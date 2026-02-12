@@ -1,0 +1,506 @@
+import SwiftUI
+import Combine
+
+struct NewInsightView: View {
+    @Binding var isPresented: Bool
+    @State private var tags: [String] = []
+    @State private var newTagText = ""
+    @State private var showAddTag = false
+    @State private var contentText = ""
+    @State private var titleText = "New Insight"
+    @State private var badgeText = "Legendary"
+    @StateObject private var publishManager = PublishNoteManager.shared
+    @StateObject private var networkManager = NetworkManager.shared
+    @StateObject private var authManager = AuthManager.shared
+    @State private var isConfirming = false
+    @State private var confirmError: String? = nil
+    @State private var cancellables = Set<AnyCancellable>()
+    @State private var isAlwaysOnTop = false
+    
+    let mergeResult: MergeCardsData?
+    let previewData: MergePreviewResponse?
+    let selectedCards: [SelectedCard]?
+    
+    // MARK: 计算属性
+    private var currentRate: Int {
+        if let previewData = previewData {
+            return previewData.data.newCard.rate
+        } else if let mergeResult = mergeResult {
+            return mergeResult.newCard.rate
+        } else {
+            return 0 // 默认值
+        }
+    }
+    
+    init(isPresented: Binding<Bool>, mergeResult: MergeCardsData? = nil, previewData: MergePreviewResponse? = nil, selectedCards: [SelectedCard]? = nil) {
+        self._isPresented = isPresented
+        self.mergeResult = mergeResult
+        self.previewData = previewData
+        self.selectedCards = selectedCards
+    }
+    
+    var body: some View {
+        ZStack {
+            // 背景模糊效果
+            Color.black.opacity(0.6)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    isPresented = false
+                }
+            
+            // 主要内容
+            VStack(spacing: 24) {
+                // 标题和徽章
+                VStack(spacing: 12) {
+                    Text(titleText)
+                        .font(.system(size: 24, weight: .bold))
+                        .foregroundColor(.white)
+                    
+                    Text(badgeText)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 6)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(Color(red: 0.3, green: 0.2, blue: 0.1).opacity(0.8))
+                        )
+                }
+                
+                // 主要内容区域
+                VStack(alignment: .leading, spacing: 16) {
+                    TextEditor(text: $contentText)
+                        .font(.system(size: 16, weight: .regular))
+                        .foregroundColor(.white)
+                        .scrollContentBackground(.hidden)
+                        .background(Color.clear)
+                        .frame(height: 230)
+                }
+                .padding(20)
+                .frame(maxWidth: .infinity)
+                .background(
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(Color.clear)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16)
+                                .stroke(Color.white.opacity(0.3), lineWidth: 1)
+                        )
+                )
+                
+                // 标签区域
+                VStack(alignment: .leading, spacing: 12) {
+                    ScrollView {
+                    LazyVGrid(columns: [
+                        GridItem(.adaptive(minimum: 80, maximum: .infinity), spacing: 8)
+                    ], spacing: 8) {
+                        ForEach(tags, id: \.self) { tag in
+                            HStack(spacing: 6) {
+                                Text(tag)
+                                    .font(.system(size: 14, weight: .medium))
+                                    .foregroundColor(.white)
+                                    .lineLimit(1)
+                                
+                                Button(action: {
+                                    if let index = tags.firstIndex(of: tag) {
+                                        tags.remove(at: index)
+                                    }
+                                }) {
+                                    Image(systemName: "xmark")
+                                        .font(.system(size: 10, weight: .bold))
+                                        .foregroundColor(.white.opacity(0.7))
+                                }
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(
+                                Capsule()
+                                    .fill(Color.white.opacity(0.2))
+                            )
+                        }
+                        
+                        if showAddTag {
+                            HStack(spacing: 6) {
+                                TextField("", text: $newTagText)
+                                    .font(.system(size: 14, weight: .medium))
+                                    .foregroundColor(.white)
+                                    .textFieldStyle(PlainTextFieldStyle())
+                                    .frame(width: 80)
+                                
+                                Button(action: {
+                                    if !newTagText.isEmpty {
+                                        tags.append(newTagText)
+                                        newTagText = ""
+                                        showAddTag = false
+                                    }
+                                }) {
+                                    Image(systemName: "checkmark")
+                                        .font(.system(size: 10, weight: .bold))
+                                        .foregroundColor(.white)
+                                }
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(
+                                Capsule()
+                                    .fill(Color.white.opacity(0.2))
+                            )
+                        } else {
+                            Button(action: {
+                                showAddTag = true
+                            }) {
+                                Image(systemName: "plus")
+                                    .font(.system(size: 14, weight: .bold))
+                                    .foregroundColor(.white)
+                                    .frame(width: 24, height: 24)
+                                    .background(
+                                        Capsule()
+                                            .fill(Color.white.opacity(0.2))
+                                    )
+                                Spacer()
+                            }
+                        }
+                    }
+                    }
+                    .frame(height: 70) // 固定高度为两行（约30*2 + 间距8）
+                }
+                
+                // 操作按钮
+                HStack(spacing: 16) {
+                    Button(action: {
+                        isPresented = false
+                    }) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 16, weight: .semibold))
+                            Text("Discard")
+                                .font(.system(size: 16, weight: .semibold))
+                        }
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(
+                            Capsule()
+                                .fill(Color.clear)
+                                .overlay(discardButtonTopLeftHighlight)
+                                .overlay(discardButtonBottomRightHighlight)
+                                .overlay(discardButtonTopEdgeHighlight)
+                                .overlay(discardButtonBottomEdgeHighlight)
+                        )
+                    }
+                    
+                    Button(action: {
+                        confirmMerge()
+                    }) {
+                        HStack(spacing: 8) {
+                            if isConfirming {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                    .scaleEffect(0.8)
+                            } else {
+                                Image(systemName: "checkmark")
+                                    .font(.system(size: 16, weight: .semibold))
+                            }
+                            Text(isConfirming ? "Confirming..." : "Accept")
+                                .font(.system(size: 16, weight: .semibold))
+                        }
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(
+                            Capsule()
+                                .fill(Color.white.opacity(0.2))
+                                .overlay(acceptButtonTopLeftHighlight)
+                                .overlay(acceptButtonBottomRightHighlight)
+                                .overlay(acceptButtonTopEdgeHighlight)
+                                .overlay(acceptButtonBottomEdgeHighlight)
+                        )
+                        .disabled(isConfirming)
+                    }
+                }
+            }
+            .padding(24)
+            .background(
+                ZStack {
+                    Image(backgroundImageForRate(currentRate))
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .clipped()
+                    
+                    RoundedRectangle(cornerRadius: 20)
+                        .fill(Color.black.opacity(0.3))
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 20))
+            )
+            .padding(.horizontal, 40)
+        }
+        .transition(.opacity.combined(with: .scale))
+        .onAppear {
+            loadMergeResult()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .notePublished)) { _ in
+            // 发布成功后关闭弹窗
+            isPresented = false
+        }
+        .alert("Publish Failed", isPresented: .constant(publishManager.publishError != nil)) {
+            Button("OK") {
+                publishManager.publishError = nil
+            }
+        } message: {
+            Text(publishManager.publishError ?? "")
+        }
+        .alert("Confirm Merge Failed", isPresented: .constant(confirmError != nil)) {
+            Button("OK") {
+                confirmError = nil
+            }
+        } message: {
+            Text(confirmError ?? "")
+        }
+    }
+    
+    // MARK: 确认合并
+    private func confirmMerge() {
+        guard let userId = authManager.currentUser?.id else {
+            confirmError = "User not logged in"
+            return
+        }
+        
+        guard let selectedCards = selectedCards else {
+            confirmError = "No cards selected to merge"
+            return
+        }
+        
+        isConfirming = true
+        confirmError = nil
+        
+        let request = ConfirmMergeRequest(
+            userId: userId,
+            selectedCards: selectedCards,
+            mergedContent: contentText
+        )
+        
+        print("开始确认合并: \(selectedCards.count) 张卡片")
+                    
+                    // 发送通知回退到 NotesList
+                    NotificationCenter.default.post(name: .exitMergePage, object: nil)
+                    
+                    // 关闭弹窗
+                    self.isPresented = false
+//        return
+//        networkManager.confirmMergeCards(request: request)
+//            .receive(on: DispatchQueue.main)
+//            .sink(
+//                receiveCompletion: { completion in
+//                    self.isConfirming = false
+//                    switch completion {
+//                    case .finished:
+//                        print("确认合并完成")
+//                    case .failure(let error):
+//                        self.confirmError = error.localizedDescription
+//                    }
+//                },
+//                receiveValue: { response in
+//                    // 发送通知回退到 NotesList
+//                    NotificationCenter.default.post(name: .exitMergePage, object: nil)
+//                    
+//                    // 关闭弹窗
+//                    self.isPresented = false
+//                }
+//            )
+//            .store(in: &cancellables)
+    }
+    
+    // MARK: 加载合并结果
+    private func loadMergeResult() {
+        if let previewData = previewData {
+            // 使用预览数据
+            titleText = "New Insight"
+            contentText = previewData.data.newCard.content
+            tags = previewData.data.newCard.tags
+            badgeText = badgeTextForRate(previewData.data.newCard.rate)
+        } else if let mergeResult = mergeResult {
+            // 使用合并结果的数据，但保持标题为"New Insight"
+            titleText = "New Insight"
+            contentText = mergeResult.newCard.content
+            tags = mergeResult.newCard.tags
+            badgeText = badgeTextForRate(mergeResult.newCard.rate)
+        } else {
+            // 使用默认数据
+            titleText = "New Insight"
+            contentText = "By analyzing the content of multiple cards, we have integrated modern UI design trends and user experience improvement strategies:\n\n1. **Design Trends**\nDark mode becomes standard micro interaction to enhance user experience\nIntegration of 3D elements\nThe Return of Gradient Colors"
+            tags = ["Design", "Inspiration", "Nature"]
+            badgeText = "Legendary"
+        }
+    }
+    
+    // MARK: 取消按钮高光效果
+    private var discardButtonTopLeftHighlight: some View {
+        Capsule()
+            .stroke(Color.white, lineWidth: 1)
+            .offset(x: 0, y: -1)
+            .mask(
+                Capsule()
+                    .fill(
+                        RadialGradient(
+                            colors: [Color.white, Color.clear],
+                            center: .topLeading,
+                            startRadius: 10,
+                            endRadius: 35
+                        )
+                    )
+            )
+    }
+    
+    private var discardButtonBottomRightHighlight: some View {
+        Capsule()
+            .stroke(Color.white, lineWidth: 1)
+            .offset(x: 0, y: 0)
+            .mask(
+                Capsule()
+                    .fill(
+                        RadialGradient(
+                            colors: [Color.white, Color.clear],
+                            center: .bottomTrailing,
+                            startRadius: 10,
+                            endRadius: 35
+                        )
+                    )
+            )
+    }
+    
+    private var discardButtonTopEdgeHighlight: some View {
+        Capsule()
+            .stroke(Color.white, lineWidth: 1)
+            .offset(x: 0, y: -1)
+            .mask(
+                Capsule()
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.white, Color.clear],
+                            startPoint: .top,
+                            endPoint: UnitPoint(x: 0, y: 0.05)
+                        )
+                    )
+            )
+    }
+    
+    private var discardButtonBottomEdgeHighlight: some View {
+        Capsule()
+            .stroke(Color.white, lineWidth: 1)
+            .offset(x: 0, y: 1)
+            .mask(
+                Capsule()
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.white, Color.clear],
+                            startPoint: .bottom,
+                            endPoint: UnitPoint(x: 1, y: 0.05)
+                        )
+                    )
+            )
+    }
+    
+    // MARK: 确认按钮高光效果
+    private var acceptButtonTopLeftHighlight: some View {
+        Capsule()
+            .stroke(Color.white, lineWidth: 1)
+            .offset(x: 0, y: -1)
+            .mask(
+                Capsule()
+                    .fill(
+                        RadialGradient(
+                            colors: [Color.white, Color.clear],
+                            center: .topLeading,
+                            startRadius: 10,
+                            endRadius: 35
+                        )
+                    )
+            )
+    }
+    
+    private var acceptButtonBottomRightHighlight: some View {
+        Capsule()
+            .stroke(Color.white, lineWidth: 1)
+            .offset(x: 0, y: 0)
+            .mask(
+                Capsule()
+                    .fill(
+                        RadialGradient(
+                            colors: [Color.white, Color.clear],
+                            center: .bottomTrailing,
+                            startRadius: 10,
+                            endRadius: 35
+                        )
+                    )
+            )
+    }
+    
+    private var acceptButtonTopEdgeHighlight: some View {
+        Capsule()
+            .stroke(Color.white, lineWidth: 1)
+            .offset(x: 0, y: -1)
+            .mask(
+                Capsule()
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.white, Color.clear],
+                            startPoint: .top,
+                            endPoint: UnitPoint(x: 0, y: 0.05)
+                        )
+                    )
+            )
+    }
+    
+    private var acceptButtonBottomEdgeHighlight: some View {
+        Capsule()
+            .stroke(Color.white, lineWidth: 1)
+            .offset(x: 0, y: 1)
+            .mask(
+                Capsule()
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.white, Color.clear],
+                            startPoint: .bottom,
+                            endPoint: UnitPoint(x: 1, y: 0.05)
+                        )
+                    )
+            )
+    }
+    
+    // MARK: 根据rate值返回背景图片
+    private func backgroundImageForRate(_ rate: Int) -> String {
+        if rate < 3 {
+            return "merge_bg_basic"
+        } else if rate >= 3 && rate <= 8 {
+            return "merge_bg_green"
+        } else if rate >= 9 && rate <= 26 {
+            return "merge_bg_blue"
+        } else if rate >= 27 && rate <= 80 {
+            return "merge_bg_purple"
+        } else if rate >= 81 && rate <= 242 {
+            return "merge_bg_yellow"
+        } else {
+            return "merge_bg_red"
+        }
+    }
+    
+    // MARK: 根据rate值返回徽章文本
+    private func badgeTextForRate(_ rate: Int) -> String {
+        if rate < 3 {
+            return "Basic"
+        } else if rate >= 3 && rate <= 8 {
+            return "Notable"
+        } else if rate >= 9 && rate <= 26 {
+            return "Valuable"
+        } else if rate >= 27 && rate <= 80 {
+            return "Significant"
+        } else if rate >= 81 && rate <= 242 {
+            return "Critical"
+        } else {
+            return "Definitive"
+        }
+    }
+}
+
+#Preview {
+    NewInsightView(isPresented: .constant(true))
+} 

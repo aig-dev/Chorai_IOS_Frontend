@@ -1,0 +1,766 @@
+import SwiftUI
+
+struct ExploreView: View {
+    @Binding var showPopupMenu: Bool
+    @Binding var selectedFilter: String
+    @Binding var showFilterTags: Bool
+    @Binding var showSideMenu: Bool
+    @State private var isSearchMode = false
+    @State private var searchText = ""
+    @StateObject private var cardsManager = RecommendedCardsManager()
+    @StateObject private var searchManager = SearchManager.shared
+    
+    // ExploreView自己的弹窗状态
+    @State private var showExplorePopupMenu = false
+    @State private var currentExploreCardData: UserCard? = nil
+    
+    // 导航状态
+    @State private var navigateToUserProfile = false
+    @State private var selectedUserId: Int? = nil
+    @State private var navigateToDetail = false
+    @State private var selectedCardId: Int? = nil
+    
+    // 搜索状态
+    @State private var currentSearchIndex = 0
+    
+    // MARK: - 计算属性
+    
+    private var searchInputBackground: some View {
+        RoundedRectangle(cornerRadius: 30)
+            .fill(.ultraThinMaterial.opacity(0.3))
+            .overlay(searchInputTopLeftHighlight)
+            .overlay(searchInputBottomRightHighlight)
+            .overlay(searchInputTopEdgeHighlight)
+            .overlay(searchInputBottomEdgeHighlight)
+    }
+    
+    private var searchInputTopLeftHighlight: some View {
+        RoundedRectangle(cornerRadius: 30)
+            .stroke(Color.white, lineWidth: 1)
+            .offset(x: 0, y: -1)
+            .mask(
+                RoundedRectangle(cornerRadius: 30)
+                    .fill(
+                        RadialGradient(
+                            colors: [Color.white, Color.clear],
+                            center: .topLeading,
+                            startRadius: 10,
+                            endRadius: 35
+                        )
+                    )
+            )
+    }
+    
+    private var searchInputBottomRightHighlight: some View {
+        RoundedRectangle(cornerRadius: 30)
+            .stroke(Color.white, lineWidth: 1)
+            .offset(x: 0, y: 0)
+            .mask(
+                RoundedRectangle(cornerRadius: 30)
+                    .fill(
+                        RadialGradient(
+                            colors: [Color.white, Color.clear],
+                            center: .bottomTrailing,
+                            startRadius: 10,
+                            endRadius: 35
+                        )
+                    )
+            )
+    }
+    
+    private var searchInputTopEdgeHighlight: some View {
+        RoundedRectangle(cornerRadius: 30)
+            .stroke(Color.white, lineWidth: 1)
+            .offset(x: 0, y: -1)
+            .mask(
+                RoundedRectangle(cornerRadius: 30)
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.white, Color.clear],
+                            startPoint: .top,
+                            endPoint: UnitPoint(x: 0, y: 0.05)
+                        )
+                    )
+            )
+    }
+    
+    private var searchInputBottomEdgeHighlight: some View {
+        RoundedRectangle(cornerRadius: 30)
+            .stroke(Color.white, lineWidth: 1)
+            .offset(x: 0, y: 1)
+            .mask(
+                RoundedRectangle(cornerRadius: 30)
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.white, Color.clear],
+                            startPoint: .bottom,
+                            endPoint: UnitPoint(x: 1, y: 0.05)
+                        )
+                    )
+            )
+    }
+    
+    // MARK: Background Card Views
+    
+    private var thirdCardBackground: some View {
+        RoundedRectangle(cornerRadius: 16)
+            .fill(Color.white.opacity(0.1))
+            .frame(maxHeight: .infinity)
+            .overlay(thirdCardTopLeftHighlight)
+            .overlay(thirdCardBottomRightHighlight)
+            .overlay(thirdCardTopEdgeHighlight)
+            .overlay(thirdCardBottomEdgeHighlight)
+            .offset(x: 60, y: 32)
+            .opacity(0.2)
+    }
+    
+    private var thirdCardTopLeftHighlight: some View {
+        RoundedRectangle(cornerRadius: 16)
+            .stroke(Color.white.opacity(0.3), lineWidth: 1)
+            .offset(x: 0, y: -1)
+            .mask(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(
+                        RadialGradient(
+                            colors: [Color.white.opacity(0.3), Color.clear],
+                            center: .topLeading,
+                            startRadius: 10,
+                            endRadius: 35
+                        )
+                    )
+            )
+    }
+    
+    private var thirdCardBottomRightHighlight: some View {
+        RoundedRectangle(cornerRadius: 16)
+            .stroke(Color.white.opacity(0.3), lineWidth: 1)
+            .offset(x: 0, y: 0)
+            .mask(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(
+                        RadialGradient(
+                            colors: [Color.white.opacity(0.3), Color.clear],
+                            center: .bottomTrailing,
+                            startRadius: 10,
+                            endRadius: 35
+                        )
+                    )
+            )
+    }
+    
+    private var thirdCardTopEdgeHighlight: some View {
+        RoundedRectangle(cornerRadius: 16)
+            .stroke(Color.white.opacity(0.3), lineWidth: 1)
+            .offset(x: 0, y: -1)
+            .mask(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.white.opacity(0.3), Color.clear],
+                            startPoint: .top,
+                            endPoint: UnitPoint(x: 0, y: 0.05)
+                        )
+                    )
+            )
+    }
+    
+    private var thirdCardBottomEdgeHighlight: some View {
+        RoundedRectangle(cornerRadius: 16)
+            .stroke(Color.white.opacity(0.3), lineWidth: 1)
+            .offset(x: -1, y: 1)
+            .mask(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.white.opacity(0.3), Color.clear],
+                            startPoint: .bottom,
+                            endPoint: UnitPoint(x: 1, y: 0.05)
+                        )
+                    )
+            )
+    }
+    
+    private var secondCardBackground: some View {
+        RoundedRectangle(cornerRadius: 16)
+            .fill(Color.white.opacity(0.1))
+            .frame(maxHeight: .infinity)
+            .overlay(secondCardTopLeftHighlight)
+            .overlay(secondCardBottomRightHighlight)
+            .overlay(secondCardTopEdgeHighlight)
+            .overlay(secondCardBottomEdgeHighlight)
+            .offset(x: 40, y: 14)
+            .opacity(0.2)
+    }
+    
+    private var secondCardTopLeftHighlight: some View {
+        RoundedRectangle(cornerRadius: 16)
+            .stroke(Color.white.opacity(0.4), lineWidth: 1)
+            .offset(x: 0, y: -1)
+            .mask(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(
+                        RadialGradient(
+                            colors: [Color.white.opacity(0.4), Color.clear],
+                            center: .topLeading,
+                            startRadius: 10,
+                            endRadius: 35
+                        )
+                    )
+            )
+    }
+    
+    private var secondCardBottomRightHighlight: some View {
+        RoundedRectangle(cornerRadius: 16)
+            .stroke(Color.white.opacity(0.4), lineWidth: 1)
+            .offset(x: 0, y: 0)
+            .mask(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(
+                        RadialGradient(
+                            colors: [Color.white.opacity(0.4), Color.clear],
+                            center: .bottomTrailing,
+                            startRadius: 10,
+                            endRadius: 35
+                        )
+                    )
+            )
+    }
+    
+    private var secondCardTopEdgeHighlight: some View {
+        RoundedRectangle(cornerRadius: 16)
+            .stroke(Color.white.opacity(0.4), lineWidth: 1)
+            .offset(x: 0, y: -1)
+            .mask(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.white.opacity(0.4), Color.clear],
+                            startPoint: .top,
+                            endPoint: UnitPoint(x: 0, y: 0.05)
+                        )
+                    )
+            )
+    }
+    
+    private var secondCardBottomEdgeHighlight: some View {
+        RoundedRectangle(cornerRadius: 16)
+            .stroke(Color.white.opacity(0.4), lineWidth: 1)
+            .offset(x: -1, y: 1)
+            .mask(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.white.opacity(0.4), Color.clear],
+                            startPoint: .bottom,
+                            endPoint: UnitPoint(x: 1, y: 0.05)
+                        )
+                    )
+            )
+    }
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // 顶部导航栏
+            HStack {
+                if isSearchMode {
+                    // 搜索模式 - 返回按钮
+                    Button(action: {
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            isSearchMode = false
+                            searchText = ""
+                            currentSearchIndex = 0
+                            // 退出搜索模式时清除搜索结果
+                            searchManager.clearSearchResults()
+                        }
+                    }) {
+                        Image(systemName: "chevron.left")
+                            .font(.title2)
+                            .foregroundColor(.white)
+                    }
+                    
+                    Spacer()
+                    
+                    // 搜索输入框
+                    HStack {
+                        Image(systemName: "magnifyingglass")
+                            .foregroundColor(.white.opacity(0.7))
+                        
+                        TextField("Please enter your search...", text: $searchText)
+                            .foregroundColor(.white)
+                            .textFieldStyle(PlainTextFieldStyle())
+                            .placeholder(when: searchText.isEmpty) {
+                                Text("Please enter your search...")
+                                    .foregroundColor(.white.opacity(0.5))
+                            }
+                            .onSubmit {
+                                // 按回车键时触发搜索
+                                performSearch()
+                            }
+                        
+//                        if !searchText.isEmpty {
+//                            Button(action: {
+//                                searchText = ""
+//                            }) {
+//                                Image(systemName: "xmark.circle.fill")
+//                                    .foregroundColor(.white.opacity(0.7))
+//                            }
+//                        }
+                    }
+                    .padding(.horizontal, 25)
+                    .padding(.vertical, 13)
+                    .frame(maxWidth: 280)
+                    .background(searchInputBackground)
+                    
+                    Spacer()
+                } else {
+                    // 正常模式
+                    Button(action: {
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            showSideMenu = true
+                        }
+                    }) {
+                        Image("menu")
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 24, height: 24)
+                    }
+                    
+                    Spacer()
+                    
+                    ZStack {
+                        // 背景图片
+                        Image("foryou_bg")
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(height: 15)
+                            .offset(x: -15, y: 7) // 左边对齐，垂直中心点对齐底部
+                        
+                        HStack(spacing: 4) {
+                            Text("For You")
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundColor(.white)
+                            
+                            Image(systemName: showFilterTags ? "chevron.up" : "chevron.down")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(.white)
+                                .animation(.easeInOut(duration: 0.3), value: showFilterTags)
+                        }
+                    }
+                    .onTapGesture {
+                        withAnimation(.easeInOut(duration: 0.3)) {
+//                            showFilterTags.toggle()
+                        }
+                    }
+                    
+                    Spacer()
+                    
+                    Button(action: {
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            isSearchMode = true
+                        }
+                    }) {
+                        Image("search")
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 24, height: 24)
+                    }
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 60)
+            
+            // 筛选标签
+            if showFilterTags && !isSearchMode {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 12) {
+                        FilterTag(title: "All", isSelected: selectedFilter == "All") {
+                            selectedFilter = "All"
+                        }
+                        .frame(width: 95)
+                        FilterTag(title: "Follow", isSelected: selectedFilter == "Follow") {
+                            selectedFilter = "Follow"
+                        }
+                        .frame(width: 95)
+                        FilterTag(title: "Popular", isSelected: selectedFilter == "Popular") {
+                            selectedFilter = "Popular"
+                        }
+                        .frame(width: 95)
+                        FilterTag(title: "Trending", isSelected: selectedFilter == "Trending") {
+                            selectedFilter = "Trending"
+                        }
+                        .frame(width: 95)
+                    }
+                    .padding(.horizontal, 20)
+                }
+                .padding(.top, 10)
+            }
+            
+            // 卡片内容
+            ZStack {
+                // 第三张卡片（最底层）- 空白卡片
+                thirdCardBackground
+                
+                // 第二张卡片（中间层）- 空白卡片
+                secondCardBackground
+                
+                // 第一张卡片（最顶层）- 有内容的卡片
+                if !searchManager.searchResults.isEmpty {
+                    // 显示搜索结果
+                    if currentSearchIndex < searchManager.searchResults.count {
+                        let currentSearchCard = searchManager.searchResults[currentSearchIndex]
+                        PostCard(
+                            card: convertSearchCardToCard(currentSearchCard),
+                            cardsManager: cardsManager,
+                            onShowMenu: { cardData in
+                                currentExploreCardData = convertCardToUserCard(cardData)
+                                showExplorePopupMenu = true
+                            },
+                            onSwipe: { translation, isEnded in
+                                handleSearchSwipe(translation: CGSize(width: translation, height: 0), isEnded: isEnded)
+                            },
+                            onAvatarTap: { userId in
+                                selectedUserId = userId
+                                DispatchQueue.main.async {
+                                    navigateToUserProfile = true
+                                    print("设置 navigateToUserProfile: \(navigateToUserProfile)")
+                                }
+                            },
+                            onCardTap: { cardId in
+                                print("收到卡片点击回调: cardId=\(cardId)")
+                                selectedCardId = cardId
+                                DispatchQueue.main.async {
+                                    navigateToDetail = true
+                                    print("设置 navigateToDetail: \(navigateToDetail)")
+                                }
+                            }
+                        )
+                        .opacity(1.0)
+                    }
+                } else if let currentCard = cardsManager.currentCard {
+                    PostCard(
+                        card: currentCard,
+                        cardsManager: cardsManager,
+                        onShowMenu: { cardData in
+                            currentExploreCardData = convertCardToUserCard(cardData)
+                            showExplorePopupMenu = true
+                        },
+                        onSwipe: { translation, isEnded in
+                            cardsManager.handleSwipeGesture(translation: translation, isEnded: isEnded)
+                        },
+                        onAvatarTap: { userId in
+                            selectedUserId = userId
+                            DispatchQueue.main.async {
+                                navigateToUserProfile = true
+                            }
+                        },
+                        onCardTap: { cardId in
+                            selectedCardId = cardId
+                            DispatchQueue.main.async {
+                                navigateToDetail = true
+                            }
+                        }
+                    )
+                    .opacity(1.0)
+                } else if cardsManager.isLoading {
+                    // 旋转的加载图片
+                    VStack {
+                        RotatingLoaderView()
+                    }
+                    .frame(maxHeight: .infinity)
+                } else {
+                    VStack {
+                        RotatingLoaderView()
+                    }
+                    .frame(maxHeight: .infinity)
+                    // 无数据状态
+//                    VStack {
+//                        Text("No cards available")
+//                            .font(.system(size: 16, weight: .medium))
+//                            .foregroundColor(.white.opacity(0.8))
+//                            .padding(.top, 16)
+//                        Button("Retry") {
+//                            cardsManager.refresh()
+//                        }
+//                        .font(.system(size: 14, weight: .medium))
+//                        .foregroundColor(.white)
+//                        .padding(.horizontal, 20)
+//                        .padding(.vertical, 8)
+//                        .background(Color.white.opacity(0.2))
+//                        .cornerRadius(20)
+//                        .padding(.top, 8)
+//                    }
+//                    .frame(maxHeight: .infinity)
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, showFilterTags ? 15 : 15)
+            .padding(.bottom, 150)
+        }
+        .onAppear {
+            // 设置评论创建回调
+            CommentPopupManager.shared.onCommentCreated = { [weak cardsManager] (cardId: Int) in
+                print("收到评论创建通知: cardId=\(cardId)")
+                cardsManager?.incrementCommentCount(for: cardId)
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("CloseAllPopups"))) { _ in
+            print("收到关闭所有popup通知")
+            // 关闭所有 popup
+            showExplorePopupMenu = false
+            showFilterTags = false
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NavigateToDetail"))) { notification in
+            if let cardId = notification.userInfo?["cardId"] as? Int {
+                print("收到导航到详情页通知: cardId=\(cardId)")
+                selectedCardId = cardId
+                navigateToDetail = true
+            }
+        }
+        .onTapGesture {
+            // 点击输入框之外的地方关闭键盘
+            if isSearchMode {
+                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+            }
+        }
+        .popupMenu(isPresented: $showExplorePopupMenu, layout: .grid2x2, cardData: currentExploreCardData)
+        .background(
+            Group {
+                if let userId = selectedUserId {
+                    NavigationLink(
+                        destination: UserProfileView(userId: userId),
+                        isActive: $navigateToUserProfile
+                    ) {
+                        EmptyView()
+                    }
+                }
+                
+                if let cardId = selectedCardId {
+                    NavigationLink(
+                        destination: DetailView(cardId: cardId),
+                        isActive: $navigateToDetail
+                    ) {
+                        EmptyView()
+                    }
+                }
+            }
+        )
+    }
+    
+    // MARK: - 执行搜索
+    private func performSearch() {
+        let trimmedText = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        if !trimmedText.isEmpty {
+            currentSearchIndex = 0 // 重置搜索索引
+            searchManager.searchCards(query: trimmedText) { result in
+                switch result {
+                case .success(let searchCards):
+                    print("搜索成功: \(searchCards.count) 张卡片")
+                case .failure(let error):
+                    print("搜索失败: \(error.localizedDescription)")
+                }
+            }
+        } else {
+            // 如果搜索文本为空，清除搜索结果
+            currentSearchIndex = 0
+            searchManager.clearSearchResults()
+        }
+    }
+    
+    // MARK: - 转换SearchCard为Card
+    private func convertSearchCardToCard(_ searchCard: SearchCard) -> Card {
+        return Card(
+            id: searchCard.id,
+            title: searchCard.title ?? "",
+            content: searchCard.content,
+            contentHash: searchCard.contentHash,
+            tags: searchCard.tags,
+            isPublic: searchCard.isPublic,
+            createdAt: searchCard.createdAt,
+            updatedAt: searchCard.updatedAt,
+            favoriteCount: searchCard.favoriteCount,
+            likeCount: searchCard.likeCount,
+            viewCount: searchCard.viewCount,
+            commentCount: searchCard.commentCount,
+            isFavorited: searchCard.isFavorited ?? false,
+            isLiked: searchCard.isLiked ?? false,
+            isPinned: searchCard.isPinned ?? false,
+            pinnedAt: searchCard.pinnedAt,
+            author: UserInfo(
+                id: searchCard.author.id,
+                username: searchCard.author.username,
+                avatar: searchCard.author.avatarUrl,
+                bio: nil,
+                followersCount: nil,
+                followingCount: nil,
+                isFollowing: nil,
+                followedAt: nil
+            )
+        )
+    }
+    
+    // MARK: - 处理搜索滑动
+    private func handleSearchSwipe(translation: CGSize, isEnded: Bool) {
+        if isEnded {
+            let threshold: CGFloat = 100
+            if abs(translation.width) > threshold {
+                if translation.width > 0 {
+                    // 向右滑上一张搜索结果
+                    if currentSearchIndex > 0 {
+                        currentSearchIndex -= 1
+                        print("搜索向右滑动，显示第 \(currentSearchIndex + 1) 张")
+                    }
+                } else {
+                    // 向左滑下一张搜索结果
+                    if currentSearchIndex < searchManager.searchResults.count - 1 {
+                        currentSearchIndex += 1
+                        print("搜索向左滑动，显示第 \(currentSearchIndex + 1) 张")
+                    }
+                }
+            }
+        }
+    }
+    
+    // MARK: - 转换Card为UserCard
+    private func convertCardToUserCard(_ card: Card) -> UserCard {
+        return UserCard(
+            id: card.id,
+            title: card.title,
+            content: card.content,
+            contentHash: card.contentHash ?? "",
+            isPublic: card.isPublic,
+            tags: card.tags,
+            createdAt: card.createdAt,
+            updatedAt: card.updatedAt,
+            likeCount: card.likeCount,
+            commentCount: card.commentCount,
+            isLiked: card.isLiked ?? false,
+            isPinned: card.isPinned ?? false,
+            pinnedAt: card.pinnedAt,
+            isFavorited: card.isFavorited,
+            favoriteCount: card.favoriteCount,
+            rate: 0 // Card 模型没有 rate 字段，默认为 0
+        )
+    }
+}
+
+#Preview {
+    ExploreView(
+        showPopupMenu: .constant(false),
+        selectedFilter: .constant("All"),
+        showFilterTags: .constant(false),
+        showSideMenu: .constant(false)
+    )
+}
+
+// MARK: - 筛选标签组件
+struct FilterTag: View {
+    let title: String
+    let isSelected: Bool
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(isSelected ? .white : .white.opacity(0.7))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+                .background(tagBackground)
+        }
+        .animation(.easeInOut(duration: 0.2), value: isSelected)
+    }
+    
+    private var tagBackground: some View {
+        RoundedRectangle(cornerRadius: 20)
+            .fill(isSelected ? Color.white.opacity(0.3) : Color.white.opacity(0.1))
+            .overlay(tagTopLeftHighlight)
+            .overlay(tagBottomRightHighlight)
+            .overlay(tagTopEdgeHighlight)
+            .overlay(tagBottomEdgeHighlight)
+    }
+    
+    private var tagTopLeftHighlight: some View {
+        RoundedRectangle(cornerRadius: 20)
+            .stroke(Color.white, lineWidth: 1)
+            .offset(x: 0, y: -1)
+            .mask(
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(
+                        RadialGradient(
+                            colors: [Color.white, Color.clear],
+                            center: .topLeading,
+                            startRadius: 5,
+                            endRadius: 20
+                        )
+                    )
+            )
+    }
+    
+    private var tagBottomRightHighlight: some View {
+        RoundedRectangle(cornerRadius: 20)
+            .stroke(Color.white, lineWidth: 1)
+            .offset(x: 0, y: 0)
+            .mask(
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(
+                        RadialGradient(
+                            colors: [Color.white, Color.clear],
+                            center: .bottomTrailing,
+                            startRadius: 5,
+                            endRadius: 20
+                        )
+                    )
+            )
+    }
+    
+    private var tagTopEdgeHighlight: some View {
+        RoundedRectangle(cornerRadius: 20)
+            .stroke(Color.white, lineWidth: 1)
+            .offset(x: 0, y: -1)
+            .mask(
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.white, Color.clear],
+                            startPoint: .top,
+                            endPoint: UnitPoint(x: 0, y: 0.05)
+                        )
+                    )
+            )
+    }
+    
+    private var tagBottomEdgeHighlight: some View {
+        RoundedRectangle(cornerRadius: 20)
+            .stroke(Color.white, lineWidth: 1)
+            .offset(x: 0, y: 1)
+            .mask(
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.white, Color.clear],
+                            startPoint: .bottom,
+                            endPoint: UnitPoint(x: 1, y: 0.05)
+                        )
+                    )
+            )
+    }
+}
+
+// MARK: - 旋转加载视图
+struct RotatingLoaderView: View {
+    @State private var isRotating = false
+    
+    var body: some View {
+        Image("Loading")
+            .resizable()
+            .aspectRatio(contentMode: .fit)
+            .frame(width: 60, height: 60)
+            .rotationEffect(.degrees(isRotating ? 360 : 0))
+            .onAppear {
+                withAnimation(.linear(duration: 2.0).repeatForever(autoreverses: false)) {
+                    isRotating = true
+                }
+            }
+    }
+} 

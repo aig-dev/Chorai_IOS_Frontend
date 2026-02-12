@@ -1,0 +1,14 @@
+/**
+ * custom.css for the MarkupEditor CustomContentView demo.
+ */
+
+/* Use a gray background for h1 */
+h1 {
+    background-color: lightgray;
+}
+
+/* Override the font-weight: bold used for h4 in markup.css */
+h4 {
+    font-weight: normal;
+}
+

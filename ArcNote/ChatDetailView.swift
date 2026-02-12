@@ -1,0 +1,803 @@
+import SwiftUI
+import UIKit
+import Combine
+
+
+
+// MARK: 卡片数据模型
+struct NoteCard: Identifiable, Equatable {
+    let id: Int
+    let title: String
+    let description: String
+    let isPublic: Bool
+}
+
+// MARK: 选择卡片弹窗管理器
+class SelectCardPopupManager: ObservableObject {
+    @Published var isShowing = false
+    @Published var noteCards: [NoteCard] = []
+    @Published var selectedNotes: [NoteCard] = []
+    @Published var isLoading: Bool = false
+    @Published var errorMessage: String?
+    
+    static let shared = SelectCardPopupManager()
+    private var cancellables = Set<AnyCancellable>()
+    
+    func show() {
+        isShowing = true
+        fetchCards()
+    }
+    
+    func hide() {
+        isShowing = false
+    }
+    
+    func selectNote(_ note: NoteCard) {
+        if !selectedNotes.contains(where: { $0.id == note.id }) {
+            selectedNotes.append(note)
+        }
+    }
+    
+    func removeNote(_ note: NoteCard) {
+        selectedNotes.removeAll { $0.id == note.id }
+    }
+    
+    func fetchCards(searchText: String = "") {
+        guard let userId = AuthManager.shared.currentUser?.id else {
+            return
+        }
+        
+        isLoading = true
+        NetworkManager.shared.getUserAllCards(
+            userId: userId,
+            searchType: "own+favorited",
+            search: searchText,
+            limit: 100
+        )
+        .receive(on: DispatchQueue.main)
+        .sink { [weak self] completion in
+            self?.isLoading = false
+            if case .failure(let error) = completion {
+                self?.errorMessage = error.localizedDescription
+                print("加载卡片失败: \(error)")
+            }
+        } receiveValue: { [weak self] response in
+            let ownCards = self?.convertCards(response.data.ownCards) ?? []
+            let favoritedCards = self?.convertCards(response.data.favoritedCards) ?? []
+            self?.noteCards = ownCards + favoritedCards
+        }
+        .store(in: &cancellables)
+    }
+    
+    private func convertCards(_ cards: [UserAllCard]) -> [NoteCard] {
+        return cards
+            .filter { $0.isPublic }
+            .map {
+                NoteCard(
+                    id: $0.id,
+                    title: $0.title.isEmpty ? "Untitled" : $0.title,
+                    description: $0.content,
+                    isPublic: $0.isPublic
+                )
+            }
+    }
+}
+
+// MARK: 消息数据模型
+struct ChatMessage: Identifiable {
+    let id = UUID()
+    let content: String
+    let isFromMe: Bool
+    let timestamp: String
+    let avatar: String
+    let attachedNotes: [String]?
+}
+
+// MARK: - 聊天详情视图
+struct ChatDetailView: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var messageText = ""
+    @State private var contactName: String
+    @State private var contactStatus: String
+    @State private var contactAvatar: String
+    @State private var searchText = ""
+    @FocusState private var isTextFieldFocused: Bool
+    @ObservedObject private var selectCardManager = SelectCardPopupManager.shared
+    @StateObject private var chatDetailManager = ChatDetailManager()
+    
+    let conversationId: Int
+    
+    
+    init(conversationId: Int, contactName: String = "Thompson", contactStatus: String = "5 minutes ago online", contactAvatar: String = "avatar") {
+        self.conversationId = conversationId
+        self._contactName = State(initialValue: contactName)
+        self._contactStatus = State(initialValue: contactStatus)
+        self._contactAvatar = State(initialValue: contactAvatar)
+    }
+    
+
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // 顶部导航栏
+            HStack {
+                Button(action: {
+                    dismiss()
+                }) {
+                    Image(systemName: "chevron.left")
+                        .font(.title2)
+                        .foregroundColor(.white)
+                }
+                
+                HStack(spacing: 10) {
+                    // 默认头像
+                    // Image("avatar")
+                    //     .resizable()
+                    //     .aspectRatio(contentMode: .fill)
+                    //     .frame(width: 40, height: 40)
+                    //     .clipShape(Circle())
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(chatDetailManager.conversation?.partner.username ?? contactName)
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundColor(.white)
+                        
+                        Text(contactStatus)
+                            .font(.system(size: 12, weight: .regular))
+                            .foregroundColor(.green)
+                    }
+                }
+                
+                Spacer()
+                
+                // 占位，保持标题居中
+                Image(systemName: "chevron.left")
+                    .font(.title2)
+                    .foregroundColor(.clear)
+            }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 20)
+            
+            // 聊天内容
+            ScrollView {
+                LazyVStack(spacing: 16) {
+                    if chatDetailManager.isLoading {
+                        VStack {
+                            Spacer()
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                .scaleEffect(1.2)
+                            Text("Loading conversation...")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(.white.opacity(0.7))
+                                .padding(.top, 10)
+                            Spacer()
+                        }
+                        .frame(height: 200)
+                    } else {
+                        if chatDetailManager.convertToChatMessages().isEmpty {
+                            VStack {
+                                Spacer()
+                                Text("No messages yet")
+                                    .font(.system(size: 16, weight: .medium))
+                                    .foregroundColor(.white.opacity(0.7))
+                                Text("Start a conversation")
+                                    .font(.system(size: 14, weight: .regular))
+                                    .foregroundColor(.white.opacity(0.5))
+                                    .padding(.top, 5)
+                                Spacer()
+                            }
+                            .frame(height: 200)
+                            .onAppear {
+                                let convertedMessages = chatDetailManager.convertToChatMessages()
+                                print("转换后的消息数量: \(convertedMessages.count)")
+                            }
+                        } else {
+                            ForEach(chatDetailManager.convertToChatMessages()) { message in
+                                ChatMessageView(message: message)
+                            }
+                            .onAppear {
+                                let convertedMessages = chatDetailManager.convertToChatMessages()
+                                print("转换后的消息数量: \(convertedMessages.count)")
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.bottom, selectCardManager.selectedNotes.isEmpty ? 100 : 200) // 为底部输入框和选中notes留出空间
+            }
+            
+            // 选中的notes展示区域
+            if !selectCardManager.selectedNotes.isEmpty {
+                HStack {
+                    VStack(spacing: 0) {
+                        ForEach(Array(selectCardManager.selectedNotes.enumerated()), id: \.element.id) { index, note in
+                            VStack(spacing: 0) {
+                                HStack(spacing: 12) {
+                                    // 头像
+                                    Image("avatar")
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fill)
+                                        .frame(width: 32, height: 32)
+                                        .clipShape(Circle())
+                                    
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(note.title)
+                                            .font(.system(size: 14, weight: .semibold))
+                                            .foregroundColor(.white)
+                                            .lineLimit(1)
+                                        
+                                        Text(note.description)
+                                            .font(.system(size: 12, weight: .regular))
+                                            .foregroundColor(.gray)
+                                            .lineLimit(1)
+                                    }
+                                    
+                                    Spacer()
+                                    
+                                    // 删除按钮
+                                    Button(action: {
+                                        selectCardManager.removeNote(note)
+                                    }) {
+                                        Image(systemName: "xmark")
+                                            .font(.system(size: 12, weight: .medium))
+                                            .foregroundColor(.white.opacity(0.7))
+                                    }
+                                }
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 5)
+                                
+                                                            // 间隔线（除了最后一个）
+                            if index < selectCardManager.selectedNotes.count - 1 {
+                                Rectangle()
+                                    .fill(Color.white.opacity(0.2))
+                                    .frame(height: 1)
+                                    .padding(.leading, 64) // 避开头像位置 (32 + 12)
+                                    .padding(.trailing, 16)
+                            }
+                            }
+                        }
+                    }
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color.white.opacity(0.3), lineWidth: 1)
+                    )
+                    .frame(maxWidth: UIScreen.main.bounds.width * 0.8, alignment: .leading)
+                    
+                    Spacer()
+                }
+                .padding(.bottom, 16)
+            }
+            
+            // 底部输入栏
+            HStack(spacing: 12) {
+                // 附件按钮
+                Button(action: {
+                    selectCardManager.show()
+                }) {
+                    Image("notes")
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 24, height: 24)
+                        .foregroundColor(.white.opacity(0.7))
+                }
+                
+                // 输入框
+                HStack(spacing: 12) {
+                    TextField("Type a message...", text: $messageText)
+                        .textFieldStyle(PlainTextFieldStyle())
+                        .foregroundColor(.white)
+                        .padding(.vertical, 12)
+                        .placeholder(when: messageText.isEmpty) {
+                            Text("Type a message...")
+                                .foregroundColor(Color(red: 0.627, green: 0.627, blue: 0.627)) // A0A0A0
+                        }
+                        .focused($isTextFieldFocused)
+                        .onTapGesture {
+                            // 防止系统自动滚动
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                isTextFieldFocused = true
+                            }
+                        }
+                    
+                    Button(action: {
+                        if !messageText.isEmpty {
+                            // 获取选中的第一张卡片 ID
+                            let attachedCardId = selectCardManager.selectedNotes.first?.id
+                            // 发送消息到API
+                            chatDetailManager.sendMessage(conversationId: conversationId, content: messageText, attachedCardId: attachedCardId)
+                            messageText = ""
+                            isTextFieldFocused = false
+                            // 清空选中的卡片
+                            selectCardManager.selectedNotes.removeAll()
+                        }
+                    }) {
+                        Image("send")
+                            .resizable()
+                            .frame(width: 40, height: 40)
+                    }
+                    .disabled(messageText.isEmpty)
+                }
+                .padding(.leading, 16)
+                .padding(.trailing, 2)
+                .padding(.vertical, 2)
+                .background(
+                    RoundedRectangle(cornerRadius: 15)
+                        .background(.ultraThinMaterial)
+                        .roundedButtonHighlightEffect(cornerRadius: 30)
+                )
+                .cornerRadius(30)
+            }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 10)
+        }
+        .navigationBarHidden(true)
+        .navigationBarBackButtonHidden(true)
+        .background(
+            Image("home_bg")
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .ignoresSafeArea()
+        )
+        .overlay(
+            SelectCardPopupView()
+        )
+        .onAppear {
+            chatDetailManager.loadConversationDetail(conversationId: conversationId)
+            // loadMessages会在对话详情加载完成后自动调用
+        }
+    }
+}
+
+// MARK: - 选择卡片弹窗视图
+struct SelectCardPopupView: View {
+    @ObservedObject private var manager = SelectCardPopupManager.shared
+    @State private var searchText = ""
+    @FocusState private var isSearchFocused: Bool
+    @State private var searchWorkItem: DispatchWorkItem?
+    
+    // 过滤后的卡片
+    private var filteredCards: [NoteCard] {
+        if searchText.isEmpty {
+            return manager.noteCards
+        } else {
+            return manager.noteCards.filter { card in
+                card.title.localizedCaseInsensitiveContains(searchText) ||
+                card.description.localizedCaseInsensitiveContains(searchText)
+            }
+        }
+    }
+    
+    var body: some View {
+        if manager.isShowing {
+            ZStack {
+                // 背景遮罩
+                Color.black.opacity(0.1)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        isSearchFocused = false
+                        manager.hide()
+                    }
+                
+                // 弹窗内容
+                GeometryReader { geometry in
+                    VStack(spacing: 0) {
+                        // 弹窗头部
+                        HStack {
+                            Text("Select Card")
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundColor(.white)
+                            
+                            Spacer()
+                            
+                            Button(action: {
+                                isSearchFocused = false
+                                manager.hide()
+                            }) {
+                                Image(systemName: "xmark")
+                                    .font(.system(size: 16, weight: .medium))
+                                    .foregroundColor(.white)
+                            }
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.top, 20)
+                        .padding(.bottom, 16)
+                        
+                        // 搜索栏
+                        HStack {
+                            TextField("Search cards", text: $searchText)
+                                .textFieldStyle(PlainTextFieldStyle())
+                                .foregroundColor(.white)
+                                .focused($isSearchFocused)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 12)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 30)
+                                        .fill(.ultraThinMaterial.opacity(0.2))
+                                )
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, 16)
+                        
+                        // 卡片列表
+                        ScrollView {
+                            if manager.isLoading {
+                                VStack(spacing: 12) {
+                                    ProgressView()
+                                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                    Text("Loading cards...")
+                                        .font(.system(size: 14, weight: .medium))
+                                        .foregroundColor(.white.opacity(0.7))
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 60)
+                            } else if filteredCards.isEmpty {
+                                VStack(spacing: 12) {
+                                    Image(systemName: "doc.text")
+                                        .font(.system(size: 32))
+                                        .foregroundColor(.white.opacity(0.5))
+                                    Text("No cards found")
+                                        .font(.system(size: 14, weight: .medium))
+                                        .foregroundColor(.white.opacity(0.7))
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 60)
+                            } else {
+                            LazyVStack(spacing: 16) {
+                                ForEach(filteredCards) { card in
+                                    NoteCardView(card: card)
+                                        .onTapGesture {
+                                            manager.selectNote(card)
+                                            manager.hide()
+                                        }
+                                }
+                            }
+                            .padding(.horizontal, 20)
+                            .padding(.bottom, 20)
+                            }
+                        }
+                        .frame(maxHeight: .infinity)
+                    }
+                    .frame(maxWidth: geometry.size.width, maxHeight: UIScreen.main.bounds.height * 0.4)
+                    .background(
+                        RoundedRectangle(cornerRadius: 16)
+                            .background(.ultraThinMaterial)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 16)
+                                    .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                            )
+                            .cardHighlightEffect()
+                            .cornerRadius(16)
+                    )
+                    .clipShape(
+                        RoundedCorner(radius: 20, corners: [.topLeft, .topRight])
+                    )
+                    .position(x: geometry.size.width / 2, y: geometry.size.height - (UIScreen.main.bounds.height * 0.4) / 2)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+                
+                .animation(.easeInOut(duration: 0.3), value: manager.isShowing)
+                .onAppear {
+                    isSearchFocused = true
+                }
+                .onChange(of: searchText) { newValue in
+                    searchWorkItem?.cancel()
+                    let workItem = DispatchWorkItem { [weak manager] in
+                        manager?.fetchCards(searchText: newValue)
+                    }
+                    searchWorkItem = workItem
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4, execute: workItem)
+                }
+            }
+        }
+    }
+}
+
+// MARK: - 卡片视图
+struct NoteCardView: View {
+    let card: NoteCard
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(card.title)
+                .font(.system(size: 18, weight: .bold))
+                .foregroundColor(.white)
+                .multilineTextAlignment(.leading)
+            
+            HTMLTextRenderer(htmlContent: card.description, maxLines: 3)
+                .font(.system(size: 14, weight: .regular))
+                .foregroundColor(.gray)
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.clear)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(Color.white.opacity(0.3), lineWidth: 1)
+                )
+        )
+    }
+}
+
+// MARK: - 聊天消息视图
+struct ChatMessageView: View {
+    let message: ChatMessage
+    
+    var body: some View {
+        VStack(spacing: 8) {
+            // 时间戳
+            Text(message.timestamp)
+                .font(.system(size: 12, weight: .regular))
+                .foregroundColor(.white.opacity(0.6))
+                .frame(maxWidth: .infinity)
+            // 消息气泡
+            HStack {
+                if message.isFromMe {
+                    HStack(alignment: .top, spacing: 16) {
+                        Spacer()
+                        
+                        // 消息内容
+                        VStack(alignment: .trailing, spacing: 8) {
+                            Text(message.content)
+                                .font(.system(size: 16, weight: .regular))
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 18)
+                                .background(
+                                    CustomRoundedCorners(topLeft: 20, topRight: 6, bottomLeft: 20, bottomRight: 20)
+                                        .fill(.ultraThinMaterial.opacity(0.2))
+                                        .overlay(
+                                            CustomRoundedCorners(topLeft: 20, topRight: 6, bottomLeft: 20, bottomRight: 20)
+                                                .stroke(.white.opacity(0.1), lineWidth: 1)
+                                        )
+                                        .customRoundedButtonHighlightEffect(topLeft: 20, topRight: 6, bottomLeft: 20, bottomRight: 20)
+                                )
+                            
+                            // 附件笔记
+                            if let attachedNotes = message.attachedNotes {
+                                VStack(spacing: 0) {
+                                    ForEach(Array(attachedNotes.enumerated()), id: \.element) { index, note in
+                                        VStack(spacing: 0) {
+                                            HStack(spacing: 12) {
+                                                Image("notes")
+                                                    .resizable()
+                                                    .aspectRatio(contentMode: .fit)
+                                                    .frame(width: 16, height: 16)
+                                                    .foregroundColor(.white.opacity(0.7))
+                                                
+                                                Text(note)
+                                                    .font(.system(size: 14, weight: .regular))
+                                                    .foregroundColor(.white)
+                                                    .lineLimit(1)
+                                                
+                                                Spacer()
+                                            }
+                                            .padding(.horizontal, 12)
+                                            .padding(.vertical, 8)
+                                            
+                                            // 间隔线（除了最后一个）
+                                            if index < attachedNotes.count - 1 {
+                                                Rectangle()
+                                                    .fill(Color.white.opacity(0.2))
+                                                    .frame(height: 1)
+                                                    .padding(.horizontal, 12)
+                                            }
+                                        }
+                                    }
+                                }
+                                .frame(maxWidth: UIScreen.main.bounds.width - 194)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(Color.white.opacity(0.3), lineWidth: 1)
+                                )
+                            }
+                        }
+                        .frame(maxWidth: UIScreen.main.bounds.width - 162, alignment: .trailing)
+//                        50 * 2 + 20 * 2 + 16 * 2
+                        // 头像
+                        Image(message.avatar)
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: 50, height: 50)
+                            .clipShape(Circle())
+                    }
+                } else {
+                    HStack(alignment: .top, spacing: 16) {
+                        // 头像
+                        Image(message.avatar)
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: 50, height: 50)
+                            .clipShape(Circle())
+                        
+                        // 消息内容
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(message.content)
+                                .font(.system(size: 16, weight: .regular))
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 18)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 18)
+                                        .fill(Color.gray.opacity(0.3))
+                                )
+                            
+                            // 附件笔记
+                            if let attachedNotes = message.attachedNotes {
+                                VStack(spacing: 0) {
+                                    ForEach(Array(attachedNotes.enumerated()), id: \.element) { index, note in
+                                        VStack(spacing: 0) {
+                                            HStack(spacing: 12) {
+                                                Image("notes")
+                                                    .resizable()
+                                                    .aspectRatio(contentMode: .fit)
+                                                    .frame(width: 16, height: 16)
+                                                    .foregroundColor(.white.opacity(0.7))
+                                                
+                                                Text(note)
+                                                    .font(.system(size: 14, weight: .regular))
+                                                    .foregroundColor(.white)
+                                                    .lineLimit(1)
+                                                
+                                                Spacer()
+                                            }
+                                            .padding(.horizontal, 12)
+                                            .padding(.vertical, 8)
+                                            
+                                            // 间隔线（除了最后一个）
+                                            if index < attachedNotes.count - 1 {
+                                                Rectangle()
+                                                    .fill(Color.white.opacity(0.2))
+                                                    .frame(height: 1)
+                                                    .padding(.horizontal, 12)
+                                            }
+                                        }
+                                    }
+                                }
+                                .frame(maxWidth: UIScreen.main.bounds.width - 172)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(Color.white.opacity(0.3), lineWidth: 1)
+                                )
+                            }
+                        }
+                        .frame(maxWidth: UIScreen.main.bounds.width - 162, alignment: .leading)
+                        
+                        Spacer()
+                    }
+                }
+            }
+            
+        }
+    }
+}
+
+// MARK: - 自定义高光效果适配不对称圆角
+fileprivate extension View {
+    func customRoundedButtonHighlightEffect(topLeft: CGFloat, topRight: CGFloat, bottomLeft: CGFloat, bottomRight: CGFloat) -> some View {
+        self
+            .overlay(customTopLeftHighlight(topLeft: topLeft, topRight: topRight, bottomLeft: bottomLeft, bottomRight: bottomRight))
+            .overlay(customBottomRightHighlight(topLeft: topLeft, topRight: topRight, bottomLeft: bottomLeft, bottomRight: bottomRight))
+            .overlay(customTopEdgeHighlight(topLeft: topLeft, topRight: topRight, bottomLeft: bottomLeft, bottomRight: bottomRight))
+            .overlay(customBottomEdgeHighlight(topLeft: topLeft, topRight: topRight, bottomLeft: bottomLeft, bottomRight: bottomRight))
+    }
+
+    private func customTopLeftHighlight(topLeft: CGFloat, topRight: CGFloat, bottomLeft: CGFloat, bottomRight: CGFloat) -> some View {
+        CustomRoundedCorners(topLeft: topLeft, topRight: topRight, bottomLeft: bottomLeft, bottomRight: bottomRight)
+            .stroke(Color.white.opacity(0.2), lineWidth: 2)
+            .mask(
+                CustomRoundedCorners(topLeft: topLeft, topRight: topRight, bottomLeft: bottomLeft, bottomRight: bottomRight)
+                    .fill(
+                        RadialGradient(
+                            colors: [Color.white, Color.clear],
+                            center: .topLeading,
+                            startRadius: 10,
+                            endRadius: 35
+                        )
+                    )
+            )
+    }
+
+    private func customBottomRightHighlight(topLeft: CGFloat, topRight: CGFloat, bottomLeft: CGFloat, bottomRight: CGFloat) -> some View {
+        CustomRoundedCorners(topLeft: topLeft, topRight: topRight, bottomLeft: bottomLeft, bottomRight: bottomRight)
+            .stroke(Color.white.opacity(0.2), lineWidth: 2)
+            .mask(
+                CustomRoundedCorners(topLeft: topLeft, topRight: topRight, bottomLeft: bottomLeft, bottomRight: bottomRight)
+                    .fill(
+                        RadialGradient(
+                            colors: [Color.white, Color.clear],
+                            center: .bottomTrailing,
+                            startRadius: 10,
+                            endRadius: 35
+                        )
+                    )
+            )
+    }
+
+    private func customTopEdgeHighlight(topLeft: CGFloat, topRight: CGFloat, bottomLeft: CGFloat, bottomRight: CGFloat) -> some View {
+        CustomRoundedCorners(topLeft: topLeft, topRight: topRight, bottomLeft: bottomLeft, bottomRight: bottomRight)
+            .stroke(Color.white.opacity(0.2), lineWidth: 1)
+            .offset(y: -1)
+            .mask(
+                CustomRoundedCorners(topLeft: topLeft, topRight: topRight, bottomLeft: bottomLeft, bottomRight: bottomRight)
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.white, Color.clear],
+                            startPoint: .top,
+                            endPoint: UnitPoint(x: 0, y: 0.05)
+                        )
+                    )
+            )
+    }
+
+    private func customBottomEdgeHighlight(topLeft: CGFloat, topRight: CGFloat, bottomLeft: CGFloat, bottomRight: CGFloat) -> some View {
+        CustomRoundedCorners(topLeft: topLeft, topRight: topRight, bottomLeft: bottomLeft, bottomRight: bottomRight)
+            .stroke(Color.white.opacity(0.2), lineWidth: 1)
+            .offset(x: -1, y: 1)
+            .mask(
+                CustomRoundedCorners(topLeft: topLeft, topRight: topRight, bottomLeft: bottomLeft, bottomRight: bottomRight)
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.white, Color.clear],
+                            startPoint: .bottom,
+                            endPoint: UnitPoint(x: 1, y: 0.05)
+                        )
+                    )
+            )
+    }
+}
+
+// MARK: - 自定义圆角形状
+struct CustomRoundedCorners: Shape {
+    var topLeft: CGFloat = 0
+    var topRight: CGFloat = 0
+    var bottomLeft: CGFloat = 0
+    var bottomRight: CGFloat = 0
+
+    func path(in rect: CGRect) -> Path {
+        let topLeftRadius = min(min(topLeft, rect.width / 2), rect.height / 2)
+        let topRightRadius = min(min(topRight, rect.width / 2), rect.height / 2)
+        let bottomLeftRadius = min(min(bottomLeft, rect.width / 2), rect.height / 2)
+        let bottomRightRadius = min(min(bottomRight, rect.width / 2), rect.height / 2)
+
+        let path = UIBezierPath()
+        path.move(to: CGPoint(x: rect.minX + topLeftRadius, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX - topRightRadius, y: rect.minY))
+        if topRightRadius > 0 {
+            path.addArc(withCenter: CGPoint(x: rect.maxX - topRightRadius, y: rect.minY + topRightRadius), radius: topRightRadius, startAngle: -CGFloat.pi / 2, endAngle: 0, clockwise: true)
+        } else {
+            path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+        }
+
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - bottomRightRadius))
+        if bottomRightRadius > 0 {
+            path.addArc(withCenter: CGPoint(x: rect.maxX - bottomRightRadius, y: rect.maxY - bottomRightRadius), radius: bottomRightRadius, startAngle: 0, endAngle: CGFloat.pi / 2, clockwise: true)
+        } else {
+            path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        }
+
+        path.addLine(to: CGPoint(x: rect.minX + bottomLeftRadius, y: rect.maxY))
+        if bottomLeftRadius > 0 {
+            path.addArc(withCenter: CGPoint(x: rect.minX + bottomLeftRadius, y: rect.maxY - bottomLeftRadius), radius: bottomLeftRadius, startAngle: CGFloat.pi / 2, endAngle: CGFloat.pi, clockwise: true)
+        } else {
+            path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        }
+
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + topLeftRadius))
+        if topLeftRadius > 0 {
+            path.addArc(withCenter: CGPoint(x: rect.minX + topLeftRadius, y: rect.minY + topLeftRadius), radius: topLeftRadius, startAngle: CGFloat.pi, endAngle: 3 * CGFloat.pi / 2, clockwise: true)
+        } else {
+            path.addLine(to: CGPoint(x: rect.minX, y: rect.minY))
+        }
+
+        path.close()
+        return Path(path.cgPath)
+    }
+}
+
+#Preview {
+    ChatDetailView(conversationId: 1)
+} 
+ 
