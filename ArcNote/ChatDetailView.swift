@@ -4,14 +4,6 @@ import Combine
 
 
 
-// MARK: 卡片数据模型
-struct NoteCard: Identifiable, Equatable {
-    let id: Int
-    let title: String
-    let description: String
-    let isPublic: Bool
-}
-
 // MARK: 选择卡片弹窗管理器
 class SelectCardPopupManager: ObservableObject {
     @Published var isShowing = false
@@ -77,7 +69,9 @@ class SelectCardPopupManager: ObservableObject {
                     id: $0.id,
                     title: $0.title.isEmpty ? "Untitled" : $0.title,
                     description: $0.content,
-                    isPublic: $0.isPublic
+                    isPublic: $0.isPublic,
+                    username: $0.author?.username ?? "Unknown",
+                    avatarUrl: $0.author?.avatar
                 )
             }
     }
@@ -90,7 +84,7 @@ struct ChatMessage: Identifiable {
     let isFromMe: Bool
     let timestamp: String
     let avatar: String
-    let attachedNotes: [String]?
+    let attachedNotes: [NoteCard]?
 }
 
 // MARK: - 聊天详情视图
@@ -159,52 +153,65 @@ struct ChatDetailView: View {
             .padding(.bottom, 20)
             
             // 聊天内容
-            ScrollView {
-                LazyVStack(spacing: 16) {
-                    if chatDetailManager.isLoading {
-                        VStack {
-                            Spacer()
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                .scaleEffect(1.2)
-                            Text("Loading conversation...")
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundColor(.white.opacity(0.7))
-                                .padding(.top, 10)
-                            Spacer()
-                        }
-                        .frame(height: 200)
-                    } else {
-                        if chatDetailManager.convertToChatMessages().isEmpty {
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(spacing: 16) {
+                        if chatDetailManager.isLoading {
                             VStack {
                                 Spacer()
-                                Text("No messages yet")
-                                    .font(.system(size: 16, weight: .medium))
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                    .scaleEffect(1.2)
+                                Text("Loading conversation...")
+                                    .font(.system(size: 14, weight: .medium))
                                     .foregroundColor(.white.opacity(0.7))
-                                Text("Start a conversation")
-                                    .font(.system(size: 14, weight: .regular))
-                                    .foregroundColor(.white.opacity(0.5))
-                                    .padding(.top, 5)
+                                    .padding(.top, 10)
                                 Spacer()
                             }
                             .frame(height: 200)
-                            .onAppear {
-                                let convertedMessages = chatDetailManager.convertToChatMessages()
-                                print("转换后的消息数量: \(convertedMessages.count)")
-                            }
                         } else {
-                            ForEach(chatDetailManager.convertToChatMessages()) { message in
-                                ChatMessageView(message: message)
-                            }
-                            .onAppear {
-                                let convertedMessages = chatDetailManager.convertToChatMessages()
-                                print("转换后的消息数量: \(convertedMessages.count)")
+                            let messages = chatDetailManager.convertToChatMessages()
+                            if messages.isEmpty {
+                                VStack {
+                                    Spacer()
+                                    Text("No messages yet")
+                                        .font(.system(size: 16, weight: .medium))
+                                        .foregroundColor(.white.opacity(0.7))
+                                    Text("Start a conversation")
+                                        .font(.system(size: 14, weight: .regular))
+                                        .foregroundColor(.white.opacity(0.5))
+                                        .padding(.top, 5)
+                                    Spacer()
+                                }
+                                .frame(height: 200)
+                                .onAppear {
+                                    print("转换后的消息数量: \(messages.count)")
+                                }
+                            } else {
+                                ForEach(messages) { message in
+                                    ChatMessageView(message: message)
+                                }
+                                Color.clear
+                                    .frame(height: 1)
+                                    .id("chatBottom")
+                                .onAppear {
+                                    print("转换后的消息数量: \(messages.count)")
+                                }
                             }
                         }
                     }
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, selectCardManager.selectedNotes.isEmpty ? 100 : 200) // 为底部输入框和选中notes留出空间
                 }
-                .padding(.horizontal, 20)
-                .padding(.bottom, selectCardManager.selectedNotes.isEmpty ? 100 : 200) // 为底部输入框和选中notes留出空间
+                .onAppear {
+                    scrollToBottom(proxy, animated: false)
+                }
+                .onChange(of: chatDetailManager.messages.count) { _ in
+                    scrollToBottom(proxy, animated: true)
+                }
+                .onChange(of: selectCardManager.selectedNotes.count) { _ in
+                    scrollToBottom(proxy, animated: false)
+                }
             }
             
             // 选中的notes展示区域
@@ -213,29 +220,27 @@ struct ChatDetailView: View {
                     VStack(spacing: 0) {
                         ForEach(Array(selectCardManager.selectedNotes.enumerated()), id: \.element.id) { index, note in
                             VStack(spacing: 0) {
-                                HStack(spacing: 12) {
-                                    // 头像
+                                HStack(alignment: .top, spacing: 12) {
                                     Image("avatar")
                                         .resizable()
                                         .aspectRatio(contentMode: .fill)
-                                        .frame(width: 32, height: 32)
+                                        .frame(width: 28, height: 28)
                                         .clipShape(Circle())
                                     
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(note.title)
+                                    VStack(alignment: .leading, spacing: 6) {
+                                        Text(note.username)
                                             .font(.system(size: 14, weight: .semibold))
                                             .foregroundColor(.white)
                                             .lineLimit(1)
                                         
                                         Text(note.description)
                                             .font(.system(size: 12, weight: .regular))
-                                            .foregroundColor(.gray)
-                                            .lineLimit(1)
+                                            .foregroundColor(.white.opacity(0.6))
+                                            .lineLimit(2)
                                     }
                                     
                                     Spacer()
                                     
-                                    // 删除按钮
                                     Button(action: {
                                         selectCardManager.removeNote(note)
                                     }) {
@@ -245,16 +250,16 @@ struct ChatDetailView: View {
                                     }
                                 }
                                 .padding(.horizontal, 16)
-                                .padding(.vertical, 5)
+                                .padding(.vertical, 10)
                                 
-                                                            // 间隔线（除了最后一个）
-                            if index < selectCardManager.selectedNotes.count - 1 {
-                                Rectangle()
-                                    .fill(Color.white.opacity(0.2))
-                                    .frame(height: 1)
-                                    .padding(.leading, 64) // 避开头像位置 (32 + 12)
-                                    .padding(.trailing, 16)
-                            }
+                                // 间隔线（除了最后一个）
+                                if index < selectCardManager.selectedNotes.count - 1 {
+                                    Rectangle()
+                                        .fill(Color.white.opacity(0.2))
+                                        .frame(height: 1)
+                                        .padding(.leading, 64)
+                                        .padding(.trailing, 16)
+                                }
                             }
                         }
                     }
@@ -302,10 +307,9 @@ struct ChatDetailView: View {
                     
                     Button(action: {
                         if !messageText.isEmpty {
-                            // 获取选中的第一张卡片 ID
-                            let attachedCardId = selectCardManager.selectedNotes.first?.id
+                            let attachedNotes = selectCardManager.selectedNotes
                             // 发送消息到API
-                            chatDetailManager.sendMessage(conversationId: conversationId, content: messageText, attachedCardId: attachedCardId)
+                            chatDetailManager.sendMessage(conversationId: conversationId, content: messageText, attachedNotes: attachedNotes)
                             messageText = ""
                             isTextFieldFocused = false
                             // 清空选中的卡片
@@ -345,6 +349,19 @@ struct ChatDetailView: View {
         .onAppear {
             chatDetailManager.loadConversationDetail(conversationId: conversationId)
             // loadMessages会在对话详情加载完成后自动调用
+        }
+    }
+    
+    private func scrollToBottom(_ proxy: ScrollViewProxy, animated: Bool) {
+        guard !chatDetailManager.messages.isEmpty else { return }
+        DispatchQueue.main.async {
+            if animated {
+                withAnimation(.easeOut(duration: 0.25)) {
+                    proxy.scrollTo("chatBottom", anchor: .bottom)
+                }
+            } else {
+                proxy.scrollTo("chatBottom", anchor: .bottom)
+            }
         }
     }
 }
@@ -498,17 +515,28 @@ struct NoteCardView: View {
     let card: NoteCard
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(card.title)
-                .font(.system(size: 18, weight: .bold))
-                .foregroundColor(.white)
-                .multilineTextAlignment(.leading)
+        HStack(alignment: .top, spacing: 12) {
+            Image("avatar")
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .frame(width: 28, height: 28)
+                .clipShape(Circle())
             
-            HTMLTextRenderer(htmlContent: card.description, maxLines: 3)
-                .font(.system(size: 14, weight: .regular))
-                .foregroundColor(.gray)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(card.username)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(.white)
+                    .lineLimit(1)
+                
+                HTMLTextRenderer(htmlContent: card.description, maxLines: 2)
+                    .font(.system(size: 12, weight: .regular))
+                    .foregroundColor(.white.opacity(0.6))
+            }
+            
+            Spacer()
         }
-        .padding(20)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 16)
@@ -557,41 +585,7 @@ struct ChatMessageView: View {
                             
                             // 附件笔记
                             if let attachedNotes = message.attachedNotes {
-                                VStack(spacing: 0) {
-                                    ForEach(Array(attachedNotes.enumerated()), id: \.element) { index, note in
-                                        VStack(spacing: 0) {
-                                            HStack(spacing: 12) {
-                                                Image("notes")
-                                                    .resizable()
-                                                    .aspectRatio(contentMode: .fit)
-                                                    .frame(width: 16, height: 16)
-                                                    .foregroundColor(.white.opacity(0.7))
-                                                
-                                                Text(note)
-                                                    .font(.system(size: 14, weight: .regular))
-                                                    .foregroundColor(.white)
-                                                    .lineLimit(1)
-                                                
-                                                Spacer()
-                                            }
-                                            .padding(.horizontal, 12)
-                                            .padding(.vertical, 8)
-                                            
-                                            // 间隔线（除了最后一个）
-                                            if index < attachedNotes.count - 1 {
-                                                Rectangle()
-                                                    .fill(Color.white.opacity(0.2))
-                                                    .frame(height: 1)
-                                                    .padding(.horizontal, 12)
-                                            }
-                                        }
-                                    }
-                                }
-                                .frame(maxWidth: UIScreen.main.bounds.width - 194)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .stroke(Color.white.opacity(0.3), lineWidth: 1)
-                                )
+                                AttachedNotesBubbleView(notes: attachedNotes, maxWidth: UIScreen.main.bounds.width - 194)
                             }
                         }
                         .frame(maxWidth: UIScreen.main.bounds.width - 162, alignment: .trailing)
@@ -626,41 +620,7 @@ struct ChatMessageView: View {
                             
                             // 附件笔记
                             if let attachedNotes = message.attachedNotes {
-                                VStack(spacing: 0) {
-                                    ForEach(Array(attachedNotes.enumerated()), id: \.element) { index, note in
-                                        VStack(spacing: 0) {
-                                            HStack(spacing: 12) {
-                                                Image("notes")
-                                                    .resizable()
-                                                    .aspectRatio(contentMode: .fit)
-                                                    .frame(width: 16, height: 16)
-                                                    .foregroundColor(.white.opacity(0.7))
-                                                
-                                                Text(note)
-                                                    .font(.system(size: 14, weight: .regular))
-                                                    .foregroundColor(.white)
-                                                    .lineLimit(1)
-                                                
-                                                Spacer()
-                                            }
-                                            .padding(.horizontal, 12)
-                                            .padding(.vertical, 8)
-                                            
-                                            // 间隔线（除了最后一个）
-                                            if index < attachedNotes.count - 1 {
-                                                Rectangle()
-                                                    .fill(Color.white.opacity(0.2))
-                                                    .frame(height: 1)
-                                                    .padding(.horizontal, 12)
-                                            }
-                                        }
-                                    }
-                                }
-                                .frame(maxWidth: UIScreen.main.bounds.width - 172)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .stroke(Color.white.opacity(0.3), lineWidth: 1)
-                                )
+                                AttachedNotesBubbleView(notes: attachedNotes, maxWidth: UIScreen.main.bounds.width - 172)
                             }
                         }
                         .frame(maxWidth: UIScreen.main.bounds.width - 162, alignment: .leading)
@@ -671,6 +631,101 @@ struct ChatMessageView: View {
             }
             
         }
+    }
+}
+
+// MARK: - 附件卡片列表
+struct AttachedNotesView: View {
+    let notes: [NoteCard]
+    let maxWidth: CGFloat
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(notes.enumerated()), id: \.element.id) { index, note in
+                VStack(spacing: 0) {
+                    HStack(alignment: .top, spacing: 10) {
+                        Image("avatar")
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: 24, height: 24)
+                            .clipShape(Circle())
+                        
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(note.username)
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundColor(.white)
+                                .lineLimit(1)
+                            
+                            HTMLTextRenderer(htmlContent: note.description, maxLines: 2)
+                                .font(.system(size: 11, weight: .regular))
+                                .foregroundColor(.white.opacity(0.6))
+                        }
+                        
+                        Spacer()
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    
+                    if index < notes.count - 1 {
+                        Rectangle()
+                            .fill(Color.white.opacity(0.2))
+                            .frame(height: 1)
+                            .padding(.leading, 50)
+                            .padding(.trailing, 12)
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: maxWidth, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.white.opacity(0.3), lineWidth: 1)
+        )
+    }
+}
+
+// MARK: - 聊天气泡附件列表
+struct AttachedNotesBubbleView: View {
+    let notes: [NoteCard]
+    let maxWidth: CGFloat
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(notes.enumerated()), id: \.element.id) { index, note in
+                VStack(spacing: 0) {
+                    NavigationLink(destination: DetailView(cardId: note.id)) {
+                        HStack(spacing: 10) {
+                            Image(systemName: "doc.text")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(.white.opacity(0.7))
+                                .frame(width: 16, height: 16)
+                            
+                            Text(note.title)
+                                .font(.system(size: 12, weight: .regular))
+                                .foregroundColor(.white)
+                                .lineLimit(1)
+                            
+                            Spacer()
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    
+                    if index < notes.count - 1 {
+                        Rectangle()
+                            .fill(Color.white.opacity(0.2))
+                            .frame(height: 1)
+                            .padding(.horizontal, 12)
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: maxWidth, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.white.opacity(0.3), lineWidth: 1)
+        )
     }
 }
 

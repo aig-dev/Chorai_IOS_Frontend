@@ -43,7 +43,7 @@ struct HTMLWebView: UIViewRepresentable {
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             // 获取内容高度并调整 WebView 高度
             webView.evaluateJavaScript("document.body.scrollHeight") { (result, error) in
-                if let height = result as? CGFloat {
+                if let _ = result as? CGFloat {
                     DispatchQueue.main.async {
                         // 这里可以通知父视图更新高度
                         // 由于 SwiftUI 的限制，我们使用固定高度

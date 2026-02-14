@@ -218,7 +218,7 @@ struct ChatView: View {
                             )) {
                                 ChatListCell(
                                     avatar: AnyView(
-                                        AsyncImage(url: URL(string: conversation.partner.avatarUrl ?? "")) { image in
+                                        AsyncImage(url: resolvedAvatarURL(conversation.partner.avatarUrl)) { image in
                                             image
                                                 .resizable()
                                                 .aspectRatio(contentMode: .fill)
@@ -292,6 +292,19 @@ struct ChatView: View {
             dateFormatter.dateFormat = "MM/dd"
             return dateFormatter.string(from: date)
         }
+    }
+
+    private func resolvedAvatarURL(_ rawValue: String?) -> URL? {
+        guard let rawValue, !rawValue.isEmpty else {
+            return nil
+        }
+
+        if rawValue.hasPrefix("http://") || rawValue.hasPrefix("https://") {
+            return URL(string: rawValue)
+        }
+
+        let trimmedPath = rawValue.hasPrefix("/") ? String(rawValue.dropFirst()) : rawValue
+        return URL(string: "https://api.zhizuo.site/\(trimmedPath)")
     }
 }
 

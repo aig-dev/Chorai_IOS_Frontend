@@ -10,6 +10,7 @@ struct SearchView: View {
     @StateObject private var searchCardsManager = HomeCardsManager()
     @State private var selectedCardId: Int?
     @State private var navigateToDetail = false
+    @State private var navigateToEdit = false
     @State private var showPopupMenu = false
     @State private var popupMenuLayout: PopupMenuLayout = .grid3x3
     @State private var currentMenuCardData: UserCard?
@@ -168,19 +169,24 @@ struct SearchView: View {
             cardData: currentMenuCardData,
             searchType: "own+favorited"
         )
-        .background(
-            Group {
-                if let cardId = selectedCardId {
-                    NavigationLink(
-                        destination: DetailView(cardId: cardId),
-                        isActive: $navigateToDetail
-                    ) {
-                        EmptyView()
-                    }
-                    .hidden()
+        .navigationDestination(isPresented: $navigateToDetail) {
+            if let cardId = selectedCardId {
+                DetailView(cardId: cardId)
+            } else {
+                EmptyView()
+            }
+        }
+        .navigationDestination(isPresented: $navigateToEdit) {
+            NewNoteView(cardId: selectedCardId ?? 0)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NavigateToEdit"))) { notification in
+            if let cardId = notification.userInfo?["cardId"] as? Int {
+                selectedCardId = cardId
+                DispatchQueue.main.async {
+                    navigateToEdit = true
                 }
             }
-        )
+        }
         .onAppear {
             isSearchFieldFocused = true
         }
@@ -193,8 +199,22 @@ struct SearchView: View {
                 }
             }
         }
+        .onChange(of: searchManager.searchResults.count) { newValue in
+            if newValue > 0 {
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    isShowingFilters = false
+                }
+            }
+        }
         .onChange(of: selectedCollection) { _ in
             showResultsIfNeeded()
+        }
+        .onChange(of: searchManager.isLoading) { newValue in
+            if newValue && !lastSearchQuery.isEmpty {
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    isShowingFilters = false
+                }
+            }
         }
         .onChange(of: selectedLabel) { _ in
             showResultsIfNeeded()

@@ -42,7 +42,7 @@ class CommentPopupManager: ObservableObject {
             .store(in: &cancellables)
         
         // 设置评论数量变化回调
-        commentManager.onCommentCountChanged = { [weak self] cardId, newCount in
+        commentManager.onCommentCountChanged = { cardId, newCount in
             print("评论数量变化回调: cardId=\(cardId), newCount=\(newCount)")
             // 通知所有相关的卡片管理器更新评论数量
             NotificationCenter.default.post(
@@ -103,12 +103,12 @@ class CommentPopupManager: ObservableObject {
     }
     
     func loadMoreComments() {
-        guard let cardId = currentCardId else { return }
+        guard currentCardId != nil else { return }
         commentManager.loadMoreComments()
     }
     
     func refreshComments() {
-        guard let cardId = currentCardId else { return }
+        guard currentCardId != nil else { return }
         commentManager.refreshComments()
     }
     
@@ -698,14 +698,9 @@ struct CommentRowView: View {
             }
             Button("Cancel", role: .cancel) {}
         }
-        .background(
-            NavigationLink(
-                destination: WebViewPage(url: URL(string: "https://www.chorai.app/report")!, title: "Help & Report"),
-                isActive: $navigateToReport
-            ) {
-                EmptyView()
-            }
-        )
+        .navigationDestination(isPresented: $navigateToReport) {
+            WebViewPage(url: URL(string: "https://www.chorai.app/report")!, title: "Help & Report")
+        }
     }
     
     // MARK: - 拉黑用户

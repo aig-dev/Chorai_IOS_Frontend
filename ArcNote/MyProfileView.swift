@@ -276,37 +276,28 @@ struct MyProfileView: View {
                 }
             }
         }
-        .background(
-            Group {
-                NavigationLink(
-                    destination: ChatDetailView(
-                        conversationId: conversationId ?? 0,
-                        contactName: userProfileManager.userProfile?.username ?? "User",
-                        contactStatus: "Online",
-                        contactAvatar: "avatar"
-                    ),
-                    isActive: $navigateToChat
-                ) {
-                    EmptyView()
-                }
-                
-                if let cardId = selectedCardId {
-                    NavigationLink(
-                        destination: DetailView(cardId: cardId),
-                        isActive: $navigateToDetail
-                    ) {
-                        EmptyView()
-                    }
-                    
-                    NavigationLink(
-                        destination: NewNoteView(cardId: cardId),
-                        isActive: $navigateToEdit
-                    ) {
-                        EmptyView()
-                    }
-                }
+        .navigationDestination(isPresented: $navigateToChat) {
+            ChatDetailView(
+                conversationId: conversationId ?? 0,
+                contactName: userProfileManager.userProfile?.username ?? "User",
+                contactStatus: "Online",
+                contactAvatar: "avatar"
+            )
+        }
+        .navigationDestination(isPresented: $navigateToDetail) {
+            if let cardId = selectedCardId {
+                DetailView(cardId: cardId)
+            } else {
+                EmptyView()
             }
-        )
+        }
+        .navigationDestination(isPresented: $navigateToEdit) {
+            if let cardId = selectedCardId {
+                NewNoteView(cardId: cardId)
+            } else {
+                EmptyView()
+            }
+        }
         .popupMenu(isPresented: $showPopupMenu, layout: popupMenuLayout, cardData: currentMenuCardData, searchType: "own")
         .linkPopup()
     }

@@ -103,20 +103,15 @@ class LinkPopupManager: ObservableObject {
                         if case .failure(let error) = completion {
                             print("关联卡片失败: \(error.localizedDescription)")
                             // 检查是否是400错误（卡片链接已存在）
-                            if let networkError = error as? NetworkError {
-                                switch networkError {
-                                case .serverError(let code, _):
-                                    if code == 400 {
-                                        self?.errorMessage = "卡片链接已存在"
-                                    } else {
-                                        self?.errorMessage = "链接失败"
-                                    }
-                                    self?.showErrorAlert = true
-                                default:
+                            switch error {
+                            case .serverError(let code, _):
+                                if code == 400 {
+                                    self?.errorMessage = "卡片链接已存在"
+                                } else {
                                     self?.errorMessage = "链接失败"
-                                    self?.showErrorAlert = true
                                 }
-                            } else {
+                                self?.showErrorAlert = true
+                            default:
                                 self?.errorMessage = "链接失败"
                                 self?.showErrorAlert = true
                             }
@@ -392,7 +387,9 @@ struct LinkPopupView: View {
                 .onAppear {
                     isTextFieldFocused = true
                     // 强制禁用键盘自动调整
-                    UIApplication.shared.windows.first?.endEditing(true)
+                    if let window = keyWindow() {
+                        window.endEditing(true)
+                    }
                     disableKeyboardAdjustment()
                 }
                 .alert("Notice", isPresented: $manager.showErrorAlert) {
@@ -586,11 +583,19 @@ extension View {
     }
 }
 
+// MARK: - Window Helper
+private func keyWindow() -> UIWindow? {
+    UIApplication.shared.connectedScenes
+        .compactMap { $0 as? UIWindowScene }
+        .flatMap { $0.windows }
+        .first { $0.isKeyWindow }
+}
+
 // MARK: - 禁用键盘调整扩展
 extension View {
     func disableKeyboardAdjustment() {
         // 递归查找并禁用所有UITextField的自动调整
-        if let window = UIApplication.shared.windows.first {
+        if let window = keyWindow() {
             disableKeyboardAdjustmentRecursive(in: window)
         }
     }

@@ -136,7 +136,7 @@ struct SparkView: View {
                                             selectedCardId = cardId
                                             DispatchQueue.main.async {
                                                 showDetailView = true
-                                                print("导航状态: selectedCardId=\(selectedCardId), showDetailView=\(showDetailView)")
+                                                print("导航状态: selectedCardId=\(String(describing: selectedCardId)), showDetailView=\(showDetailView)")
                                             }
                                         }
                                     }
@@ -203,10 +203,10 @@ struct SparkView: View {
             
             EmptyView()
                 .onAppear {
-                    print("selectedCardId: \(selectedCardId), showDetailView: \(showDetailView)")
+                    print("selectedCardId: \(String(describing: selectedCardId)), showDetailView: \(showDetailView)")
                 }
                 .onChange(of: selectedCardId) { newValue in
-                    print("selectedCardId 变化: \(newValue)")
+                    print("selectedCardId 变化: \(String(describing: newValue))")
                 }
                 .onChange(of: showDetailView) { newValue in
                     print("showDetailView 变化: \(newValue)")
@@ -214,21 +214,16 @@ struct SparkView: View {
             }
         .navigationBarHidden(true)
         .navigationBarBackButtonHidden(true)
-        .overlay(
-            Group {
-                if let cardId = selectedCardId {
-                    NavigationLink(
-                        destination: DetailView(cardId: cardId)
-                            .onAppear {
-                                print("onAppear, cardId: \(cardId)")
-                            },
-                        isActive: $showDetailView
-                    ) {
-                        EmptyView()
+        .navigationDestination(isPresented: $showDetailView) {
+            if let cardId = selectedCardId {
+                DetailView(cardId: cardId)
+                    .onAppear {
+                        print("onAppear, cardId: \(cardId)")
                     }
-                }
+            } else {
+                EmptyView()
             }
-        )
+        }
         .gesture(
             DragGesture()
                 .onEnded { value in
@@ -280,7 +275,7 @@ struct SparkView: View {
         cardDetailManager.fetchCardDetail(cardId: cardId) { result in
             switch result {
             case .success(let cardDetail):
-                print("卡片详情加载成功: \(cardDetail.title)")
+                print("卡片详情加载成功: \(String(describing: cardDetail.title))")
                 
                 loadMergeHistory()
             case .failure(let error):
@@ -395,7 +390,7 @@ struct SparkView: View {
             }
         }
         
-        if let presented = viewController.presentedViewController {
+        if let _ = viewController.presentedViewController {
             viewController.dismiss(animated: true) {
                 self.findAndPopNavigationControllers(in: viewController)
             }
@@ -902,7 +897,7 @@ struct InspiredNoteCard: View {
                         relatedCardsManager.toggleFavorite(for: card.id)
                     }) {
                         HStack(spacing: 4) {
-                            Image(relatedCardsManager.getFavoriteState(for: card.id) ? "favorite" : "favorite")
+                            Image(relatedCardsManager.getFavoriteState(for: card.id) ? "favorite_active" : "favorite")
                                 .resizable()
                                 .aspectRatio(contentMode: .fit)
                                 .frame(width: 18, height: 18)

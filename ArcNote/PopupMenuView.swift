@@ -52,14 +52,6 @@ struct PopupMenuOverlay: View {
     let cardData: UserCard?
     let isOwnCard: Bool
     let searchType: String
-    @State private var navigateToEdit = false
-    @State private var navigateToSpark = false
-    @State private var navigateToMerge = false
-    @State private var navigateToRoot = false
-    @State private var rootViewType: String? = nil
-    @State private var rootCardId: Int? = nil
-    @State private var navigateToDetail = false
-    @State private var navigateToReport = false
     @State private var animateContent = false
     
     var body: some View {
@@ -122,39 +114,6 @@ struct PopupMenuOverlay: View {
                 animateContent = true
             }
         }
-        .background(
-            NavigationLink(destination: NewNoteView(cardId: cardData?.id ?? 0), isActive: $navigateToEdit) {
-                EmptyView()
-            }
-        )
-        .background(
-            NavigationLink(destination: SparkView(cardId: cardData?.id ?? 0), isActive: $navigateToSpark) {
-                EmptyView()
-            }
-        )
-        .background(
-            NavigationLink(destination: MergeView(cardId: cardData?.id ?? 0), isActive: $navigateToMerge) {
-                EmptyView()
-            }
-        )
-        .background(
-            // 创建一个包装视图来确保 destination 使用最新的状态值
-            RootNavigationLink(
-                isActive: $navigateToRoot,
-                cardId: rootCardId ?? cardData?.id ?? 0,
-                type: rootViewType
-            )
-        )
-        .background(
-            NavigationLink(destination: DetailView(cardId: cardData?.id ?? 0), isActive: $navigateToDetail) {
-                EmptyView()
-            }
-        )
-        .background(
-            NavigationLink(destination: WebViewPage(url: URL(string: "https://www.chorai.app/report")!, title: "Help & Report"), isActive: $navigateToReport) {
-                EmptyView()
-            }
-        )
     }
     
     // MARK: - 删除卡片功能
@@ -207,11 +166,20 @@ struct PopupMenuOverlay: View {
                 HStack(spacing: 15) {
                     MenuButton(icon: "menu_spark", text: "Spark", color: .red, onTap: {
                         isPresented = false
-                        navigateToSpark = true
+                        if let cardId = cardData?.id {
+                            NotificationCenter.default.post(
+                                name: NSNotification.Name("NavigateToSpark"),
+                                object: nil,
+                                userInfo: ["cardId": cardId]
+                            )
+                        }
                     })
                     MenuButton(icon: "menu_report", text: "Report", color: .green, onTap: {
                         isPresented = false
-                        navigateToReport = true
+                        NotificationCenter.default.post(
+                            name: NSNotification.Name("NavigateToReport"),
+                            object: nil
+                        )
                     })
                 }
                 HStack(spacing: 15) {
@@ -222,9 +190,21 @@ struct PopupMenuOverlay: View {
                     MenuButton(icon: isOwnCard ? "menu_view" : "menu_view", text: isOwnCard ? "Edit" : "View", color: .blue, onTap: {
                         isPresented = false
                         if isOwnCard {
-                            navigateToEdit = true
+                            if let cardId = cardData?.id {
+                                NotificationCenter.default.post(
+                                    name: NSNotification.Name("NavigateToEdit"),
+                                    object: nil,
+                                    userInfo: ["cardId": cardId]
+                                )
+                            }
                         } else {
-                            navigateToDetail = true
+                            if let cardId = cardData?.id {
+                                NotificationCenter.default.post(
+                                    name: NSNotification.Name("NavigateToDetail"),
+                                    object: nil,
+                                    userInfo: ["cardId": cardId]
+                                )
+                            }
                         }
                     })
                 }
@@ -234,15 +214,33 @@ struct PopupMenuOverlay: View {
                 HStack(spacing: 15) {
                     MenuButton(icon: "menu_view", text: "Edit", color: .blue, onTap: {
                         isPresented = false
-                        navigateToEdit = true
+                        if let cardId = cardData?.id {
+                            NotificationCenter.default.post(
+                                name: NSNotification.Name("NavigateToEdit"),
+                                object: nil,
+                                userInfo: ["cardId": cardId]
+                            )
+                        }
                     })
                     MenuButton(icon: "menu_spark", text: "Spark", color: .red, onTap: {
                         isPresented = false
-                        navigateToSpark = true
+                        if let cardId = cardData?.id {
+                            NotificationCenter.default.post(
+                                name: NSNotification.Name("NavigateToSpark"),
+                                object: nil,
+                                userInfo: ["cardId": cardId]
+                            )
+                        }
                     })
                     MenuButton(icon: "menu_merge", text: "Merge", color: .orange, onTap: {
                         isPresented = false
-                        navigateToMerge = true
+                        if let cardId = cardData?.id {
+                            NotificationCenter.default.post(
+                                name: NSNotification.Name("NavigateToMerge"),
+                                object: nil,
+                                userInfo: ["cardId": cardId]
+                            )
+                        }
                     })
                 }
                 HStack(spacing: 15) {
@@ -317,11 +315,23 @@ struct PopupMenuOverlay: View {
                 HStack(spacing: 15) {
                     MenuButton(icon: "menu_view", text: "View", color: .blue, onTap: {
                         isPresented = false
-                        navigateToDetail = true
+                        if let cardId = cardData?.id {
+                            NotificationCenter.default.post(
+                                name: NSNotification.Name("NavigateToDetail"),
+                                object: nil,
+                                userInfo: ["cardId": cardId]
+                            )
+                        }
                     })
                     MenuButton(icon: "menu_spark", text: "Spark", color: .red, onTap: {
                         isPresented = false
-                        navigateToSpark = true
+                        if let cardId = cardData?.id {
+                            NotificationCenter.default.post(
+                                name: NSNotification.Name("NavigateToSpark"),
+                                object: nil,
+                                userInfo: ["cardId": cardId]
+                            )
+                        }
                     })
                 }
                 HStack(spacing: 15) {
@@ -466,28 +476,6 @@ struct MenuButton: View {
                 // 默认处理按钮点击事件
                 print("\(text) button tapped")
             }
-        }
-    }
-}
-
-// MARK: - Root Navigation Link Wrapper
-struct RootNavigationLink: View {
-    @Binding var isActive: Bool
-    let cardId: Int
-    let type: String?
-    
-    var body: some View {
-        NavigationLink(
-            destination: {
-                print("创建 destination: cardId = \(cardId), type = \(type ?? "nil")")
-                return RootView(cardId: cardId, type: type)
-            }(),
-            isActive: $isActive
-        ) {
-            EmptyView()
-        }
-        .onChange(of: isActive) { newValue in
-            print("isActive 变化: \(newValue), cardId = \(cardId), type = \(type ?? "nil")")
         }
     }
 }

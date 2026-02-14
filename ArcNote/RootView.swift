@@ -171,6 +171,14 @@ struct RootView: View {
                         }
                 }
             }
+            .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NavigateToEdit"))) { notification in
+                if let cardId = notification.userInfo?["cardId"] as? Int {
+                    selectedCardId = cardId
+                    DispatchQueue.main.async {
+                        navigateToEdit = true
+                    }
+                }
+            }
         .navigationBarHidden(true)
         .navigationBarBackButtonHidden(true)
         .gesture(

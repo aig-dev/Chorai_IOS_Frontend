@@ -10,6 +10,15 @@ struct TabBarView: View {
     @State private var showSideMenu = false
     @State private var currentMenuCardData: UserCard? = nil
     @State private var navigationPath = NavigationPath()
+    @State private var navigateToEdit = false
+    @State private var selectedEditCardId: Int? = nil
+    @State private var navigateToMerge = false
+    @State private var selectedMergeCardId: Int? = nil
+    @State private var navigateToReport = false
+
+    private enum TabRoute: Hashable {
+        case spark(Int)
+    }
 
     // MARK: - My Notes 点击处理
     private func onMyNotesTapped() {
@@ -244,6 +253,51 @@ struct TabBarView: View {
         .linkPopup()
         .navigationBarHidden(true)
         .navigationBarBackButtonHidden(true)
+        .navigationDestination(isPresented: $navigateToEdit) {
+            NewNoteView(cardId: selectedEditCardId ?? 0)
+        }
+        .navigationDestination(isPresented: $navigateToMerge) {
+            MergeView(cardId: selectedMergeCardId ?? 0)
+        }
+        .navigationDestination(isPresented: $navigateToReport) {
+            WebViewPage(url: URL(string: "https://www.chorai.app/report")!, title: "Help & Report")
+        }
+        .navigationDestination(for: TabRoute.self) { route in
+            switch route {
+            case .spark(let cardId):
+                SparkView(cardId: cardId)
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NavigateToEdit"))) { notification in
+            if let cardId = notification.userInfo?["cardId"] as? Int {
+                selectedEditCardId = cardId
+                DispatchQueue.main.async {
+                    navigateToEdit = true
+                }
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NavigateToSpark"))) { notification in
+            if let cardId = notification.userInfo?["cardId"] as? Int {
+                DispatchQueue.main.async {
+                    navigationPath.append(TabRoute.spark(cardId))
+                }
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NavigateToMerge"))) { notification in
+            if let cardId = notification.userInfo?["cardId"] as? Int {
+                selectedMergeCardId = cardId
+                DispatchQueue.main.async {
+                    navigateToMerge = false
+                    navigateToMerge = true
+                }
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NavigateToReport"))) { _ in
+            DispatchQueue.main.async {
+                navigateToReport = false
+                navigateToReport = true
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ShowCardMenu"))) { notification in
             if let userInfo = notification.userInfo,
                let cardData = userInfo["cardData"] as? UserCard {
@@ -455,7 +509,7 @@ struct PostCard: View {
                         cardsManager.toggleFavorite(for: card.id)
                     }) {
                         HStack(spacing: 4) {
-                            Image(cardsManager.getFavoriteState(for: card.id) ? "favorite" : "favorite")
+                            Image(cardsManager.getFavoriteState(for: card.id) ? "favorite_active" : "favorite")
                                 .resizable()
                                 .aspectRatio(contentMode: .fit)
                                 .frame(width: 26, height: 26)

@@ -143,7 +143,7 @@ struct BenefitItem: View {
     
     var body: some View {
         HStack(spacing: 12) {
-            Image("checkmark")
+            Image("checkmark_icon")
                 .resizable()
                 .frame(width: 20, height: 20)
             

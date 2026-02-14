@@ -404,37 +404,54 @@ struct ExploreView: View {
                 secondCardBackground
                 
                 // 第一张卡片（最顶层）- 有内容的卡片
-                if !searchManager.searchResults.isEmpty {
-                    // 显示搜索结果
-                    if currentSearchIndex < searchManager.searchResults.count {
-                        let currentSearchCard = searchManager.searchResults[currentSearchIndex]
-                        PostCard(
-                            card: convertSearchCardToCard(currentSearchCard),
-                            cardsManager: cardsManager,
-                            onShowMenu: { cardData in
-                                currentExploreCardData = convertCardToUserCard(cardData)
-                                showExplorePopupMenu = true
-                            },
-                            onSwipe: { translation, isEnded in
-                                handleSearchSwipe(translation: CGSize(width: translation, height: 0), isEnded: isEnded)
-                            },
-                            onAvatarTap: { userId in
-                                selectedUserId = userId
-                                DispatchQueue.main.async {
-                                    navigateToUserProfile = true
-                                    print("设置 navigateToUserProfile: \(navigateToUserProfile)")
+                if isSearchMode {
+                    if searchManager.isLoading {
+                        VStack {
+                            RotatingLoaderView()
+                        }
+                        .frame(maxHeight: .infinity)
+                    } else if !searchManager.searchResults.isEmpty {
+                        // 显示搜索结果
+                        if currentSearchIndex < searchManager.searchResults.count {
+                            let currentSearchCard = searchManager.searchResults[currentSearchIndex]
+                            PostCard(
+                                card: convertSearchCardToCard(currentSearchCard),
+                                cardsManager: cardsManager,
+                                onShowMenu: { cardData in
+                                    currentExploreCardData = convertCardToUserCard(cardData)
+                                    showExplorePopupMenu = true
+                                },
+                                onSwipe: { translation, isEnded in
+                                    handleSearchSwipe(translation: CGSize(width: translation, height: 0), isEnded: isEnded)
+                                },
+                                onAvatarTap: { userId in
+                                    selectedUserId = userId
+                                    DispatchQueue.main.async {
+                                        navigateToUserProfile = true
+                                        print("设置 navigateToUserProfile: \(navigateToUserProfile)")
+                                    }
+                                },
+                                onCardTap: { cardId in
+                                    print("收到卡片点击回调: cardId=\(cardId)")
+                                    selectedCardId = cardId
+                                    DispatchQueue.main.async {
+                                        navigateToDetail = true
+                                        print("设置 navigateToDetail: \(navigateToDetail)")
+                                    }
                                 }
-                            },
-                            onCardTap: { cardId in
-                                print("收到卡片点击回调: cardId=\(cardId)")
-                                selectedCardId = cardId
-                                DispatchQueue.main.async {
-                                    navigateToDetail = true
-                                    print("设置 navigateToDetail: \(navigateToDetail)")
-                                }
-                            }
-                        )
-                        .opacity(1.0)
+                            )
+                            .opacity(1.0)
+                        }
+                    } else {
+                        VStack(spacing: 12) {
+                            Text("No results found")
+                                .font(.system(size: 16, weight: .medium))
+                                .foregroundColor(.white.opacity(0.8))
+                            Text("Try another keyword")
+                                .font(.system(size: 13, weight: .regular))
+                                .foregroundColor(.white.opacity(0.6))
+                        }
+                        .frame(maxHeight: .infinity)
                     }
                 } else if let currentCard = cardsManager.currentCard {
                     PostCard(
@@ -523,27 +540,20 @@ struct ExploreView: View {
             }
         }
         .popupMenu(isPresented: $showExplorePopupMenu, layout: .grid2x2, cardData: currentExploreCardData)
-        .background(
-            Group {
-                if let userId = selectedUserId {
-                    NavigationLink(
-                        destination: UserProfileView(userId: userId),
-                        isActive: $navigateToUserProfile
-                    ) {
-                        EmptyView()
-                    }
-                }
-                
-                if let cardId = selectedCardId {
-                    NavigationLink(
-                        destination: DetailView(cardId: cardId),
-                        isActive: $navigateToDetail
-                    ) {
-                        EmptyView()
-                    }
-                }
+        .navigationDestination(isPresented: $navigateToUserProfile) {
+            if let userId = selectedUserId {
+                UserProfileView(userId: userId)
+            } else {
+                EmptyView()
             }
-        )
+        }
+        .navigationDestination(isPresented: $navigateToDetail) {
+            if let cardId = selectedCardId {
+                DetailView(cardId: cardId)
+            } else {
+                EmptyView()
+            }
+        }
     }
     
     // MARK: - 执行搜索

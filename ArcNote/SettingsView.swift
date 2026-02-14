@@ -284,31 +284,21 @@ struct SettingsView: View {
         } message: {
             Text("Are you sure you want to log out?")
         }
-        .background(
-            NavigationLink(destination: AccountDetailsView(), isActive: $navigateToAccountDetails) {
-                EmptyView()
-            }
-        )
-        .background(
-            NavigationLink(destination: PreferencesView(), isActive: $navigateToPreferences) {
-                EmptyView()
-            }
-        )
-        .background(
-            NavigationLink(destination: APIAndPluginsView(), isActive: $navigateToAPIAndPlugins) {
-                EmptyView()
-            }
-        )
-        .background(
-            NavigationLink(destination: EditProfileView(), isActive: $navigateToEditProfile) {
-                EmptyView()
-            }
-        )
-        .background(
-            NavigationLink(destination: UpgradeProView(), isActive: $navigateToUpgradePro) {
-                EmptyView()
-            }
-        )
+        .navigationDestination(isPresented: $navigateToAccountDetails) {
+            AccountDetailsView()
+        }
+        .navigationDestination(isPresented: $navigateToPreferences) {
+            PreferencesView()
+        }
+        .navigationDestination(isPresented: $navigateToAPIAndPlugins) {
+            APIAndPluginsView()
+        }
+        .navigationDestination(isPresented: $navigateToEditProfile) {
+            EditProfileView()
+        }
+        .navigationDestination(isPresented: $navigateToUpgradePro) {
+            UpgradeProView()
+        }
         .onAppear {
             userProfileManager.fetchCurrentUserProfile()
         }

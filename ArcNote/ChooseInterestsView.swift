@@ -566,15 +566,14 @@ struct ChooseInterestsView: View {
         guard interests.count > 0 else { return }
         
         let sortedData = interests.enumerated().sorted { $0.element.size > $1.element.size }
-        var sortedIndices = sortedData.map { $0.offset }
+        let sortedIndices = sortedData.map { $0.offset }
         
         interests[sortedIndices[0]].offset = CGSize.zero
         
         for i in 1..<sortedIndices.count {
             let currentIndex = sortedIndices[i]
-            let currentSize = interests[currentIndex].size
             
-            var bestPosition = findBestPosition(for: currentIndex, existingBubbles: Array(sortedIndices.prefix(i)))
+            let bestPosition = findBestPosition(for: currentIndex, existingBubbles: Array(sortedIndices.prefix(i)))
             interests[currentIndex].offset = bestPosition
         }
         

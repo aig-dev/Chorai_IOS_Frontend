@@ -180,12 +180,12 @@ class FavoritesManager: ObservableObject {
                         completion(.failure(error))
                     }
                 },
-                receiveValue: { [weak self] response in
+                receiveValue: { response in
                     if response.success {
                         print("取消收藏成功: cardId=\(cardId)")
                         completion(.success(true))
                     } else {
-                        print("取消收藏失败: \(response.message)")
+                        print("取消收藏失败: \(String(describing: response.message))")
                         completion(.failure(.serverError(500, response.message)))
                     }
                 }

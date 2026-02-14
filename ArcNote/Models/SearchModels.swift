@@ -6,10 +6,39 @@ struct SearchAuthor: Codable {
     let id: Int
     let username: String
     let avatarUrl: String?
-    
+
     enum CodingKeys: String, CodingKey {
-        case id, username
+        case id
+        case userId = "user_id"
+        case username
+        case userName = "user_name"
         case avatarUrl = "avatar_url"
+        case avatar
+    }
+
+    init(id: Int, username: String, avatarUrl: String?) {
+        self.id = id
+        self.username = username
+        self.avatarUrl = avatarUrl
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = (try? container.decode(Int.self, forKey: .id))
+            ?? (try? container.decode(Int.self, forKey: .userId))
+            ?? 0
+        username = (try? container.decode(String.self, forKey: .username))
+            ?? (try? container.decode(String.self, forKey: .userName))
+            ?? "Unknown"
+        avatarUrl = (try? container.decode(String.self, forKey: .avatarUrl))
+            ?? (try? container.decode(String.self, forKey: .avatar))
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(username, forKey: .username)
+        try container.encodeIfPresent(avatarUrl, forKey: .avatarUrl)
     }
 }
 
@@ -34,9 +63,15 @@ struct SearchCard: Codable, Identifiable {
     let author: SearchAuthor
     let linkedCards: SearchLinkedCards?
     let rate: Int
-    
+
     enum CodingKeys: String, CodingKey {
-        case id, title, content, tags, author, rate
+        case id
+        case title
+        case content
+        case tags
+        case labels
+        case author
+        case rate
         case contentHash = "content_hash"
         case isPublic = "is_public"
         case createdAt = "created_at"
@@ -51,6 +86,64 @@ struct SearchCard: Codable, Identifiable {
         case pinnedAt = "pinned_at"
         case linkedCards = "linked_cards"
     }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = (try? container.decode(Int.self, forKey: .id)) ?? 0
+        title = try? container.decode(String.self, forKey: .title)
+        content = (try? container.decode(String.self, forKey: .content)) ?? ""
+        contentHash = (try? container.decode(String.self, forKey: .contentHash)) ?? ""
+        isPublic = (try? container.decode(Bool.self, forKey: .isPublic)) ?? true
+
+        if let decodedTags = try? container.decode([String].self, forKey: .tags) {
+            tags = decodedTags
+        } else if let labels = try? container.decode(String.self, forKey: .labels) {
+            tags = labels
+                .split(separator: ",")
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+        } else {
+            tags = []
+        }
+
+        createdAt = (try? container.decode(String.self, forKey: .createdAt)) ?? ""
+        updatedAt = (try? container.decode(String.self, forKey: .updatedAt)) ?? ""
+        favoriteCount = (try? container.decode(Int.self, forKey: .favoriteCount)) ?? 0
+        viewCount = (try? container.decode(Int.self, forKey: .viewCount)) ?? 0
+        likeCount = (try? container.decode(Int.self, forKey: .likeCount)) ?? 0
+        commentCount = (try? container.decode(Int.self, forKey: .commentCount)) ?? 0
+        isFavorited = try? container.decode(Bool.self, forKey: .isFavorited)
+        isPinned = try? container.decode(Bool.self, forKey: .isPinned)
+        isLiked = try? container.decode(Bool.self, forKey: .isLiked)
+        pinnedAt = try? container.decode(String.self, forKey: .pinnedAt)
+        linkedCards = try? container.decode(SearchLinkedCards.self, forKey: .linkedCards)
+        rate = (try? container.decode(Int.self, forKey: .rate)) ?? 0
+        author = (try? container.decode(SearchAuthor.self, forKey: .author))
+            ?? SearchAuthor(id: 0, username: "Unknown", avatarUrl: nil)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encodeIfPresent(title, forKey: .title)
+        try container.encode(content, forKey: .content)
+        try container.encode(contentHash, forKey: .contentHash)
+        try container.encode(isPublic, forKey: .isPublic)
+        try container.encode(tags, forKey: .tags)
+        try container.encode(createdAt, forKey: .createdAt)
+        try container.encode(updatedAt, forKey: .updatedAt)
+        try container.encode(favoriteCount, forKey: .favoriteCount)
+        try container.encode(viewCount, forKey: .viewCount)
+        try container.encode(likeCount, forKey: .likeCount)
+        try container.encode(commentCount, forKey: .commentCount)
+        try container.encodeIfPresent(isFavorited, forKey: .isFavorited)
+        try container.encodeIfPresent(isPinned, forKey: .isPinned)
+        try container.encodeIfPresent(isLiked, forKey: .isLiked)
+        try container.encodeIfPresent(pinnedAt, forKey: .pinnedAt)
+        try container.encode(author, forKey: .author)
+        try container.encodeIfPresent(linkedCards, forKey: .linkedCards)
+        try container.encode(rate, forKey: .rate)
+    }
 }
 
 // MARK: 搜索卡片链接模型
@@ -64,25 +157,63 @@ struct SearchResponse: Codable {
     let success: Bool
     let message: String
     let data: [SearchCard]
+
+    enum CodingKeys: String, CodingKey {
+        case success
+        case message
+        case data
+        case cards
+        case results
+    }
+
+    private struct SearchDataContainer: Decodable {
+        let cards: [SearchCard]?
+        let results: [SearchCard]?
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        success = (try? container.decode(Bool.self, forKey: .success)) ?? false
+        message = (try? container.decode(String.self, forKey: .message)) ?? ""
+
+        if let directData = try? container.decode([SearchCard].self, forKey: .data) {
+            data = directData
+        } else if let nested = try? container.decode(SearchDataContainer.self, forKey: .data) {
+            data = nested.cards ?? nested.results ?? []
+        } else if let cards = try? container.decode([SearchCard].self, forKey: .cards) {
+            data = cards
+        } else if let results = try? container.decode([SearchCard].self, forKey: .results) {
+            data = results
+        } else {
+            data = []
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(success, forKey: .success)
+        try container.encode(message, forKey: .message)
+        try container.encode(data, forKey: .data)
+    }
 }
 
 // MARK: 搜索管理器
 class SearchManager: ObservableObject {
     static let shared = SearchManager()
-    
+
     @Published var searchResults: [SearchCard] = []
     @Published var isLoading: Bool = false
     @Published var hasMoreData: Bool = true
     @Published var currentPage: Int = 1
     @Published var error: NetworkError?
-    
+
     private let perPage: Int = 20
     private let networkManager = NetworkManager.shared
     private let authManager = AuthManager.shared
     private var cancellables = Set<AnyCancellable>()
-    
+
     private init() {}
-    
+
     // 搜索卡片
     func searchCards(query: String, page: Int = 1, completion: @escaping (Result<[SearchCard], NetworkError>) -> Void) {
         guard let userId = authManager.currentUser?.id else {
@@ -90,15 +221,15 @@ class SearchManager: ObservableObject {
             completion(.failure(.unauthorized))
             return
         }
-        
+
         guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             completion(.failure(.invalidURL))
             return
         }
-        
+
         isLoading = true
         error = nil
-        
+
         networkManager.searchCards(
             query: query,
             userId: userId,
@@ -131,7 +262,7 @@ class SearchManager: ObservableObject {
             }
         }
     }
-    
+
     // 清空搜索结果
     func clearSearchResults() {
         searchResults = []
@@ -139,7 +270,7 @@ class SearchManager: ObservableObject {
         hasMoreData = true
         error = nil
     }
-    
+
     // 加载更多搜索结果
     func loadMoreSearchResults(query: String) {
         guard hasMoreData && !isLoading else { return }

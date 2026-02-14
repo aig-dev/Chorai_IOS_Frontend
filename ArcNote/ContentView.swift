@@ -73,7 +73,7 @@ struct ContentView: View {
             VStack(spacing: 0) {
                 // 标题和标语 移到中上位置
                 HStack(alignment: .center, spacing: 16) {
-                    Image("小幽灵logo")
+                    Image("logo")
                         .resizable()
                         .aspectRatio(contentMode: .fit)
                         .frame(height: 60)
@@ -216,25 +216,16 @@ struct ContentView: View {
                 .padding(.top, 32)
                 
                 // 社交登录图标
-                HStack(spacing: 20) {
-                    SocialLoginButton(iconName: "btn_google", action: {
+                SocialLoginRow(
+                    googleAction: {
                         self.signInWithGoogle()
-                    })
-                    
-                    SocialLoginButton(iconName: "btn_apple", action: {
+                    },
+                    appleAction: {
                         signInWithApple()
-                    })
-                    
-                    SocialLoginButton(iconName: "btn_facebook", action: {
-                        // Facebook 登录
-                    })
-                    
-                    SocialLoginButton(iconName: "btn_x", action: {
-                        // Twitter 登录
-                    })
-                }
+                    }
+                )
                 .padding(.top, 24)
-                        .padding(.bottom, max(50, geometry.safeAreaInsets.bottom + 30))
+                .padding(.bottom, max(50, geometry.safeAreaInsets.bottom + 30))
                     }
                     .frame(minHeight: geometry.size.height)
                 }
@@ -245,7 +236,10 @@ struct ContentView: View {
     
     // MARK: - Google登录
     private func signInWithGoogle() {
-        guard let presentingViewController = UIApplication.shared.windows.first?.rootViewController else {
+        guard let presentingViewController = UIApplication.shared.connectedScenes
+            .compactMap({ $0 as? UIWindowScene })
+            .flatMap({ $0.windows })
+            .first(where: { $0.isKeyWindow })?.rootViewController else {
             print("无法获取presenting view controller")
             return
         }
@@ -418,6 +412,21 @@ class AppleSignInDelegate: NSObject, ASAuthorizationControllerDelegate {
     }
 }
 
+
+// 社交登录按钮行组件
+struct SocialLoginRow: View {
+    let googleAction: () -> Void
+    let appleAction: () -> Void
+    var spacing: CGFloat = 24
+
+    var body: some View {
+        HStack(spacing: spacing) {
+            SocialLoginButton(iconName: "btn_google", action: googleAction)
+            SocialLoginButton(iconName: "btn_apple", action: appleAction)
+        }
+        .frame(maxWidth: .infinity, alignment: .center)
+    }
+}
 
 // 社交登录按钮组件
 struct SocialLoginButton: View {

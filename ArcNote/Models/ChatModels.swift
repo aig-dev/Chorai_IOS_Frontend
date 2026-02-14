@@ -124,6 +124,7 @@ struct APIChatMessage: Codable, Identifiable {
     let isRead: Int
     let messageType: String
     var isFromCurrentUser: Bool
+    var attachedCards: [NoteCard]
     
     enum CodingKeys: String, CodingKey {
         case id, content
@@ -135,7 +136,7 @@ struct APIChatMessage: Codable, Identifiable {
     }
     
     // 普通初始化方法
-    init(id: Int, content: String, senderId: Int, receiverId: Int, createdAt: String, isRead: Int, messageType: String, isFromCurrentUser: Bool) {
+    init(id: Int, content: String, senderId: Int, receiverId: Int, createdAt: String, isRead: Int, messageType: String, isFromCurrentUser: Bool, attachedCards: [NoteCard] = []) {
         self.id = id
         self.content = content
         self.senderId = senderId
@@ -144,6 +145,7 @@ struct APIChatMessage: Codable, Identifiable {
         self.isRead = isRead
         self.messageType = messageType
         self.isFromCurrentUser = isFromCurrentUser
+        self.attachedCards = attachedCards
     }
     
     init(from decoder: Decoder) throws {
@@ -158,6 +160,7 @@ struct APIChatMessage: Codable, Identifiable {
         
         // 这里需要根据当前用户ID来判断，暂时设为false，在ChatDetailManager中处理
         isFromCurrentUser = false
+        attachedCards = []
     }
 }
 
@@ -238,7 +241,8 @@ class ChatDetailManager: ObservableObject {
         }
     }
     
-    func sendMessage(conversationId: Int, content: String, attachedCardId: Int? = nil) {
+    func sendMessage(conversationId: Int, content: String, attachedNotes: [NoteCard]) {
+        let attachedCardId = attachedNotes.first?.id
         print("发送消息conversationId: \(conversationId), content: \(content), attachedCardId: \(attachedCardId ?? 0)")
         
         let request = SendMessageRequest(content: content, attachedCardId: attachedCardId)
@@ -254,7 +258,9 @@ class ChatDetailManager: ObservableObject {
                 },
                 receiveValue: { [weak self] response in
                     // 将新消息添加到消息列表
-                    self?.messages.append(response.message)
+                    var message = response.message
+                    message.attachedCards = attachedNotes
+                    self?.messages.append(message)
                     print("发送消息成功: \(response.message.content)")
                 }
             )
@@ -267,7 +273,10 @@ class ChatDetailManager: ObservableObject {
             return []
         }
         print("转换消息原始消息数量: \(messages.count), 当前用户ID: \(userId)")
-        return messages.map { apiMessage in
+        let sortedMessages = messages.sorted { lhs, rhs in
+            parseAPIDate(lhs.createdAt) < parseAPIDate(rhs.createdAt)
+        }
+        return sortedMessages.map { apiMessage in
             let isFromMe = apiMessage.senderId == userId
             print("消息: \(apiMessage.content), senderId: \(apiMessage.senderId), isFromMe: \(isFromMe)")
             return ChatMessage(
@@ -275,21 +284,39 @@ class ChatDetailManager: ObservableObject {
                 isFromMe: isFromMe,
                 timestamp: formatMessageTime(apiMessage.createdAt),
                 avatar: "avatar",
-                attachedNotes: nil
+                attachedNotes: apiMessage.attachedCards.isEmpty ? nil : apiMessage.attachedCards
             )
         }
     }
     
-    private func formatMessageTime(_ dateString: String) -> String {
+    private func parseAPIDate(_ dateString: String) -> Date {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
         formatter.timeZone = TimeZone(abbreviation: "UTC")
+        return formatter.date(from: dateString) ?? Date.distantPast
+    }
+    
+    private func formatMessageTime(_ dateString: String) -> String {
+        let date = parseAPIDate(dateString)
+        let calendar = Calendar.current
         
-        guard let date = formatter.date(from: dateString) else {
-            return "Unknown"
+        if calendar.isDateInToday(date) {
+            return timeString(from: date)
         }
         
+        if calendar.isDateInYesterday(date) {
+            return "Yesterday \(timeString(from: date))"
+        }
+        
+        let dateFormatter = DateFormatter()
+        dateFormatter.locale = Locale(identifier: "en_US_POSIX")
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+        return dateFormatter.string(from: date)
+    }
+    
+    private func timeString(from date: Date) -> String {
         let timeFormatter = DateFormatter()
+        timeFormatter.locale = Locale(identifier: "en_US_POSIX")
         timeFormatter.dateFormat = "HH:mm"
         return timeFormatter.string(from: date)
     }

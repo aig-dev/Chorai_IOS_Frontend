@@ -276,11 +276,26 @@ class RecommendedCardsManager: ObservableObject {
         }
         
         let isCurrentlyFavorited = getFavoriteState(for: cardId)
+        let currentCount = cardFavoriteCounts[cardId] ?? 0
         
         if isCurrentlyFavorited {
-            removeFavorite(cardId: cardId, userId: userId)
+            // Optimistic update for immediate UI feedback.
+            cardFavoriteStates[cardId] = false
+            cardFavoriteCounts[cardId] = max(0, currentCount - 1)
+            removeFavorite(cardId: cardId, userId: userId) { [weak self] success in
+                guard let self = self, !success else { return }
+                self.cardFavoriteStates[cardId] = true
+                self.cardFavoriteCounts[cardId] = currentCount
+            }
         } else {
-            addFavorite(cardId: cardId, userId: userId)
+            // Optimistic update for immediate UI feedback.
+            cardFavoriteStates[cardId] = true
+            cardFavoriteCounts[cardId] = currentCount + 1
+            addFavorite(cardId: cardId, userId: userId) { [weak self] success in
+                guard let self = self, !success else { return }
+                self.cardFavoriteStates[cardId] = false
+                self.cardFavoriteCounts[cardId] = currentCount
+            }
         }
     }
     
@@ -324,40 +339,44 @@ class RecommendedCardsManager: ObservableObject {
             .store(in: &cancellables)
     }
     
-    private func addFavorite(cardId: Int, userId: Int) {
+    private func addFavorite(cardId: Int, userId: Int, completion: ((Bool) -> Void)? = nil) {
         networkManager.favoriteCard(cardId: cardId, userId: userId)
             .receive(on: DispatchQueue.main)
             .sink(
-                receiveCompletion: { completion in
-                    if case .failure(let error) = completion {
+                receiveCompletion: { result in
+                    if case .failure(let error) = result {
                         print("收藏失败: \(error)")
+                        completion?(false)
                     }
                 },
-                receiveValue: { [weak self] (response: NetworkResponse<FavoriteResponseData>) in
+                receiveValue: { (response: NetworkResponse<FavoriteResponseData>) in
                     if response.success {
-                        self?.cardFavoriteStates[cardId] = true
-                        self?.cardFavoriteCounts[cardId] = (self?.cardFavoriteCounts[cardId] ?? 0) + 1
                         print("收藏成功")
+                        completion?(true)
+                    } else {
+                        completion?(false)
                     }
                 }
             )
             .store(in: &cancellables)
     }
     
-    private func removeFavorite(cardId: Int, userId: Int) {
+    private func removeFavorite(cardId: Int, userId: Int, completion: ((Bool) -> Void)? = nil) {
         networkManager.unfavoriteCard(cardId: cardId, userId: userId)
             .receive(on: DispatchQueue.main)
             .sink(
-                receiveCompletion: { completion in
-                    if case .failure(let error) = completion {
+                receiveCompletion: { result in
+                    if case .failure(let error) = result {
                         print("取消收藏失败: \(error)")
+                        completion?(false)
                     }
                 },
-                receiveValue: { [weak self] (response: NetworkResponse<UnfavoriteResponseData>) in
+                receiveValue: { (response: NetworkResponse<UnfavoriteResponseData>) in
                     if response.success {
-                        self?.cardFavoriteStates[cardId] = false
-                        self?.cardFavoriteCounts[cardId] = max(0, (self?.cardFavoriteCounts[cardId] ?? 0) - 1)
                         print("取消收藏成功")
+                        completion?(true)
+                    } else {
+                        completion?(false)
                     }
                 }
             )

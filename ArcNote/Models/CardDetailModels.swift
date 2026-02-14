@@ -90,7 +90,7 @@ class CardDetailManager: ObservableObject {
                 case .success(let response):
                     if response.success {
                         self?.cardDetail = response.data
-                        print("详细信息获取成功: \(response.data.title)")
+                        print("详细信息获取成功: \(String(describing: response.data.title))")
                         completion(.success(response.data))
                     } else {
                         print("详细信息获取失败: \(response.message)")

@@ -73,7 +73,7 @@ struct SignUpView: View {
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal, 24)
-                            .padding(.top, 40)
+                            .padding(.top, 24)
                             
                             
                             // 输入字段
@@ -145,7 +145,7 @@ struct SignUpView: View {
                                 InputField(icon: "checkmark", placeholder: "Confirm Password", text: $confirmPassword)
                             }
                             .padding(.horizontal, 24)
-                            .padding(.top, 50)
+                            .padding(.top, 24)
                             
                             // 创建账户按钮
                             Button(action: {
@@ -237,7 +237,7 @@ struct SignUpView: View {
                             }
                             .disabled(isRegistering)
                             .padding(.horizontal, 24)
-                            .padding(.top, 32)
+                            .padding(.top, 24)
                             
                             // 用户协议提示
                             VStack(spacing: 4) {
@@ -292,7 +292,7 @@ struct SignUpView: View {
                                 showSignIn = true
                             }
                             
-                            Spacer(minLength: 20)
+                            Spacer(minLength: 8)
                             
                             // 分隔线
                             HStack {
@@ -310,28 +310,19 @@ struct SignUpView: View {
                                     .foregroundColor(.gray.opacity(0.3))
                             }
                             .padding(.horizontal, 24)
-                            .padding(.top, 32)
+                            .padding(.top, 20)
                             
                             // 社交登录图标
-                            HStack(spacing: 20) {
-                                SocialLoginButton(iconName: "btn_google", action: {
+                            SocialLoginRow(
+                                googleAction: {
                                     signInWithGoogle()
-                                })
-                                
-                                SocialLoginButton(iconName: "btn_apple", action: {
+                                },
+                                appleAction: {
                                     signInWithApple()
-                                })
-                                
-                                SocialLoginButton(iconName: "btn_facebook", action: {
-                                    // Facebook 登录
-                                })
-                                
-                                SocialLoginButton(iconName: "btn_x", action: {
-                                    // Twitter 登录
-                                })
-                            }
-                            .padding(.top, 24)
-                            .padding(.bottom, max(50, geometry.safeAreaInsets.bottom + 30))
+                                }
+                            )
+                            .padding(.top, 16)
+                            .padding(.bottom, max(32, geometry.safeAreaInsets.bottom + 20))
                         }
                         .frame(minHeight: geometry.size.height)
                     }
@@ -579,7 +570,10 @@ struct SignUpView: View {
     
     // MARK: - Google登录
     private func signInWithGoogle() {
-        guard let presentingViewController = UIApplication.shared.windows.first?.rootViewController else {
+        guard let presentingViewController = UIApplication.shared.connectedScenes
+            .compactMap({ $0 as? UIWindowScene })
+            .flatMap({ $0.windows })
+            .first(where: { $0.isKeyWindow })?.rootViewController else {
             print("无法获取presenting view controller")
             return
         }

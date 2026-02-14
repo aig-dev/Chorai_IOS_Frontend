@@ -342,7 +342,7 @@ struct DetailView: View {
                         toggleFavorite()
                     }) {
                     HStack(spacing: 6) {
-                        Image("favorite")
+                        Image(isFavorited ? "favorite_active" : "favorite")
                             .resizable()
                             .aspectRatio(contentMode: .fit)
                             .frame(width: 25, height: 25)
@@ -372,39 +372,24 @@ struct DetailView: View {
         .overlay(
             CommentPopupView()
         )
-        .background(
-            Group {
-                // 用户资料导航
-                NavigationLink(
-                    destination: UserProfileView(userId: cardDetailManager.cardDetail?.author?.userId ?? 0),
-                    isActive: $navigateToUserProfile
-                ) {
-                    EmptyView()
-                }
-                
-                // 聊天导航
-                NavigationLink(
-                    destination: ChatDetailView(
-                        conversationId: conversationId ?? 0,
-                        contactName: cardDetailManager.cardDetail?.author?.userName ?? "User",
-                        contactStatus: "Online",
-                        contactAvatar: "avatar"
-                    ),
-                    isActive: $navigateToChat
-                ) {
+        .navigationDestination(isPresented: $navigateToUserProfile) {
+            UserProfileView(userId: cardDetailManager.cardDetail?.author?.userId ?? 0)
+        }
+        .navigationDestination(isPresented: $navigateToChat) {
+            ChatDetailView(
+                conversationId: conversationId ?? 0,
+                contactName: cardDetailManager.cardDetail?.author?.userName ?? "User",
+                contactStatus: "Online",
+                contactAvatar: "avatar"
+            )
+        }
+        .navigationDestination(isPresented: $navigateToRelatedDetail) {
+            if let relatedCardId = selectedRelatedCardId {
+                DetailView(cardId: relatedCardId)
+            } else {
                 EmptyView()
-                }
-                
-                if let relatedCardId = selectedRelatedCardId {
-                    NavigationLink(
-                        destination: DetailView(cardId: relatedCardId),
-                        isActive: $navigateToRelatedDetail
-                    ) {
-                        EmptyView()
-                    }
-                }
             }
-        )
+        }
         .onAppear {
             if cardId > 0 {
                 loadCardDetail()
@@ -426,12 +411,12 @@ struct DetailView: View {
         cardDetailManager.fetchCardDetail(cardId: cardId) { result in
             switch result {
             case .success(let cardDetail):
-                print("详情加载成功: \(cardDetail.title)")
+                print("详情加载成功: \(cardDetail.title ?? "")")
                 
                 // 初始化状态
                 DispatchQueue.main.async {
-                    self.isLiked = cardDetail.isLiked ?? false
-                    self.likeCount = cardDetail.likeCount ?? 0
+                    self.isLiked = cardDetail.isLiked
+                    self.likeCount = cardDetail.likeCount
                     self.isFavorited = cardDetail.isFavorited ?? false
                     self.favoriteCount = cardDetail.favoriteCount ?? 0
                     self.commentCount = cardDetail.commentCount ?? 0

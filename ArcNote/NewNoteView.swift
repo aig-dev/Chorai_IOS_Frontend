@@ -71,7 +71,12 @@ struct NewNoteView: View, MarkupDelegate {
             .onDisappear(perform: onDisappearAction)
             .linkPopup()
             .popupMenu(isPresented: $showPopupMenu, layout: .grid3x3, cardData: createTempUserCard())
-            .background(navigationLinks)
+            .navigationDestination(isPresented: $navigateToDetail) {
+                DetailView(cardId: selectedCardId ?? 0)
+            }
+            .navigationDestination(isPresented: $navigateToEdit) {
+                NewNoteView(cardId: selectedCardId ?? 0)
+            }
             .alert("Publish Result", isPresented: $showPublishAlert) {
                 Button("OK") {
                     if publishMessage.contains("success") || publishMessage.contains("Success") {
@@ -84,6 +89,14 @@ struct NewNoteView: View, MarkupDelegate {
             .overlay(deleteConfirmationOverlay)
             .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ToggleCardPin"))) { notification in
                 handleToggleCardPin(notification: notification)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NavigateToEdit"))) { notification in
+                if let cardId = notification.userInfo?["cardId"] as? Int {
+                    selectedCardId = cardId
+                    DispatchQueue.main.async {
+                        navigateToEdit = true
+                    }
+                }
             }
     }
     
@@ -174,24 +187,6 @@ struct NewNoteView: View, MarkupDelegate {
         MarkupEditor.selectedWebView = nil
         // 退出时自动保存
         autoSaveNote()
-    }
-    
-    private var navigationLinks: some View {
-        Group {
-            NavigationLink(
-                destination: DetailView(cardId: selectedCardId ?? 0),
-                isActive: $navigateToDetail
-            ) {
-                EmptyView()
-            }
-            
-            NavigationLink(
-                destination: NewNoteView(cardId: selectedCardId ?? 0),
-                isActive: $navigateToEdit
-            ) {
-                EmptyView()
-            }
-        }
     }
     
     private var deleteConfirmationOverlay: some View {
@@ -963,13 +958,13 @@ struct NewNoteView: View, MarkupDelegate {
                     noteHtml = cardDetail.content
                     noteText = cardDetail.content
                     
-                    isPublic = cardDetail.isPublic ?? false
+                    isPublic = cardDetail.isPublic
                     
                     updatedAt = cardDetail.updatedAt
                     
                     isPinned = cardDetail.isPinned ?? false
                     
-                    defaultTags = cardDetail.tags ?? []
+                    defaultTags = cardDetail.tags
                     
                     // 更新MarkupEditor内容
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
@@ -1043,8 +1038,7 @@ struct NewNoteView: View, MarkupDelegate {
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { completion in
-                    if case .failure(let error) = completion {
-                        
+                    if case .failure = completion {
                         DispatchQueue.main.async {
                             self.isPublic = !newVisibility
                         }
@@ -1210,9 +1204,7 @@ struct NewNoteView: View, MarkupDelegate {
         publisher
             .receive(on: DispatchQueue.main)
             .sink(
-                receiveCompletion: { completion in
-                    if case .failure(let error) = completion {
-                    }
+                receiveCompletion: { _ in
                 },
                 receiveValue: { response in
                     if response.success {

@@ -353,7 +353,7 @@ struct HomeView: View {
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ToggleCardVisibility"))) { notification in
             guard let userInfo = notification.userInfo,
                   let cardId = userInfo["cardId"] as? Int,
-                  let isPublic = userInfo["isPublic"] as? Bool else {
+                  let _ = userInfo["isPublic"] as? Bool else {
                 print("通知缺少必要参数")
                 return
             }
@@ -370,7 +370,7 @@ struct HomeView: View {
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ToggleCardPin"))) { notification in
             guard let userInfo = notification.userInfo,
                   let cardId = userInfo["cardId"] as? Int,
-                  let isPinned = userInfo["isPinned"] as? Bool else {
+                  let _ = userInfo["isPinned"] as? Bool else {
                 print("通知缺少必要参数")
                 return
             }
@@ -565,41 +565,34 @@ struct HomeView: View {
                 }
             }
         )
-        .background(
-            Group {
-                if let cardId = selectedCardId {
-                    NavigationLink(
-                        destination: DetailView(cardId: cardId),
-                        isActive: $navigateToDetail
-                    ) {
-                        EmptyView()
-                    }
-                    
-                    NavigationLink(
-                        destination: NewNoteView(cardId: cardId),
-                        isActive: $navigateToEdit
-                    ) {
-                        EmptyView()
-                    }
-                    
-                    NavigationLink(
-                        destination: RootView(cardId: cardId, type: rootViewType),
-                        isActive: $navigateToRoot
-                    ) {
-                        EmptyView()
-                    }
-                }
-                
-                if let userId = selectedUserId {
-                    NavigationLink(
-                        destination: UserProfileView(userId: userId),
-                        isActive: $navigateToUserProfile
-                    ) {
-                        EmptyView()
-                    }
-                }
+        .navigationDestination(isPresented: $navigateToDetail) {
+            if let cardId = selectedCardId {
+                DetailView(cardId: cardId)
+            } else {
+                EmptyView()
             }
-        )
+        }
+        .navigationDestination(isPresented: $navigateToEdit) {
+            if let cardId = selectedCardId {
+                NewNoteView(cardId: cardId)
+            } else {
+                EmptyView()
+            }
+        }
+        .navigationDestination(isPresented: $navigateToRoot) {
+            if let cardId = selectedCardId {
+                RootView(cardId: cardId, type: rootViewType)
+            } else {
+                EmptyView()
+            }
+        }
+        .navigationDestination(isPresented: $navigateToUserProfile) {
+            if let userId = selectedUserId {
+                UserProfileView(userId: userId)
+            } else {
+                EmptyView()
+            }
+        }
     }
 }
 
@@ -1342,7 +1335,7 @@ struct HomePostCard: View {
                             onUnfavorite?(cardId)
                         }) {
                         HStack(spacing: 4) {
-                            Image("favorite")
+                            Image("favorite_active")
                                 .resizable()
                                 .aspectRatio(contentMode: .fit)
                                 .frame(width: 18, height: 18)

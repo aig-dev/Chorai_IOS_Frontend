@@ -259,7 +259,7 @@ struct NewInsightView: View {
     
     // MARK: 确认合并
     private func confirmMerge() {
-        guard let userId = authManager.currentUser?.id else {
+        guard authManager.currentUser?.id != nil else {
             confirmError = "User not logged in"
             return
         }
@@ -271,12 +271,6 @@ struct NewInsightView: View {
         
         isConfirming = true
         confirmError = nil
-        
-        let request = ConfirmMergeRequest(
-            userId: userId,
-            selectedCards: selectedCards,
-            mergedContent: contentText
-        )
         
         print("开始确认合并: \(selectedCards.count) 张卡片")
                     

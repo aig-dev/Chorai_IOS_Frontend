@@ -226,36 +226,24 @@ struct SideMenuView: View {
             }
         }
         .animation(.easeInOut(duration: 0.3), value: isPresented)
-        .background(
-            NavigationLink(destination: NotificationView(), isActive: $navigateToNotification) {
-                EmptyView()
-            }
-        )
-        .background(
-            NavigationLink(destination: TrashView(), isActive: $navigateToTrash) {
-                EmptyView()
-            }
-        )
-        .background(
-            NavigationLink(destination: SettingsView(), isActive: $navigateToSettings) {
-                EmptyView()
-            }
-        )
-        .background(
-            NavigationLink(destination: UpgradeProView(), isActive: $navigateToUpgradePro) {
-                EmptyView()
-            }
-        )
-        .background(
-            NavigationLink(destination: MyProfileView(), isActive: $navigateToMyProfile) {
-                EmptyView()
-            }
-        )
-        .background(
-            NavigationLink(destination: WebViewPage(url: URL(string: "https://www.chorai.app/report")!, title: "Help & Report"), isActive: $navigateToHelpReport) {
-                EmptyView()
-            }
-        )
+        .navigationDestination(isPresented: $navigateToNotification) {
+            NotificationView()
+        }
+        .navigationDestination(isPresented: $navigateToTrash) {
+            TrashView()
+        }
+        .navigationDestination(isPresented: $navigateToSettings) {
+            SettingsView()
+        }
+        .navigationDestination(isPresented: $navigateToUpgradePro) {
+            UpgradeProView()
+        }
+        .navigationDestination(isPresented: $navigateToMyProfile) {
+            MyProfileView()
+        }
+        .navigationDestination(isPresented: $navigateToHelpReport) {
+            WebViewPage(url: URL(string: "https://www.chorai.app/report")!, title: "Help & Report")
+        }
         .onAppear {
             // 当侧边栏出现时加载用户资料
             if isPresented {

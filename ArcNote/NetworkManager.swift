@@ -1825,10 +1825,6 @@ extension NetworkManager {
     
     // MARK: 切换卡片置顶状态
     func toggleCardPin(cardId: Int, userId: Int, completion: @escaping (Result<ToggleCardPinResponse, NetworkError>) -> Void) {
-        let parameters: Parameters = [
-            "user_id": userId
-        ]
-        
         self.request(
             endpoint: "/api/cards/\(cardId)/pin?user_id=\(userId)",
             method: .post,

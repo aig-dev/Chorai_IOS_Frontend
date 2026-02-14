@@ -196,23 +196,14 @@ struct SignInView: View {
                 .padding(.top, 32)
                 
                 // 社交登录图标
-                HStack(spacing: 20) {
-                    SocialLoginButton(iconName: "btn_google", action: {
+                SocialLoginRow(
+                    googleAction: {
                         signInWithGoogle()
-                    })
-                    
-                    SocialLoginButton(iconName: "btn_apple", action: {
+                    },
+                    appleAction: {
                         signInWithApple()
-                    })
-                    
-                    SocialLoginButton(iconName: "btn_facebook", action: {
-                        // Facebook 登录
-                    })
-                    
-                    SocialLoginButton(iconName: "btn_x", action: {
-                        // Twitter 登录
-                    })
-                }
+                    }
+                )
                 .padding(.top, 24)
                 .padding(.bottom, 50)
         }
@@ -344,7 +335,10 @@ struct SignInView: View {
     
     // MARK: - Google登录
     private func signInWithGoogle() {
-        guard let presentingViewController = UIApplication.shared.windows.first?.rootViewController else {
+        guard let presentingViewController = UIApplication.shared.connectedScenes
+            .compactMap({ $0 as? UIWindowScene })
+            .flatMap({ $0.windows })
+            .first(where: { $0.isKeyWindow })?.rootViewController else {
             return
         }
         

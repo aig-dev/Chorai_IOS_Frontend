@@ -76,6 +76,7 @@
 		1BF373172E30D07900255F41 /* SignUpView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1BF373162E30D07900255F41 /* SignUpView.swift */; };
 		1BF373192E30D5E100255F41 /* SignInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1BF373182E30D5E100255F41 /* SignInView.swift */; };
 		1BF3731B2E30DA7A00255F41 /* ChooseInterestsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1BF3731A2E30DA7A00255F41 /* ChooseInterestsView.swift */; };
+		8D4846EB2F409AEB00A3D3C7 /* NoteCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D4846EA2F409AEB00A3D3C7 /* NoteCard.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -143,6 +144,7 @@
 		1BF373162E30D07900255F41 /* SignUpView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SignUpView.swift; sourceTree = "<group>"; };
 		1BF373182E30D5E100255F41 /* SignInView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SignInView.swift; sourceTree = "<group>"; };
 		1BF3731A2E30DA7A00255F41 /* ChooseInterestsView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ChooseInterestsView.swift; sourceTree = "<group>"; };
+		8D4846EA2F409AEB00A3D3C7 /* NoteCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteCard.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -262,6 +264,7 @@
 				1B331DC92E7BB1BC00876A32 /* FavoritesModels.swift */,
 				1B331DC72E7BAE7900876A32 /* UserProfileModels.swift */,
 				1B331DC52E79A7C900876A32 /* CommentModels.swift */,
+				8D4846EA2F409AEB00A3D3C7 /* NoteCard.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -354,6 +357,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				1BC6B7682E4A0FE400E997B1 /* SettingsView.swift in Sources */,
+				8D4846EB2F409AEB00A3D3C7 /* NoteCard.swift in Sources */,
 				1BEC65D22E97654100075403 /* NotificationViewModel.swift in Sources */,
 				1BC6B7662E4A07C400E997B1 /* SearchView.swift in Sources */,
 				1B21AA9E2E86913D00C1E5AD /* AppleLoginModels.swift in Sources */,
