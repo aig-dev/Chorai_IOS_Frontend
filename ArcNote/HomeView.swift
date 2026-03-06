@@ -300,7 +300,7 @@ struct HomeView: View {
                 )
             }
         }
-        .popupMenu(isPresented: $showPopupMenu, layout: popupMenuLayout, cardData: currentMenuCardData ?? getCurrentCard(), searchType: selectedSegment == 1 ? "own" : "own+favorited")
+        .popupMenu(isPresented: $showPopupMenu, layout: popupMenuLayout, cardData: currentMenuCardData ?? getCurrentCard(), isOwnCard: selectedSegment == 0)
         .onAppear {
             // 使用默认排序（Latest Edited）
             cardsManager.loadUserCards(refresh: true, sortBy: "updated_at", sortOrder: "desc")

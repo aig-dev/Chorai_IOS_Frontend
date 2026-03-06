@@ -25,7 +25,7 @@ struct UserAllCardsData: Codable {
 
 struct UserAllCard: Codable, Identifiable {
     let id: Int
-    let title: String
+    let title: String?
     let content: String
     let contentHash: String
     let labels: String

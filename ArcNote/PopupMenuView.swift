@@ -31,14 +31,13 @@ struct PopupMenuModifier: ViewModifier {
     let layout: PopupMenuLayout
     let cardData: UserCard?
     let isOwnCard: Bool
-    let searchType: String
     
     func body(content: Content) -> some View {
         content
             .overlay(
                 Group {
                     if isPresented {
-                        PopupMenuOverlay(isPresented: $isPresented, layout: layout, cardData: cardData, isOwnCard: isOwnCard, searchType: searchType)
+                        PopupMenuOverlay(isPresented: $isPresented, layout: layout, cardData: cardData, isOwnCard: isOwnCard)
                     }
                 }
             )
@@ -51,7 +50,6 @@ struct PopupMenuOverlay: View {
     let layout: PopupMenuLayout
     let cardData: UserCard?
     let isOwnCard: Bool
-    let searchType: String
     @State private var animateContent = false
     
     var body: some View {
@@ -185,7 +183,7 @@ struct PopupMenuOverlay: View {
                 HStack(spacing: 15) {
                     MenuButton(icon: "menu_link", text: "Link", color: .pink, onTap: {
                         isPresented = false
-                        LinkPopupManager.shared.show(cardId: cardData?.id, searchType: searchType)
+                        LinkPopupManager.shared.show(cardId: cardData?.id, isInitiatingCardOwned: isOwnCard)
                     })
                     MenuButton(icon: isOwnCard ? "menu_view" : "menu_view", text: isOwnCard ? "Edit" : "View", color: .blue, onTap: {
                         isPresented = false
@@ -261,7 +259,7 @@ struct PopupMenuOverlay: View {
                     MenuButton(icon: "menu_share", text: "Share", color: .green)
                     MenuButton(icon: "menu_link", text: "Link", color: .pink, onTap: {
                         isPresented = false
-                        LinkPopupManager.shared.show(cardId: cardData?.id, searchType: searchType)
+                        LinkPopupManager.shared.show(cardId: cardData?.id, isInitiatingCardOwned: isOwnCard)
                     })
                 }
                 HStack(spacing: 15) {
@@ -338,7 +336,7 @@ struct PopupMenuOverlay: View {
                     MenuButton(icon: "menu_share", text: "Share", color: .green)
                     MenuButton(icon: "menu_link", text: "Link", color: .pink, onTap: {
                         isPresented = false
-                        LinkPopupManager.shared.show(cardId: cardData?.id, searchType: searchType)
+                        LinkPopupManager.shared.show(cardId: cardData?.id, isInitiatingCardOwned: isOwnCard)
                     })
                 }
                 HStack(spacing: 15) {
@@ -482,8 +480,8 @@ struct MenuButton: View {
 
 // MARK: - View Extension
 extension View {
-    func popupMenu(isPresented: Binding<Bool>, layout: PopupMenuLayout = .grid2x2, cardData: UserCard? = nil, isOwnCard: Bool = false, searchType: String = "own+favorited") -> some View {
-        self.modifier(PopupMenuModifier(isPresented: isPresented, layout: layout, cardData: cardData, isOwnCard: isOwnCard, searchType: searchType))
+    func popupMenu(isPresented: Binding<Bool>, layout: PopupMenuLayout = .grid2x2, cardData: UserCard? = nil, isOwnCard: Bool = false) -> some View {
+        self.modifier(PopupMenuModifier(isPresented: isPresented, layout: layout, cardData: cardData, isOwnCard: isOwnCard))
     }
 }
 

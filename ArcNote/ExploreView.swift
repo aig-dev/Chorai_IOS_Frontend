@@ -13,6 +13,7 @@ struct ExploreView: View {
     // ExploreView自己的弹窗状态
     @State private var showExplorePopupMenu = false
     @State private var currentExploreCardData: UserCard? = nil
+    @State private var isCurrentExploreCardOwned = false
     
     // 导航状态
     @State private var navigateToUserProfile = false
@@ -419,6 +420,7 @@ struct ExploreView: View {
                                 cardsManager: cardsManager,
                                 onShowMenu: { cardData in
                                     currentExploreCardData = convertCardToUserCard(cardData)
+                                    isCurrentExploreCardOwned = isOwnedByCurrentUser(authorId: cardData.author?.id)
                                     showExplorePopupMenu = true
                                 },
                                 onSwipe: { translation, isEnded in
@@ -459,6 +461,7 @@ struct ExploreView: View {
                         cardsManager: cardsManager,
                         onShowMenu: { cardData in
                             currentExploreCardData = convertCardToUserCard(cardData)
+                            isCurrentExploreCardOwned = isOwnedByCurrentUser(authorId: cardData.author?.id)
                             showExplorePopupMenu = true
                         },
                         onSwipe: { translation, isEnded in
@@ -539,7 +542,7 @@ struct ExploreView: View {
                 UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
             }
         }
-        .popupMenu(isPresented: $showExplorePopupMenu, layout: .grid2x2, cardData: currentExploreCardData)
+        .popupMenu(isPresented: $showExplorePopupMenu, layout: .grid2x2, cardData: currentExploreCardData, isOwnCard: isCurrentExploreCardOwned)
         .navigationDestination(isPresented: $navigateToUserProfile) {
             if let userId = selectedUserId {
                 UserProfileView(userId: userId)
@@ -651,6 +654,14 @@ struct ExploreView: View {
             favoriteCount: card.favoriteCount,
             rate: 0 // Card 模型没有 rate 字段，默认为 0
         )
+    }
+    
+    private func isOwnedByCurrentUser(authorId: Int?) -> Bool {
+        guard let authorId = authorId,
+              let currentUserId = AuthManager.shared.currentUser?.id else {
+            return false
+        }
+        return authorId == currentUserId
     }
 }
 

@@ -727,7 +727,7 @@ struct CardLinkAuthor: Codable {
 struct CardLinkItem: Codable, Identifiable {
     let linkId: Int
     let linkedCardId: Int
-    let title: String
+    let title: String?
     let content: String
     let createdAt: String
     let author: CardLinkAuthor

@@ -23,9 +23,9 @@ class NetworkManager: ObservableObject {
     private init() {
         // 根据环境设置基础URL
         #if DEBUG
-        self.baseURL = "https://api.zhizuo.site"
+        self.baseURL = "https://production.zhizuo.site"
         #else
-        self.baseURL = "https://api.zhizuo.site"
+        self.baseURL = "https://production.zhizuo.site"
         #endif
         
         // 配置Alamofire Session
@@ -204,30 +204,83 @@ class NetworkManager: ObservableObject {
         headers: HTTPHeaders? = nil,
         responseType: T.Type
     ) -> AnyPublisher<T, NetworkError> {
-        
-        return request(
-            endpoint: endpoint,
-            method: method,
-            parameters: parameters,
-            encoding: encoding,
-            headers: headers,
-            responseType: NetworkResponse<T>.self
-        )
-        .tryMap { response in
-            if response.success {
-                guard let data = response.data else {
-                    throw NetworkError.noData
-                }
-                return data
-            } else {
-                throw NetworkError.serverError(0, response.message)
+        return Future<T, NetworkError> { [weak self] promise in
+            guard let self = self else {
+                promise(.failure(.unknown))
+                return
             }
-        }
-        .mapError { error in
-            if let networkError = error as? NetworkError {
-                return networkError
-            } else {
-                return NetworkError.unknown
+            
+            let url = "\(self.baseURL)\(endpoint)"
+            
+            print("请求URL: \(url)")
+            print("请求方法: \(method.rawValue)")
+            if let parameters = parameters {
+                print("请求参数: \(parameters)")
+            }
+            
+            var requestHeaders = HTTPHeaders()
+            if let token = self.authToken {
+                requestHeaders.add(.authorization(bearerToken: token))
+                print("认证Token: \(token)")
+            }
+            if let customHeaders = headers {
+                for header in customHeaders {
+                    requestHeaders.add(header)
+                }
+                print("自定义请求头: \(customHeaders)")
+            }
+            
+            DispatchQueue.main.async {
+                self.isLoading = true
+            }
+            
+            self.session.request(
+                url,
+                method: method,
+                parameters: parameters,
+                encoding: encoding,
+                headers: requestHeaders
+            )
+            .validate()
+            .responseData { response in
+                DispatchQueue.main.async {
+                    self.isLoading = false
+                }
+                
+                if let httpResponse = response.response {
+                    print("响应状态码: \(httpResponse.statusCode)")
+                    print("响应头: \(httpResponse.allHeaderFields)")
+                }
+                
+                switch response.result {
+                case .success(let data):
+                    if let responseString = String(data: data, encoding: .utf8) {
+                        print("响应数据: \(responseString)")
+                    }
+                    do {
+                        let wrapped = try JSONDecoder().decode(NetworkResponse<T>.self, from: data)
+                        if wrapped.success {
+                            if let wrappedData = wrapped.data {
+                                promise(.success(wrappedData))
+                            } else {
+                                promise(.failure(.noData))
+                            }
+                        } else {
+                            promise(.failure(.serverError(0, wrapped.message)))
+                        }
+                    } catch {
+                        do {
+                            let direct = try JSONDecoder().decode(T.self, from: data)
+                            promise(.success(direct))
+                        } catch {
+                            print("解码错误: \(error)")
+                            promise(.failure(.decodingError))
+                        }
+                    }
+                case .failure(let error):
+                    let networkError = self.handleError(error, response: response.response)
+                    promise(.failure(networkError))
+                }
             }
         }
         .eraseToAnyPublisher()
@@ -2017,15 +2070,17 @@ extension NetworkManager {
     }
     
     // MARK: 获取卡片详细信息
-    func getCardDetail(cardId: Int, userId: Int, completion: @escaping (Result<CardDetailResponse, NetworkError>) -> Void) {
-        let parameters: Parameters = [
-            "user_id": userId
-        ]
-        
+    func getCardDetail(cardId: Int, userId: Int? = nil, completion: @escaping (Result<CardDetailResponse, NetworkError>) -> Void) {
+        var parameters: Parameters = [:]
+        if let userId = userId {
+            parameters["user_id"] = userId
+        }
+        let finalParameters: Parameters? = parameters.isEmpty ? nil : parameters
+
         self.request(
-            endpoint: "/api/cards/\(cardId)?user_id=\(userId)",
+            endpoint: "/api/cards/\(cardId)",
             method: .get,
-            parameters: parameters,
+            parameters: finalParameters,
             encoding: URLEncoding.default,
             responseType: CardDetailResponse.self
         )
@@ -2263,7 +2318,7 @@ extension NetworkManager {
 struct CardLink: Codable {
     let linkId: Int
     let linkedCardId: Int
-    let title: String
+    let title: String?
     let content: String
     let createdAt: String
     

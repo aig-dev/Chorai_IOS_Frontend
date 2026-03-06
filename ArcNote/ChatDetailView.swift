@@ -67,7 +67,7 @@ class SelectCardPopupManager: ObservableObject {
             .map {
                 NoteCard(
                     id: $0.id,
-                    title: $0.title.isEmpty ? "Untitled" : $0.title,
+                    title: ($0.title?.isEmpty ?? true) ? "Untitled" : ($0.title ?? ""),
                     description: $0.content,
                     isPublic: $0.isPublic,
                     username: $0.author?.username ?? "Unknown",

@@ -14,6 +14,7 @@ struct SearchView: View {
     @State private var showPopupMenu = false
     @State private var popupMenuLayout: PopupMenuLayout = .grid3x3
     @State private var currentMenuCardData: UserCard?
+    @State private var isCurrentMenuCardOwned = false
     @FocusState private var isSearchFieldFocused: Bool
     @State private var lastSearchQuery = ""
     @State private var isShowingFilters = true
@@ -167,7 +168,7 @@ struct SearchView: View {
             isPresented: $showPopupMenu,
             layout: popupMenuLayout,
             cardData: currentMenuCardData,
-            searchType: "own+favorited"
+            isOwnCard: isCurrentMenuCardOwned
         )
         .navigationDestination(isPresented: $navigateToDetail) {
             if let cardId = selectedCardId {
@@ -272,7 +273,8 @@ struct SearchView: View {
                                 NotesCard(
                                     card: userCard,
                                     onShowMenu: { card in
-                                        handleShowMenu(for: card)
+                                        let isOwnCard = isOwnedByCurrentUser(authorId: searchCard.author.id)
+                                        handleShowMenu(for: card, isOwnCard: isOwnCard)
                                     },
                                     cardsManager: searchCardsManager,
                                     onCardTap: { cardId in
@@ -283,7 +285,8 @@ struct SearchView: View {
                                 NotesColorCard(
                                     card: userCard,
                                     onShowMenu: { card in
-                                        handleShowMenu(for: card)
+                                        let isOwnCard = isOwnedByCurrentUser(authorId: searchCard.author.id)
+                                        handleShowMenu(for: card, isOwnCard: isOwnCard)
                                     },
                                     cardsManager: searchCardsManager,
                                     onCardTap: { cardId in
@@ -372,8 +375,9 @@ struct SearchView: View {
         navigateToDetail = true
     }
     
-    private func handleShowMenu(for card: UserCard) {
+    private func handleShowMenu(for card: UserCard, isOwnCard: Bool) {
         currentMenuCardData = card
+        isCurrentMenuCardOwned = isOwnCard
         popupMenuLayout = .grid3x3
         showPopupMenu = true
     }
@@ -443,6 +447,13 @@ struct SearchView: View {
         }
         isoFormatter.formatOptions = [.withInternetDateTime]
         return isoFormatter.date(from: dateString)
+    }
+    
+    private func isOwnedByCurrentUser(authorId: Int) -> Bool {
+        guard let currentUserId = AuthManager.shared.currentUser?.id else {
+            return false
+        }
+        return authorId == currentUserId
     }
     
     private func convertToUserCard(_ card: SearchCard) -> UserCard {

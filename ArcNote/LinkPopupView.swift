@@ -38,7 +38,8 @@ class LinkPopupManager: ObservableObject {
     
     private var cancellables = Set<AnyCancellable>()
     private var currentCardId: Int? = nil
-    private var searchType: String = "own+favorited" // 默认搜索类型
+    private var searchType: String = "own+favorite" // 默认搜索类型
+    private var isInitiatingCardOwned = true
     
     static let shared = LinkPopupManager()
     
@@ -52,10 +53,11 @@ class LinkPopupManager: ObservableObject {
             .store(in: &cancellables)
     }
     
-    func show(cardId: Int? = nil, searchType: String = "own+favorited") {
+    func show(cardId: Int? = nil, isInitiatingCardOwned: Bool = true) {
         isShowing = true
         currentCardId = cardId
-        self.searchType = searchType
+        self.isInitiatingCardOwned = isInitiatingCardOwned
+        self.searchType = isInitiatingCardOwned ? "own+favorite" : "own"
         // 打开时获取初始数据（不带关键词）
         searchCards(keyword: "")
     }
@@ -65,6 +67,7 @@ class LinkPopupManager: ObservableObject {
         searchText = ""
         linkItems = []
         currentCardId = nil
+        isInitiatingCardOwned = true
     }
     
     // MARK: - Link 卡片
@@ -77,20 +80,20 @@ class LinkPopupManager: ObservableObject {
             
             isLinking = true
             
-            // 当 searchType == "own" 时，需要对调 cardId 和 linkedCardId
+            // card_id 必须属于发起用户的卡片
             let actualCardId: Int
             let actualLinkedCardId: Int
             
-            if searchType == "own" {
-                // 对调：cardId 使用 linkItem.id，linkedCardId 使用 currentCardId
-                actualCardId = linkItem.id
-                actualLinkedCardId = cardId
-                print("开始关联卡片own: cardId=\(actualCardId), linkedCardId=\(actualLinkedCardId)")
-            } else {
-                // 正常：cardId 使用 currentCardId，linkedCardId 使用 linkItem.id
+            if isInitiatingCardOwned {
+                // 发起卡片属于当前用户
                 actualCardId = cardId
                 actualLinkedCardId = linkItem.id
                 print("开始关联卡片: cardId=\(actualCardId), linkedCardId=\(actualLinkedCardId)")
+            } else {
+                // 发起卡片不属于当前用户，改用搜索结果中的自有卡片作为 card_id
+                actualCardId = linkItem.id
+                actualLinkedCardId = cardId
+                print("开始关联卡片own: cardId=\(actualCardId), linkedCardId=\(actualLinkedCardId)")
             }
             
             let linkRequest = LinkRequest(userId: userId, linkedCardId: actualLinkedCardId)
@@ -208,7 +211,7 @@ class LinkPopupManager: ObservableObject {
                         LinkItem(
                             id: card.id,
                             avatar: card.author?.avatar ?? "", // 使用author的avatar字段
-                            title: card.title,
+                            title: card.title ?? "",
                             description: card.content,
                             username: card.author?.username ?? "Unknown", // 使用author的username字段
                             authorId: card.author?.id, // 传入作者ID

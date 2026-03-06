@@ -40,6 +40,38 @@ struct DetailView: View {
         self.cardId = cardId
     }
     
+    private var isCurrentCardOwned: Bool {
+        guard let authorId = cardDetailManager.cardDetail?.author?.userId,
+              let currentUserId = AuthManager.shared.currentUser?.id else {
+            return false
+        }
+        return authorId == currentUserId
+    }
+    
+    private var currentDetailUserCard: UserCard? {
+        guard let detail = cardDetailManager.cardDetail else {
+            return nil
+        }
+        return UserCard(
+            id: detail.id,
+            title: detail.title,
+            content: detail.content,
+            contentHash: detail.contentHash,
+            isPublic: detail.isPublic,
+            tags: detail.tags,
+            createdAt: detail.createdAt,
+            updatedAt: detail.updatedAt,
+            likeCount: detail.likeCount,
+            commentCount: detail.commentCount,
+            isLiked: detail.isLiked,
+            isPinned: detail.isPinned ?? false,
+            pinnedAt: detail.pinnedAt,
+            isFavorited: detail.isFavorited,
+            favoriteCount: detail.favoriteCount,
+            rate: detail.rate
+        )
+    }
+    
     // 关联笔记数据
     @State private var relatedNotes: [CardLinkItem] = []
     @State private var isLoadingLinks = false
@@ -368,7 +400,7 @@ struct DetailView: View {
                         }
                 }
         )
-        .popupMenu(isPresented: $showPopupMenu, layout: .grid2x2)
+        .popupMenu(isPresented: $showPopupMenu, layout: .grid2x2, cardData: currentDetailUserCard, isOwnCard: isCurrentCardOwned)
         .overlay(
             CommentPopupView()
         )

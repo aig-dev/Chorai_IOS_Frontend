@@ -298,7 +298,7 @@ struct MyProfileView: View {
                 EmptyView()
             }
         }
-        .popupMenu(isPresented: $showPopupMenu, layout: popupMenuLayout, cardData: currentMenuCardData, searchType: "own")
+        .popupMenu(isPresented: $showPopupMenu, layout: popupMenuLayout, cardData: currentMenuCardData, isOwnCard: true)
         .linkPopup()
     }
     

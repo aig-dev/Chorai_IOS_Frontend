@@ -369,7 +369,7 @@ struct UserProfileView: View {
         .navigationDestination(isPresented: $navigateToReport) {
             WebViewPage(url: URL(string: "https://www.chorai.app/report")!, title: "Help & Report")
         }
-        .popupMenu(isPresented: $showPopupMenu, layout: popupMenuLayout, cardData: currentMenuCardData, searchType: "own")
+        .popupMenu(isPresented: $showPopupMenu, layout: popupMenuLayout, cardData: currentMenuCardData, isOwnCard: true)
         .linkPopup()
     }
     

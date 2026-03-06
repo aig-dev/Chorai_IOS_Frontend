@@ -70,7 +70,7 @@ struct NewNoteView: View, MarkupDelegate {
             .onAppear(perform: onAppearAction)
             .onDisappear(perform: onDisappearAction)
             .linkPopup()
-            .popupMenu(isPresented: $showPopupMenu, layout: .grid3x3, cardData: createTempUserCard())
+            .popupMenu(isPresented: $showPopupMenu, layout: .grid3x3, cardData: createTempUserCard(), isOwnCard: true)
             .navigationDestination(isPresented: $navigateToDetail) {
                 DetailView(cardId: selectedCardId ?? 0)
             }
@@ -168,7 +168,7 @@ struct NewNoteView: View, MarkupDelegate {
             )
             
             // 检查是否已存在相同的卡片，避免重复添加
-            if !relatedNotes.contains(where: { $0.title == selectedItem.title }) {
+            if !relatedNotes.contains(where: { $0.linkedCardId == selectedItem.id }) {
                 relatedNotes.append(newCardLinkItem)
                 print("已添加关联笔记: \(selectedItem.title)")
             } else {
@@ -1061,7 +1061,7 @@ struct NewNoteView: View, MarkupDelegate {
         }
         
         selectedCardId = note.linkedCardId
-        print("关联笔记: \(note.title), cardId: \(note.linkedCardId)")
+        print("关联笔记: \(note.title ?? ""), cardId: \(note.linkedCardId)")
   
         
         // 判断卡片是否属于当前用户
@@ -1083,7 +1083,7 @@ struct NewNoteView: View, MarkupDelegate {
         
         if let index = relatedNotes.firstIndex(where: { $0.id == note.id }) {
             relatedNotes.remove(at: index)
-            print("删除关联笔记: \(note.title)")
+            print("删除关联笔记: \(note.title ?? "")")
         }
     }
     

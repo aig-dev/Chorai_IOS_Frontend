@@ -237,6 +237,7 @@ struct SparkView: View {
             CommentPopupView()
         )
         .popupMenu(isPresented: $showPopupMenu, layout: popupMenuLayout, cardData: currentMenuCardData)
+        .linkPopup()
         .onAppear {
             if cardId > 0 {
                 // 清除所有缓存数据
