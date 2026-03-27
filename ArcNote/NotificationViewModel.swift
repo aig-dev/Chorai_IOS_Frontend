@@ -11,7 +11,7 @@ struct NotificationItem: Codable, Identifiable {
     let isRead: Bool
     let createdAt: String
     let relatedUser: RelatedUser?
-    
+
     enum CodingKeys: String, CodingKey {
         case id, type, content
         case relatedId = "related_id"
@@ -27,7 +27,7 @@ enum NotificationType: String, Codable, CaseIterable {
     case like = "like"
     case system = "system"
     case mention = "mention"
-    
+
     var displayName: String {
         switch self {
         case .follow:
@@ -76,7 +76,7 @@ struct GetNotificationsRequest: Codable {
     let perPage: Int
     let unreadOnly: Bool
     let userId: Int
-    
+
     enum CodingKeys: String, CodingKey {
         case page
         case perPage = "per_page"
@@ -94,7 +94,7 @@ struct NotificationsResponse: Codable {
     let page: Int
     let perPage: Int
     let totalPages: Int
-    
+
     enum CodingKeys: String, CodingKey {
         case success, message, data, total, page
         case perPage = "per_page"
@@ -105,7 +105,7 @@ struct NotificationsResponse: Codable {
 // MARK: 标记已读请求模型
 struct MarkNotificationsReadRequest: Codable {
     let userId: Int
-    
+
     enum CodingKeys: String, CodingKey {
         case userId = "user_id"
     }
@@ -138,17 +138,17 @@ class NotificationViewModel: ObservableObject {
             errorMessage = "用户未登录"
             return
         }
-        
+
         isLoading = true
         errorMessage = nil
-        
+
         let request = GetNotificationsRequest(
             page: 1,
             perPage: 50,
             unreadOnly: false,
             userId: userId
         )
-        
+
         networkManager.getNotifications(request)
             .receive(on: DispatchQueue.main)
             .sink(
@@ -173,9 +173,9 @@ class NotificationViewModel: ObservableObject {
     // MARK: 标记所有通知为已读
     func markAllAsRead() {
         guard let userId = authManager.currentUser?.id else { return }
-        
+
         let request = MarkNotificationsReadRequest(userId: userId)
-        
+
         networkManager.markNotificationsAsRead(request)
             .receive(on: DispatchQueue.main)
             .sink(
@@ -186,7 +186,6 @@ class NotificationViewModel: ObservableObject {
                 },
                 receiveValue: { [weak self] response in
                     if response.success {
-                        // 更新本地通知状态
                         if let notifications = self?.notifications {
                             self?.notifications = notifications.map { notification in
                                 NotificationItem(

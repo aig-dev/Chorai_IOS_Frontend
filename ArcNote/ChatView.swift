@@ -304,7 +304,7 @@ struct ChatView: View {
         }
 
         let trimmedPath = rawValue.hasPrefix("/") ? String(rawValue.dropFirst()) : rawValue
-        return URL(string: "https://api.zhizuo.site/\(trimmedPath)")
+        return URL(string: "https://production.chorai.top/\(trimmedPath)")
     }
 }
 

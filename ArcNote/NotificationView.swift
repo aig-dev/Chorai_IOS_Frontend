@@ -127,7 +127,7 @@ struct NotificationView: View {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 24) {
                             let groupedNotifications = viewModel.groupedNotifications(by: selectedFilter)
-                            
+
                             ForEach(Array(groupedNotifications.keys.sorted(by: { key1, key2 in
                                 let order = ["Today", "Yesterday", "This Week", "Earlier"]
                                 let index1 = order.firstIndex(of: key1) ?? 999
@@ -139,7 +139,7 @@ struct NotificationView: View {
                                         .font(.system(size: 18, weight: .semibold))
                                         .foregroundColor(.white)
                                         .padding(.horizontal, 20)
-                                    
+
                                     VStack(spacing: 0) {
                                         if let notifications = groupedNotifications[groupKey] {
                                             ForEach(Array(notifications.enumerated()), id: \.element.id) { index, notification in
@@ -147,7 +147,7 @@ struct NotificationView: View {
                                                     NotificationItemView(notification: notification)
                                                 }
                                                 .buttonStyle(PlainButtonStyle())
-                                                
+
                                                 if index < notifications.count - 1 {
                                                     Divider()
                                                         .background(Color.white.opacity(0.1))

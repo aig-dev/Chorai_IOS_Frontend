@@ -707,7 +707,7 @@ struct CardLinksResponse1: Codable {
 struct CardLinksData: Codable {
     let outgoingLinks: [CardLinkItem]
     let incomingLinks: [CardLinkItem]
-    
+
     enum CodingKeys: String, CodingKey {
         case outgoingLinks = "outgoing_links"
         case incomingLinks = "incoming_links"

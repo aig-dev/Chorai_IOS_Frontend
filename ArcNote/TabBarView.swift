@@ -426,7 +426,7 @@ struct PostCard: View {
                         if let avatarUrl = card.author?.avatar, !avatarUrl.isEmpty {
                             let fullAvatarUrl = avatarUrl.hasPrefix("http://") || avatarUrl.hasPrefix("https://") 
                                 ? avatarUrl 
-                                : "https://api.zhizuo.site/\(avatarUrl.hasPrefix("/") ? String(avatarUrl.dropFirst()) : avatarUrl)"
+                                : "https://production.chorai.top/\(avatarUrl.hasPrefix("/") ? String(avatarUrl.dropFirst()) : avatarUrl)"
                             
                             AsyncImage(url: URL(string: fullAvatarUrl)) { image in
                                 image

@@ -1255,7 +1255,7 @@ struct HomePostCard: View {
                             }
                         } else if !profileImage.isEmpty {
                             // 相对路径，拼接域名
-                            let fullAvatarUrl = "https://api.zhizuo.site/\(profileImage.hasPrefix("/") ? String(profileImage.dropFirst()) : profileImage)"
+                            let fullAvatarUrl = "https://production.chorai.top/\(profileImage.hasPrefix("/") ? String(profileImage.dropFirst()) : profileImage)"
                  
                             AsyncImage(url: URL(string: fullAvatarUrl)) { image in
                                 image

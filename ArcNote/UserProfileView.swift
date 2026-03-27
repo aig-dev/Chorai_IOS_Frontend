@@ -261,7 +261,7 @@ struct UserProfileView: View {
                                 if let avatarUrl = userProfileManager.userProfile?.avatar, !avatarUrl.isEmpty {
                                     let fullAvatarUrl = avatarUrl.hasPrefix("http://") || avatarUrl.hasPrefix("https://") 
                                         ? avatarUrl 
-                                        : "https://api.zhizuo.site/\(avatarUrl.hasPrefix("/") ? String(avatarUrl.dropFirst()) : avatarUrl)"
+                                        : "https://production.chorai.top/\(avatarUrl.hasPrefix("/") ? String(avatarUrl.dropFirst()) : avatarUrl)"
                                     
                                     AsyncImage(url: URL(string: fullAvatarUrl)) { image in
                                         image
@@ -590,7 +590,7 @@ struct UserPostCard: View {
                     if let avatarUrl = avatarUrl, !avatarUrl.isEmpty {
                         let fullAvatarUrl = avatarUrl.hasPrefix("http://") || avatarUrl.hasPrefix("https://") 
                             ? avatarUrl 
-                            : "https://api.zhizuo.site/\(avatarUrl.hasPrefix("/") ? String(avatarUrl.dropFirst()) : avatarUrl)"
+                            : "https://production.chorai.top/\(avatarUrl.hasPrefix("/") ? String(avatarUrl.dropFirst()) : avatarUrl)"
                         
                         AsyncImage(url: URL(string: fullAvatarUrl)) { image in
                             image

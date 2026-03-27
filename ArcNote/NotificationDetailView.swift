@@ -239,14 +239,14 @@ class NotificationDetailViewModel: ObservableObject {
         guard let userId = authManager.currentUser?.id else {
             return
         }
-        
+
         // 如果通知已经是已读状态
         if notification.isRead {
             return
         }
-        
+
         print("标记通知为已读: \(notification.id)")
-        
+
         networkManager.markNotificationAsRead(notificationId: notification.id, userId: userId)
             .receive(on: DispatchQueue.main)
             .sink(

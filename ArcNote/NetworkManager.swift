@@ -23,9 +23,9 @@ class NetworkManager: ObservableObject {
     private init() {
         // 根据环境设置基础URL
         #if DEBUG
-        self.baseURL = "https://production.zhizuo.site"
+        self.baseURL = "https://production.chorai.top"
         #else
-        self.baseURL = "https://production.zhizuo.site"
+        self.baseURL = "https://production.chorai.top"
         #endif
         
         // 配置Alamofire Session
@@ -1485,7 +1485,7 @@ extension NetworkManager {
             "unread_only": request.unreadOnly,
             "user_id": request.userId
         ]
-        
+
         return self.request(
             endpoint: "/api/notifications",
             method: .post,
@@ -2224,7 +2224,7 @@ extension NetworkManager {
         let parameters: Parameters = [
             "user_id": userId
         ]
-        
+
         return self.request(
             endpoint: "/api/cards/\(cardId)/links",
             method: .get,
@@ -2262,7 +2262,7 @@ extension NetworkManager {
         let parameters: [String: Any] = [
             "user_id": request.userId
         ]
-        
+
         return self.request(
             endpoint: "/api/notifications/read-all",
             method: .post,
@@ -2270,12 +2270,12 @@ extension NetworkManager {
             responseType: MarkNotificationsReadResponse.self
         )
     }
-    
+
     func markNotificationAsRead(notificationId: Int, userId: Int) -> AnyPublisher<MarkNotificationsReadResponse, NetworkError> {
         let parameters: [String: Any] = [
             "user_id": userId
         ]
-        
+
         return self.request(
             endpoint: "/api/notifications/\(notificationId)/read",
             method: .post,
