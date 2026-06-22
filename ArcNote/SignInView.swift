@@ -61,10 +61,10 @@ struct SignInView: View {
                 // 输入字段
                 VStack(spacing: 16) {
                     // Username / Email
-                    InputField(icon: "person", placeholder: "Email", text: $usernameEmail)
+                    InputField(icon: "person", placeholder: "Email", text: $usernameEmail, accessibilityIdentifier: "signin.email")
                     
                     // Password
-                    InputField(icon: "lock", placeholder: "Password", text: $password)
+                    InputField(icon: "lock", placeholder: "Password", text: $password, accessibilityIdentifier: "signin.password")
                 }
                 .padding(.horizontal, 24)
                 .padding(.top, 50)
@@ -172,6 +172,7 @@ struct SignInView: View {
                         )
                 }
                 .disabled(isSigningIn)
+                .accessibilityIdentifier("signin.submit")
                 .padding(.horizontal, 24)
                 .padding(.top, 32)
                 
@@ -243,6 +244,7 @@ struct SignInView: View {
             showChooseInterests = false
             showTabBar = true
         }
+        .accessibilityIdentifier("screen.signin")
     }
     
     // MARK: - 登录功能
@@ -284,12 +286,12 @@ struct SignInView: View {
                 },
                 receiveValue: { authResponse in
                     isSigningIn = false
-                    // 先保存用户会话
-                    authManager.saveUserSession(authResponse)
-                    // 根据 isNewUser 判断跳转到哪个页面
-                    if authResponse.data?.isNewUser == true {
-                        showChooseInterests = true
-                    } else {
+                // 先保存用户会话
+                authManager.saveUserSession(authResponse)
+                // 根据 isNewUser 判断跳转到哪个页面
+                if authResponse.data.isNewUser == true {
+                    showChooseInterests = true
+                } else {
                         showTabBar = true
                     }
                 }
@@ -381,13 +383,12 @@ struct SignInView: View {
                 },
                 receiveValue: { authResponse in
                     print("后端Google登录成功")
-                    if let userData = authResponse.data {
-                        print("用户信息: \(userData.username) - \(userData.email), isNewUser: \(userData.isNewUser)")
-                    }
+                    let user = authResponse.data.user
+                    print("用户信息: \(user.username) - \(user.email), isNewUser: \(String(describing: authResponse.data.isNewUser))")
                     // 保存用户会话
                     authManager.saveUserSession(authResponse)
                     // 根据 isNewUser
-                    if authResponse.data?.isNewUser == true {
+                    if authResponse.data.isNewUser == true {
                         showChooseInterests = true
                     } else {
                         showTabBar = true
@@ -467,13 +468,12 @@ struct SignInView: View {
                 },
                 receiveValue: { authResponse in
                     print("后端Apple登录成功")
-                    if let userData = authResponse.data {
-                        print("用户信息: \(userData.username) - \(userData.email), isNewUser: \(userData.isNewUser)")
-                    }
+                    let user = authResponse.data.user
+                    print("用户信息: \(user.username) - \(user.email), isNewUser: \(String(describing: authResponse.data.isNewUser))")
                     // 存用户会话
                     authManager.saveUserSession(authResponse)
                     // 根据 isNewUser 判断跳转到哪个页面
-                    if authResponse.data?.isNewUser == true {
+                    if authResponse.data.isNewUser == true {
                         showChooseInterests = true
                     } else {
                         showTabBar = true

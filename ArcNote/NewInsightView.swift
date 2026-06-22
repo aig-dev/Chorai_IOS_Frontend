@@ -187,6 +187,7 @@ struct NewInsightView: View {
                                 .overlay(discardButtonBottomEdgeHighlight)
                         )
                     }
+                    .accessibilityIdentifier("new-insight.discard")
                     
                     Button(action: {
                         confirmMerge()
@@ -216,6 +217,7 @@ struct NewInsightView: View {
                         )
                         .disabled(isConfirming)
                     }
+                    .accessibilityIdentifier("new-insight.accept")
                 }
             }
             .padding(24)
@@ -241,6 +243,23 @@ struct NewInsightView: View {
             // 发布成功后关闭弹窗
             isPresented = false
         }
+        .overlay(alignment: .topLeading) {
+            #if DEBUG
+            VStack(spacing: 1) {
+                Text("loaded")
+                    .font(.system(size: 1))
+                    .foregroundColor(.white.opacity(0.01))
+                    .accessibilityIdentifier("screen.new-insight.loaded")
+                if let jobId = previewData?.data.jobId, !jobId.isEmpty {
+                    Text(jobId)
+                        .font(.system(size: 1))
+                        .foregroundColor(.white.opacity(0.01))
+                        .accessibilityIdentifier("new-insight.job-id")
+                }
+            }
+            .frame(width: 1, height: 1)
+            #endif
+        }
         .alert("Publish Failed", isPresented: .constant(publishManager.publishError != nil)) {
             Button("OK") {
                 publishManager.publishError = nil
@@ -264,43 +283,34 @@ struct NewInsightView: View {
             return
         }
         
-        guard let selectedCards = selectedCards else {
-            confirmError = "No cards selected to merge"
+        guard let jobId = previewData?.data.jobId, !jobId.isEmpty else {
+            confirmError = "Merge job is missing"
             return
         }
         
         isConfirming = true
         confirmError = nil
         
-        print("开始确认合并: \(selectedCards.count) 张卡片")
-                    
-                    // 发送通知回退到 NotesList
+        print("开始提交合并 job: \(jobId)")
+
+        networkManager.commitMergeJob(jobId: jobId, titleOverride: titleText)
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { completion in
+                    self.isConfirming = false
+                    switch completion {
+                    case .finished:
+                        print("确认合并完成")
+                    case .failure(let error):
+                        self.confirmError = error.localizedDescription
+                    }
+                },
+                receiveValue: { _ in
                     NotificationCenter.default.post(name: .exitMergePage, object: nil)
-                    
-                    // 关闭弹窗
                     self.isPresented = false
-//        return
-//        networkManager.confirmMergeCards(request: request)
-//            .receive(on: DispatchQueue.main)
-//            .sink(
-//                receiveCompletion: { completion in
-//                    self.isConfirming = false
-//                    switch completion {
-//                    case .finished:
-//                        print("确认合并完成")
-//                    case .failure(let error):
-//                        self.confirmError = error.localizedDescription
-//                    }
-//                },
-//                receiveValue: { response in
-//                    // 发送通知回退到 NotesList
-//                    NotificationCenter.default.post(name: .exitMergePage, object: nil)
-//                    
-//                    // 关闭弹窗
-//                    self.isPresented = false
-//                }
-//            )
-//            .store(in: &cancellables)
+                }
+            )
+            .store(in: &cancellables)
     }
     
     // MARK: 加载合并结果

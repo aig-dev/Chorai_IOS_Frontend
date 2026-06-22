@@ -4,20 +4,52 @@ import SwiftUI
 
 // MARK: 通知相关类型定义
 struct NotificationItem: Codable, Identifiable {
-    let id: Int
+    let id: String
     let type: NotificationType
     let content: String
-    let relatedId: Int?
+    let relatedId: String?
     let isRead: Bool
     let createdAt: String
     let relatedUser: RelatedUser?
 
     enum CodingKeys: String, CodingKey {
-        case id, type, content
-        case relatedId = "related_id"
+        case id = "notification_id"
+        case sourceType = "source_type"
+        case payloadRef = "payload_ref"
         case isRead = "is_read"
         case createdAt = "created_at"
-        case relatedUser = "related_user"
+    }
+    
+    init(id: String, type: NotificationType, content: String, relatedId: String?, isRead: Bool, createdAt: String, relatedUser: RelatedUser?) {
+        self.id = id
+        self.type = type
+        self.content = content
+        self.relatedId = relatedId
+        self.isRead = isRead
+        self.createdAt = createdAt
+        self.relatedUser = relatedUser
+    }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        let sourceType = (try? container.decode(String.self, forKey: .sourceType)) ?? "system"
+        let payloadRef = try? container.decode(String.self, forKey: .payloadRef)
+        type = NotificationType(sourceType: sourceType)
+        content = payloadRef?.isEmpty == false ? payloadRef! : sourceType
+        relatedId = payloadRef
+        isRead = try container.decode(Bool.self, forKey: .isRead)
+        createdAt = try container.decode(String.self, forKey: .createdAt)
+        relatedUser = nil
+    }
+    
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(type.rawValue, forKey: .sourceType)
+        try container.encodeIfPresent(relatedId, forKey: .payloadRef)
+        try container.encode(isRead, forKey: .isRead)
+        try container.encode(createdAt, forKey: .createdAt)
     }
 }
 
@@ -27,6 +59,21 @@ enum NotificationType: String, Codable, CaseIterable {
     case like = "like"
     case system = "system"
     case mention = "mention"
+    
+    init(sourceType: String) {
+        switch sourceType.lowercased() {
+        case "follow":
+            self = .follow
+        case "comment":
+            self = .comment
+        case "like":
+            self = .like
+        case "mention":
+            self = .mention
+        default:
+            self = .system
+        }
+    }
 
     var displayName: String {
         switch self {
@@ -60,7 +107,7 @@ enum NotificationType: String, Codable, CaseIterable {
 }
 
 struct RelatedUser: Codable {
-    let id: Int
+    let id: String
     let username: String
     let avatarUrl: String?
     
@@ -74,47 +121,33 @@ struct RelatedUser: Codable {
 struct GetNotificationsRequest: Codable {
     let page: Int
     let perPage: Int
-    let unreadOnly: Bool
-    let userId: Int
 
     enum CodingKeys: String, CodingKey {
         case page
         case perPage = "per_page"
-        case unreadOnly = "unread_only"
-        case userId = "user_id"
     }
 }
 
 // MARK: 通知响应模型
 struct NotificationsResponse: Codable {
     let success: Bool
-    let message: String
+    let message: String?
     let data: [NotificationItem]
-    let total: Int
-    let page: Int
-    let perPage: Int
-    let totalPages: Int
+    let meta: PaginationMeta?
+    let unreadCount: Int
+    
+    var total: Int { meta?.total ?? data.count }
+    var page: Int { meta?.page ?? 1 }
+    var perPage: Int { meta?.perPage ?? data.count }
+    var totalPages: Int {
+        guard perPage > 0 else { return 1 }
+        return max(1, Int(ceil(Double(total) / Double(perPage))))
+    }
 
     enum CodingKeys: String, CodingKey {
-        case success, message, data, total, page
-        case perPage = "per_page"
-        case totalPages = "total_pages"
+        case success, message, data, meta
+        case unreadCount = "unread_count"
     }
-}
-
-// MARK: 标记已读请求模型
-struct MarkNotificationsReadRequest: Codable {
-    let userId: Int
-
-    enum CodingKeys: String, CodingKey {
-        case userId = "user_id"
-    }
-}
-
-// MARK: 标记已读响应模型
-struct MarkNotificationsReadResponse: Codable {
-    let success: Bool
-    let message: String
 }
 
 // MARK: 通知视图模型
@@ -134,7 +167,7 @@ class NotificationViewModel: ObservableObject {
     
     // MARK: 加载通知
     func loadNotifications() {
-        guard let userId = authManager.currentUser?.id else {
+        guard authManager.currentUser != nil else {
             errorMessage = "用户未登录"
             return
         }
@@ -144,9 +177,7 @@ class NotificationViewModel: ObservableObject {
 
         let request = GetNotificationsRequest(
             page: 1,
-            perPage: 50,
-            unreadOnly: false,
-            userId: userId
+            perPage: 50
         )
 
         networkManager.getNotifications(request)
@@ -161,47 +192,9 @@ class NotificationViewModel: ObservableObject {
                 receiveValue: { [weak self] response in
                     if response.success {
                         self?.notifications = response.data
-                        self?.calculateUnreadCount()
+                        self?.unreadCount = response.unreadCount
                     } else {
-                        self?.errorMessage = response.message
-                    }
-                }
-            )
-            .store(in: &cancellables)
-    }
-    
-    // MARK: 标记所有通知为已读
-    func markAllAsRead() {
-        guard let userId = authManager.currentUser?.id else { return }
-
-        let request = MarkNotificationsReadRequest(userId: userId)
-
-        networkManager.markNotificationsAsRead(request)
-            .receive(on: DispatchQueue.main)
-            .sink(
-                receiveCompletion: { [weak self] completion in
-                    if case .failure(let error) = completion {
-                        self?.errorMessage = error.localizedDescription
-                    }
-                },
-                receiveValue: { [weak self] response in
-                    if response.success {
-                        if let notifications = self?.notifications {
-                            self?.notifications = notifications.map { notification in
-                                NotificationItem(
-                                    id: notification.id,
-                                    type: notification.type,
-                                    content: notification.content,
-                                    relatedId: notification.relatedId,
-                                    isRead: true,
-                                    createdAt: notification.createdAt,
-                                    relatedUser: notification.relatedUser
-                                )
-                            }
-                        }
-                        self?.unreadCount = 0
-                    } else {
-                        self?.errorMessage = response.message
+                        self?.errorMessage = response.message ?? "加载通知失败"
                     }
                 }
             )

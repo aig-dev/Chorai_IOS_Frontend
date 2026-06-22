@@ -14,9 +14,9 @@ struct MyProfileView: View {
     // 导航状态
     @State private var navigateToDetail = false
     @State private var navigateToEdit = false
-    @State private var selectedCardId: Int? = nil
+    @State private var selectedCardId: String? = nil
     @State private var navigateToChat = false
-    @State private var conversationId: Int? = nil
+    @State private var conversationId: String? = nil
     @State private var isCreatingConversation = false
     @State private var cancellables = Set<AnyCancellable>()
     
@@ -125,12 +125,12 @@ struct MyProfileView: View {
                                     
                                     Spacer()
                                     HStack(spacing: 4) {
-                                        if userProfileManager.isLoading {
+                                        if userProfileManager.isCreditLoading {
                                             Text("--")
                                                 .font(.system(size: 19, weight: .bold))
                                                 .foregroundColor(.white.opacity(0.7))
                                         } else {
-                                            Text("\(userProfileManager.userProfile?.credit ?? 0)")
+                                            Text("\(userProfileManager.creditTotal)")
                                                 .font(.system(size: 19, weight: .bold))
                                                 .foregroundColor(.white)
                                         }
@@ -204,9 +204,7 @@ struct MyProfileView: View {
                         HStack {
                             Group {
                                 if let avatarUrl = userProfileManager.userProfile?.avatar, !avatarUrl.isEmpty {
-                                    let fullAvatarUrl = avatarUrl.hasPrefix("http://") || avatarUrl.hasPrefix("https://") 
-                                        ? avatarUrl 
-                                        : "https://production.chorai.top/\(avatarUrl.hasPrefix("/") ? String(avatarUrl.dropFirst()) : avatarUrl)"
+                                    let fullAvatarUrl = APIConfiguration.resourceURLString(avatarUrl)
                                   
                                     AsyncImage(url: URL(string: fullAvatarUrl)) { image in
                                         image
@@ -255,12 +253,10 @@ struct MyProfileView: View {
             // 加载当前用户资料
             userProfileManager.fetchCurrentUserProfile()
             
-            if let userId = AuthManager.shared.currentUser?.id {
-                cardsManager.loadUserCards(userId: userId, refresh: true)
-            }
+            cardsManager.loadUserCards(refresh: true)
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NavigateToDetail"))) { notification in
-            if let cardId = notification.userInfo?["cardId"] as? Int {
+            if let cardId = notification.userInfo?["cardId"] as? String {
                 selectedCardId = cardId
                 DispatchQueue.main.async {
                     navigateToDetail = true
@@ -268,7 +264,7 @@ struct MyProfileView: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NavigateToEdit"))) { notification in
-            if let cardId = notification.userInfo?["cardId"] as? Int {
+            if let cardId = notification.userInfo?["cardId"] as? String {
                 print("编辑cardId=\(cardId)")
                 selectedCardId = cardId
                 DispatchQueue.main.async {
@@ -278,7 +274,7 @@ struct MyProfileView: View {
         }
         .navigationDestination(isPresented: $navigateToChat) {
             ChatDetailView(
-                conversationId: conversationId ?? 0,
+                conversationId: conversationId ?? "",
                 contactName: userProfileManager.userProfile?.username ?? "User",
                 contactStatus: "Online",
                 contactAvatar: "avatar"
@@ -338,7 +334,7 @@ struct MyProfileView: View {
                         print("发起会话成功: conversationId=\(response.conversation.id)")
                         DispatchQueue.main.async {
                             conversationId = response.conversation.id
-                            print("conversationId: \(conversationId ?? -1)")
+                            print("conversationId: \(conversationId ?? "")")
                             
                             // 延迟一点时间确保状态更新
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
@@ -358,5 +354,3 @@ struct MyProfileView: View {
 #Preview {
     MyProfileView()
 }
-
-

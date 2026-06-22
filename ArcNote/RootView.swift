@@ -5,20 +5,20 @@ struct RootView: View {
     @State private var showPopupMenu = false
     @State private var currentMenuCardData: UserCard? = nil
     @State private var isCurrentMenuCardOwned = false
-    @StateObject private var mergeHistoryManager = MergeHistoryManager()
+    @StateObject private var sparkHistoryManager = SparkHistoryManager()
     @State private var currentCard: CardDetail? = nil
     @State private var isLoadingCurrentCard = false
     @State private var navigateToDetail = false
     @State private var navigateToEdit = false
     @State private var navigateToProfile = false
-    @State private var selectedCardId: Int? = nil
-    @State private var selectedUserId: Int? = nil
+    @State private var selectedCardId: String? = nil
+    @State private var selectedActorId: String? = nil
     @State private var navigationPath = NavigationPath()
     
-    let cardId: Int
+    let cardId: String
     let type: String?
     
-    init(cardId: Int = 0, type: String? = nil) {
+    init(cardId: String = "", type: String? = nil) {
         self.cardId = cardId
         self.type = type
     }
@@ -67,62 +67,47 @@ struct RootView: View {
                                     handleMenuTap(card: currentCard)
                                 },
                                 onCardTap: {
-                                    handleCardTap(cardId: currentCard.id, authorId: currentCard.author?.userId)
+                                    handleCardTap(cardId: currentCard.id, authorId: currentCard.author?.actorId)
                                 },
                                 onAvatarTap: {
-                                    handleAvatarTap(userId: currentCard.author?.userId)
+                                    handleAvatarTap(actorId: currentCard.author?.actorId)
                                 }
                             )
                         }
                         
-                        if mergeHistoryManager.isLoading {
+                        if sparkHistoryManager.isLoading {
                             // 加载状态
                             VStack {
                                 ProgressView()
                                     .progressViewStyle(CircularProgressViewStyle(tint: .white))
                                     .scaleEffect(1.2)
-                                Text("Loading merge history...")
+                                Text("Loading Spark history...")
                                     .font(.system(size: 14, weight: .medium))
                                     .foregroundColor(.white.opacity(0.7))
                                     .padding(.top, 10)
                             }
                             .frame(maxHeight: .infinity)
-                        } else if let mergeHistory = mergeHistoryManager.mergeHistory {
-                            // 显示合并历史数据
-                            VStack(spacing: 30) {
-                                // 源卡片列表
-                                ForEach(mergeHistory.sourceCards, id: \.id) { sourceCard in
-                                    RootCardView(
-                                        avatar: "avatar",
-                                        name: sourceCard.author.userName,
-                                        time: formatDate(sourceCard.createdAt),
-                                        content: sourceCard.content,
-                                        tags: sourceCard.tags.isEmpty ? ["Source", "Card"] : sourceCard.tags,
-                                        rate: sourceCard.rate,
-                                        onMenuTap: {
-                                            handleSourceCardMenuTap(sourceCard: sourceCard)
-                                        },
-                                        onCardTap: {
-                                            handleCardTap(cardId: sourceCard.id, authorId: sourceCard.author.userId)
-                                        },
-                                        onAvatarTap: {
-                                            handleAvatarTap(userId: sourceCard.author.userId)
-                                        }
-                                    )
-                                }
-                            }
-                        } else {
+                        } else if sparkHistoryManager.historyItems.isEmpty {
                             // 无数据状态
                             VStack {
                                 Image(systemName: "exclamationmark.triangle")
                                     .font(.system(size: 48))
                                     .foregroundColor(.white.opacity(0.6))
-                                Text("No merge history found")
+                                Text("No Spark history found")
                                     .font(.system(size: 16, weight: .medium))
                                     .foregroundColor(.white.opacity(0.8))
                                     .padding(.top, 16)
                             }
                             .frame(maxHeight: .infinity)
+                        } else {
+                            VStack(spacing: 12) {
+                                ForEach(sparkHistoryManager.historyItems) { item in
+                                    SparkHistoryRow(
+                                        item: item,
+                                        timeText: formatFlexibleDate(item.createdAt)
+                                    )
+                                }
+                            }
                         }
                     }
                     .padding(.horizontal, 20)
@@ -159,20 +144,20 @@ struct RootView: View {
                 }
             }
             .navigationDestination(isPresented: $navigateToProfile) {
-                if let userId = selectedUserId {
-                    UserProfileView(userId: userId)
+                if let actorId = selectedActorId {
+                    UserProfileView(actorId: actorId)
                         .onAppear {
-                            print("navigationDestination - 创建 UserProfileView with userId: \(userId)")
+                            print("navigationDestination - 创建 UserProfileView with actorId: \(actorId)")
                         }
                 } else {
                     EmptyView()
                         .onAppear {
-                            print("navigationDestination - selectedUserId 为空")
+                            print("navigationDestination - selectedActorId 为空")
                         }
                 }
             }
             .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NavigateToEdit"))) { notification in
-                if let cardId = notification.userInfo?["cardId"] as? Int {
+                if let cardId = notification.userInfo?["cardId"] as? String {
                     selectedCardId = cardId
                     DispatchQueue.main.async {
                         navigateToEdit = true
@@ -191,19 +176,15 @@ struct RootView: View {
                 }
         )
         .onAppear {
-            if cardId > 0 {
-                if let userId = AuthManager.shared.currentUser?.id {
-                    // 加载当前卡片详情
-                    loadCurrentCard()
-                    // 加载合并历史，传递 type 参数
-                    mergeHistoryManager.fetchMergeHistory(cardId: cardId, userId: userId, type: type)
-                }
+            if !cardId.isEmpty {
+                loadCurrentCard()
+                sparkHistoryManager.fetchSparkHistory(cardId: cardId)
             }
         }
     }
     
     // MARK: 处理卡片点击
-    private func handleCardTap(cardId: Int, authorId: Int?) {
+    private func handleCardTap(cardId: String, authorId: String?) {
         guard let currentUserId = AuthManager.shared.currentUser?.id else {
             return
         }
@@ -243,65 +224,36 @@ struct RootView: View {
         
         // 判断是否是自己的卡片
         let currentUserId = AuthManager.shared.currentUser?.id
-        isCurrentMenuCardOwned = (card.author?.userId == currentUserId)
-        
-        currentMenuCardData = userCard
-        showPopupMenu = true
-    }
-    
-    private func handleSourceCardMenuTap(sourceCard: MergeHistorySourceCard) {
-        // 将 MergeHistorySourceCard 转换为 UserCard
-        let userCard = UserCard(
-            id: sourceCard.id,
-            title: sourceCard.title ?? "",
-            content: sourceCard.content,
-            contentHash: "",
-            isPublic: true, // 源卡片默认为公开
-            tags: sourceCard.tags,
-            createdAt: sourceCard.createdAt,
-            updatedAt: sourceCard.createdAt,
-            likeCount: 0,
-            commentCount: 0,
-            isLiked: false,
-            isPinned: false,
-            pinnedAt: nil,
-            isFavorited: false,
-            favoriteCount: 0,
-            rate: sourceCard.rate
-        )
-        
-        // 判断是否是自己的卡片
-        let currentUserId = AuthManager.shared.currentUser?.id
-        isCurrentMenuCardOwned = (sourceCard.author.userId == currentUserId)
+        isCurrentMenuCardOwned = (card.author?.actorId == currentUserId)
         
         currentMenuCardData = userCard
         showPopupMenu = true
     }
     
     // MARK: 处理头像点击
-    private func handleAvatarTap(userId: Int?) {
-        guard let userId = userId else {
-            print("用户ID为空")
+    private func handleAvatarTap(actorId: String?) {
+        guard let actorId = actorId else {
+            print("actorId 为空")
             return
         }
         
-        selectedUserId = userId
-        print("selectedUserId 设置为: \(selectedUserId ?? -1)")
+        selectedActorId = actorId
+        print("selectedActorId 设置为: \(selectedActorId ?? "")")
         navigateToProfile = true
         print("navigateToProfile 设置为: \(navigateToProfile)")
     }
     
     // MARK: 加载当前卡片详情
     private func loadCurrentCard() {
-        guard let userId = AuthManager.shared.currentUser?.id else {
+        guard AuthManager.shared.currentUser != nil else {
             print("用户未登录")
             return
         }
         
         isLoadingCurrentCard = true
-        print("开始加载当前卡片详情: cardId=\(cardId), userId=\(userId)")
+        print("开始加载当前卡片详情: cardId=\(cardId)")
         
-        NetworkManager.shared.getCardDetail(cardId: cardId, userId: userId) { result in
+        NetworkManager.shared.getCardDetail(cardId: cardId) { result in
             DispatchQueue.main.async {
                 isLoadingCurrentCard = false
                 
@@ -343,6 +295,70 @@ struct RootView: View {
         }
         
         return dateString
+    }
+
+    private func formatFlexibleDate(_ dateString: String) -> String {
+        let isoFormatter = ISO8601DateFormatter()
+        isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let fallbackFormatter = ISO8601DateFormatter()
+        fallbackFormatter.formatOptions = [.withInternetDateTime]
+
+        let date = isoFormatter.date(from: dateString) ?? fallbackFormatter.date(from: dateString)
+        guard let date = date else {
+            return dateString
+        }
+
+        let displayFormatter = DateFormatter()
+        displayFormatter.dateFormat = "MMM d, HH:mm"
+        return displayFormatter.string(from: date)
+    }
+}
+
+struct SparkHistoryRow: View {
+    let item: SparkHistoryItem
+    let timeText: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Label("Spark", systemImage: "sparkles")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.white)
+
+                Spacer()
+
+                Text(timeText)
+                    .font(.system(size: 12, weight: .regular))
+                    .foregroundColor(.white.opacity(0.65))
+            }
+
+            HStack(spacing: 14) {
+                metric("Results", "\(item.resultCount)")
+                metric("Depth", "\(item.chainDepth)")
+                metric("Credits", "\(item.creditsDeducted)")
+            }
+
+            Text(item.activityId)
+                .font(.system(size: 11, weight: .regular, design: .monospaced))
+                .foregroundColor(.white.opacity(0.55))
+                .lineLimit(1)
+                .truncationMode(.middle)
+        }
+        .padding(14)
+        .background(Color.white.opacity(0.08))
+        .cornerRadius(8)
+    }
+
+    private func metric(_ label: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(value)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundColor(.white)
+            Text(label)
+                .font(.system(size: 11, weight: .regular))
+                .foregroundColor(.white.opacity(0.6))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

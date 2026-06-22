@@ -1,5 +1,4 @@
 import SwiftUI
-import Combine
 
 // MARK: 高光效果扩展
 extension View {
@@ -80,15 +79,6 @@ extension View {
 
 struct AccountDetailsView: View {
     @Environment(\.presentationMode) var presentationMode
-    @State private var showDeleteAccountAlert = false
-    @State private var isDeletingAccount = false
-    @State private var showDeleteSuccessAlert = false
-    @State private var deleteErrorMessage = ""
-    @State private var showDeleteErrorAlert = false
-    @State private var cancellables = Set<AnyCancellable>()
-    
-    private let networkManager = NetworkManager.shared
-    private let authManager = AuthManager.shared
     
     var body: some View {
         ZStack {
@@ -387,29 +377,6 @@ struct AccountDetailsView: View {
 //                                .cardHighlightEffect()
 //                        )
                         
-                        // Delete Account Button
-                        Button(action: {
-                            showDeleteAccountAlert = true
-                        }) {
-                            HStack {
-                                if isDeletingAccount {
-                                    ProgressView()
-                                        .progressViewStyle(CircularProgressViewStyle(tint: .red))
-                                        .scaleEffect(0.8)
-                                }
-                                Text(isDeletingAccount ? "Deleting Account..." : "Delete my account and all related data")
-                                .font(.system(size: 16, weight: .medium))
-                                .foregroundColor(.red)
-                            }
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 16)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 30)
-                                        .stroke(Color.red.opacity(0.3), lineWidth: 1)
-                                )
-                        }
-                        .disabled(isDeletingAccount)
-                        
                         // 底部隐私声明
                         Text("We never sell your data or run ads. Your subscription powers our continued")
                             .font(.system(size: 12, weight: .regular))
@@ -425,57 +392,6 @@ struct AccountDetailsView: View {
             }
         }
         .navigationBarHidden(true)
-        .alert("Delete Account", isPresented: $showDeleteAccountAlert) {
-            Button("Cancel", role: .cancel) { }
-            Button("Delete", role: .destructive) {
-                deleteUserAccount()
-            }
-        } message: {
-            Text("Are you sure you want to delete your account? This action cannot be undone.")
-        }
-        .alert("Account Deleted", isPresented: $showDeleteSuccessAlert) {
-            Button("OK") {
-                // 账户删除成功后，退出登录并返回登录页面
-                authManager.logout()
-                presentationMode.wrappedValue.dismiss()
-            }
-        } message: {
-            Text("Your account has been successfully deleted.")
-        }
-        .alert("Delete Failed", isPresented: $showDeleteErrorAlert) {
-            Button("OK") { }
-        } message: {
-            Text(deleteErrorMessage)
-        }
-    }
-    
-    // MARK: 删除账户方法
-    private func deleteUserAccount() {
-        guard let userId = authManager.currentUser?.id else {
-            deleteErrorMessage = "用户未登录，无法删除账户"
-            showDeleteErrorAlert = true
-            return
-        }
-        
-        isDeletingAccount = true
-        
-        networkManager.deleteUser(userId: userId)
-            .receive(on: DispatchQueue.main)
-            .sink(
-                receiveCompletion: { completion in
-                    isDeletingAccount = false
-                    if case .failure(let error) = completion {
-                        print("删除账户失败: \(error.localizedDescription)")
-                        deleteErrorMessage = "删除账户失败: \(error.localizedDescription)"
-                        showDeleteErrorAlert = true
-                    }
-                },
-                receiveValue: { response in
-                    print("删除账户成功")
-                    showDeleteSuccessAlert = true
-                }
-            )
-            .store(in: &cancellables)
     }
 }
 

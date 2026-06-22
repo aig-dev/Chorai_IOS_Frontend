@@ -28,22 +28,22 @@ struct NewNoteView: View, MarkupDelegate {
     @State private var publishMessage = ""
     @State private var isPublic = false
     @State private var showPopupMenu = false
-    @State private var currentNoteId: Int? = nil
+    @State private var currentNoteId: String? = nil
     @State private var isLoadingNote = false
     @State private var relatedNotes: [CardLinkItem] = []
     @State private var isLoadingLinks = false
     @State private var navigateToDetail = false
     @State private var navigateToEdit = false
-    @State private var selectedCardId: Int? = nil
+    @State private var selectedCardId: String? = nil
     @State private var showDeleteConfirmation = false
     @State private var noteToDelete: CardLinkItem? = nil
     @State private var animateDeleteConfirmation = false
     @State private var updatedAt: String? = nil
     @State private var isPinned: Bool = false
     
-    let cardId: Int
+    let cardId: String
     
-    init(cardId: Int = 0) {
+    init(cardId: String = "") {
         self.cardId = cardId
     }
     
@@ -72,10 +72,10 @@ struct NewNoteView: View, MarkupDelegate {
             .linkPopup()
             .popupMenu(isPresented: $showPopupMenu, layout: .grid3x3, cardData: createTempUserCard(), isOwnCard: true)
             .navigationDestination(isPresented: $navigateToDetail) {
-                DetailView(cardId: selectedCardId ?? 0)
+                DetailView(cardId: selectedCardId ?? "")
             }
             .navigationDestination(isPresented: $navigateToEdit) {
-                NewNoteView(cardId: selectedCardId ?? 0)
+                NewNoteView(cardId: selectedCardId ?? "")
             }
             .alert("Publish Result", isPresented: $showPublishAlert) {
                 Button("OK") {
@@ -91,7 +91,7 @@ struct NewNoteView: View, MarkupDelegate {
                 handleToggleCardPin(notification: notification)
             }
             .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NavigateToEdit"))) { notification in
-                if let cardId = notification.userInfo?["cardId"] as? Int {
+                if let cardId = notification.userInfo?["cardId"] as? String {
                     selectedCardId = cardId
                     DispatchQueue.main.async {
                         navigateToEdit = true
@@ -111,7 +111,7 @@ struct NewNoteView: View, MarkupDelegate {
             textInputArea
             
             // 编辑模式状态信息（仅在编辑模式下显示）
-            if cardId > 0 {
+            if !cardId.isEmpty {
                 editModeStatusInfo
             }
             
@@ -154,14 +154,17 @@ struct NewNoteView: View, MarkupDelegate {
             print("选择卡片: \(selectedItem.title)")
             
             // 将选中的卡片添加到关联笔记中
+            let sourceAssetId = !cardId.isEmpty ? cardId : (currentNoteId ?? "")
             let newCardLinkItem = CardLinkItem(
                 linkId: selectedItem.id,
+                sourceAssetId: sourceAssetId,
+                targetAssetId: selectedItem.id,
                 linkedCardId: selectedItem.id,
                 title: selectedItem.title,
                 content: selectedItem.description,
                 createdAt: ISO8601DateFormatter().string(from: Date()),
                 author: CardLinkAuthor(
-                    id: selectedItem.id,
+                    id: selectedItem.authorId ?? "",
                     userName: selectedItem.username,
                     avatar: selectedItem.avatar
                 )
@@ -177,7 +180,7 @@ struct NewNoteView: View, MarkupDelegate {
         }
         
         // 加载笔记详情和关联笔记
-        if cardId > 0 {
+        if !cardId.isEmpty {
             loadNoteDetail()
             loadRelatedNotes()
         }
@@ -531,11 +534,11 @@ struct NewNoteView: View, MarkupDelegate {
                     .clipShape(Circle())
                 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(note.author.userName)
+                    Text(note.author?.userName ?? note.title ?? "Related note")
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(.white)
                     
-                    HTMLTextRenderer(htmlContent: note.content, maxLines: 2)
+                    HTMLTextRenderer(htmlContent: note.content ?? "", maxLines: 2)
                         .font(.system(size: 14, weight: .regular))
                         .foregroundColor(.white.opacity(0.7))
                 }
@@ -738,7 +741,7 @@ struct NewNoteView: View, MarkupDelegate {
     
     // MARK: 为菜单发布笔记
     private func publishNoteForMenu() {
-        guard let userId = authManager.currentUser?.id else {
+        guard authManager.currentUser != nil else {
             publishMessage = "User not logged in, cannot publish"
             showPublishAlert = true
             return
@@ -758,7 +761,6 @@ struct NewNoteView: View, MarkupDelegate {
         let title = String(plainText.prefix(50))
         
         let request = CreateCardRequest(
-            userId: userId,
             title: title.isEmpty ? nil : title,
             content: content,
             tags: displayedTags.isEmpty ? nil : displayedTags,
@@ -790,7 +792,7 @@ struct NewNoteView: View, MarkupDelegate {
     // MARK: - 创建UserCard
     private func createTempUserCard() -> UserCard {
         return UserCard(
-            id: currentNoteId ?? 0,
+            id: currentNoteId ?? "",
             title: "New Note",
             content: noteHtml,
             contentHash: "",
@@ -827,7 +829,7 @@ struct NewNoteView: View, MarkupDelegate {
     
     // MARK: 发布笔记方法
     private func publishNote() {
-        guard let userId = authManager.currentUser?.id else {
+        guard authManager.currentUser != nil else {
             publishMessage = "User not logged in, cannot publish"
             showPublishAlert = true
             return
@@ -847,7 +849,6 @@ struct NewNoteView: View, MarkupDelegate {
         let title = String(plainText.prefix(50))
         
         let request = CreateCardRequest(
-            userId: userId,
             title: title.isEmpty ? nil : title,
             content: content,
             tags: displayedTags.isEmpty ? nil : displayedTags,
@@ -879,7 +880,7 @@ struct NewNoteView: View, MarkupDelegate {
     
     // MARK: - 更新笔记方法
     private func updateNote() {
-        guard let userId = authManager.currentUser?.id,
+        guard authManager.currentUser != nil,
               let noteId = currentNoteId else {
             publishMessage = "User not logged in or note ID does not exist, cannot update"
             showPublishAlert = true
@@ -900,7 +901,6 @@ struct NewNoteView: View, MarkupDelegate {
         let title = String(plainText.prefix(50))
         
         let request = UpdateCardRequest(
-            userId: userId,
             title: title.isEmpty ? nil : title,
             content: content,
             tags: displayedTags.isEmpty ? nil : displayedTags
@@ -917,13 +917,11 @@ struct NewNoteView: View, MarkupDelegate {
                         print("更新失败: \(error)")
                     }
                 },
-                receiveValue: { (response: NetworkResponse<CardResponse>) in
-                    if let cardResponse = response.data {
-                        print("更新成功笔记ID: \(cardResponse.data.id)")
-                        // 更新成功后直接退出
-                        if !showPopupMenu {
-                            dismiss()
-                        }
+                receiveValue: { (response: CardResponse) in
+                    print("更新成功笔记ID: \(response.data.id)")
+                    // 更新成功后直接退出
+                    if !showPopupMenu {
+                        dismiss()
                     }
                 }
             )
@@ -932,20 +930,20 @@ struct NewNoteView: View, MarkupDelegate {
     
     // MARK:  加载笔记详情方法
     private func loadNoteDetail() {
-        guard cardId > 0 else {
+        guard !cardId.isEmpty else {
             return
         }
         
         isLoadingNote = true
         
-        guard let userId = authManager.currentUser?.id else {
+        guard authManager.currentUser != nil else {
             publishMessage = "User not logged in, cannot load note details"
             showPublishAlert = true
             isLoadingNote = false
             return
         }
         
-        networkManager.getCardDetail(cardId: cardId, userId: userId) { result in
+        networkManager.getCardDetail(cardId: cardId) { result in
             DispatchQueue.main.async {
                 isLoadingNote = false
                 
@@ -983,15 +981,15 @@ struct NewNoteView: View, MarkupDelegate {
     
     // MARK: 加载关联笔记
     private func loadRelatedNotes() {
-        guard let userId = authManager.currentUser?.id else {
+        guard authManager.currentUser != nil else {
             print("用户未登录")
             return
         }
         
         isLoadingLinks = true
-        print("开始加载关联笔记: cardId=\(cardId), userId=\(userId)")
+        print("开始加载关联笔记: cardId=\(cardId)")
         
-        networkManager.getCardLinks(cardId: cardId, userId: userId)
+        networkManager.getCardLinks(cardId: cardId)
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { completion in
@@ -1016,7 +1014,7 @@ struct NewNoteView: View, MarkupDelegate {
     
     // MARK: 切换可见性方法
     private func toggleVisibility() {
-        if let noteId = currentNoteId, noteId > 0 {
+        if let noteId = currentNoteId, !noteId.isEmpty {
             updateCardVisibility()
         } else {
             isPublic.toggle()
@@ -1025,7 +1023,7 @@ struct NewNoteView: View, MarkupDelegate {
     
     // MARK: 更新卡片可见性
     private func updateCardVisibility() {
-        guard let userId = authManager.currentUser?.id,
+        guard authManager.currentUser != nil,
               let noteId = currentNoteId else {
             publishMessage = "Not ID"
             showPublishAlert = true
@@ -1034,7 +1032,7 @@ struct NewNoteView: View, MarkupDelegate {
         
         let newVisibility = !isPublic
         
-        networkManager.updateCardVisibility(cardId: noteId, userId: userId, isPublic: newVisibility)
+        networkManager.updateCardVisibility(cardId: noteId, isPublic: newVisibility)
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { completion in
@@ -1065,7 +1063,7 @@ struct NewNoteView: View, MarkupDelegate {
   
         
         // 判断卡片是否属于当前用户
-        if note.author.id == currentUserId {
+        if note.author?.id == currentUserId {
             navigateToDetail = false
             DispatchQueue.main.async {
                 self.navigateToEdit = true
@@ -1134,11 +1132,14 @@ struct NewNoteView: View, MarkupDelegate {
     
     // MARK: - 调用API删除关联笔记
     private func deleteRelatedNote(_ note: CardLinkItem) {
-        guard let userId = authManager.currentUser?.id else {
+        guard authManager.currentUser != nil else {
             return
         }
         
-        networkManager.deleteCardLink(cardId: cardId, linkId: note.linkedCardId, userId: userId)
+        let sourceAssetId = note.sourceAssetId.isEmpty ? cardId : note.sourceAssetId
+        let targetAssetId = note.targetAssetId.isEmpty ? note.linkedCardId : note.targetAssetId
+
+        networkManager.deleteCardLink(cardId: sourceAssetId, linkedCardId: targetAssetId)
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { completion in
@@ -1160,19 +1161,19 @@ struct NewNoteView: View, MarkupDelegate {
     // MARK: - 处理切换卡片Pin状态
     private func handleToggleCardPin(notification: Notification) {
         guard let userInfo = notification.userInfo,
-              let cardId = userInfo["cardId"] as? Int else {
+              let cardId = userInfo["cardId"] as? String else {
             print("通知缺少必要参数")
             return
         }
         
         // 检查是否是当前卡片
-        let currentCardId = self.cardId > 0 ? self.cardId : (currentNoteId ?? 0)
+        let currentCardId = !self.cardId.isEmpty ? self.cardId : (currentNoteId ?? "")
         guard cardId == currentCardId else {
             print("cardId(\(cardId))与当前卡片(\(currentCardId))不匹配，忽略")
             return
         }
         
-        guard let userId = authManager.currentUser?.id else {
+        guard authManager.currentUser != nil else {
             print("用户未登录")
             return
         }
@@ -1195,10 +1196,10 @@ struct NewNoteView: View, MarkupDelegate {
         
         if previousIsPinned {
             print("调用Unpin API")
-            publisher = networkManager.unpinCard(cardId: cardId, userId: userId)
+            publisher = networkManager.unpinCard(cardId: cardId)
         } else {
             print("调用Pin API")
-            publisher = networkManager.pinCard(cardId: cardId, userId: userId)
+            publisher = networkManager.pinCard(cardId: cardId)
         }
         
         publisher

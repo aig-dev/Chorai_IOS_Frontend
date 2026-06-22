@@ -5,7 +5,6 @@ struct SideMenuView: View {
     @State private var navigateToNotification = false
     @State private var navigateToTrash = false
     @State private var navigateToSettings = false
-    @State private var navigateToUpgradePro = false
     @State private var navigateToMyProfile = false
     @State private var navigateToHelpReport = false
     @ObservedObject private var userProfileManager = UserProfileManager.shared
@@ -54,35 +53,18 @@ struct SideMenuView: View {
                                     
                                     // 用户资料区域（除头像外）
                                     VStack(alignment: .leading, spacing: 16) {
-                                        // 用户名和PRO标签
+                                        // 用户名
                                         HStack {
                                             Text(userProfileManager.userProfile?.username ?? "Loading...")
                                                 .font(.system(size: 20, weight: .semibold))
                                                 .foregroundColor(.white)
-                                            
-                                            if let memberLevel = userProfileManager.userProfile?.memberLevel,
-                                               memberLevel.lowercased() == "pro" {
-                                            Button(action: {
-                                                navigateToUpgradePro = true
-                                            }) {
-                                                Text("PRO")
-                                                    .font(.system(size: 12, weight: .bold))
-                                                    .foregroundColor(.black)
-                                                    .padding(.horizontal, 8)
-                                                    .padding(.vertical, 4)
-                                                    .background(
-                                                        RoundedRectangle(cornerRadius: 12)
-                                                            .fill(Color.white)
-                                                    )
-                                                }
-                                            }
                                         }
                                         
                                         // SYN 积分
                                         HStack(spacing: 8) {
                                             Image("syn").resizable().frame(width: 20, height: 20)
                                             
-                                            Text("\(userProfileManager.userProfile?.credit ?? 0)")
+                                            Text(userProfileManager.isCreditLoading ? "--" : "\(userProfileManager.creditTotal)")
                                                 .font(.system(size: 16, weight: .semibold))
                                                 .foregroundColor(.yellow)
                                             
@@ -154,13 +136,13 @@ struct SideMenuView: View {
                                                 onFavoritesTapped?()
                                             }
                                         }
-                                        SideMenuItem(imageName: "notification", title: "Notification") {
+                                        SideMenuItem(imageName: "notification", title: "Notification", accessibilityIdentifier: "side-menu.notification") {
                                             navigateToNotification = true
                                         }
                                         SideMenuItem(imageName: "trash", title: "Trash") {
                                             navigateToTrash = true
                                         }
-                                        SideMenuItem(imageName: "settings", title: "Settings") {
+                                        SideMenuItem(imageName: "settings", title: "Settings", accessibilityIdentifier: "side-menu.settings") {
                                             navigateToSettings = true
                                         }
                                         SideMenuItem(imageName: "help", title: "Help & Report") {
@@ -186,9 +168,7 @@ struct SideMenuView: View {
                                 }) {
                                     Group {
                                         if let avatarUrl = userProfileManager.userProfile?.avatar, !avatarUrl.isEmpty {
-                                            let fullAvatarUrl = avatarUrl.hasPrefix("http://") || avatarUrl.hasPrefix("https://") 
-                                                ? avatarUrl 
-                                                : "https://production.chorai.top/\(avatarUrl.hasPrefix("/") ? String(avatarUrl.dropFirst()) : avatarUrl)"
+                                            let fullAvatarUrl = APIConfiguration.resourceURLString(avatarUrl)
                                             
                                             AsyncImage(url: URL(string: fullAvatarUrl)) { image in
                                                 image
@@ -235,9 +215,6 @@ struct SideMenuView: View {
         .navigationDestination(isPresented: $navigateToSettings) {
             SettingsView()
         }
-        .navigationDestination(isPresented: $navigateToUpgradePro) {
-            UpgradeProView()
-        }
         .navigationDestination(isPresented: $navigateToMyProfile) {
             MyProfileView()
         }
@@ -262,7 +239,15 @@ struct SideMenuView: View {
 struct SideMenuItem: View {
     let imageName: String
     let title: String
+    let accessibilityIdentifier: String?
     let action: () -> Void
+
+    init(imageName: String, title: String, accessibilityIdentifier: String? = nil, action: @escaping () -> Void) {
+        self.imageName = imageName
+        self.title = title
+        self.accessibilityIdentifier = accessibilityIdentifier
+        self.action = action
+    }
     
     var body: some View {
         Button(action: action) {
@@ -281,6 +266,7 @@ struct SideMenuItem: View {
             }
             .padding(.vertical, 16)
         }
+        .accessibilityIdentifier(accessibilityIdentifier ?? "side-menu.item.\(title)")
     }
 }
 

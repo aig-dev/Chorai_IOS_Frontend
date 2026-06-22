@@ -11,7 +11,13 @@ struct EditProfileView: View {
     @State private var birthday = ""
     @State private var selectedImage: UIImage? = nil
     @State private var showImagePicker = false
+    @State private var isSaving = false
     @State private var cancellables = Set<AnyCancellable>()
+    #if DEBUG
+    @State private var saveStatus = "idle"
+    @State private var avatarUploadStatus = "idle"
+    @State private var avatarUploadError = ""
+    #endif
     
     var body: some View {
         ZStack {
@@ -46,11 +52,21 @@ struct EditProfileView: View {
                     
                     Spacer()
                     
-                    Button("Save") {
-                        saveUserProfile()
-                    }
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundColor(.white)
+                    Text("Save")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(.white)
+                        .frame(minWidth: 44, minHeight: 44)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            saveUserProfile()
+                        }
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel("Save")
+                        .accessibilityAddTraits(.isButton)
+                        .accessibilityIdentifier("edit-profile.save")
+                        .accessibilityAction {
+                            saveUserProfile()
+                        }
                 }
                 .padding(.horizontal, 20)
                 .padding(.bottom, 20)
@@ -91,6 +107,7 @@ struct EditProfileView: View {
                                                     .fill(Color.white.opacity(0.1))
                                                     .cardHighlightEffect()
                                             )
+                                            .accessibilityIdentifier("edit-profile.name")
                                 }
                                 
                                 // Bio
@@ -112,6 +129,7 @@ struct EditProfileView: View {
                                             )
                                             .frame(minHeight: 60, maxHeight: 120)
                                             .scrollContentBackground(.hidden)
+                                            .accessibilityIdentifier("edit-profile.bio")
                                         
                                         Text("\(bio.count)/100")
                                             .font(.system(size: 12, weight: .regular))
@@ -137,6 +155,7 @@ struct EditProfileView: View {
                                                 .fill(Color.white.opacity(0.1))
                                                 .cardHighlightEffect()
                                         )
+                                        .accessibilityIdentifier("edit-profile.location")
                                 }
                                 
                                 // Birthday
@@ -155,6 +174,7 @@ struct EditProfileView: View {
                                                 .fill(Color.white.opacity(0.1))
                                                 .cardHighlightEffect()
                                         )
+                                        .accessibilityIdentifier("edit-profile.birthday")
                                 }
                             }
                             .padding(.horizontal, 20)
@@ -237,6 +257,7 @@ struct EditProfileView: View {
                                 }
                             }
                             .offset(y: -30) // 向上偏移30，使头像中心在卡片上边框
+                            .accessibilityIdentifier("edit-profile.avatar")
                             
                             Spacer()
                         }
@@ -255,6 +276,59 @@ struct EditProfileView: View {
                 .ignoresSafeArea()
         )
         .navigationBarHidden(true)
+        .overlay(alignment: .topLeading) {
+            VStack(spacing: 1) {
+                Text("Edit profile loaded")
+                    .font(.system(size: 1))
+                    .foregroundColor(.white.opacity(0.01))
+                    .frame(width: 1, height: 1)
+                    .accessibilityIdentifier("screen.edit-profile.loaded")
+
+                if let profile = userProfileManager.userProfile {
+                    Text(profile.id)
+                        .font(.system(size: 1))
+                        .foregroundColor(.white.opacity(0.01))
+                        .frame(width: 1, height: 1)
+                        .accessibilityIdentifier("edit-profile.profile-id")
+                }
+
+                #if DEBUG
+                Text(saveStatus)
+                    .font(.system(size: 1))
+                    .foregroundColor(.white.opacity(0.01))
+                    .frame(width: 1, height: 1)
+                    .accessibilityIdentifier("edit-profile.save-status")
+
+                Text(avatarUploadStatus)
+                    .font(.system(size: 1))
+                    .foregroundColor(.white.opacity(0.01))
+                    .frame(width: 1, height: 1)
+                    .accessibilityIdentifier("edit-profile.avatar-upload-status")
+
+                Text(userProfileManager.userProfile?.avatar ?? "")
+                    .font(.system(size: 1))
+                    .foregroundColor(.white.opacity(0.01))
+                    .frame(width: 1, height: 1)
+                    .accessibilityIdentifier("edit-profile.avatar-url")
+
+                Text(avatarUploadError)
+                    .font(.system(size: 1))
+                    .foregroundColor(.white.opacity(0.01))
+                    .frame(width: 1, height: 1)
+                    .accessibilityIdentifier("edit-profile.avatar-upload-error")
+
+                Button(action: {
+                    uploadAvatar(image: makeAvatarSmokeImage())
+                }) {
+                    Text("Avatar smoke upload")
+                        .font(.system(size: 1))
+                        .foregroundColor(.white.opacity(0.01))
+                        .frame(width: 44, height: 44)
+                }
+                .accessibilityIdentifier("edit-profile.avatar-smoke-upload")
+                #endif
+            }
+        }
         .sheet(isPresented: $showImagePicker) {
             ImagePicker(selectedImage: $selectedImage)
         }
@@ -301,36 +375,60 @@ struct EditProfileView: View {
         }
         
         print("开始上传头像，userId: \(userId)")
+        #if DEBUG
+        avatarUploadStatus = "uploading"
+        avatarUploadError = ""
+        #endif
         
-        NetworkManager.shared.uploadAvatar(userId: userId, imageData: imageData)
+        NetworkManager.shared.uploadAvatar(imageData: imageData)
+            .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { completion in
                     if case .failure(let error) = completion {
                         print("头像上传失败: \(error.localizedDescription)")
+                        #if DEBUG
+                        self.avatarUploadStatus = "failure"
+                        self.avatarUploadError = error.localizedDescription
+                        #endif
                     } else {
                         print("头像上传完成")
                     }
                 },
                 receiveValue: { response in
                     print("头像上传成功")
+                    self.userProfileManager.userProfile = response.data
+                    #if DEBUG
+                    self.avatarUploadStatus = "success"
+                    self.avatarUploadError = ""
+                    #endif
                 }
             )
             .store(in: &cancellables)
     }
+
+    #if DEBUG
+    private func makeAvatarSmokeImage() -> UIImage {
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: 96, height: 96))
+        return renderer.image { context in
+            UIColor(red: 0.10, green: 0.42, blue: 0.86, alpha: 1).setFill()
+            context.cgContext.fill(CGRect(x: 0, y: 0, width: 96, height: 96))
+            UIColor(red: 0.93, green: 0.86, blue: 0.28, alpha: 1).setFill()
+            context.cgContext.fillEllipse(in: CGRect(x: 24, y: 24, width: 48, height: 48))
+        }
+    }
+    #endif
     
     // MARK: 保存用户资料
     private func saveUserProfile() {
-        guard let currentProfile = userProfileManager.userProfile else {
-            print("没有当前用户资料")
+        guard !isSaving else {
             return
         }
-        
-        // 使用当前头像URL，如果没有则使用空字符串
-        let avatarUrl = currentProfile.avatar
-        
+        isSaving = true
+        #if DEBUG
+        saveStatus = "attempted"
+        #endif
         userProfileManager.updateUserProfile(
             username: name,
-            avatar: avatarUrl,
             bio: bio,
             location: location,
             birthday: birthday
@@ -338,9 +436,17 @@ struct EditProfileView: View {
             switch result {
             case .success:
                 print("用户资料保存成功")
+                #if DEBUG
+                saveStatus = "success"
+                #endif
+                isSaving = false
                 presentationMode.wrappedValue.dismiss()
             case .failure(let error):
                 print("用户资料保存失败: \(error.localizedDescription)")
+                #if DEBUG
+                saveStatus = "failure"
+                #endif
+                isSaving = false
             }
         }
     }

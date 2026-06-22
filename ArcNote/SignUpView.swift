@@ -502,7 +502,7 @@ struct SignUpView: View {
                 // 先保存用户会话
                 authManager.saveUserSession(authResponse)
                 // 根据 isNewUser 判断跳转到哪个页面
-                if authResponse.data?.isNewUser == true {
+                if authResponse.data.isNewUser == true {
                     showChooseInterests = true
                 } else {
                     // 如果不是新用户，跳转到主页
@@ -618,13 +618,12 @@ struct SignUpView: View {
                 },
                 receiveValue: { authResponse in
                     print("后端Google登录成功")
-                    if let userData = authResponse.data {
-                        print("用户信息: \(userData.username) - \(userData.email), isNewUser: \(userData.isNewUser)")
-                    }
+                    let user = authResponse.data.user
+                    print("用户信息: \(user.username) - \(user.email), isNewUser: \(String(describing: authResponse.data.isNewUser))")
                     // 保存用户会话
                     authManager.saveUserSession(authResponse)
                     // 根据 isNewUser 判断跳转到哪个页面
-                    if authResponse.data?.isNewUser == true {
+                    if authResponse.data.isNewUser == true {
                         showChooseInterests = true
                     } else {
                         // 如果不是新用户，跳转到主页
@@ -705,13 +704,12 @@ struct SignUpView: View {
                 },
                 receiveValue: { authResponse in
                     print("后端Apple登录成功")
-                    if let userData = authResponse.data {
-                        print("用户信息: \(userData.username) - \(userData.email), isNewUser: \(userData.isNewUser)")
-                    }
+                    let user = authResponse.data.user
+                    print("用户信息: \(user.username) - \(user.email), isNewUser: \(String(describing: authResponse.data.isNewUser))")
                     // 保存用户会话
                     authManager.saveUserSession(authResponse)
                     // 根据 isNewUser 判断跳转到哪个页面
-                    if authResponse.data?.isNewUser == true {
+                    if authResponse.data.isNewUser == true {
                         showChooseInterests = true
                     } else {
                         // 如果不是新用户，跳转到主页
@@ -728,7 +726,15 @@ struct SignUpView: View {
 struct InputField: View {
     let icon: String
     let placeholder: String
+    let accessibilityIdentifier: String?
     @Binding var text: String
+
+    init(icon: String, placeholder: String, text: Binding<String>, accessibilityIdentifier: String? = nil) {
+        self.icon = icon
+        self.placeholder = placeholder
+        self._text = text
+        self.accessibilityIdentifier = accessibilityIdentifier
+    }
     
     var body: some View {
         HStack(spacing: 12) {
@@ -739,6 +745,7 @@ struct InputField: View {
             TextField(placeholder, text: $text)
                 .foregroundColor(.white)
                 .accentColor(.white)
+                .modifier(OptionalAccessibilityIdentifier(identifier: accessibilityIdentifier))
                 .placeholder(when: text.isEmpty) {
                     Text(placeholder)
                         .foregroundColor(.white.opacity(0.6))
@@ -756,6 +763,19 @@ struct InputField: View {
                         .stroke(Color.white.opacity(0.3), lineWidth: 1) // 白色半透明边框
                 )
         )
+    }
+}
+
+private struct OptionalAccessibilityIdentifier: ViewModifier {
+    let identifier: String?
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if let identifier {
+            content.accessibilityIdentifier(identifier)
+        } else {
+            content
+        }
     }
 }
 

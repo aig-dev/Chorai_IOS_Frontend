@@ -6,53 +6,77 @@ import UIKit
 // MARK: 网络管理器
 class NetworkManager: ObservableObject {
     static let shared = NetworkManager()
-    
+
     // MARK: 配置
     private let baseURL: String
     private let session: Session
     private var authToken: String?
-    
+
     // MARK: 发布者
     @Published var isConnected: Bool = true
     @Published var isLoading: Bool = false
-    
+
     // MARK: 订阅管理
     private var cancellables = Set<AnyCancellable>()
-    
+
     // MARK: 初始化
     private init() {
-        // 根据环境设置基础URL
-        #if DEBUG
-        self.baseURL = "https://production.chorai.top"
-        #else
-        self.baseURL = "https://production.chorai.top"
-        #endif
-        
+        self.baseURL = APIConfiguration.baseURL
+
         // 配置Alamofire Session
         let configuration = URLSessionConfiguration.default
         configuration.timeoutIntervalForRequest = 30
         configuration.timeoutIntervalForResource = 60
-        
+
         configuration.httpAdditionalHeaders = [
             "Content-Type": "application/json",
             "Accept": "application/json"
         ]
         let serverTrustPolicy = ServerTrustManager(allHostsMustBeEvaluated: false, evaluators: [:])
         self.session = Session(configuration: configuration, serverTrustManager: serverTrustPolicy)
-        
+
         // 监听网络状态
         startNetworkMonitoring()
     }
-    
+
     // MARK: 认证相关
     func setAuthToken(_ token: String) {
         self.authToken = token
     }
-    
+
     func clearAuthToken() {
         self.authToken = nil
     }
-    
+
+    private func authorizedHeaders(extra customHeaders: HTTPHeaders? = nil) -> HTTPHeaders {
+        var requestHeaders: HTTPHeaders = [
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+        ]
+
+        if let token = self.authToken, !token.isEmpty {
+            requestHeaders.add(.authorization(bearerToken: token))
+            print("认证Token: <redacted>")
+        }
+
+        if let customHeaders = customHeaders {
+            for header in customHeaders {
+                requestHeaders.update(header)
+            }
+            print("自定义请求头: \(customHeaders)")
+        }
+
+        return requestHeaders
+    }
+
+    private func encodedParameters<T: Encodable>(_ value: T) throws -> Parameters {
+        let data = try JSONEncoder().encode(value)
+        guard let object = try JSONSerialization.jsonObject(with: data) as? Parameters else {
+            throw NetworkError.encodingError
+        }
+        return object
+    }
+
     // MARK: 通用请求方法
     private func request<T: Codable>(
         endpoint: String,
@@ -62,39 +86,28 @@ class NetworkManager: ObservableObject {
         headers: HTTPHeaders? = nil,
         responseType: T.Type
     ) -> AnyPublisher<T, NetworkError> {
-        
+
         return Future<T, NetworkError> { [weak self] promise in
             guard let self = self else {
                 promise(.failure(.unknown))
                 return
             }
-            
+
             let url = "\(self.baseURL)\(endpoint)"
-            
+
             print("请求URL: \(url)")
             print("请求方法: \(method.rawValue)")
             if let parameters = parameters {
                 print("请求参数: \(parameters)")
             }
-            
-            // 构建请求头
-            var requestHeaders = HTTPHeaders()
-            if let token = self.authToken {
-                requestHeaders.add(.authorization(bearerToken: token))
-                print("认证Token: \(token)")
-            }
-            if let customHeaders = headers {
-                for header in customHeaders {
-                    requestHeaders.add(header)
-                }
-                print("自定义请求头: \(customHeaders)")
-            }
-            
+
+            let requestHeaders = self.authorizedHeaders(extra: headers)
+
             // 显示加载状态
             DispatchQueue.main.async {
                 self.isLoading = true
             }
-            
+
             // 发送请求
             self.session.request(
                 url,
@@ -108,18 +121,16 @@ class NetworkManager: ObservableObject {
                 DispatchQueue.main.async {
                     self.isLoading = false
                 }
-                
+
                 if let httpResponse = response.response {
                     print("响应状态码: \(httpResponse.statusCode)")
                     print("响应头: \(httpResponse.allHeaderFields)")
                 }
-                
+
                 switch response.result {
                 case .success(let data):
-                    if let responseString = String(data: data, encoding: .utf8) {
-                        print("响应数据: \(responseString)")
-                    }
-                    
+                    self.logResponseData(data, label: "响应数据")
+
                     do {
                         let decodedResponse = try JSONDecoder().decode(T.self, from: data)
                         print("解码成功: \(type(of: decodedResponse))")
@@ -128,24 +139,22 @@ class NetworkManager: ObservableObject {
                         print("解码错误: \(error)")
                         promise(.failure(.decodingError))
                     }
-                    
+
                 case .failure(let error):
                     var responseMessage: String?
                     if let data = response.data {
-                        if let responseString = String(data: data, encoding: .utf8) {
-                            print("请求失败响应数据: \(responseString)")
-                        }
+                        self.logResponseData(data, label: "请求失败响应数据")
                         responseMessage = self.extractMessage(from: data)
                     }
                     if let httpResponse = response.response {
                         print("请求失败状态码: \(httpResponse.statusCode)")
                     }
                     print("请求失败错误: \(error)")
-                    
+
                     if let message = responseMessage, !message.isEmpty {
                         self.presentErrorAlert(message: message)
                     }
-                    
+
                     let networkError = self.handleError(error, response: response.response)
                     promise(.failure(networkError))
                 }
@@ -153,26 +162,41 @@ class NetworkManager: ObservableObject {
         }
         .eraseToAnyPublisher()
     }
-    
+
     private func extractMessage(from data: Data) -> String? {
         guard
             let json = try? JSONSerialization.jsonObject(with: data, options: []) as? [String: Any]
         else { return nil }
-        
+
         if let message = json["message"] as? String {
             return message
         }
-        
+
         if
             let dataDict = json["data"] as? [String: Any],
             let message = dataDict["message"] as? String
         {
             return message
         }
-        
+
         return nil
     }
-    
+
+    private func logResponseData(_ data: Data, label: String) {
+        guard let responseString = String(data: data, encoding: .utf8) else {
+            print("\(label): <non-utf8 \(data.count) bytes>")
+            return
+        }
+
+        let isSmokeRun = ProcessInfo.processInfo.environment["CHORAI_API_SMOKE"] == "1"
+        let limit = isSmokeRun ? 1200 : 12000
+        if responseString.count > limit {
+            print("\(label): \(String(responseString.prefix(limit)))... <truncated \(data.count) bytes>")
+        } else {
+            print("\(label): \(responseString)")
+        }
+    }
+
     private func presentErrorAlert(message: String) {
         DispatchQueue.main.async {
             guard
@@ -182,110 +206,20 @@ class NetworkManager: ObservableObject {
                 let window = windowScene.windows.first,
                 let root = window.rootViewController
             else { return }
-            
+
             let alert = UIAlertController(title: "Error", message: message, preferredStyle: .alert)
             alert.addAction(UIAlertAction(title: "OK", style: .default, handler: nil))
-            
+
             var topController = root
             while let presented = topController.presentedViewController {
                 topController = presented
             }
-            
+
             topController.present(alert, animated: true, completion: nil)
         }
     }
-    
+
     // MARK: 带包装响应的请求方法
-    private func requestWithWrapper<T: Codable>(
-        endpoint: String,
-        method: HTTPMethod = .get,
-        parameters: Parameters? = nil,
-        encoding: ParameterEncoding = JSONEncoding.default,
-        headers: HTTPHeaders? = nil,
-        responseType: T.Type
-    ) -> AnyPublisher<T, NetworkError> {
-        return Future<T, NetworkError> { [weak self] promise in
-            guard let self = self else {
-                promise(.failure(.unknown))
-                return
-            }
-            
-            let url = "\(self.baseURL)\(endpoint)"
-            
-            print("请求URL: \(url)")
-            print("请求方法: \(method.rawValue)")
-            if let parameters = parameters {
-                print("请求参数: \(parameters)")
-            }
-            
-            var requestHeaders = HTTPHeaders()
-            if let token = self.authToken {
-                requestHeaders.add(.authorization(bearerToken: token))
-                print("认证Token: \(token)")
-            }
-            if let customHeaders = headers {
-                for header in customHeaders {
-                    requestHeaders.add(header)
-                }
-                print("自定义请求头: \(customHeaders)")
-            }
-            
-            DispatchQueue.main.async {
-                self.isLoading = true
-            }
-            
-            self.session.request(
-                url,
-                method: method,
-                parameters: parameters,
-                encoding: encoding,
-                headers: requestHeaders
-            )
-            .validate()
-            .responseData { response in
-                DispatchQueue.main.async {
-                    self.isLoading = false
-                }
-                
-                if let httpResponse = response.response {
-                    print("响应状态码: \(httpResponse.statusCode)")
-                    print("响应头: \(httpResponse.allHeaderFields)")
-                }
-                
-                switch response.result {
-                case .success(let data):
-                    if let responseString = String(data: data, encoding: .utf8) {
-                        print("响应数据: \(responseString)")
-                    }
-                    do {
-                        let wrapped = try JSONDecoder().decode(NetworkResponse<T>.self, from: data)
-                        if wrapped.success {
-                            if let wrappedData = wrapped.data {
-                                promise(.success(wrappedData))
-                            } else {
-                                promise(.failure(.noData))
-                            }
-                        } else {
-                            promise(.failure(.serverError(0, wrapped.message)))
-                        }
-                    } catch {
-                        do {
-                            let direct = try JSONDecoder().decode(T.self, from: data)
-                            promise(.success(direct))
-                        } catch {
-                            print("解码错误: \(error)")
-                            promise(.failure(.decodingError))
-                        }
-                    }
-                case .failure(let error):
-                    let networkError = self.handleError(error, response: response.response)
-                    promise(.failure(networkError))
-                }
-            }
-        }
-        .eraseToAnyPublisher()
-    }
-    
     // MARK: 错误处理
     private func handleError(_ error: AFError, response: HTTPURLResponse?) -> NetworkError {
         if let statusCode = response?.statusCode {
@@ -304,7 +238,7 @@ class NetworkManager: ObservableObject {
                 return .serverError(statusCode, "Unknown Error")
             }
         }
-        
+
         switch error {
         case .sessionTaskFailed(let error):
             if let urlError = error as? URLError {
@@ -322,7 +256,7 @@ class NetworkManager: ObservableObject {
             return .networkError(error)
         }
     }
-    
+
     // MARK: 网络状态监控
     private func startNetworkMonitoring() {
         let reachabilityManager = NetworkReachabilityManager()
@@ -341,95 +275,59 @@ class NetworkManager: ObservableObject {
 
 // MARK: 公开的请求方法
 extension NetworkManager {
-    
+
     // MARK: 认证相关API
     func login(email: String, password: String) -> AnyPublisher<AuthResponse, NetworkError> {
         let parameters: Parameters = [
             "email": email,
             "password": password
         ]
-        
-        return request(
+
+        return self.request(
             endpoint: "/api/auth/login",
             method: .post,
             parameters: parameters,
             responseType: AuthResponse.self
         )
     }
-    
+
     func register(username: String, email: String, password: String, verificationCode: String? = nil) -> AnyPublisher<AuthResponse, NetworkError> {
         var parameters: Parameters = [
             "username": username,
             "email": email,
             "password": password
         ]
-        
+
         if let verificationCode = verificationCode {
             parameters["verification_code"] = verificationCode
         }
-        
-        return request(
+
+        return self.request(
             endpoint: "/api/auth/register",
             method: .post,
             parameters: parameters,
             responseType: AuthResponse.self
         )
     }
-    
-    func sendVerificationCode(email: String) -> AnyPublisher<NetworkResponse<String>, NetworkError> {
+
+    func sendVerificationCode(email: String) -> AnyPublisher<SendVerificationCodeResponse, NetworkError> {
         let parameters: Parameters = [
             "email": email
         ]
-        
+
         return request(
             endpoint: "/api/auth/send-verification-code",
             method: .post,
             parameters: parameters,
-            responseType: NetworkResponse<String>.self
+            responseType: SendVerificationCodeResponse.self
         )
     }
-    
-    func refreshToken() -> AnyPublisher<AuthResponse, NetworkError> {
-        return request(
-            endpoint: "/api/auth/refresh",
-            method: .post,
-            responseType: AuthResponse.self
-        )
-    }
-    
-    func appleLogin(identityToken: String, authorizationCode: String? = nil, userInfo: [String: Any]? = nil) -> AnyPublisher<AuthResponse, NetworkError> {
-        var parameters: Parameters = [
-            "identity_token": identityToken
-        ]
-        
-        if let authorizationCode = authorizationCode {
-            parameters["authorization_code"] = authorizationCode
-        }
-        if let userInfo = userInfo {
-            // 将 userInfo 转换为可序列化的格式
-            do {
-                let userInfoData = try JSONSerialization.data(withJSONObject: userInfo)
-                if let userInfoString = String(data: userInfoData, encoding: .utf8) {
-                    parameters["user_info"] = userInfoString
-                }
-            } catch {
-                print("无法序列化 userInfo: \(error)")
-            }
-        }
-        
-        return request(
-            endpoint: "/api/auth/apple-login",
-            method: .post,
-            parameters: parameters,
-            responseType: AuthResponse.self
-        )
-    }
-    
+
     func googleLogin(idToken: String) -> AnyPublisher<AuthResponse, NetworkError> {
         let parameters: Parameters = [
             "id_token": idToken
         ]
-        
+
         return request(
             endpoint: "/api/auth/google-login",
             method: .post,
@@ -437,28 +335,27 @@ extension NetworkManager {
             responseType: AuthResponse.self
         )
     }
-    
-    func verifyToken() -> AnyPublisher<AuthResponse, NetworkError> {
+
+    func verifyToken() -> AnyPublisher<VerifyTokenResponse, NetworkError> {
         return request(
             endpoint: "/api/auth/verify-token",
             method: .get,
-            responseType: AuthResponse.self
+            responseType: VerifyTokenResponse.self
         )
     }
-    
+
     // MARK: 卡片相关API
-    func getCards(userId: Int, page: Int = 1, perPage: Int = 20, tags: String? = nil, search: String? = nil, sortBy: String? = nil, sortOrder: String? = nil) -> AnyPublisher<UserCardsListResponse, NetworkError> {
+    func getCards(page: Int = 1, perPage: Int = 20, tags: String? = nil, search: String? = nil, sortBy: String? = nil, sortOrder: String? = nil) -> AnyPublisher<UserCardsListResponse, NetworkError> {
         var parameters: Parameters = [
-            "user_id": userId,
             "page": page,
             "per_page": perPage
         ]
-        
+
         if let tags = tags { parameters["tags"] = tags }
         if let search = search { parameters["search"] = search }
         if let sortBy = sortBy { parameters["sort_by"] = sortBy }
         if let sortOrder = sortOrder { parameters["sort_order"] = sortOrder }
-        
+
         return request(
             endpoint: "/api/cards",
             method: .get,
@@ -467,31 +364,41 @@ extension NetworkManager {
             responseType: UserCardsListResponse.self
         )
     }
-    
-    func getCard(id: Int, userId: Int) -> AnyPublisher<CardResponse, NetworkError> {
+
+    func getPublicProfileCards(actorId: String, page: Int = 1, perPage: Int = 20) -> AnyPublisher<UserCardsListResponse, NetworkError> {
         let parameters: Parameters = [
-            "viewer_user_id": userId
+            "page": page,
+            "per_page": perPage
         ]
-        return requestWithWrapper(
-            endpoint: "/api/cards/\(id)",
+
+        return request(
+            endpoint: "/api/v1/profile/\(actorId)/cards",
             method: .get,
             parameters: parameters,
+            encoding: URLEncoding.default,
+            responseType: UserCardsListResponse.self
+        )
+    }
+
+    func getCard(id: String) -> AnyPublisher<CardResponse, NetworkError> {
+        return request(
+            endpoint: "/api/cards/\(id)",
+            method: .get,
             responseType: CardResponse.self
         )
     }
-    
+
     func createCard(_ cardRequest: CreateCardRequest) -> AnyPublisher<CardResponse, NetworkError> {
         var parameters: Parameters = [
-            "user_id": cardRequest.userId,
             "title": cardRequest.title ?? "",
             "content": cardRequest.content,
             "tags": cardRequest.tags ?? []
         ]
-        
+
         if let isPublic = cardRequest.isPublic {
             parameters["is_public"] = isPublic
         }
-        
+
         return request(
             endpoint: "/api/cards",
             method: .post,
@@ -499,234 +406,132 @@ extension NetworkManager {
             responseType: CardResponse.self
         )
     }
-    
-    func updateCard(id: Int, request: UpdateCardRequest) -> AnyPublisher<CardResponse, NetworkError> {
-        var parameters: Parameters = [
-            "user_id": request.userId
-        ]
-        
+
+    func updateCard(id: String, request: UpdateCardRequest) -> AnyPublisher<CardResponse, NetworkError> {
+        var parameters: Parameters = [:]
+
         if let title = request.title { parameters["title"] = title }
         parameters["content"] = request.content
         if let tags = request.tags { parameters["tags"] = tags }
-        
-        return requestWithWrapper(
+
+        return self.request(
             endpoint: "/api/cards/\(id)",
             method: .put,
             parameters: parameters,
             responseType: CardResponse.self
         )
     }
-    
-    func deleteCard(id: Int) -> AnyPublisher<NetworkResponse<String>, NetworkError> {
+
+    func deleteCard(id: String) -> AnyPublisher<NetworkResponse<CardMessageData>, NetworkError> {
         return request(
             endpoint: "/api/cards/\(id)",
             method: .delete,
-            responseType: NetworkResponse<String>.self
-        )
-    }
-    
-    func searchCards(_ request: SearchRequest) -> AnyPublisher<SearchResponse, NetworkError> {
-        var parameters: Parameters = [
-            "user_id": request.userId,
-            "query": request.query,
-            "page": request.page ?? 1,
-            "per_page": request.perPage ?? 20
-        ]
-        
-        if let searchType = request.searchType { parameters["search_type"] = searchType }
-        if let scope = request.scope { parameters["scope"] = scope }
-        if let sortBy = request.sortBy { parameters["sort_by"] = sortBy }
-        if let sortOrder = request.sortOrder { parameters["sort_order"] = sortOrder }
-        if let tags = request.tags { parameters["tags"] = tags }
-        if let dateFrom = request.dateFrom { parameters["date_from"] = dateFrom }
-        if let dateTo = request.dateTo { parameters["date_to"] = dateTo }
-        
-        return requestWithWrapper(
-            endpoint: "/api/cards/search",
-            method: .get,
-            parameters: parameters,
-            responseType: SearchResponse.self
-        )
-    }
-    
-    func searchCardsPost(_ request: SearchRequest) -> AnyPublisher<SearchResponse, NetworkError> {
-        let parameters: Parameters = [
-            "user_id": request.userId,
-            "query": request.query,
-            "search_type": request.searchType ?? "all",
-            "scope": request.scope ?? "my",
-            "sort_by": request.sortBy ?? "relevance",
-            "sort_order": request.sortOrder ?? "desc",
-            "tags": request.tags ?? [],
-            "date_from": request.dateFrom as Any,
-            "date_to": request.dateTo as Any,
-            "page": request.page ?? 1,
-            "per_page": request.perPage ?? 20
-        ]
-        
-        return requestWithWrapper(
-            endpoint: "/api/cards/search",
-            method: .post,
-            parameters: parameters,
-            responseType: SearchResponse.self
-        )
-    }
-    
-    func batchDeleteCards(_ request: BatchRequest) -> AnyPublisher<BatchResponse, NetworkError> {
-        let parameters: Parameters = [
-            "user_id": request.userId,
-            "card_ids": request.cardIds
-        ]
-        
-        return requestWithWrapper(
-            endpoint: "/api/cards/batch/delete",
-            method: .post,
-            parameters: parameters,
-            responseType: BatchResponse.self
-        )
-    }
-    
-    func batchPermanentDeleteCards(_ request: BatchRequest) -> AnyPublisher<BatchResponse, NetworkError> {
-        let parameters: Parameters = [
-            "user_id": request.userId,
-            "card_ids": request.cardIds
-        ]
-        
-        return requestWithWrapper(
-            endpoint: "/api/cards/batch/permanent-delete",
-            method: .post,
-            parameters: parameters,
-            responseType: BatchResponse.self
-        )
-    }
-    
-    func batchRestoreCards(_ request: BatchRequest) -> AnyPublisher<BatchResponse, NetworkError> {
-        let parameters: Parameters = [
-            "user_id": request.userId,
-            "card_ids": request.cardIds
-        ]
-        
-        return requestWithWrapper(
-            endpoint: "/api/cards/batch/restore",
-            method: .post,
-            parameters: parameters,
-            responseType: BatchResponse.self
+            responseType: NetworkResponse<CardMessageData>.self
         )
     }
 
-    func cleanupExpiredTrash() -> AnyPublisher<CleanupResponse, NetworkError> {
-        return requestWithWrapper(
-            endpoint: "/api/cards/trash/cleanup",
-            method: .post,
-            responseType: CleanupResponse.self
-        )
-    }
-    
-    func permanentlyDeleteCard(cardId: Int, userId: Int) -> AnyPublisher<NetworkResponse<String>, NetworkError> {
-        let parameters: Parameters = [
-            "user_id": userId
-        ]
-        
-        return request(
-            endpoint: "/api/cards/trash/\(cardId)/permanent",
-            method: .delete,
-            parameters: parameters,
-            responseType: NetworkResponse<String>.self
-        )
-    }
-    
-    func restoreCard(cardId: Int, request: RestoreRequest) -> AnyPublisher<NetworkResponse<String>, NetworkError> {
-        let parameters: Parameters = [
-            "user_id": request.userId
-        ]
-        
-        return self.request(
-            endpoint: "/api/cards/trash/\(cardId)/restore",
-            method: .post,
-            parameters: parameters,
-            responseType: NetworkResponse<String>.self
-        )
-    }
-    
-    
-    func mergeCardsIdeas(_ request: MergeCardsRequest) -> AnyPublisher<CardResponse, NetworkError> {
-        // 将 SelectedCard 数组转换为 JSON 字符串
-        let selectedCardsString: String
-        do {
-            let selectedCardsData = try JSONEncoder().encode(request.selectedCards)
-            selectedCardsString = String(data: selectedCardsData, encoding: .utf8) ?? "[]"
-        } catch {
-            return Fail(error: NetworkError.encodingError)
-                .eraseToAnyPublisher()
-        }
-        
-        let parameters: Parameters = [
-            "user_id": request.userId,
-            "selected_cards": selectedCardsString
-        ]
-        
-        return requestWithWrapper(
-            endpoint: "/api/cards/merge-ideas",
-            method: .post,
-            parameters: parameters,
-            responseType: CardResponse.self
-        )
-    }
-    
-    // MARK: 生成相关卡片
-    func generateRelatedCards(_ request: GenerateRelatedCardsRequest) -> AnyPublisher<GenerateRelatedCardsResponse, NetworkError> {
-        let parameters: Parameters = [
-            "user_id": request.userId,
-            "card_id": request.cardId,
-            "count": request.count
-        ]
-        
-        return self.request(
-            endpoint: "/api/cards/generate-related",
-            method: .post,
-            parameters: parameters,
-            responseType: GenerateRelatedCardsResponse.self
-        )
-    }
-    
-    // MARK: 获取合并历史
-    func getMergeHistory(cardId: Int, userId: Int, type: String? = nil) -> AnyPublisher<MergeHistoryResponse, NetworkError> {
+    func searchCards(_ request: SearchRequest) -> AnyPublisher<SearchResponse, NetworkError> {
         var parameters: Parameters = [
-            "user_id": userId
+            "search": request.query,
+            "page": request.page ?? 1,
+            "per_page": request.perPage ?? 20
         ]
-        
-        if let type = type {
-            parameters["type"] = type
-        } else {
+
+        if let sortBy = request.sortBy { parameters["sort_by"] = sortBy }
+        if let sortOrder = request.sortOrder { parameters["sort_order"] = sortOrder }
+        if let tags = request.tags, !tags.isEmpty {
+            parameters["tags"] = tags.joined(separator: ",")
         }
-        
-        
+
         return self.request(
-            endpoint: "/api/cards/\(cardId)/merge-history",
+            endpoint: "/api/cards",
             method: .get,
             parameters: parameters,
             encoding: URLEncoding.default,
-            responseType: MergeHistoryResponse.self
+            responseType: SearchResponse.self
         )
     }
-    
-    // MARK: 更新卡片
-    func updateCard(cardId: Int, request: UpdateCardRequest) -> AnyPublisher<NetworkResponse<CardResponse>, NetworkError> {
+    func permanentlyDeleteCard(cardId: String) -> AnyPublisher<NetworkResponse<CardMessageData>, NetworkError> {
+        return request(
+            endpoint: "/api/cards/trash/\(cardId)/permanent",
+            method: .delete,
+            responseType: NetworkResponse<CardMessageData>.self
+        )
+    }
+
+    func restoreCard(cardId: String) -> AnyPublisher<NetworkResponse<CreateCardData>, NetworkError> {
+        return self.request(
+            endpoint: "/api/cards/trash/\(cardId)/restore",
+            method: .post,
+            responseType: NetworkResponse<CreateCardData>.self
+        )
+    }
+    // MARK: 生成相关卡片
+    func generateRelatedCards(cardId: String) -> AnyPublisher<GenerateRelatedCardsResponse, NetworkError> {
+        return self.request(
+            endpoint: "/api/v1/assets/\(cardId)/spark",
+            method: .post,
+            responseType: GenerateRelatedCardsResponse.self
+        )
+    }
+
+    func getSparkHistory(cardId: String, offset: Int = 0, limit: Int = 20) -> AnyPublisher<NetworkResponse<SparkHistoryResponse>, NetworkError> {
         let parameters: Parameters = [
-            "user_id": request.userId,
+            "offset": offset,
+            "limit": limit
+        ]
+
+        return self.request(
+            endpoint: "/api/v1/assets/\(cardId)/spark/history",
+            method: .get,
+            parameters: parameters,
+            encoding: URLEncoding.default,
+            responseType: NetworkResponse<SparkHistoryResponse>.self
+        )
+    }
+
+    func getSparkMore(cardId: String, cursor: String? = nil, limit: Int = 20) -> AnyPublisher<NetworkResponse<SparkMoreResponse>, NetworkError> {
+        var parameters: Parameters = [
+            "limit": limit
+        ]
+        if let cursor = cursor, !cursor.isEmpty {
+            parameters["cursor"] = cursor
+        }
+
+        return self.request(
+            endpoint: "/api/v1/assets/\(cardId)/spark/more",
+            method: .get,
+            parameters: parameters,
+            encoding: URLEncoding.default,
+            responseType: NetworkResponse<SparkMoreResponse>.self
+        )
+    }
+
+    func getSparkActivityResults(activityId: String) -> AnyPublisher<NetworkResponse<SparkActivityResultsResponse>, NetworkError> {
+        return self.request(
+            endpoint: "/api/v1/spark/activities/\(activityId)/results",
+            method: .get,
+            encoding: URLEncoding.default,
+            responseType: NetworkResponse<SparkActivityResultsResponse>.self
+        )
+    }
+
+    // MARK: 更新卡片
+    func updateCard(cardId: String, request: UpdateCardRequest) -> AnyPublisher<CardResponse, NetworkError> {
+        let parameters: Parameters = [
             "title": request.title ?? "",
             "content": request.content,
             "tags": request.tags ?? []
         ]
-        
+
         return self.request(
             endpoint: "/api/cards/\(cardId)",
             method: .put,
             parameters: parameters,
-            responseType: NetworkResponse.self
+            responseType: CardResponse.self
         )
     }
-    
+
     // MARK: 获取对话列表
     func getConversations() -> AnyPublisher<ConversationsResponse, NetworkError> {
         return self.request(
@@ -735,13 +540,13 @@ extension NetworkManager {
             responseType: ConversationsResponse.self
         )
     }
-    
+
     // MARK: 发起会话
     func createConversation(request: CreateConversationRequest) -> AnyPublisher<CreateConversationResponse, NetworkError> {
         let parameters: Parameters = [
-            "participant_id": request.participantId
+            "participant_actor_id": request.participantId
         ]
-        
+
         return self.request(
             endpoint: "/api/chats/conversations",
             method: .post,
@@ -749,24 +554,24 @@ extension NetworkManager {
             responseType: CreateConversationResponse.self
         )
     }
-    
+
     // MARK: 获取聊天详情
-    func getConversationDetail(conversationId: Int) -> AnyPublisher<ChatDetailResponse, NetworkError> {
+    func getConversationDetail(conversationId: String) -> AnyPublisher<ChatDetailResponse, NetworkError> {
         return self.request(
             endpoint: "/api/chats/conversations/\(conversationId)",
             method: .get,
             responseType: ChatDetailResponse.self
         )
     }
-    
+
     // MARK: 获取消息列表
-    func getMessages(conversationId: Int, page: Int = 1, perPage: Int = 20) -> AnyPublisher<MessagesListResponse, NetworkError> {
-        
+    func getMessages(conversationId: String, page: Int = 1, perPage: Int = 20) -> AnyPublisher<MessagesListResponse, NetworkError> {
+
         let parameters: Parameters = [
             "page": page,
             "per_page": perPage
         ]
-        
+
         return self.request(
             endpoint: "/api/chats/conversations/\(conversationId)/messages",
             method: .get,
@@ -775,200 +580,142 @@ extension NetworkManager {
             responseType: MessagesListResponse.self
         )
     }
-    
+
     // MARK: - 发送消息
-    func sendMessage(conversationId: Int, request: SendMessageRequest) -> AnyPublisher<SendMessageResponse, NetworkError> {
+    func sendMessage(conversationId: String, request: SendMessageRequest) -> AnyPublisher<SendMessageResponse, NetworkError> {
         var parameters: Parameters = [
-            "content": request.content
+            "content": request.content,
+            "message_type": "text"
         ]
-        
+
         if let attachedCardId = request.attachedCardId {
-            parameters["attached_card_id"] = attachedCardId
+            parameters["referenced_asset_id"] = attachedCardId
         }
-        
+
         return self.request(
             endpoint: "/api/chats/conversations/\(conversationId)/messages",
             method: .post,
             parameters: parameters,
+            headers: ["Idempotency-Key": UUID().uuidString],
             responseType: SendMessageResponse.self
         )
     }
-    
+
     // MARK: - 获取兴趣类别
     func getInterests() -> AnyPublisher<InterestsResponse, NetworkError> {
         return self.request(
-            endpoint: "/api/utils/interests/categories",
+            endpoint: "/api/v1/profile/interests/options",
             method: .get,
             responseType: InterestsResponse.self
         )
     }
-    
+
     // MARK: - 保存用户兴趣
     func saveUserInterests(request: SaveUserInterestsRequest) -> AnyPublisher<SaveUserInterestsResponse, NetworkError> {
         let parameters: Parameters = [
-            "user_id": request.userId,
-            "interest_ids": request.interestIds
+            "domains": request.domains
         ]
-        
+
         return self.request(
-            endpoint: "/api/utils/interests/user",
-            method: .post,
+            endpoint: "/api/v1/profile/interests",
+            method: .put,
             parameters: parameters,
             responseType: SaveUserInterestsResponse.self
         )
     }
-    
-    func getRecommendedCards(userId: Int? = nil, limit: Int = 10, page: Int = 1) -> AnyPublisher<CardsListResponse, NetworkError> {
+
+    func getRecommendedCards(limit: Int = 10, refreshToken: String? = nil) -> AnyPublisher<CardsListResponse, NetworkError> {
         var parameters: Parameters = [
-            "limit": limit,
-            "page": page
+            "limit": limit
         ]
-        
-        if let userId = userId {
-            parameters["user_id"] = userId
+        if let refreshToken = refreshToken, !refreshToken.isEmpty {
+            parameters["refresh_token"] = refreshToken
         }
-        
+
         return request(
-            endpoint: "/api/cards/recommended",
+            endpoint: "/api/v1/explore/recommended",
             method: .get,
             parameters: parameters,
             encoding: URLEncoding.default,
             responseType: CardsListResponse.self
         )
     }
-    
-    func updateCardVisibility(cardId: Int, request: UpdateVisibilityRequest) -> AnyPublisher<NetworkResponse<String>, NetworkError> {
-        let parameters: Parameters = [
-            "user_id": request.userId,
-            "is_public": request.isPublic
-        ]
-        
-        return self.request(
-            endpoint: "/api/cards/\(cardId)/visibility",
-            method: .put,
-            parameters: parameters,
-            responseType: NetworkResponse<String>.self
-        )
-    }
-    
 
-    
     // MARK: - 卡片点赞相关API
-    func likeCard(cardId: Int, userId: Int) -> AnyPublisher<NetworkResponse<String>, NetworkError> {
+    func likeCard(cardId: String) -> AnyPublisher<NetworkResponse<LikeResponseData>, NetworkError> {
         let parameters: Parameters = [
-            "user_id": userId
+            "asset_id": cardId
         ]
-        
+
         return request(
-            endpoint: "/api/cards/\(cardId)/like",
+            endpoint: "/api/v1/actors/me/likes",
             method: .post,
             parameters: parameters,
-            responseType: NetworkResponse<String>.self
+            responseType: NetworkResponse<LikeResponseData>.self
         )
     }
-    
-    func unlikeCard(cardId: Int, userId: Int) -> AnyPublisher<NetworkResponse<String>, NetworkError> {
-        let parameters: Parameters = [
-            "user_id": userId
-        ]
-        
+
+    func unlikeCard(cardId: String) -> AnyPublisher<NetworkResponse<EmptyResponseData>, NetworkError> {
         return request(
-            endpoint: "/api/cards/\(cardId)/like",
+            endpoint: "/api/v1/actors/me/likes/\(cardId)",
             method: .delete,
-            parameters: parameters,
-            responseType: NetworkResponse<String>.self
+            responseType: NetworkResponse<EmptyResponseData>.self
         )
     }
-    
+
     // MARK: - 收藏相关API
-    func favoriteCard(cardId: Int, userId: Int) -> AnyPublisher<NetworkResponse<FavoriteResponseData>, NetworkError> {
+    func favoriteCard(cardId: String) -> AnyPublisher<NetworkResponse<FavoriteResponseData>, NetworkError> {
         let parameters: Parameters = [
-            "user_id": userId,
-            "card_id": cardId
+            "asset_id": cardId
         ]
-        
+
         return request(
-            endpoint: "/api/favorites",
+            endpoint: "/api/v1/actors/me/favorites",
             method: .post,
             parameters: parameters,
             responseType: NetworkResponse<FavoriteResponseData>.self
         )
     }
-    
-    func unfavoriteCard(cardId: Int, userId: Int) -> AnyPublisher<NetworkResponse<UnfavoriteResponseData>, NetworkError> {
-        let parameters: Parameters = [
-            "user_id": userId
-        ]
-        
+
+    func unfavoriteCard(cardId: String) -> AnyPublisher<NetworkResponse<EmptyResponseData>, NetworkError> {
         return request(
-            endpoint: "/api/favorites/\(cardId)",
+            endpoint: "/api/v1/actors/me/favorites/\(cardId)",
             method: .delete,
-            parameters: parameters,
             encoding: URLEncoding.default,
-            responseType: NetworkResponse<UnfavoriteResponseData>.self
+            responseType: NetworkResponse<EmptyResponseData>.self
         )
     }
 
-    
-    func deleteComment(commentId: Int) -> AnyPublisher<NetworkResponse<String>, NetworkError> {
-        return request(
-            endpoint: "/api/cards/comments/\(commentId)",
-            method: .delete,
-            responseType: NetworkResponse<String>.self
-        )
-    }
-    
-    func deleteReply(replyId: Int) -> AnyPublisher<NetworkResponse<String>, NetworkError> {
-        return request(
-            endpoint: "/api/cards/replies/\(replyId)",
-            method: .delete,
-            responseType: NetworkResponse<String>.self
-        )
-    }
-    
 
-    
+
     // MARK: 卡片链接相关API
-    func getUserAllLinks(userId: Int, limit: Int = 50) -> AnyPublisher<LinkResponse, NetworkError> {
+    func getUserAllLinks(limit: Int = 50) -> AnyPublisher<NetworkResponse<ListMyLinksData>, NetworkError> {
         let parameters: Parameters = [
-            "user_id": userId,
-            "limit": limit
+            "page": 1,
+            "per_page": limit
         ]
-        
-        return requestWithWrapper(
+
+        return request(
             endpoint: "/api/cards/links",
             method: .get,
             parameters: parameters,
-            responseType: LinkResponse.self
+            encoding: URLEncoding.default,
+            responseType: NetworkResponse<ListMyLinksData>.self
         )
     }
-    
-    func getCardLinks(cardId: Int, userId: Int) -> AnyPublisher<LinkResponse, NetworkError> {
-        let parameters: Parameters = [
-            "user_id": userId
-        ]
-        
-        return requestWithWrapper(
-            endpoint: "/api/cards/\(cardId)/links",
-            method: .get,
-            parameters: parameters,
-            responseType: LinkResponse.self
-        )
-    }
-    
+
     // MARK: - 获取用户所有卡片
-    func getUserAllCards(userId: Int, searchType: String = "all", search: String = "", limit: Int = 20, cardId: Int? = nil) -> AnyPublisher<UserAllCardsResponse, NetworkError> {
+    func getUserAllCards(searchType: String = "all", search: String = "", limit: Int = 20, cardId: String? = nil) -> AnyPublisher<UserAllCardsResponse, NetworkError> {
         var parameters: Parameters = [
             "search_type": searchType,
             "search": search,
-            "limit": limit,
-            "user_id": userId
+            "limit": limit
         ]
-        
+
         if let cardId = cardId {
             parameters["card_id"] = cardId
         }
-        
+
         return request(
             endpoint: "/api/cards/user-all-cards",
             method: .get,
@@ -977,13 +724,13 @@ extension NetworkManager {
             responseType: UserAllCardsResponse.self
         )
     }
-    
-    func createCardLink(cardId: Int, reques: LinkRequest) -> AnyPublisher<LinkResponse, NetworkError> {
+
+    func createCardLink(cardId: String, reques: LinkRequest) -> AnyPublisher<LinkResponse, NetworkError> {
         let parameters: Parameters = [
-            "user_id": reques.userId,
-            "linked_card_id": reques.linkedCardId
+            "linked_card_id": reques.linkedCardId,
+            "link_type": "MANUAL"
         ]
-        
+
         return request(
             endpoint: "/api/cards/\(cardId)/links",
             method: .post,
@@ -991,151 +738,89 @@ extension NetworkManager {
             responseType: LinkResponse.self
         )
     }
-    
-    func removeCardLink(cardId: Int, linkedCardId: Int, userId: Int) -> AnyPublisher<LinkResponse, NetworkError> {
-        let parameters: Parameters = [
-            "user_id": userId
-        ]
-        
-        return requestWithWrapper(
+
+    func removeCardLink(cardId: String, linkedCardId: String) -> AnyPublisher<NetworkResponse<DeleteLinkData>, NetworkError> {
+        return request(
             endpoint: "/api/cards/\(cardId)/links/\(linkedCardId)",
             method: .delete,
-            parameters: parameters,
-            responseType: LinkResponse.self
+            responseType: NetworkResponse<DeleteLinkData>.self
         )
     }
-    
+
     // MARK: 卡片Pin相关API
-    func getUserPinnedCards(userId: Int, limit: Int = 50) -> AnyPublisher<NetworkResponse<String>, NetworkError> {
+    func getUserPinnedCards(limit: Int = 50) -> AnyPublisher<CardsListResponse, NetworkError> {
         let parameters: Parameters = [
-            "user_id": userId,
-            "limit": limit
+            "page": 1,
+            "per_page": limit
         ]
-        
-        return requestWithWrapper(
+
+        return request(
             endpoint: "/api/cards/pins",
             method: .get,
             parameters: parameters,
-            responseType: NetworkResponse.self
+            encoding: URLEncoding.default,
+            responseType: CardsListResponse.self
         )
     }
-    
-    func pinCard(cardId: Int, userId: Int) -> AnyPublisher<PinResponse, NetworkError> {
-        let parameters: Parameters = [
-            "user_id": userId
-        ]
-        
-        return requestWithWrapper(
+
+    func pinCard(cardId: String) -> AnyPublisher<PinResponse, NetworkError> {
+        return request(
             endpoint: "/api/cards/\(cardId)/pin",
             method: .post,
-            parameters: parameters,
             encoding: URLEncoding.default,
             responseType: PinResponse.self
         )
     }
-    
-    func unpinCard(cardId: Int, userId: Int) -> AnyPublisher<PinResponse, NetworkError> {
-        let parameters: Parameters = [
-            "user_id": userId
-        ]
-        
-        return requestWithWrapper(
+
+    func unpinCard(cardId: String) -> AnyPublisher<PinResponse, NetworkError> {
+        return request(
             endpoint: "/api/cards/\(cardId)/pin",
             method: .delete,
-            parameters: parameters,
             responseType: PinResponse.self
         )
     }
-    
-    // MARK: 标签相关API
-    func getTags() -> AnyPublisher<[Tag], NetworkError> {
-        return requestWithWrapper(
-            endpoint: "/api/tags",
-            method: .get,
-            responseType: [Tag].self
-        )
-    }
-    
+
     // MARK: 用户相关API
-    func getUserProfile(userId: Int) -> AnyPublisher<UserResponse, NetworkError> {
-        let parameters: Parameters = [
-            "user_id": userId
-        ]
-        
-        return requestWithWrapper(
-            endpoint: "/api/users/profile",
-            method: .get,
-            parameters: parameters,
-            responseType: UserResponse.self
-        )
-    }
-    
-    func updateUserProfile(userId: Int, request: UpdateProfileRequest) -> AnyPublisher<UserResponse, NetworkError> {
-        var parameters: Parameters = [
-            "user_id": userId
-        ]
-        
-        if let username = request.username { parameters["username"] = username }
-        if let avatar = request.avatar { parameters["avatar"] = avatar }
-        if let bio = request.bio { parameters["bio"] = bio }
-        if let location = request.location { parameters["location"] = location }
-        if let birthday = request.birthday { parameters["birthday"] = birthday }
-        
-        return requestWithWrapper(
-            endpoint: "/api/users/profile",
-            method: .put,
-            parameters: parameters,
-            responseType: UserResponse.self
-        )
-    }
-    
-    func changePassword(userId: Int, request: ChangePasswordRequest) -> AnyPublisher<NetworkResponse<String>, NetworkError> {
-        let parameters: Parameters = [
-            "user_id": userId,
-            "old_password": request.oldPassword,
-            "new_password": request.newPassword
-        ]
-        
-        return self.request(
-            endpoint: "/api/users/change-password",
-            method: .post,
-            parameters: parameters,
-            responseType: NetworkResponse<String>.self
-        )
-    }
-    
-    func getCurrentUser() -> AnyPublisher<NetworkResponse<String>, NetworkError> {
+    func getCurrentUserProfile() -> AnyPublisher<UserProfileResponse, NetworkError> {
         return request(
-            endpoint: "/api/utils/user/current",
+            endpoint: "/api/v1/profile/me",
             method: .get,
-            responseType: NetworkResponse<String>.self
+            responseType: UserProfileResponse.self
         )
     }
-    
-    func uploadAvatar(userId: Int, imageData: Data) -> AnyPublisher<AvatarUploadResponse, NetworkError> {
+
+    func getUserProfile(actorId: String) -> AnyPublisher<UserProfileResponse, NetworkError> {
+        return request(
+            endpoint: "/api/v1/profile/\(actorId)",
+            method: .get,
+            responseType: UserProfileResponse.self
+        )
+    }
+
+    func uploadAvatar(imageData: Data) -> AnyPublisher<AvatarUploadResponse, NetworkError> {
         return Future<AvatarUploadResponse, NetworkError> { [weak self] promise in
             guard let self = self else {
                 promise(.failure(.unknown))
                 return
             }
-            
-            let url = "\(self.baseURL)/api/users/avatar?user_id=\(userId)"
-            
+
+            let url = "\(self.baseURL)/api/v1/profile/me/avatar"
+
             var headers = HTTPHeaders()
             if let token = self.authToken {
                 headers.add(.authorization(bearerToken: token))
             }
-            
+
             DispatchQueue.main.async {
                 self.isLoading = true
             }
-            
+
             self.session.upload(
                 multipartFormData: { multipartFormData in
                     multipartFormData.append(imageData, withName: "avatar", fileName: "avatar.jpg", mimeType: "image/jpeg")
                 },
                 to: url,
-                method: .post,
+                method: .put,
                 headers: headers
             )
             .validate()
@@ -1143,7 +828,7 @@ extension NetworkManager {
                 DispatchQueue.main.async {
                     self.isLoading = false
                 }
-                
+
                 switch response.result {
                 case .success(let data):
                     do {
@@ -1160,282 +845,118 @@ extension NetworkManager {
         }
         .eraseToAnyPublisher()
     }
-    
-    func deleteAvatar(userId: Int) -> AnyPublisher<NetworkResponse<String>, NetworkError> {
+    func updateCardVisibility(cardId: String, isPublic: Bool) -> AnyPublisher<ToggleCardVisibilityResponse, NetworkError> {
         let parameters: Parameters = [
-            "user_id": userId
+            "visibility": isPublic ? "PUBLIC" : "PRIVATE"
         ]
-        
+
         return request(
-            endpoint: "/api/users/avatar",
-            method: .delete,
-            parameters: parameters,
-            responseType: NetworkResponse<String>.self
-        )
-    }
-    
-    func deleteUser(userId: Int) -> AnyPublisher<NetworkResponse<String>, NetworkError> {
-        let parameters: Parameters = [
-            "user_id": userId,
-            "reason": "Confirmed delete"
-        ]
-        
-        return request(
-            endpoint: "/api/user/delete",
+            endpoint: "/api/v1/assets/\(cardId)/visibility",
             method: .post,
             parameters: parameters,
-            responseType: NetworkResponse<String>.self
+            responseType: ToggleCardVisibilityResponse.self
         )
     }
-    
-    func updateCardVisibility(cardId: Int, userId: Int, isPublic: Bool) -> AnyPublisher<NetworkResponse<CardDetail>, NetworkError> {
-        let parameters: Parameters = [
-            "user_id": userId,
-            "is_public": isPublic
-        ]
-        
+
+    func getUserCredit() -> AnyPublisher<NetworkResponse<[CreditBalanceData]>, NetworkError> {
         return request(
-            endpoint: "/api/cards/\(cardId)/visibility",
-            method: .put,
-            parameters: parameters,
-            responseType: NetworkResponse<CardDetail>.self
+            endpoint: "/api/v1/credits/balance",
+            method: .get,
+            responseType: NetworkResponse<[CreditBalanceData]>.self
         )
     }
-    
-    func getUserCredit(userId: Int) -> AnyPublisher<NetworkResponse<String>, NetworkError> {
-        let parameters: Parameters = [
-            "user_id": userId
-        ]
-        
+
+    func getUserStats() -> AnyPublisher<StatsResponse, NetworkError> {
         return request(
-            endpoint: "/api/users/credit",
+            endpoint: "/api/v1/profile/me/stats",
             method: .get,
-            parameters: parameters,
-            responseType: NetworkResponse<String>.self
-        )
-    }
-    
-    func getUserStats(userId: Int) -> AnyPublisher<StatsResponse, NetworkError> {
-        let parameters: Parameters = [
-            "user_id": userId
-        ]
-        
-        return requestWithWrapper(
-            endpoint: "/api/users/stats",
-            method: .get,
-            parameters: parameters,
             responseType: StatsResponse.self
         )
     }
-    
-    func getTopUsers(limit: Int = 10) -> AnyPublisher<TopUsersResponse, NetworkError> {
-        let parameters: Parameters = [
-            "limit": limit
-        ]
-        
-        return requestWithWrapper(
-            endpoint: "/api/users/top",
+
+    func getTopUsers() -> AnyPublisher<TopUsersResponse, NetworkError> {
+        return request(
+            endpoint: "/api/v1/credits/leaderboard",
             method: .get,
-            parameters: parameters,
             responseType: TopUsersResponse.self
         )
     }
-    
-    
-    func getFavorites(userId: Int, page: Int = 1, perPage: Int = 20) -> AnyPublisher<FavoritesResponse, NetworkError> {
+    func checkFavoriteStatus(cardIds: String) -> AnyPublisher<NetworkResponse<[String: Bool]>, NetworkError> {
         let parameters: Parameters = [
-            "user_id": userId,
-            "page": page,
-            "per_page": perPage
+            "asset_ids": cardIds.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
         ]
-        
-        return requestWithWrapper(
-            endpoint: "/api/favorites",
-            method: .get,
-            parameters: parameters,
-            responseType: FavoritesResponse.self
-        )
-    }
-    
-    func getFavoriteCount(userId: Int) -> AnyPublisher<NetworkResponse<String>, NetworkError> {
-        let parameters: Parameters = [
-            "user_id": userId
-        ]
-        
+
         return request(
-            endpoint: "/api/favorites/count",
-            method: .get,
+            endpoint: "/api/v1/actors/me/favorites/status",
+            method: .post,
             parameters: parameters,
-            responseType: NetworkResponse<String>.self
+            responseType: NetworkResponse<[String: Bool]>.self
         )
     }
-    
-    func checkFavoriteStatus(cardIds: String, userId: Int) -> AnyPublisher<NetworkResponse<String>, NetworkError> {
-        let parameters: Parameters = [
-            "card_ids": cardIds,
-            "user_id": userId
-        ]
-        
-        return request(
-            endpoint: "/api/favorites/status",
-            method: .get,
-            parameters: parameters,
-            responseType: NetworkResponse<String>.self
-        )
-    }
-    
-    func getPopularCards(limit: Int = 10) -> AnyPublisher<NetworkResponse<String>, NetworkError> {
-        let parameters: Parameters = [
+
+    func getFollowersList(actorId: String, cursor: String? = nil, limit: Int = 20) -> AnyPublisher<FollowListResponse, NetworkError> {
+        var parameters: Parameters = [
             "limit": limit
         ]
-        
-        return request(
-            endpoint: "/api/favorites/popular",
-            method: .get,
-            parameters: parameters,
-            responseType: NetworkResponse<String>.self
-        )
-    }
-    
-    func addUserFavourite(_ request: UserFavouriteRequest) -> AnyPublisher<NetworkResponse<String>, NetworkError> {
-        let parameters: Parameters = [
-            "userid": request.userid,
-            "originid": request.originid,
-            "favouriteid": request.favouriteid
-        ]
-        
-        return self.request(
-            endpoint: "/api/favorites/user-favourites",
-            method: .post,
-            parameters: parameters,
-            responseType: NetworkResponse<String>.self
-        )
-    }
-    
-    func getFavouriteRelatedCards(favouriteId: Int) -> AnyPublisher<RelatedCardsResponse, NetworkError> {
-        return requestWithWrapper(
-            endpoint: "/api/favorites/favourites/\(favouriteId)/related",
-            method: .get,
-            responseType: RelatedCardsResponse.self
-        )
-    }
-    
-    // MARK: 关注相关API
-    func followUser(_ request: FollowRequest) -> AnyPublisher<FollowResponse, NetworkError> {
-        let parameters: Parameters = [
-            "user_id": request.userId,
-            "target_user_id": request.targetUserId
-        ]
-        
-        return requestWithWrapper(
-            endpoint: "/api/follows/follow",
-            method: .post,
-            parameters: parameters,
-            responseType: FollowResponse.self
-        )
-    }
-    
-    func unfollowUser(_ request: FollowRequest) -> AnyPublisher<FollowResponse, NetworkError> {
-        let parameters: Parameters = [
-            "user_id": request.userId,
-            "target_user_id": request.targetUserId
-        ]
-        
-        return requestWithWrapper(
-            endpoint: "/api/follows/unfollow",
-            method: .post,
-            parameters: parameters,
-            responseType: FollowResponse.self
-        )
-    }
-    
-    func getFollowersList(userId: Int, currentUserId: Int? = nil, page: Int = 1, perPage: Int = 20) -> AnyPublisher<FollowListResponse, NetworkError> {
-        var parameters: Parameters = [
-            "page": page,
-            "per_page": perPage
-        ]
-        
-        if let currentUserId = currentUserId {
-            parameters["current_user_id"] = currentUserId
+        if let cursor = cursor, !cursor.isEmpty {
+            parameters["cursor"] = cursor
         }
-        
-        return requestWithWrapper(
-            endpoint: "/api/follows/followers/\(userId)",
+
+        return request(
+            endpoint: "/api/v1/actors/\(actorId)/followers",
             method: .get,
             parameters: parameters,
             responseType: FollowListResponse.self
         )
     }
-    
-    func getFollowingList(userId: Int, currentUserId: Int? = nil, page: Int = 1, perPage: Int = 20) -> AnyPublisher<FollowListResponse, NetworkError> {
+
+    func getFollowingList(actorId: String, cursor: String? = nil, limit: Int = 20) -> AnyPublisher<FollowListResponse, NetworkError> {
         var parameters: Parameters = [
-            "page": page,
-            "per_page": perPage
+            "limit": limit
         ]
-        
-        if let currentUserId = currentUserId {
-            parameters["current_user_id"] = currentUserId
+        if let cursor = cursor, !cursor.isEmpty {
+            parameters["cursor"] = cursor
         }
-        
-        return requestWithWrapper(
-            endpoint: "/api/follows/following/\(userId)",
+
+        return request(
+            endpoint: "/api/v1/actors/\(actorId)/following",
             method: .get,
             parameters: parameters,
             responseType: FollowListResponse.self
         )
     }
-    
-    func getMutualFollows(userId: Int, targetUserId: Int) -> AnyPublisher<NetworkResponse<String>, NetworkError> {
-        return request(
-            endpoint: "/api/follows/mutual/\(userId)/\(targetUserId)",
-            method: .get,
-            responseType: NetworkResponse<String>.self
-        )
-    }
-    
-    func checkFollowStatus(_ request: FollowStatusRequest) -> AnyPublisher<FollowStatusResponse, NetworkError> {
-        let parameters: Parameters = [
-            "user_id": request.userId,
-            "target_user_ids": request.targetUserIds
-        ]
-        
-        return requestWithWrapper(
-            endpoint: "/api/follows/status",
-            method: .post,
-            parameters: parameters,
-            responseType: FollowStatusResponse.self
-        )
-    }
-    
     // MARK: - 文件上传API
-    func uploadFile(data: Data, filename: String, mimeType: String, userId: Int) -> AnyPublisher<UploadResponse, NetworkError> {
+    func uploadFile(data: Data, filename: String, mimeType: String, assetId: String, kind: String = "background") -> AnyPublisher<UploadResponse, NetworkError> {
         return Future<UploadResponse, NetworkError> { [weak self] promise in
             guard let self = self else {
                 promise(.failure(.unknown))
                 return
             }
-            
-            let url = "\(self.baseURL)/utils/upload"
-            
+
+            let url = "\(self.baseURL)/api/v1/media/upload"
+
             print("文件上传URL: \(url)")
             print("文件名: \(filename)")
             print("文件大小: \(data.count) bytes")
             print("MIME类型: \(mimeType)")
-            
+            print("关联资产ID: \(assetId)")
+            print("上传类型: \(kind)")
+
             var headers = HTTPHeaders()
             if let token = self.authToken {
                 headers.add(.authorization(bearerToken: token))
-                print("认证Token: \(token)")
+                print("认证Token: <redacted>")
             }
-            
+
             DispatchQueue.main.async {
                 self.isLoading = true
             }
-            
+
             self.session.upload(
                 multipartFormData: { multipartFormData in
                     multipartFormData.append(data, withName: "file", fileName: filename, mimeType: mimeType)
-                    multipartFormData.append(String(userId).data(using: .utf8)!, withName: "user_id")
+                    multipartFormData.append(Data(assetId.utf8), withName: "asset_id")
+                    multipartFormData.append(Data(kind.utf8), withName: "kind")
                 },
                 to: url,
                 headers: headers
@@ -1445,17 +966,17 @@ extension NetworkManager {
                 DispatchQueue.main.async {
                     self.isLoading = false
                 }
-                
+
                 if let httpResponse = response.response {
                     print("文件上传响应状态码: \(httpResponse.statusCode)")
                 }
-                
+
                 switch response.result {
                 case .success(let data):
                     if let responseString = String(data: data, encoding: .utf8) {
                         print("文件上传响应数据: \(responseString)")
                     }
-                    
+
                     do {
                         let uploadResponse = try JSONDecoder().decode(UploadResponse.self, from: data)
                         if uploadResponse.success {
@@ -1467,7 +988,7 @@ extension NetworkManager {
                     } catch {
                         promise(.failure(.decodingError))
                     }
-                    
+
                 case .failure(let error):
                     let networkError = self.handleError(error, response: response.response)
                     promise(.failure(networkError))
@@ -1476,206 +997,148 @@ extension NetworkManager {
         }
         .eraseToAnyPublisher()
     }
-    
+
     // MARK: 通知相关API
     func getNotifications(_ request: GetNotificationsRequest) -> AnyPublisher<NotificationsResponse, NetworkError> {
         let parameters: [String: Any] = [
             "page": request.page,
-            "per_page": request.perPage,
-            "unread_only": request.unreadOnly,
-            "user_id": request.userId
+            "per_page": request.perPage
         ]
 
         return self.request(
             endpoint: "/api/notifications",
-            method: .post,
+            method: .get,
             parameters: parameters,
+            encoding: URLEncoding.default,
             responseType: NotificationsResponse.self
         )
     }
-    
-    func markAllNotificationsRead(_ request: MarkReadRequest) -> AnyPublisher<SuccessResponse, NetworkError> {
+
+    func getUnreadCount() -> AnyPublisher<UnreadCountResponse, NetworkError> {
         let parameters: Parameters = [
-            "user_id": request.userId
+            "page": 1,
+            "per_page": 1
         ]
-        
-        return requestWithWrapper(
-            endpoint: "/api/notifications/read-all",
-            method: .post,
+
+        return self.request(
+            endpoint: "/api/notifications",
+            method: .get,
             parameters: parameters,
-            responseType: SuccessResponse.self
+            encoding: URLEncoding.default,
+            responseType: NotificationsResponse.self
         )
+        .map { response in
+            UnreadCountResponse(success: response.success, message: response.message, unreadCount: response.unreadCount)
+        }
+        .eraseToAnyPublisher()
     }
-    
-    func getUnreadCount(_ request: MarkReadRequest) -> AnyPublisher<UnreadCountResponse, NetworkError> {
-        let parameters: Parameters = [
-            "user_id": request.userId
-        ]
-        
-        return requestWithWrapper(
-            endpoint: "/api/notifications/unread-count",
-            method: .post,
-            parameters: parameters,
-            responseType: UnreadCountResponse.self
-        )
-    }
-    
-    func deleteNotification(notificationId: Int, request: DeleteNotificationRequest) -> AnyPublisher<SuccessResponse, NetworkError> {
-        let parameters: Parameters = [
-            "user_id": request.userId
-        ]
-        
-        return requestWithWrapper(
-            endpoint: "/api/notifications/\(notificationId)",
-            method: .delete,
-            parameters: parameters,
-            responseType: SuccessResponse.self
-        )
-    }
-    
-    func markNotificationRead(notificationId: Int, request: MarkReadRequest) -> AnyPublisher<SuccessResponse, NetworkError> {
-        let parameters: Parameters = [
-            "user_id": request.userId
-        ]
-        
-        return requestWithWrapper(
+
+    func markNotificationRead(notificationId: String) -> AnyPublisher<SuccessResponse, NetworkError> {
+        return self.request(
             endpoint: "/api/notifications/\(notificationId)/read",
-            method: .post,
-            parameters: parameters,
+            method: .patch,
             responseType: SuccessResponse.self
         )
     }
-    
+
     // MARK: 邀请码相关API
-    func getInvitationCodeStats(_ request: GetCodeStatsRequest) -> AnyPublisher<SuccessResponse, NetworkError> {
+    func useInvitationCode(_ request: UseInvitationRequest) -> AnyPublisher<InvitationRedeemResponse, NetworkError> {
         let parameters: Parameters = [
-            "invitation_code": request.invitationCode
+            "code": request.code
         ]
-        
-        return requestWithWrapper(
-            endpoint: "/api/invitations/code-stats",
+
+        return self.request(
+            endpoint: "/api/invitations/redeem",
             method: .post,
             parameters: parameters,
-            responseType: SuccessResponse.self
+            responseType: InvitationRedeemResponse.self
         )
     }
-    
-    func useInvitationCode(_ request: UseInvitationRequest) -> AnyPublisher<SuccessResponse, NetworkError> {
-        let parameters: Parameters = [
-            "user_id": request.userId,
-            "invitation_code": request.invitationCode
-        ]
-        
-        return requestWithWrapper(
-            endpoint: "/api/invitations/use",
-            method: .post,
-            parameters: parameters,
-            responseType: SuccessResponse.self
+
+    func getUserGroup() -> AnyPublisher<InvitationReferralResponse, NetworkError> {
+        return self.request(
+            endpoint: "/api/invitations/referral",
+            method: .get,
+            responseType: InvitationReferralResponse.self
         )
     }
-    
-    func getUserGroup(_ request: GetUserGroupRequest) -> AnyPublisher<SuccessResponse, NetworkError> {
+
+    func validateInvitationCode(_ request: ValidateInvitationRequest) -> AnyPublisher<InvitationValidateResponse, NetworkError> {
         let parameters: Parameters = [
-            "user_id": request.userId
+            "code": request.code
         ]
-        
-        return requestWithWrapper(
-            endpoint: "/api/invitations/user-group",
-            method: .post,
-            parameters: parameters,
-            responseType: SuccessResponse.self
-        )
-    }
-    
-    func validateInvitationCode(_ request: ValidateInvitationRequest) -> AnyPublisher<SuccessResponse, NetworkError> {
-        let parameters: Parameters = [
-            "user_id": request.userId,
-            "invitation_code": request.invitationCode
-        ]
-        
-        return requestWithWrapper(
+
+        return self.request(
             endpoint: "/api/invitations/validate",
             method: .post,
             parameters: parameters,
-            responseType: SuccessResponse.self
+            responseType: InvitationValidateResponse.self
         )
     }
-    
-    // MARK: 工具相关API
-    func generateCaptcha(sessionId: String) -> AnyPublisher<NetworkResponse<String>, NetworkError> {
-        let parameters: Parameters = [
-            "session_id": sessionId
+
+    func trackInvitationClick(_ request: InvitationTrackRequest) -> AnyPublisher<InvitationTrackResponse, NetworkError> {
+        var parameters: Parameters = [
+            "code": request.code
         ]
-        
-        return request(
-            endpoint: "/api/utils/captcha",
-            method: .get,
-            parameters: parameters,
-            responseType: NetworkResponse<String>.self
-        )
-    }
-    
-    func verifyCaptcha() -> AnyPublisher<NetworkResponse<String>, NetworkError> {
-        return request(
-            endpoint: "/api/utils/captcha/verify",
-            method: .post,
-            responseType: NetworkResponse<String>.self
-        )
-    }
-    
-    func getInterestCategories() -> AnyPublisher<InterestCategoriesResponse, NetworkError> {
-        return requestWithWrapper(
-            endpoint: "/api/utils/interests/categories",
-            method: .get,
-            responseType: InterestCategoriesResponse.self
-        )
-    }
-    
-    func getUserInterests() -> AnyPublisher<InterestCategoriesResponse, NetworkError> {
-        return requestWithWrapper(
-            endpoint: "/api/utils/interests/user",
-            method: .get,
-            responseType: InterestCategoriesResponse.self
-        )
-    }
-    
-    func saveUserInterests(_ request: UserInterestsRequest) -> AnyPublisher<UserInterestsResponse, NetworkError> {
-        let parameters: Parameters = [
-            "user_id": request.userId,
-            "interest_ids": request.interestIds
-        ]
-        
-        return requestWithWrapper(
-            endpoint: "/api/utils/interests/user",
+        if let deviceFingerprint = request.deviceFingerprint {
+            parameters["device_fingerprint"] = deviceFingerprint
+        }
+
+        return self.request(
+            endpoint: "/api/invitations/track",
             method: .post,
             parameters: parameters,
-            responseType: UserInterestsResponse.self
+            responseType: InvitationTrackResponse.self
         )
     }
-    
-    func healthCheck() -> AnyPublisher<NetworkResponse<String>, NetworkError> {
-        return request(
-            endpoint: "/api/utils/system/health",
+
+    func getInvitationRecords(page: Int = 1, limit: Int = 20, status: String? = nil) -> AnyPublisher<InvitationRecordsResponse, NetworkError> {
+        var parameters: Parameters = [
+            "page": page,
+            "limit": limit
+        ]
+        if let status = status {
+            parameters["status"] = status
+        }
+
+        return self.request(
+            endpoint: "/api/invitations/records",
             method: .get,
-            responseType: NetworkResponse<String>.self
+            parameters: parameters,
+            encoding: URLEncoding.default,
+            responseType: InvitationRecordsResponse.self
         )
     }
-    
-    func getSystemInfo() -> AnyPublisher<NetworkResponse<String>, NetworkError> {
-        return request(
-            endpoint: "/api/utils/system/info",
+
+    func getInvitationRewards(page: Int = 1, limit: Int = 20) -> AnyPublisher<InvitationRewardsResponse, NetworkError> {
+        let parameters: Parameters = [
+            "page": page,
+            "limit": limit
+        ]
+
+        return self.request(
+            endpoint: "/api/invitations/rewards",
             method: .get,
-            responseType: NetworkResponse<String>.self
+            parameters: parameters,
+            encoding: URLEncoding.default,
+            responseType: InvitationRewardsResponse.self
         )
     }
-    
+
+    func healthCheck() -> AnyPublisher<HealthResponse, NetworkError> {
+        return request(
+            endpoint: "/health",
+            method: .get,
+            responseType: HealthResponse.self
+        )
+    }
     // MARK: 评论相关API
-    func getComments(cardId: Int, page: Int = 1, perPage: Int = 20, completion: @escaping (Result<CommentListResponse, NetworkError>) -> Void) {
+    func getComments(cardId: String, page: Int = 1, perPage: Int = 20, completion: @escaping (Result<CommentListResponse, NetworkError>) -> Void) {
         let parameters: Parameters = [
             "per_page": perPage,
             "page": page
         ]
-        
+
         request(
             endpoint: "/api/cards/\(cardId)/comments",
             method: .get,
@@ -1695,13 +1158,15 @@ extension NetworkManager {
         )
         .store(in: &cancellables)
     }
-    
-    func createComment(cardId: Int, request: CreateCommentRequest, completion: @escaping (Result<CreateCommentResponse, NetworkError>) -> Void) {
-        let parameters: Parameters = [
-            "content": request.content,
-            "visibility": request.visibility
+
+    func createComment(cardId: String, request: CreateCommentRequest, completion: @escaping (Result<CreateCommentResponse, NetworkError>) -> Void) {
+        var parameters: Parameters = [
+            "body": request.content
         ]
-        
+        if let parentCommentId = request.parentCommentId {
+            parameters["parent_comment_id"] = parentCommentId
+        }
+
         self.request(
             endpoint: "/api/cards/\(cardId)/comments",
             method: .post,
@@ -1720,65 +1185,10 @@ extension NetworkManager {
         )
         .store(in: &cancellables)
     }
-    
-    func likeComment(commentId: Int, request: CommentLikeRequest, completion: @escaping (Result<CommentLikeResponse, NetworkError>) -> Void) {
-        let parameters: Parameters = [
-            "user_id": request.userId
-        ]
-        
+    func getUserProfile(actorId: String, completion: @escaping (Result<UserProfileResponse, NetworkError>) -> Void) {
         self.request(
-            endpoint: "/api/cards/comments/\(commentId)/like",
-            method: .post,
-            parameters: parameters,
-            responseType: CommentLikeResponse.self
-        )
-        .sink(
-            receiveCompletion: { completionResult in
-                if case .failure(let error) = completionResult {
-                    completion(.failure(error))
-                }
-            },
-            receiveValue: { response in
-                completion(.success(response))
-            }
-        )
-        .store(in: &cancellables)
-    }
-    
-    func createReply(commentId: Int, request: CreateReplyRequest, completion: @escaping (Result<CreateReplyResponse, NetworkError>) -> Void) {
-        let parameters: Parameters = [
-            "content": request.content,
-            "visibility": request.visibility
-        ]
-        
-        self.request(
-            endpoint: "/api/cards/comments/\(commentId)/replies",
-            method: .post,
-            parameters: parameters,
-            responseType: CreateReplyResponse.self
-        )
-        .sink(
-            receiveCompletion: { completionResult in
-                if case .failure(let error) = completionResult {
-                    completion(.failure(error))
-                }
-            },
-            receiveValue: { response in
-                completion(.success(response))
-            }
-        )
-        .store(in: &cancellables)
-    }
-    
-    func getUserProfile(userId: Int, completion: @escaping (Result<UserProfileResponse, NetworkError>) -> Void) {
-        let parameters: Parameters = [
-            "user_id": userId
-        ]
-        
-        self.request(
-            endpoint: "/api/users/profile",
+            endpoint: "/api/v1/profile/\(actorId)",
             method: .get,
-            parameters: parameters,
             encoding: URLEncoding.default,
             responseType: UserProfileResponse.self
         )
@@ -1794,19 +1204,35 @@ extension NetworkManager {
         )
         .store(in: &cancellables)
     }
-    
-    func getFavorites(userId: Int, page: Int = 1, perPage: Int = 20, sortBy: String? = nil, sortOrder: String? = nil, completion: @escaping (Result<FavoritesListResponse, NetworkError>) -> Void) {
-        var parameters: Parameters = [
-            "per_page": perPage,
-            "page": page,
-            "user_id": userId
-        ]
-        
-        if let sortBy = sortBy { parameters["sort_by"] = sortBy }
-        if let sortOrder = sortOrder { parameters["sort_order"] = sortOrder }
-        
+
+    func getCurrentUserProfile(completion: @escaping (Result<UserProfileResponse, NetworkError>) -> Void) {
         self.request(
-            endpoint: "/api/favorites",
+            endpoint: "/api/v1/profile/me",
+            method: .get,
+            encoding: URLEncoding.default,
+            responseType: UserProfileResponse.self
+        )
+        .sink(
+            receiveCompletion: { completionResult in
+                if case .failure(let error) = completionResult {
+                    completion(.failure(error))
+                }
+            },
+            receiveValue: { response in
+                completion(.success(response))
+            }
+        )
+        .store(in: &cancellables)
+    }
+
+    func getFavorites(page: Int = 1, perPage: Int = 20, completion: @escaping (Result<FavoritesListResponse, NetworkError>) -> Void) {
+        let parameters: Parameters = [
+            "per_page": perPage,
+            "page": page
+        ]
+
+        self.request(
+            endpoint: "/api/v1/actors/me/favorites",
             method: .get,
             parameters: parameters,
             encoding: URLEncoding.default,
@@ -1824,18 +1250,13 @@ extension NetworkManager {
         )
         .store(in: &cancellables)
     }
-    
-    func deleteCard(cardId: Int, userId: Int, completion: @escaping (Result<DeleteCardResponse, NetworkError>) -> Void) {
-        let parameters: Parameters = [
-            "user_id": userId
-        ]
-        
+
+    func deleteCard(cardId: String, completion: @escaping (Result<NetworkResponse<CardMessageData>, NetworkError>) -> Void) {
         self.request(
             endpoint: "/api/cards/\(cardId)",
             method: .delete,
-            parameters: parameters,
             encoding: URLEncoding.default,
-            responseType: DeleteCardResponse.self
+            responseType: NetworkResponse<CardMessageData>.self
         )
         .sink(
             receiveCompletion: { completionResult in
@@ -1849,17 +1270,16 @@ extension NetworkManager {
         )
         .store(in: &cancellables)
     }
-    
+
     // MARK: 切换卡片可见性
-    func toggleCardVisibility(cardId: Int, userId: Int, isPublic: Bool, completion: @escaping (Result<ToggleCardVisibilityResponse, NetworkError>) -> Void) {
+    func toggleCardVisibility(cardId: String, isPublic: Bool, completion: @escaping (Result<ToggleCardVisibilityResponse, NetworkError>) -> Void) {
         let parameters: Parameters = [
-            "user_id": userId,
-            "is_public": isPublic
+            "visibility": isPublic ? "PUBLIC" : "PRIVATE"
         ]
-        
+
         self.request(
-            endpoint: "/api/cards/\(cardId)/visibility",
-            method: .put,
+            endpoint: "/api/v1/assets/\(cardId)/visibility",
+            method: .post,
             parameters: parameters,
             responseType: ToggleCardVisibilityResponse.self
         )
@@ -1875,11 +1295,11 @@ extension NetworkManager {
         )
         .store(in: &cancellables)
     }
-    
+
     // MARK: 切换卡片置顶状态
-    func toggleCardPin(cardId: Int, userId: Int, completion: @escaping (Result<ToggleCardPinResponse, NetworkError>) -> Void) {
+    func toggleCardPin(cardId: String, completion: @escaping (Result<ToggleCardPinResponse, NetworkError>) -> Void) {
         self.request(
-            endpoint: "/api/cards/\(cardId)/pin?user_id=\(userId)",
+            endpoint: "/api/cards/\(cardId)/pin",
             method: .post,
             parameters: nil,
             encoding: URLEncoding.default,
@@ -1897,12 +1317,12 @@ extension NetworkManager {
         )
         .store(in: &cancellables)
     }
-    
+
     // MARK: 取消卡片置顶状态
-    func unpinCard(cardId: Int, userId: Int, completion: @escaping (Result<ToggleCardPinResponse, NetworkError>) -> Void) {
- 
+    func unpinCard(cardId: String, completion: @escaping (Result<ToggleCardPinResponse, NetworkError>) -> Void) {
+
         self.request(
-            endpoint: "/api/cards/\(cardId)/pin?user_id=\(userId)",
+            endpoint: "/api/cards/\(cardId)/pin",
             method: .delete,
             parameters: nil,
             encoding: URLEncoding.default,
@@ -1920,15 +1340,14 @@ extension NetworkManager {
         )
         .store(in: &cancellables)
     }
-    
+
     // MARK: 获取回收站卡片列表
-    func getTrashCards(userId: Int, page: Int = 1, perPage: Int = 20, completion: @escaping (Result<TrashListResponse, NetworkError>) -> Void) {
+    func getTrashCards(page: Int = 1, perPage: Int = 20, completion: @escaping (Result<TrashListResponse, NetworkError>) -> Void) {
         let parameters: Parameters = [
             "per_page": perPage,
-            "page": page,
-            "user_id": userId
+            "page": page
         ]
-        
+
         self.request(
             endpoint: "/api/cards/trash",
             method: .get,
@@ -1948,18 +1367,13 @@ extension NetworkManager {
         )
         .store(in: &cancellables)
     }
-    
+
     // MARK: 恢复卡片
-    func restoreCard(cardId: Int, userId: Int, completion: @escaping (Result<RestoreCardResponse, NetworkError>) -> Void) {
-        let parameters: Parameters = [
-            "user_id": userId
-        ]
-        
+    func restoreCard(cardId: String, completion: @escaping (Result<NetworkResponse<CreateCardData>, NetworkError>) -> Void) {
         self.request(
             endpoint: "/api/cards/trash/\(cardId)/restore",
             method: .post,
-            parameters: parameters,
-            responseType: RestoreCardResponse.self
+            responseType: NetworkResponse<CreateCardData>.self
         )
         .sink(
             receiveCompletion: { completionResult in
@@ -1973,19 +1387,14 @@ extension NetworkManager {
         )
         .store(in: &cancellables)
     }
-    
+
     // MARK: - 永久删除卡片
-    func permanentlyDeleteCard(cardId: Int, userId: Int, completion: @escaping (Result<PermanentlyDeleteCardResponse, NetworkError>) -> Void) {
-        let parameters: Parameters = [
-            "user_id": userId
-        ]
-        
+    func permanentlyDeleteCard(cardId: String, completion: @escaping (Result<NetworkResponse<CardMessageData>, NetworkError>) -> Void) {
         self.request(
             endpoint: "/api/cards/trash/\(cardId)/permanent",
             method: .delete,
-            parameters: parameters,
             encoding: URLEncoding.default,
-            responseType: PermanentlyDeleteCardResponse.self
+            responseType: NetworkResponse<CardMessageData>.self
         )
         .sink(
             receiveCompletion: { completionResult in
@@ -1999,27 +1408,28 @@ extension NetworkManager {
         )
         .store(in: &cancellables)
     }
-    
+
     // MARK: 更新用户资料
     func updateUserProfile(
-        userId: Int,
         username: String,
-        avatar: String,
         bio: String,
         location: String,
         birthday: String,
         completion: @escaping (Result<UserProfileResponse, NetworkError>) -> Void
     ) {
-        let parameters: Parameters = [
+        var parameters: Parameters = [
             "username": username,
-            "avatar": avatar,
             "bio": bio,
-            "location": location,
-            "birthday": birthday
+            "city": location
         ]
-        
+
+        let trimmedBirthday = birthday.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedBirthday.isEmpty {
+            parameters["birthday"] = trimmedBirthday
+        }
+
         self.request(
-            endpoint: "/api/users/profile?user_id=\(userId)",
+            endpoint: "/api/v1/profile/me",
             method: .put,
             parameters: parameters,
             responseType: UserProfileResponse.self
@@ -2036,21 +1446,20 @@ extension NetworkManager {
         )
         .store(in: &cancellables)
     }
-    
+
     // MARK: 搜索卡片
-    func searchCards(query: String, userId: Int, page: Int = 1, perPage: Int = 20, completion: @escaping (Result<SearchResponse, NetworkError>) -> Void) {
+    func searchCards(query: String, page: Int = 1, perPage: Int = 20, completion: @escaping (Result<SearchResponse, NetworkError>) -> Void) {
         let parameters: Parameters = [
             "per_page": perPage,
             "page": page,
             "sort_order": "desc",
             "sort_by": "relevance",
             "search_type": "all",
-            "query": query,
-            "user_id": userId
+            "query": query
         ]
-        
+
         self.request(
-            endpoint: "/api/cards/global-search",
+            endpoint: "/api/v1/explore/search",
             method: .get,
             parameters: parameters,
             encoding: URLEncoding.default,
@@ -2068,19 +1477,12 @@ extension NetworkManager {
         )
         .store(in: &cancellables)
     }
-    
-    // MARK: 获取卡片详细信息
-    func getCardDetail(cardId: Int, userId: Int? = nil, completion: @escaping (Result<CardDetailResponse, NetworkError>) -> Void) {
-        var parameters: Parameters = [:]
-        if let userId = userId {
-            parameters["user_id"] = userId
-        }
-        let finalParameters: Parameters? = parameters.isEmpty ? nil : parameters
 
+    // MARK: 获取卡片详细信息
+    func getCardDetail(cardId: String, completion: @escaping (Result<CardDetailResponse, NetworkError>) -> Void) {
         self.request(
             endpoint: "/api/cards/\(cardId)",
             method: .get,
-            parameters: finalParameters,
             encoding: URLEncoding.default,
             responseType: CardDetailResponse.self
         )
@@ -2096,119 +1498,161 @@ extension NetworkManager {
         )
         .store(in: &cancellables)
     }
-    
+
     // MARK: 合并卡片预览
     func mergeCards(request: MergeCardsRequest, completion: @escaping (Result<MergePreviewResponse, NetworkError>) -> Void) {
-        let parameters: Parameters = [
-            "user_id": request.userId,
-            "selected_cards": request.selectedCards.map { card in
-                [
-                    "id": card.id,
-                    "content": card.content
-                ]
-            }
-        ]
-        
-        self.request(
-            endpoint: "/api/cards/merge-ideas",
-            method: .post,
-            parameters: parameters,
-            responseType: MergePreviewResponse.self
-        )
-        .sink(
-            receiveCompletion: { completionResult in
-                if case .failure(let error) = completionResult {
-                    completion(.failure(error))
+        createMergeJob(request)
+            .flatMap { [weak self] job -> AnyPublisher<MergeArtifactResponse, NetworkError> in
+                guard let self = self else {
+                    return Fail(error: .unknown).eraseToAnyPublisher()
                 }
-            },
-            receiveValue: { response in
-                completion(.success(response))
+                return self.waitForMergeArtifact(jobId: job.jobId)
             }
-        )
-        .store(in: &cancellables)
+            .map { $0.toPreviewResponse() }
+            .sink(
+                receiveCompletion: { result in
+                    if case .failure(let error) = result {
+                        completion(.failure(error))
+                    }
+                },
+                receiveValue: { response in
+                    completion(.success(response))
+                }
+            )
+            .store(in: &cancellables)
     }
-    
-    // MARK: 关注相关API
-    
-    /// 关注用户
-    func followUser(userId: Int, targetUserId: Int) -> AnyPublisher<FollowResponse, NetworkError> {
-        let parameters: Parameters = [
-            "user_id": userId,
-            "target_user_id": targetUserId
-        ]
-        
+
+    private func createMergeJob(_ request: MergeCardsRequest) -> AnyPublisher<MergeJobResponse, NetworkError> {
+        do {
+            return self.request(
+                endpoint: "/api/merge/jobs",
+                method: .post,
+                parameters: try encodedParameters(request),
+                responseType: MergeJobResponse.self
+            )
+        } catch {
+            return Fail(error: NetworkError.encodingError).eraseToAnyPublisher()
+        }
+    }
+
+    private func getMergeJob(jobId: String) -> AnyPublisher<MergeJobResponse, NetworkError> {
         return self.request(
-            endpoint: "/api/follows/follow",
+            endpoint: "/api/merge/jobs/\(jobId)",
+            method: .get,
+            encoding: URLEncoding.default,
+            responseType: MergeJobResponse.self
+        )
+    }
+
+    private func getMergeArtifact(jobId: String) -> AnyPublisher<MergeArtifactResponse, NetworkError> {
+        return self.request(
+            endpoint: "/api/merge/jobs/\(jobId)/artifact",
+            method: .get,
+            encoding: URLEncoding.default,
+            responseType: MergeArtifactResponse.self
+        )
+    }
+
+    private func waitForMergeArtifact(jobId: String, attempt: Int = 0) -> AnyPublisher<MergeArtifactResponse, NetworkError> {
+        return getMergeJob(jobId: jobId)
+            .flatMap { [weak self] job -> AnyPublisher<MergeArtifactResponse, NetworkError> in
+                guard let self = self else {
+                    return Fail(error: .unknown).eraseToAnyPublisher()
+                }
+
+                switch job.status {
+                case "ARTIFACT_READY", "COMMITTING", "COMMITTED_CARD", "COMMITTED_BLOCK":
+                    return self.getMergeArtifact(jobId: jobId)
+                case "FAILED", "CANCELLED":
+                    return Fail(error: .serverError(409, job.errorCode ?? job.status)).eraseToAnyPublisher()
+                default:
+                    guard attempt < 30 else {
+                        return Fail(error: .timeout).eraseToAnyPublisher()
+                    }
+                    return Just(())
+                        .delay(for: .seconds(1), scheduler: DispatchQueue.global(qos: .userInitiated))
+                        .setFailureType(to: NetworkError.self)
+                        .flatMap { self.waitForMergeArtifact(jobId: jobId, attempt: attempt + 1) }
+                        .eraseToAnyPublisher()
+                }
+            }
+            .eraseToAnyPublisher()
+    }
+
+    // MARK: 关注相关API
+
+    /// 关注用户
+    func followUser(targetActorId: String) -> AnyPublisher<FollowResponse, NetworkError> {
+        return self.request(
+            endpoint: "/api/follows/\(targetActorId)",
             method: .post,
-            parameters: parameters,
             responseType: FollowResponse.self
         )
     }
-    
+
     /// 取消关注用户
-    func unfollowUser(userId: Int, targetUserId: Int) -> AnyPublisher<UnfollowResponse, NetworkError> {
-        let parameters: Parameters = [
-            "user_id": userId,
-            "target_user_id": targetUserId
-        ]
-        
+    func unfollowUser(targetActorId: String) -> AnyPublisher<UnfollowResponse, NetworkError> {
         return self.request(
-            endpoint: "/api/follows/unfollow",
-            method: .post,
-            parameters: parameters,
+            endpoint: "/api/follows/\(targetActorId)",
+            method: .delete,
             responseType: UnfollowResponse.self
         )
     }
-    
+
     /// 检查关注状态
-    func checkFollowStatus(userId: Int, targetUserIds: [Int]) -> AnyPublisher<FollowStatusResponse, NetworkError> {
-        let parameters: Parameters = [
-            "user_id": userId,
-            "target_user_ids": targetUserIds
-        ]
-        
+    func checkFollowStatus(targetActorIds: [String]) -> AnyPublisher<FollowStatusResponse, NetworkError> {
+        guard let targetActorId = targetActorIds.first, targetActorIds.count == 1 else {
+            return Fail(error: NetworkError.serverError(400, "Go profile API supports one follow-status target per request")).eraseToAnyPublisher()
+        }
+
         return self.request(
-            endpoint: "/api/follows/status",
-            method: .post,
-            parameters: parameters,
-            responseType: FollowStatusResponse.self
+            endpoint: "/api/v1/profile/\(targetActorId)",
+            method: .get,
+            encoding: URLEncoding.default,
+            responseType: UserProfileResponse.self
         )
+        .map { response in
+            FollowStatusResponse(
+                success: response.success,
+                message: response.message ?? "",
+                data: [targetActorId: response.data.isFollowing ?? false]
+            )
+        }
+        .eraseToAnyPublisher()
     }
-    
+
     /// 拉黑用户
-    func blockUser(userId: Int, blockedId: Int) -> AnyPublisher<BlockUserResponse, NetworkError> {
-        let parameters: Parameters = [
-            "user_id": userId,
-            "blocked_id": blockedId
-        ]
-        
+    func blockUser(blockedActorId: String) -> AnyPublisher<BlockUserResponse, NetworkError> {
         return self.request(
-            endpoint: "/api/user-blocks/block",
+            endpoint: "/api/user-blocks/\(blockedActorId)",
             method: .post,
-            parameters: parameters,
             responseType: BlockUserResponse.self
         )
     }
-    
+
+    /// 取消拉黑用户
+    func unblockUser(blockedActorId: String) -> AnyPublisher<UnblockUserResponse, NetworkError> {
+        return self.request(
+            endpoint: "/api/user-blocks/\(blockedActorId)",
+            method: .delete,
+            responseType: UnblockUserResponse.self
+        )
+    }
+
     // MARK: Apple登录API
-    
+
     /// Apple登录
     func appleLogin(loginRequest: AppleLoginRequest) -> AnyPublisher<AuthResponse, NetworkError> {
-        let nameInfo: [String: Any] = [
-            "firstName": loginRequest.userInfo.name.firstName,
-            "lastName": loginRequest.userInfo.name.lastName
+        var parameters: Parameters = [
+            "identity_token": loginRequest.identityToken
         ]
-        
-        let userInfo: [String: Any] = [
-            "name": nameInfo
-        ]
-        
-        let parameters: Parameters = [
-            "identity_token": loginRequest.identityToken,
-            "authorization_code": loginRequest.authorizationCode,
-            "user_info": userInfo
-        ]
-        
+        let fullName = [loginRequest.userInfo.name.firstName, loginRequest.userInfo.name.lastName]
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+        if !fullName.isEmpty {
+            parameters["full_name"] = fullName
+        }
+
         return self.request(
             endpoint: "/api/auth/apple-login",
             method: .post,
@@ -2216,13 +1660,13 @@ extension NetworkManager {
             responseType: AuthResponse.self
         )
     }
-    
+
     // MARK: - 卡片链接API
-    
+
     /// 获取卡片链接
-    func getCardLinks(cardId: Int, userId: Int) -> AnyPublisher<CardLinksResponse, NetworkError> {
+    func getCardLinks(cardId: String) -> AnyPublisher<CardLinksResponse, NetworkError> {
         let parameters: Parameters = [
-            "user_id": userId
+            "include": "cards"
         ]
 
         return self.request(
@@ -2233,133 +1677,50 @@ extension NetworkManager {
             responseType: CardLinksResponse.self
         )
     }
-    
-    // MARK: - 确认合并API
-    
-    /// 确认合并卡片
-    func confirmMergeCards(request: ConfirmMergeRequest) -> AnyPublisher<ConfirmMergeResponse, NetworkError> {
-        let parameters: Parameters = [
-            "user_id": request.userId,
-            "selected_cards": request.selectedCards.map { card in
-                [
-                    "id": card.id,
-                    "content": card.content
-                ]
-            },
-            "merged_content": request.mergedContent
-        ]
-        
-        return self.request(
-            endpoint: "/api/cards/merge-ideas/confirm",
-            method: .post,
-            parameters: parameters,
-            responseType: ConfirmMergeResponse.self
-        )
-    }
-    
-    
-    func markNotificationsAsRead(_ request: MarkNotificationsReadRequest) -> AnyPublisher<MarkNotificationsReadResponse, NetworkError> {
-        let parameters: [String: Any] = [
-            "user_id": request.userId
-        ]
 
-        return self.request(
-            endpoint: "/api/notifications/read-all",
-            method: .post,
-            parameters: parameters,
-            responseType: MarkNotificationsReadResponse.self
+    func commitMergeJob(jobId: String, titleOverride: String?) -> AnyPublisher<MergeCommitResponse, NetworkError> {
+        let request = CommitMergeJobRequest(
+            idemKey: "ios-merge-commit-\(jobId)-\(UUID().uuidString)",
+            target: NewCardCommitTarget(titleOverride: titleOverride)
         )
+
+        do {
+            return self.request(
+                endpoint: "/api/merge/jobs/\(jobId)/commit",
+                method: .post,
+                parameters: try encodedParameters(request),
+                responseType: MergeCommitResponse.self
+            )
+        } catch {
+            return Fail(error: NetworkError.encodingError).eraseToAnyPublisher()
+        }
     }
 
-    func markNotificationAsRead(notificationId: Int, userId: Int) -> AnyPublisher<MarkNotificationsReadResponse, NetworkError> {
-        let parameters: [String: Any] = [
-            "user_id": userId
-        ]
 
-        return self.request(
-            endpoint: "/api/notifications/\(notificationId)/read",
-            method: .post,
-            parameters: parameters,
-            responseType: MarkNotificationsReadResponse.self
-        )
-    }
-    
-    func getUnreadCount(userId: Int) -> AnyPublisher<UnreadCountResponse, NetworkError> {
-        let parameters: [String: Any] = [
-            "user_id": userId
-        ]
-        
-        return self.request(
-            endpoint: "/api/notifications/unread-count",
-            method: .post,
-            parameters: parameters,
-            
-            responseType: UnreadCountResponse.self
-        )
-    }
-    
     // MARK: 删除卡片关联
-    func deleteCardLink(cardId: Int, linkId: Int, userId: Int) -> AnyPublisher<NetworkResponse<String>, NetworkError> {
-        let parameters: [String: Any] = [
-            "user_id": userId
-        ]
-        
-        return self.request(
-            endpoint: "/api/cards/\(cardId)/links/\(linkId)",
-            method: .delete,
-            parameters: parameters,
-            encoding: URLEncoding.default,
-            responseType: NetworkResponse<String>.self
-        )
-    }
-}
-
-// MARK: Card Link Data Models
-struct CardLink: Codable {
-    let linkId: Int
-    let linkedCardId: Int
-    let title: String?
-    let content: String
-    let createdAt: String
-    
-    enum CodingKeys: String, CodingKey {
-        case linkId = "link_id"
-        case linkedCardId = "linked_card_id"
-        case title
-        case content
-        case createdAt = "created_at"
+    func deleteCardLink(cardId: String, linkedCardId: String) -> AnyPublisher<NetworkResponse<DeleteLinkData>, NetworkError> {
+        return removeCardLink(cardId: cardId, linkedCardId: linkedCardId)
     }
 }
 
 struct CardLinksResponse: Codable {
     let success: Bool
-    let message: String
+    let message: String?
     let data: CardLinksData
 }
 
+struct DeleteLinkData: Codable {
+    let removed: Bool
+    let sourceAssetId: String
+    let targetAssetId: String
+    let activityId: String?
+    let actionLogId: String?
 
-
-// MARK: 确认合并数据模型
-struct ConfirmMergeRequest: Codable {
-    let userId: Int
-    let selectedCards: [SelectedCard]
-    let mergedContent: String
-    
     enum CodingKeys: String, CodingKey {
-        case userId = "user_id"
-        case selectedCards = "selected_cards"
-        case mergedContent = "merged_content"
-    }
-}
-
-struct ConfirmMergeResponse: Codable {
-    let message: String
-    let newCard: NewCard
-    let remainingCredit: Int
-    
-    enum CodingKeys: String, CodingKey {
-        case message
-        case newCard = "new_card"
-        case remainingCredit = "remaining_credit"
+        case removed
+        case sourceAssetId = "source_asset_id"
+        case targetAssetId = "target_asset_id"
+        case activityId = "activity_id"
+        case actionLogId = "action_log_id"
     }
 }

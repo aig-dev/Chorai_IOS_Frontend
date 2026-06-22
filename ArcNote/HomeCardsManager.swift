@@ -9,7 +9,7 @@ class HomeCardsManager: ObservableObject {
     @Published var hasMoreData: Bool = true
     
     // 收藏状态管理
-    @Published var cardFavoriteStates: [Int: Bool] = [:] // cardId -> isFavorited
+    @Published var cardFavoriteStates: [String: Bool] = [:] // cardId -> isFavorited
     
     private let networkManager = NetworkManager.shared
     private let authManager = AuthManager.shared
@@ -19,9 +19,8 @@ class HomeCardsManager: ObservableObject {
     private var currentSortBy: String? = "updated_at" // 默认排序字段
     private var currentSortOrder: String? = "desc" // 默认排序顺序
     
-    func loadUserCards(userId: Int? = nil, refresh: Bool = false, sortBy: String? = nil, sortOrder: String? = nil) {
-        let targetUserId = userId ?? authManager.currentUser?.id
-        guard let targetUserId = targetUserId else {
+    func loadUserCards(refresh: Bool = false, sortBy: String? = nil, sortOrder: String? = nil) {
+        guard authManager.currentUser != nil else {
             error = .unauthorized
             return
         }
@@ -48,7 +47,7 @@ class HomeCardsManager: ObservableObject {
         isLoading = true
         error = nil
         
-        networkManager.getCards(userId: targetUserId, page: currentPage, perPage: pageSize, sortBy: finalSortBy, sortOrder: finalSortOrder)
+        networkManager.getCards(page: currentPage, perPage: pageSize, sortBy: finalSortBy, sortOrder: finalSortOrder)
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { [weak self] completion in
@@ -89,6 +88,47 @@ class HomeCardsManager: ObservableObject {
             )
             .store(in: &cancellables)
     }
+
+    func loadPublicProfileCards(actorId: String, refresh: Bool = false) {
+        guard authManager.currentUser != nil else {
+            error = .unauthorized
+            return
+        }
+
+        if refresh {
+            currentPage = 1
+            cards = []
+            hasMoreData = true
+        }
+
+        isLoading = true
+        error = nil
+
+        networkManager.getPublicProfileCards(actorId: actorId, page: currentPage, perPage: pageSize)
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { [weak self] completion in
+                    self?.isLoading = false
+                    if case .failure(let error) = completion {
+                        self?.error = error
+                        print("获取公开用户卡片失败: \(error)")
+                    }
+                },
+                receiveValue: { [weak self] response in
+                    guard let self = self else { return }
+
+                    if refresh {
+                        self.cards = response.data
+                    } else {
+                        self.cards.append(contentsOf: response.data)
+                    }
+
+                    self.hasMoreData = response.data.count == self.pageSize
+                    self.currentPage += 1
+                }
+            )
+            .store(in: &cancellables)
+    }
     
     func loadMoreCards() {
         guard hasMoreData && !isLoading else { return }
@@ -100,14 +140,14 @@ class HomeCardsManager: ObservableObject {
     }
     
     // MARK: 删除卡片功能
-    func deleteCard(cardId: Int, completion: @escaping (Result<Bool, NetworkError>) -> Void) {
-        guard let userId = authManager.currentUser?.id else {
+    func deleteCard(cardId: String, completion: @escaping (Result<Bool, NetworkError>) -> Void) {
+        guard authManager.currentUser != nil else {
             print("用户未登录")
             completion(.failure(.unauthorized))
             return
         }
         
-        networkManager.deleteCard(cardId: cardId, userId: userId) { [weak self] result in
+        networkManager.deleteCard(cardId: cardId) { [weak self] result in
             DispatchQueue.main.async {
                 switch result {
                 case .success(let response):
@@ -131,26 +171,26 @@ class HomeCardsManager: ObservableObject {
     }
     
     // MARK: - 收藏相关方法
-    func getFavoriteState(for cardId: Int) -> Bool {
+    func getFavoriteState(for cardId: String) -> Bool {
         return cardFavoriteStates[cardId] ?? false
     }
     
-    func toggleFavorite(for cardId: Int) {
-        guard let userId = authManager.currentUser?.id else {
+    func toggleFavorite(for cardId: String) {
+        guard authManager.currentUser != nil else {
             return
         }
         
         let isCurrentlyFavorited = getFavoriteState(for: cardId)
         
         if isCurrentlyFavorited {
-            removeFavorite(cardId: cardId, userId: userId)
+            removeFavorite(cardId: cardId)
         } else {
-            addFavorite(cardId: cardId, userId: userId)
+            addFavorite(cardId: cardId)
         }
     }
     
-    private func addFavorite(cardId: Int, userId: Int) {
-        networkManager.favoriteCard(cardId: cardId, userId: userId)
+    private func addFavorite(cardId: String) {
+        networkManager.favoriteCard(cardId: cardId)
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { completion in
@@ -168,8 +208,8 @@ class HomeCardsManager: ObservableObject {
             .store(in: &cancellables)
     }
     
-    private func removeFavorite(cardId: Int, userId: Int) {
-        networkManager.unfavoriteCard(cardId: cardId, userId: userId)
+    private func removeFavorite(cardId: String) {
+        networkManager.unfavoriteCard(cardId: cardId)
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { completion in
@@ -177,7 +217,7 @@ class HomeCardsManager: ObservableObject {
                         print("取消收藏失败: \(error)")
                     }
                 },
-                receiveValue: { [weak self] (response: NetworkResponse<UnfavoriteResponseData>) in
+                receiveValue: { [weak self] (response: NetworkResponse<EmptyResponseData>) in
                     if response.success {
                         self?.cardFavoriteStates[cardId] = false
                         print("取消收藏成功")
@@ -188,8 +228,8 @@ class HomeCardsManager: ObservableObject {
     }
     
     // MARK: - 切换卡片可见性
-    func toggleCardVisibility(cardId: Int, completion: @escaping (Result<Bool, NetworkError>) -> Void) {
-        guard let userId = authManager.currentUser?.id else {
+    func toggleCardVisibility(cardId: String, completion: @escaping (Result<Bool, NetworkError>) -> Void) {
+        guard authManager.currentUser != nil else {
             print("用户未登录")
             completion(.failure(.unauthorized))
             return
@@ -204,7 +244,7 @@ class HomeCardsManager: ObservableObject {
         
         let newIsPublic = !currentCard.isPublic
         
-        networkManager.toggleCardVisibility(cardId: cardId, userId: userId, isPublic: newIsPublic) { [weak self] result in
+        networkManager.toggleCardVisibility(cardId: cardId, isPublic: newIsPublic) { [weak self] result in
             DispatchQueue.main.async {
                 switch result {
                 case .success(let response):
@@ -212,7 +252,7 @@ class HomeCardsManager: ObservableObject {
                         // 更新本地卡片数据
                         if let index = self?.cards.firstIndex(where: { $0.id == cardId }) {
                             self?.cards[index] = UserCard(
-                                id: self?.cards[index].id ?? 0,
+                                id: self?.cards[index].id ?? "",
                                 title: self?.cards[index].title ?? "",
                                 content: self?.cards[index].content ?? "",
                                 contentHash: self?.cards[index].contentHash ?? "",
@@ -246,8 +286,8 @@ class HomeCardsManager: ObservableObject {
     }
     
     // MARK: - 切换卡片置顶状态
-    func toggleCardPin(cardId: Int, completion: @escaping (Result<Bool, NetworkError>) -> Void) {
-        guard let userId = authManager.currentUser?.id else {
+    func toggleCardPin(cardId: String, completion: @escaping (Result<Bool, NetworkError>) -> Void) {
+        guard authManager.currentUser != nil else {
             print("用户未登录")
             completion(.failure(.unauthorized))
             return
@@ -264,7 +304,7 @@ class HomeCardsManager: ObservableObject {
         print("卡片置顶状态: cardId=\(cardId), 当前状态: \(isCurrentlyPinned)")
         
         // 根据当前状态选择调用Pin还是Unpin API
-        let apiCall: (Int, Int, @escaping (Result<ToggleCardPinResponse, NetworkError>) -> Void) -> Void
+        let apiCall: (String, @escaping (Result<ToggleCardPinResponse, NetworkError>) -> Void) -> Void
         
         if isCurrentlyPinned {
             apiCall = networkManager.unpinCard
@@ -272,15 +312,15 @@ class HomeCardsManager: ObservableObject {
             apiCall = networkManager.toggleCardPin
         }
         
-        apiCall(cardId, userId) { [weak self] result in
+        apiCall(cardId) { [weak self] result in
             DispatchQueue.main.async {
                 switch result {
                 case .success(let response):
-                    if response.success {
+                    if response.success, let updatedCard = response.data {
                         // 更新本地卡片数据
                         if let index = self?.cards.firstIndex(where: { $0.id == cardId }) {
                             self?.cards[index] = UserCard(
-                                id: self?.cards[index].id ?? 0,
+                                id: self?.cards[index].id ?? "",
                                 title: self?.cards[index].title ?? "",
                                 content: self?.cards[index].content ?? "",
                                 contentHash: self?.cards[index].contentHash ?? "",
@@ -291,14 +331,14 @@ class HomeCardsManager: ObservableObject {
                                 likeCount: self?.cards[index].likeCount ?? 0,
                                 commentCount: self?.cards[index].commentCount,
                                 isLiked: self?.cards[index].isLiked ?? false,
-                                isPinned: response.data.isPinned,
-                                pinnedAt: response.data.pinnedAt,
+                                isPinned: updatedCard.isPinned ?? false,
+                                pinnedAt: updatedCard.pinnedAt,
                                 isFavorited: self?.cards[index].isFavorited,
                                 favoriteCount: self?.cards[index].favoriteCount,
                                 rate: self?.cards[index].rate ?? 0
                             )
                         }
-                        print("置顶状态切换成功: cardId=\(cardId), isPinned=\(response.data.isPinned)")
+                        print("置顶状态切换成功: cardId=\(cardId), isPinned=\(updatedCard.isPinned ?? false)")
                         // 刷新Notes列表
                         self?.loadUserCards(refresh: true)
                         completion(.success(true))

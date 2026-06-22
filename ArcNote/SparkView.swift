@@ -16,10 +16,10 @@ struct SparkView: View {
     @State private var currentMenuCardData: UserCard? = nil
     
     // 导航状态
-    @State private var selectedCardId: Int? = nil
+    @State private var selectedCardId: String? = nil
     @State private var showDetailView = false
     
-    let cardId: Int
+    let cardId: String
     @StateObject private var cardDetailManager = CardDetailManager.shared
     @StateObject private var relatedCardsManager = RelatedCardsManager.shared
     @State private var cancellables = Set<AnyCancellable>()
@@ -27,7 +27,7 @@ struct SparkView: View {
     // 监听返回首页通知
     @State private var shouldDismiss = false
     
-    init(cardId: Int) {
+    init(cardId: String) {
         self.cardId = cardId
     }
     
@@ -238,8 +238,13 @@ struct SparkView: View {
         )
         .popupMenu(isPresented: $showPopupMenu, layout: popupMenuLayout, cardData: currentMenuCardData)
         .linkPopup()
+        #if DEBUG
+        .overlay(alignment: .topLeading) {
+            sparkAutomationAnchors
+        }
+        #endif
         .onAppear {
-            if cardId > 0 {
+            if !cardId.isEmpty {
                 // 清除所有缓存数据
                 cardDetailManager.clearCardDetail()
                 relatedCardsManager.clearCache()
@@ -265,6 +270,37 @@ struct SparkView: View {
             }
         }
     }
+
+    #if DEBUG
+    private var sparkAutomationAnchors: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text("Spark loaded")
+                .accessibilityIdentifier("spark.screen.loaded")
+
+            Text(cardId)
+                .accessibilityIdentifier("spark.source.card-id")
+
+            if relatedCardsManager.isLoading {
+                Text("loading")
+                    .accessibilityIdentifier("spark.related.loading")
+            } else if let error = relatedCardsManager.error, !error.isEmpty {
+                Text(error)
+                    .accessibilityIdentifier("spark.related.error")
+            } else if !relatedCardsManager.relatedCards.isEmpty {
+                Text("loaded")
+                    .accessibilityIdentifier("spark.related.loaded")
+                Text(relatedCardsManager.relatedCards[currentInspiredIndex].id)
+                    .accessibilityIdentifier("spark.related.card-id")
+            } else {
+                Text("empty")
+                    .accessibilityIdentifier("spark.related.empty")
+            }
+        }
+        .font(.system(size: 1))
+        .foregroundColor(.white.opacity(0.01))
+        .frame(width: 1, height: 1)
+    }
+    #endif
     
     // MARK: - 加载卡片详情
     private func loadCardDetail() {
@@ -292,14 +328,13 @@ struct SparkView: View {
         // 清除之前的缓存数据
         relatedCardsManager.clearCache()
         
-        // 获取用户ID
-        guard let userId = AuthManager.shared.currentUser?.id else {
+        guard AuthManager.shared.currentUser != nil else {
             print("用户未登录")
             return
         }
         
         // 调用生成相关卡片API
-        relatedCardsManager.generateRelatedCards(userId: userId, cardId: cardId, count: 5)
+        relatedCardsManager.generateRelatedCards(cardId: cardId)
         
         // 监听相关卡片数据变化，重置到第一张卡片
         relatedCardsManager.$relatedCards
@@ -800,7 +835,7 @@ struct InspiredNoteCard: View {
             // 用户信息 固定在顶部
             HStack {
                 // 头像
-                NavigationLink(destination: UserProfileView(userId: card.author?.userId ?? AuthManager.shared.currentUser?.id ?? 1)) {
+                NavigationLink(destination: UserProfileView(actorId: card.author?.actorId ?? AuthManager.shared.currentUser?.id ?? "")) {
                     AsyncImage(url: URL(string: card.author?.avatarUrl ?? "")) { image in
                         image
                             .resizable()
@@ -955,5 +990,5 @@ struct InspiredNoteCard: View {
 //}
 
 #Preview {
-    SparkView(cardId: 133)
+    SparkView(cardId: "ast_preview")
 } 

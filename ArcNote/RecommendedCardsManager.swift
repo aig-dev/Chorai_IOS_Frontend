@@ -10,18 +10,18 @@ class RecommendedCardsManager: ObservableObject {
     @Published var error: NetworkError?
     
     // 点赞状态管理
-    @Published var cardLikeStates: [Int: Bool] = [:] // cardId -> isLiked
-    @Published var cardLikeCounts: [Int: Int] = [:] // cardId -> likeCount
+    @Published var cardLikeStates: [String: Bool] = [:] // cardId -> isLiked
+    @Published var cardLikeCounts: [String: Int] = [:] // cardId -> likeCount
     
     // 收藏状态管理
-    @Published var cardFavoriteStates: [Int: Bool] = [:] // cardId -> isFavorited
-    @Published var cardFavoriteCounts: [Int: Int] = [:] // cardId -> favoriteCount
+    @Published var cardFavoriteStates: [String: Bool] = [:] // cardId -> isFavorited
+    @Published var cardFavoriteCounts: [String: Int] = [:] // cardId -> favoriteCount
     
     // 评论数量管理
-    @Published var cardCommentCounts: [Int: Int] = [:] // cardId -> commentCount
+    @Published var cardCommentCounts: [String: Int] = [:] // cardId -> commentCount
     
-    // 分页管理
-    private var currentPage: Int = 1
+    // 推荐流续拉管理
+    private var nextRefreshToken: String?
     private let pageSize: Int = 20
     private var hasMoreData: Bool = true
     private var isLoadingMore: Bool = false
@@ -53,14 +53,14 @@ class RecommendedCardsManager: ObservableObject {
     
     // MARK: - 加载推荐卡片
     func loadRecommendedCards(refresh: Bool = false) {
-        guard let userId = authManager.currentUser?.id else {
+        guard authManager.currentUser != nil else {
             print("用户未登录")
             error = .unauthorized
             return
         }
         
         if refresh {
-            currentPage = 1
+            nextRefreshToken = nil
             cards = []
             hasMoreData = true
             currentIndex = 0
@@ -76,7 +76,7 @@ class RecommendedCardsManager: ObservableObject {
         error = nil
         
         
-        networkManager.getRecommendedCards(userId: userId, limit: pageSize, page: currentPage)
+        networkManager.getRecommendedCards(limit: pageSize, refreshToken: nextRefreshToken)
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { [weak self] completion in
@@ -106,9 +106,8 @@ class RecommendedCardsManager: ObservableObject {
                         self.updateCommentCounts(for: response.data)
                     }
                     
-                    // 检查是否还有更多数据
-                    self.hasMoreData = response.data.count == self.pageSize
-                    self.currentPage += 1
+                    self.nextRefreshToken = response.nextRefreshToken
+                    self.hasMoreData = !(response.nextRefreshToken?.isEmpty ?? true)
                     
                     
 //                    for (index, card) in response.data.enumerated() {
@@ -199,16 +198,16 @@ class RecommendedCardsManager: ObservableObject {
         }
     }
     
-    func getFavoriteState(for cardId: Int) -> Bool {
+    func getFavoriteState(for cardId: String) -> Bool {
         return cardFavoriteStates[cardId] ?? false
     }
     
-    func getFavoriteCount(for cardId: Int) -> Int {
+    func getFavoriteCount(for cardId: String) -> Int {
         return cardFavoriteCounts[cardId] ?? 0
     }
     
     // MARK: - 评论数量相关方法
-    func getCommentCount(for cardId: Int) -> Int {
+    func getCommentCount(for cardId: String) -> Int {
         if let count = cardCommentCounts[cardId] {
             return count
         } else {
@@ -220,7 +219,7 @@ class RecommendedCardsManager: ObservableObject {
         }
     }
     
-    func incrementCommentCount(for cardId: Int) {
+    func incrementCommentCount(for cardId: String) {
         let currentCount = cardCommentCounts[cardId] ?? 0
         cardCommentCounts[cardId] = currentCount + 1
     }
@@ -233,7 +232,7 @@ class RecommendedCardsManager: ObservableObject {
             queue: .main
         ) { [weak self] notification in
             guard let userInfo = notification.userInfo,
-                  let cardId = userInfo["cardId"] as? Int,
+                  let cardId = userInfo["cardId"] as? String,
                   let newCount = userInfo["newCount"] as? Int else {
                 return
             }
@@ -247,16 +246,16 @@ class RecommendedCardsManager: ObservableObject {
         NotificationCenter.default.removeObserver(self)
     }
     
-    func getLikeState(for cardId: Int) -> Bool {
+    func getLikeState(for cardId: String) -> Bool {
         return cardLikeStates[cardId] ?? false
     }
     
-    func getLikeCount(for cardId: Int) -> Int {
+    func getLikeCount(for cardId: String) -> Int {
         return cardLikeCounts[cardId] ?? 0
     }
     
-    func toggleLike(for cardId: Int) {
-        guard let userId = authManager.currentUser?.id else {
+    func toggleLike(for cardId: String) {
+        guard authManager.currentUser != nil else {
             print("用户未登录")
             return
         }
@@ -264,14 +263,14 @@ class RecommendedCardsManager: ObservableObject {
         let isCurrentlyLiked = getLikeState(for: cardId)
         
         if isCurrentlyLiked {
-            unlikeCard(cardId: cardId, userId: userId)
+            unlikeCard(cardId: cardId)
         } else {
-            likeCard(cardId: cardId, userId: userId)
+            likeCard(cardId: cardId)
         }
     }
     
-    func toggleFavorite(for cardId: Int) {
-        guard let userId = authManager.currentUser?.id else {
+    func toggleFavorite(for cardId: String) {
+        guard authManager.currentUser != nil else {
             return
         }
         
@@ -282,7 +281,7 @@ class RecommendedCardsManager: ObservableObject {
             // Optimistic update for immediate UI feedback.
             cardFavoriteStates[cardId] = false
             cardFavoriteCounts[cardId] = max(0, currentCount - 1)
-            removeFavorite(cardId: cardId, userId: userId) { [weak self] success in
+            removeFavorite(cardId: cardId) { [weak self] success in
                 guard let self = self, !success else { return }
                 self.cardFavoriteStates[cardId] = true
                 self.cardFavoriteCounts[cardId] = currentCount
@@ -291,7 +290,7 @@ class RecommendedCardsManager: ObservableObject {
             // Optimistic update for immediate UI feedback.
             cardFavoriteStates[cardId] = true
             cardFavoriteCounts[cardId] = currentCount + 1
-            addFavorite(cardId: cardId, userId: userId) { [weak self] success in
+            addFavorite(cardId: cardId) { [weak self] success in
                 guard let self = self, !success else { return }
                 self.cardFavoriteStates[cardId] = false
                 self.cardFavoriteCounts[cardId] = currentCount
@@ -299,8 +298,8 @@ class RecommendedCardsManager: ObservableObject {
         }
     }
     
-    private func likeCard(cardId: Int, userId: Int) {
-        networkManager.likeCard(cardId: cardId, userId: userId)
+    private func likeCard(cardId: String) {
+        networkManager.likeCard(cardId: cardId)
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { completion in
@@ -319,8 +318,8 @@ class RecommendedCardsManager: ObservableObject {
             .store(in: &cancellables)
     }
     
-    private func unlikeCard(cardId: Int, userId: Int) {
-        networkManager.unlikeCard(cardId: cardId, userId: userId)
+    private func unlikeCard(cardId: String) {
+        networkManager.unlikeCard(cardId: cardId)
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { completion in
@@ -339,8 +338,8 @@ class RecommendedCardsManager: ObservableObject {
             .store(in: &cancellables)
     }
     
-    private func addFavorite(cardId: Int, userId: Int, completion: ((Bool) -> Void)? = nil) {
-        networkManager.favoriteCard(cardId: cardId, userId: userId)
+    private func addFavorite(cardId: String, completion: ((Bool) -> Void)? = nil) {
+        networkManager.favoriteCard(cardId: cardId)
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { result in
@@ -361,8 +360,8 @@ class RecommendedCardsManager: ObservableObject {
             .store(in: &cancellables)
     }
     
-    private func removeFavorite(cardId: Int, userId: Int, completion: ((Bool) -> Void)? = nil) {
-        networkManager.unfavoriteCard(cardId: cardId, userId: userId)
+    private func removeFavorite(cardId: String, completion: ((Bool) -> Void)? = nil) {
+        networkManager.unfavoriteCard(cardId: cardId)
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { result in
@@ -371,7 +370,7 @@ class RecommendedCardsManager: ObservableObject {
                         completion?(false)
                     }
                 },
-                receiveValue: { (response: NetworkResponse<UnfavoriteResponseData>) in
+                receiveValue: { (response: NetworkResponse<EmptyResponseData>) in
                     if response.success {
                         print("取消收藏成功")
                         completion?(true)

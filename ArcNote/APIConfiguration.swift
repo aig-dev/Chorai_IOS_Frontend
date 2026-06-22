@@ -2,6 +2,28 @@ import Foundation
 
 // MARK: API配置管理
 struct APIConfiguration {
+    static var baseURL: String {
+        if let override = ProcessInfo.processInfo.environment["CHORAI_API_BASE_URL"],
+           !override.isEmpty {
+            return override
+        }
+
+        #if DEBUG
+        return "http://127.0.0.1:8080"
+        #else
+        return "https://api.chorai.top"
+        #endif
+    }
+
+    static func resourceURLString(_ pathOrURL: String) -> String {
+        if pathOrURL.hasPrefix("http://") || pathOrURL.hasPrefix("https://") {
+            return pathOrURL
+        }
+
+        let trimmedBase = baseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let trimmedPath = pathOrURL.hasPrefix("/") ? String(pathOrURL.dropFirst()) : pathOrURL
+        return "\(trimmedBase)/\(trimmedPath)"
+    }
     
     // MARK: 环境配置
     enum Environment {
@@ -28,116 +50,6 @@ struct APIConfiguration {
         #else
         return .production
         #endif
-    }
-    
-    // MARK: API端点定义
-    struct Endpoints {
-        
-        // MARK: 认证
-        struct Auth {
-            static let login = "/auth/login"
-            static let register = "/auth/register"
-            static let logout = "/auth/logout"
-            static let refresh = "/auth/refresh"
-            static let forgotPassword = "/auth/forgot-password"
-            static let resetPassword = "/auth/reset-password"
-            static let verifyEmail = "/auth/verify-email"
-        }
-        
-        // MARK: 笔记相关
-        struct Notes {
-            static let base = "/notes"
-            static let search = "/notes/search"
-            static let favorites = "/notes/favorites"
-            static let trash = "/notes/trash"
-            static let restore = "/notes/restore"
-            static let share = "/notes/share"
-            static let export = "/notes/export"
-            
-            static func detail(id: String) -> String {
-                return "/notes/\(id)"
-            }
-            
-            static func update(id: String) -> String {
-                return "/notes/\(id)"
-            }
-            
-            static func delete(id: String) -> String {
-                return "/notes/\(id)"
-            }
-            
-            static func favorite(id: String) -> String {
-                return "/notes/\(id)/favorite"
-            }
-            
-            static func share(id: String) -> String {
-                return "/notes/\(id)/share"
-            }
-        }
-        
-        // MARK: 标签
-        struct Tags {
-            static let base = "/tags"
-            static let popular = "/tags/popular"
-            static let search = "/tags/search"
-            
-            static func detail(id: String) -> String {
-                return "/tags/\(id)"
-            }
-            
-            static func notes(id: String) -> String {
-                return "/tags/\(id)/notes"
-            }
-        }
-        
-        // MARK: 用户相关
-        struct User {
-            static let profile = "/user/profile"
-            static let settings = "/user/settings"
-            static let preferences = "/user/preferences"
-            static let avatar = "/user/avatar"
-            static let password = "/user/password"
-            static let delete = "/user/delete"
-            static let export = "/user/export"
-        }
-        
-        // MARK: 文件
-        struct Files {
-            static let upload = "/files/upload"
-            static let download = "/files/download"
-            static let delete = "/files/delete"
-            
-            static func detail(id: String) -> String {
-                return "/files/\(id)"
-            }
-        }
-        
-        // MARK: 搜索
-        struct Search {
-            static let global = "/search"
-            static let suggestions = "/search/suggestions"
-            static let history = "/search/history"
-        }
-        
-        // MARK: 通知相关
-        struct Notifications {
-            static let base = "/notifications"
-            static let unread = "/notifications/unread"
-            static let markRead = "/notifications/mark-read"
-            static let markAllRead = "/notifications/mark-all-read"
-            
-            static func detail(id: String) -> String {
-                return "/notifications/\(id)"
-            }
-        }
-        
-        // MARK: 同步相关
-        struct Sync {
-            static let status = "/sync/status"
-            static let pull = "/sync/pull"
-            static let push = "/sync/push"
-            static let conflict = "/sync/conflict"
-        }
     }
     
     // MARK: HTTP状态码
@@ -216,7 +128,7 @@ struct RequestParameters {
     static func pagination(page: Int = 1, pageSize: Int = APIConfiguration.Pagination.defaultPageSize) -> [String: Any] {
         return [
             "page": page,
-            "pageSize": min(pageSize, APIConfiguration.Pagination.maxPageSize)
+            "per_page": min(pageSize, APIConfiguration.Pagination.maxPageSize)
         ]
     }
     
@@ -225,11 +137,11 @@ struct RequestParameters {
         var parameters: [String: Any] = [
             "query": query,
             "page": page,
-            "pageSize": min(pageSize, APIConfiguration.Pagination.maxPageSize)
+            "per_page": min(pageSize, APIConfiguration.Pagination.maxPageSize)
         ]
         
         if let tags = tags, !tags.isEmpty {
-            parameters["tags"] = tags
+            parameters["tags"] = tags.joined(separator: ",")
         }
         
         return parameters
@@ -238,8 +150,8 @@ struct RequestParameters {
     // MARK: 排序参数
     static func sorting(sortBy: String, sortOrder: String = "desc") -> [String: Any] {
         return [
-            "sortBy": sortBy,
-            "sortOrder": sortOrder
+            "sort_by": sortBy,
+            "sort_order": sortOrder
         ]
     }
     
@@ -264,10 +176,4 @@ struct CacheKeyGenerator {
         return key
     }
     
-    static func generateUserSpecific(for endpoint: String, userId: String, parameters: [String: Any]? = nil) -> String {
-        let baseKey = generate(for: endpoint, parameters: parameters)
-        return "\(userId):\(baseKey)"
-    }
 }
-
-

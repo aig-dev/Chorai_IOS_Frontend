@@ -27,21 +27,21 @@ struct DetailView: View {
     
     // 聊天相关状态
     @State private var navigateToChat = false
-    @State private var conversationId: Int? = nil
+    @State private var conversationId: String? = nil
     @State private var isCreatingConversation = false
     
     // 关注相关状态
     @State private var isFollowing = false
     @State private var isFollowLoading = false
     
-    let cardId: Int
+    let cardId: String
     
-    init(cardId: Int = 0) {
+    init(cardId: String = "") {
         self.cardId = cardId
     }
     
     private var isCurrentCardOwned: Bool {
-        guard let authorId = cardDetailManager.cardDetail?.author?.userId,
+        guard let authorId = cardDetailManager.cardDetail?.author?.actorId,
               let currentUserId = AuthManager.shared.currentUser?.id else {
             return false
         }
@@ -76,7 +76,7 @@ struct DetailView: View {
     @State private var relatedNotes: [CardLinkItem] = []
     @State private var isLoadingLinks = false
     @State private var navigateToRelatedDetail = false
-    @State private var selectedRelatedCardId: Int? = nil
+    @State private var selectedRelatedCardId: String? = nil
     
     var body: some View {
         ZStack {
@@ -106,6 +106,7 @@ struct DetailView: View {
                             .font(.title2)
                             .foregroundColor(.white)
                     }
+                    .accessibilityIdentifier("detail.menu.open")
                 }
                 .padding(.horizontal, 20)
                 .padding(.bottom, 20)
@@ -118,7 +119,7 @@ struct DetailView: View {
                         HStack {
                             Button(action: {
                                 // 导航到UserProfileView
-                                if let userId = cardDetailManager.cardDetail?.author?.userId {
+                                if let userId = cardDetailManager.cardDetail?.author?.actorId {
                                     print("UserProfileView: userId=\(userId)")
                                 navigateToUserProfile = true
                                 } else {
@@ -127,9 +128,7 @@ struct DetailView: View {
                             }) {
                                 Group {
                                     if let avatarUrl = cardDetailManager.cardDetail?.author?.avatarUrl, !avatarUrl.isEmpty {
-                                        let fullAvatarUrl = avatarUrl.hasPrefix("http://") || avatarUrl.hasPrefix("https://") 
-                                            ? avatarUrl 
-                                            : "https://production.chorai.top/\(avatarUrl.hasPrefix("/") ? String(avatarUrl.dropFirst()) : avatarUrl)"
+                                        let fullAvatarUrl = APIConfiguration.resourceURLString(avatarUrl)
                                         
                                         
                                         AsyncImage(url: URL(string: fullAvatarUrl)) { image in
@@ -284,10 +283,8 @@ struct DetailView: View {
                                         VStack {
                                 HStack(spacing: 12) {
                                     Group {
-                                        if let avatarUrl = note.author.avatar, !avatarUrl.isEmpty {
-                                            let fullAvatarUrl = avatarUrl.hasPrefix("http://") || avatarUrl.hasPrefix("https://") 
-                                                ? avatarUrl 
-                                                : "https://production.chorai.top/\(avatarUrl.hasPrefix("/") ? String(avatarUrl.dropFirst()) : avatarUrl)"
+                                        if let avatarUrl = note.author?.avatar, !avatarUrl.isEmpty {
+                                            let fullAvatarUrl = APIConfiguration.resourceURLString(avatarUrl)
                                             
                                         
                                             AsyncImage(url: URL(string: fullAvatarUrl)) { image in
@@ -309,12 +306,12 @@ struct DetailView: View {
                                                     .clipShape(Circle())
                                     
                                     VStack(alignment: .leading, spacing: 4) {
-                                                    Text(note.author.userName)
+                                                    Text(note.author?.userName ?? note.title ?? "Related note")
                                             .font(.system(size: 16, weight: .semibold))
                                             .foregroundColor(.white)
                                                         .lineLimit(1)
                                         
-                                                    HTMLTextRenderer(htmlContent: note.content, maxLines: 2)
+                                                    HTMLTextRenderer(htmlContent: note.content ?? "", maxLines: 2)
                                             .font(.system(size: 14, weight: .regular))
                                             .foregroundColor(.white.opacity(0.7))
                                         }
@@ -368,6 +365,7 @@ struct DetailView: View {
                     // 评论按钮
                     CommentButton(cardId: cardId, commentCount: commentCount)
                         .scaleEffect(1.1)
+                        .accessibilityIdentifier("detail.comment.open")
                     
                     // 收藏按钮
                     Button(action: {
@@ -400,16 +398,21 @@ struct DetailView: View {
                         }
                 }
         )
-        .popupMenu(isPresented: $showPopupMenu, layout: .grid2x2, cardData: currentDetailUserCard, isOwnCard: isCurrentCardOwned)
+        .popupMenu(
+            isPresented: $showPopupMenu,
+            layout: isCurrentCardOwned ? .grid3x3 : .grid2x2,
+            cardData: currentDetailUserCard,
+            isOwnCard: isCurrentCardOwned
+        )
         .overlay(
             CommentPopupView()
         )
         .navigationDestination(isPresented: $navigateToUserProfile) {
-            UserProfileView(userId: cardDetailManager.cardDetail?.author?.userId ?? 0)
+            UserProfileView(actorId: cardDetailManager.cardDetail?.author?.actorId ?? "")
         }
         .navigationDestination(isPresented: $navigateToChat) {
             ChatDetailView(
-                conversationId: conversationId ?? 0,
+                conversationId: conversationId ?? "",
                 contactName: cardDetailManager.cardDetail?.author?.userName ?? "User",
                 contactStatus: "Online",
                 contactAvatar: "avatar"
@@ -423,15 +426,55 @@ struct DetailView: View {
             }
         }
         .onAppear {
-            if cardId > 0 {
+            if !cardId.isEmpty {
                 loadCardDetail()
             }
         }
         .onChange(of: cardId) { newCardId in
-            if newCardId > 0 {
+            if !newCardId.isEmpty {
                 loadCardDetail()
                 
             }
+        }
+        .overlay(alignment: .topLeading) {
+            #if DEBUG
+            Group {
+                if cardDetailManager.isLoading {
+                    Text("Detail loading")
+                        .font(.system(size: 1))
+                        .foregroundColor(.white.opacity(0.01))
+                        .frame(width: 1, height: 1)
+                        .accessibilityIdentifier("screen.detail.loading")
+                } else if cardDetailManager.cardDetail != nil {
+                    Text("Detail loaded")
+                        .font(.system(size: 1))
+                        .foregroundColor(.white.opacity(0.01))
+                        .frame(width: 1, height: 1)
+                        .accessibilityIdentifier("screen.detail.loaded")
+                } else if cardDetailManager.error != nil {
+                    Text("Detail error")
+                        .font(.system(size: 1))
+                        .foregroundColor(.white.opacity(0.01))
+                        .frame(width: 1, height: 1)
+                        .accessibilityIdentifier("screen.detail.error")
+                } else {
+                    Text("Detail idle")
+                        .font(.system(size: 1))
+                        .foregroundColor(.white.opacity(0.01))
+                        .frame(width: 1, height: 1)
+                        .accessibilityIdentifier("screen.detail.content")
+                }
+            }
+            #endif
+        }
+        .overlay(alignment: .topTrailing) {
+            #if DEBUG
+            Text(cardId)
+                .font(.system(size: 1))
+                .foregroundColor(.white.opacity(0.01))
+                .frame(width: 1, height: 1)
+                .accessibilityIdentifier("screen.detail.card-id")
+            #endif
         }
     }
     
@@ -454,7 +497,7 @@ struct DetailView: View {
                     self.commentCount = cardDetail.commentCount ?? 0
                 }
                 
-                loadRelatedNotes(cardDetail.author?.userId ?? 0)
+                loadRelatedNotes()
                 checkFollowStatus()
             case .failure(let error):
                 print("详情加载失败: \(error.localizedDescription)")
@@ -463,13 +506,13 @@ struct DetailView: View {
     }
     
     // MARK: - 加载关联笔记
-    private func loadRelatedNotes(_ userId: Int) {
+    private func loadRelatedNotes() {
       
         
         isLoadingLinks = true
-        print("加载关联笔记: cardId=\(cardId), userId=\(userId)")
+        print("加载关联笔记: cardId=\(cardId)")
         
-        NetworkManager.shared.getCardLinks(cardId: cardId, userId: userId)
+        NetworkManager.shared.getCardLinks(cardId: cardId)
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { completion in
@@ -492,7 +535,7 @@ struct DetailView: View {
     
     // MARK: 点赞功能
     private func toggleLike() {
-        guard let userId = AuthManager.shared.currentUser?.id else {
+        guard AuthManager.shared.currentUser != nil else {
             print("用户未登录")
             return
         }
@@ -501,7 +544,7 @@ struct DetailView: View {
         
         if isLiked {
             // 取消点赞
-            networkManager.unlikeCard(cardId: cardId, userId: userId)
+            networkManager.unlikeCard(cardId: cardId)
                 .receive(on: DispatchQueue.main)
                 .sink(
                     receiveCompletion: { completion in
@@ -520,7 +563,7 @@ struct DetailView: View {
                 .store(in: &cancellables)
         } else {
             // 点赞
-            networkManager.likeCard(cardId: cardId, userId: userId)
+            networkManager.likeCard(cardId: cardId)
                 .receive(on: DispatchQueue.main)
                 .sink(
                     receiveCompletion: { completion in
@@ -542,7 +585,7 @@ struct DetailView: View {
     
     // MARK: - 收藏功能
     private func toggleFavorite() {
-        guard let userId = AuthManager.shared.currentUser?.id else {
+        guard AuthManager.shared.currentUser != nil else {
             print("用户未登录")
             return
         }
@@ -551,7 +594,7 @@ struct DetailView: View {
         
         if isFavorited {
             // 取消收藏
-            networkManager.unfavoriteCard(cardId: cardId, userId: userId)
+            networkManager.unfavoriteCard(cardId: cardId)
                 .receive(on: DispatchQueue.main)
                 .sink(
                     receiveCompletion: { completion in
@@ -570,7 +613,7 @@ struct DetailView: View {
                 .store(in: &cancellables)
         } else {
             // 收藏
-            networkManager.favoriteCard(cardId: cardId, userId: userId)
+            networkManager.favoriteCard(cardId: cardId)
                 .receive(on: DispatchQueue.main)
                 .sink(
                     receiveCompletion: { completion in
@@ -594,7 +637,7 @@ struct DetailView: View {
     private func createConversation() {
         guard !isCreatingConversation else { return }
         
-        guard let authorId = cardDetailManager.cardDetail?.author?.userId else {
+        guard let authorId = cardDetailManager.cardDetail?.author?.actorId else {
             print("无法获取作者ID")
             return
         }
@@ -617,7 +660,7 @@ struct DetailView: View {
                     if response.success {
                         DispatchQueue.main.async {
                             self.conversationId = response.conversation.id
-                            print("设置 conversationId: \(self.conversationId ?? -1)")
+                            print("设置 conversationId: \(self.conversationId ?? "")")
                             
                             // 延迟一点时间确保状态更新
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
@@ -640,13 +683,13 @@ struct DetailView: View {
             return
         }
         
-        guard let authorId = cardDetailManager.cardDetail?.author?.userId else {
+        guard let authorId = cardDetailManager.cardDetail?.author?.actorId else {
             print("无法获取作者ID")
             return
         }
         
         
-        NetworkManager.shared.checkFollowStatus(userId: currentUserId, targetUserIds: [authorId])
+        NetworkManager.shared.checkFollowStatus(targetActorIds: [authorId])
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { completion in
@@ -656,7 +699,7 @@ struct DetailView: View {
                 },
                 receiveValue: { response in
                     if response.success {
-                        let followStatus = response.data[String(authorId)] ?? false
+                        let followStatus = response.data[authorId] ?? false
                         self.isFollowing = followStatus
                         print("关注状态: \(followStatus)")
                     } else {
@@ -674,7 +717,7 @@ struct DetailView: View {
             return
         }
         
-        guard let authorId = cardDetailManager.cardDetail?.author?.userId else {
+        guard let authorId = cardDetailManager.cardDetail?.author?.actorId else {
             print("无法获取作者ID")
             return
         }
@@ -683,7 +726,7 @@ struct DetailView: View {
         
         if isFollowing {
             // 取消关注
-            NetworkManager.shared.unfollowUser(userId: currentUserId, targetUserId: authorId)
+            NetworkManager.shared.unfollowUser(targetActorId: authorId)
                 .receive(on: DispatchQueue.main)
                 .sink(
                     receiveCompletion: { completion in
@@ -705,7 +748,7 @@ struct DetailView: View {
         } else {
             // 关注
             
-            NetworkManager.shared.followUser(userId: currentUserId, targetUserId: authorId)
+            NetworkManager.shared.followUser(targetActorId: authorId)
                 .receive(on: DispatchQueue.main)
                 .sink(
                     receiveCompletion: { completion in
@@ -717,7 +760,7 @@ struct DetailView: View {
                     receiveValue: { response in
                         if response.success {
                             self.isFollowing = true
-                            print("关注成功: \(response.data.targetUser.username)")
+                            print("关注成功: \(response.message)")
                         } else {
                             print("关注失败: 服务器返回失败")
                         }
@@ -759,5 +802,5 @@ struct DetailView: View {
 }
 
 #Preview {
-    DetailView(cardId: 123)
+    DetailView(cardId: "ast_preview")
 }

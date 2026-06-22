@@ -9,7 +9,7 @@ struct ExploreView: View {
     @State private var searchText = ""
     @StateObject private var cardsManager = RecommendedCardsManager()
     @StateObject private var searchManager = SearchManager.shared
-    
+
     // ExploreView自己的弹窗状态
     @State private var showExplorePopupMenu = false
     @State private var currentExploreCardData: UserCard? = nil
@@ -17,15 +17,22 @@ struct ExploreView: View {
     
     // 导航状态
     @State private var navigateToUserProfile = false
-    @State private var selectedUserId: Int? = nil
+    @State private var selectedActorId: String? = nil
     @State private var navigateToDetail = false
-    @State private var selectedCardId: Int? = nil
+    @State private var selectedCardId: String? = nil
     
     // 搜索状态
     @State private var currentSearchIndex = 0
+    @State private var hasSubmittedSearch = false
     
     // MARK: - 计算属性
     
+    #if DEBUG
+    private var isUITestSession: Bool {
+        ProcessInfo.processInfo.environment["CHORAI_UI_TEST"] == "1"
+    }
+    #endif
+
     private var searchInputBackground: some View {
         RoundedRectangle(cornerRadius: 30)
             .fill(.ultraThinMaterial.opacity(0.3))
@@ -270,6 +277,7 @@ struct ExploreView: View {
                             isSearchMode = false
                             searchText = ""
                             currentSearchIndex = 0
+                            hasSubmittedSearch = false
                             // 退出搜索模式时清除搜索结果
                             searchManager.clearSearchResults()
                         }
@@ -278,6 +286,9 @@ struct ExploreView: View {
                             .font(.title2)
                             .foregroundColor(.white)
                     }
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("Back")
+                    .accessibilityIdentifier("explore.search.back")
                     
                     Spacer()
                     
@@ -289,6 +300,8 @@ struct ExploreView: View {
                         TextField("Please enter your search...", text: $searchText)
                             .foregroundColor(.white)
                             .textFieldStyle(PlainTextFieldStyle())
+                            .accessibilityIdentifier("explore.search.input")
+                            .submitLabel(.search)
                             .placeholder(when: searchText.isEmpty) {
                                 Text("Please enter your search...")
                                     .foregroundColor(.white.opacity(0.5))
@@ -325,6 +338,7 @@ struct ExploreView: View {
                             .aspectRatio(contentMode: .fit)
                             .frame(width: 24, height: 24)
                     }
+                    .accessibilityIdentifier("side-menu.open")
                     
                     Spacer()
                     
@@ -360,16 +374,23 @@ struct ExploreView: View {
                             isSearchMode = true
                         }
                     }) {
-                        Image("search")
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 24, height: 24)
+                        ZStack {
+                            Color.white.opacity(0.01)
+                                .frame(width: 44, height: 44)
+                            Image("search")
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .frame(width: 24, height: 24)
+                        }
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel("Search")
+                        .accessibilityIdentifier("explore.search.open")
                     }
                 }
             }
             .padding(.horizontal, 20)
             .padding(.top, 60)
-            
+
             // 筛选标签
             if showFilterTags && !isSearchMode {
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -411,39 +432,67 @@ struct ExploreView: View {
                             RotatingLoaderView()
                         }
                         .frame(maxHeight: .infinity)
+                        .accessibilityIdentifier("explore.search.loading")
                     } else if !searchManager.searchResults.isEmpty {
                         // 显示搜索结果
                         if currentSearchIndex < searchManager.searchResults.count {
                             let currentSearchCard = searchManager.searchResults[currentSearchIndex]
-                            PostCard(
-                                card: convertSearchCardToCard(currentSearchCard),
-                                cardsManager: cardsManager,
-                                onShowMenu: { cardData in
-                                    currentExploreCardData = convertCardToUserCard(cardData)
-                                    isCurrentExploreCardOwned = isOwnedByCurrentUser(authorId: cardData.author?.id)
-                                    showExplorePopupMenu = true
-                                },
-                                onSwipe: { translation, isEnded in
-                                    handleSearchSwipe(translation: CGSize(width: translation, height: 0), isEnded: isEnded)
-                                },
-                                onAvatarTap: { userId in
-                                    selectedUserId = userId
-                                    DispatchQueue.main.async {
-                                        navigateToUserProfile = true
-                                        print("设置 navigateToUserProfile: \(navigateToUserProfile)")
+                            ZStack(alignment: .topLeading) {
+                                PostCard(
+                                    card: convertSearchCardToCard(currentSearchCard),
+                                    cardsManager: cardsManager,
+                                    onShowMenu: { cardData in
+                                        currentExploreCardData = convertCardToUserCard(cardData)
+                                        isCurrentExploreCardOwned = isOwnedByCurrentUser(authorId: cardData.author?.id)
+                                        showExplorePopupMenu = true
+                                    },
+                                    onSwipe: { translation, isEnded in
+                                        handleSearchSwipe(translation: CGSize(width: translation, height: 0), isEnded: isEnded)
+                                    },
+                                    onAvatarTap: { actorId in
+                                        selectedActorId = actorId
+                                        DispatchQueue.main.async {
+                                            navigateToUserProfile = true
+                                            print("设置 navigateToUserProfile: \(navigateToUserProfile)")
+                                        }
+                                    },
+                                    onCardTap: { cardId in
+                                        print("收到卡片点击回调: cardId=\(cardId)")
+                                        selectedCardId = cardId
+                                        DispatchQueue.main.async {
+                                            navigateToDetail = true
+                                            print("设置 navigateToDetail: \(navigateToDetail)")
+                                        }
                                     }
-                                },
-                                onCardTap: { cardId in
-                                    print("收到卡片点击回调: cardId=\(cardId)")
-                                    selectedCardId = cardId
-                                    DispatchQueue.main.async {
-                                        navigateToDetail = true
-                                        print("设置 navigateToDetail: \(navigateToDetail)")
-                                    }
-                                }
-                            )
-                            .opacity(1.0)
+                                )
+                                .opacity(1.0)
+
+                                #if DEBUG
+                                Text("Search results")
+                                    .font(.system(size: 1))
+                                    .foregroundColor(.white.opacity(0.01))
+                                    .frame(width: 1, height: 1)
+                                    .accessibilityIdentifier("explore.search.results")
+
+                                Text(currentSearchCard.id)
+                                    .font(.system(size: 1))
+                                    .foregroundColor(.white.opacity(0.01))
+                                    .frame(width: 1, height: 1)
+                                    .accessibilityIdentifier("explore.search.result.card-id")
+                                #endif
+                            }
                         }
+                    } else if !hasSubmittedSearch {
+                        VStack(spacing: 12) {
+                            Text("Type a keyword")
+                                .font(.system(size: 16, weight: .medium))
+                                .foregroundColor(.white.opacity(0.8))
+                            Text("Press return to search")
+                                .font(.system(size: 13, weight: .regular))
+                                .foregroundColor(.white.opacity(0.6))
+                        }
+                        .frame(maxHeight: .infinity)
+                        .accessibilityIdentifier("explore.search.idle")
                     } else {
                         VStack(spacing: 12) {
                             Text("No results found")
@@ -454,6 +503,7 @@ struct ExploreView: View {
                                 .foregroundColor(.white.opacity(0.6))
                         }
                         .frame(maxHeight: .infinity)
+                        .accessibilityIdentifier("explore.search.empty")
                     }
                 } else if let currentCard = cardsManager.currentCard {
                     PostCard(
@@ -467,8 +517,8 @@ struct ExploreView: View {
                         onSwipe: { translation, isEnded in
                             cardsManager.handleSwipeGesture(translation: translation, isEnded: isEnded)
                         },
-                        onAvatarTap: { userId in
-                            selectedUserId = userId
+                        onAvatarTap: { actorId in
+                            selectedActorId = actorId
                             DispatchQueue.main.async {
                                 navigateToUserProfile = true
                             }
@@ -516,13 +566,44 @@ struct ExploreView: View {
             .padding(.top, showFilterTags ? 15 : 15)
             .padding(.bottom, 150)
         }
+        #if DEBUG
+        .overlay(alignment: .topTrailing) {
+            if isUITestSession && !isSearchMode {
+                Button(action: {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        isSearchMode = true
+                    }
+                }) {
+                    Color.white.opacity(0.01)
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(PlainButtonStyle())
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Open Explore search")
+                .accessibilityIdentifier("explore.search.open.test-hook")
+                .padding(.top, 60)
+                .padding(.trailing, 20)
+            }
+        }
+        #endif
         .onAppear {
             // 设置评论创建回调
-            CommentPopupManager.shared.onCommentCreated = { [weak cardsManager] (cardId: Int) in
+            CommentPopupManager.shared.onCommentCreated = { [weak cardsManager] (cardId: String) in
                 print("收到评论创建通知: cardId=\(cardId)")
                 cardsManager?.incrementCommentCount(for: cardId)
             }
+            #if DEBUG
+            publishVisibleRecommendedCardForUITest()
+            #endif
         }
+        #if DEBUG
+        .onReceive(cardsManager.$cards) { _ in
+            publishVisibleRecommendedCardForUITest()
+        }
+        .onReceive(cardsManager.$currentIndex) { _ in
+            publishVisibleRecommendedCardForUITest()
+        }
+        #endif
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("CloseAllPopups"))) { _ in
             print("收到关闭所有popup通知")
             // 关闭所有 popup
@@ -530,7 +611,7 @@ struct ExploreView: View {
             showFilterTags = false
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NavigateToDetail"))) { notification in
-            if let cardId = notification.userInfo?["cardId"] as? Int {
+            if let cardId = notification.userInfo?["cardId"] as? String {
                 print("收到导航到详情页通知: cardId=\(cardId)")
                 selectedCardId = cardId
                 navigateToDetail = true
@@ -544,8 +625,8 @@ struct ExploreView: View {
         }
         .popupMenu(isPresented: $showExplorePopupMenu, layout: .grid2x2, cardData: currentExploreCardData, isOwnCard: isCurrentExploreCardOwned)
         .navigationDestination(isPresented: $navigateToUserProfile) {
-            if let userId = selectedUserId {
-                UserProfileView(userId: userId)
+            if let actorId = selectedActorId {
+                UserProfileView(actorId: actorId)
             } else {
                 EmptyView()
             }
@@ -558,13 +639,28 @@ struct ExploreView: View {
             }
         }
     }
-    
+
+    #if DEBUG
+    private func publishVisibleRecommendedCardForUITest() {
+        guard !isSearchMode, let cardId = cardsManager.currentCard?.id else {
+            return
+        }
+
+        NotificationCenter.default.post(
+            name: NSNotification.Name("ExploreVisibleRecommendedCardChanged"),
+            object: nil,
+            userInfo: ["cardId": cardId]
+        )
+    }
+    #endif
+
     // MARK: - 执行搜索
     private func performSearch() {
         let trimmedText = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         
         if !trimmedText.isEmpty {
             currentSearchIndex = 0 // 重置搜索索引
+            hasSubmittedSearch = true
             searchManager.searchCards(query: trimmedText) { result in
                 switch result {
                 case .success(let searchCards):
@@ -576,6 +672,7 @@ struct ExploreView: View {
         } else {
             // 如果搜索文本为空，清除搜索结果
             currentSearchIndex = 0
+            hasSubmittedSearch = false
             searchManager.clearSearchResults()
         }
     }
@@ -595,6 +692,7 @@ struct ExploreView: View {
             likeCount: searchCard.likeCount,
             viewCount: searchCard.viewCount,
             commentCount: searchCard.commentCount,
+            rate: searchCard.rate,
             isFavorited: searchCard.isFavorited ?? false,
             isLiked: searchCard.isLiked ?? false,
             isPinned: searchCard.isPinned ?? false,
@@ -606,8 +704,7 @@ struct ExploreView: View {
                 bio: nil,
                 followersCount: nil,
                 followingCount: nil,
-                isFollowing: nil,
-                followedAt: nil
+                isFollowing: nil
             )
         )
     }
@@ -656,7 +753,7 @@ struct ExploreView: View {
         )
     }
     
-    private func isOwnedByCurrentUser(authorId: Int?) -> Bool {
+    private func isOwnedByCurrentUser(authorId: String?) -> Bool {
         guard let authorId = authorId,
               let currentUserId = AuthManager.shared.currentUser?.id else {
             return false

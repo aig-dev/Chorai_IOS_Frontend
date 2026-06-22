@@ -5,7 +5,7 @@ struct MergeView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.presentationMode) var presentationMode
     @State private var searchText = ""
-    @State private var selectedCards: Set<Int> = []
+    @State private var selectedCards: Set<String> = []
     @State private var showLoading = false
     @State private var showNewInsight = false
     @State private var animationPhase = 0
@@ -15,7 +15,7 @@ struct MergeView: View {
     @StateObject private var mergeCardsManager = MergeCardsManager.shared
     @StateObject private var networkManager = NetworkManager.shared
     
-    let cardId: Int
+    let cardId: String
     
     // 可选择的卡片数据
     @State private var selectableCards: [MergeCard] = []
@@ -23,6 +23,8 @@ struct MergeView: View {
     @State private var isLoadingCards = false
     @State private var cancellables = Set<AnyCancellable>()
     @State private var previewData: MergePreviewResponse? = nil
+    @State private var mergeErrorMessage: String?
+    @State private var cardsErrorMessage: String?
     
     // MARK: 搜索框高光效果
     private var searchBarTopLeftHighlight: some View {
@@ -170,6 +172,7 @@ struct MergeView: View {
                         TextField("", text: $searchText)
                             .foregroundColor(.white)
                             .textFieldStyle(PlainTextFieldStyle())
+                            .accessibilityIdentifier("merge.search.input")
                             .placeholder(when: searchText.isEmpty) {
                                 Text("Please enter your search...")
                                     .foregroundColor(.white).font(.system(size: 13))
@@ -218,9 +221,11 @@ struct MergeView: View {
 //                                        .font(.system(size: 48))
 //                                        .foregroundColor(.white.opacity(0.5))
                                     
-                                    Text("No linked cards found")
+                                    Text(cardsErrorMessage ?? "No linked cards found")
                                         .font(.system(size: 18, weight: .medium))
                                         .foregroundColor(.white.opacity(0.8))
+                                        .multilineTextAlignment(.center)
+                                        .accessibilityIdentifier(cardsErrorMessage == nil ? "merge.cards.empty-message" : "merge.cards.error")
                                     
                                 }
                                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -282,6 +287,7 @@ struct MergeView: View {
                         )
                 }
                 .disabled(selectedCards.isEmpty)
+                .accessibilityIdentifier("merge.action")
                 .padding(.horizontal, 20)
                 .padding(.bottom, 30)
             }
@@ -313,7 +319,26 @@ struct MergeView: View {
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
                 }
+                .accessibilityIdentifier("merge.loading")
                 .transition(.opacity)
+            }
+
+            if let mergeErrorMessage {
+                VStack {
+                    Spacer()
+                    Text(mergeErrorMessage)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(.white)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(Color.black.opacity(0.55))
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .padding(.horizontal, 24)
+                        .padding(.bottom, 92)
+                        .accessibilityIdentifier("merge.error")
+                    Spacer().frame(height: 0)
+                }
             }
             
             // 新洞察弹窗
@@ -344,6 +369,10 @@ struct MergeView: View {
                 }
                 Spacer()
             }
+
+            #if DEBUG
+            mergeDebugAnchors
+            #endif
         }
         .navigationBarHidden(true)
         .gesture(
@@ -374,6 +403,41 @@ struct MergeView: View {
             performSearch()
         }
     }
+
+    #if DEBUG
+    private var mergeDebugAnchors: some View {
+        VStack(spacing: 1) {
+            Text("loaded")
+                .font(.system(size: 1))
+                .foregroundColor(.white.opacity(0.01))
+                .accessibilityIdentifier("screen.merge.loaded")
+            if let cardDetail = cardDetailManager.cardDetail {
+                Text(cardDetail.id)
+                    .font(.system(size: 1))
+                    .foregroundColor(.white.opacity(0.01))
+                    .accessibilityIdentifier("merge.source.card-id")
+            }
+            if isLoadingCards {
+                Text("loading")
+                    .font(.system(size: 1))
+                    .foregroundColor(.white.opacity(0.01))
+                    .accessibilityIdentifier("merge.cards.loading")
+            } else if selectableCards.isEmpty {
+                Text("empty")
+                    .font(.system(size: 1))
+                    .foregroundColor(.white.opacity(0.01))
+                    .accessibilityIdentifier("merge.cards.empty")
+            } else {
+                Text("loaded")
+                    .font(.system(size: 1))
+                    .foregroundColor(.white.opacity(0.01))
+                    .accessibilityIdentifier("merge.cards.loaded")
+            }
+        }
+        .frame(width: 1, height: 1)
+        .accessibilityElement(children: .contain)
+    }
+    #endif
     
     // MARK: 加载卡片详细信息
     private func loadCardDetail() {
@@ -389,14 +453,11 @@ struct MergeView: View {
     
     // MARK: 加载用户所有卡片
     private func loadUserAllCards() {
-        guard let userId = AuthManager.shared.currentUser?.id else {
-            return
-        }
-        
         isLoadingCards = true
-        print("开始加载用户所有卡片: userId=\(userId)")
+        cardsErrorMessage = nil
+        print("开始加载用户所有卡片")
         
-        networkManager.getUserAllCards(userId: userId, searchType: "own+favorited", cardId: cardId)
+        networkManager.getUserAllCards(searchType: "own+favorited", cardId: cardId)
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { completion in
@@ -406,10 +467,12 @@ struct MergeView: View {
                         print("用户所有卡片加载完成")
                     case .failure(let error):
                         print("用户所有卡片加载失败: \(error.localizedDescription)")
+                        self.cardsErrorMessage = error.localizedDescription
                     }
                 },
                 receiveValue: { response in
                     print("用户所有卡片加载成功")
+                    self.cardsErrorMessage = nil
                     
                     // 合并所有卡片数据
                     var allUserCards: [MergeCard] = []
@@ -492,6 +555,8 @@ struct MergeView: View {
             print("没有选择要合并的卡片")
             return
         }
+
+        mergeErrorMessage = nil
         
         // 获取头部固定卡片的内容
         guard let cardDetail = cardDetailManager.cardDetail else {
@@ -526,17 +591,15 @@ struct MergeView: View {
                 }
             case .failure(let error):
                 print("卡片合并失败: \(error.localizedDescription)")
+                DispatchQueue.main.async {
+                    self.mergeErrorMessage = error.localizedDescription
+                }
             }
         }
     }
     
     // MARK: 执行搜索
     private func performSearch() {
-        guard let userId = AuthManager.shared.currentUser?.id else {
-            print("用户未登录，无法执行搜索")
-            return
-        }
-        
         // 如果搜索框为空，显示所有卡片
         if searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             selectableCards = allCards
@@ -546,8 +609,9 @@ struct MergeView: View {
         print("搜索: \(searchText)")
         
         isLoadingCards = true
+        cardsErrorMessage = nil
         
-        networkManager.getUserAllCards(userId: userId, searchType: "own+favorited", search: searchText, limit: 50, cardId: cardId)
+        networkManager.getUserAllCards(searchType: "own+favorited", search: searchText, limit: 50, cardId: cardId)
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { completion in
@@ -557,9 +621,11 @@ struct MergeView: View {
                         print("搜索完成")
                     case .failure(let error):
                         print("搜索失败: \(error.localizedDescription)")
+                        self.cardsErrorMessage = error.localizedDescription
                     }
                 },
                 receiveValue: { response in
+                    self.cardsErrorMessage = nil
                     
                     var searchResults: [MergeCard] = []
                     
@@ -622,42 +688,6 @@ struct MergeView: View {
         animationTimer = nil
     }
     
-    // MARK: 转换Link为MergeCard
-    private func convertLinkToMergeCard(_ link: CardLink) -> MergeCard {
-        // 格式化日期
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
-        
-        let displayDate: String
-        if let date = dateFormatter.date(from: link.createdAt) {
-            let now = Date()
-            let timeInterval = now.timeIntervalSince(date)
-            
-            if timeInterval < 86400 { // 24小时内
-                displayDate = "Today"
-            } else if timeInterval < 172800 { // 48小时内
-                displayDate = "Yesterday"
-            } else {
-                let days = Int(timeInterval / 86400)
-                displayDate = "\(days) days ago"
-            }
-        } else {
-            displayDate = "Unknown"
-        }
-        
-        return MergeCard(
-            id: link.linkedCardId,
-            date: displayDate,
-            content: link.content,
-            tags: [],
-            isUserCard: false,
-            userName: nil,
-            avatarUrl: nil,
-            favoriteCount: 0,
-            rate: 0
-        )
-    }
-    
     // MARK: - 转换SearchCard为MergeCard
     private func convertSearchCardToMergeCard(_ searchCard: SearchCard) -> MergeCard {
         // 格式化日期
@@ -717,15 +747,11 @@ struct MergeView: View {
             displayDate = "Unknown"
         }
         
-        // 解析标签
-        let tags = userAllCard.labels.isEmpty ? [] : userAllCard.labels.components(separatedBy: ",").map { $0.trimmingCharacters(in: .whitespaces) }
-        
-        
         return MergeCard(
             id: userAllCard.id,
             date: displayDate,
             content: userAllCard.content,
-            tags: tags,
+            tags: userAllCard.tags,
             isUserCard: isOwnCard,
             userName: isOwnCard ? userAllCard.author?.username : nil,
             avatarUrl: isOwnCard ? userAllCard.author?.avatar : nil,
@@ -737,7 +763,7 @@ struct MergeView: View {
 
 // MARK: - Merge Card Data Model
 struct MergeCard: Identifiable {
-    let id: Int
+    let id: String
     let date: String
     let content: String
     let tags: [String]
@@ -747,7 +773,7 @@ struct MergeCard: Identifiable {
     let favoriteCount: Int
     let rate: Int
     
-    init(id: Int, date: String, content: String, tags: [String], isUserCard: Bool, userName: String? = nil, avatarUrl: String? = nil, favoriteCount: Int = 0, rate: Int = 0) {
+    init(id: String, date: String, content: String, tags: [String], isUserCard: Bool, userName: String? = nil, avatarUrl: String? = nil, favoriteCount: Int = 0, rate: Int = 0) {
         self.id = id
         self.date = date
         self.content = content
@@ -870,6 +896,13 @@ struct MergeCardView: View {
         .contentShape(Rectangle())
         .padding(.horizontal, 20)
         .onTapGesture {
+            onToggleSelection()
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("merge.card.\(card.id)")
+        .accessibilityValue(isSelected ? "selected" : "unselected")
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction {
             onToggleSelection()
         }
     }
@@ -1305,5 +1338,5 @@ struct FixedMergeCardView: View {
 
 
 #Preview {
-    MergeView(cardId: 133)
+    MergeView(cardId: "ast_preview")
 } 

@@ -25,11 +25,11 @@ class CommentPopupManager: ObservableObject {
     @Published var errorMessage = ""
     
     // Callback for when a comment is created
-    var onCommentCreated: ((Int) -> Void)?
+    var onCommentCreated: ((String) -> Void)?
     
     static let shared = CommentPopupManager()
     private var commentManager = CommentManager()
-    private var currentCardId: Int?
+    private var currentCardId: String?
     
     private init() {
         // 监听评论管理器的数据变化
@@ -63,20 +63,18 @@ class CommentPopupManager: ObservableObject {
         isShowing = false
     }
     
-    func show(for cardId: Int) {
+    func show(for cardId: String) {
         currentCardId = cardId
         isShowing = true
         commentManager.loadComments(for: cardId, refresh: true)
     }
     
-    func addComment(_ content: String, isPrivate: Bool = false) {
+    func addComment(_ content: String) {
         guard let cardId = currentCardId else { return }
         
-        let visibility = isPrivate ? "private" : "public"
         commentManager.createComment(
             for: cardId,
-            content: content,
-            visibility: visibility
+            content: content
         ) { result in
             DispatchQueue.main.async {
                 switch result {
@@ -112,101 +110,8 @@ class CommentPopupManager: ObservableObject {
         commentManager.refreshComments()
     }
     
-    func toggleCommentLike(commentId: Int) {
-        commentManager.toggleCommentLike(commentId: commentId) { result in
-            switch result {
-            case .success(let data):
-                print("评论点赞成功: commentId=\(commentId), action=\(data.action)")
-            case .failure(let error):
-                print("评论点赞失败: \(error.localizedDescription)")
-            }
-        }
-    }
-    
-    func createReply(for commentId: Int, content: String, visibility: String = "public") {
-        commentManager.createReply(for: commentId, content: content, visibility: visibility) { result in
-            DispatchQueue.main.async {
-                switch result {
-                case .success(let reply):
-                    print("回复创建成功: commentId=\(commentId), replyId=\(reply.id)")
-                case .failure(let error):
-                    print("回复创建失败: \(error.localizedDescription)")
-                    
-                    // 检查是否是未授权错误
-                    if case .unauthorized = error {
-                        self.hide()
-                        // 发送通知返回首页
-                        NotificationCenter.default.post(
-                            name: NSNotification.Name("UnauthorizedError"),
-                            object: nil
-                        )
-                    } else {
-                        self.errorMessage = "Failed to post reply: \(error.localizedDescription)"
-                        self.showErrorAlert = true
-                    }
-                }
-            }
-        }
-    }
-    
-    func enterReplyMode(commentId: Int, username: String) {
-        NotificationCenter.default.post(
-            name: NSNotification.Name("EnterReplyMode"),
-            object: nil,
-            userInfo: ["commentId": commentId, "username": username]
-        )
-    }
-    
-    func deleteComment(commentId: Int) {
-        commentManager.deleteComment(commentId: commentId) { result in
-            DispatchQueue.main.async {
-                switch result {
-                case .success:
-                    print("评论删除成功: commentId=\(commentId)")
-                case .failure(let error):
-                    print("评论删除失败: \(error.localizedDescription)")
-                    
-                    if case .unauthorized = error {
-                        self.hide()
-                        NotificationCenter.default.post(
-                            name: NSNotification.Name("UnauthorizedError"),
-                            object: nil
-                        )
-                    } else {
-                        self.errorMessage = "Failed to delete comment: \(error.localizedDescription)"
-                        self.showErrorAlert = true
-                    }
-                }
-            }
-        }
-    }
-    
-    func deleteReply(replyId: Int) {
-        commentManager.deleteReply(replyId: replyId) { result in
-            DispatchQueue.main.async {
-                switch result {
-                case .success:
-                    print("回复删除成功: replyId=\(replyId)")
-                case .failure(let error):
-                    print("回复删除失败: \(error.localizedDescription)")
-                    
-                    if case .unauthorized = error {
-                        self.hide()
-                        NotificationCenter.default.post(
-                            name: NSNotification.Name("UnauthorizedError"),
-                            object: nil
-                        )
-                    } else {
-                        self.errorMessage = "Failed to delete reply: \(error.localizedDescription)"
-                        self.showErrorAlert = true
-                    }
-                }
-            }
-        }
-    }
-    
     // MARK: - 移除评论（用于拉黑后移除）
-    func removeComment(commentId: Int) {
+    func removeComment(commentId: String) {
         DispatchQueue.main.async {
             // 从主评论列表中移除
             if let index = self.comments.firstIndex(where: { $0.id == commentId }) {
@@ -232,11 +137,10 @@ class CommentPopupManager: ObservableObject {
                         var updatedComment = self.comments[i]
                         updatedComment = CommentModel(
                             id: updatedComment.id,
+                            commentAssetId: updatedComment.commentAssetId,
+                            cardId: updatedComment.cardId,
+                            parentCommentId: updatedComment.parentCommentId,
                             content: updatedComment.content,
-                            visibility: updatedComment.visibility,
-                            likeCount: updatedComment.likeCount,
-                            replyCount: updatedComment.replies.count,
-                            isLiked: updatedComment.isLiked,
                             createdAt: updatedComment.createdAt,
                             updatedAt: updatedComment.updatedAt,
                             user: updatedComment.user,
@@ -255,15 +159,9 @@ class CommentPopupManager: ObservableObject {
 struct CommentPopupView: View {
     @ObservedObject private var manager = CommentPopupManager.shared
     @State private var commentText = ""
-    @State private var isPrivateMode = false
     @State private var keyboardHeight: CGFloat = 0
     @State private var slideOffset: CGFloat = UIScreen.main.bounds.height
     @FocusState private var isTextFieldFocused: Bool
-    
-    // 回复模式状态
-    @State private var isReplyMode = false
-    @State private var replyToCommentId: Int? = nil
-    @State private var replyToUsername: String = ""
     
     var body: some View {
 //        if manager.isShowing {
@@ -281,6 +179,14 @@ struct CommentPopupView: View {
                 // 弹窗内容
                 GeometryReader { geometry in
                     VStack(spacing: 0) {
+                        #if DEBUG
+                        Text("Comment popup")
+                            .font(.system(size: 1))
+                            .foregroundColor(.white.opacity(0.01))
+                            .frame(width: 1, height: 1)
+                            .accessibilityIdentifier("comment.popup")
+                        #endif
+
                         // 弹窗头部
                         HStack {
                             Text("Comment")
@@ -324,6 +230,7 @@ struct CommentPopupView: View {
                                         ForEach(manager.comments) { comment in
                                             CommentRowView(comment: comment)
                                                 .id(comment.id)
+                                                .accessibilityIdentifier("comment.row.\(comment.id)")
                                         }
                                         
                                         // 加载更多指示器
@@ -362,45 +269,15 @@ struct CommentPopupView: View {
                             }
                         }
                         
-                        // 回复模式提示
-//                        if isReplyMode {
-//                            HStack {
-//                                Text("回复 \(replyToUsername)")
-//                                    .font(.system(size: 14, weight: .medium))
-//                                    .foregroundColor(.white.opacity(0.8))
-//                                
-//                                Spacer()
-//                                
-//                                Button(action: {
-//                                    exitReplyMode()
-//                                }) {
-//                                    Image(systemName: "xmark.circle.fill")
-//                                        .font(.system(size: 16))
-//                                        .foregroundColor(.white.opacity(0.6))
-//                                }
-//                            }
-//                            .padding(.horizontal, 20)
-//                            .padding(.bottom, 8)
-//                        }
-                        
                         // 评论输入框
                         HStack(spacing: 12) {
-                            Button(action: {
-                                isPrivateMode.toggle()
-                            }) {
-                                Image(isPrivateMode ? "secret_active" : "secret")
-                                    .resizable()
-                                    .aspectRatio(contentMode: .fit)
-                                    .frame(width: 30, height: 30)
-                            }
-                            
                             HStack(spacing: 12){
-                                TextField(isReplyMode ? "Replay \(replyToUsername)..." : "Add Comment", text: $commentText)
+                                TextField("Add Comment", text: $commentText)
                                     .textFieldStyle(PlainTextFieldStyle())
                                     .foregroundColor(.white)
                                     .padding(.vertical, 12)
                                     .placeholder(when: commentText.isEmpty) {
-                                        Text(isReplyMode ? "Replay \(replyToUsername)..." : "Add Comment")
+                                        Text("Add Comment")
                                             .foregroundColor(Color(red: 0.627, green: 0.627, blue: 0.627)) // A0A0A0
                                     }
                                     .focused($isTextFieldFocused)
@@ -410,30 +287,22 @@ struct CommentPopupView: View {
                                             isTextFieldFocused = true
                                         }
                                     }
+                                    .accessibilityIdentifier("comment.input")
                                 
                                 Button(action: {
                                     if !commentText.isEmpty {
-                                        if isReplyMode {
-                                            // 发送回复
-                                            if let commentId = replyToCommentId {
-                                                manager.createReply(for: commentId, content: commentText, visibility: isPrivateMode ? "private" : "public")
-                                            }
-                                        } else {
-                                            // 发送评论
-                                            manager.addComment(commentText, isPrivate: isPrivateMode)
-                                        }
+                                        manager.addComment(commentText)
                                         
                                         // 重置状态
                                         commentText = ""
-                                        isPrivateMode = false
                                         isTextFieldFocused = false
-                                        exitReplyMode()
                                     }
                                 }) {
                                     Image("send")
                                         .resizable()
                                         .frame(width: 40,height: 40)
                                 }
+                                .accessibilityIdentifier("comment.send")
                                 .disabled(commentText.isEmpty)
                             }
                             .padding(.leading, 16)
@@ -501,15 +370,7 @@ struct CommentPopupView: View {
                 }
                 .onChange(of: manager.isShowing) { isShowing in
                     if !isShowing {
-                        // 关闭弹窗时退出回复模式
-                        exitReplyMode()
-                    }
-                }
-                .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("EnterReplyMode"))) { notification in
-                    if let userInfo = notification.userInfo,
-                       let commentId = userInfo["commentId"] as? Int,
-                       let username = userInfo["username"] as? String {
-                        enterReplyMode(commentId: commentId, username: username)
+                        isTextFieldFocused = false
                     }
                 }
                 .alert("Error", isPresented: $manager.showErrorAlert) {
@@ -536,20 +397,6 @@ struct CommentPopupView: View {
 //        }
     }
     
-    // MARK: 回复模式管理
-    private func enterReplyMode(commentId: Int, username: String) {
-        isReplyMode = true
-        replyToCommentId = commentId
-        replyToUsername = username
-        isTextFieldFocused = true
-    }
-    
-    private func exitReplyMode() {
-        isReplyMode = false
-        replyToCommentId = nil
-        replyToUsername = ""
-        isTextFieldFocused = false
-    }
 }
 
 // MARK: 评论行视图
@@ -594,31 +441,13 @@ struct CommentRowView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     // 用户名和时间
                     HStack {
-                        Text(comment.user.username)
+                        Text(comment.user.username ?? comment.user.id)
                             .font(.system(size: 14, weight: .semibold))
                             .foregroundColor(.white)
                         
                         Spacer()
                         
-                        // 删除按钮（只对当前用户的评论显示）或三个点按钮（对非当前用户的评论显示）
-                        if isCurrentUserComment {
-                            Button(action: {
-                                if isSubComment {
-                                    // 子评论（回复）使用 deleteReply
-                                    CommentPopupManager.shared.deleteReply(replyId: comment.id)
-                                } else {
-                                    // 主评论使用 deleteComment
-                                    CommentPopupManager.shared.deleteComment(commentId: comment.id)
-                                }
-                            }) {
-                                Image("menu_remove")
-                                    .resizable()
-                                    .aspectRatio(contentMode: .fit)
-                                    .frame(width: 24, height: 24)
-                                    .foregroundColor(.white.opacity(0.7))
-                            }
-                        } else {
-                            // 非当前用户的评论显示三个点按钮
+                        if !isCurrentUserComment {
                             Button(action: {
                                 showActionSheet = true
                             }) {
@@ -634,48 +463,11 @@ struct CommentRowView: View {
                         .font(.system(size: 14, weight: .regular))
                         .foregroundColor(.white.opacity(0.9))
                         .multilineTextAlignment(.leading)
+                        .accessibilityIdentifier("comment.content.\(comment.id)")
                     
-                    HStack(spacing: 4) {
-                        if comment.visibility == "private" {
-                            Image("secret_active")
-                                .resizable()
-                                .aspectRatio(contentMode: .fit)
-                                .frame(width: 12, height: 12)
-                        }
-                        Text(formatDate(comment.createdAt))
-                            .font(.system(size: 12, weight: .regular))
-                            .foregroundColor(.white.opacity(0.6))
-                    }
-                    
-                    // 点赞和回复
-                    HStack(spacing: 16) {
-                        Button(action: {
-                            CommentPopupManager.shared.toggleCommentLike(commentId: comment.id)
-                        }) {
-                            HStack(spacing: 4) {
-                                Image(comment.isLiked ? "like_active" : "like")
-                                    .resizable()
-                                    .frame(width: 20, height: 20)
-                                Text("\(comment.likeCount)")
-                                    .font(.system(size: 12, weight: .medium))
-                                    .foregroundColor(.white.opacity(0.7))
-                            }
-                        }
-                        
-                        Button(action: {
-                            // 进入回复模式
-                            CommentPopupManager.shared.enterReplyMode(commentId: comment.id, username: comment.user.username)
-                        }) {
-                            HStack(spacing: 4) {
-                                Image("comment")
-                                    .resizable()
-                                    .frame(width: 20, height: 20)
-                                Text("\(comment.replyCount ?? 0)")
-                                    .font(.system(size: 12, weight: .medium))
-                                    .foregroundColor(.white.opacity(0.7))
-                            }
-                        }
-                    }
+                    Text(formatDate(comment.createdAt))
+                        .font(.system(size: 12, weight: .regular))
+                        .foregroundColor(.white.opacity(0.6))
                 }
             }
             
@@ -710,7 +502,7 @@ struct CommentRowView: View {
         }
         
         
-        NetworkManager.shared.blockUser(userId: currentUserId, blockedId: comment.user.id)
+        NetworkManager.shared.blockUser(blockedActorId: comment.user.id)
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { completion in
@@ -766,26 +558,26 @@ struct CommentRowView: View {
 struct CommentButton: View {
     @ObservedObject private var manager = CommentPopupManager.shared
     @ObservedObject private var relatedCardsManager = RelatedCardsManager.shared
-    let cardId: Int
+    let cardId: String
     let cardsManager: RecommendedCardsManager?
     let useRelatedCardsManager: Bool
     @State private var staticCommentCount: Int = 0
     
-    init(cardId: Int, cardsManager: RecommendedCardsManager) {
+    init(cardId: String, cardsManager: RecommendedCardsManager) {
         self.cardId = cardId
         self.cardsManager = cardsManager
         self.useRelatedCardsManager = false
         self.staticCommentCount = 0
     }
     
-    init(cardId: Int, relatedCardsManager: RelatedCardsManager) {
+    init(cardId: String, relatedCardsManager: RelatedCardsManager) {
         self.cardId = cardId
         self.cardsManager = nil
         self.useRelatedCardsManager = true
         self.staticCommentCount = 0
     }
     
-    init(cardId: Int, commentCount: Int = 0) {
+    init(cardId: String, commentCount: Int = 0) {
         self.cardId = cardId
         self.cardsManager = nil
         self.useRelatedCardsManager = false
@@ -808,7 +600,7 @@ struct CommentButton: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("CommentCountChanged"))) { notification in
             if let userInfo = notification.userInfo,
-               let updatedCardId = userInfo["cardId"] as? Int,
+               let updatedCardId = userInfo["cardId"] as? String,
                let newCount = userInfo["newCount"] as? Int,
                updatedCardId == cardId && cardsManager == nil && !useRelatedCardsManager {
                 print("数量变化通知: cardId=\(cardId), newCount=\(newCount)")

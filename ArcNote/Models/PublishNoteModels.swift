@@ -3,13 +3,11 @@ import Combine
 
 // MARK: 更新卡片请求模型
 struct UpdateCardRequest: Codable {
-    let userId: Int
     let title: String?
     let content: String
     let tags: [String]?
     
     enum CodingKeys: String, CodingKey {
-        case userId = "user_id"
         case title, content, tags
     }
 }
@@ -27,12 +25,11 @@ class PublishNoteManager: ObservableObject {
     private init() {}
     
     // MARK: 发布笔记
-    func publishNote(title: String, content: String, tags: [String], userId: Int = 7, isPublic: Bool = true) {
+    func publishNote(title: String, content: String, tags: [String], isPublic: Bool = true) {
         isPublishing = true
         publishError = nil
         
         let request = CreateCardRequest(
-            userId: userId,
             title: title,
             content: content,
             tags: tags,

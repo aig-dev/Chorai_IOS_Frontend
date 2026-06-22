@@ -9,7 +9,7 @@ struct HomeView: View {
     @State private var showFilterTags = false
     @State private var selectedFilter = "Latest Edited" // 默认筛选
     @StateObject private var cardsManager = HomeCardsManager()
-    @State private var currentCardId: Int? = nil
+    @State private var currentCardId: String? = nil
     @State private var currentMenuCardData: UserCard? = nil
     @StateObject private var favoritesManager = FavoritesManager.shared
     @State private var showDeleteConfirmation = false
@@ -17,9 +17,9 @@ struct HomeView: View {
     @State private var animateDeleteConfirmation = false
     @State private var navigateToDetail = false
     @State private var navigateToEdit = false
-    @State private var selectedCardId: Int? = nil
+    @State private var selectedCardId: String? = nil
     @State private var navigateToUserProfile = false
-    @State private var selectedUserId: Int? = nil
+    @State private var selectedActorId: String? = nil
     @State private var navigateToRoot = false
     @State private var rootViewType: String? = nil
     
@@ -48,9 +48,9 @@ struct HomeView: View {
     }
     
     // MARK: 加载用户卡片列表
-    private func loadUserCards(userId: Int) {
+    private func loadUserCards() {
         // 使用默认排序（Latest Edited）
-        cardsManager.loadUserCards(userId: userId, refresh: true, sortBy: "updated_at", sortOrder: "desc")
+        cardsManager.loadUserCards(refresh: true, sortBy: "updated_at", sortOrder: "desc")
     }
     
     // MARK: 应用排序
@@ -60,8 +60,8 @@ struct HomeView: View {
             // NotesList 排序
             cardsManager.loadUserCards(refresh: true, sortBy: sortBy, sortOrder: sortOrder)
         } else {
-            // AIList 排序
-            favoritesManager.loadFavorites(refresh: true, sortBy: sortBy, sortOrder: sortOrder)
+            // Favorites list follows the Go API contract: page/per_page only.
+            favoritesManager.loadFavorites(refresh: true)
         }
     }
     
@@ -171,6 +171,7 @@ struct HomeView: View {
                                 .aspectRatio(contentMode: .fit)
                                 .frame(width: 24, height: 24)
                         }
+                        .accessibilityIdentifier("home.search")
                     }
                 }
                 
@@ -189,6 +190,7 @@ struct HomeView: View {
                             .frame(width: 50, height: 32)
                             .background(segmentBackground(for: 0))
                     }
+                    .accessibilityIdentifier("home.segment.notes")
                     
                     // Collect 按钮
                     Button(action: {
@@ -203,6 +205,7 @@ struct HomeView: View {
                             .frame(width: 50, height: 32)
                             .background(segmentBackground(for: 1))
                     }
+                    .accessibilityIdentifier("home.segment.collect")
                 }
                 .padding(.horizontal, 4)
                 .padding(.vertical, 4)
@@ -292,7 +295,7 @@ struct HomeView: View {
                     }
                     },
                     onAvatarTap: { authorId in
-                        selectedUserId = authorId
+                        selectedActorId = authorId
                         DispatchQueue.main.async {
                             navigateToUserProfile = true
                         }
@@ -300,6 +303,7 @@ struct HomeView: View {
                 )
             }
         }
+        .accessibilityIdentifier("screen.home.content")
         .popupMenu(isPresented: $showPopupMenu, layout: popupMenuLayout, cardData: currentMenuCardData ?? getCurrentCard(), isOwnCard: selectedSegment == 0)
         .onAppear {
             // 使用默认排序（Latest Edited）
@@ -352,7 +356,7 @@ struct HomeView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ToggleCardVisibility"))) { notification in
             guard let userInfo = notification.userInfo,
-                  let cardId = userInfo["cardId"] as? Int,
+                  let cardId = userInfo["cardId"] as? String,
                   let _ = userInfo["isPublic"] as? Bool else {
                 print("通知缺少必要参数")
                 return
@@ -369,7 +373,7 @@ struct HomeView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ToggleCardPin"))) { notification in
             guard let userInfo = notification.userInfo,
-                  let cardId = userInfo["cardId"] as? Int,
+                  let cardId = userInfo["cardId"] as? String,
                   let _ = userInfo["isPinned"] as? Bool else {
                 print("通知缺少必要参数")
                 return
@@ -388,7 +392,7 @@ struct HomeView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("CardTapped"))) { notification in
             guard let userInfo = notification.userInfo,
-                  let cardId = userInfo["cardId"] as? Int else {
+                  let cardId = userInfo["cardId"] as? String else {
                 return
             }
             
@@ -404,7 +408,7 @@ struct HomeView: View {
             showFilterTags = false
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NavigateToDetail"))) { notification in
-            if let cardId = notification.userInfo?["cardId"] as? Int {
+            if let cardId = notification.userInfo?["cardId"] as? String {
                 selectedCardId = cardId
                 DispatchQueue.main.async {
                     navigateToDetail = true
@@ -413,7 +417,7 @@ struct HomeView: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NavigateToEdit"))) { notification in
-            if let cardId = notification.userInfo?["cardId"] as? Int {
+            if let cardId = notification.userInfo?["cardId"] as? String {
                 selectedCardId = cardId
                 DispatchQueue.main.async {
                     navigateToEdit = true
@@ -421,7 +425,7 @@ struct HomeView: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NavigateToRoot"))) { notification in
-            if let cardId = notification.userInfo?["cardId"] as? Int {
+            if let cardId = notification.userInfo?["cardId"] as? String {
                 let type = notification.userInfo?["type"] as? String
                 selectedCardId = cardId
                 rootViewType = type
@@ -587,8 +591,8 @@ struct HomeView: View {
             }
         }
         .navigationDestination(isPresented: $navigateToUserProfile) {
-            if let userId = selectedUserId {
-                UserProfileView(userId: userId)
+            if let actorId = selectedActorId {
+                UserProfileView(actorId: actorId)
             } else {
                 EmptyView()
             }
@@ -599,8 +603,8 @@ struct HomeView: View {
 // MARK: - Notes 列表视图
 struct NotesListView: View {
     @ObservedObject var cardsManager: HomeCardsManager
-    @Binding var currentCardId: Int?
-    @Binding var selectedCardId: Int?
+    @Binding var currentCardId: String?
+    @Binding var selectedCardId: String?
     @Binding var navigateToDetail: Bool
     @Binding var navigateToEdit: Bool
     let onShowMenu: (UserCard) -> Void
@@ -797,11 +801,11 @@ struct NotesListView: View {
 
 // MARK: - AI 列表视图
 struct AIListView: View {
-    let onShowMenu: (Int) -> Void
-    let onAvatarTap: ((Int) -> Void)?
+    let onShowMenu: (String) -> Void
+    let onAvatarTap: ((String) -> Void)?
     @StateObject private var favoritesManager = FavoritesManager.shared
     
-    init(onShowMenu: @escaping (Int) -> Void, onAvatarTap: ((Int) -> Void)? = nil) {
+    init(onShowMenu: @escaping (String) -> Void, onAvatarTap: ((String) -> Void)? = nil) {
         self.onShowMenu = onShowMenu
         self.onAvatarTap = onAvatarTap
     }
@@ -894,7 +898,7 @@ struct AIListView: View {
         }
         .onAppear {
             if favoritesManager.favorites.isEmpty {
-                favoritesManager.loadFavorites(refresh: true, sortBy: "updated_at", sortOrder: "desc")
+                favoritesManager.loadFavorites(refresh: true)
             }
         }
     }
@@ -933,10 +937,10 @@ struct AIListView: View {
 struct NotesCard: View {
     let card: UserCard
     let onShowMenu: (UserCard) -> Void
-    let onCardTap: ((Int) -> Void)?
+    let onCardTap: ((String) -> Void)?
     @ObservedObject var cardsManager: HomeCardsManager
     
-    init(card: UserCard, onShowMenu: @escaping (UserCard) -> Void, cardsManager: HomeCardsManager, onCardTap: ((Int) -> Void)? = nil) {
+    init(card: UserCard, onShowMenu: @escaping (UserCard) -> Void, cardsManager: HomeCardsManager, onCardTap: ((String) -> Void)? = nil) {
         self.card = card
         self.onShowMenu = onShowMenu
         self.cardsManager = cardsManager
@@ -1206,15 +1210,15 @@ struct HomePostCard: View {
     let tags: [String]
     let showSpark: Bool
     let favoriteCount: Int
-    let cardId: Int
+    let cardId: String
     let rate: Int
-    let authorId: Int?
-    let onShowMenu: (Int) -> Void
-    let onCardTap: ((Int) -> Void)?
-    let onUnfavorite: ((Int) -> Void)?
-    let onAvatarTap: ((Int) -> Void)?
+    let authorId: String?
+    let onShowMenu: (String) -> Void
+    let onCardTap: ((String) -> Void)?
+    let onUnfavorite: ((String) -> Void)?
+    let onAvatarTap: ((String) -> Void)?
     
-    init(profileImage: String, name: String, time: String, content: String, tags: [String], showSpark: Bool, favoriteCount: Int, cardId: Int, rate: Int = 0, authorId: Int? = nil, onShowMenu: @escaping (Int) -> Void, onCardTap: ((Int) -> Void)? = nil, onUnfavorite: ((Int) -> Void)? = nil, onAvatarTap: ((Int) -> Void)? = nil) {
+    init(profileImage: String, name: String, time: String, content: String, tags: [String], showSpark: Bool, favoriteCount: Int, cardId: String, rate: Int = 0, authorId: String? = nil, onShowMenu: @escaping (String) -> Void, onCardTap: ((String) -> Void)? = nil, onUnfavorite: ((String) -> Void)? = nil, onAvatarTap: ((String) -> Void)? = nil) {
         self.profileImage = profileImage
         self.name = name
         self.time = time
@@ -1255,7 +1259,7 @@ struct HomePostCard: View {
                             }
                         } else if !profileImage.isEmpty {
                             // 相对路径，拼接域名
-                            let fullAvatarUrl = "https://production.chorai.top/\(profileImage.hasPrefix("/") ? String(profileImage.dropFirst()) : profileImage)"
+                            let fullAvatarUrl = APIConfiguration.resourceURLString(profileImage)
                  
                             AsyncImage(url: URL(string: fullAvatarUrl)) { image in
                                 image
@@ -1364,6 +1368,7 @@ struct HomePostCard: View {
             }
         )
         .clipShape(RoundedRectangle(cornerRadius: 16))
+        .accessibilityIdentifier("card.home.\(cardId)")
     }
     
     // MARK: - Background Views
@@ -1715,10 +1720,10 @@ struct HomeFilterTag: View {
 struct NotesColorCard: View {
     let card: UserCard
     let onShowMenu: (UserCard) -> Void
-    let onCardTap: ((Int) -> Void)?
+    let onCardTap: ((String) -> Void)?
     @ObservedObject var cardsManager: HomeCardsManager
     
-    init(card: UserCard, onShowMenu: @escaping (UserCard) -> Void, cardsManager: HomeCardsManager, onCardTap: ((Int) -> Void)? = nil) {
+    init(card: UserCard, onShowMenu: @escaping (UserCard) -> Void, cardsManager: HomeCardsManager, onCardTap: ((String) -> Void)? = nil) {
         self.card = card
         self.onShowMenu = onShowMenu
         self.cardsManager = cardsManager

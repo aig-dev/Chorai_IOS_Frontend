@@ -50,13 +50,8 @@ struct NotificationView: View {
                     
                     Spacer()
                     
-                    Button(action: {
-                        viewModel.markAllAsRead()
-                    }) {
-                        Image("check")
-                            .resizable()
-                            .frame(width: 30, height: 30)
-                    }
+                    Color.clear
+                        .frame(width: 30, height: 30)
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 60)
@@ -128,6 +123,15 @@ struct NotificationView: View {
                         VStack(alignment: .leading, spacing: 24) {
                             let groupedNotifications = viewModel.groupedNotifications(by: selectedFilter)
 
+                            if groupedNotifications.isEmpty {
+                                Text("No notifications")
+                                    .font(.system(size: 16, weight: .medium))
+                                    .foregroundColor(.white.opacity(0.7))
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.top, 80)
+                                    .accessibilityIdentifier("notification.list.empty")
+                            }
+
                             ForEach(Array(groupedNotifications.keys.sorted(by: { key1, key2 in
                                 let order = ["Today", "Yesterday", "This Week", "Earlier"]
                                 let index1 = order.firstIndex(of: key1) ?? 999
@@ -147,6 +151,7 @@ struct NotificationView: View {
                                                     NotificationItemView(notification: notification)
                                                 }
                                                 .buttonStyle(PlainButtonStyle())
+                                                .accessibilityIdentifier("notification.row.\(notification.id)")
 
                                                 if index < notifications.count - 1 {
                                                     Divider()
@@ -172,6 +177,7 @@ struct NotificationView: View {
                         }
                         .padding(.bottom, 100)
                     }
+                    .accessibilityIdentifier("notification.list.loaded")
                 }
             }
         }
@@ -268,6 +274,7 @@ struct NotificationItemView: View {
                     .fill(Color.purple)
                     .frame(width: 6, height: 6)
                     .padding(.top, 6)
+                    .accessibilityIdentifier("notification.unread-dot.\(notification.id)")
             } else {
                 Spacer()
                     .frame(width: 6, height: 6)

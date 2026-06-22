@@ -1,9 +1,13 @@
 import SwiftUI
+import Combine
 
 struct UpgradeProView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var invitationCode = ""
+    @State private var isRedeemingInvitation = false
+    @State private var invitationMessage: String?
     @FocusState private var isTextFieldFocused: Bool
+    @State private var cancellables = Set<AnyCancellable>()
     
     var body: some View {
         ZStack {
@@ -75,13 +79,9 @@ struct UpgradeProView: View {
                             .focused($isTextFieldFocused)
                         
                         Button(action: {
-                            // 处理邀请码验证
-                            if !invitationCode.isEmpty {
-                                // 这里可以添加邀请码验证逻辑
-                                print("验证邀请码: \(invitationCode)")
-                            }
+                            redeemInvitationCode()
                         }) {
-                            Text("LET'S GO")
+                            Text(isRedeemingInvitation ? "VERIFYING..." : "LET'S GO")
                                 .font(.system(size: 18, weight: .bold))
                                 .foregroundColor(Color(red: 81/255, green: 1.0, blue: 200/255)) // 51FFC8
                                 .frame(maxWidth: .infinity)
@@ -95,8 +95,14 @@ struct UpgradeProView: View {
                                         )
                                 )
                         }
-                        .disabled(invitationCode.isEmpty)
-                        .opacity(invitationCode.isEmpty ? 1 : 1.0)
+                        .disabled(invitationCode.isEmpty || isRedeemingInvitation)
+                        
+                        if let invitationMessage = invitationMessage {
+                            Text(invitationMessage)
+                                .font(.system(size: 13, weight: .regular))
+                                .foregroundColor(.white.opacity(0.75))
+                                .multilineTextAlignment(.center)
+                        }
                     }
                     .padding(.horizontal, 20)
                     
@@ -134,6 +140,40 @@ struct UpgradeProView: View {
         .onAppear {
             isTextFieldFocused = true
         }
+    }
+    
+    private func redeemInvitationCode() {
+        let code = invitationCode.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !code.isEmpty else { return }
+        
+        isRedeemingInvitation = true
+        invitationMessage = nil
+        
+        NetworkManager.shared.validateInvitationCode(ValidateInvitationRequest(code: code))
+            .flatMap { response -> AnyPublisher<InvitationRedeemResponse, NetworkError> in
+                guard response.success, response.data.valid else {
+                    return Fail(error: NetworkError.serverError(400, response.message ?? "Invalid invitation code"))
+                        .eraseToAnyPublisher()
+                }
+                return NetworkManager.shared.useInvitationCode(UseInvitationRequest(code: code))
+            }
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { completion in
+                    isRedeemingInvitation = false
+                    if case .failure(let error) = completion {
+                        invitationMessage = error.localizedDescription
+                    }
+                },
+                receiveValue: { response in
+                    if response.success {
+                        invitationMessage = "Invitation redeemed"
+                    } else {
+                        invitationMessage = response.message ?? "Invitation redemption failed"
+                    }
+                }
+            )
+            .store(in: &cancellables)
     }
 }
 

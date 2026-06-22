@@ -10,10 +10,10 @@ import Combine
 
 // MARK: 回收站卡片数据模型
 struct TrashCard: Codable, Identifiable {
-    let id: Int
+    let id: String
     let title: String?
     let content: String
-    let contentHash: String?
+    let contentHash: String
     let isPublic: Bool
     let tags: [String]
     let createdAt: String
@@ -21,9 +21,8 @@ struct TrashCard: Codable, Identifiable {
     let likeCount: Int
     let isLiked: Bool
     let deletedAt: String
-    let daysInTrash: Int
     let daysRemaining: Int
-    
+
     enum CodingKeys: String, CodingKey {
         case id, title, content, tags
         case contentHash = "content_hash"
@@ -33,36 +32,48 @@ struct TrashCard: Codable, Identifiable {
         case likeCount = "like_count"
         case isLiked = "is_liked"
         case deletedAt = "deleted_at"
-        case daysInTrash = "days_in_trash"
         case daysRemaining = "days_remaining"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        title = try container.decode(String.self, forKey: .title)
+        content = try container.decode(String.self, forKey: .content)
+        contentHash = try container.decode(String.self, forKey: .contentHash)
+        isPublic = try container.decode(Bool.self, forKey: .isPublic)
+        tags = try container.decode([String].self, forKey: .tags)
+        createdAt = try container.decode(String.self, forKey: .createdAt)
+        updatedAt = try container.decode(String.self, forKey: .updatedAt)
+        likeCount = try container.decode(Int.self, forKey: .likeCount)
+        isLiked = try container.decode(Bool.self, forKey: .isLiked)
+        deletedAt = try container.decode(String.self, forKey: .deletedAt)
+        daysRemaining = try container.decode(Int.self, forKey: .daysRemaining)
     }
 }
 
 // MARK: 回收站列表响应模型
 struct TrashListResponse: Codable {
     let success: Bool
-    let message: String
+    let message: String?
     let data: [TrashCard]
-    let total: Int
-    let page: Int
-    let perPage: Int
-    
+    let meta: PaginationMeta
+
+    var total: Int { meta.total }
+    var page: Int { meta.page }
+    var perPage: Int { meta.perPage }
+
     enum CodingKeys: String, CodingKey {
-        case success, message, data, total, page
-        case perPage = "per_page"
+        case success, message, data, meta
     }
-}
 
-// MARK: 恢复卡片响应模型
-struct RestoreCardResponse: Codable {
-    let success: Bool
-    let message: String
-}
-
-// MARK: 永久删除卡片响应模型
-struct PermanentlyDeleteCardResponse: Codable {
-    let success: Bool
-    let message: String
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        success = try container.decode(Bool.self, forKey: .success)
+        message = try container.decodeIfPresent(String.self, forKey: .message)
+        data = try container.decode([TrashCard].self, forKey: .data)
+        meta = try container.decode(PaginationMeta.self, forKey: .meta)
+    }
 }
 
 // MARK: 回收站管理器
@@ -83,7 +94,7 @@ class TrashManager: ObservableObject {
     private init() {}
     
     func loadTrashCards(refresh: Bool = false) {
-        guard let userId = authManager.currentUser?.id else {
+        guard authManager.currentUser != nil else {
             print("用户未登录")
             self.error = .unauthorized
             return
@@ -100,7 +111,7 @@ class TrashManager: ObservableObject {
         isLoading = true
         error = nil
         
-        networkManager.getTrashCards(userId: userId, page: currentPage, perPage: perPage) { [weak self] result in
+        networkManager.getTrashCards(page: currentPage, perPage: perPage) { [weak self] result in
             DispatchQueue.main.async {
                 self?.isLoading = false
                 switch result {
@@ -130,14 +141,14 @@ class TrashManager: ObservableObject {
         loadTrashCards(refresh: true)
     }
     
-    func restoreCard(cardId: Int, completion: @escaping (Result<Bool, NetworkError>) -> Void) {
-        guard let userId = authManager.currentUser?.id else {
+    func restoreCard(cardId: String, completion: @escaping (Result<Bool, NetworkError>) -> Void) {
+        guard authManager.currentUser != nil else {
             print("用户未登录")
             completion(.failure(.unauthorized))
             return
         }
         
-        networkManager.restoreCard(cardId: cardId, userId: userId) { [weak self] result in
+        networkManager.restoreCard(cardId: cardId) { [weak self] result in
             DispatchQueue.main.async {
                 switch result {
                 case .success(let response):
@@ -158,14 +169,14 @@ class TrashManager: ObservableObject {
         }
     }
     
-    func permanentlyDeleteCard(cardId: Int, completion: @escaping (Result<Bool, NetworkError>) -> Void) {
-        guard let userId = authManager.currentUser?.id else {
+    func permanentlyDeleteCard(cardId: String, completion: @escaping (Result<Bool, NetworkError>) -> Void) {
+        guard authManager.currentUser != nil else {
             print("用户未登录")
             completion(.failure(.unauthorized))
             return
         }
         
-        networkManager.permanentlyDeleteCard(cardId: cardId, userId: userId) { [weak self] result in
+        networkManager.permanentlyDeleteCard(cardId: cardId) { [weak self] result in
             DispatchQueue.main.async {
                 switch result {
                 case .success(let response):

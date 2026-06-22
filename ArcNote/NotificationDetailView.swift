@@ -139,6 +139,7 @@ struct NotificationDetailView: View {
                 }
             }
         }
+        .accessibilityIdentifier("notification.detail.loaded")
         .navigationBarHidden(true)
         .navigationBarBackButtonHidden(true)
         .onAppear {
@@ -232,14 +233,9 @@ struct NotificationDetailView: View {
 // MARK: 通知详情视图模型
 class NotificationDetailViewModel: ObservableObject {
     private let networkManager = NetworkManager.shared
-    private let authManager = AuthManager.shared
     private var cancellables = Set<AnyCancellable>()
     
     func markNotificationAsRead(notification: NotificationItem) {
-        guard let userId = authManager.currentUser?.id else {
-            return
-        }
-
         // 如果通知已经是已读状态
         if notification.isRead {
             return
@@ -247,7 +243,7 @@ class NotificationDetailViewModel: ObservableObject {
 
         print("标记通知为已读: \(notification.id)")
 
-        networkManager.markNotificationAsRead(notificationId: notification.id, userId: userId)
+        networkManager.markNotificationRead(notificationId: notification.id)
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { completion in
@@ -270,7 +266,7 @@ class NotificationDetailViewModel: ObservableObject {
 #Preview {
     NotificationDetailView(
         notification: NotificationItem(
-            id: 1,
+            id: "not_preview",
             type: .system,
             content: "We are excited to notify the magics updated features that will enhance your note-taking experience. The new collaboration feature allows you to work together with your team members in real-time, making it easier than ever to share ideas and collaborate on projects. We hope you enjoy these new features and find them helpful in your daily workflow.",
             relatedId: nil,

@@ -3,20 +3,17 @@ import Combine
 
 // MARK: 搜索作者模型
 struct SearchAuthor: Codable {
-    let id: Int
+    let id: String
     let username: String
     let avatarUrl: String?
 
     enum CodingKeys: String, CodingKey {
-        case id
-        case userId = "user_id"
-        case username
-        case userName = "user_name"
+        case authorId = "author_id"
+        case authorName = "author_name"
         case avatarUrl = "avatar_url"
-        case avatar
     }
 
-    init(id: Int, username: String, avatarUrl: String?) {
+    init(id: String, username: String, avatarUrl: String?) {
         self.id = id
         self.username = username
         self.avatarUrl = avatarUrl
@@ -24,27 +21,22 @@ struct SearchAuthor: Codable {
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        id = (try? container.decode(Int.self, forKey: .id))
-            ?? (try? container.decode(Int.self, forKey: .userId))
-            ?? 0
-        username = (try? container.decode(String.self, forKey: .username))
-            ?? (try? container.decode(String.self, forKey: .userName))
-            ?? "Unknown"
-        avatarUrl = (try? container.decode(String.self, forKey: .avatarUrl))
-            ?? (try? container.decode(String.self, forKey: .avatar))
+        id = try container.decode(String.self, forKey: .authorId)
+        username = try container.decode(String.self, forKey: .authorName)
+        avatarUrl = try container.decode(String.self, forKey: .avatarUrl)
     }
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(id, forKey: .id)
-        try container.encode(username, forKey: .username)
+        try container.encode(id, forKey: .authorId)
+        try container.encode(username, forKey: .authorName)
         try container.encodeIfPresent(avatarUrl, forKey: .avatarUrl)
     }
 }
 
 // MARK: 搜索结果卡片模型
 struct SearchCard: Codable, Identifiable {
-    let id: Int
+    let id: String
     let title: String?
     let content: String
     let contentHash: String
@@ -69,7 +61,6 @@ struct SearchCard: Codable, Identifiable {
         case title
         case content
         case tags
-        case labels
         case author
         case rate
         case contentHash = "content_hash"
@@ -89,37 +80,27 @@ struct SearchCard: Codable, Identifiable {
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        id = (try? container.decode(Int.self, forKey: .id)) ?? 0
-        title = try? container.decode(String.self, forKey: .title)
-        content = (try? container.decode(String.self, forKey: .content)) ?? ""
-        contentHash = (try? container.decode(String.self, forKey: .contentHash)) ?? ""
-        isPublic = (try? container.decode(Bool.self, forKey: .isPublic)) ?? true
+        id = try container.decode(String.self, forKey: .id)
+        title = try container.decodeIfPresent(String.self, forKey: .title)
+        content = try container.decode(String.self, forKey: .content)
+        contentHash = try container.decode(String.self, forKey: .contentHash)
+        isPublic = try container.decode(Bool.self, forKey: .isPublic)
 
-        if let decodedTags = try? container.decode([String].self, forKey: .tags) {
-            tags = decodedTags
-        } else if let labels = try? container.decode(String.self, forKey: .labels) {
-            tags = labels
-                .split(separator: ",")
-                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                .filter { !$0.isEmpty }
-        } else {
-            tags = []
-        }
+        tags = try container.decode([String].self, forKey: .tags)
 
-        createdAt = (try? container.decode(String.self, forKey: .createdAt)) ?? ""
-        updatedAt = (try? container.decode(String.self, forKey: .updatedAt)) ?? ""
-        favoriteCount = (try? container.decode(Int.self, forKey: .favoriteCount)) ?? 0
-        viewCount = (try? container.decode(Int.self, forKey: .viewCount)) ?? 0
-        likeCount = (try? container.decode(Int.self, forKey: .likeCount)) ?? 0
-        commentCount = (try? container.decode(Int.self, forKey: .commentCount)) ?? 0
-        isFavorited = try? container.decode(Bool.self, forKey: .isFavorited)
-        isPinned = try? container.decode(Bool.self, forKey: .isPinned)
-        isLiked = try? container.decode(Bool.self, forKey: .isLiked)
-        pinnedAt = try? container.decode(String.self, forKey: .pinnedAt)
-        linkedCards = try? container.decode(SearchLinkedCards.self, forKey: .linkedCards)
-        rate = (try? container.decode(Int.self, forKey: .rate)) ?? 0
-        author = (try? container.decode(SearchAuthor.self, forKey: .author))
-            ?? SearchAuthor(id: 0, username: "Unknown", avatarUrl: nil)
+        createdAt = try container.decode(String.self, forKey: .createdAt)
+        updatedAt = try container.decode(String.self, forKey: .updatedAt)
+        favoriteCount = try container.decode(Int.self, forKey: .favoriteCount)
+        viewCount = try container.decode(Int.self, forKey: .viewCount)
+        likeCount = try container.decode(Int.self, forKey: .likeCount)
+        commentCount = try container.decode(Int.self, forKey: .commentCount)
+        isFavorited = try container.decode(Bool.self, forKey: .isFavorited)
+        isPinned = try container.decode(Bool.self, forKey: .isPinned)
+        isLiked = try container.decode(Bool.self, forKey: .isLiked)
+        pinnedAt = try container.decodeIfPresent(String.self, forKey: .pinnedAt)
+        linkedCards = try container.decodeIfPresent(SearchLinkedCards.self, forKey: .linkedCards)
+        rate = try container.decode(Int.self, forKey: .rate)
+        author = try container.decode(SearchAuthor.self, forKey: .author)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -155,45 +136,31 @@ struct SearchLinkedCards: Codable {
 // MARK: 搜索响应模型
 struct SearchResponse: Codable {
     let success: Bool
-    let message: String
+    let message: String?
     let data: [SearchCard]
+    let meta: PaginationMeta?
 
     enum CodingKeys: String, CodingKey {
         case success
         case message
         case data
-        case cards
-        case results
-    }
-
-    private struct SearchDataContainer: Decodable {
-        let cards: [SearchCard]?
-        let results: [SearchCard]?
+        case meta
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        success = (try? container.decode(Bool.self, forKey: .success)) ?? false
-        message = (try? container.decode(String.self, forKey: .message)) ?? ""
-
-        if let directData = try? container.decode([SearchCard].self, forKey: .data) {
-            data = directData
-        } else if let nested = try? container.decode(SearchDataContainer.self, forKey: .data) {
-            data = nested.cards ?? nested.results ?? []
-        } else if let cards = try? container.decode([SearchCard].self, forKey: .cards) {
-            data = cards
-        } else if let results = try? container.decode([SearchCard].self, forKey: .results) {
-            data = results
-        } else {
-            data = []
-        }
+        success = try container.decode(Bool.self, forKey: .success)
+        message = try container.decodeIfPresent(String.self, forKey: .message)
+        data = try container.decode([SearchCard].self, forKey: .data)
+        meta = try container.decodeIfPresent(PaginationMeta.self, forKey: .meta)
     }
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(success, forKey: .success)
-        try container.encode(message, forKey: .message)
+        try container.encodeIfPresent(message, forKey: .message)
         try container.encode(data, forKey: .data)
+        try container.encodeIfPresent(meta, forKey: .meta)
     }
 }
 
@@ -216,7 +183,7 @@ class SearchManager: ObservableObject {
 
     // 搜索卡片
     func searchCards(query: String, page: Int = 1, completion: @escaping (Result<[SearchCard], NetworkError>) -> Void) {
-        guard let userId = authManager.currentUser?.id else {
+        guard authManager.currentUser != nil else {
             print("用户未登录")
             completion(.failure(.unauthorized))
             return
@@ -232,7 +199,6 @@ class SearchManager: ObservableObject {
 
         networkManager.searchCards(
             query: query,
-            userId: userId,
             page: page,
             perPage: perPage
         ) { [weak self] result in

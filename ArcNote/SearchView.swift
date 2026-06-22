@@ -8,7 +8,7 @@ struct SearchView: View {
     @State private var selectedTime = "All"
     @ObservedObject private var searchManager = SearchManager.shared
     @StateObject private var searchCardsManager = HomeCardsManager()
-    @State private var selectedCardId: Int?
+    @State private var selectedCardId: String?
     @State private var navigateToDetail = false
     @State private var navigateToEdit = false
     @State private var showPopupMenu = false
@@ -178,10 +178,10 @@ struct SearchView: View {
             }
         }
         .navigationDestination(isPresented: $navigateToEdit) {
-            NewNoteView(cardId: selectedCardId ?? 0)
+            NewNoteView(cardId: selectedCardId ?? "")
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NavigateToEdit"))) { notification in
-            if let cardId = notification.userInfo?["cardId"] as? Int {
+            if let cardId = notification.userInfo?["cardId"] as? String {
                 selectedCardId = cardId
                 DispatchQueue.main.async {
                     navigateToEdit = true
@@ -370,7 +370,7 @@ struct SearchView: View {
         showResultsIfNeeded(animated: true)
     }
     
-    private func handleCardTap(_ cardId: Int) {
+    private func handleCardTap(_ cardId: String) {
         selectedCardId = cardId
         navigateToDetail = true
     }
@@ -449,7 +449,7 @@ struct SearchView: View {
         return isoFormatter.date(from: dateString)
     }
     
-    private func isOwnedByCurrentUser(authorId: Int) -> Bool {
+    private func isOwnedByCurrentUser(authorId: String) -> Bool {
         guard let currentUserId = AuthManager.shared.currentUser?.id else {
             return false
         }

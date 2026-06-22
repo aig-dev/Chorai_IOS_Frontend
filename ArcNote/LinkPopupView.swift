@@ -4,15 +4,15 @@ import UIKit
 
 // MARK: - Link数据模型
 struct LinkItem: Identifiable {
-    let id: Int
+    let id: String
     let avatar: String
     let title: String
     let description: String
     let username: String
-    let authorId: Int?
+    let authorId: String?
     let labels: [String]
     
-    init(id: Int, avatar: String, title: String, description: String, username: String, authorId: Int? = nil, labels: [String] = []) {
+    init(id: String, avatar: String, title: String, description: String, username: String, authorId: String? = nil, labels: [String] = []) {
         self.id = id
         self.avatar = avatar
         self.title = title
@@ -37,7 +37,7 @@ class LinkPopupManager: ObservableObject {
     var onCardSelected: ((LinkItem) -> Void)?
     
     private var cancellables = Set<AnyCancellable>()
-    private var currentCardId: Int? = nil
+    private var currentCardId: String? = nil
     private var searchType: String = "own+favorite" // 默认搜索类型
     private var isInitiatingCardOwned = true
     
@@ -53,7 +53,7 @@ class LinkPopupManager: ObservableObject {
             .store(in: &cancellables)
     }
     
-    func show(cardId: Int? = nil, isInitiatingCardOwned: Bool = true) {
+    func show(cardId: String? = nil, isInitiatingCardOwned: Bool = true) {
         isShowing = true
         currentCardId = cardId
         self.isInitiatingCardOwned = isInitiatingCardOwned
@@ -74,15 +74,15 @@ class LinkPopupManager: ObservableObject {
     func linkCard(linkItem: LinkItem) {
         if let cardId = currentCardId {
             // 如果有cardId，调用API关联卡片
-            guard let userId = AuthManager.shared.currentUser?.id else {
+            guard let currentActorId = AuthManager.shared.currentUser?.id else {
                 return
             }
             
             isLinking = true
             
             // card_id 必须属于发起用户的卡片
-            let actualCardId: Int
-            let actualLinkedCardId: Int
+            let actualCardId: String
+            let actualLinkedCardId: String
             
             if isInitiatingCardOwned {
                 // 发起卡片属于当前用户
@@ -96,7 +96,7 @@ class LinkPopupManager: ObservableObject {
                 print("开始关联卡片own: cardId=\(actualCardId), linkedCardId=\(actualLinkedCardId)")
             }
             
-            let linkRequest = LinkRequest(userId: userId, linkedCardId: actualLinkedCardId)
+            let linkRequest = LinkRequest(linkedCardId: actualLinkedCardId)
             
             NetworkManager.shared.createCardLink(cardId: actualCardId, reques: linkRequest)
                 .receive(on: DispatchQueue.main)
@@ -127,7 +127,7 @@ class LinkPopupManager: ObservableObject {
                             self.hide()
                             
                             // 判断被链接的卡片是否属于当前用户
-                            let targetCardId: Int
+                            let targetCardId: String
 //                            if self.searchType == "own" {
 //                                // own模式：被链接的卡片是 actualCardId（即 linkItem.id）
                                 targetCardId = actualCardId
@@ -137,7 +137,7 @@ class LinkPopupManager: ObservableObject {
 //                            }
                             
                             // 判断是否为自己的卡片
-                            let isOwnCard = linkItem.authorId == userId
+                            let isOwnCard = linkItem.authorId == currentActorId
                             
                             if isOwnCard {
                                 // 如果是自己的卡片，跳转到编辑页
@@ -172,7 +172,7 @@ class LinkPopupManager: ObservableObject {
     
     // 搜索卡片
     private func searchCards(keyword: String) {
-        guard let userId = AuthManager.shared.currentUser?.id else {
+        guard AuthManager.shared.currentUser != nil else {
             print("用户未登录")
             return
         }
@@ -183,7 +183,6 @@ class LinkPopupManager: ObservableObject {
         let searchValue = keyword.isEmpty ? "" : keyword
         
         NetworkManager.shared.getUserAllCards(
-            userId: userId,
             searchType: searchType,
             search: searchValue,
             limit: 50,
@@ -214,8 +213,8 @@ class LinkPopupManager: ObservableObject {
                             title: card.title ?? "",
                             description: card.content,
                             username: card.author?.username ?? "Unknown", // 使用author的username字段
-                            authorId: card.author?.id, // 传入作者ID
-                            labels: self?.parseLabels(card.labels) ?? [] // 解析labels字符串为数组
+                            authorId: card.author?.id,
+                            labels: card.tags
                         )
                     }
                 } else {
@@ -231,25 +230,6 @@ class LinkPopupManager: ObservableObject {
         return linkItems
     }
     
-    // MARK: 解析labels字符串为数组
-    private func parseLabels(_ labelsString: String) -> [String] {
-        // 如果labels为空或只包含空白字符，返回空数组
-        let trimmed = labelsString.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty {
-            return []
-        }
-        
-        // 尝试解析JSON数组格式
-        if let data = trimmed.data(using: .utf8),
-           let jsonArray = try? JSONSerialization.jsonObject(with: data) as? [String] {
-            return jsonArray
-        }
-        
-        // 如果不是JSON格式，尝试按逗号分割
-        return trimmed.components(separatedBy: ",")
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-    }
 }
 
 // MARK: - Link弹窗视图

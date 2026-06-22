@@ -1,7 +1,7 @@
 import Foundation
 
 struct NoteCard: Identifiable, Equatable {
-    let id: Int
+    let id: String
     let title: String
     let description: String
     let isPublic: Bool

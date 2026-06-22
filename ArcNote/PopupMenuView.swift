@@ -475,6 +475,9 @@ struct MenuButton: View {
                 print("\(text) button tapped")
             }
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(text)
+        .accessibilityIdentifier("popup-menu.item.\(text.lowercased().replacingOccurrences(of: " ", with: "-"))")
     }
 }
 

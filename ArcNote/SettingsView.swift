@@ -198,14 +198,14 @@ struct SettingsView: View {
                         
                         // 设置选项列表
                         VStack(spacing: 0) {
-                            SettingsRow(imageName: "personal", title: "Personal Data") {
+                            SettingsRow(imageName: "personal", title: "Personal Data", accessibilityIdentifier: "settings.personal-data") {
                                 navigateToEditProfile = true
                             }
                             
                             Divider()
                                 .background(Color.white.opacity(0.2))
                             
-                            SettingsRow(imageName: "account", title: "Account & Password") {
+                            SettingsRow(imageName: "account", title: "Account & Password", accessibilityIdentifier: "settings.account-password") {
                                 // 跳转到账户密码页面
                                 navigateToAccountDetails = true
                             }
@@ -276,6 +276,13 @@ struct SettingsView: View {
             }
         }
         .navigationBarHidden(true)
+        .overlay(alignment: .topLeading) {
+            Text("Settings loaded")
+                .font(.system(size: 1))
+                .foregroundColor(.white.opacity(0.01))
+                .frame(width: 1, height: 1)
+                .accessibilityIdentifier("screen.settings.loaded")
+        }
         .alert("Log Out", isPresented: $showLogoutAlert) {
             Button("Cancel", role: .cancel) { }
             Button("Log Out", role: .destructive) {
@@ -329,12 +336,14 @@ struct SettingsRow: View {
     let imageName: String
     let title: String
     let subtitle: String?
+    let accessibilityIdentifier: String?
     let action: () -> Void
     
-    init(imageName: String, title: String, subtitle: String? = nil, action: @escaping () -> Void) {
+    init(imageName: String, title: String, subtitle: String? = nil, accessibilityIdentifier: String? = nil, action: @escaping () -> Void) {
         self.imageName = imageName
         self.title = title
         self.subtitle = subtitle
+        self.accessibilityIdentifier = accessibilityIdentifier
         self.action = action
     }
     
@@ -366,6 +375,7 @@ struct SettingsRow: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 16)
         }
+        .accessibilityIdentifier(accessibilityIdentifier ?? "settings.row.\(title)")
     }
 }
 

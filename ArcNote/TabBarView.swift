@@ -11,14 +11,117 @@ struct TabBarView: View {
     @State private var currentMenuCardData: UserCard? = nil
     @State private var navigationPath = NavigationPath()
     @State private var navigateToEdit = false
-    @State private var selectedEditCardId: Int? = nil
+    @State private var selectedEditCardId: String? = nil
     @State private var navigateToMerge = false
-    @State private var selectedMergeCardId: Int? = nil
+    @State private var selectedMergeCardId: String? = nil
     @State private var navigateToReport = false
 
+    #if DEBUG
+    @State private var exploreSearchSmokeInvoked = false
+    @State private var exploreSearchSmokeInFlight = false
+    @State private var exploreSearchSmokeCompleted = false
+    @State private var exploreDetailSmokeInvoked = false
+    @State private var exploreDetailSmokeInFlight = false
+    @State private var selectedDetailSmokeCardId: String? = nil
+    @State private var navigateToDetailSmoke = false
+    @State private var detailSmokeCancellable: AnyCancellable?
+    @State private var exploreDetailSmokeAutoStarted = false
+    @State private var visibleExploreCardId: String? = nil
+    #endif
+
     private enum TabRoute: Hashable {
-        case spark(Int)
+        case spark(String)
     }
+
+    #if DEBUG
+    private var activeScreenAutomationAnchor: some View {
+        let identifier: String
+        let label: String
+
+        switch selectedTab {
+        case 1:
+            identifier = "screen.home.content"
+            label = "Home screen"
+        case 2:
+            identifier = "screen.chat.content"
+            label = "Chat screen"
+        default:
+            identifier = "screen.explore.content"
+            label = "Explore screen"
+        }
+
+        return Text(label)
+            .font(.system(size: 1))
+            .foregroundColor(.white.opacity(0.01))
+            .frame(width: 1, height: 1)
+            .accessibilityIdentifier(identifier)
+    }
+
+    private func submitExploreSearchSmoke() {
+        print("Explore search smoke invoked")
+        exploreSearchSmokeInvoked = true
+        exploreSearchSmokeCompleted = false
+        exploreSearchSmokeInFlight = true
+
+        SearchManager.shared.searchCards(query: "go api ui smoke unlikely result") { _ in
+            DispatchQueue.main.async {
+                print("Explore search smoke completed")
+                exploreSearchSmokeInFlight = false
+                exploreSearchSmokeCompleted = true
+            }
+        }
+    }
+
+    private func openExploreRecommendedDetailSmoke() {
+        print("Explore detail smoke invoked")
+        exploreDetailSmokeInvoked = true
+        exploreDetailSmokeInFlight = true
+        selectedDetailSmokeCardId = nil
+        navigateToDetailSmoke = false
+
+        if let requestedCardId = ProcessInfo.processInfo.environment["CHORAI_UI_TEST_DETAIL_CARD_ID"],
+           !requestedCardId.isEmpty {
+            exploreDetailSmokeInFlight = false
+            selectedDetailSmokeCardId = requestedCardId
+            navigateToDetailSmoke = true
+            return
+        }
+
+        detailSmokeCancellable = NetworkManager.shared
+            .getRecommendedCards(limit: 1)
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { completion in
+                    exploreDetailSmokeInFlight = false
+                    if case .failure(let error) = completion {
+                        print("Explore detail smoke failed: \(error.localizedDescription)")
+                    }
+                },
+                receiveValue: { response in
+                    guard let card = response.data.first else {
+                        print("Explore detail smoke has no recommended card")
+                        return
+                    }
+
+                    selectedDetailSmokeCardId = card.id
+                    navigateToDetailSmoke = true
+                }
+            )
+    }
+
+    private func startExploreDetailSmokeIfRequested() {
+        guard !exploreDetailSmokeAutoStarted,
+              ProcessInfo.processInfo.arguments.contains("--ui-test-open-recommended-detail") else {
+            return
+        }
+
+        exploreDetailSmokeAutoStarted = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            selectedTab = 0
+            openExploreRecommendedDetailSmoke()
+        }
+    }
+    #endif
 
     // MARK: - My Notes 点击处理
     private func onMyNotesTapped() {
@@ -84,12 +187,12 @@ struct TabBarView: View {
             // 主要内容区域 - 全屏显示
             TabView(selection: $selectedTab) {
                 // Explore 页面
-                ExploreView(
-                    showPopupMenu: $showPopupMenu,
-                    selectedFilter: $selectedFilter,
-                    showFilterTags: $showFilterTags,
-                    showSideMenu: $showSideMenu
-                )
+	            ExploreView(
+	                showPopupMenu: $showPopupMenu,
+	                selectedFilter: $selectedFilter,
+	                showFilterTags: $showFilterTags,
+	                showSideMenu: $showSideMenu
+	            )
                 .tag(0)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .ignoresSafeArea(.all)
@@ -144,12 +247,95 @@ struct TabBarView: View {
             .onAppear {
                 // 禁用 TabView 的侧滑手势
                 UIScrollView.appearance().isScrollEnabled = false
+                #if DEBUG
+                startExploreDetailSmokeIfRequested()
+                #endif
             }
             .onChange(of: selectedTab) { newTab in
                 // 切换 tab 时关闭所有 popup
                 closeAllPopups()
             }
-            
+
+            #if DEBUG
+            activeScreenAutomationAnchor
+            if selectedTab == 0 {
+                VStack(alignment: .leading, spacing: 4) {
+                    Button(action: {
+                        submitExploreSearchSmoke()
+                    }) {
+                        Color.white.opacity(0.01)
+                            .frame(width: 44, height: 44)
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("Explore search smoke")
+                    .accessibilityIdentifier("explore.search")
+
+                    Button(action: {
+                        openExploreRecommendedDetailSmoke()
+                    }) {
+                        Color.white.opacity(0.01)
+                            .frame(width: 44, height: 44)
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("Explore detail smoke")
+                    .accessibilityIdentifier("explore.card-detail")
+
+                    if exploreSearchSmokeInvoked {
+                        Text("Explore search invoked")
+                            .font(.system(size: 1))
+                            .foregroundColor(.white.opacity(0.01))
+                            .frame(width: 1, height: 1)
+                            .accessibilityIdentifier("explore.search.invoked")
+                    }
+
+                    if exploreSearchSmokeInFlight {
+                        Text("Explore search loading")
+                            .font(.system(size: 1))
+                            .foregroundColor(.white.opacity(0.01))
+                            .frame(width: 1, height: 1)
+                            .accessibilityIdentifier("explore.search.loading")
+                    }
+
+                    if exploreSearchSmokeCompleted {
+                        Text("Explore search completed")
+                            .font(.system(size: 1))
+                            .foregroundColor(.white.opacity(0.01))
+                            .frame(width: 1, height: 1)
+                            .accessibilityIdentifier("explore.search.completed")
+                    }
+
+                    if exploreDetailSmokeInvoked {
+                        Text("Explore detail invoked")
+                            .font(.system(size: 1))
+                            .foregroundColor(.white.opacity(0.01))
+                            .frame(width: 1, height: 1)
+                            .accessibilityIdentifier("explore.card-detail.invoked")
+                    }
+
+                    if exploreDetailSmokeInFlight {
+                        Text("Explore detail loading")
+                            .font(.system(size: 1))
+                            .foregroundColor(.white.opacity(0.01))
+                            .frame(width: 1, height: 1)
+                            .accessibilityIdentifier("explore.card-detail.loading")
+                    }
+
+                    if let visibleExploreCardId {
+                        Text(visibleExploreCardId)
+                            .font(.system(size: 1))
+                            .foregroundColor(.white.opacity(0.01))
+                            .frame(width: 1, height: 1)
+                            .accessibilityIdentifier("explore.visible-card.id")
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .padding(.top, 90)
+                .padding(.leading, 8)
+            }
+            #endif
+
             // 底部 TabBar - 浮在内容之上
             VStack {
                 Spacer()
@@ -175,6 +361,7 @@ struct TabBarView: View {
                         }
                     }
                     .frame(maxWidth: .infinity)
+                    .accessibilityIdentifier("tab.explore")
                     
                     // Home Tab
                     Button(action: {
@@ -196,6 +383,7 @@ struct TabBarView: View {
                         }
                     }
                     .frame(maxWidth: .infinity)
+                    .accessibilityIdentifier("tab.home")
                     
                     // Chat Tab
                     Button(action: {
@@ -217,6 +405,7 @@ struct TabBarView: View {
                         }
                     }
                     .frame(maxWidth: .infinity)
+                    .accessibilityIdentifier("tab.chat")
                 }
                 .padding(.horizontal, 20)
                 .padding(.vertical, 16)
@@ -254,14 +443,23 @@ struct TabBarView: View {
         .navigationBarHidden(true)
         .navigationBarBackButtonHidden(true)
         .navigationDestination(isPresented: $navigateToEdit) {
-            NewNoteView(cardId: selectedEditCardId ?? 0)
+            NewNoteView(cardId: selectedEditCardId ?? "")
         }
         .navigationDestination(isPresented: $navigateToMerge) {
-            MergeView(cardId: selectedMergeCardId ?? 0)
+            MergeView(cardId: selectedMergeCardId ?? "")
         }
         .navigationDestination(isPresented: $navigateToReport) {
             WebViewPage(url: URL(string: "https://www.chorai.app/report")!, title: "Help & Report")
         }
+        #if DEBUG
+        .navigationDestination(isPresented: $navigateToDetailSmoke) {
+            if let cardId = selectedDetailSmokeCardId {
+                DetailView(cardId: cardId)
+            } else {
+                EmptyView()
+            }
+        }
+        #endif
         .navigationDestination(for: TabRoute.self) { route in
             switch route {
             case .spark(let cardId):
@@ -269,7 +467,7 @@ struct TabBarView: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NavigateToEdit"))) { notification in
-            if let cardId = notification.userInfo?["cardId"] as? Int {
+            if let cardId = notification.userInfo?["cardId"] as? String {
                 selectedEditCardId = cardId
                 DispatchQueue.main.async {
                     navigateToEdit = true
@@ -277,14 +475,14 @@ struct TabBarView: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NavigateToSpark"))) { notification in
-            if let cardId = notification.userInfo?["cardId"] as? Int {
+            if let cardId = notification.userInfo?["cardId"] as? String {
                 DispatchQueue.main.async {
                     navigationPath.append(TabRoute.spark(cardId))
                 }
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NavigateToMerge"))) { notification in
-            if let cardId = notification.userInfo?["cardId"] as? Int {
+            if let cardId = notification.userInfo?["cardId"] as? String {
                 selectedMergeCardId = cardId
                 DispatchQueue.main.async {
                     navigateToMerge = false
@@ -292,6 +490,11 @@ struct TabBarView: View {
                 }
             }
         }
+        #if DEBUG
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ExploreVisibleRecommendedCardChanged"))) { notification in
+            visibleExploreCardId = notification.userInfo?["cardId"] as? String
+        }
+        #endif
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NavigateToReport"))) { _ in
             DispatchQueue.main.async {
                 navigateToReport = false
@@ -329,8 +532,8 @@ struct PostCard: View {
     @State private var isMenuButtonPressed = false
     var onShowMenu: (Card) -> Void
     var onSwipe: (CGFloat, Bool) -> Void
-    var onAvatarTap: ((Int) -> Void)? = nil
-    var onCardTap: ((Int) -> Void)? = nil
+    var onAvatarTap: ((String) -> Void)? = nil
+    var onCardTap: ((String) -> Void)? = nil
     
     private var cardBackground: some View {
         RoundedRectangle(cornerRadius: 16)
@@ -424,9 +627,7 @@ struct PostCard: View {
                 }) {
                     Group {
                         if let avatarUrl = card.author?.avatar, !avatarUrl.isEmpty {
-                            let fullAvatarUrl = avatarUrl.hasPrefix("http://") || avatarUrl.hasPrefix("https://") 
-                                ? avatarUrl 
-                                : "https://production.chorai.top/\(avatarUrl.hasPrefix("/") ? String(avatarUrl.dropFirst()) : avatarUrl)"
+                            let fullAvatarUrl = APIConfiguration.resourceURLString(avatarUrl)
                             
                             AsyncImage(url: URL(string: fullAvatarUrl)) { image in
                                 image
@@ -518,6 +719,10 @@ struct PostCard: View {
                                 .foregroundColor(.white.opacity(0.8))
                         }
                     }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("Favorite")
+                    .accessibilityValue(cardsManager.getFavoriteState(for: card.id) ? "true" : "false")
+                    .accessibilityIdentifier("card.favorite.\(card.id)")
                     
                     Spacer()
                     
@@ -536,6 +741,10 @@ struct PostCard: View {
                                     .foregroundColor(.white.opacity(0.8))
                             }
                         }
+                        .accessibilityElement(children: .combine)
+                        .accessibilityLabel("Like")
+                        .accessibilityValue(cardsManager.getLikeState(for: card.id) ? "true" : "false")
+                        .accessibilityIdentifier("card.like.\(card.id)")
                         
                         CommentButton(cardId: card.id, cardsManager: cardsManager)
                     }
@@ -589,6 +798,13 @@ struct PostCard: View {
         )
         .onAppear {
             // 点赞状态现在由 RecommendedCardsManager 管理
+            #if DEBUG
+            NotificationCenter.default.post(
+                name: NSNotification.Name("ExploreVisibleRecommendedCardChanged"),
+                object: nil,
+                userInfo: ["cardId": card.id]
+            )
+            #endif
         }
     }
     
@@ -599,20 +815,20 @@ struct PostCard: View {
         isLoadingAuthor = true
         print("获取卡片详情: cardId=\(card.id)")
         
-        guard let userId = AuthManager.shared.currentUser?.id else {
+        guard AuthManager.shared.currentUser != nil else {
             print("用户未登录")
             isLoadingAuthor = false
             return
         }
         
-        NetworkManager.shared.getCardDetail(cardId: card.id, userId: userId) { result in
+        NetworkManager.shared.getCardDetail(cardId: card.id) { result in
             DispatchQueue.main.async {
                 self.isLoadingAuthor = false
                 switch result {
                 case .success(let response):
                     if let author = response.data.author {
-                        print("成功: userId=\(author.userId)")
-                        self.onAvatarTap?(author.userId)
+                        print("成功: actorId=\(author.actorId)")
+                        self.onAvatarTap?(author.actorId)
                     } else {
                     }
                 case .failure(let error):

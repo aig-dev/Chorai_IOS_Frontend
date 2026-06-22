@@ -3,13 +3,27 @@ import Combine
 
 // MARK: 对话伙伴模型
 struct ChatPartner: Codable {
-    let id: Int
-    let username: String
+    let id: String
+    let username: String?
     let avatarUrl: String?
     
     enum CodingKeys: String, CodingKey {
-        case id, username
+        case id = "actor_id"
+        case username
         case avatarUrl = "avatar_url"
+    }
+
+    init(id: String, username: String?, avatarUrl: String?) {
+        self.id = id
+        self.username = username
+        self.avatarUrl = avatarUrl
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        username = try container.decodeIfPresent(String.self, forKey: .username)
+        avatarUrl = try container.decodeIfPresent(String.self, forKey: .avatarUrl)
     }
 }
 
@@ -17,25 +31,26 @@ struct ChatPartner: Codable {
 struct LastMessage: Codable {
     let content: String
     let createdAt: String
-    let senderId: Int
+    let senderId: String
     
     enum CodingKeys: String, CodingKey {
         case content
         case createdAt = "created_at"
-        case senderId = "sender_id"
+        case senderId = "sender_actor_id"
     }
 }
 
 // MARK: 对话模型
 struct Conversation: Codable, Identifiable {
-    let id: Int
+    let id: String
     let partner: ChatPartner
     let lastMessage: LastMessage?
     let unreadCount: Int
     let createdAt: String
     
     enum CodingKeys: String, CodingKey {
-        case id, partner
+        case id = "conversation_id"
+        case partner = "participant"
         case lastMessage = "last_message"
         case unreadCount = "unread_count"
         case createdAt = "created_at"
@@ -62,101 +77,141 @@ struct ChatPagination: Codable {
 // MARK: 对话列表响应模型
 struct ConversationsResponse: Codable {
     let success: Bool
-    let conversations: [Conversation]
+    let data: ConversationsData
+
+    var conversations: [Conversation] { data.items }
+    var pagination: ChatPagination { data.pagination }
+}
+
+struct ConversationsData: Codable {
+    let items: [Conversation]
     let pagination: ChatPagination
 }
 
 // MARK: 聊天详情响应模型
 struct ChatDetailResponse: Codable {
     let success: Bool
-    let conversation: ChatDetailConversation
+    let data: ChatDetailConversation
+
+    var conversation: ChatDetailConversation { data }
 }
 
 struct ChatDetailConversation: Codable {
-    let id: Int
+    let id: String
     let partner: ChatPartner
     let createdAt: String
     let lastMessageTime: String?
     
     enum CodingKeys: String, CodingKey {
-        case id, partner
+        case id = "conversation_id"
+        case partner = "participant"
         case createdAt = "created_at"
-        case lastMessageTime = "last_message_time"
+        case lastMessageTime = "last_message_at"
     }
 }
 
 // MARK: 消息列表响应模型
 struct MessagesListResponse: Codable {
     let success: Bool
-    let messages: [APIChatMessage]
+    let data: MessagesListData
+
+    var messages: [APIChatMessage] { data.items }
+    var pagination: ChatPagination { data.pagination }
+}
+
+struct MessagesListData: Codable {
+    let items: [APIChatMessage]
     let pagination: ChatPagination
 }
 
 // MARK: 发送消息请求模型
 struct SendMessageRequest: Codable {
     let content: String
-    let attachedCardId: Int?
+    let attachedCardId: String?
     
     enum CodingKeys: String, CodingKey {
         case content
-        case attachedCardId = "attached_card_id"
+        case attachedCardId = "referenced_asset_id"
+        case messageType = "message_type"
     }
     
-    init(content: String, attachedCardId: Int? = nil) {
+    init(content: String, attachedCardId: String? = nil) {
         self.content = content
         self.attachedCardId = attachedCardId
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        content = try container.decode(String.self, forKey: .content)
+        attachedCardId = try container.decodeIfPresent(String.self, forKey: .attachedCardId)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(content, forKey: .content)
+        try container.encode("text", forKey: .messageType)
+        if let attachedCardId {
+            try container.encode(attachedCardId, forKey: .attachedCardId)
+        }
     }
 }
 
 // MARK: 发送消息响应模型
 struct SendMessageResponse: Codable {
     let success: Bool
+    let data: SendMessageData
+
+    var message: APIChatMessage { data.message }
+}
+
+struct SendMessageData: Codable {
     let message: APIChatMessage
 }
 
 // MARK: 聊天消息模型
 struct APIChatMessage: Codable, Identifiable {
-    let id: Int
+    let id: String
     let content: String
-    let senderId: Int
-    let receiverId: Int
+    let senderId: String
+    let receiverId: String
     let createdAt: String
-    let isRead: Int
     let messageType: String
+    var referencedAssetId: String?
     var isFromCurrentUser: Bool
     var attachedCards: [NoteCard]
     
     enum CodingKeys: String, CodingKey {
-        case id, content
-        case senderId = "sender_id"
-        case receiverId = "receiver_id"
+        case id = "message_id"
+        case content
+        case senderId = "sender_actor_id"
+        case receiverId = "receiver_actor_id"
         case createdAt = "created_at"
-        case isRead = "is_read"
         case messageType = "message_type"
+        case referencedAssetId = "referenced_asset_id"
     }
     
     // 普通初始化方法
-    init(id: Int, content: String, senderId: Int, receiverId: Int, createdAt: String, isRead: Int, messageType: String, isFromCurrentUser: Bool, attachedCards: [NoteCard] = []) {
+    init(id: String, content: String, senderId: String, receiverId: String, createdAt: String, messageType: String, referencedAssetId: String? = nil, isFromCurrentUser: Bool, attachedCards: [NoteCard] = []) {
         self.id = id
         self.content = content
         self.senderId = senderId
         self.receiverId = receiverId
         self.createdAt = createdAt
-        self.isRead = isRead
         self.messageType = messageType
+        self.referencedAssetId = referencedAssetId
         self.isFromCurrentUser = isFromCurrentUser
         self.attachedCards = attachedCards
     }
     
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        id = try container.decode(Int.self, forKey: .id)
+        id = try container.decode(String.self, forKey: .id)
         content = try container.decode(String.self, forKey: .content)
-        senderId = try container.decode(Int.self, forKey: .senderId)
-        receiverId = try container.decode(Int.self, forKey: .receiverId)
+        senderId = try container.decode(String.self, forKey: .senderId)
+        receiverId = try container.decode(String.self, forKey: .receiverId)
         createdAt = try container.decode(String.self, forKey: .createdAt)
-        isRead = try container.decode(Int.self, forKey: .isRead)
         messageType = try container.decode(String.self, forKey: .messageType)
+        referencedAssetId = try container.decodeIfPresent(String.self, forKey: .referencedAssetId)
         
         // 这里需要根据当前用户ID来判断，暂时设为false，在ChatDetailManager中处理
         isFromCurrentUser = false
@@ -175,11 +230,11 @@ class ChatDetailManager: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     
     // 从AuthManager获取当前用户ID
-    private var currentUserId: Int? {
+    private var currentUserId: String? {
         return AuthManager.shared.currentUser?.id
     }
     
-    func loadConversationDetail(conversationId: Int) {
+    func loadConversationDetail(conversationId: String) {
         isLoading = true
         error = nil
         
@@ -196,7 +251,7 @@ class ChatDetailManager: ObservableObject {
                 },
                 receiveValue: { [weak self] response in
                     self?.conversation = response.conversation
-                    print("获取成功: \(response.conversation.partner.username)")
+                    print("获取成功: \(response.conversation.partner.username ?? response.conversation.partner.id)")
                     print("加载列表conversationId: \(response.conversation.id)")
                     
                     // 对话详情加载完成后，加载消息
@@ -205,7 +260,7 @@ class ChatDetailManager: ObservableObject {
             .store(in: &cancellables)
     }
     
-    func loadMessages(conversationId: Int) {
+    func loadMessages(conversationId: String) {
         print("加载conversationId: \(conversationId)")
         
         isLoading = true
@@ -241,9 +296,9 @@ class ChatDetailManager: ObservableObject {
         }
     }
     
-    func sendMessage(conversationId: Int, content: String, attachedNotes: [NoteCard]) {
+    func sendMessage(conversationId: String, content: String, attachedNotes: [NoteCard]) {
         let attachedCardId = attachedNotes.first?.id
-        print("发送消息conversationId: \(conversationId), content: \(content), attachedCardId: \(attachedCardId ?? 0)")
+        print("发送消息conversationId: \(conversationId), content: \(content), attachedCardId: \(attachedCardId ?? "")")
         
         let request = SendMessageRequest(content: content, attachedCardId: attachedCardId)
         
@@ -259,6 +314,7 @@ class ChatDetailManager: ObservableObject {
                 receiveValue: { [weak self] response in
                     // 将新消息添加到消息列表
                     var message = response.message
+                    message.referencedAssetId = message.referencedAssetId ?? attachedCardId
                     message.attachedCards = attachedNotes
                     self?.messages.append(message)
                     print("发送消息成功: \(response.message.content)")
@@ -360,39 +416,42 @@ class ChatManager: ObservableObject {
 
 // MARK: 发起会话相关模型
 struct CreateConversationRequest: Codable {
-    let participantId: Int
+    let participantId: String
     
     enum CodingKeys: String, CodingKey {
-        case participantId = "participant_id"
+        case participantId = "participant_actor_id"
     }
 }
 
 struct CreateConversationParticipant: Codable {
-    let id: Int
-    let username: String
+    let id: String
+    let username: String?
     let avatarUrl: String?
     
     enum CodingKeys: String, CodingKey {
-        case id, username
+        case id = "actor_id"
+        case username
         case avatarUrl = "avatar_url"
     }
 }
 
 struct CreateConversationData: Codable {
-    let id: Int
+    let id: String
     let createdAt: String
     let lastMessageTime: String?
     let participant: CreateConversationParticipant
     
     enum CodingKeys: String, CodingKey {
-        case id
+        case id = "conversation_id"
         case createdAt = "created_at"
-        case lastMessageTime = "last_message_time"
+        case lastMessageTime = "last_message_at"
         case participant
     }
 }
 
 struct CreateConversationResponse: Codable {
     let success: Bool
-    let conversation: CreateConversationData
+    let data: CreateConversationData
+
+    var conversation: CreateConversationData { data }
 }

@@ -9,7 +9,7 @@ struct UserProfileView: View {
     
     // 聊天相关状态
     @State private var navigateToChat = false
-    @State private var conversationId: Int? = nil
+    @State private var conversationId: String? = nil
     @State private var isCreatingConversation = false
     @State private var cancellables = Set<AnyCancellable>()
     
@@ -24,14 +24,14 @@ struct UserProfileView: View {
     // 导航状态
     @State private var navigateToDetail = false
     @State private var navigateToEdit = false
-    @State private var selectedCardId: Int? = nil
+    @State private var selectedCardId: String? = nil
     @State private var navigateToReport = false
     @State private var showActionSheet = false
     
-    let userId: Int
-    
-    init(userId: Int) {
-        self.userId = userId
+    let actorId: String
+
+    init(actorId: String) {
+        self.actorId = actorId
     }
     
     var body: some View {
@@ -167,23 +167,6 @@ struct UserProfileView: View {
                                             .font(.system(size: 17, weight: .regular))
                                             .foregroundColor(.white.opacity(0.7))
                                     }
-                                    
-                                    Spacer()
-                                    HStack(spacing: 4) {
-                                        if userProfileManager.isLoading {
-                                            Text("--")
-                                                .font(.system(size: 19, weight: .bold))
-                                                .foregroundColor(.white.opacity(0.7))
-                                        } else {
-                                            Text("\(userProfileManager.userProfile?.credit ?? 0)")
-                                                .font(.system(size: 19, weight: .bold))
-                                                .foregroundColor(.white)
-                                        }
-                                        Text("SYN")
-                                            .font(.system(size: 17, weight: .regular))
-                                            .foregroundColor(.white.opacity(0.7))
-                                    }
-                                    
                                 }
                             }
                             .padding(.horizontal, 20)
@@ -259,9 +242,7 @@ struct UserProfileView: View {
                         HStack {
                             Group {
                                 if let avatarUrl = userProfileManager.userProfile?.avatar, !avatarUrl.isEmpty {
-                                    let fullAvatarUrl = avatarUrl.hasPrefix("http://") || avatarUrl.hasPrefix("https://") 
-                                        ? avatarUrl 
-                                        : "https://production.chorai.top/\(avatarUrl.hasPrefix("/") ? String(avatarUrl.dropFirst()) : avatarUrl)"
+                                    let fullAvatarUrl = APIConfiguration.resourceURLString(avatarUrl)
                                     
                                     AsyncImage(url: URL(string: fullAvatarUrl)) { image in
                                         image
@@ -308,18 +289,18 @@ struct UserProfileView: View {
         )
         .onAppear {
             // 加载用户详情数据
-            print("开始加载用户详情: userId=\(userId)")
-            userProfileManager.fetchUserProfile(userId: userId)
-            
+            print("开始加载用户详情: actorId=\(actorId)")
+            userProfileManager.fetchUserProfile(actorId: actorId)
+
             // 加载用户卡片数据
-            print("开始加载用户卡片: userId=\(userId)")
-            cardsManager.loadUserCards(userId: userId, refresh: true)
+            print("开始加载用户公开卡片: actorId=\(actorId)")
+            cardsManager.loadPublicProfileCards(actorId: actorId, refresh: true)
             
             // 检查关注状态
             checkFollowStatus()
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NavigateToDetail"))) { notification in
-            if let cardId = notification.userInfo?["cardId"] as? Int {
+            if let cardId = notification.userInfo?["cardId"] as? String {
                 selectedCardId = cardId
                 DispatchQueue.main.async {
                     navigateToDetail = true
@@ -327,7 +308,7 @@ struct UserProfileView: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NavigateToEdit"))) { notification in
-            if let cardId = notification.userInfo?["cardId"] as? Int {
+            if let cardId = notification.userInfo?["cardId"] as? String {
                 print("到编辑页通知: cardId=\(cardId)")
                 selectedCardId = cardId
                 DispatchQueue.main.async {
@@ -346,7 +327,7 @@ struct UserProfileView: View {
         }
         .navigationDestination(isPresented: $navigateToChat) {
             ChatDetailView(
-                conversationId: conversationId ?? 0,
+                conversationId: conversationId ?? "",
                 contactName: userProfileManager.userProfile?.username ?? "User",
                 contactStatus: "Online",
                 contactAvatar: "avatar"
@@ -404,7 +385,7 @@ struct UserProfileView: View {
         guard !isCreatingConversation else { return }
         
         isCreatingConversation = true
-        let request = CreateConversationRequest(participantId: userId)
+        let request = CreateConversationRequest(participantId: actorId)
         
         NetworkManager.shared.createConversation(request: request)
             .receive(on: DispatchQueue.main)
@@ -427,7 +408,7 @@ struct UserProfileView: View {
                         print("发起会话成功: conversationId=\(response.conversation.id)")
                         DispatchQueue.main.async {
                             self.conversationId = response.conversation.id
-                            print("设置 conversationId: \(self.conversationId ?? -1)")
+                            print("设置 conversationId: \(self.conversationId ?? "")")
                             
                             // 延迟一点时间确保状态更新
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
@@ -450,9 +431,9 @@ struct UserProfileView: View {
             return
         }
         
-        print("关注状态: currentUserId=\(currentUserId), targetUserId=\(userId)")
-        
-        NetworkManager.shared.checkFollowStatus(userId: currentUserId, targetUserIds: [userId])
+        print("关注状态: currentActorId=\(currentUserId), targetActorId=\(actorId)")
+
+        NetworkManager.shared.checkFollowStatus(targetActorIds: [actorId])
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { completion in
@@ -462,7 +443,7 @@ struct UserProfileView: View {
                 },
                 receiveValue: { response in
                     if response.success {
-                        let followStatus = response.data[String(userId)] ?? false
+                        let followStatus = response.data[actorId] ?? false
                         self.isFollowing = followStatus
                         print("关注状态: \(followStatus)")
                     } else {
@@ -484,7 +465,7 @@ struct UserProfileView: View {
         
         if isFollowing {
             // 取消关注
-            NetworkManager.shared.unfollowUser(userId: currentUserId, targetUserId: userId)
+            NetworkManager.shared.unfollowUser(targetActorId: actorId)
                 .receive(on: DispatchQueue.main)
                 .sink(
                     receiveCompletion: { completion in
@@ -504,7 +485,7 @@ struct UserProfileView: View {
                 )
                 .store(in: &cancellables)
         } else {
-            NetworkManager.shared.followUser(userId: currentUserId, targetUserId: userId)
+            NetworkManager.shared.followUser(targetActorId: actorId)
                 .receive(on: DispatchQueue.main)
                 .sink(
                     receiveCompletion: { completion in
@@ -516,7 +497,7 @@ struct UserProfileView: View {
                     receiveValue: { response in
                         if response.success {
                             self.isFollowing = true
-                            print("关注成功: \(response.data.targetUser.username)")
+                            print("关注成功: \(response.message)")
                         } else {
                             print("关注失败: 服务器返回失败")
                         }
@@ -534,7 +515,7 @@ struct UserProfileView: View {
         }
         
         
-        NetworkManager.shared.blockUser(userId: currentUserId, blockedId: userId)
+        NetworkManager.shared.blockUser(blockedActorId: actorId)
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { completion in
@@ -558,13 +539,13 @@ struct UserProfileView: View {
 struct UserPostCard: View {
     let card: UserCard
     let onShowMenu: (UserCard) -> Void
-    let onCardTap: ((Int) -> Void)?
+    let onCardTap: ((String) -> Void)?
     let onChatTap: (() -> Void)?
     let username: String
     let avatarUrl: String?
     let disableFavorite: Bool
     
-    init(card: UserCard, onShowMenu: @escaping (UserCard) -> Void, onCardTap: ((Int) -> Void)? = nil, onChatTap: (() -> Void)? = nil, username: String, avatarUrl: String? = nil, disableFavorite: Bool = false) {
+    init(card: UserCard, onShowMenu: @escaping (UserCard) -> Void, onCardTap: ((String) -> Void)? = nil, onChatTap: (() -> Void)? = nil, username: String, avatarUrl: String? = nil, disableFavorite: Bool = false) {
         self.card = card
         self.onShowMenu = onShowMenu
         self.onCardTap = onCardTap
@@ -588,9 +569,7 @@ struct UserPostCard: View {
             HStack {
                 Group {
                     if let avatarUrl = avatarUrl, !avatarUrl.isEmpty {
-                        let fullAvatarUrl = avatarUrl.hasPrefix("http://") || avatarUrl.hasPrefix("https://") 
-                            ? avatarUrl 
-                            : "https://production.chorai.top/\(avatarUrl.hasPrefix("/") ? String(avatarUrl.dropFirst()) : avatarUrl)"
+                        let fullAvatarUrl = APIConfiguration.resourceURLString(avatarUrl)
                         
                         AsyncImage(url: URL(string: fullAvatarUrl)) { image in
                             image
@@ -726,7 +705,7 @@ struct UserPostCard: View {
     
     // MARK: 点赞功能
     private func toggleLike() {
-        guard let userId = AuthManager.shared.currentUser?.id else {
+        guard AuthManager.shared.currentUser != nil else {
             print("用户未登录，无法点赞")
             return
         }
@@ -735,7 +714,7 @@ struct UserPostCard: View {
         
         if isLiked {
             // 取消点赞
-            networkManager.unlikeCard(cardId: card.id, userId: userId)
+            networkManager.unlikeCard(cardId: card.id)
                 .receive(on: DispatchQueue.main)
                 .sink(
                     receiveCompletion: { completion in
@@ -754,7 +733,7 @@ struct UserPostCard: View {
                 .store(in: &cancellables)
         } else {
             // 点赞
-            networkManager.likeCard(cardId: card.id, userId: userId)
+            networkManager.likeCard(cardId: card.id)
                 .receive(on: DispatchQueue.main)
                 .sink(
                     receiveCompletion: { completion in
@@ -776,7 +755,7 @@ struct UserPostCard: View {
     
     // MARK: 收藏功能
     private func toggleFavorite() {
-        guard let userId = AuthManager.shared.currentUser?.id else {
+        guard AuthManager.shared.currentUser != nil else {
             print("用户未登录")
             return
         }
@@ -785,7 +764,7 @@ struct UserPostCard: View {
         
         if isFavorited {
             // 取消收藏
-            networkManager.unfavoriteCard(cardId: card.id, userId: userId)
+            networkManager.unfavoriteCard(cardId: card.id)
                 .receive(on: DispatchQueue.main)
                 .sink(
                     receiveCompletion: { completion in
@@ -804,7 +783,7 @@ struct UserPostCard: View {
                 .store(in: &cancellables)
         } else {
             // 收藏
-            networkManager.favoriteCard(cardId: card.id, userId: userId)
+            networkManager.favoriteCard(cardId: card.id)
                 .receive(on: DispatchQueue.main)
                 .sink(
                     receiveCompletion: { completion in
@@ -1007,5 +986,5 @@ struct UserPostCard: View {
 }
 
 #Preview {
-    UserProfileView(userId: 7)
+    UserProfileView(actorId: "act_preview")
 } 

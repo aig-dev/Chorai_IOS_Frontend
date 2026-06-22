@@ -10,7 +10,7 @@ import Combine
 
 // MARK: 兴趣类别数据模型
 struct InterestCategory: Codable, Identifiable, Equatable {
-    let id: Int
+    let id: String
     let name: String
     let nameEn: String
     let description: String?
@@ -24,30 +24,55 @@ struct InterestCategory: Codable, Identifiable, Equatable {
         case description, icon, color
         case isTrending = "is_trending"
     }
+
+    init(domain: String) {
+        self.id = domain
+        self.name = domain
+        self.nameEn = domain
+        self.description = nil
+        self.icon = nil
+        self.color = nil
+        self.isTrending = false
+    }
 }
 
 // MARK: 兴趣类别响应模型
 struct InterestsResponse: Codable {
     let success: Bool
-    let message: String
+    let message: String?
     let data: [InterestCategory]
+
+    enum CodingKeys: String, CodingKey {
+        case success, message, data
+    }
+
+    enum DataKeys: String, CodingKey {
+        case domains
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        success = try container.decode(Bool.self, forKey: .success)
+        message = try container.decodeIfPresent(String.self, forKey: .message)
+        let dataContainer = try container.nestedContainer(keyedBy: DataKeys.self, forKey: .data)
+        data = try dataContainer.decode([String].self, forKey: .domains).map(InterestCategory.init(domain:))
+    }
 }
 
 // MARK: 保存用户兴趣请求模型
 struct SaveUserInterestsRequest: Codable {
-    let userId: Int
-    let interestIds: [Int]
+    let domains: [String]
     
     enum CodingKeys: String, CodingKey {
-        case userId = "user_id"
-        case interestIds = "interest_ids"
+        case domains
     }
 }
 
 // MARK: 保存用户兴趣响应模型
 struct SaveUserInterestsResponse: Codable {
     let success: Bool
-    let message: String
+    let message: String?
+    let data: InterestDomainsData
 }
 
 // MARK: 兴趣类别管理器
@@ -86,12 +111,12 @@ class InterestsManager: ObservableObject {
     }
     
     // MARK: 保存用户兴趣
-    func saveUserInterests(userId: Int, interestIds: [Int]) {
+    func saveUserInterests(domains: [String]) {
         isSaving = true
         error = nil
         saveSuccess = false
         
-        let request = SaveUserInterestsRequest(userId: userId, interestIds: interestIds)
+        let request = SaveUserInterestsRequest(domains: domains)
         
         networkManager.saveUserInterests(request: request)
             .receive(on: DispatchQueue.main)
@@ -105,7 +130,7 @@ class InterestsManager: ObservableObject {
                 },
                 receiveValue: { [weak self] response in
                     self?.saveSuccess = true
-                    print("保存成功: \(response.message)")
+                    print("保存成功: \(response.message ?? "OK")")
                 }
             )
             .store(in: &cancellables)

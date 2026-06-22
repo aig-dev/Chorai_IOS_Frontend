@@ -35,13 +35,12 @@ class SelectCardPopupManager: ObservableObject {
     }
     
     func fetchCards(searchText: String = "") {
-        guard let userId = AuthManager.shared.currentUser?.id else {
+        guard AuthManager.shared.currentUser != nil else {
             return
         }
         
         isLoading = true
         NetworkManager.shared.getUserAllCards(
-            userId: userId,
             searchType: "own+favorited",
             search: searchText,
             limit: 100
@@ -99,10 +98,10 @@ struct ChatDetailView: View {
     @ObservedObject private var selectCardManager = SelectCardPopupManager.shared
     @StateObject private var chatDetailManager = ChatDetailManager()
     
-    let conversationId: Int
+    let conversationId: String
     
     
-    init(conversationId: Int, contactName: String = "Thompson", contactStatus: String = "5 minutes ago online", contactAvatar: String = "avatar") {
+    init(conversationId: String, contactName: String = "Thompson", contactStatus: String = "5 minutes ago online", contactAvatar: String = "avatar") {
         self.conversationId = conversationId
         self._contactName = State(initialValue: contactName)
         self._contactStatus = State(initialValue: contactStatus)
@@ -293,6 +292,7 @@ struct ChatDetailView: View {
                         .textFieldStyle(PlainTextFieldStyle())
                         .foregroundColor(.white)
                         .padding(.vertical, 12)
+                        .accessibilityIdentifier("chat.message.input")
                         .placeholder(when: messageText.isEmpty) {
                             Text("Type a message...")
                                 .foregroundColor(Color(red: 0.627, green: 0.627, blue: 0.627)) // A0A0A0
@@ -320,6 +320,7 @@ struct ChatDetailView: View {
                             .resizable()
                             .frame(width: 40, height: 40)
                     }
+                    .accessibilityIdentifier("chat.message.send")
                     .disabled(messageText.isEmpty)
                 }
                 .padding(.leading, 16)
@@ -346,6 +347,25 @@ struct ChatDetailView: View {
         .overlay(
             SelectCardPopupView()
         )
+        #if DEBUG
+        .overlay(alignment: .topLeading) {
+            if let conversation = chatDetailManager.conversation {
+                VStack(spacing: 0) {
+                    Text("Chat detail loaded")
+                        .font(.system(size: 1))
+                        .foregroundColor(.white.opacity(0.01))
+                        .frame(width: 1, height: 1)
+                        .accessibilityIdentifier("chat.detail.loaded")
+
+                    Text(conversation.id)
+                        .font(.system(size: 1))
+                        .foregroundColor(.white.opacity(0.01))
+                        .frame(width: 1, height: 1)
+                        .accessibilityIdentifier("chat.detail.conversation-id")
+                }
+            }
+        }
+        #endif
         .onAppear {
             chatDetailManager.loadConversationDetail(conversationId: conversationId)
             // loadMessages会在对话详情加载完成后自动调用
@@ -853,6 +873,6 @@ struct CustomRoundedCorners: Shape {
 }
 
 #Preview {
-    ChatDetailView(conversationId: 1)
-} 
+    ChatDetailView(conversationId: "cnv_preview")
+}
  

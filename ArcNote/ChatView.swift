@@ -113,6 +113,7 @@ struct ChatView: View {
                             TextField("Please enter your search...", text: $searchText)
                                 .foregroundColor(.white)
                                 .textFieldStyle(PlainTextFieldStyle())
+                                .accessibilityIdentifier("chat.search.input")
                                 .placeholder(when: searchText.isEmpty) {
                                     Text("Please enter your search...")
                                         .foregroundColor(.white.opacity(0.5))
@@ -167,6 +168,7 @@ struct ChatView: View {
                                 .aspectRatio(contentMode: .fit)
                                 .frame(width: 24, height: 24)
                         }
+                        .accessibilityIdentifier("chat.search")
                     }
                 }
             }
@@ -212,7 +214,7 @@ struct ChatView: View {
                         ForEach(Array(chatManager.conversations.enumerated()), id: \.element.id) { index, conversation in
                             NavigationLink(destination: ChatDetailView(
                                 conversationId: conversation.id,
-                                contactName: conversation.partner.username,
+                                contactName: conversation.partner.username ?? conversation.partner.id,
                                 contactStatus: "Online",
                                 contactAvatar: conversation.partner.avatarUrl ?? "avatar"
                             )) {
@@ -230,12 +232,13 @@ struct ChatView: View {
                                         .frame(width: 56, height: 56)
                                         .clipShape(Circle())
                                     ),
-                                    title: conversation.partner.username,
+                                    title: conversation.partner.username ?? conversation.partner.id,
                                     subtitle: conversation.lastMessage?.content ?? "No messages yet",
                                     time: formatConversationTime(conversation.lastMessage?.createdAt ?? conversation.createdAt),
                                     unreadCount: conversation.unreadCount
                                 )
                             }
+                            .accessibilityIdentifier("chat.conversation.\(conversation.id)")
                             
                             // 分割线（除了最后一个）
                             if index < chatManager.conversations.count - 1 {
@@ -256,6 +259,7 @@ struct ChatView: View {
             }
             Spacer()
         }
+        .accessibilityIdentifier("screen.chat.content")
         .onAppear {
             chatManager.loadConversations()
         }
@@ -299,12 +303,7 @@ struct ChatView: View {
             return nil
         }
 
-        if rawValue.hasPrefix("http://") || rawValue.hasPrefix("https://") {
-            return URL(string: rawValue)
-        }
-
-        let trimmedPath = rawValue.hasPrefix("/") ? String(rawValue.dropFirst()) : rawValue
-        return URL(string: "https://production.chorai.top/\(trimmedPath)")
+        return URL(string: APIConfiguration.resourceURLString(rawValue))
     }
 }
 

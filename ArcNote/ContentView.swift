@@ -176,6 +176,7 @@ struct ContentView: View {
                                 )
                             )
                     }
+                    .accessibilityIdentifier("welcome.login")
                     
                                             // Sign Up 按钮
                         NavigationLink(destination: SignUpView()) {
@@ -286,13 +287,12 @@ struct ContentView: View {
                 },
                 receiveValue: { authResponse in
                     print("后端Google登录成功")
-                    if let userData = authResponse.data {
-                        print("用户信息: \(userData.username) - \(userData.email), isNewUser: \(userData.isNewUser)")
-                    }
+                    let userData = authResponse.data
+                    print("用户信息: \(userData.user.username) - \(userData.user.email), isNewUser: \(String(describing: userData.isNewUser))")
                     // 先保存用户会话
                     authManager.saveUserSession(authResponse)
                     // 根据 isNewUser 判断跳转到哪个页面
-                    if authResponse.data?.isNewUser == true {
+                    if authResponse.data.isNewUser == true {
                     showChooseInterests = true
                     } else {
                         // 如果不是新用户，直接显示 TabBarView（ContentView 会自动处理）
@@ -315,13 +315,12 @@ struct ContentView: View {
                 },
                 receiveValue: { authResponse in
                     print("后端Apple登录成功")
-                    if let userData = authResponse.data {
-                        print("用户信息: \(userData.username) - \(userData.email), isNewUser: \(userData.isNewUser)")
-                    }
+                    let userData = authResponse.data
+                    print("用户信息: \(userData.user.username) - \(userData.user.email), isNewUser: \(String(describing: userData.isNewUser))")
                     // 先保存用户会话
                     authManager.saveUserSession(authResponse)
                     // 根据 isNewUser 判断跳转到哪个页面
-                    if authResponse.data?.isNewUser == true {
+                    if authResponse.data.isNewUser == true {
                     showChooseInterests = true
                     } else {
                         // 如果不是新用户，直接显示 TabBarView（ContentView 会自动处理）

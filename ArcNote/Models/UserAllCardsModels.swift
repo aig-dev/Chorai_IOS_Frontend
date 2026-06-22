@@ -3,7 +3,7 @@ import Foundation
 // MARK: 用户所有卡片响应模型
 struct UserAllCardsResponse: Codable {
     let success: Bool
-    let message: String
+    let message: String?
     let data: UserAllCardsData
 }
 
@@ -24,17 +24,18 @@ struct UserAllCardsData: Codable {
 }
 
 struct UserAllCard: Codable, Identifiable {
-    let id: Int
+    let id: String
     let title: String?
     let content: String
     let contentHash: String
-    let labels: String
+    let tags: [String]
     let isPublic: Bool
     let createdAt: String
     let updatedAt: String
-    let userId: Int
+    let ownerActorId: String
     let likeCount: Int
     let favoriteCount: Int
+    let commentCount: Int
     let viewCount: Int
     let rate: Int
     let author: UserAllCardAuthor?
@@ -42,25 +43,28 @@ struct UserAllCard: Codable, Identifiable {
     enum CodingKeys: String, CodingKey {
         case id, title, content, rate
         case contentHash = "content_hash"
-        case labels
+        case tags
         case isPublic = "is_public"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
-        case userId = "user_id"
+        case ownerActorId = "owner_actor_id"
         case likeCount = "like_count"
         case favoriteCount = "favorite_count"
+        case commentCount = "comment_count"
         case viewCount = "view_count"
         case author
     }
 }
 
 struct UserAllCardAuthor: Codable {
-    let id: Int
+    let id: String
     let username: String
     let avatar: String?
     
     enum CodingKeys: String, CodingKey {
-        case id, username, avatar
+        case id = "author_id"
+        case username = "author_name"
+        case avatar = "avatar_url"
     }
 }
 

@@ -2,7 +2,7 @@ import SwiftUI
 import Combine
 
 struct DataItem: Identifiable {
-    var id: Int
+    var id: String
     var title: String
     var size: CGFloat
     var color: Color
@@ -342,20 +342,20 @@ struct ChooseInterestsView: View {
     
     // MARK: - 保存选中的兴趣
     private func saveSelectedInterests() {
-        let selectedInterestIds = interests.filter { $0.isMultiSelected }.map { $0.id }
+        let selectedDomains = interests.filter { $0.isMultiSelected }.map { $0.id }
         
-        if selectedInterestIds.isEmpty {
+        if selectedDomains.isEmpty {
             showTabBar = true
             return
         }
         
-        guard let currentUserId = authManager.currentUser?.id else {
+        guard authManager.currentUser != nil else {
             showTabBar = true
             return
         }
         
-        print("保存选中的兴趣: \(selectedInterestIds), 用户ID: \(currentUserId)")
-        interestsManager.saveUserInterests(userId: currentUserId, interestIds: selectedInterestIds)
+        print("保存选中的兴趣: \(selectedDomains)")
+        interestsManager.saveUserInterests(domains: selectedDomains)
     }
     
     // 重置选择
