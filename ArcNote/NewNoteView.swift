@@ -637,11 +637,8 @@ struct NewNoteView: View, MarkupDelegate {
     
     // MARK: 提取标签方法
     private func extractTags(from text: String) {
-        print("extractTags called with text: \(text)")
-        
         // 从HTML内容中提取纯文本，然后查找标签
         let plainText = text.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
-        print("Plain text after HTML removal: \(plainText)")
         
         let pattern = "#([\\w\\u4e00-\\u9fff]+)"
         let regex = try? NSRegularExpression(pattern: pattern, options: [])
@@ -686,7 +683,7 @@ struct NewNoteView: View, MarkupDelegate {
     
     // MARK: 插入格式化文本
     @MainActor private func insertFormattingText(_ text: String) {
-        print("insertFormattingText called with: \(text)")
+        print("insertFormattingText called")
         // 使用MarkupEditor API插入文本
         MarkupEditor.observedWebView.selectedWebView?.insertShape()
 //        MarkupEditor.observedWebView.selectedWebView?.insertText(text)
@@ -1301,7 +1298,6 @@ extension NewNoteView {
         view.getHtml { html in
             DispatchQueue.main.async {
                 if let html = html {
-                    print("Content changed via markupInput: \(html)")
                     self.noteHtml = html
                     self.extractTags(from: html)
                 }

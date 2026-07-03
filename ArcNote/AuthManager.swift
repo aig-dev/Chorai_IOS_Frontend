@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import Security
 
 // MARK: 用户认证管理器
 class AuthManager: ObservableObject {
@@ -19,7 +20,8 @@ class AuthManager: ObservableObject {
     // MARK: 用户会话管理
     func loadUserSession() {
         isLoggedIn = userDefaults.bool(forKey: "is_logged_in")
-        authToken = userDefaults.string(forKey: "auth_token")
+        authToken = SessionTokenStore.load()
+        migrateLegacyAuthTokenIfNeeded()
         
         if isLoggedIn, let actorId = userDefaults.string(forKey: "actor_id") {
             guard
@@ -62,7 +64,8 @@ class AuthManager: ObservableObject {
 
         // 保存到UserDefaults
         userDefaults.set(true, forKey: "is_logged_in")
-        userDefaults.set(userData.token, forKey: "auth_token")
+        SessionTokenStore.save(userData.token)
+        userDefaults.removeObject(forKey: "auth_token")
         userDefaults.set(user.id, forKey: "actor_id")
         userDefaults.set(user.username, forKey: "username")
         userDefaults.set(user.email, forKey: "email")
@@ -84,6 +87,7 @@ class AuthManager: ObservableObject {
         // 清除UserDefaults
         userDefaults.removeObject(forKey: "is_logged_in")
         userDefaults.removeObject(forKey: "auth_token")
+        SessionTokenStore.delete()
         userDefaults.removeObject(forKey: "actor_id")
         userDefaults.removeObject(forKey: "username")
         userDefaults.removeObject(forKey: "email")
@@ -142,6 +146,20 @@ class AuthManager: ObservableObject {
         return networkManager.appleLogin(loginRequest: request)
             .eraseToAnyPublisher()
     }
+
+    private func migrateLegacyAuthTokenIfNeeded() {
+        guard authToken == nil,
+              let legacyToken = userDefaults.string(forKey: "auth_token"),
+              !legacyToken.isEmpty
+        else {
+            userDefaults.removeObject(forKey: "auth_token")
+            return
+        }
+
+        SessionTokenStore.save(legacyToken)
+        authToken = legacyToken
+        userDefaults.removeObject(forKey: "auth_token")
+    }
 }
 
 // MARK: - 用户状态扩展
@@ -160,5 +178,61 @@ extension AuthManager {
     
     var userAvatar: String? {
         return currentUser?.avatar
+    }
+}
+
+// MARK: - Keychain-backed auth token storage
+enum SessionTokenStore {
+    private static let service = Bundle.main.bundleIdentifier ?? "com.michen.arcnote"
+    private static let account = "auth_token"
+
+    static func load() -> String? {
+        var query = baseQuery()
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        guard status == errSecSuccess,
+              let data = result as? Data,
+              let token = String(data: data, encoding: .utf8),
+              !token.isEmpty
+        else {
+            return nil
+        }
+
+        return token
+    }
+
+    static func save(_ token: String) {
+        guard let data = token.data(using: .utf8), !token.isEmpty else {
+            return
+        }
+
+        var query = baseQuery()
+        let attributes: [String: Any] = [
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+        ]
+
+        let updateStatus = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
+        if updateStatus == errSecSuccess {
+            return
+        }
+
+        query.merge(attributes) { _, new in new }
+        SecItemAdd(query as CFDictionary, nil)
+    }
+
+    static func delete() {
+        SecItemDelete(baseQuery() as CFDictionary)
+    }
+
+    private static func baseQuery() -> [String: Any] {
+        [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account
+        ]
     }
 }

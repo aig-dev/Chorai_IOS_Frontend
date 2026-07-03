@@ -60,8 +60,10 @@ class HomeCardsManager: ObservableObject {
                     if let atsConfig = Bundle.main.infoDictionary?["NSAppTransportSecurity"] as? [String: Any] {
                         if let allowsArbitraryLoads = atsConfig["NSAllowsArbitraryLoads"] as? Bool, allowsArbitraryLoads {
                             atsStatus = "ATS 已禁用 (NSAllowsArbitraryLoads = true)"
+                        } else if let allowsLocalNetworking = atsConfig["NSAllowsLocalNetworking"] as? Bool, allowsLocalNetworking {
+                            atsStatus = "ATS 已启用，本地网络例外已允许"
                         } else {
-                            atsStatus = "ATS 未正确配置"
+                            atsStatus = "ATS 已启用"
                         }
                     } else {
                         atsStatus = "未找到 ATS 配置"

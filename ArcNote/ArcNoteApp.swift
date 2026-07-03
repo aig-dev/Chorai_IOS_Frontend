@@ -50,7 +50,8 @@ private enum APIMigrationUITestSeed {
 
         let defaults = UserDefaults.standard
         if let token = environment["CHORAI_UI_TEST_AUTH_TOKEN"], !token.isEmpty {
-            defaults.set(token, forKey: "auth_token")
+            SessionTokenStore.save(token)
+            defaults.removeObject(forKey: "auth_token")
             NetworkManager.shared.setAuthToken(token)
         }
 
@@ -100,10 +101,12 @@ private final class APIMigrationSmokeRunner {
             ?? environment["CHORAI_API_SMOKE_SOCIAL_TARGET"])?.trimmingCharacters(in: .whitespacesAndNewlines)
         defaults.set(false, forKey: "api_migration_smoke_avatar_upload")
 
-        guard let token = defaults.string(forKey: "auth_token"), !token.isEmpty else {
+        let token = SessionTokenStore.load() ?? defaults.string(forKey: "auth_token")
+        guard let token, !token.isEmpty else {
             log("FAIL missing auth_token")
             return 2
         }
+        defaults.removeObject(forKey: "auth_token")
 
         guard let actorId = defaults.string(forKey: "actor_id"), !actorId.isEmpty else {
             log("FAIL missing actor_id")

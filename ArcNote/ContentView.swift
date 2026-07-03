@@ -258,10 +258,6 @@ struct ContentView: View {
             
             print("Google登录成功")
             
-            print("Access Token: \(user.accessToken.tokenString)")
-            print("ID Token: \(user.idToken?.tokenString ?? "")")
-            print("Refresh Token: \(user.refreshToken.tokenString)")
-            
             // 调用后端Google登录接口
             guard let idToken = user.idToken?.tokenString else {
                 print("无法获取ID Token")
@@ -287,8 +283,6 @@ struct ContentView: View {
                 },
                 receiveValue: { authResponse in
                     print("后端Google登录成功")
-                    let userData = authResponse.data
-                    print("用户信息: \(userData.user.username) - \(userData.user.email), isNewUser: \(String(describing: userData.isNewUser))")
                     // 先保存用户会话
                     authManager.saveUserSession(authResponse)
                     // 根据 isNewUser 判断跳转到哪个页面
@@ -315,8 +309,6 @@ struct ContentView: View {
                 },
                 receiveValue: { authResponse in
                     print("后端Apple登录成功")
-                    let userData = authResponse.data
-                    print("用户信息: \(userData.user.username) - \(userData.user.email), isNewUser: \(String(describing: userData.isNewUser))")
                     // 先保存用户会话
                     authManager.saveUserSession(authResponse)
                     // 根据 isNewUser 判断跳转到哪个页面
@@ -355,9 +347,6 @@ struct ContentView: View {
                             print("无法获取Authorization Code")
                             return
                         }
-                        
-                        print("Identity Token: \(identityTokenString)")
-                        print("Authorization Code: \(authorizationCodeString)")
                         
                         // 构建Apple登录请求
                         let appleUserInfo = AppleUserInfo(

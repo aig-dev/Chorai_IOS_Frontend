@@ -79,7 +79,7 @@ class CommentPopupManager: ObservableObject {
             DispatchQueue.main.async {
                 switch result {
                 case .success(let comment):
-                    print("评论发布成功: \(comment.content)")
+                    print("评论发布成功: id=\(comment.id)")
                 case .failure(let error):
                     print("评论发布失败: \(error.localizedDescription)")
                     

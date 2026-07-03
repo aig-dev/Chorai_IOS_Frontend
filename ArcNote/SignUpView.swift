@@ -590,9 +590,6 @@ struct SignUpView: View {
             }
             
             print("Google登录成功")
-            print("用户ID: \(user.userID ?? "无")")
-            print("用户邮箱: \(user.profile?.email ?? "无")")
-            print("用户姓名: \(user.profile?.name ?? "无")")
             
             guard let idToken = user.idToken?.tokenString else {
                 print("无法获取ID Token")
@@ -618,8 +615,6 @@ struct SignUpView: View {
                 },
                 receiveValue: { authResponse in
                     print("后端Google登录成功")
-                    let user = authResponse.data.user
-                    print("用户信息: \(user.username) - \(user.email), isNewUser: \(String(describing: authResponse.data.isNewUser))")
                     // 保存用户会话
                     authManager.saveUserSession(authResponse)
                     // 根据 isNewUser 判断跳转到哪个页面
@@ -646,9 +641,6 @@ struct SignUpView: View {
                     print("Apple授权成功")
                     if let appleIDCredential = authorization.credential as? ASAuthorizationAppleIDCredential {
                         print("Apple登录成功")
-                        print("用户ID: \(appleIDCredential.user)")
-                        print("邮箱: \(appleIDCredential.email ?? "无")")
-                        print("全名: \(appleIDCredential.fullName?.description ?? "无")")
                         
                         guard let identityToken = appleIDCredential.identityToken,
                               let identityTokenString = String(data: identityToken, encoding: .utf8) else {
@@ -704,8 +696,6 @@ struct SignUpView: View {
                 },
                 receiveValue: { authResponse in
                     print("后端Apple登录成功")
-                    let user = authResponse.data.user
-                    print("用户信息: \(user.username) - \(user.email), isNewUser: \(String(describing: authResponse.data.isNewUser))")
                     // 保存用户会话
                     authManager.saveUserSession(authResponse)
                     // 根据 isNewUser 判断跳转到哪个页面

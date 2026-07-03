@@ -298,7 +298,7 @@ class ChatDetailManager: ObservableObject {
     
     func sendMessage(conversationId: String, content: String, attachedNotes: [NoteCard]) {
         let attachedCardId = attachedNotes.first?.id
-        print("发送消息conversationId: \(conversationId), content: \(content), attachedCardId: \(attachedCardId ?? "")")
+        print("发送消息conversationId: \(conversationId), contentLength: \(content.count), attachedCardId: \(attachedCardId ?? "")")
         
         let request = SendMessageRequest(content: content, attachedCardId: attachedCardId)
         
@@ -317,7 +317,7 @@ class ChatDetailManager: ObservableObject {
                     message.referencedAssetId = message.referencedAssetId ?? attachedCardId
                     message.attachedCards = attachedNotes
                     self?.messages.append(message)
-                    print("发送消息成功: \(response.message.content)")
+                    print("发送消息成功: id=\(response.message.id)")
                 }
             )
             .store(in: &cancellables)
@@ -334,7 +334,7 @@ class ChatDetailManager: ObservableObject {
         }
         return sortedMessages.map { apiMessage in
             let isFromMe = apiMessage.senderId == userId
-            print("消息: \(apiMessage.content), senderId: \(apiMessage.senderId), isFromMe: \(isFromMe)")
+            print("消息: id=\(apiMessage.id), senderId: \(apiMessage.senderId), isFromMe: \(isFromMe)")
             return ChatMessage(
                 content: apiMessage.content,
                 isFromMe: isFromMe,
