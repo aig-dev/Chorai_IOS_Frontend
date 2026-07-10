@@ -1,9 +1,14 @@
 import SwiftUI
 import Combine
+import CoreFlow
 import WebKit
 
 struct TabBarView: View {
-    @State private var selectedTab = 0
+    @StateObject private var coordinator = CoreFlowCoordinator()
+    @StateObject private var captureStore = QuickCaptureStore(
+        service: NetworkCoreFlowService(),
+        draftStore: UserDefaultsCaptureDraftStore()
+    )
     @State private var showPopupMenu = false
     @State private var selectedFilter = "All"
     @State private var showFilterTags = false
@@ -38,16 +43,16 @@ struct TabBarView: View {
         let identifier: String
         let label: String
 
-        switch selectedTab {
-        case 1:
+        switch coordinator.selectedTab {
+        case .library:
             identifier = "screen.home.content"
-            label = "Home screen"
-        case 2:
+            label = "Library screen"
+        case .chat:
             identifier = "screen.chat.content"
             label = "Chat screen"
-        default:
-            identifier = "screen.explore.content"
-            label = "Explore screen"
+        case .flow:
+            identifier = "screen.flow.content"
+            label = "Flow screen"
         }
 
         return Text(label)
@@ -117,7 +122,7 @@ struct TabBarView: View {
 
         exploreDetailSmokeAutoStarted = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            selectedTab = 0
+            coordinator.selectedTab = .flow
             openExploreRecommendedDetailSmoke()
         }
     }
@@ -126,7 +131,7 @@ struct TabBarView: View {
     // MARK: - My Notes 点击处理
     private func onMyNotesTapped() {
         // 切换到Home页面 (tag = 1)
-        selectedTab = 1
+        coordinator.selectedTab = .library
         
         // 关闭所有 popup
         closeAllPopups()
@@ -141,7 +146,7 @@ struct TabBarView: View {
     // MARK: - Favorites 点击处理
     private func onFavoritesTapped() {
         // 切换到Home页面 (tag = 1)
-        selectedTab = 1
+        coordinator.selectedTab = .library
         
         // 关闭所有 popup
         closeAllPopups()
@@ -185,7 +190,7 @@ struct TabBarView: View {
 //                    .ignoresSafeArea()
             
             // 主要内容区域 - 全屏显示
-            TabView(selection: $selectedTab) {
+            TabView(selection: $coordinator.selectedTab) {
                 // Explore 页面
 	            ExploreView(
 	                showPopupMenu: $showPopupMenu,
@@ -196,7 +201,7 @@ struct TabBarView: View {
 	                    navigationPath.append(TabRoute.spark(cardId))
 	                }
 	            )
-                .tag(0)
+                .tag(CoreTab.flow)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .ignoresSafeArea(.all)
                 .background(
@@ -209,8 +214,11 @@ struct TabBarView: View {
                 )
                 
                 // Home 页面
-                HomeView(showSideMenu: $showSideMenu)
-                    .tag(1)
+                HomeView(
+                    showSideMenu: $showSideMenu,
+                    refreshID: coordinator.libraryRefreshID
+                )
+                    .tag(CoreTab.library)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .ignoresSafeArea(.all)
                 .background(
@@ -224,7 +232,7 @@ struct TabBarView: View {
                 
                 // Chat 页面
                 ChatView(showSideMenu: $showSideMenu)
-                    .tag(2)
+                    .tag(CoreTab.chat)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .ignoresSafeArea(.all)
                 .background(
@@ -254,14 +262,14 @@ struct TabBarView: View {
                 startExploreDetailSmokeIfRequested()
                 #endif
             }
-            .onChange(of: selectedTab) { newTab in
+            .onChange(of: coordinator.selectedTab) { _ in
                 // 切换 tab 时关闭所有 popup
                 closeAllPopups()
             }
 
             #if DEBUG
             activeScreenAutomationAnchor
-            if selectedTab == 0 {
+            if coordinator.selectedTab == .flow {
                 VStack(alignment: .leading, spacing: 4) {
                     Button(action: {
                         submitExploreSearchSmoke()
@@ -339,91 +347,6 @@ struct TabBarView: View {
             }
             #endif
 
-            // 底部 TabBar - 浮在内容之上
-            VStack {
-                Spacer()
-                
-                HStack(spacing: 0) {
-                    // Explore Tab
-                    Button(action: {
-                        selectedTab = 0
-                        closeAllPopups()
-                    }) {
-                        VStack(spacing: 4) {
-                            Image(selectedTab == 0 ? "tab_explore_active" : "tab_explore")
-                                .resizable()
-                                .aspectRatio(contentMode: .fit)
-                                .frame(width: selectedTab == 0 ? 35 : 26, height: selectedTab == 0 ? 35 : 26)
-                                .scaleEffect(selectedTab == 0 ? 1.1 : 1.0)
-                                .animation(.spring(response: 0.5, dampingFraction: 0.7), value: selectedTab == 0)
-                            
-                            Text("Explore")
-                                .font(.system(size: 12, weight: selectedTab == 0 ? .semibold : .medium))
-                                .foregroundColor(selectedTab == 0 ? .white : .white.opacity(0.7))
-                                .animation(.easeInOut(duration: 0.3), value: selectedTab == 0)
-                        }
-                    }
-                    .frame(maxWidth: .infinity)
-                    .accessibilityIdentifier("tab.explore")
-                    
-                    // Home Tab
-                    Button(action: {
-                        selectedTab = 1
-                        closeAllPopups()
-                    }) {
-                        VStack(spacing: 4) {
-                            Image(selectedTab == 1 ? "tab_home_active" : "tab_home")
-                                .resizable()
-                                .aspectRatio(contentMode: .fit)
-                                .frame(width: selectedTab == 1 ? 35 : 26, height: selectedTab == 1 ? 35 : 26)
-                                .scaleEffect(selectedTab == 1 ? 1.1 : 1.0)
-                                .animation(.spring(response: 0.5, dampingFraction: 0.7), value: selectedTab == 1)
-                            
-                            Text("Home")
-                                .font(.system(size: 12, weight: selectedTab == 1 ? .semibold : .medium))
-                                .foregroundColor(selectedTab == 1 ? .white : .white.opacity(0.7))
-                                .animation(.easeInOut(duration: 0.3), value: selectedTab == 1)
-                        }
-                    }
-                    .frame(maxWidth: .infinity)
-                    .accessibilityIdentifier("tab.home")
-                    
-                    // Chat Tab
-                    Button(action: {
-                        selectedTab = 2
-                        closeAllPopups()
-                    }) {
-                        VStack(spacing: 4) {
-                            Image(selectedTab == 2 ? "tab_chat_active" : "tab_chat")
-                                .resizable()
-                                .aspectRatio(contentMode: .fit)
-                                .frame(width: selectedTab == 2 ? 35 : 26, height: selectedTab == 2 ? 35 : 26)
-                                .scaleEffect(selectedTab == 2 ? 1.1 : 1.0)
-                                .animation(.spring(response: 0.5, dampingFraction: 0.7), value: selectedTab == 2)
-                            
-                            Text("Chat")
-                                .font(.system(size: 12, weight: selectedTab == 2 ? .semibold : .medium))
-                                .foregroundColor(selectedTab == 2 ? .white : .white.opacity(0.7))
-                                .animation(.easeInOut(duration: 0.3), value: selectedTab == 2)
-                        }
-                    }
-                    .frame(maxWidth: .infinity)
-                    .accessibilityIdentifier("tab.chat")
-                }
-                .padding(.horizontal, 20)
-                .padding(.vertical, 16)
-                .background(
-                    Capsule()
-                        .fill(.ultraThinMaterial.opacity(0.9))
-                        .overlay(
-                            Capsule()
-                                .stroke(Color.white.opacity(0.3), lineWidth: 1)
-                        )
-                )
-                .padding(.horizontal, 20)
-                .padding(.bottom, 0)
-            }
-            
             // 全局弹窗 - 最顶层
             // 使用 modifier 方式，不需要额外的 if 语句
             
@@ -440,6 +363,52 @@ struct TabBarView: View {
             
             // 评论弹窗
             CommentPopupView()
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            CoreTabBar(
+                selectedTab: $coordinator.selectedTab,
+                onRecord: coordinator.presentCapture
+            )
+            .padding(.bottom, 6)
+        }
+        .sheet(isPresented: $coordinator.isCapturePresented) {
+            if let actorID = AuthManager.shared.currentUser?.id {
+                QuickCaptureSheet(
+                    store: captureStore,
+                    actorID: actorID,
+                    onCreated: coordinator.captureCompleted,
+                    onDismiss: coordinator.dismissCapture
+                )
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+            }
+        }
+        .overlay(alignment: .top) {
+            ZStack(alignment: .top) {
+                if let acknowledgementID = coordinator.recordAcknowledgementID {
+                    Label("Recorded", systemImage: "checkmark")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 14)
+                        .frame(minHeight: 36)
+                        .background(Capsule().fill(Color.white.opacity(0.12)))
+                        .accessibilityIdentifier("record.acknowledgement")
+                        .task(id: acknowledgementID) {
+                            try? await Task.sleep(nanoseconds: 2_000_000_000)
+                            guard !Task.isCancelled else { return }
+                            coordinator.clearRecordAcknowledgement(cardID: acknowledgementID)
+                        }
+                }
+
+                if let cardID = coordinator.lastCreatedCardID {
+                    Text(cardID)
+                        .font(.system(size: 1))
+                        .foregroundStyle(Color.white.opacity(0.01))
+                        .frame(width: 1, height: 1)
+                        .accessibilityIdentifier("record.created-card-id")
+                }
+            }
+            .padding(.top, 54)
         }
         .popupMenu(isPresented: $showPopupMenu, layout: .grid2x2, cardData: currentMenuCardData)
         .linkPopup()
@@ -514,7 +483,7 @@ struct TabBarView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NavigateToHome"))) { _ in
             navigationPath.removeLast(navigationPath.count)
-            selectedTab = 1
+            coordinator.selectedTab = .library
             // 关闭所有 popup
             closeAllPopups()
         }

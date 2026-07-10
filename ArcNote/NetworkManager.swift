@@ -390,10 +390,13 @@ extension NetworkManager {
 
     func createCard(_ cardRequest: CreateCardRequest) -> AnyPublisher<CardResponse, NetworkError> {
         var parameters: Parameters = [
-            "title": cardRequest.title ?? "",
             "content": cardRequest.content,
             "tags": cardRequest.tags ?? []
         ]
+
+        if let title = cardRequest.title {
+            parameters["title"] = title
+        }
 
         if let isPublic = cardRequest.isPublic {
             parameters["is_public"] = isPublic

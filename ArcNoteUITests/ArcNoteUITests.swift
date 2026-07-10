@@ -11,25 +11,25 @@ final class ArcNoteUITests: XCTestCase {
     func testMainTabsRenderAgainstSeededGoSession() throws {
         launchAuthenticatedApp()
 
-        waitFor("tab.explore")
-        waitFor("tab.home")
+        waitFor("tab.flow")
+        waitFor("tab.library")
         waitFor("tab.chat")
 
-        tap("tab.home")
+        tap("tab.library")
         waitFor("screen.home.content", timeout: 20)
 
         tap("tab.chat")
         waitFor("screen.chat.content", timeout: 20)
 
-        tap("tab.explore")
-        waitFor("screen.explore.content", timeout: 20)
+        tap("tab.flow")
+        waitFor("screen.flow.content", timeout: 20)
     }
 
     func testExploreSearchSubmitsAgainstGoSearchRoute() throws {
         launchAuthenticatedApp()
 
-        waitFor("tab.explore")
-        waitFor("screen.explore.content", timeout: 20)
+        waitFor("tab.flow")
+        waitFor("screen.flow.content", timeout: 20)
 
         tap("explore.search")
         waitFor("explore.search.invoked", timeout: 10)
@@ -48,8 +48,8 @@ final class ArcNoteUITests: XCTestCase {
 
         launchAuthenticatedApp()
 
-        waitFor("tab.explore")
-        waitFor("screen.explore.content", timeout: 20)
+        waitFor("tab.flow")
+        waitFor("screen.flow.content", timeout: 20)
         openExploreSearchMode()
 
         let input = waitFor("explore.search.input")
@@ -208,8 +208,8 @@ final class ArcNoteUITests: XCTestCase {
 
         launchAuthenticatedApp()
 
-        waitFor("tab.explore")
-        waitFor("screen.explore.content", timeout: 20)
+        waitFor("tab.flow")
+        waitFor("screen.flow.content", timeout: 20)
         tap("side-menu.open")
         tap("side-menu.settings")
 
@@ -247,8 +247,8 @@ final class ArcNoteUITests: XCTestCase {
 
         launchAuthenticatedApp()
 
-        waitFor("tab.explore")
-        waitFor("screen.explore.content", timeout: 20)
+        waitFor("tab.flow")
+        waitFor("screen.flow.content", timeout: 20)
         tap("side-menu.open")
         tap("side-menu.settings")
 
@@ -290,8 +290,8 @@ final class ArcNoteUITests: XCTestCase {
 
         launchAuthenticatedApp()
 
-        waitFor("tab.explore")
-        waitFor("screen.explore.content", timeout: 20)
+        waitFor("tab.flow")
+        waitFor("screen.flow.content", timeout: 20)
         tap("side-menu.open")
         tap("side-menu.settings")
 
@@ -329,8 +329,8 @@ final class ArcNoteUITests: XCTestCase {
 
         launchAuthenticatedApp()
 
-        waitFor("tab.explore")
-        waitFor("screen.explore.content", timeout: 20)
+        waitFor("tab.flow")
+        waitFor("screen.flow.content", timeout: 20)
         tap("side-menu.open")
         tap("side-menu.notification")
 
@@ -358,8 +358,8 @@ final class ArcNoteUITests: XCTestCase {
     func testExploreVisibleRecommendedCardTapOpensGoDetailRoute() throws {
         launchAuthenticatedApp()
 
-        waitFor("tab.explore")
-        waitFor("screen.explore.content", timeout: 20)
+        waitFor("tab.flow")
+        waitFor("screen.flow.content", timeout: 20)
 
         let visibleCardId = waitFor("explore.visible-card.id", timeout: 30)
             .label
@@ -380,8 +380,8 @@ final class ArcNoteUITests: XCTestCase {
         seedAppSession(session)
         launchAuthenticatedApp()
 
-        waitFor("tab.explore")
-        waitFor("screen.explore.content", timeout: 20)
+        waitFor("tab.flow")
+        waitFor("screen.flow.content", timeout: 20)
 
         let firstCardId = waitFor("flow.visible-card.id", timeout: 30)
             .label
@@ -410,8 +410,8 @@ final class ArcNoteUITests: XCTestCase {
         seedAppSession(session)
         launchAuthenticatedApp()
 
-        waitFor("tab.explore")
-        waitFor("screen.explore.content", timeout: 20)
+        waitFor("tab.flow")
+        waitFor("screen.flow.content", timeout: 20)
 
         let cardId = try waitForUnfavoritedFlowCard(token: session.token)
         defer {
@@ -433,7 +433,7 @@ final class ArcNoteUITests: XCTestCase {
     func testFlowSparkOpensGoSparkScreen() throws {
         launchAuthenticatedApp()
 
-        waitFor("screen.explore.content", timeout: 20)
+        waitFor("screen.flow.content", timeout: 20)
         let cardId = waitFor("flow.visible-card.id", timeout: 30)
             .label
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -445,6 +445,75 @@ final class ArcNoteUITests: XCTestCase {
             .label
             .trimmingCharacters(in: .whitespacesAndNewlines)
         XCTAssertEqual(sourceCardId, cardId)
+    }
+
+    func testRecordCreatesPrivateGoCardAndRefreshesLibrary() throws {
+        let session = try requireSmokeSession()
+        seedAppSession(session)
+        launchAuthenticatedApp()
+
+        let content = "Flow record \(Int(Date().timeIntervalSince1970))"
+        let input = openRecordWithEmptyDraft()
+        input.tap()
+        input.typeText(content)
+        XCTAssertEqual(input.value as? String, content)
+        XCTAssertTrue(waitForButton("record.save").isEnabled, "Record Save should enable for a non-empty draft")
+        tapButton("record.save")
+
+        let cardId = waitFor("record.created-card-id", timeout: 30)
+            .label
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        defer {
+            deleteSmokeCard(id: cardId, token: session.token)
+        }
+
+        let card = try fetchSmokeCard(id: cardId, token: session.token)
+        XCTAssertEqual(card.content, content)
+        XCTAssertFalse(card.isPublic)
+
+        tap("tab.library")
+        waitFor("card.home.\(cardId)", timeout: 30)
+    }
+
+    func testFailedRecordDraftRestoresAfterRelaunch() throws {
+        let session = try requireSmokeSession()
+        let healthyBaseURL = ProcessInfo.processInfo.environment["CHORAI_API_BASE_URL"]
+            ?? "http://127.0.0.1:8080"
+        seedAppSession(session)
+        app.launchEnvironment["CHORAI_API_BASE_URL"] = "http://127.0.0.1:65535"
+        app.launch()
+
+        let draft = "Recovered draft \(Int(Date().timeIntervalSince1970))"
+        let input = openRecordWithEmptyDraft()
+        input.tap()
+        input.typeText(draft)
+        tapButton("record.save")
+        waitFor("record.error", timeout: 20)
+
+        app.terminate()
+        app.launchEnvironment["CHORAI_API_BASE_URL"] = healthyBaseURL
+        app.launch()
+
+        if !exists("record.input", timeout: 3) {
+            tap("record.open")
+        }
+        XCTAssertEqual(waitFor("record.input").value as? String, draft)
+        tapButton("record.discard")
+        confirmRecordDiscard()
+    }
+
+    func testRecordRemainsVisibleFromEveryPrimaryTab() throws {
+        let session = try requireSmokeSession()
+        seedAppSession(session)
+        launchAuthenticatedApp()
+
+        for tabId in ["tab.flow", "tab.library", "tab.chat"] {
+            tap(tabId)
+            XCTAssertTrue(
+                waitFor("record.open").isHittable,
+                "Record must remain visible on \(tabId)"
+            )
+        }
     }
 
     func testRecommendedDetailCommentCreateAppearsInVisibleList() throws {
@@ -505,6 +574,9 @@ final class ArcNoteUITests: XCTestCase {
         let environment = ProcessInfo.processInfo.environment
 
         app.launchEnvironment["CHORAI_UI_TEST"] = "1"
+        if let baseURL = environment["CHORAI_API_BASE_URL"], !baseURL.isEmpty {
+            app.launchEnvironment["CHORAI_API_BASE_URL"] = baseURL
+        }
         if let token = environment["CHORAI_UI_TEST_AUTH_TOKEN"], !token.isEmpty {
             app.launchEnvironment["CHORAI_UI_TEST_AUTH_TOKEN"] = token
         }
@@ -524,7 +596,7 @@ final class ArcNoteUITests: XCTestCase {
             return
         }
 
-        if !exists("tab.explore", timeout: 10) {
+        if !exists("tab.flow", timeout: 10) {
             signInWithLocalSmokeUser()
         }
     }
@@ -547,7 +619,7 @@ final class ArcNoteUITests: XCTestCase {
         passwordField.typeText(password)
 
         tap("signin.submit")
-        waitFor("tab.explore", timeout: 30)
+        waitFor("tab.flow", timeout: 30)
     }
 
     private func seedAppSession(_ session: SmokeSession) {
@@ -562,6 +634,23 @@ final class ArcNoteUITests: XCTestCase {
         let element = app.descendants(matching: .any)[identifier]
         XCTAssertTrue(element.waitForExistence(timeout: timeout), "Missing accessibility identifier: \(identifier)", file: file, line: line)
         return element
+    }
+
+    @discardableResult
+    private func waitForButton(
+        _ identifier: String,
+        timeout: TimeInterval = 10,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) -> XCUIElement {
+        let button = app.buttons[identifier]
+        XCTAssertTrue(
+            button.waitForExistence(timeout: timeout),
+            "Missing button accessibility identifier: \(identifier)",
+            file: file,
+            line: line
+        )
+        return button
     }
 
     private func waitForDifferentVisibleFlowCard(
@@ -612,6 +701,12 @@ final class ArcNoteUITests: XCTestCase {
         element.tap()
     }
 
+    private func tapButton(_ identifier: String, file: StaticString = #filePath, line: UInt = #line) {
+        let button = waitForButton(identifier, file: file, line: line)
+        XCTAssertTrue(button.isHittable, "Button is not hittable: \(identifier)", file: file, line: line)
+        button.tap()
+    }
+
     private func exists(_ identifier: String, timeout: TimeInterval) -> Bool {
         app.descendants(matching: .any)[identifier].waitForExistence(timeout: timeout)
     }
@@ -628,9 +723,44 @@ final class ArcNoteUITests: XCTestCase {
         _ = waitFor("explore.search.input", timeout: 10, file: file, line: line)
     }
 
+    private func openRecordWithEmptyDraft(
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) -> XCUIElement {
+        tap("record.open", file: file, line: line)
+        var input = waitFor("record.input", file: file, line: line)
+
+        if let existingDraft = input.value as? String, !existingDraft.isEmpty {
+            tapButton("record.discard", file: file, line: line)
+            confirmRecordDiscard(file: file, line: line)
+            waitForMissing("record.sheet", timeout: 10, file: file, line: line)
+
+            tap("record.open", file: file, line: line)
+            input = waitFor("record.input", file: file, line: line)
+        }
+
+        return input
+    }
+
+    private func confirmRecordDiscard(
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let discardConfirmation = app.alerts.buttons["Discard"]
+        XCTAssertTrue(
+            discardConfirmation.waitForExistence(timeout: 10),
+            "Missing Record discard confirmation",
+            file: file,
+            line: line
+        )
+        discardConfirmation
+            .coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            .tap()
+    }
+
     private func showExploreSearchResult(searchToken: String, expectedCardId: String, file: StaticString = #filePath, line: UInt = #line) {
-        waitFor("tab.explore", file: file, line: line)
-        waitFor("screen.explore.content", timeout: 20, file: file, line: line)
+        waitFor("tab.flow", file: file, line: line)
+        waitFor("screen.flow.content", timeout: 20, file: file, line: line)
         openExploreSearchMode(file: file, line: line)
 
         let input = waitFor("explore.search.input", file: file, line: line)
@@ -871,6 +1001,13 @@ final class ArcNoteUITests: XCTestCase {
 
         struct SmokeCardData: Decodable {
             let id: String
+            let content: String
+            let isPublic: Bool
+
+            enum CodingKeys: String, CodingKey {
+                case id, content
+                case isPublic = "is_public"
+            }
         }
     }
 
@@ -1070,6 +1207,24 @@ final class ArcNoteUITests: XCTestCase {
         request.httpMethod = "DELETE"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         _ = try? sendRawRequest(request)
+    }
+
+    private func fetchSmokeCard(
+        id: String,
+        token: String
+    ) throws -> SmokeCardResponse.SmokeCardData {
+        let baseURL = ProcessInfo.processInfo.environment["CHORAI_API_BASE_URL"] ?? "http://127.0.0.1:8080"
+        guard let url = URL(string: "\(baseURL)/api/cards/\(id)") else {
+            throw NSError(
+                domain: "ArcNoteUITests",
+                code: 12,
+                userInfo: [NSLocalizedDescriptionKey: "Invalid Go card URL"]
+            )
+        }
+
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        return try sendRequest(request, responseType: SmokeCardResponse.self).data
     }
 
     private func clearFavoriteLikeState(id: String, token: String) {

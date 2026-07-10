@@ -2,6 +2,7 @@ import SwiftUI
 
 struct HomeView: View {
     @Binding var showSideMenu: Bool
+    let refreshID: UUID
     @State private var selectedSegment = 0 // 0: Notes, 1: AI
 
     @State private var showPopupMenu = false
@@ -307,6 +308,9 @@ struct HomeView: View {
         .popupMenu(isPresented: $showPopupMenu, layout: popupMenuLayout, cardData: currentMenuCardData ?? getCurrentCard(), isOwnCard: selectedSegment == 0)
         .onAppear {
             // 使用默认排序（Latest Edited）
+            cardsManager.loadUserCards(refresh: true, sortBy: "updated_at", sortOrder: "desc")
+        }
+        .onChange(of: refreshID) { _ in
             cardsManager.loadUserCards(refresh: true, sortBy: "updated_at", sortOrder: "desc")
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ShowCardMenu"))) { notification in
@@ -1013,6 +1017,7 @@ struct NotesCard: View {
         }
         .padding(20)
         .background(notesCardBackground)
+        .accessibilityIdentifier("card.home.\(card.id)")
     }
     
     // MARK: Background Views
@@ -1562,7 +1567,7 @@ struct HomePostCard: View {
 }
 
 #Preview {
-    HomeView(showSideMenu: .constant(false))
+    HomeView(showSideMenu: .constant(false), refreshID: UUID())
 }
 
 // MARK: - HTML 文本渲染组件
@@ -1805,6 +1810,7 @@ struct NotesColorCard: View {
             }
         )
         .clipShape(RoundedRectangle(cornerRadius: 16))
+        .accessibilityIdentifier("card.home.\(card.id)")
     }
     
     // MARK: 根据 rate 值返回背景图片
