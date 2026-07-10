@@ -2,6 +2,7 @@ import XCTest
 
 final class ArcNoteUITests: XCTestCase {
     private var app: XCUIApplication!
+    private static var cachedSmokeSession: SmokeSession?
 
     override func setUpWithError() throws {
         continueAfterFailure = false
@@ -1515,6 +1516,10 @@ final class ArcNoteUITests: XCTestCase {
     }
 
     private func fetchLocalSmokeSession() -> SmokeSession? {
+        if let cachedSession = Self.cachedSmokeSession {
+            return cachedSession
+        }
+
         let environment = ProcessInfo.processInfo.environment
         let email = environment["CHORAI_UI_TEST_EMAIL"] ?? "ios-smoke-a-20260619@example.com"
         let password = environment["CHORAI_UI_TEST_PASSWORD"] ?? "Password123"
@@ -1550,6 +1555,7 @@ final class ArcNoteUITests: XCTestCase {
         }.resume()
 
         _ = semaphore.wait(timeout: .now() + 10)
+        Self.cachedSmokeSession = result
         return result
     }
 
