@@ -164,6 +164,16 @@ struct PopupMenuOverlay: View {
         // 关闭菜单
         isPresented = false
     }
+
+    private func shareCard() {
+        guard let cardID = cardData?.id else { return }
+        isPresented = false
+        NotificationCenter.default.post(
+            name: NSNotification.Name("ShowCardShare"),
+            object: nil,
+            userInfo: ["cardId": cardID]
+        )
+    }
     
     // MARK: 菜单内容
     @ViewBuilder
@@ -266,7 +276,12 @@ struct PopupMenuOverlay: View {
                         MenuButton(icon: "menu_private", text: "Private", color: .purple)
                     }
                     
-                    MenuButton(icon: "menu_share", text: "Share", color: .green)
+                    MenuButton(
+                        icon: "menu_share",
+                        text: "Share",
+                        color: .green,
+                        onTap: shareCard
+                    )
                     MenuButton(icon: "menu_link", text: "Link", color: .pink, onTap: {
                         isPresented = false
                         LinkPopupManager.shared.show(cardId: cardData?.id, isInitiatingCardOwned: isOwnCard)
@@ -343,7 +358,12 @@ struct PopupMenuOverlay: View {
                     })
                 }
                 HStack(spacing: 15) {
-                    MenuButton(icon: "menu_share", text: "Share", color: .green)
+                    MenuButton(
+                        icon: "menu_share",
+                        text: "Share",
+                        color: .green,
+                        onTap: shareCard
+                    )
                     MenuButton(icon: "menu_link", text: "Link", color: .pink, onTap: {
                         isPresented = false
                         LinkPopupManager.shared.show(cardId: cardData?.id, isInitiatingCardOwned: isOwnCard)

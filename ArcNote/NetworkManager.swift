@@ -190,6 +190,89 @@ class NetworkManager: ObservableObject {
         .eraseToAnyPublisher()
     }
 
+    private func requestData(
+        endpoint: String,
+        method: HTTPMethod = .get,
+        parameters: Parameters? = nil,
+        encoding: ParameterEncoding = URLEncoding.default,
+        accept: String = "application/octet-stream",
+        presentsError: Bool = true
+    ) -> AnyPublisher<Data, NetworkError> {
+        Future<Data, NetworkError> { [weak self] promise in
+            guard let self else {
+                promise(.failure(.unknown))
+                return
+            }
+
+            var requestHeaders = self.authorizedHeaders()
+            requestHeaders.update(
+                HTTPHeader(name: "Accept", value: accept)
+            )
+            self.session.request(
+                "\(self.baseURL)\(endpoint)",
+                method: method,
+                parameters: parameters,
+                encoding: encoding,
+                headers: requestHeaders
+            )
+            .validate()
+            .responseData { response in
+                switch response.result {
+                case .success(let data):
+                    promise(.success(data))
+                case .failure(let error):
+                    var apiError: GoAPIErrorPayload?
+                    if let data = response.data {
+                        apiError = try? JSONDecoder()
+                            .decode(GoAPIErrorEnvelope.self, from: data)
+                            .error
+                        if apiError == nil {
+                            apiError = try? JSONDecoder().decode(
+                                GoAPIErrorPayload.self,
+                                from: data
+                            )
+                        }
+                    }
+
+                    let statusCode = response.response?.statusCode
+                    if presentsError, let message = apiError?.message {
+                        self.presentErrorAlert(message: message)
+                    }
+
+                    if statusCode == 401 {
+                        promise(.failure(.unauthorized))
+                    } else if statusCode == 403 {
+                        promise(.failure(.forbidden))
+                    } else if statusCode == 404 {
+                        promise(.failure(.notFound))
+                    } else if let statusCode,
+                              let apiError,
+                              (400...599).contains(statusCode) {
+                        promise(
+                            .failure(
+                                .api(
+                                    statusCode: statusCode,
+                                    code: apiError.code,
+                                    message: apiError.message
+                                )
+                            )
+                        )
+                    } else {
+                        promise(
+                            .failure(
+                                self.handleError(
+                                    error,
+                                    response: response.response
+                                )
+                            )
+                        )
+                    }
+                }
+            }
+        }
+        .eraseToAnyPublisher()
+    }
+
     private func extractMessage(from data: Data) -> String? {
         guard
             let json = try? JSONSerialization.jsonObject(with: data, options: []) as? [String: Any]
@@ -1654,6 +1737,41 @@ extension NetworkManager {
             method: .get,
             encoding: URLEncoding.default,
             responseType: MergeCapabilitiesResponse.self,
+            presentsError: false
+        )
+    }
+
+    func getSharePreview(
+        cardId: String
+    ) -> AnyPublisher<SharePreviewWireResponse, NetworkError> {
+        request(
+            endpoint: "/api/cards/\(cardId)/share-preview",
+            parameters: ["template": "auto"],
+            encoding: URLEncoding.default,
+            responseType: SharePreviewWireResponse.self,
+            presentsError: false
+        )
+    }
+
+    func getShareArtifactImage(
+        cardId: String,
+        artifactId: String
+    ) -> AnyPublisher<Data, NetworkError> {
+        requestData(
+            endpoint: "/api/cards/\(cardId)/share-artifacts/\(artifactId)/image",
+            accept: "image/png",
+            presentsError: false
+        )
+    }
+
+    func pinShareArtifact(
+        cardId: String,
+        artifactId: String
+    ) -> AnyPublisher<SharePinWireResponse, NetworkError> {
+        request(
+            endpoint: "/api/cards/\(cardId)/share-artifacts/\(artifactId)/pin",
+            method: .post,
+            responseType: SharePinWireResponse.self,
             presentsError: false
         )
     }

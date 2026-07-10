@@ -15,6 +15,8 @@
 		C0DEF1042F60000100000003 /* MergeLifecycleViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1042F60000100000002 /* MergeLifecycleViews.swift */; };
 		C0DEF1052F60000100000003 /* NetworkCoreOnboardingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1052F60000100000002 /* NetworkCoreOnboardingService.swift */; };
 		C0DEF1062F60000100000003 /* OnboardingGuideLine.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1062F60000100000002 /* OnboardingGuideLine.swift */; };
+		C0DEF1072F60000100000003 /* NetworkCoreShareService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1072F60000100000002 /* NetworkCoreShareService.swift */; };
+		C0DEF1082F60000100000003 /* ShareCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1082F60000100000002 /* ShareCardView.swift */; };
 		C0DEF1012F60000100000005 /* FlowViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1012F60000100000004 /* FlowViews.swift */; };
 		C0DEF1012F60000100000007 /* CoreShellViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1012F60000100000006 /* CoreShellViews.swift */; };
 		A00000012F50000100000001 /* ArcNoteUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000012F50000100000002 /* ArcNoteUITests.swift */; };
@@ -108,6 +110,8 @@
 		C0DEF1042F60000100000002 /* MergeLifecycleViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MergeLifecycleViews.swift; sourceTree = "<group>"; };
 		C0DEF1052F60000100000002 /* NetworkCoreOnboardingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkCoreOnboardingService.swift; sourceTree = "<group>"; };
 		C0DEF1062F60000100000002 /* OnboardingGuideLine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingGuideLine.swift; sourceTree = "<group>"; };
+		C0DEF1072F60000100000002 /* NetworkCoreShareService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkCoreShareService.swift; sourceTree = "<group>"; };
+		C0DEF1082F60000100000002 /* ShareCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareCardView.swift; sourceTree = "<group>"; };
 		C0DEF1012F60000100000004 /* FlowViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlowViews.swift; sourceTree = "<group>"; };
 		C0DEF1012F60000100000006 /* CoreShellViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreShellViews.swift; sourceTree = "<group>"; };
 		A00000012F50000100000002 /* ArcNoteUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArcNoteUITests.swift; sourceTree = "<group>"; };
@@ -216,6 +220,8 @@
 				C0DEF1042F60000100000002 /* MergeLifecycleViews.swift */,
 				C0DEF1052F60000100000002 /* NetworkCoreOnboardingService.swift */,
 				C0DEF1062F60000100000002 /* OnboardingGuideLine.swift */,
+				C0DEF1072F60000100000002 /* NetworkCoreShareService.swift */,
+				C0DEF1082F60000100000002 /* ShareCardView.swift */,
 				C0DEF1012F60000100000004 /* FlowViews.swift */,
 				C0DEF1012F60000100000006 /* CoreShellViews.swift */,
 			);
@@ -472,6 +478,8 @@
 				C0DEF1042F60000100000003 /* MergeLifecycleViews.swift in Sources */,
 				C0DEF1052F60000100000003 /* NetworkCoreOnboardingService.swift in Sources */,
 				C0DEF1062F60000100000003 /* OnboardingGuideLine.swift in Sources */,
+				C0DEF1072F60000100000003 /* NetworkCoreShareService.swift in Sources */,
+				C0DEF1082F60000100000003 /* ShareCardView.swift in Sources */,
 				C0DEF1012F60000100000005 /* FlowViews.swift in Sources */,
 				C0DEF1012F60000100000007 /* CoreShellViews.swift in Sources */,
 				1BC6B7682E4A0FE400E997B1 /* SettingsView.swift in Sources */,

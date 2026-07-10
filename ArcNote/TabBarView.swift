@@ -30,6 +30,7 @@ struct TabBarView: View {
     @State private var visibleFlowCardID: String?
     @State private var hasObservedActiveOnboarding = false
     @State private var showOnboardingCompletionAcknowledgement = false
+    @State private var shareRoute: ShareRoute?
 
     #if DEBUG
     @State private var exploreSearchSmokeInvoked = false
@@ -46,6 +47,11 @@ struct TabBarView: View {
 
     private enum TabRoute: Hashable {
         case spark(String)
+    }
+
+    private struct ShareRoute: Identifiable {
+        let cardID: String
+        var id: String { cardID }
     }
 
     private var mergePersistence: UserDefaultsMergeSessionStore {
@@ -613,6 +619,9 @@ struct TabBarView: View {
                 }
             }
         }
+        .sheet(item: $shareRoute) { route in
+            ShareCardView(cardID: route.cardID)
+        }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NavigateToEdit"))) { notification in
             if let cardId = notification.userInfo?["cardId"] as? String {
                 selectedEditCardId = cardId
@@ -636,6 +645,15 @@ struct TabBarView: View {
                     navigateToMerge = true
                 }
             }
+        }
+        .onReceive(
+            NotificationCenter.default.publisher(
+                for: NSNotification.Name("ShowCardShare")
+            )
+        ) { notification in
+            guard let cardID = notification.userInfo?["cardId"] as? String,
+                  !cardID.isEmpty else { return }
+            shareRoute = ShareRoute(cardID: cardID)
         }
         .onReceive(
             NotificationCenter.default.publisher(for: .mergeSessionDidChange)

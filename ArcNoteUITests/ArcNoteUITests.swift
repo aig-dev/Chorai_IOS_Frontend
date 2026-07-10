@@ -1207,6 +1207,74 @@ final class ArcNoteUITests: XCTestCase {
         waitFor("card.home.\(cardId)", timeout: 30)
     }
 
+    func testLibraryCardShareLoadsGoArtifactAndOpensNativeShare() throws {
+        let session = try requireSmokeSession()
+        seedAppSession(session)
+        let searchToken = "share-\(Int(Date().timeIntervalSince1970))"
+        let cardID = try createPublicSmokeCard(
+            token: session.token,
+            searchToken: searchToken
+        )
+        defer {
+            deleteSmokeCard(id: cardID, token: session.token)
+        }
+        let canonicalPreview = try fetchSmokeSharePreview(
+            cardID: cardID,
+            token: session.token
+        )
+
+        launchAuthenticatedApp()
+        tap("tab.library")
+        waitFor("card.home.\(cardID)", timeout: 30)
+        tap("home.card.menu.\(cardID)")
+        tap("popup-menu.item.share")
+
+        waitFor("screen.share-card", timeout: 20)
+        waitFor("share-card.preview", timeout: 30)
+        XCTAssertEqual(
+            waitFor("share-card.artifact-id")
+                .label
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+            canonicalPreview.artifact.id
+        )
+        captureShareVisual("library-card-share-preview")
+
+        tap("share-card.action")
+        XCTAssertTrue(
+            app.otherElements["ActivityListView"].waitForExistence(timeout: 20),
+            "Native share sheet did not open after Go artifact pin"
+        )
+    }
+
+    func testLibraryCardShareShowsRetryableErrorWhenCardDisappears() throws {
+        let session = try requireSmokeSession()
+        seedAppSession(session)
+        let searchToken = "share-error-\(Int(Date().timeIntervalSince1970))"
+        let cardID = try createPublicSmokeCard(
+            token: session.token,
+            searchToken: searchToken
+        )
+
+        launchAuthenticatedApp()
+        tap("tab.library")
+        waitFor("card.home.\(cardID)", timeout: 30)
+        deleteSmokeCard(id: cardID, token: session.token)
+
+        tap("home.card.menu.\(cardID)")
+        tap("popup-menu.item.share")
+
+        waitFor("screen.share-card", timeout: 20)
+        waitFor("share-card.error", timeout: 30)
+        XCTAssertEqual(
+            waitFor("share-card.error-code")
+                .label
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+            "forbidden"
+        )
+        waitFor("share-card.retry")
+        captureShareVisual("library-card-share-error")
+    }
+
     func testFailedRecordDraftRestoresAfterRelaunch() throws {
         let session = try requireSmokeSession()
         let healthyBaseURL = ProcessInfo.processInfo.environment["CHORAI_API_BASE_URL"]
@@ -1529,6 +1597,13 @@ final class ArcNoteUITests: XCTestCase {
     private func captureMergeVisual(_ name: String) {
         let attachment = XCTAttachment(screenshot: app.screenshot())
         attachment.name = "merge-\(name)"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
+    private func captureShareVisual(_ name: String) {
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
     }
@@ -2197,6 +2272,14 @@ final class ArcNoteUITests: XCTestCase {
         }
     }
 
+    private struct SmokeSharePreview: Decodable {
+        let artifact: Artifact
+
+        struct Artifact: Decodable {
+            let id: String
+        }
+    }
+
     private struct SmokeMergeJobResponse: Decodable {
         let status: String
     }
@@ -2693,6 +2776,28 @@ final class ArcNoteUITests: XCTestCase {
         var request = URLRequest(url: url)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         return try sendRequest(request, responseType: SmokeCardResponse.self).data
+    }
+
+    private func fetchSmokeSharePreview(
+        cardID: String,
+        token: String
+    ) throws -> SmokeSharePreview {
+        let baseURL = ProcessInfo.processInfo.environment[
+            "CHORAI_API_BASE_URL"
+        ] ?? "http://127.0.0.1:8080"
+        guard var components = URLComponents(
+            string: "\(baseURL)/api/cards/\(cardID)/share-preview"
+        ) else {
+            throw URLError(.badURL)
+        }
+        components.queryItems = [URLQueryItem(name: "template", value: "auto")]
+        guard let url = components.url else { throw URLError(.badURL) }
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        return try sendRequest(
+            request,
+            responseType: SmokeSharePreview.self
+        )
     }
 
     private func fetchSmokeMergeJob(
