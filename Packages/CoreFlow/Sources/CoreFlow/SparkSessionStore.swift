@@ -70,6 +70,7 @@ public final class SparkSessionStore: ObservableObject {
     private var pendingTrigger: PendingSparkTrigger?
     private var lastFailedTrigger: PendingSparkTrigger?
     private var lastFailedSourceCard: FlowCard?
+    private var lastFailedReplayActivityID: String?
     private var undoEntry: UndoEntry?
 
     private var nextCursor: String?
@@ -270,8 +271,11 @@ public final class SparkSessionStore: ObservableObject {
     }
 
     public func retryTrigger() {
+        guard !isInteractionLocked else {
+            return
+        }
+
         if let pendingTrigger {
-            guard !isInteractionLocked else { return }
             reconcilePendingTrigger(
                 pendingTrigger,
                 rollback: nil,
@@ -280,8 +284,17 @@ public final class SparkSessionStore: ObservableObject {
             return
         }
 
+        if let activityID = lastFailedReplayActivityID {
+            replay(activityID: activityID)
+            return
+        }
+
+        if chain.isEmpty, sourceCard == nil {
+            loadRootSource()
+            return
+        }
+
         guard
-            !isInteractionLocked,
             let pending = lastFailedTrigger,
             let source = lastFailedSourceCard,
             pending.sourceAssetID == source.id
@@ -541,6 +554,7 @@ public final class SparkSessionStore: ObservableObject {
         phase = .replaying
         isInteractionLocked = true
         notice = nil
+        lastFailedReplayActivityID = activityID
         let token = beginOperation()
         var receivedPage = false
 
@@ -548,7 +562,10 @@ public final class SparkSessionStore: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { [weak self] completion in
-                    guard let self, self.isCurrentOperation(token) else {
+                    guard let self else {
+                        return
+                    }
+                    guard self.isCurrentOperation(token) else {
                         return
                     }
                     if case .failure(let error) = completion {
@@ -558,7 +575,10 @@ public final class SparkSessionStore: ObservableObject {
                     }
                 },
                 receiveValue: { [weak self] page in
-                    guard let self, self.isCurrentOperation(token) else {
+                    guard let self else {
+                        return
+                    }
+                    guard self.isCurrentOperation(token) else {
                         return
                     }
                     receivedPage = true
@@ -566,46 +586,66 @@ public final class SparkSessionStore: ObservableObject {
                         self.failReplay(.decoding)
                         return
                     }
-                    self.loadReplaySource(
+                    self.applyReplay(
                         page: page,
-                        savedNode: savedNode,
+                        source: Self.restoredSource(
+                            page: page,
+                            savedNode: savedNode
+                        ),
+                        savedNode: savedNode
+                    )
+                    self.refreshReplaySource(
+                        page: page,
                         token: token
                     )
                 }
             )
     }
 
-    private func loadReplaySource(
+    private func refreshReplaySource(
         page: SparkActivityPage,
-        savedNode: SparkChainNode,
         token: Int
     ) {
-        var receivedCard = false
         replaySourceCancellable = service.card(assetID: page.sourceAssetID)
             .receive(on: DispatchQueue.main)
             .sink(
-                receiveCompletion: { [weak self] completion in
-                    guard let self, self.isCurrentOperation(token) else {
-                        return
-                    }
-                    if case .failure(let error) = completion {
-                        self.failReplay(error)
-                    } else if !receivedCard {
-                        self.failReplay(.decoding)
-                    }
-                },
+                receiveCompletion: { _ in },
                 receiveValue: { [weak self] card in
-                    guard let self, self.isCurrentOperation(token) else {
+                    guard let self else {
                         return
                     }
-                    receivedCard = true
-                    self.applyReplay(
-                        page: page,
-                        source: card,
-                        savedNode: savedNode
-                    )
+                    guard self.isCurrentOperation(token) else {
+                        return
+                    }
+                    self.applyRefreshedReplaySource(card, page: page)
                 }
             )
+    }
+
+    private func applyRefreshedReplaySource(
+        _ source: FlowCard,
+        page: SparkActivityPage
+    ) {
+        guard activeActivityID == page.activityID else {
+            return
+        }
+
+        sourceCard = source
+        if let index = chain.firstIndex(where: {
+            $0.activityID == page.activityID
+        }) {
+            let node = chain[index]
+            chain[index] = SparkChainNode(
+                sourceAssetID: page.sourceAssetID,
+                sourcePreview: Self.preview(for: source),
+                activityID: page.activityID,
+                parentActivityID: page.parentActivityID,
+                rootActivityID: page.rootActivityID,
+                chainDepth: page.chainDepth,
+                visibleIndex: node.visibleIndex
+            )
+        }
+        persistCurrentState()
     }
 
     private func applyReplay(
@@ -640,9 +680,35 @@ public final class SparkSessionStore: ObservableObject {
         resetMoreState(sourceAssetID: page.sourceAssetID)
         undoEntry = nil
         pendingTrigger = nil
+        lastFailedReplayActivityID = nil
         isInteractionLocked = false
         phase = replayedResults.isEmpty ? .empty : .loaded
         persistCurrentState()
+    }
+
+    private static func restoredSource(
+        page: SparkActivityPage,
+        savedNode: SparkChainNode
+    ) -> FlowCard {
+        FlowCard(
+            id: page.sourceAssetID,
+            title: nil,
+            content: savedNode.sourcePreview,
+            contentHash: nil,
+            tags: [],
+            isPublic: true,
+            createdAt: "",
+            updatedAt: "",
+            favoriteCount: 0,
+            likeCount: 0,
+            commentCount: 0,
+            rate: 0,
+            isFavorited: false,
+            isLiked: false,
+            isPinned: false,
+            pinnedAt: nil,
+            author: nil
+        )
     }
 
     private func reconcilePendingTrigger(
@@ -878,6 +944,7 @@ public final class SparkSessionStore: ObservableObject {
             pendingTrigger = nil
             results = []
             visibleIndex = 0
+            lastFailedReplayActivityID = nil
             phase = .failed("This Spark can no longer be restored.")
             return
         }

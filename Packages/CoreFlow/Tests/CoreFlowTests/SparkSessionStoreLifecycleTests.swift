@@ -49,6 +49,40 @@ final class SparkSessionStoreLifecycleTests: XCTestCase {
         XCTAssertTrue(harness.service.triggerCalls.isEmpty)
     }
 
+    func testRootLoadRetryFetchesSourceAgainAndTriggersOnce() async {
+        let harness = makeHarness()
+        let failedSource = harness.service.enqueueCard()
+
+        harness.store.start()
+        failedSource.send(completion: .failure(.timeout))
+        await settle()
+
+        let retrySource = harness.service.enqueueCard()
+        let triggerSubject = harness.service.enqueueTrigger()
+        harness.store.retryTrigger()
+        retrySource.send(card("ast_root", content: "Recovered root"))
+        retrySource.send(completion: .finished)
+        await settle()
+        triggerSubject.send(
+            page(
+                activity: "act_root",
+                parent: nil,
+                root: "act_root",
+                depth: 0,
+                source: "ast_root"
+            )
+        )
+        triggerSubject.send(completion: .finished)
+        await settle()
+
+        XCTAssertEqual(
+            harness.service.requestedCardIDs,
+            ["ast_root", "ast_root"]
+        )
+        XCTAssertEqual(harness.service.triggerCalls.count, 1)
+        XCTAssertEqual(harness.store.phase, .loaded)
+    }
+
     func testAdvanceChangesOnlyLocalIndexAndPersistsIt() async {
         let harness = makeHarness()
         await loadRoot(harness, resultCount: 3)
@@ -232,6 +266,13 @@ final class SparkSessionStoreLifecycleTests: XCTestCase {
         )
         replaySubject.send(completion: .finished)
         await settle()
+
+        XCTAssertEqual(harness.store.phase, .loaded)
+        XCTAssertEqual(harness.store.visibleIndex, 1)
+        XCTAssertEqual(harness.store.currentResult?.id, "ast_restored_keyword")
+        XCTAssertEqual(harness.store.sourceCard?.id, "ast_child_source")
+        XCTAssertEqual(harness.store.sourceCard?.content, "Saved child")
+
         sourceSubject.send(card("ast_child_source", content: "Restored source"))
         sourceSubject.send(completion: .finished)
         await settle()
@@ -241,6 +282,7 @@ final class SparkSessionStoreLifecycleTests: XCTestCase {
         XCTAssertEqual(harness.service.requestedCardIDs, ["ast_child_source"])
         XCTAssertEqual(harness.store.visibleIndex, 1)
         XCTAssertEqual(harness.store.currentResult?.id, "ast_restored_keyword")
+        XCTAssertEqual(harness.store.sourceCard?.content, "Restored source")
         XCTAssertEqual(harness.store.phase, .loaded)
     }
 
@@ -275,6 +317,101 @@ final class SparkSessionStoreLifecycleTests: XCTestCase {
         XCTAssertTrue(harness.service.triggerCalls.isEmpty)
         XCTAssertEqual(harness.persistence.removals.count, 1)
         XCTAssertEqual(harness.store.phase, .failed("This Spark can no longer be restored."))
+    }
+
+    func testTransientReplayFailureRetriesExactActivity() async {
+        let harness = makeHarness()
+        harness.persistence.seed(
+            SparkSessionSnapshot(
+                actorID: "act_user",
+                rootSourceAssetID: "ast_root",
+                nodes: [
+                    SparkChainNode(
+                        sourceAssetID: "ast_root",
+                        sourcePreview: "Saved root",
+                        activityID: "act_root",
+                        parentActivityID: nil,
+                        rootActivityID: "act_root",
+                        chainDepth: 0,
+                        visibleIndex: 0
+                    )
+                ],
+                activeActivityID: "act_root",
+                pendingTrigger: nil,
+                didShowUpwardCue: false
+            )
+        )
+        let failedReplay = harness.service.enqueueActivityResults()
+
+        harness.store.start()
+        failedReplay.send(completion: .failure(.timeout))
+        await settle()
+
+        let retryReplay = harness.service.enqueueActivityResults()
+        _ = harness.service.enqueueCard()
+        harness.store.retryTrigger()
+        retryReplay.send(
+            page(
+                activity: "act_root",
+                parent: nil,
+                root: "act_root",
+                depth: 0,
+                source: "ast_root"
+            )
+        )
+        retryReplay.send(completion: .finished)
+        await settle()
+
+        XCTAssertEqual(
+            harness.service.requestedActivityIDs,
+            ["act_root", "act_root"]
+        )
+        XCTAssertEqual(harness.store.phase, .loaded)
+    }
+
+    func testReplaySourceRefreshFailureKeepsRestoredDeckUsable() async {
+        let harness = makeHarness()
+        harness.persistence.seed(
+            SparkSessionSnapshot(
+                actorID: "act_user",
+                rootSourceAssetID: "ast_root",
+                nodes: [
+                    SparkChainNode(
+                        sourceAssetID: "ast_root",
+                        sourcePreview: "Saved root",
+                        activityID: "act_root",
+                        parentActivityID: nil,
+                        rootActivityID: "act_root",
+                        chainDepth: 0,
+                        visibleIndex: 0
+                    )
+                ],
+                activeActivityID: "act_root",
+                pendingTrigger: nil,
+                didShowUpwardCue: false
+            )
+        )
+        let replaySubject = harness.service.enqueueActivityResults()
+        let sourceSubject = harness.service.enqueueCard()
+
+        harness.store.start()
+        replaySubject.send(
+            page(
+                activity: "act_root",
+                parent: nil,
+                root: "act_root",
+                depth: 0,
+                source: "ast_root"
+            )
+        )
+        replaySubject.send(completion: .finished)
+        await settle()
+        sourceSubject.send(completion: .failure(.timeout))
+        await settle()
+
+        XCTAssertEqual(harness.store.phase, .loaded)
+        XCTAssertEqual(harness.store.sourceCard?.content, "Saved root")
+        XCTAssertNotNil(harness.store.currentResult)
     }
 
     private typealias Harness = (

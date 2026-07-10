@@ -2,11 +2,18 @@ import XCTest
 
 final class ArcNoteUITests: XCTestCase {
     private var app: XCUIApplication!
+    private var sparkSessionScope: String!
     private static var cachedSmokeSession: SmokeSession?
+
+    private var sparkSeedCardID: String {
+        ProcessInfo.processInfo.environment["CHORAI_UI_TEST_SPARK_CARD_ID"]
+            ?? "ast_cs_art_88ba36bc8dea"
+    }
 
     override func setUpWithError() throws {
         continueAfterFailure = false
         app = XCUIApplication()
+        sparkSessionScope = "\(name).\(UUID().uuidString)"
     }
 
     func testMainTabsRenderAgainstSeededGoSession() throws {
@@ -441,11 +448,86 @@ final class ArcNoteUITests: XCTestCase {
 
         tap("flow.spark.\(cardId)")
 
-        waitFor("spark.screen.loaded", timeout: 20)
+        waitFor("screen.spark.loaded", timeout: 60)
         let sourceCardId = waitFor("spark.source.card-id", timeout: 10)
             .label
             .trimmingCharacters(in: .whitespacesAndNewlines)
         XCTAssertEqual(sourceCardId, cardId)
+    }
+
+    func testSparkUsesAnyNonEmptyGoBucketAndLeftSwipeAdvances() throws {
+        let session = try requireSmokeSession()
+        let sparkCardId = sparkSeedCardID
+        openSparkFromDetail(cardID: sparkCardId, session: session)
+
+        let activityID = sparkAnchorValue("spark.activity.id")
+        let page = try fetchSparkActivity(activityID: activityID, token: session.token)
+        let visibleID = sparkAnchorValue("spark.visible-card.id")
+        let visibleBucket = sparkAnchorValue("spark.visible-card.bucket")
+
+        XCTAssertTrue(page.orderedAssetIDs.contains(visibleID))
+        XCTAssertEqual(page.bucketByAssetID[visibleID], visibleBucket)
+        guard page.orderedAssetIDs.count > 1 else {
+            throw XCTSkip("Go Spark returned only one visible result")
+        }
+
+        waitFor("spark.card.\(visibleID)").swipeLeft()
+        let nextID = waitForDifferentSparkCard(from: visibleID)
+        XCTAssertTrue(page.orderedAssetIDs.contains(nextID))
+    }
+
+    func testSparkRightSwipeSavesWithDiscoveryContextAndUndo() throws {
+        let session = try requireSmokeSession()
+        openSparkFromDetail(cardID: sparkSeedCardID, session: session)
+
+        let resultID = try waitForUnfavoritedSparkResult(token: session.token)
+        let activityID = sparkAnchorValue("spark.activity.id")
+        let rootActivityID = sparkAnchorValue("spark.root.id")
+        defer { deleteFavorite(id: resultID, token: session.token) }
+
+        waitFor("spark.card.\(resultID)").swipeRight()
+        waitForAssetStatus(
+            kind: "favorites",
+            id: resultID,
+            token: session.token,
+            expected: true
+        )
+        XCTAssertEqual(
+            try waitForDiscoveryRoot(assetID: resultID, token: session.token),
+            rootActivityID
+        )
+        XCTAssertFalse(activityID.isEmpty)
+
+        tap("spark.save.undo")
+        waitForAssetStatus(
+            kind: "favorites",
+            id: resultID,
+            token: session.token,
+            expected: false
+        )
+        XCTAssertEqual(sparkAnchorValue("spark.visible-card.id"), resultID)
+    }
+
+    func testSparkUpSwipeCreatesChildAndChainReplayRestoresParent() throws {
+        let session = try requireSmokeSession()
+        openSparkFromDetail(cardID: sparkSeedCardID, session: session)
+
+        let rootActivityID = sparkAnchorValue("spark.activity.id")
+        let rootID = sparkAnchorValue("spark.root.id")
+        let parentVisibleID = sparkAnchorValue("spark.visible-card.id")
+
+        waitFor("spark.card.\(parentVisibleID)").swipeUp()
+        let childActivityID = waitForDifferentSparkActivity(from: rootActivityID, timeout: 90)
+        XCTAssertEqual(sparkAnchorValue("spark.root.id"), rootID)
+        XCTAssertEqual(sparkAnchorValue("spark.parent.id"), rootActivityID)
+        XCTAssertEqual(sparkAnchorValue("spark.depth"), "1")
+        XCTAssertEqual(sparkAnchorValue("spark.source.card-id"), parentVisibleID)
+        XCTAssertNotEqual(childActivityID, rootActivityID)
+
+        tap("spark.chain.\(rootActivityID)")
+        waitForSparkActivity(rootActivityID, timeout: 60)
+        XCTAssertEqual(sparkAnchorValue("spark.visible-card.id"), parentVisibleID)
+        XCTAssertEqual(sparkAnchorValue("spark.depth"), "0")
     }
 
     func testRecordCreatesPrivateGoCardAndRefreshesLibrary() throws {
@@ -538,38 +620,21 @@ final class ArcNoteUITests: XCTestCase {
 
     func testRecommendedDetailSparkMenuOpensGoSparkResults() throws {
         let session = try requireSmokeSession()
-        seedAppSession(session)
+        let sparkCardId = sparkSeedCardID
+        openSparkFromDetail(cardID: sparkCardId, session: session)
 
-        let sparkCardId = ProcessInfo.processInfo.environment["CHORAI_UI_TEST_SPARK_CARD_ID"] ?? "ast_cs_art_88ba36bc8dea"
-        let expectedRelatedIds = try fetchSparkRelatedCardIds(cardId: sparkCardId, token: session.token)
-        guard !expectedRelatedIds.isEmpty else {
-            throw XCTSkip("Go Spark returned no related cards for \(sparkCardId); choose a seeded asset with related cards")
-        }
-
-        app.launchArguments.append("--ui-test-open-recommended-detail")
-        app.launchEnvironment["CHORAI_UI_TEST_DETAIL_CARD_ID"] = sparkCardId
-        launchAuthenticatedApp()
-
-        waitFor("screen.detail.loaded", timeout: 30)
-        let detailCardId = waitFor("screen.detail.card-id", timeout: 10)
-            .label
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        XCTAssertEqual(detailCardId, sparkCardId)
-
-        tap("detail.menu.open")
-        tap("popup-menu.item.spark")
-
-        waitFor("spark.screen.loaded", timeout: 20)
         let sourceCardId = waitFor("spark.source.card-id", timeout: 10)
             .label
             .trimmingCharacters(in: .whitespacesAndNewlines)
         XCTAssertEqual(sourceCardId, sparkCardId)
 
-        waitFor("spark.related.loaded", timeout: 60)
-        let visibleRelatedId = waitFor("spark.related.card-id", timeout: 10)
-            .label
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        XCTAssertTrue(expectedRelatedIds.contains(visibleRelatedId), "Visible Spark related card \(visibleRelatedId) was not in Go preflight result \(expectedRelatedIds)")
+        let activityID = sparkAnchorValue("spark.activity.id")
+        let page = try fetchSparkActivity(activityID: activityID, token: session.token)
+        let visibleID = sparkAnchorValue("spark.visible-card.id")
+        XCTAssertTrue(
+            page.orderedAssetIDs.contains(visibleID),
+            "Visible Spark card \(visibleID) was not in Go activity \(activityID)"
+        )
     }
 
     private func launchAuthenticatedApp() {
@@ -674,6 +739,127 @@ final class ArcNoteUITests: XCTestCase {
 
         XCTFail("Flow did not advance from card \(initialCardId)", file: file, line: line)
         return initialCardId
+    }
+
+    private func openSparkFromDetail(
+        cardID: String,
+        session: SmokeSession
+    ) {
+        seedAppSession(session)
+        app.launchEnvironment["CHORAI_UI_TEST_DETAIL_CARD_ID"] = cardID
+        app.launchEnvironment["CHORAI_UI_TEST_SPARK_SESSION_SCOPE"] = sparkSessionScope
+        launchAuthenticatedApp()
+
+        waitFor("screen.flow.content", timeout: 30)
+        tap("explore.card-detail")
+        waitFor("screen.detail.loaded", timeout: 30)
+        XCTAssertEqual(
+            waitFor("screen.detail.card-id")
+                .label
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+            cardID
+        )
+        tap("detail.menu.open")
+        tap("popup-menu.item.spark")
+        waitFor("screen.spark.loaded", timeout: 90)
+    }
+
+    private func sparkAnchorValue(
+        _ identifier: String,
+        timeout: TimeInterval = 10,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) -> String {
+        waitFor(identifier, timeout: timeout, file: file, line: line)
+            .label
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func waitForDifferentSparkCard(
+        from initialCardID: String,
+        timeout: TimeInterval = 15,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) -> String {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            let current = app.staticTexts["spark.visible-card.id"]
+                .label
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !current.isEmpty, current != initialCardID {
+                return current
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+        }
+        XCTFail("Spark did not advance from \(initialCardID)", file: file, line: line)
+        return initialCardID
+    }
+
+    private func waitForDifferentSparkActivity(
+        from initialActivityID: String,
+        timeout: TimeInterval,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) -> String {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            let current = app.staticTexts["spark.activity.id"]
+                .label
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !current.isEmpty, current != initialActivityID,
+               exists("screen.spark.loaded", timeout: 0.2) {
+                return current
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+        }
+        XCTFail("Spark did not create a child activity", file: file, line: line)
+        return initialActivityID
+    }
+
+    private func waitForSparkActivity(
+        _ expectedActivityID: String,
+        timeout: TimeInterval,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            let current = app.staticTexts["spark.activity.id"]
+                .label
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if current == expectedActivityID,
+               exists("screen.spark.loaded", timeout: 0.2) {
+                return
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+        }
+        XCTFail(
+            "Spark did not restore activity \(expectedActivityID)",
+            file: file,
+            line: line
+        )
+    }
+
+    private func waitForUnfavoritedSparkResult(
+        token: String,
+        maximumAttempts: Int = 10,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) throws -> String {
+        for _ in 0..<maximumAttempts {
+            let resultID = sparkAnchorValue(
+                "spark.visible-card.id",
+                timeout: 30,
+                file: file,
+                line: line
+            )
+            if try !fetchAssetStatus(kind: "favorites", id: resultID, token: token) {
+                return resultID
+            }
+            waitFor("spark.card.\(resultID)", file: file, line: line).swipeLeft()
+            _ = waitForDifferentSparkCard(from: resultID, file: file, line: line)
+        }
+        throw XCTSkip("No unfavorited Spark result was available")
     }
 
     private func waitForUnfavoritedFlowCard(
@@ -1098,11 +1284,46 @@ final class ArcNoteUITests: XCTestCase {
         }
     }
 
-    private struct SmokeSparkResponse: Decodable {
-        let data: SmokeSparkData
+    private struct SmokeSparkActivityResponse: Decodable {
+        let data: SmokeSparkActivity
 
-        struct SmokeSparkData: Decodable {
+        struct SmokeSparkActivity: Decodable {
+            let activityID: String
+            let parentActivityID: String?
+            let rootActivityID: String
+            let chainDepth: Int
+            let sourceAssetID: String
             let groups: SmokeSparkGroups
+
+            var orderedItems: [SmokeSparkItem] {
+                [groups.related, groups.angles, groups.keywords]
+                    .compactMap { $0 }
+                    .flatMap(\.items)
+            }
+
+            var orderedAssetIDs: [String] {
+                var seen = Set<String>()
+                return orderedItems
+                    .map(\.assetID)
+                    .filter { seen.insert($0).inserted }
+            }
+
+            var bucketByAssetID: [String: String] {
+                var result: [String: String] = [:]
+                for item in orderedItems where result[item.assetID] == nil {
+                    result[item.assetID] = item.bucket
+                }
+                return result
+            }
+
+            enum CodingKeys: String, CodingKey {
+                case activityID = "activity_id"
+                case parentActivityID = "parent_activity_id"
+                case rootActivityID = "root_activity_id"
+                case chainDepth = "chain_depth"
+                case sourceAssetID = "source_asset_id"
+                case groups
+            }
         }
 
         struct SmokeSparkGroups: Decodable {
@@ -1116,22 +1337,24 @@ final class ArcNoteUITests: XCTestCase {
         }
 
         struct SmokeSparkItem: Decodable {
-            let card: SmokeSparkCard?
-        }
-
-        struct SmokeSparkCard: Decodable {
-            let id: String
+            let assetID: String
+            let bucket: String
 
             enum CodingKeys: String, CodingKey {
-                case id
-                case cardId = "card_id"
+                case assetID = "asset_id"
+                case bucket
             }
+        }
+    }
 
-            init(from decoder: Decoder) throws {
-                let container = try decoder.container(keyedBy: CodingKeys.self)
-                id = (try? container.decode(String.self, forKey: .id))
-                    ?? (try? container.decode(String.self, forKey: .cardId))
-                    ?? ""
+    private struct SmokeDiscoveryPathResponse: Decodable {
+        let data: SmokeDiscoveryPath
+
+        struct SmokeDiscoveryPath: Decodable {
+            let rootActivityID: String
+
+            enum CodingKeys: String, CodingKey {
+                case rootActivityID = "root_activity_id"
             }
         }
     }
@@ -1458,30 +1681,93 @@ final class ArcNoteUITests: XCTestCase {
         return response.data.first(where: { $0.notificationId == notificationId })?.isRead
     }
 
-    private func fetchSparkRelatedCardIds(cardId: String, token: String) throws -> [String] {
+    private func fetchSparkActivity(
+        activityID: String,
+        token: String
+    ) throws -> SmokeSparkActivityResponse.SmokeSparkActivity {
         let baseURL = ProcessInfo.processInfo.environment["CHORAI_API_BASE_URL"] ?? "http://127.0.0.1:8080"
-        guard let url = URL(string: "\(baseURL)/api/v1/assets/\(cardId)/spark") else {
-            throw NSError(domain: "ArcNoteUITests", code: 12, userInfo: [NSLocalizedDescriptionKey: "Invalid Go Spark URL"])
+        guard let url = URL(
+            string: "\(baseURL)/api/v1/spark/activities/\(activityID)/results"
+        ) else {
+            throw NSError(
+                domain: "ArcNoteUITests",
+                code: 12,
+                userInfo: [NSLocalizedDescriptionKey: "Invalid Go Spark activity URL"]
+            )
         }
 
         var request = URLRequest(url: url)
-        request.httpMethod = "POST"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONSerialization.data(withJSONObject: [:])
+        return try sendRequest(
+            request,
+            responseType: SmokeSparkActivityResponse.self
+        ).data
+    }
 
-        let response = try sendRequest(request, responseType: SmokeSparkResponse.self)
-        let buckets = [
-            response.data.groups.related,
-            response.data.groups.angles,
-            response.data.groups.keywords
-        ]
+    private func deleteFavorite(id: String, token: String) {
+        let baseURL = ProcessInfo.processInfo.environment["CHORAI_API_BASE_URL"]
+            ?? "http://127.0.0.1:8080"
+        guard let url = URL(
+            string: "\(baseURL)/api/v1/actors/me/favorites/\(id)"
+        ) else { return }
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        _ = try? sendRawRequest(request)
+    }
 
-        return buckets
-            .compactMap { $0 }
-            .flatMap(\.items)
-            .compactMap(\.card?.id)
-            .filter { !$0.isEmpty }
+    private func fetchDiscoveryRoot(
+        assetID: String,
+        token: String
+    ) throws -> String {
+        let baseURL = ProcessInfo.processInfo.environment["CHORAI_API_BASE_URL"]
+            ?? "http://127.0.0.1:8080"
+        guard let url = URL(
+            string: "\(baseURL)/api/v1/actors/me/favorites/\(assetID)/discovery-path"
+        ) else {
+            throw NSError(
+                domain: "ArcNoteUITests",
+                code: 13,
+                userInfo: [NSLocalizedDescriptionKey: "Invalid discovery path URL"]
+            )
+        }
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        return try sendRequest(
+            request,
+            responseType: SmokeDiscoveryPathResponse.self
+        ).data.rootActivityID
+    }
+
+    private func waitForDiscoveryRoot(
+        assetID: String,
+        token: String,
+        timeout: TimeInterval = 15,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) throws -> String {
+        let deadline = Date().addingTimeInterval(timeout)
+        var lastRoot = ""
+        var lastError: Error?
+        while Date() < deadline {
+            do {
+                lastRoot = try fetchDiscoveryRoot(assetID: assetID, token: token)
+                if !lastRoot.isEmpty { return lastRoot }
+            } catch {
+                lastError = error
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.3))
+        }
+        if let lastError {
+            XCTFail(
+                "Timed out waiting for discovery path; last error: \(lastError)",
+                file: file,
+                line: line
+            )
+        } else {
+            XCTFail("Timed out waiting for discovery path", file: file, line: line)
+        }
+        return lastRoot
     }
 
     private func waitForNotificationReadState(notificationId: String, token: String, expected: Bool, timeout: TimeInterval = 15, file: StaticString = #filePath, line: UInt = #line) {

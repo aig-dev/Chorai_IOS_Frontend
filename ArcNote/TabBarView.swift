@@ -435,7 +435,11 @@ struct TabBarView: View {
         .navigationDestination(for: TabRoute.self) { route in
             switch route {
             case .spark(let cardId):
-                SparkView(cardId: cardId)
+                if let actorID = AuthManager.shared.currentUser?.id {
+                    SparkContinuationView(cardID: cardId, actorID: actorID)
+                } else {
+                    EmptyView()
+                }
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NavigateToEdit"))) { notification in

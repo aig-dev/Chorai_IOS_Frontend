@@ -206,8 +206,11 @@ struct NetworkCoreSparkService: CoreSparkServing {
                 .eraseToAnyPublisher()
         }
 
-        let publishers = candidates.map(hydrate(candidate:))
-        return Publishers.MergeMany(publishers)
+        return candidates.publisher
+            .setFailureType(to: CoreSparkError.self)
+            .flatMap(maxPublishers: .max(4)) { candidate in
+                hydrate(candidate: candidate)
+            }
             .collect()
             .map { results in
                 results.compactMap { $0 }.sorted { $0.index < $1.index }
@@ -225,26 +228,29 @@ struct NetworkCoreSparkService: CoreSparkServing {
                 .eraseToAnyPublisher()
         }
 
-        return network.getSparkCard(id: candidate.item.assetId)
-            .tryMap { response -> RelatedCard in
-                guard response.success, let card = response.data else {
-                    throw CoreSparkError.server
+        return Deferred {
+            return network.getSparkCard(id: candidate.item.assetId)
+                .tryMap { response -> RelatedCard in
+                    guard response.success, let card = response.data else {
+                        throw CoreSparkError.server
+                    }
+                    return card
                 }
-                return card
-            }
-            .map { Self.hydrated(candidate, card: $0) }
-            .map(Optional.some)
-            .mapError(Self.mapError)
-            .catch { error -> AnyPublisher<HydratedCandidate?, CoreSparkError> in
-                switch error {
-                case .forbidden, .notFound:
-                    return Just(nil)
-                        .setFailureType(to: CoreSparkError.self)
-                        .eraseToAnyPublisher()
-                default:
-                    return Fail(error: error).eraseToAnyPublisher()
+                .map { Self.hydrated(candidate, card: $0) }
+                .map(Optional.some)
+                .mapError(Self.mapError)
+                .catch { error -> AnyPublisher<HydratedCandidate?, CoreSparkError> in
+                    switch error {
+                    case .forbidden, .notFound:
+                        return Just(nil)
+                            .setFailureType(to: CoreSparkError.self)
+                            .eraseToAnyPublisher()
+                    default:
+                        return Fail(error: error).eraseToAnyPublisher()
+                    }
                 }
-            }
+                .eraseToAnyPublisher()
+        }
             .eraseToAnyPublisher()
     }
 
