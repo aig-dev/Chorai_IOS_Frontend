@@ -548,6 +548,8 @@ final class ArcNoteUITests: XCTestCase {
         app.launch()
         navigateToSparkFromFlow(cardID: cardID)
 
+        waitFor("spark.card.\(visibleCardID)", timeout: 30)
+
         XCTAssertEqual(sparkAnchorValue("spark.activity.id"), activityID)
         XCTAssertEqual(sparkAnchorValue("spark.root.id"), rootActivityID)
         XCTAssertEqual(sparkAnchorValue("spark.depth"), depth)
@@ -587,6 +589,108 @@ final class ArcNoteUITests: XCTestCase {
         waitFor("screen.spark.loaded", timeout: 20)
         tap("spark.menu.\(visibleCardID)")
         waitFor("popup-menu.item.view", timeout: 10)
+    }
+
+    func testSparkVisualEvidenceMatrix() throws {
+        guard ProcessInfo.processInfo.environment[
+            "CHORAI_CAPTURE_SPARK_VISUALS"
+        ] == "1" else {
+            throw XCTSkip("Set CHORAI_CAPTURE_SPARK_VISUALS=1 to capture evidence")
+        }
+
+        let session = try requireSmokeSession()
+        let cardID = sparkSeedCardID
+
+        prepareSparkVisualApp(
+            session: session,
+            cardID: cardID,
+            suffix: "root-child-save",
+            environment: ["CHORAI_UI_TEST_SPARK_TRIGGER_DELAY_MS": "1200"]
+        )
+        openSparkRouteFromFlow(cardID: cardID)
+        waitFor("screen.spark.loading", timeout: 10)
+        captureSparkVisual("initial-loading")
+        waitFor("screen.spark.loaded", timeout: 90)
+        captureSparkVisual("root-loaded")
+
+        let rootActivityID = sparkAnchorValue("spark.activity.id")
+        let rootVisibleID = sparkAnchorValue("spark.visible-card.id")
+        waitFor("spark.card.\(rootVisibleID)").swipeUp()
+        waitFor("screen.spark.loading", timeout: 10)
+        captureSparkVisual("child-loading")
+        _ = waitForDifferentSparkActivity(from: rootActivityID, timeout: 90)
+        captureSparkVisual("child-loaded")
+
+        let savedID = try waitForUnfavoritedSparkResult(token: session.token)
+        waitFor("spark.card.\(savedID)").swipeRight()
+        waitFor("spark.save.undo", timeout: 20)
+        captureSparkVisual("save-success")
+        tap("spark.save.undo")
+        waitForAssetStatus(
+            kind: "favorites",
+            id: savedID,
+            token: session.token,
+            expected: false
+        )
+
+        prepareSparkVisualApp(
+            session: session,
+            cardID: cardID,
+            suffix: "error",
+            environment: ["CHORAI_UI_TEST_SPARK_FAIL_CHILD_TRIGGER": "1"]
+        )
+        navigateToSparkFromFlow(cardID: cardID)
+        let errorParentID = sparkAnchorValue("spark.visible-card.id")
+        waitFor("spark.card.\(errorParentID)").swipeUp()
+        waitFor("screen.spark.error", timeout: 20)
+        captureSparkVisual("confirmed-trigger-error")
+
+        prepareSparkVisualApp(
+            session: session,
+            cardID: cardID,
+            suffix: "empty",
+            environment: ["CHORAI_UI_TEST_SPARK_EMPTY_ROOT": "1"]
+        )
+        openSparkRouteFromFlow(cardID: cardID)
+        waitFor("screen.spark.empty", timeout: 30)
+        captureSparkVisual("all-groups-empty")
+
+        prepareSparkVisualApp(
+            session: session,
+            cardID: cardID,
+            suffix: "save-rollback",
+            environment: ["CHORAI_UI_TEST_SPARK_FAIL_FAVORITE": "1"]
+        )
+        navigateToSparkFromFlow(cardID: cardID)
+        let rollbackID = try waitForUnfavoritedSparkResult(token: session.token)
+        waitFor("spark.card.\(rollbackID)").swipeRight()
+        waitFor("spark.save.failed", timeout: 20)
+        captureSparkVisual("save-rollback")
+
+        prepareSparkVisualApp(
+            session: session,
+            cardID: cardID,
+            suffix: "restored",
+            environment: [:]
+        )
+        navigateToSparkFromFlow(cardID: cardID)
+        let restoredActivityID = sparkAnchorValue("spark.activity.id")
+        let restoredVisibleID = sparkAnchorValue("spark.visible-card.id")
+        app.terminate()
+        app.launch()
+        navigateToSparkFromFlow(cardID: cardID)
+        waitFor("spark.card.\(restoredVisibleID)", timeout: 30)
+        XCTAssertEqual(sparkAnchorValue("spark.activity.id"), restoredActivityID)
+        captureSparkVisual("restored-session")
+
+        prepareSparkVisualApp(
+            session: session,
+            cardID: cardID,
+            suffix: "accessibility",
+            environment: ["CHORAI_UI_TEST_SPARK_ACCESSIBILITY_MODE": "1"]
+        )
+        navigateToSparkFromFlow(cardID: cardID)
+        captureSparkVisual("accessibility-xxxl-contrast-reduced-motion")
     }
 
     func testRecordCreatesPrivateGoCardAndRefreshesLibrary() throws {
@@ -813,6 +917,11 @@ final class ArcNoteUITests: XCTestCase {
     }
 
     private func navigateToSparkFromFlow(cardID: String) {
+        openSparkRouteFromFlow(cardID: cardID)
+        waitFor("screen.spark.loaded", timeout: 90)
+    }
+
+    private func openSparkRouteFromFlow(cardID: String) {
         waitFor("screen.flow.content", timeout: 30)
         tap("explore.card-detail")
         waitFor("screen.detail.loaded", timeout: 30)
@@ -824,7 +933,35 @@ final class ArcNoteUITests: XCTestCase {
         )
         tap("detail.menu.open")
         tap("popup-menu.item.spark")
-        waitFor("screen.spark.loaded", timeout: 90)
+    }
+
+    private func prepareSparkVisualApp(
+        session: SmokeSession,
+        cardID: String,
+        suffix: String,
+        environment: [String: String]
+    ) {
+        if app.state != .notRunning {
+            app.terminate()
+        }
+        app = XCUIApplication()
+        sparkSessionScope = "\(name).\(suffix).\(UUID().uuidString)"
+        seedAppSession(session)
+        app.launchEnvironment["CHORAI_UI_TEST_DETAIL_CARD_ID"] = cardID
+        app.launchEnvironment[
+            "CHORAI_UI_TEST_SPARK_SESSION_SCOPE"
+        ] = sparkSessionScope
+        for (key, value) in environment {
+            app.launchEnvironment[key] = value
+        }
+        launchAuthenticatedApp()
+    }
+
+    private func captureSparkVisual(_ name: String) {
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
     }
 
     private func sparkAnchorValue(

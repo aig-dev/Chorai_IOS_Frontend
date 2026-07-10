@@ -4,6 +4,7 @@ import UIKit
 
 struct SparkContinuationView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var systemDynamicTypeSize
     @StateObject private var store: SparkSessionStore
     @State private var showPopupMenu = false
     @State private var currentMenuCard: UserCard?
@@ -12,6 +13,7 @@ struct SparkContinuationView: View {
     @State private var selectedAuthorID: String?
     @State private var showDetail = false
     @State private var showAuthor = false
+    @State private var presentationRevision = 0
 
     private let actorID: String
 
@@ -44,6 +46,7 @@ struct SparkContinuationView: View {
                 phaseContent
                     .id(screenStateIdentifier)
             }
+            .id(presentationRevision)
             .padding(.horizontal, ZenVisualTokens.pageInset)
             .padding(.top, 8)
             .padding(.bottom, 18)
@@ -72,13 +75,27 @@ struct SparkContinuationView: View {
                 UserProfileView(actorId: actorID)
             }
         }
-        .task { store.start() }
+        .task {
+            store.start()
+            guard presentationRevision == 0 else { return }
+            // iOS 26 can retain the pushed destination snapshot when a fast
+            // replay completes while the source popup is still dismissing.
+            try? await Task.sleep(nanoseconds: 700_000_000)
+            guard !Task.isCancelled, presentationRevision == 0 else { return }
+            presentationRevision = 1
+        }
         .task(id: store.savedAssetID) {
             guard let assetID = store.savedAssetID else { return }
             try? await Task.sleep(nanoseconds: 3_000_000_000)
             guard !Task.isCancelled else { return }
             store.expireUndo(assetID: assetID)
         }
+        .environment(
+            \.dynamicTypeSize,
+            usesAccessibilityEvidenceMode
+                ? .accessibility3
+                : systemDynamicTypeSize
+        )
     }
 
     private var sparkAtmosphere: some View {
@@ -265,6 +282,7 @@ struct SparkContinuationView: View {
                     result: result,
                     isInteractionLocked: store.isInteractionLocked,
                     allowsSparkDeeper: store.phase == .loaded,
+                    forcesAccessibleAppearance: usesAccessibilityEvidenceMode,
                     onNext: store.advance,
                     onSave: store.saveCurrent,
                     onSparkDeeper: store.sparkCurrentDeeper,
@@ -319,6 +337,7 @@ struct SparkContinuationView: View {
             }
         case .saveFailed:
             SparkIconNotice(image: "favorite", label: "Save failed")
+                .accessibilityIdentifier("spark.save.failed")
         case .undoFailed:
             Button(action: store.undoLastSave) {
                 SparkIconNotice(image: "favorite_active", label: "Retry undo")
@@ -387,6 +406,16 @@ struct SparkContinuationView: View {
             store.currentResult?.id ?? "",
             String(store.visibleIndex)
         ].joined(separator: "::")
+    }
+
+    private var usesAccessibilityEvidenceMode: Bool {
+#if DEBUG
+        ProcessInfo.processInfo.environment[
+            "CHORAI_UI_TEST_SPARK_ACCESSIBILITY_MODE"
+        ] == "1"
+#else
+        false
+#endif
     }
 
     private func automationText(
@@ -488,6 +517,7 @@ private struct SparkResultCard: View {
     let result: SparkResult
     let isInteractionLocked: Bool
     let allowsSparkDeeper: Bool
+    let forcesAccessibleAppearance: Bool
     let onNext: () -> Void
     let onSave: () -> Void
     let onSparkDeeper: () -> Void
@@ -495,9 +525,9 @@ private struct SparkResultCard: View {
     let onOpenAuthor: () -> Void
     let onOpenMenu: () -> Void
 
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-    @Environment(\.colorSchemeContrast) private var contrast
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
+    @Environment(\.accessibilityReduceTransparency) private var systemReduceTransparency
+    @Environment(\.colorSchemeContrast) private var systemContrast
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var dragOffset: CGSize = .zero
     @State private var isResolvingGesture = false
@@ -641,6 +671,18 @@ private struct SparkResultCard: View {
                 lineWidth: 1
             )
         )
+    }
+
+    private var reduceMotion: Bool {
+        forcesAccessibleAppearance || systemReduceMotion
+    }
+
+    private var reduceTransparency: Bool {
+        forcesAccessibleAppearance || systemReduceTransparency
+    }
+
+    private var contrast: ColorSchemeContrast {
+        forcesAccessibleAppearance ? .increased : systemContrast
     }
 
     @ViewBuilder

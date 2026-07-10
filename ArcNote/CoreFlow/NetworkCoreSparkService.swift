@@ -26,6 +26,30 @@ struct NetworkCoreSparkService: CoreSparkServing {
         parentActivityID: String?
     ) -> AnyPublisher<SparkActivityPage, CoreSparkError> {
 #if DEBUG
+        if parentActivityID == nil,
+           ProcessInfo.processInfo.environment[
+               "CHORAI_UI_TEST_SPARK_EMPTY_ROOT"
+           ] == "1" {
+            let activityID = "act_ui_empty_root"
+            return Just(
+                SparkActivityPage(
+                    activityID: activityID,
+                    parentActivityID: nil,
+                    rootActivityID: activityID,
+                    chainDepth: 0,
+                    sourceAssetID: sourceAssetID,
+                    groups: [
+                        .related: [],
+                        .angles: [],
+                        .keywords: []
+                    ],
+                    createdAt: nil
+                )
+            )
+            .setFailureType(to: CoreSparkError.self)
+            .eraseToAnyPublisher()
+        }
+
         if parentActivityID != nil,
            ProcessInfo.processInfo.environment[
                "CHORAI_UI_TEST_SPARK_FAIL_CHILD_TRIGGER"
@@ -34,7 +58,7 @@ struct NetworkCoreSparkService: CoreSparkServing {
                 .eraseToAnyPublisher()
         }
 #endif
-        return network.triggerSpark(
+        let publisher = network.triggerSpark(
             cardId: sourceAssetID,
             parentActivityId: parentActivityID
         )
@@ -59,6 +83,20 @@ struct NetworkCoreSparkService: CoreSparkServing {
                 .eraseToAnyPublisher()
         }
         .eraseToAnyPublisher()
+
+#if DEBUG
+        if let rawDelay = ProcessInfo.processInfo.environment[
+            "CHORAI_UI_TEST_SPARK_TRIGGER_DELAY_MS"
+        ], let delay = Int(rawDelay), delay > 0 {
+            return publisher
+                .delay(
+                    for: .milliseconds(delay),
+                    scheduler: DispatchQueue.main
+                )
+                .eraseToAnyPublisher()
+        }
+#endif
+        return publisher
     }
 
     func activityResults(
@@ -146,7 +184,14 @@ struct NetworkCoreSparkService: CoreSparkServing {
         assetID: String,
         sparkActivityID: String
     ) -> AnyPublisher<Void, CoreSparkError> {
-        network.favoriteCard(
+#if DEBUG
+        if ProcessInfo.processInfo.environment[
+            "CHORAI_UI_TEST_SPARK_FAIL_FAVORITE"
+        ] == "1" {
+            return Fail(error: .server).eraseToAnyPublisher()
+        }
+#endif
+        return network.favoriteCard(
             cardId: assetID,
             sparkActivityId: sparkActivityID,
             presentsError: false
