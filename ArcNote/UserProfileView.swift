@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import CoreFlow
 
 struct UserProfileView: View {
     @Environment(\.dismiss) private var dismiss
@@ -25,7 +26,7 @@ struct UserProfileView: View {
     @State private var navigateToDetail = false
     @State private var navigateToEdit = false
     @State private var selectedCardId: String? = nil
-    @State private var navigateToReport = false
+    @State private var showReport = false
     @State private var showActionSheet = false
     
     let actorId: String
@@ -62,6 +63,8 @@ struct UserProfileView: View {
                         .font(.title2)
                         .foregroundColor(.white)
                 }
+                .accessibilityLabel("Profile actions")
+                .accessibilityIdentifier("user-profile.actions")
             }
             .padding(.horizontal, 20)
             .padding(.bottom, 20)
@@ -318,7 +321,7 @@ struct UserProfileView: View {
         }
         .confirmationDialog("", isPresented: $showActionSheet, titleVisibility: .hidden) {
             Button("Report this user", role: .destructive) {
-                navigateToReport = true
+                showReport = true
             }
             Button("Block this user", role: .destructive) {
                 blockUser()
@@ -347,11 +350,26 @@ struct UserProfileView: View {
                 EmptyView()
             }
         }
-        .navigationDestination(isPresented: $navigateToReport) {
-            WebViewPage(url: URL(string: "https://www.chorai.app/report")!, title: "Help & Report")
+        .sheet(isPresented: $showReport) {
+            ContentReportView(targetType: .actor, targetID: actorId)
         }
         .popupMenu(isPresented: $showPopupMenu, layout: popupMenuLayout, cardData: currentMenuCardData, isOwnCard: true)
         .linkPopup()
+        .overlay(alignment: .topLeading) {
+            VStack(spacing: 0) {
+                Text("User profile")
+                    .font(.system(size: 1))
+                    .foregroundStyle(.clear)
+                    .frame(width: 1, height: 1)
+                    .accessibilityIdentifier("screen.user-profile")
+                Text(actorId)
+                    .font(.system(size: 1))
+                    .foregroundStyle(.clear)
+                    .frame(width: 1, height: 1)
+                    .accessibilityIdentifier("user-profile.actor-id")
+            }
+            .accessibilityElement(children: .contain)
+        }
     }
     
     // MARK: Helper Functions

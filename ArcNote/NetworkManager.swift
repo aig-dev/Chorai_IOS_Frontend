@@ -1776,6 +1776,22 @@ extension NetworkManager {
         )
     }
 
+    func createContentReport(
+        _ input: ContentReportWireRequest
+    ) -> AnyPublisher<ContentReportWireEnvelope, NetworkError> {
+        do {
+            return request(
+                endpoint: "/api/content-reports",
+                method: .post,
+                parameters: try encodedParameters(input),
+                responseType: ContentReportWireEnvelope.self,
+                presentsError: false
+            )
+        } catch {
+            return Fail(error: .encodingError).eraseToAnyPublisher()
+        }
+    }
+
     private func waitForMergeArtifact(jobId: String, attempt: Int = 0) -> AnyPublisher<MergeArtifactResponse, NetworkError> {
         return getMergeJob(jobId: jobId)
             .flatMap { [weak self] job -> AnyPublisher<MergeArtifactResponse, NetworkError> in

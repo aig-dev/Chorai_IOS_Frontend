@@ -1275,6 +1275,120 @@ final class ArcNoteUITests: XCTestCase {
         captureShareVisual("library-card-share-error")
     }
 
+    func testPublicCardReportCreatesCanonicalGoCase() throws {
+        let session = try requireSmokeSession()
+        let targetSession = try requireSecondarySmokeSession()
+        XCTAssertNotEqual(session.actorId, targetSession.actorId)
+        seedAppSession(session)
+        let searchToken = "report-\(Int(Date().timeIntervalSince1970))"
+        let cardID = try createPublicSmokeCard(
+            token: targetSession.token,
+            searchToken: searchToken
+        )
+        defer {
+            deleteSmokeCard(id: cardID, token: targetSession.token)
+        }
+
+        launchAuthenticatedApp()
+        showExploreSearchResult(
+            searchToken: searchToken,
+            expectedCardId: cardID
+        )
+        tap("ellipsis")
+        tap("popup-menu.item.report")
+
+        waitFor("screen.content-report", timeout: 20)
+        waitFor("content-report.reason")
+        captureReportVisual("content-report-form")
+        tap("content-report.submit")
+
+        waitFor("content-report.submitted", timeout: 30)
+        let reportID = waitFor("content-report.report-id")
+            .label
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let report = try fetchSmokeReport(id: reportID, token: session.token)
+        XCTAssertEqual(report.reportID, reportID)
+        XCTAssertEqual(report.status, "OPEN")
+        captureReportVisual("content-report-submitted")
+    }
+
+    func testPublicCardReportFailureKeepsRetryableDraft() throws {
+        let session = try requireSmokeSession()
+        let targetSession = try requireSecondarySmokeSession()
+        seedAppSession(session)
+        let searchToken = "report-error-\(Int(Date().timeIntervalSince1970))"
+        let cardID = try createPublicSmokeCard(
+            token: targetSession.token,
+            searchToken: searchToken
+        )
+
+        launchAuthenticatedApp()
+        showExploreSearchResult(
+            searchToken: searchToken,
+            expectedCardId: cardID
+        )
+        deleteSmokeCard(id: cardID, token: targetSession.token)
+        tap("ellipsis")
+        tap("popup-menu.item.report")
+        waitFor("screen.content-report", timeout: 20)
+        tap("content-report.submit")
+
+        waitFor("content-report.error", timeout: 30)
+        waitFor("content-report.retry")
+        XCTAssertFalse(
+            waitFor("content-report.error-code")
+                .label
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .isEmpty
+        )
+        XCTAssertTrue(waitFor("content-report.reason").label.contains("Spam"))
+        captureReportVisual("content-report-error")
+    }
+
+    func testPublicProfileReportCreatesCanonicalActorCase() throws {
+        let session = try requireSmokeSession()
+        let targetSession = try requireSecondarySmokeSession()
+        seedAppSession(session)
+        let searchToken = "actor-report-\(Int(Date().timeIntervalSince1970))"
+        let cardID = try createPublicSmokeCard(
+            token: targetSession.token,
+            searchToken: searchToken
+        )
+        defer {
+            deleteSmokeCard(id: cardID, token: targetSession.token)
+        }
+
+        launchAuthenticatedApp()
+        showExploreSearchResult(
+            searchToken: searchToken,
+            expectedCardId: cardID
+        )
+        tapFirstHittableButton(label: "avatar")
+
+        waitFor("screen.user-profile", timeout: 30)
+        XCTAssertEqual(
+            waitFor("user-profile.actor-id")
+                .label
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+            targetSession.actorId
+        )
+        tapFirstExistingButton(["user-profile.actions"], timeout: 20)
+        let reportAction = app.buttons["Report this user"]
+        XCTAssertTrue(reportAction.waitForExistence(timeout: 10))
+        reportAction.tap()
+
+        waitFor("screen.content-report", timeout: 20)
+        tap("content-report.submit")
+        waitFor("content-report.submitted", timeout: 30)
+        let reportID = waitFor("content-report.report-id")
+            .label
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let report = try fetchSmokeReport(id: reportID, token: session.token)
+        XCTAssertEqual(report.reportID, reportID)
+        XCTAssertEqual(report.status, "OPEN")
+        captureReportVisual("actor-report-submitted")
+    }
+
     func testFailedRecordDraftRestoresAfterRelaunch() throws {
         let session = try requireSmokeSession()
         let healthyBaseURL = ProcessInfo.processInfo.environment["CHORAI_API_BASE_URL"]
@@ -1602,6 +1716,13 @@ final class ArcNoteUITests: XCTestCase {
     }
 
     private func captureShareVisual(_ name: String) {
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
+    private func captureReportVisual(_ name: String) {
         let attachment = XCTAttachment(screenshot: app.screenshot())
         attachment.name = name
         attachment.lifetime = .keepAlways
@@ -1944,6 +2065,31 @@ final class ArcNoteUITests: XCTestCase {
         }
     }
 
+    private func tapFirstHittableButton(
+        label: String,
+        timeout: TimeInterval = 10,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let deadline = Date().addingTimeInterval(timeout)
+        let query = app.buttons.matching(
+            NSPredicate(format: "label == %@", label)
+        )
+
+        while Date() < deadline {
+            for index in 0..<query.count {
+                let button = query.element(boundBy: index)
+                if button.isHittable {
+                    button.tap()
+                    return
+                }
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+        }
+
+        XCTFail("Missing hittable button with label: \(label)", file: file, line: line)
+    }
+
     private func replaceText(_ identifier: String, with text: String, file: StaticString = #filePath, line: UInt = #line) {
         let element = waitFor(identifier, timeout: 10, file: file, line: line)
         XCTAssertTrue(element.isHittable, "Identifier is not hittable: \(identifier)", file: file, line: line)
@@ -2280,6 +2426,20 @@ final class ArcNoteUITests: XCTestCase {
         }
     }
 
+    private struct SmokeReportResponse: Decodable {
+        let data: SmokeReport
+    }
+
+    private struct SmokeReport: Decodable {
+        let reportID: String
+        let status: String
+
+        enum CodingKeys: String, CodingKey {
+            case reportID = "report_id"
+            case status
+        }
+    }
+
     private struct SmokeMergeJobResponse: Decodable {
         let status: String
     }
@@ -2560,6 +2720,33 @@ final class ArcNoteUITests: XCTestCase {
         )
     }
 
+    private func requireSecondarySmokeSession(
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) throws -> SmokeSession {
+        let environment = ProcessInfo.processInfo.environment
+        let email = environment["CHORAI_UI_TEST_TARGET_EMAIL"]
+            ?? "ios-smoke-b-20260619@example.com"
+        let password = environment["CHORAI_UI_TEST_TARGET_PASSWORD"]
+            ?? "Password123"
+        if let session = fetchSmokeSession(email: email, password: password) {
+            return session
+        }
+        XCTFail(
+            "Unable to authenticate secondary local Go user",
+            file: file,
+            line: line
+        )
+        throw NSError(
+            domain: "ArcNoteUITests",
+            code: 1,
+            userInfo: [
+                NSLocalizedDescriptionKey:
+                    "Unable to authenticate secondary local Go user"
+            ]
+        )
+    }
+
     private func revokeSmokeSession(token: String) throws {
         let baseURL = ProcessInfo.processInfo.environment[
             "CHORAI_API_BASE_URL"
@@ -2798,6 +2985,26 @@ final class ArcNoteUITests: XCTestCase {
             request,
             responseType: SmokeSharePreview.self
         )
+    }
+
+    private func fetchSmokeReport(
+        id: String,
+        token: String
+    ) throws -> SmokeReport {
+        let baseURL = ProcessInfo.processInfo.environment[
+            "CHORAI_API_BASE_URL"
+        ] ?? "http://127.0.0.1:8080"
+        guard let url = URL(
+            string: "\(baseURL)/api/content-reports/\(id)"
+        ) else {
+            throw URLError(.badURL)
+        }
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        return try sendRequest(
+            request,
+            responseType: SmokeReportResponse.self
+        ).data
     }
 
     private func fetchSmokeMergeJob(
@@ -3215,10 +3422,17 @@ final class ArcNoteUITests: XCTestCase {
     }
 
     private func fetchFreshSmokeSession() -> SmokeSession? {
-
         let environment = ProcessInfo.processInfo.environment
         let email = environment["CHORAI_UI_TEST_EMAIL"] ?? "ios-smoke-a-20260619@example.com"
         let password = environment["CHORAI_UI_TEST_PASSWORD"] ?? "Password123"
+        return fetchSmokeSession(email: email, password: password)
+    }
+
+    private func fetchSmokeSession(
+        email: String,
+        password: String
+    ) -> SmokeSession? {
+        let environment = ProcessInfo.processInfo.environment
         let baseURL = environment["CHORAI_API_BASE_URL"] ?? "http://127.0.0.1:8080"
         guard let url = URL(string: "\(baseURL)/api/auth/login") else {
             return nil

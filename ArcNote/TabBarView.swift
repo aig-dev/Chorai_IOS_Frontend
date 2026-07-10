@@ -24,13 +24,13 @@ struct TabBarView: View {
     @State private var selectedEditCardId: String? = nil
     @State private var navigateToMerge = false
     @State private var selectedMergeCardId: String? = nil
-    @State private var navigateToReport = false
     @State private var mergeResumeMetadata: MergeResumeMetadata?
     @State private var didAutoPresentInitialRecord = false
     @State private var visibleFlowCardID: String?
     @State private var hasObservedActiveOnboarding = false
     @State private var showOnboardingCompletionAcknowledgement = false
     @State private var shareRoute: ShareRoute?
+    @State private var reportRoute: ReportRoute?
 
     #if DEBUG
     @State private var exploreSearchSmokeInvoked = false
@@ -50,6 +50,11 @@ struct TabBarView: View {
     }
 
     private struct ShareRoute: Identifiable {
+        let cardID: String
+        var id: String { cardID }
+    }
+
+    private struct ReportRoute: Identifiable {
         let cardID: String
         var id: String { cardID }
     }
@@ -593,9 +598,6 @@ struct TabBarView: View {
                 onCommitted: coordinator.mergeCompleted
             )
         }
-        .navigationDestination(isPresented: $navigateToReport) {
-            WebViewPage(url: URL(string: "https://www.chorai.app/report")!, title: "Help & Report")
-        }
         #if DEBUG
         .navigationDestination(isPresented: $navigateToDetailSmoke) {
             if let cardId = selectedDetailSmokeCardId {
@@ -621,6 +623,9 @@ struct TabBarView: View {
         }
         .sheet(item: $shareRoute) { route in
             ShareCardView(cardID: route.cardID)
+        }
+        .sheet(item: $reportRoute) { route in
+            ContentReportView(targetType: .asset, targetID: route.cardID)
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NavigateToEdit"))) { notification in
             if let cardId = notification.userInfo?["cardId"] as? String {
@@ -654,6 +659,15 @@ struct TabBarView: View {
             guard let cardID = notification.userInfo?["cardId"] as? String,
                   !cardID.isEmpty else { return }
             shareRoute = ShareRoute(cardID: cardID)
+        }
+        .onReceive(
+            NotificationCenter.default.publisher(
+                for: NSNotification.Name("ShowContentReport")
+            )
+        ) { notification in
+            guard let cardID = notification.userInfo?["cardId"] as? String,
+                  !cardID.isEmpty else { return }
+            reportRoute = ReportRoute(cardID: cardID)
         }
         .onReceive(
             NotificationCenter.default.publisher(for: .mergeSessionDidChange)
@@ -710,12 +724,6 @@ struct TabBarView: View {
             visibleExploreCardId = notification.userInfo?["cardId"] as? String
         }
         #endif
-        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NavigateToReport"))) { _ in
-            DispatchQueue.main.async {
-                navigateToReport = false
-                navigateToReport = true
-            }
-        }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ShowCardMenu"))) { notification in
             if let userInfo = notification.userInfo,
                let cardData = userInfo["cardData"] as? UserCard {

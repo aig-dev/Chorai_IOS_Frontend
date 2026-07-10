@@ -174,6 +174,16 @@ struct PopupMenuOverlay: View {
             userInfo: ["cardId": cardID]
         )
     }
+
+    private func reportCard() {
+        guard let cardID = cardData?.id else { return }
+        isPresented = false
+        NotificationCenter.default.post(
+            name: NSNotification.Name("ShowContentReport"),
+            object: nil,
+            userInfo: ["cardId": cardID]
+        )
+    }
     
     // MARK: 菜单内容
     @ViewBuilder
@@ -192,13 +202,21 @@ struct PopupMenuOverlay: View {
                             )
                         }
                     })
-                    MenuButton(icon: "menu_report", text: "Report", color: .green, onTap: {
-                        isPresented = false
-                        NotificationCenter.default.post(
-                            name: NSNotification.Name("NavigateToReport"),
-                            object: nil
+                    if isOwnCard {
+                        MenuButton(
+                            icon: "menu_share",
+                            text: "Share",
+                            color: .green,
+                            onTap: shareCard
                         )
-                    })
+                    } else {
+                        MenuButton(
+                            icon: "menu_report",
+                            text: "Report",
+                            color: .green,
+                            onTap: reportCard
+                        )
+                    }
                 }
                 HStack(spacing: 15) {
                     MenuButton(icon: "menu_link", text: "Link", color: .pink, onTap: {
@@ -272,8 +290,6 @@ struct PopupMenuOverlay: View {
                                 toggleCardVisibility()
                             })
                         }
-                    } else {
-                        MenuButton(icon: "menu_private", text: "Private", color: .purple)
                     }
                     
                     MenuButton(
@@ -316,8 +332,6 @@ struct PopupMenuOverlay: View {
                                 toggleCardPin()
                             })
                         }
-                    } else {
-                        MenuButton(icon: "menu_pin", text: "Pin", color: .orange)
                     }
                     if let card = cardData, card.rate < 2 {
                         VStack(spacing: 6) {
@@ -382,7 +396,12 @@ struct PopupMenuOverlay: View {
                             )
                         }
                     })
-                    MenuButton(icon: "menu_pin", text: "Pin", color: .orange)
+                    MenuButton(
+                        icon: "menu_report",
+                        text: "Report",
+                        color: .green,
+                        onTap: reportCard
+                    )
                 }
             }
         }
