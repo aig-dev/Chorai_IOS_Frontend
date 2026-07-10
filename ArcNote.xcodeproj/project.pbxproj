@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		C0DEF1002F60000100000001 /* CoreFlow in Frameworks */ = {isa = PBXBuildFile; productRef = C0DEF1002F60000100000003 /* CoreFlow */; };
 		A00000012F50000100000001 /* ArcNoteUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000012F50000100000002 /* ArcNoteUITests.swift */; };
 		1B055F4E2E4E08EF00896B01 /* ChatDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B055F4D2E4E08EE00896B01 /* ChatDetailView.swift */; };
 		1B055F502E4EFC9000896B01 /* NotificationDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B055F4F2E4EFC9000896B01 /* NotificationDetailView.swift */; };
@@ -165,6 +166,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C0DEF1002F60000100000001 /* CoreFlow in Frameworks */,
 				1B846EF42E84F19100A7E621 /* GoogleSignInSwift in Frameworks */,
 				1B1240302F3C95DD00B53098 /* MarkupEditor in Frameworks */,
 				1BEC65DC2E9E6DFC00075403 /* MarkupEditor in Frameworks */,
@@ -316,6 +318,7 @@
 			);
 			name = ArcNote;
 			packageProductDependencies = (
+				C0DEF1002F60000100000003 /* CoreFlow */,
 				1B6E6FBA2E6ABA88006898F5 /* Alamofire */,
 				1B6E6FBD2E6ABB6E006898F5 /* SwiftyJSON */,
 				1B846EF12E84F19100A7E621 /* GoogleSignIn */,
@@ -378,6 +381,7 @@
 			);
 			mainGroup = 1B48AE282E30967F0090CF86;
 			packageReferences = (
+				C0DEF1002F60000100000002 /* XCLocalSwiftPackageReference "Packages/CoreFlow" */,
 				1B6E6FB92E6ABA88006898F5 /* XCRemoteSwiftPackageReference "Alamofire" */,
 				1B6E6FBC2E6ABB6E006898F5 /* XCRemoteSwiftPackageReference "SwiftyJSON" */,
 				1B846EF02E84F19100A7E621 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
@@ -767,6 +771,10 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
+		C0DEF1002F60000100000002 /* XCLocalSwiftPackageReference "Packages/CoreFlow" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/CoreFlow;
+		};
 		1B1240312F3C960D00B53098 /* XCLocalSwiftPackageReference "Packages/MarkdownEditor" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/MarkdownEditor;
@@ -801,6 +809,10 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		C0DEF1002F60000100000003 /* CoreFlow */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = CoreFlow;
+		};
 		1B12402F2F3C95DD00B53098 /* MarkupEditor */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = MarkupEditor;
