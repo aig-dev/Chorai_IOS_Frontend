@@ -45,6 +45,10 @@ public final class MergeSessionStore: ObservableObject {
         snapshot
     }
 
+    public var isTitleOverrideLocked: Bool {
+        snapshot?.commitRequest != nil
+    }
+
     private let actorID: String
     private let service: any CoreMergeServing
     private let persistence: any MergeSessionPersisting
@@ -184,6 +188,25 @@ public final class MergeSessionStore: ObservableObject {
             return
         }
 
+        if snapshot.lastStatus == .failed {
+            retryGeneration()
+            return
+        }
+
+        let shouldReplayCommit = snapshot.lastStatus == .artifactReady
+            || snapshot.lastStatus == .committedCard
+        if let commitRequest = snapshot.commitRequest, shouldReplayCommit {
+            phase = .committing
+            launch { store in
+                await store.submitCommit(
+                    jobID: snapshot.jobID ?? "",
+                    request: commitRequest,
+                    reconcileConflict: true
+                )
+            }
+            return
+        }
+
         if let jobID = snapshot.jobID {
             phase = snapshot.lastStatus == .committing
                 ? .committing
@@ -196,6 +219,100 @@ public final class MergeSessionStore: ObservableObject {
             launch { store in
                 await store.submitCreate(snapshot.createRequest)
             }
+        }
+    }
+
+    public func cancel() {
+        guard
+            !isOperationInFlight,
+            let job,
+            job.status.canCancel,
+            snapshot != nil
+        else {
+            return
+        }
+
+        phase = .cancelling
+        launch { store in
+            await store.submitCancel(jobID: job.jobID)
+        }
+    }
+
+    public func commit() {
+        guard
+            !isOperationInFlight,
+            phase == .ready,
+            let job,
+            job.status.canCommit,
+            var value = snapshot
+        else {
+            return
+        }
+
+        let request: MergeCommitRequest
+        if let existing = value.commitRequest {
+            request = existing
+        } else {
+            let trimmedTitle = titleOverride
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            request = MergeCommitRequest(
+                idempotencyKey: idempotencyKey(),
+                target: .newCard(
+                    spaceID: nil,
+                    titleOverride: trimmedTitle.isEmpty ? nil : trimmedTitle
+                )
+            )
+            value.commitRequest = request
+            snapshot = value
+            persistence.save(value)
+        }
+
+        phase = .committing
+        launch { store in
+            await store.submitCommit(
+                jobID: job.jobID,
+                request: request,
+                reconcileConflict: true
+            )
+        }
+    }
+
+    public func retryGeneration() {
+        guard
+            !isOperationInFlight,
+            let current = snapshot,
+            current.lastStatus == .failed
+        else {
+            return
+        }
+
+        let request = MergeCreateRequest(
+            sources: current.createRequest.sources,
+            capability: current.createRequest.capability,
+            idempotencyKey: idempotencyKey(),
+            context: current.createRequest.context
+        )
+        let replacement = MergeSessionSnapshot(
+            actorID: current.actorID,
+            anchorAssetID: current.anchorAssetID,
+            anchorPreview: current.anchorPreview,
+            createRequest: request,
+            selectedCapability: nil,
+            jobID: nil,
+            lastStatus: nil,
+            artifactID: nil,
+            commitRequest: nil,
+            committedAssetID: nil
+        )
+        snapshot = replacement
+        persistence.save(replacement)
+        selectedSources = request.sources
+        job = nil
+        artifact = nil
+        titleOverride = ""
+        phase = .creating
+        launch { store in
+            await store.submitCreate(request)
         }
     }
 
@@ -271,6 +388,52 @@ public final class MergeSessionStore: ObservableObject {
         }
     }
 
+    private func submitCancel(jobID: String) async {
+        do {
+            let cancelled = try await service.cancel(jobID: jobID)
+            guard !Task.isCancelled else { return }
+            await driveLifecycle(from: cancelled)
+        } catch {
+            guard !Task.isCancelled else { return }
+            do {
+                let current = try await service.job(id: jobID)
+                guard !Task.isCancelled else { return }
+                await driveLifecycle(from: current)
+            } catch {
+                guard !Task.isCancelled else { return }
+                phase = .paused(coreError(from: error))
+            }
+        }
+    }
+
+    private func submitCommit(
+        jobID: String,
+        request: MergeCommitRequest,
+        reconcileConflict: Bool
+    ) async {
+        guard !jobID.isEmpty else {
+            phase = .failed(.decoding)
+            return
+        }
+
+        do {
+            let result = try await service.commit(
+                jobID: jobID,
+                request: request
+            )
+            guard !Task.isCancelled else { return }
+            recordCommitResult(result)
+        } catch {
+            guard !Task.isCancelled else { return }
+            let mapped = coreError(from: error)
+            if case .conflict = mapped, reconcileConflict {
+                await reconcile(jobID: jobID)
+            } else {
+                phase = .paused(mapped)
+            }
+        }
+    }
+
     private func driveLifecycle(from initialJob: MergeJob) async {
         var current = initialJob
         var pollCount = 0
@@ -287,7 +450,17 @@ public final class MergeSessionStore: ObservableObject {
                 await loadArtifact(jobID: current.jobID)
                 return
             case .committedCard:
-                phase = .completed(assetID: snapshot?.committedAssetID)
+                if let committedAssetID = snapshot?.committedAssetID {
+                    phase = .completed(assetID: committedAssetID)
+                } else if let commitRequest = snapshot?.commitRequest {
+                    await submitCommit(
+                        jobID: current.jobID,
+                        request: commitRequest,
+                        reconcileConflict: false
+                    )
+                } else {
+                    phase = .paused(.decoding)
+                }
                 return
             case .committedBlock:
                 phase = .completed(assetID: nil)
@@ -337,7 +510,7 @@ public final class MergeSessionStore: ObservableObject {
                 return
             }
             artifact = loaded
-            titleOverride = ""
+            titleOverride = snapshot?.commitRequest?.target.titleOverride ?? ""
             if var value = snapshot {
                 value.artifactID = loaded.artifactID
                 snapshot = value
@@ -351,6 +524,26 @@ public final class MergeSessionStore: ObservableObject {
                 ? .failed(mapped)
                 : .paused(mapped)
         }
+    }
+
+    private func recordCommitResult(_ result: MergeCommitResult) {
+        guard
+            result.targetType == "new_card",
+            let assetID = result.assetID,
+            !assetID.isEmpty,
+            var value = snapshot
+        else {
+            phase = .paused(
+                .server(code: result.errorCode ?? "commit_result_incomplete")
+            )
+            return
+        }
+
+        value.committedAssetID = assetID
+        value.lastStatus = .committedCard
+        snapshot = value
+        persistence.save(value)
+        phase = .completed(assetID: assetID)
     }
 
     private func record(_ current: MergeJob) {

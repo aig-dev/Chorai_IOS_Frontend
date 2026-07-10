@@ -17,11 +17,23 @@ actor MockCoreMergeService: CoreMergeServing {
     private var cancelResults: [Result<MergeJob, CoreMergeError>] = []
     private var commitResults: [Result<MergeCommitResult, CoreMergeError>] = []
     private var createObserver: (@Sendable (MergeCreateRequest) -> Void)?
+    private var cancelObserver: (@Sendable (String) -> Void)?
+    private var commitObserver: (@Sendable (String, MergeCommitRequest) -> Void)?
 
     func setCreateObserver(
         _ observer: @escaping @Sendable (MergeCreateRequest) -> Void
     ) {
         createObserver = observer
+    }
+
+    func setCancelObserver(_ observer: @escaping @Sendable (String) -> Void) {
+        cancelObserver = observer
+    }
+
+    func setCommitObserver(
+        _ observer: @escaping @Sendable (String, MergeCommitRequest) -> Void
+    ) {
+        commitObserver = observer
     }
 
     func enqueueCapabilities(_ result: Result<[MergeCapability], CoreMergeError>) {
@@ -71,6 +83,7 @@ actor MockCoreMergeService: CoreMergeServing {
 
     func cancel(jobID: String) async throws -> MergeJob {
         cancelCalls.append(jobID)
+        cancelObserver?(jobID)
         return try dequeue(&cancelResults).get()
     }
 
@@ -79,6 +92,7 @@ actor MockCoreMergeService: CoreMergeServing {
         request: MergeCommitRequest
     ) async throws -> MergeCommitResult {
         commitCalls.append((jobID, request))
+        commitObserver?(jobID, request)
         return try dequeue(&commitResults).get()
     }
 
@@ -95,6 +109,7 @@ final class InMemoryMergeSessionPersistence: MergeSessionPersisting {
     private(set) var saves: [MergeSessionSnapshot] = []
     private(set) var removals: [String] = []
     var onSave: ((MergeSessionSnapshot) -> Void)?
+    var onRemove: ((String) -> Void)?
 
     func snapshot(actorID: String) -> MergeSessionSnapshot? {
         values[actorID]
@@ -109,6 +124,7 @@ final class InMemoryMergeSessionPersistence: MergeSessionPersisting {
     func remove(actorID: String) {
         values[actorID] = nil
         removals.append(actorID)
+        onRemove?(actorID)
     }
 
     func resumeMetadata(actorID: String) -> MergeResumeMetadata? {
@@ -144,6 +160,12 @@ final class LockedMergeEventLog: @unchecked Sendable {
     func append(_ event: String) {
         lock.lock()
         storage.append(event)
+        lock.unlock()
+    }
+
+    func removeAll() {
+        lock.lock()
+        storage.removeAll()
         lock.unlock()
     }
 }
@@ -257,6 +279,23 @@ func makeMergeArtifact(
         ),
         fragments: [],
         metadata: [:]
+    )
+}
+
+func makeMergeCommitResult(
+    assetID: String? = "ast_committed",
+    errorCode: String? = nil
+) -> MergeCommitResult {
+    MergeCommitResult(
+        commitID: "commit_1",
+        status: "COMMITTED",
+        targetType: "new_card",
+        assetID: assetID,
+        versionID: assetID == nil ? nil : "ver_committed",
+        activityID: assetID == nil ? nil : "activity_1",
+        logID: nil,
+        errorCode: errorCode,
+        backgroundMediaReference: nil
     )
 }
 
