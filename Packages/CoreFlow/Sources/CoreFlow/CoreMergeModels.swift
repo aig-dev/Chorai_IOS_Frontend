@@ -574,6 +574,7 @@ public enum CoreMergeError: Error, Equatable, Sendable {
     case unavailable(code: String?)
     case offline
     case timeout
+    case interrupted
     case artifactNotReady
     case cancelled
     case decoding
