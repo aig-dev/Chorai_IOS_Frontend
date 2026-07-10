@@ -1,6 +1,7 @@
 import Foundation
 import Alamofire
 import Combine
+import CoreFlow
 import UIKit
 
 // MARK: 网络管理器
@@ -1809,6 +1810,75 @@ extension NetworkManager {
                 idemKey: "ios-legacy-merge-commit-\(jobId)",
                 target: NewCardCommitTarget(titleOverride: titleOverride)
             )
+        )
+    }
+
+    func getOnboardingStatus(
+    ) -> AnyPublisher<NetworkResponse<OnboardingStatusSnapshot>, NetworkError> {
+        request(
+            endpoint: "/api/v1/onboarding/status",
+            responseType: NetworkResponse<OnboardingStatusSnapshot>.self,
+            presentsError: false
+        )
+    }
+
+    func startOnboarding(
+        flowVersion: Int
+    ) -> AnyPublisher<NetworkResponse<OnboardingGuideSession>, NetworkError> {
+        request(
+            endpoint: "/api/v1/onboarding/sessions",
+            method: .post,
+            parameters: ["flow_version": flowVersion],
+            responseType: NetworkResponse<OnboardingGuideSession>.self,
+            presentsError: false
+        )
+    }
+
+    func getCurrentOnboarding(
+    ) -> AnyPublisher<NetworkResponse<OnboardingGuideSession>, NetworkError> {
+        request(
+            endpoint: "/api/v1/onboarding/sessions/current",
+            responseType: NetworkResponse<OnboardingGuideSession>.self,
+            presentsError: false
+        )
+    }
+
+    func respondToOnboarding(
+        sessionID: String,
+        input: OnboardingGuideInput
+    ) -> AnyPublisher<NetworkResponse<OnboardingGuideSession>, NetworkError> {
+        do {
+            return request(
+                endpoint: "/api/v1/onboarding/sessions/\(sessionID)/respond",
+                method: .post,
+                parameters: try encodedParameters(input),
+                responseType: NetworkResponse<OnboardingGuideSession>.self,
+                presentsError: false
+            )
+        } catch {
+            return Fail(error: NetworkError.encodingError).eraseToAnyPublisher()
+        }
+    }
+
+    func completeOnboarding(
+        sessionID: String
+    ) -> AnyPublisher<NetworkResponse<OnboardingGuideSession>, NetworkError> {
+        request(
+            endpoint: "/api/v1/onboarding/sessions/\(sessionID)/complete",
+            method: .post,
+            responseType: NetworkResponse<OnboardingGuideSession>.self,
+            presentsError: false
+        )
+    }
+
+    func skipOnboarding(
+        sessionID: String
+    ) -> AnyPublisher<NetworkResponse<OnboardingGuideSession>, NetworkError> {
+        request(
+            endpoint: "/api/v1/onboarding/sessions/\(sessionID)/skip",
+            method: .post,
+            responseType: NetworkResponse<OnboardingGuideSession>.self,
+            presentsError: false
         )
     }
 

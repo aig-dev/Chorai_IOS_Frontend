@@ -426,6 +426,105 @@ final class ArcNoteUITests: XCTestCase {
         )
     }
 
+    func testCanonicalOnboardingRecordAndFlowResumeGoV1() throws {
+        let smoke = try requireFreshSmokeSession()
+        let started = try restartSmokeOnboarding(
+            token: smoke.token,
+            flowVersion: 1
+        )
+        XCTAssertEqual(started.state, "elicit_signal")
+
+        seedAppSession(smoke)
+        app.launchEnvironment["CHORAI_UI_TEST_ONBOARDING"] = "1"
+        launchAuthenticatedApp()
+
+        waitForSessionPhase("verified", timeout: 30)
+        waitForOnboardingAnchor("onboarding.state", value: "elicit_signal")
+        waitFor("record.sheet", timeout: 30)
+        captureVisual("onboarding-record-handoff")
+
+        let signal = "iOS onboarding signal \(Int(Date().timeIntervalSince1970))"
+        replaceText("record.input", with: signal)
+        tapButton("record.save")
+
+        waitForOnboardingAnchor("onboarding.state", value: "deepen_signal")
+        waitFor("onboarding.choice.accurate", timeout: 15)
+        captureVisual("onboarding-deepen-choice")
+        tap("onboarding.choice.accurate")
+
+        waitForOnboardingAnchor(
+            "onboarding.state",
+            value: "product_explore_card",
+            timeout: 30
+        )
+        waitFor("onboarding.guide", timeout: 15)
+        let visibleCardID = waitFor("flow.visible-card.id", timeout: 30)
+            .label
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        XCTAssertFalse(visibleCardID.isEmpty)
+        captureVisual("onboarding-flow-guide")
+
+        tap("flow.skip.\(visibleCardID)")
+        waitForOnboardingAnchor(
+            "onboarding.state",
+            value: "product_spark_intro",
+            timeout: 30
+        )
+
+        let canonical = try fetchCurrentSmokeOnboarding(token: smoke.token)
+        XCTAssertEqual(canonical.sessionID, started.sessionID)
+        XCTAssertEqual(canonical.flowVersion, 1)
+        XCTAssertEqual(canonical.state, "product_spark_intro")
+
+        app.terminate()
+        app.launch()
+        waitForSessionPhase("verified", timeout: 30)
+        waitForOnboardingAnchor(
+            "onboarding.state",
+            value: "product_spark_intro",
+            timeout: 30
+        )
+        waitForOnboardingAnchor(
+            "onboarding.session.id",
+            value: started.sessionID,
+            timeout: 10
+        )
+        captureVisual("onboarding-v1-resumed")
+    }
+
+    func testActiveWebV2OnboardingIsNotMutatedByIOS() throws {
+        let smoke = try requireFreshSmokeSession()
+        let started = try restartSmokeOnboarding(
+            token: smoke.token,
+            flowVersion: 2
+        )
+        XCTAssertEqual(started.flowVersion, 2)
+
+        seedAppSession(smoke)
+        app.launchEnvironment["CHORAI_UI_TEST_ONBOARDING"] = "1"
+        launchAuthenticatedApp()
+
+        waitForSessionPhase("verified", timeout: 30)
+        waitForOnboardingAnchor(
+            "onboarding.phase",
+            value: "deferred:2",
+            timeout: 30
+        )
+        waitForOnboardingAnchor(
+            "onboarding.session.id",
+            value: started.sessionID,
+            timeout: 10
+        )
+        XCTAssertFalse(exists("record.sheet", timeout: 2))
+        XCTAssertFalse(exists("onboarding.guide", timeout: 2))
+
+        let unchanged = try fetchCurrentSmokeOnboarding(token: smoke.token)
+        XCTAssertEqual(unchanged.sessionID, started.sessionID)
+        XCTAssertEqual(unchanged.flowVersion, 2)
+        XCTAssertEqual(unchanged.state, started.state)
+        XCTAssertEqual(unchanged.status, "active")
+    }
+
     func testSettingsPersonalDataSaveUpdatesGoProfileMe() throws {
         let session = try requireSmokeSession()
         seedAppSession(session)
@@ -1247,6 +1346,34 @@ final class ArcNoteUITests: XCTestCase {
         )
     }
 
+    private func waitForOnboardingAnchor(
+        _ identifier: String,
+        value expected: String,
+        timeout: TimeInterval = 20,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let deadline = Date().addingTimeInterval(timeout)
+        let anchor = app.descendants(matching: .any)[identifier]
+        var lastValue = "missing"
+        while Date() < deadline {
+            if anchor.exists {
+                lastValue = anchor.label.trimmingCharacters(
+                    in: .whitespacesAndNewlines
+                )
+                if lastValue == expected {
+                    return
+                }
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+        }
+        XCTFail(
+            "\(identifier) did not become \(expected); last value: \(lastValue)",
+            file: file,
+            line: line
+        )
+    }
+
     private func mergeAnchorValue(
         _ identifier: String,
         timeout: TimeInterval = 10,
@@ -2006,6 +2133,23 @@ final class ArcNoteUITests: XCTestCase {
         }
     }
 
+    private struct SmokeOnboardingResponse: Decodable {
+        let data: SmokeOnboardingSession
+    }
+
+    private struct SmokeOnboardingSession: Decodable {
+        let sessionID: String
+        let flowVersion: Int
+        let status: String
+        let state: String
+
+        enum CodingKeys: String, CodingKey {
+            case sessionID = "session_id"
+            case flowVersion = "flow_version"
+            case status, state
+        }
+    }
+
     private struct SmokeVerifyTokenResponse: Decodable {
         let data: VerifyData
 
@@ -2071,6 +2215,57 @@ final class ArcNoteUITests: XCTestCase {
         request.httpMethod = "POST"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         _ = try sendRawRequest(request)
+    }
+
+    private func restartSmokeOnboarding(
+        token: String,
+        flowVersion: Int
+    ) throws -> SmokeOnboardingSession {
+        let baseURL = ProcessInfo.processInfo.environment[
+            "CHORAI_API_BASE_URL"
+        ] ?? "http://127.0.0.1:8080"
+        guard let url = URL(string: "\(baseURL)/api/v1/onboarding/sessions") else {
+            throw NSError(
+                domain: "ArcNoteUITests",
+                code: 16,
+                userInfo: [NSLocalizedDescriptionKey: "Invalid onboarding start URL"]
+            )
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.httpBody = try JSONSerialization.data(withJSONObject: [
+            "flow_version": flowVersion,
+            "restart": true
+        ])
+        return try sendRequest(
+            request,
+            responseType: SmokeOnboardingResponse.self
+        ).data
+    }
+
+    private func fetchCurrentSmokeOnboarding(
+        token: String
+    ) throws -> SmokeOnboardingSession {
+        let baseURL = ProcessInfo.processInfo.environment[
+            "CHORAI_API_BASE_URL"
+        ] ?? "http://127.0.0.1:8080"
+        guard let url = URL(
+            string: "\(baseURL)/api/v1/onboarding/sessions/current"
+        ) else {
+            throw NSError(
+                domain: "ArcNoteUITests",
+                code: 16,
+                userInfo: [NSLocalizedDescriptionKey: "Invalid onboarding current URL"]
+            )
+        }
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        return try sendRequest(
+            request,
+            responseType: SmokeOnboardingResponse.self
+        ).data
     }
 
     private func verifySmokeToken(

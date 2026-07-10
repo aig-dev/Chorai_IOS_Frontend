@@ -7,6 +7,10 @@ struct ExploreView: View {
     @Binding var showFilterTags: Bool
     @Binding var showSideMenu: Bool
     let onSpark: (String) -> Void
+    var onFlowCardVisible: (String) -> Void = { _ in }
+    var onFlowCardSaved: (String) -> Void = { _ in }
+    var onFlowCardDismissed: (String) -> Void = { _ in }
+    var onboardingStore: OnboardingGuideStore? = nil
     @State private var isSearchMode = false
     @State private var searchText = ""
     @StateObject private var cardsManager = RecommendedCardsManager(autoLoad: false)
@@ -378,6 +382,14 @@ struct ExploreView: View {
             .padding(.horizontal, 20)
             .padding(.top, 60)
 
+            if let onboardingStore,
+               onboardingStore.guideScene != nil,
+               !isSearchMode {
+                OnboardingGuideLine(store: onboardingStore)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 8)
+            }
+
             // 筛选标签
             if showFilterTags && !isSearchMode {
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -511,7 +523,12 @@ struct ExploreView: View {
                         },
                         onSpark: { card in
                             onSpark(card.id)
-                        }
+                        },
+                        onCardVisible: { card in
+                            onFlowCardVisible(card.id)
+                        },
+                        onCardSaved: onFlowCardSaved,
+                        onCardDismissed: onFlowCardDismissed
                     )
                 }
             }

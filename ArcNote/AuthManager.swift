@@ -2,7 +2,7 @@ import Foundation
 import Combine
 import Security
 
-enum AuthSessionPhase: String {
+enum AuthSessionPhase: String, Equatable {
     case signedOut = "signed-out"
     case restored
     case verifying

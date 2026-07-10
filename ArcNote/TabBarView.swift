@@ -10,6 +10,10 @@ struct TabBarView: View {
         service: NetworkCoreFlowService(),
         draftStore: UserDefaultsCaptureDraftStore()
     )
+    @StateObject private var onboardingStore = OnboardingGuideStore(
+        service: NetworkCoreOnboardingService(),
+        persistence: UserDefaultsOnboardingGuidePersistence()
+    )
     @State private var showPopupMenu = false
     @State private var selectedFilter = "All"
     @State private var showFilterTags = false
@@ -22,6 +26,8 @@ struct TabBarView: View {
     @State private var selectedMergeCardId: String? = nil
     @State private var navigateToReport = false
     @State private var mergeResumeMetadata: MergeResumeMetadata?
+    @State private var didAutoPresentInitialRecord = false
+    @State private var visibleFlowCardID: String?
 
     #if DEBUG
     @State private var exploreSearchSmokeInvoked = false
@@ -45,6 +51,35 @@ struct TabBarView: View {
             keyPrefix: MergeSessionStorageConfiguration.keyPrefix
         )
     }
+
+    private func loadOnboardingIfVerified() {
+        #if DEBUG
+        let environment = ProcessInfo.processInfo.environment
+        if environment["CHORAI_UI_TEST"] == "1",
+           environment["CHORAI_UI_TEST_ONBOARDING"] != "1" {
+            return
+        }
+        #endif
+        guard authManager.sessionPhase == .verified,
+              let actorID = authManager.currentUser?.id else {
+            return
+        }
+        onboardingStore.load(actorID: actorID)
+    }
+
+    #if DEBUG
+    private var onboardingPhaseLabel: String {
+        switch onboardingStore.phase {
+        case .idle: return "idle"
+        case .loading: return "loading"
+        case .active: return "active"
+        case .completed: return "completed"
+        case .skipped: return "skipped"
+        case .deferred(let flowVersion): return "deferred:\(flowVersion)"
+        case .unavailable: return "unavailable"
+        }
+    }
+    #endif
 
     private func refreshMergeResumeMetadata() {
         guard let actorID = authManager.currentUser?.id else {
@@ -224,7 +259,22 @@ struct TabBarView: View {
 	                showSideMenu: $showSideMenu,
 	                onSpark: { cardId in
 	                    navigationPath.append(TabRoute.spark(cardId))
-	                }
+	                },
+                    onFlowCardVisible: { assetID in
+                        visibleFlowCardID = assetID
+                        if !coordinator.isCapturePresented {
+                            onboardingStore.receive(.flowViewed)
+                        }
+                    },
+                    onFlowCardSaved: { assetID in
+                        onboardingStore.receive(.flowCardSaved(assetID: assetID))
+                    },
+                    onFlowCardDismissed: { assetID in
+                        onboardingStore.receive(.flowCardDismissed(assetID: assetID))
+                    },
+                    onboardingStore: coordinator.recordAcknowledgementID == nil
+                        ? onboardingStore
+                        : nil
 	            )
                 .tag(CoreTab.flow)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -290,10 +340,26 @@ struct TabBarView: View {
             .onChange(of: coordinator.selectedTab) { _ in
                 // 切换 tab 时关闭所有 popup
                 closeAllPopups()
+                if coordinator.selectedTab == .library {
+                    onboardingStore.receive(.libraryViewed)
+                }
             }
 
             #if DEBUG
             activeScreenAutomationAnchor
+            VStack(alignment: .leading, spacing: 1) {
+                Text(onboardingPhaseLabel)
+                    .accessibilityIdentifier("onboarding.phase")
+                Text(onboardingStore.session?.state ?? "none")
+                    .accessibilityIdentifier("onboarding.state")
+                Text(onboardingStore.session?.sessionID ?? "none")
+                    .accessibilityIdentifier("onboarding.session.id")
+                Text(String(onboardingStore.session?.flowVersion ?? 0))
+                    .accessibilityIdentifier("onboarding.flow.version")
+            }
+            .font(.system(size: 1))
+            .foregroundColor(.white.opacity(0.01))
+            .frame(width: 1, height: 1)
             if coordinator.selectedTab == .flow {
                 VStack(alignment: .leading, spacing: 4) {
                     Button(action: {
@@ -401,7 +467,12 @@ struct TabBarView: View {
                 QuickCaptureSheet(
                     store: captureStore,
                     actorID: actorID,
-                    onCreated: coordinator.captureCompleted,
+                    onCreated: { card in
+                        coordinator.captureCompleted(card)
+                        onboardingStore.receive(
+                            .recordCreated(cardID: card.id, content: card.content)
+                        )
+                    },
                     onDismiss: coordinator.dismissCapture
                 )
                 .presentationDetents([.medium, .large])
@@ -525,9 +596,28 @@ struct TabBarView: View {
         }
         .onChange(of: authManager.currentUser?.id) { _ in
             refreshMergeResumeMetadata()
+            loadOnboardingIfVerified()
+        }
+        .onChange(of: authManager.sessionPhase) { phase in
+            if phase == .verified {
+                loadOnboardingIfVerified()
+            }
+        }
+        .onChange(of: onboardingStore.shouldPresentRecord) { shouldPresent in
+            guard shouldPresent, !didAutoPresentInitialRecord else { return }
+            didAutoPresentInitialRecord = true
+            coordinator.presentCapture()
+        }
+        .onChange(of: coordinator.isCapturePresented) { isPresented in
+            if !isPresented,
+               coordinator.selectedTab == .flow,
+               visibleFlowCardID != nil {
+                onboardingStore.receive(.flowViewed)
+            }
         }
         .onAppear {
             refreshMergeResumeMetadata()
+            loadOnboardingIfVerified()
         }
         #if DEBUG
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ExploreVisibleRecommendedCardChanged"))) { notification in

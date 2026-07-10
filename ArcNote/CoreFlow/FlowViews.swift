@@ -294,6 +294,9 @@ struct FlowDeckView: View {
     let onOpenAuthor: (FlowCard) -> Void
     let onOpenMenu: (FlowCard) -> Void
     let onSpark: (FlowCard) -> Void
+    let onCardVisible: (FlowCard) -> Void
+    let onCardSaved: (String) -> Void
+    let onCardDismissed: (String) -> Void
 
     var body: some View {
         VStack(spacing: 12) {
@@ -348,6 +351,16 @@ struct FlowDeckView: View {
             guard !Task.isCancelled else { return }
             store.expireUndo(assetID: assetID)
         }
+        .onChange(of: store.currentCard?.id) { _ in
+            if let card = store.currentCard {
+                onCardVisible(card)
+            }
+        }
+        .onChange(of: store.notice) { notice in
+            if case .saved(let assetID)? = notice {
+                onCardSaved(assetID)
+            }
+        }
     }
 
     @ViewBuilder
@@ -370,7 +383,11 @@ struct FlowDeckView: View {
                     onOpenMenu: { onOpenMenu(card) },
                     onSave: store.saveCurrent,
                     onSpark: { onSpark(card) },
-                    onDismiss: store.dismissCurrent
+                    onDismiss: {
+                        let assetID = card.id
+                        store.dismissCurrent()
+                        onCardDismissed(assetID)
+                    }
                 )
             }
         } else {
