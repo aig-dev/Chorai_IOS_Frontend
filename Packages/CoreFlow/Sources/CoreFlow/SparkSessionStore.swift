@@ -12,6 +12,22 @@ public final class SparkSessionStore: ObservableObject {
     @Published public private(set) var notice: SparkNotice?
     @Published public private(set) var isInteractionLocked = false
     @Published public private(set) var didShowUpwardCue = false
+    @Published public private(set) var isMoreExhausted = false
+
+    public var canUndoSave: Bool {
+        undoEntry?.createdFavorite == true
+    }
+
+    public var undoAssetID: String? {
+        canUndoSave ? undoEntry?.result.id : nil
+    }
+
+    public var savedAssetID: String? {
+        guard case .saved(let assetID) = notice else {
+            return nil
+        }
+        return assetID
+    }
 
     public var currentResult: SparkResult? {
         guard results.indices.contains(visibleIndex) else {
@@ -37,6 +53,13 @@ public final class SparkSessionStore: ObservableObject {
         let didShowUpwardCue: Bool
     }
 
+    private struct UndoEntry {
+        let result: SparkResult
+        let originalIndex: Int
+        let postSaveIndex: Int
+        let createdFavorite: Bool
+    }
+
     private let actorID: String
     private let rootSourceAssetID: String
     private let service: CoreSparkServing
@@ -47,11 +70,21 @@ public final class SparkSessionStore: ObservableObject {
     private var pendingTrigger: PendingSparkTrigger?
     private var lastFailedTrigger: PendingSparkTrigger?
     private var lastFailedSourceCard: FlowCard?
+    private var undoEntry: UndoEntry?
+
+    private var nextCursor: String?
+    private var seenAssetIDs = Set<String>()
+    private var hasRequestedMore = false
+    private var consecutiveEmptyMorePages = 0
+    private var isLoadingMore = false
 
     private var sourceCancellable: AnyCancellable?
     private var triggerCancellable: AnyCancellable?
     private var replayCancellable: AnyCancellable?
     private var replaySourceCancellable: AnyCancellable?
+    private var historyCancellable: AnyCancellable?
+    private var moreCancellable: AnyCancellable?
+    private var interactionCancellable: AnyCancellable?
 
     public init(
         actorID: String,
@@ -83,8 +116,11 @@ public final class SparkSessionStore: ObservableObject {
 
             if let pending = snapshot.pendingTrigger {
                 lastFailedTrigger = pending
-                phase = .reconciling
-                isInteractionLocked = true
+                reconcilePendingTrigger(
+                    pending,
+                    rollback: nil,
+                    source: nil
+                )
                 return
             }
 
@@ -105,6 +141,116 @@ public final class SparkSessionStore: ObservableObject {
         visibleIndex += 1
         phase = currentResult == nil ? .empty : .loaded
         persistCurrentState()
+        prefetchIfNeeded()
+    }
+
+    public func saveCurrent() {
+        guard
+            !isInteractionLocked,
+            let result = currentResult,
+            let sparkActivityID = activeActivityID
+        else {
+            return
+        }
+
+        let entry = UndoEntry(
+            result: result,
+            originalIndex: visibleIndex,
+            postSaveIndex: visibleIndex + 1,
+            createdFavorite: !result.card.isFavorited
+        )
+        undoEntry = nil
+        notice = nil
+        visibleIndex = entry.postSaveIndex
+        phase = currentResult == nil ? .empty : .loaded
+        isInteractionLocked = true
+        persistCurrentState()
+
+        var receivedValue = false
+        interactionCancellable = service.favorite(
+            assetID: result.id,
+            sparkActivityID: sparkActivityID
+        )
+        .receive(on: DispatchQueue.main)
+        .sink(
+            receiveCompletion: { [weak self] completion in
+                guard let self else { return }
+                self.isInteractionLocked = false
+                if case .failure = completion {
+                    self.visibleIndex = entry.originalIndex
+                    self.phase = .loaded
+                    self.notice = .saveFailed
+                    self.undoEntry = nil
+                    self.persistCurrentState()
+                } else if !receivedValue {
+                    self.visibleIndex = entry.originalIndex
+                    self.phase = .loaded
+                    self.notice = .saveFailed
+                    self.undoEntry = nil
+                    self.persistCurrentState()
+                } else {
+                    self.prefetchIfNeeded()
+                }
+            },
+            receiveValue: { [weak self] in
+                guard let self else { return }
+                receivedValue = true
+                self.undoEntry = entry
+                self.notice = .saved(assetID: result.id)
+            }
+        )
+    }
+
+    public func undoLastSave() {
+        guard
+            !isInteractionLocked,
+            let entry = undoEntry,
+            entry.createdFavorite
+        else {
+            return
+        }
+
+        undoEntry = nil
+        notice = nil
+        visibleIndex = entry.originalIndex
+        phase = .loaded
+        isInteractionLocked = true
+        persistCurrentState()
+
+        var receivedValue = false
+        interactionCancellable = service.unfavorite(assetID: entry.result.id)
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { [weak self] completion in
+                    guard let self else { return }
+                    self.isInteractionLocked = false
+                    if case .failure = completion {
+                        self.visibleIndex = entry.postSaveIndex
+                        self.phase = self.currentResult == nil ? .empty : .loaded
+                        self.undoEntry = entry
+                        self.notice = .undoFailed
+                    } else if !receivedValue {
+                        self.visibleIndex = entry.postSaveIndex
+                        self.phase = self.currentResult == nil ? .empty : .loaded
+                        self.undoEntry = entry
+                        self.notice = .undoFailed
+                    }
+                    self.persistCurrentState()
+                },
+                receiveValue: { _ in
+                    receivedValue = true
+                }
+            )
+    }
+
+    public func expireUndo(assetID: String) {
+        guard undoEntry?.result.id == assetID else {
+            return
+        }
+        undoEntry = nil
+        if notice == .saved(assetID: assetID) {
+            notice = nil
+        }
     }
 
     public func sparkCurrentDeeper() {
@@ -124,6 +270,16 @@ public final class SparkSessionStore: ObservableObject {
     }
 
     public func retryTrigger() {
+        if let pendingTrigger {
+            guard !isInteractionLocked else { return }
+            reconcilePendingTrigger(
+                pendingTrigger,
+                rollback: nil,
+                source: lastFailedSourceCard
+            )
+            return
+        }
+
         guard
             !isInteractionLocked,
             let pending = lastFailedTrigger,
@@ -232,12 +388,20 @@ public final class SparkSessionStore: ObservableObject {
                     return
                 }
                 if case .failure(let error) = completion {
-                    self.restoreAfterTriggerFailure(
-                        rollback: rollback,
-                        pending: pending,
-                        source: source,
-                        error: error
-                    )
+                    if Self.isAmbiguousTriggerError(error) {
+                        self.reconcilePendingTrigger(
+                            pending,
+                            rollback: rollback,
+                            source: source
+                        )
+                    } else {
+                        self.restoreAfterTriggerFailure(
+                            rollback: rollback,
+                            pending: pending,
+                            source: source,
+                            error: error
+                        )
+                    }
                 } else if !receivedPage {
                     self.restoreAfterTriggerFailure(
                         rollback: rollback,
@@ -335,6 +499,8 @@ public final class SparkSessionStore: ObservableObject {
         results = page.orderedResults
         visibleIndex = 0
         activeActivityID = page.activityID
+        resetMoreState(sourceAssetID: page.sourceAssetID)
+        undoEntry = nil
         pendingTrigger = nil
         lastFailedTrigger = nil
         lastFailedSourceCard = nil
@@ -471,10 +637,233 @@ public final class SparkSessionStore: ObservableObject {
             ? 0
             : min(savedNode.visibleIndex, replayedResults.count - 1)
         activeActivityID = page.activityID
+        resetMoreState(sourceAssetID: page.sourceAssetID)
+        undoEntry = nil
         pendingTrigger = nil
         isInteractionLocked = false
         phase = replayedResults.isEmpty ? .empty : .loaded
         persistCurrentState()
+    }
+
+    private func reconcilePendingTrigger(
+        _ pending: PendingSparkTrigger,
+        rollback: TriggerRollback?,
+        source: FlowCard?
+    ) {
+        pendingTrigger = pending
+        lastFailedTrigger = pending
+        lastFailedSourceCard = source
+        phase = .reconciling
+        isInteractionLocked = true
+        persistCurrentState()
+
+        let token = beginOperation()
+        var receivedHistory = false
+        historyCancellable = service.history(
+            sourceAssetID: pending.sourceAssetID,
+            limit: 20
+        )
+        .receive(on: DispatchQueue.main)
+        .sink(
+            receiveCompletion: { [weak self] completion in
+                guard let self, self.isCurrentOperation(token) else {
+                    return
+                }
+                if case .failure = completion {
+                    self.isInteractionLocked = false
+                    self.phase = .failed("Couldn't check this Spark.")
+                    self.persistCurrentState()
+                } else if !receivedHistory {
+                    self.isInteractionLocked = false
+                    self.phase = .failed("Couldn't check this Spark.")
+                    self.persistCurrentState()
+                }
+            },
+            receiveValue: { [weak self] entries in
+                guard let self, self.isCurrentOperation(token) else {
+                    return
+                }
+                receivedHistory = true
+                let earliestMatch = pending.startedAt.addingTimeInterval(-2)
+                let match = entries
+                    .filter {
+                        $0.sourceAssetID == pending.sourceAssetID
+                            && $0.parentActivityID == pending.parentActivityID
+                            && $0.createdAt >= earliestMatch
+                    }
+                    .max(by: { $0.createdAt < $1.createdAt })
+
+                if let match {
+                    self.recover(
+                        match: match,
+                        pending: pending,
+                        rollback: rollback,
+                        source: source
+                    )
+                } else {
+                    self.confirmNoHistoryMatch(
+                        pending: pending,
+                        rollback: rollback,
+                        source: source
+                    )
+                }
+            }
+        )
+    }
+
+    private func recover(
+        match: SparkHistoryEntry,
+        pending: PendingSparkTrigger,
+        rollback: TriggerRollback?,
+        source: FlowCard?
+    ) {
+        let recoveredNode = SparkChainNode(
+            sourceAssetID: match.sourceAssetID,
+            sourcePreview: pending.sourcePreview,
+            activityID: match.activityID,
+            parentActivityID: match.parentActivityID,
+            rootActivityID: match.rootActivityID,
+            chainDepth: match.chainDepth,
+            visibleIndex: 0
+        )
+        let baseChain = rollback?.chain ?? chain
+        if let parentActivityID = pending.parentActivityID,
+           let parentIndex = baseChain.firstIndex(where: {
+               $0.activityID == parentActivityID
+           }) {
+            chain = Array(baseChain.prefix(through: parentIndex)) + [recoveredNode]
+            didShowUpwardCue = true
+        } else {
+            chain = [recoveredNode]
+        }
+
+        sourceCard = source ?? rollback?.sourceCard ?? sourceCard
+        results = rollback?.results ?? results
+        visibleIndex = 0
+        activeActivityID = match.activityID
+        pendingTrigger = nil
+        lastFailedTrigger = nil
+        lastFailedSourceCard = nil
+        persistCurrentState()
+        replay(activityID: match.activityID)
+    }
+
+    private func confirmNoHistoryMatch(
+        pending: PendingSparkTrigger,
+        rollback: TriggerRollback?,
+        source: FlowCard?
+    ) {
+        pendingTrigger = nil
+        lastFailedTrigger = pending
+        lastFailedSourceCard = source
+        if let rollback {
+            sourceCard = rollback.sourceCard ?? source
+            results = rollback.results
+            visibleIndex = rollback.visibleIndex
+            chain = rollback.chain
+            activeActivityID = rollback.activeActivityID
+            didShowUpwardCue = rollback.didShowUpwardCue
+        }
+        isInteractionLocked = false
+        phase = .failed("Couldn't confirm this Spark.")
+        persistCurrentState()
+
+        if source == nil {
+            loadSourceForConfirmedRetry(pending: pending)
+        }
+    }
+
+    private func loadSourceForConfirmedRetry(
+        pending: PendingSparkTrigger
+    ) {
+        sourceCancellable = service.card(assetID: pending.sourceAssetID)
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { _ in },
+                receiveValue: { [weak self] card in
+                    self?.lastFailedSourceCard = card
+                }
+            )
+    }
+
+    private func resetMoreState(sourceAssetID: String) {
+        moreCancellable?.cancel()
+        moreCancellable = nil
+        nextCursor = nil
+        seenAssetIDs = Set(results.map(\.id))
+        seenAssetIDs.insert(sourceAssetID)
+        hasRequestedMore = false
+        consecutiveEmptyMorePages = 0
+        isLoadingMore = false
+        isMoreExhausted = false
+    }
+
+    private func prefetchIfNeeded() {
+        guard
+            !isLoadingMore,
+            !isMoreExhausted,
+            let sourceAssetID = sourceCard?.id,
+            let activityID = activeActivityID,
+            max(0, results.count - visibleIndex) <= 2,
+            !hasRequestedMore || nextCursor != nil
+        else {
+            return
+        }
+
+        isLoadingMore = true
+        let requestedCursor = nextCursor
+        var receivedPage = false
+        let publisher = service.more(
+            sourceAssetID: sourceAssetID,
+            cursor: requestedCursor,
+            limit: 20
+        )
+        moreCancellable = publisher
+        .receive(on: DispatchQueue.main)
+        .sink(
+            receiveCompletion: { [weak self] completion in
+                guard let self, self.activeActivityID == activityID else {
+                    return
+                }
+                self.isLoadingMore = false
+                if case .failure = completion, self.undoEntry == nil {
+                    self.notice = .moreFailed
+                } else if !receivedPage, self.undoEntry == nil {
+                    self.notice = .moreFailed
+                }
+            },
+            receiveValue: { [weak self] page in
+                guard
+                    let self,
+                    self.activeActivityID == activityID,
+                    page.sourceAssetID == sourceAssetID
+                else {
+                    return
+                }
+                receivedPage = true
+                self.hasRequestedMore = true
+                let additions = page.results.filter {
+                    self.seenAssetIDs.insert($0.id).inserted
+                }
+                self.results.append(contentsOf: additions)
+                self.nextCursor = page.nextCursor.flatMap {
+                    $0.isEmpty ? nil : $0
+                }
+                self.consecutiveEmptyMorePages = additions.isEmpty
+                    ? self.consecutiveEmptyMorePages + 1
+                    : 0
+                self.isMoreExhausted = self.nextCursor == nil
+                    || self.consecutiveEmptyMorePages >= 2
+                self.isLoadingMore = false
+                if self.currentResult != nil {
+                    self.phase = .loaded
+                } else if !self.isMoreExhausted {
+                    DispatchQueue.main.async { [weak self] in
+                        self?.prefetchIfNeeded()
+                    }
+                }
+            }
+        )
     }
 
     private func failReplay(_ error: CoreSparkError) {
@@ -552,6 +941,12 @@ public final class SparkSessionStore: ObservableObject {
             )
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return String(normalized.prefix(80))
+    }
+
+    private static func isAmbiguousTriggerError(
+        _ error: CoreSparkError
+    ) -> Bool {
+        error == .offline || error == .timeout || error == .unknown
     }
 
     private static func message(for error: CoreSparkError) -> String {

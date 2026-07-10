@@ -53,6 +53,7 @@ final class SparkSessionStoreLifecycleTests: XCTestCase {
         let harness = makeHarness()
         await loadRoot(harness, resultCount: 3)
         let triggerCount = harness.service.triggerCalls.count
+        _ = harness.service.enqueueMore()
 
         harness.store.advance()
 
@@ -97,6 +98,7 @@ final class SparkSessionStoreLifecycleTests: XCTestCase {
     func testChildWithInvalidRootRestoresParentAndIndex() async {
         let harness = makeHarness()
         await loadRoot(harness, resultCount: 3)
+        _ = harness.service.enqueueMore()
         harness.store.advance()
         let childTrigger = harness.service.enqueueTrigger()
 
@@ -123,6 +125,7 @@ final class SparkSessionStoreLifecycleTests: XCTestCase {
     func testChildFailureRestoresExactParentAndIndex() async {
         let harness = makeHarness()
         await loadRoot(harness, resultCount: 3)
+        _ = harness.service.enqueueMore()
         harness.store.advance()
         let childTrigger = harness.service.enqueueTrigger()
 
