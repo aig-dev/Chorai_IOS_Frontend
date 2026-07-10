@@ -219,6 +219,114 @@ final class ArcNoteUITests: XCTestCase {
         )
     }
 
+    func testMergeRelaunchResumesCommitsAndOpensCanonicalCard() throws {
+        let session = try requireSmokeSession()
+        seedAppSession(session)
+
+        let uniqueSuffix = Int(Date().timeIntervalSince1970)
+        let sourceToken = "merge-resume-source-\(uniqueSuffix)"
+        let targetToken = "merge-resume-target-\(uniqueSuffix)"
+        let committedTitle = "iOS resumed merge \(uniqueSuffix)"
+        let sourceCardID = try createPublicSmokeCard(
+            token: session.token,
+            searchToken: sourceToken
+        )
+        let targetCardID = try createPublicSmokeCard(
+            token: session.token,
+            searchToken: targetToken
+        )
+        var committedCardID: String?
+        defer {
+            if let committedCardID {
+                deleteSmokeCard(id: committedCardID, token: session.token)
+            }
+            deleteSmokeCard(id: sourceCardID, token: session.token)
+            deleteSmokeCard(id: targetCardID, token: session.token)
+        }
+
+        app.launchArguments.append("--ui-test-open-recommended-detail")
+        app.launchEnvironment["CHORAI_UI_TEST_DETAIL_CARD_ID"] = sourceCardID
+        app.launchEnvironment[
+            "CHORAI_UI_TEST_MERGE_SESSION_SCOPE"
+        ] = sparkSessionScope
+        launchAuthenticatedApp()
+
+        waitFor("screen.detail.loaded", timeout: 30)
+        tap("detail.menu.open")
+        tap("popup-menu.item.merge")
+        waitFor("screen.merge.loaded", timeout: 30)
+        waitForMergeCardsLoaded()
+
+        let searchInput = waitFor("merge.search.input", timeout: 20)
+        searchInput.tap()
+        searchInput.typeText(targetToken)
+        waitFor("merge.card.\(targetCardID)", timeout: 30)
+        tap("merge.card.\(targetCardID)")
+        dismissKeyboard()
+        tap("merge.action")
+        waitForMergeArtifactReady(timeout: 90)
+        let originalJobID = mergeAnchorValue("merge.job.id")
+        XCTAssertEqual(mergeAnchorValue("merge.job.status"), "ARTIFACT_READY")
+
+        app.terminate()
+        app.launchArguments.removeAll {
+            $0 == "--ui-test-open-recommended-detail"
+        }
+        launchAuthenticatedApp()
+
+        waitFor("screen.flow.content", timeout: 30)
+        waitFor("merge.resume", timeout: 20)
+        captureMergeVisual("resume-affordance")
+        tap("merge.resume")
+
+        waitFor("screen.merge.loaded", timeout: 30)
+        waitForMergeArtifactReady(timeout: 30)
+        XCTAssertEqual(mergeAnchorValue("merge.job.id"), originalJobID)
+        XCTAssertEqual(mergeAnchorValue("merge.job.status"), "ARTIFACT_READY")
+
+        replaceText("merge.artifact.title", with: committedTitle)
+        dismissKeyboard()
+        tap("merge.commit")
+        committedCardID = waitForCommittedMergeCard(
+            excluding: sourceCardID,
+            timeout: 90
+        )
+
+        guard let committedCardID else {
+            XCTFail("Merge commit did not expose a canonical card ID")
+            return
+        }
+        XCTAssertEqual(
+            try fetchSmokeMergeJob(
+                jobID: originalJobID,
+                token: session.token
+            ).status,
+            "COMMITTED_CARD"
+        )
+        let committedCard = try fetchSmokeCard(
+            id: committedCardID,
+            token: session.token
+        )
+        XCTAssertEqual(committedCard.title, committedTitle)
+        XCTAssertFalse(
+            committedCard.content
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .isEmpty
+        )
+        waitForLoadedDetailCard(committedCardID, timeout: 30)
+        RunLoop.current.run(until: Date().addingTimeInterval(1))
+        captureMergeVisual("committed-detail")
+
+        app.terminate()
+        launchAuthenticatedApp()
+        waitFor("screen.flow.content", timeout: 30)
+        XCTAssertFalse(
+            app.descendants(matching: .any)["merge.resume"]
+                .waitForExistence(timeout: 3),
+            "Completed Merge recovery should be cleared after opening detail"
+        )
+    }
+
     func testSettingsPersonalDataSaveUpdatesGoProfileMe() throws {
         let session = try requireSmokeSession()
         seedAppSession(session)
@@ -1249,7 +1357,31 @@ final class ArcNoteUITests: XCTestCase {
         RunLoop.current.run(until: Date().addingTimeInterval(0.2))
         app.typeKey("a", modifierFlags: .command)
         app.typeKey(.delete, modifierFlags: [])
+        if let remaining = element.value as? String, !remaining.isEmpty {
+            element.press(forDuration: 1)
+            let selectAllMenuItem = app.menuItems["Select All"].firstMatch
+            let selectAllButton = app.buttons["Select All"].firstMatch
+            if selectAllMenuItem.waitForExistence(timeout: 3) {
+                selectAllMenuItem.tap()
+            } else if selectAllButton.waitForExistence(timeout: 1) {
+                selectAllButton.tap()
+            } else {
+                XCTFail(
+                    "Could not select all text for \(identifier)",
+                    file: file,
+                    line: line
+                )
+                return
+            }
+        }
         app.typeText(text)
+        XCTAssertEqual(
+            element.value as? String ?? "",
+            text,
+            "Could not replace text for \(identifier)",
+            file: file,
+            line: line
+        )
     }
 
     private func dismissKeyboard() {
@@ -1328,6 +1460,83 @@ final class ArcNoteUITests: XCTestCase {
 
         XCTFail(
             "Timed out waiting for Merge artifact; last job status: \(lastStatus)",
+            file: file,
+            line: line
+        )
+    }
+
+    private func waitForCommittedMergeCard(
+        excluding sourceCardID: String,
+        timeout: TimeInterval = 90,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) -> String? {
+        let deadline = Date().addingTimeInterval(timeout)
+        let detailID = app.descendants(matching: .any)["screen.detail.card-id"]
+        let paused = app.descendants(matching: .any)["merge.phase.paused"]
+        let failed = app.descendants(matching: .any)["merge.phase.failed"]
+        var lastStatus = "missing"
+
+        while Date() < deadline {
+            if detailID.exists {
+                let value = detailID.label.trimmingCharacters(
+                    in: .whitespacesAndNewlines
+                )
+                if !value.isEmpty, value != sourceCardID {
+                    return value
+                }
+            }
+            if paused.exists {
+                XCTFail("Merge commit paused before opening detail", file: file, line: line)
+                return nil
+            }
+            if failed.exists {
+                XCTFail("Merge commit failed before opening detail", file: file, line: line)
+                return nil
+            }
+            let status = app.descendants(matching: .any)["merge.job.status"]
+            if status.exists {
+                lastStatus = status.label.trimmingCharacters(
+                    in: .whitespacesAndNewlines
+                )
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.5))
+        }
+
+        XCTFail(
+            "Timed out waiting for committed Merge detail; last status: \(lastStatus)",
+            file: file,
+            line: line
+        )
+        return nil
+    }
+
+    private func waitForLoadedDetailCard(
+        _ expectedCardID: String,
+        timeout: TimeInterval = 30,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let deadline = Date().addingTimeInterval(timeout)
+        let loadedCardID = app.descendants(matching: .any)[
+            "screen.detail.loaded-card-id"
+        ]
+        var lastCardID = "missing"
+
+        while Date() < deadline {
+            if loadedCardID.exists {
+                lastCardID = loadedCardID.label.trimmingCharacters(
+                    in: .whitespacesAndNewlines
+                )
+                if lastCardID == expectedCardID {
+                    return
+                }
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+        }
+
+        XCTFail(
+            "Detail did not load committed card \(expectedCardID); last loaded card: \(lastCardID)",
             file: file,
             line: line
         )
@@ -1458,11 +1667,12 @@ final class ArcNoteUITests: XCTestCase {
 
         struct SmokeCardData: Decodable {
             let id: String
+            let title: String?
             let content: String
             let isPublic: Bool
 
             enum CodingKeys: String, CodingKey {
-                case id, content
+                case id, title, content
                 case isPublic = "is_public"
             }
         }

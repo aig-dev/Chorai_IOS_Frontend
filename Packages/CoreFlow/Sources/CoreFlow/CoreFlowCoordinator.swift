@@ -26,6 +26,11 @@ public final class CoreFlowCoordinator: ObservableObject {
         isCapturePresented = false
     }
 
+    public func mergeCompleted(cardID: String) {
+        lastCreatedCardID = cardID
+        libraryRefreshID = UUID()
+    }
+
     public func clearRecordAcknowledgement(cardID: String) {
         guard recordAcknowledgementID == cardID else { return }
         recordAcknowledgementID = nil

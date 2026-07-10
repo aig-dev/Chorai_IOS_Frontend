@@ -3,6 +3,18 @@ import XCTest
 
 final class CoreFlowCoordinatorTests: XCTestCase {
     @MainActor
+    func testMergeCompletionRefreshesLibraryWithoutRecordAcknowledgement() {
+        let coordinator = CoreFlowCoordinator()
+        let previousRefreshID = coordinator.libraryRefreshID
+
+        coordinator.mergeCompleted(cardID: "card_merged")
+
+        XCTAssertEqual(coordinator.lastCreatedCardID, "card_merged")
+        XCTAssertNil(coordinator.recordAcknowledgementID)
+        XCTAssertNotEqual(coordinator.libraryRefreshID, previousRefreshID)
+    }
+
+    @MainActor
     func testCaptureCompletionRefreshesLibraryAndDismissesSheet() {
         let coordinator = CoreFlowCoordinator()
         let previousRefreshID = coordinator.libraryRefreshID

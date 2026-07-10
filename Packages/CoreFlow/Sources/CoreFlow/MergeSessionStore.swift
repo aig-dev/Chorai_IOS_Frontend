@@ -325,6 +325,12 @@ public final class MergeSessionStore: ObservableObject {
         }
     }
 
+    public func acknowledgeCompletion() {
+        guard case .completed = phase, snapshot != nil else { return }
+        persistence.remove(actorID: actorID)
+        snapshot = nil
+    }
+
     private var isTerminalPresentation: Bool {
         switch phase {
         case .cancelled, .completed:

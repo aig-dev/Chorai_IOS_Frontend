@@ -4,6 +4,7 @@ import CoreFlow
 import WebKit
 
 struct TabBarView: View {
+    @StateObject private var authManager = AuthManager.shared
     @StateObject private var coordinator = CoreFlowCoordinator()
     @StateObject private var captureStore = QuickCaptureStore(
         service: NetworkCoreFlowService(),
@@ -20,6 +21,7 @@ struct TabBarView: View {
     @State private var navigateToMerge = false
     @State private var selectedMergeCardId: String? = nil
     @State private var navigateToReport = false
+    @State private var mergeResumeMetadata: MergeResumeMetadata?
 
     #if DEBUG
     @State private var exploreSearchSmokeInvoked = false
@@ -36,6 +38,29 @@ struct TabBarView: View {
 
     private enum TabRoute: Hashable {
         case spark(String)
+    }
+
+    private var mergePersistence: UserDefaultsMergeSessionStore {
+        UserDefaultsMergeSessionStore(
+            keyPrefix: MergeSessionStorageConfiguration.keyPrefix
+        )
+    }
+
+    private func refreshMergeResumeMetadata() {
+        guard let actorID = authManager.currentUser?.id else {
+            mergeResumeMetadata = nil
+            return
+        }
+        mergeResumeMetadata = mergePersistence.resumeMetadata(actorID: actorID)
+    }
+
+    private func resumeMerge() {
+        guard let metadata = mergeResumeMetadata else { return }
+        selectedMergeCardId = metadata.anchorAssetID
+        navigateToMerge = false
+        DispatchQueue.main.async {
+            navigateToMerge = true
+        }
     }
 
     #if DEBUG
@@ -407,6 +432,26 @@ struct TabBarView: View {
                         .frame(width: 1, height: 1)
                         .accessibilityIdentifier("record.created-card-id")
                 }
+
+                if mergeResumeMetadata != nil {
+                    HStack {
+                        Spacer()
+                        Button(action: resumeMerge) {
+                            Image("menu_merge")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 21, height: 21)
+                                .frame(width: 44, height: 36)
+                                .background(
+                                    Capsule().fill(Color.white.opacity(0.12))
+                                )
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Resume Merge")
+                        .accessibilityIdentifier("merge.resume")
+                    }
+                    .padding(.trailing, 20)
+                }
             }
             .padding(.top, 112)
         }
@@ -418,7 +463,10 @@ struct TabBarView: View {
             NewNoteView(cardId: selectedEditCardId ?? "")
         }
         .navigationDestination(isPresented: $navigateToMerge) {
-            MergeView(cardId: selectedMergeCardId ?? "")
+            MergeView(
+                cardId: selectedMergeCardId ?? "",
+                onCommitted: coordinator.mergeCompleted
+            )
         }
         .navigationDestination(isPresented: $navigateToReport) {
             WebViewPage(url: URL(string: "https://www.chorai.app/report")!, title: "Help & Report")
@@ -465,6 +513,21 @@ struct TabBarView: View {
                     navigateToMerge = true
                 }
             }
+        }
+        .onReceive(
+            NotificationCenter.default.publisher(for: .mergeSessionDidChange)
+        ) { notification in
+            guard let actorID = authManager.currentUser?.id,
+                  notification.userInfo?["actorID"] as? String == actorID else {
+                return
+            }
+            refreshMergeResumeMetadata()
+        }
+        .onChange(of: authManager.currentUser?.id) { _ in
+            refreshMergeResumeMetadata()
+        }
+        .onAppear {
+            refreshMergeResumeMetadata()
         }
         #if DEBUG
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ExploreVisibleRecommendedCardChanged"))) { notification in

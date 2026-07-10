@@ -448,11 +448,15 @@ struct DetailView: View {
                         .frame(width: 1, height: 1)
                         .accessibilityIdentifier("screen.detail.loading")
                 } else if cardDetailManager.cardDetail != nil {
-                    Text("Detail loaded")
-                        .font(.system(size: 1))
-                        .foregroundColor(.white.opacity(0.01))
-                        .frame(width: 1, height: 1)
-                        .accessibilityIdentifier("screen.detail.loaded")
+                    VStack(spacing: 0) {
+                        Text("Detail loaded")
+                            .accessibilityIdentifier("screen.detail.loaded")
+                        Text(cardDetailManager.cardDetail?.id ?? "")
+                            .accessibilityIdentifier("screen.detail.loaded-card-id")
+                    }
+                    .font(.system(size: 1))
+                    .foregroundColor(.white.opacity(0.01))
+                    .frame(width: 1, height: 1)
                 } else if cardDetailManager.error != nil {
                     Text("Detail error")
                         .font(.system(size: 1))

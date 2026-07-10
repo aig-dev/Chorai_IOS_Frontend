@@ -2,12 +2,26 @@ import Combine
 import CoreFlow
 import SwiftUI
 
+enum MergeSessionStorageConfiguration {
+    static var keyPrefix: String {
+        ProcessInfo.processInfo.environment[
+            "CHORAI_UI_TEST_MERGE_SESSION_SCOPE"
+        ].map { "chorai.merge.session.\($0)" }
+            ?? "chorai.merge.session"
+    }
+}
+
 struct MergeView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var authManager = AuthManager.shared
     @StateObject private var candidates: MergeCandidateStore
+    private let onCommitted: (String) -> Void
 
-    init(cardId: String) {
+    init(
+        cardId: String,
+        onCommitted: @escaping (String) -> Void = { _ in }
+    ) {
+        self.onCommitted = onCommitted
         _candidates = StateObject(
             wrappedValue: MergeCandidateStore(anchorCardID: cardId)
         )
@@ -21,7 +35,8 @@ struct MergeView: View {
                     actorID: actorID,
                     anchor: anchor,
                     candidates: candidates,
-                    onBack: dismiss.callAsFunction
+                    onBack: dismiss.callAsFunction,
+                    onCommitted: onCommitted
                 )
             } else if let error = candidates.anchorError {
                 MergeEntryFailureView(
@@ -190,29 +205,29 @@ private struct MergeLifecycleView: View {
     @StateObject private var store: MergeSessionStore
     @State private var searchText = ""
     @State private var showCancelConfirmation = false
+    @State private var committedCardID: String?
+    @State private var showCommittedDetail = false
 
     private let onBack: () -> Void
+    private let onCommitted: (String) -> Void
 
     init(
         actorID: String,
         anchor: MergeCard,
         candidates: MergeCandidateStore,
-        onBack: @escaping () -> Void
+        onBack: @escaping () -> Void,
+        onCommitted: @escaping (String) -> Void
     ) {
         self.candidates = candidates
         self.onBack = onBack
-        let scope = ProcessInfo.processInfo.environment[
-            "CHORAI_UI_TEST_MERGE_SESSION_SCOPE"
-        ]
-        let keyPrefix = scope.map { "chorai.merge.session.\($0)" }
-            ?? "chorai.merge.session"
+        self.onCommitted = onCommitted
         _store = StateObject(
             wrappedValue: MergeSessionStore(
                 actorID: actorID,
                 anchor: anchor.coreMergeSource,
                 service: NetworkCoreMergeService(),
                 persistence: UserDefaultsMergeSessionStore(
-                    keyPrefix: keyPrefix
+                    keyPrefix: MergeSessionStorageConfiguration.keyPrefix
                 )
             )
         )
@@ -245,6 +260,18 @@ private struct MergeLifecycleView: View {
         }
         .task {
             store.start()
+        }
+        .task(id: completedAssetID) {
+            guard let assetID = completedAssetID else { return }
+            onCommitted(assetID)
+            committedCardID = assetID
+            showCommittedDetail = true
+            store.acknowledgeCompletion()
+        }
+        .navigationDestination(isPresented: $showCommittedDetail) {
+            if let cardID = committedCardID {
+                DetailView(cardId: cardID)
+            }
         }
         .onDisappear {
             store.stop()
@@ -724,6 +751,11 @@ private struct MergeLifecycleView: View {
         case .cancelled: return "cancelled"
         case .completed: return "completed"
         }
+    }
+
+    private var completedAssetID: String? {
+        guard case .completed(let assetID) = store.phase else { return nil }
+        return assetID
     }
 }
 

@@ -3,6 +3,29 @@ import XCTest
 
 @MainActor
 final class MergeSessionStoreCommitTests: XCTestCase {
+    func testCompletionAcknowledgementClearsPersistedRecoveryOnce() async {
+        let service = MockCoreMergeService()
+        let persistence = InMemoryMergeSessionPersistence()
+        let store = await readyStore(
+            service: service,
+            persistence: persistence,
+            keys: ["commit-stable"]
+        )
+        await service.enqueueCommit(.success(makeMergeCommitResult()))
+
+        store.commit()
+        await waitForMergeStore {
+            store.phase == .completed(assetID: "ast_committed")
+        }
+        XCTAssertNotNil(persistence.snapshot(actorID: "actor_1"))
+
+        store.acknowledgeCompletion()
+        store.acknowledgeCompletion()
+
+        XCTAssertNil(persistence.snapshot(actorID: "actor_1"))
+        XCTAssertEqual(persistence.removals, ["actor_1"])
+    }
+
     func testCommitPersistsTrimmedStableRequestBeforeOneServiceCall() async {
         let service = MockCoreMergeService()
         let persistence = InMemoryMergeSessionPersistence()
