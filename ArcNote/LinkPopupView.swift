@@ -114,6 +114,9 @@ class LinkPopupManager: ObservableObject {
                                     self?.errorMessage = "链接失败"
                                 }
                                 self?.showErrorAlert = true
+                            case .api(let statusCode, _, _):
+                                self?.errorMessage = statusCode == 400 ? "卡片链接已存在" : "链接失败"
+                                self?.showErrorAlert = true
                             default:
                                 self?.errorMessage = "链接失败"
                                 self?.showErrorAlert = true

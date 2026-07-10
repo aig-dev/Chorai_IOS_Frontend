@@ -559,6 +559,17 @@ struct SignUpView: View {
             default:
                 showAlert(message: message ?? "Registration failed, please try again later")
             }
+        case .api(let statusCode, _, _):
+            switch statusCode {
+            case 400:
+                showAlert(message: "Invalid request parameters, please check your input")
+            case 409:
+                showAlert(message: "Username or email already in use, please try another one")
+            case 422:
+                showAlert(message: "Verification code is incorrect or expired, please get a new one")
+            default:
+                showAlert(message: "Registration failed, please try again later")
+            }
         case .networkError:
             showAlert(message: "Network connection failed, please check your network settings")
         case .timeout:

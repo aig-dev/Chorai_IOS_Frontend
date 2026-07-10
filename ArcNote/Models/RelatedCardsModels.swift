@@ -6,39 +6,56 @@ struct RelatedCard: Codable, Identifiable {
     let id: String
     let title: String?
     let content: String
+    let contentHash: String?
     let tags: [String]
+    let isPublic: Bool
     let likeCount: Int?
     let isLiked: Bool?
     let favoriteCount: Int?
     let isFavorited: Bool?
     let commentCount: Int?
     let createdAt: String
+    let updatedAt: String
+    let rate: Int
+    let isPinned: Bool
+    let pinnedAt: String?
     let author: RelatedCardAuthor?
 
     enum CodingKeys: String, CodingKey {
-        case id, title, content, tags
+        case id, title, content, tags, rate
+        case contentHash = "content_hash"
+        case isPublic = "is_public"
         case likeCount = "like_count"
         case isLiked = "is_liked"
         case favoriteCount = "favorite_count"
         case isFavorited = "is_favorited"
         case commentCount = "comment_count"
         case createdAt = "created_at"
+        case updatedAt = "updated_at"
+        case isPinned = "is_pinned"
+        case pinnedAt = "pinned_at"
         case author
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(String.self, forKey: .id)
-        title = try container.decode(String.self, forKey: .title)
-        content = try container.decode(String.self, forKey: .content)
-        tags = try container.decode([String].self, forKey: .tags)
-        likeCount = try container.decode(Int.self, forKey: .likeCount)
-        isLiked = try container.decode(Bool.self, forKey: .isLiked)
-        favoriteCount = try container.decode(Int.self, forKey: .favoriteCount)
-        isFavorited = try container.decode(Bool.self, forKey: .isFavorited)
-        commentCount = try container.decode(Int.self, forKey: .commentCount)
-        createdAt = try container.decode(String.self, forKey: .createdAt)
-        author = try container.decode(RelatedCardAuthor.self, forKey: .author)
+        title = try container.decodeIfPresent(String.self, forKey: .title)
+        content = try container.decodeIfPresent(String.self, forKey: .content) ?? ""
+        contentHash = try container.decodeIfPresent(String.self, forKey: .contentHash)
+        tags = try container.decodeIfPresent([String].self, forKey: .tags) ?? []
+        isPublic = try container.decodeIfPresent(Bool.self, forKey: .isPublic) ?? false
+        likeCount = try container.decodeIfPresent(Int.self, forKey: .likeCount) ?? 0
+        isLiked = try container.decodeIfPresent(Bool.self, forKey: .isLiked) ?? false
+        favoriteCount = try container.decodeIfPresent(Int.self, forKey: .favoriteCount) ?? 0
+        isFavorited = try container.decodeIfPresent(Bool.self, forKey: .isFavorited) ?? false
+        commentCount = try container.decodeIfPresent(Int.self, forKey: .commentCount) ?? 0
+        createdAt = try container.decodeIfPresent(String.self, forKey: .createdAt) ?? ""
+        updatedAt = try container.decodeIfPresent(String.self, forKey: .updatedAt) ?? createdAt
+        rate = try container.decodeIfPresent(Int.self, forKey: .rate) ?? 0
+        isPinned = try container.decodeIfPresent(Bool.self, forKey: .isPinned) ?? false
+        pinnedAt = try container.decodeIfPresent(String.self, forKey: .pinnedAt)
+        author = try container.decodeIfPresent(RelatedCardAuthor.self, forKey: .author)
     }
 }
 
@@ -153,6 +170,20 @@ struct SparkResultGroups: Codable {
     let related: SparkResultBucket
     let angles: SparkResultBucket
     let keywords: SparkResultBucket
+}
+
+struct SparkRunData: Codable {
+    let activityId: String
+    let rootActivityId: String
+    let chainDepth: Int
+    let groups: SparkResultGroups
+
+    enum CodingKeys: String, CodingKey {
+        case activityId = "activity_id"
+        case rootActivityId = "root_activity_id"
+        case chainDepth = "chain_depth"
+        case groups
+    }
 }
 
 struct SparkMoreResponse: Codable {

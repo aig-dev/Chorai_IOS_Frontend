@@ -326,6 +326,17 @@ struct SignInView: View {
             default:
                 showAlert(message: message ?? "Login failed, please try again later")
             }
+        case .api(let statusCode, _, _):
+            switch statusCode {
+            case 400, 401:
+                showAlert(message: "Incorrect username or password")
+            case 404:
+                showAlert(message: "User does not exist")
+            default:
+                showAlert(message: "Login failed, please try again later")
+            }
+        case .unauthorized:
+            showAlert(message: "Incorrect username or password")
         case .networkError:
             showAlert(message: "Network connection failed, please check your network settings")
         case .timeout:

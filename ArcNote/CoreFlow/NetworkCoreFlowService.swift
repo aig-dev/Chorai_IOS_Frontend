@@ -153,6 +153,11 @@ private extension NetworkError {
             return .offline
         case .serverError:
             return .server
+        case .api(let statusCode, let code, _):
+            if statusCode == 401 || code == "UNAUTHORIZED" {
+                return .unauthorized
+            }
+            return .server
         case .invalidURL,
              .noData,
              .encodingError,

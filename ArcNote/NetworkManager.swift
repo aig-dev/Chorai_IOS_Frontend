@@ -84,7 +84,8 @@ class NetworkManager: ObservableObject {
         parameters: Parameters? = nil,
         encoding: ParameterEncoding = JSONEncoding.default,
         headers: HTTPHeaders? = nil,
-        responseType: T.Type
+        responseType: T.Type,
+        presentsError: Bool = true
     ) -> AnyPublisher<T, NetworkError> {
 
         return Future<T, NetworkError> { [weak self] promise in
@@ -142,20 +143,34 @@ class NetworkManager: ObservableObject {
 
                 case .failure(let error):
                     var responseMessage: String?
+                    var apiError: GoAPIErrorPayload?
                     if let data = response.data {
                         self.logResponseData(data, label: "请求失败响应数据")
-                        responseMessage = self.extractMessage(from: data)
+                        apiError = try? JSONDecoder().decode(GoAPIErrorEnvelope.self, from: data).error
+                        responseMessage = apiError?.message ?? self.extractMessage(from: data)
                     }
                     if let httpResponse = response.response {
                         print("请求失败状态码: \(httpResponse.statusCode)")
                     }
                     print("请求失败错误: \(error)")
 
-                    if let message = responseMessage, !message.isEmpty {
+                    if presentsError, let message = responseMessage, !message.isEmpty {
                         self.presentErrorAlert(message: message)
                     }
 
-                    let networkError = self.handleError(error, response: response.response)
+                    let statusCode = response.response?.statusCode
+                    let networkError: NetworkError
+                    if statusCode == 401 {
+                        networkError = .unauthorized
+                    } else if let statusCode, (400...599).contains(statusCode), let apiError {
+                        networkError = .api(
+                            statusCode: statusCode,
+                            code: apiError.code,
+                            message: apiError.message
+                        )
+                    } else {
+                        networkError = self.handleError(error, response: response.response)
+                    }
                     promise(.failure(networkError))
                 }
             }
@@ -183,6 +198,7 @@ class NetworkManager: ObservableObject {
     }
 
     private func logResponseData(_ data: Data, label: String) {
+#if DEBUG
         guard let responseString = String(data: data, encoding: .utf8) else {
             print("\(label): <non-utf8 \(data.count) bytes>")
             return
@@ -195,6 +211,10 @@ class NetworkManager: ObservableObject {
         } else {
             print("\(label): \(responseString)")
         }
+#else
+        _ = data
+        _ = label
+#endif
     }
 
     private func presentErrorAlert(message: String) {
@@ -478,6 +498,27 @@ extension NetworkManager {
         )
     }
 
+    func triggerSpark(cardId: String, parentActivityId: String?) -> AnyPublisher<NetworkResponse<SparkRunData>, NetworkError> {
+        let parameters = parentActivityId.map { ["parent_activity_id": $0] }
+
+        return self.request(
+            endpoint: "/api/v1/assets/\(cardId)/spark",
+            method: .post,
+            parameters: parameters,
+            responseType: NetworkResponse<SparkRunData>.self,
+            presentsError: false
+        )
+    }
+
+    func getSparkCard(id: String) -> AnyPublisher<NetworkResponse<RelatedCard>, NetworkError> {
+        return self.request(
+            endpoint: "/api/cards/\(id)",
+            method: .get,
+            responseType: NetworkResponse<RelatedCard>.self,
+            presentsError: false
+        )
+    }
+
     func getSparkHistory(cardId: String, offset: Int = 0, limit: Int = 20) -> AnyPublisher<NetworkResponse<SparkHistoryResponse>, NetworkError> {
         let parameters: Parameters = [
             "offset": offset,
@@ -489,7 +530,8 @@ extension NetworkManager {
             method: .get,
             parameters: parameters,
             encoding: URLEncoding.default,
-            responseType: NetworkResponse<SparkHistoryResponse>.self
+            responseType: NetworkResponse<SparkHistoryResponse>.self,
+            presentsError: false
         )
     }
 
@@ -506,7 +548,8 @@ extension NetworkManager {
             method: .get,
             parameters: parameters,
             encoding: URLEncoding.default,
-            responseType: NetworkResponse<SparkMoreResponse>.self
+            responseType: NetworkResponse<SparkMoreResponse>.self,
+            presentsError: false
         )
     }
 
@@ -515,7 +558,8 @@ extension NetworkManager {
             endpoint: "/api/v1/spark/activities/\(activityId)/results",
             method: .get,
             encoding: URLEncoding.default,
-            responseType: NetworkResponse<SparkActivityResultsResponse>.self
+            responseType: NetworkResponse<SparkActivityResultsResponse>.self,
+            presentsError: false
         )
     }
 
@@ -667,25 +711,35 @@ extension NetworkManager {
     }
 
     // MARK: - 收藏相关API
-    func favoriteCard(cardId: String) -> AnyPublisher<NetworkResponse<FavoriteResponseData>, NetworkError> {
-        let parameters: Parameters = [
-            "asset_id": cardId
-        ]
+    func favoriteCard(
+        cardId: String,
+        sparkActivityId: String? = nil,
+        presentsError: Bool = true
+    ) -> AnyPublisher<NetworkResponse<FavoriteResponseData>, NetworkError> {
+        var parameters: Parameters = ["asset_id": cardId]
+        if let sparkActivityId, !sparkActivityId.isEmpty {
+            parameters["spark_activity_id"] = sparkActivityId
+        }
 
         return request(
             endpoint: "/api/v1/actors/me/favorites",
             method: .post,
             parameters: parameters,
-            responseType: NetworkResponse<FavoriteResponseData>.self
+            responseType: NetworkResponse<FavoriteResponseData>.self,
+            presentsError: presentsError
         )
     }
 
-    func unfavoriteCard(cardId: String) -> AnyPublisher<NetworkResponse<EmptyResponseData>, NetworkError> {
+    func unfavoriteCard(
+        cardId: String,
+        presentsError: Bool = true
+    ) -> AnyPublisher<NetworkResponse<EmptyResponseData>, NetworkError> {
         return request(
             endpoint: "/api/v1/actors/me/favorites/\(cardId)",
             method: .delete,
             encoding: URLEncoding.default,
-            responseType: NetworkResponse<EmptyResponseData>.self
+            responseType: NetworkResponse<EmptyResponseData>.self,
+            presentsError: presentsError
         )
     }
 
