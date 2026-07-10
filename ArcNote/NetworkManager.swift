@@ -160,11 +160,16 @@ class NetworkManager: ObservableObject {
                     }
                     print("请求失败错误: \(error)")
 
-                    if presentsError, let message = responseMessage, !message.isEmpty {
+                    let statusCode = response.response?.statusCode
+                    let isStaleUnauthorizedRequest = statusCode == 401
+                        && self.authToken == nil
+                    if presentsError,
+                       !isStaleUnauthorizedRequest,
+                       let message = responseMessage,
+                       !message.isEmpty {
                         self.presentErrorAlert(message: message)
                     }
 
-                    let statusCode = response.response?.statusCode
                     let networkError: NetworkError
                     if statusCode == 401 {
                         networkError = .unauthorized
@@ -362,11 +367,25 @@ extension NetworkManager {
         )
     }
 
-    func verifyToken() -> AnyPublisher<VerifyTokenResponse, NetworkError> {
+    func verifyToken(
+        presentsError: Bool = true
+    ) -> AnyPublisher<VerifyTokenResponse, NetworkError> {
         return request(
             endpoint: "/api/auth/verify-token",
             method: .get,
-            responseType: VerifyTokenResponse.self
+            responseType: VerifyTokenResponse.self,
+            presentsError: presentsError
+        )
+    }
+
+    func logoutCurrentSession(
+        presentsError: Bool = false
+    ) -> AnyPublisher<AuthActionResponse, NetworkError> {
+        request(
+            endpoint: "/api/auth/logout",
+            method: .post,
+            responseType: AuthActionResponse.self,
+            presentsError: presentsError
         )
     }
 

@@ -60,6 +60,12 @@ private enum APIMigrationUITestSeed {
             defaults.set(actorId, forKey: "actor_id")
             defaults.set(environment["CHORAI_UI_TEST_EMAIL"] ?? "ui-test@example.com", forKey: "email")
             defaults.set(environment["CHORAI_UI_TEST_USERNAME"] ?? "ui-test-user", forKey: "username")
+            defaults.set(0, forKey: "credit")
+            defaults.set(
+                environment["CHORAI_UI_TEST_CREATED_AT"]
+                    ?? "2026-01-01T00:00:00Z",
+                forKey: "created_at"
+            )
             AuthManager.shared.loadUserSession()
         }
     }

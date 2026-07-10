@@ -2,16 +2,29 @@ import Foundation
 import Combine
 import Security
 
+enum AuthSessionPhase: String {
+    case signedOut = "signed-out"
+    case restored
+    case verifying
+    case verified
+    case degraded
+}
+
 // MARK: 用户认证管理器
 class AuthManager: ObservableObject {
     static let shared = AuthManager()
+    private static let foregroundVerificationDebounce: TimeInterval = 2
     
     @Published var isLoggedIn: Bool = false
     @Published var currentUser: User?
     @Published var authToken: String?
+    @Published private(set) var sessionPhase: AuthSessionPhase = .signedOut
     
     private let userDefaults = UserDefaults.standard
     private let networkManager = NetworkManager.shared
+    private var sessionVerification: AnyCancellable?
+    private var verifiedToken: String?
+    private var lastVerificationStartedAt: Date?
     
     private init() {
         loadUserSession()
@@ -23,7 +36,10 @@ class AuthManager: ObservableObject {
         authToken = SessionTokenStore.load()
         migrateLegacyAuthTokenIfNeeded()
         
-        if isLoggedIn, let actorId = userDefaults.string(forKey: "actor_id") {
+        if isLoggedIn,
+           let token = authToken,
+           !token.isEmpty,
+           let actorId = userDefaults.string(forKey: "actor_id") {
             guard
                 let username = userDefaults.string(forKey: "username"),
                 let email = userDefaults.string(forKey: "email"),
@@ -46,9 +62,10 @@ class AuthManager: ObservableObject {
             )
             
             // 设置网络管理器的认证令牌
-            if let token = authToken {
-                networkManager.setAuthToken(token)
-            }
+            networkManager.setAuthToken(token)
+            sessionPhase = .restored
+        } else {
+            clearUserSession()
         }
     }
     
@@ -57,6 +74,8 @@ class AuthManager: ObservableObject {
         let userData = authResponse.data
         authToken = userData.token
         isLoggedIn = true
+        verifiedToken = userData.token
+        sessionPhase = .verified
 
         print("用户\(userData.user.id),登录成功")
         let user = userData.user
@@ -66,23 +85,23 @@ class AuthManager: ObservableObject {
         userDefaults.set(true, forKey: "is_logged_in")
         SessionTokenStore.save(userData.token)
         userDefaults.removeObject(forKey: "auth_token")
-        userDefaults.set(user.id, forKey: "actor_id")
-        userDefaults.set(user.username, forKey: "username")
-        userDefaults.set(user.email, forKey: "email")
-        userDefaults.set(user.avatar, forKey: "avatar")
-        userDefaults.set(user.bio, forKey: "bio")
-        userDefaults.set(user.credit, forKey: "credit")
-        userDefaults.set(user.createdAt, forKey: "created_at")
+        persistUserProjection(user)
         
         // 设置网络管理器的认证令牌
         networkManager.setAuthToken(userData.token)
     }
     
-    func clearUserSession() {
+    private func clearUserSession() {
+        sessionVerification?.cancel()
+        sessionVerification = nil
+        verifiedToken = nil
+        lastVerificationStartedAt = nil
+
         // 清除认证信息
         authToken = nil
         currentUser = nil
         isLoggedIn = false
+        sessionPhase = .signedOut
         
         // 清除UserDefaults
         userDefaults.removeObject(forKey: "is_logged_in")
@@ -125,10 +144,86 @@ class AuthManager: ObservableObject {
         .eraseToAnyPublisher()
     }
     
-    // MARK: 登出方法
-    func logout() {
-        print("执行本地登出，清除用户信息")
+    func invalidateLocalSession() {
         clearUserSession()
+    }
+
+    func verifyRestoredSession(force: Bool = false) {
+        guard isAuthenticated, let token = authToken, !token.isEmpty else {
+            sessionPhase = .signedOut
+            return
+        }
+        guard sessionVerification == nil else { return }
+        if let lastVerificationStartedAt,
+           Date().timeIntervalSince(lastVerificationStartedAt)
+            < Self.foregroundVerificationDebounce {
+            return
+        }
+        if !force, verifiedToken == token, sessionPhase == .verified {
+            return
+        }
+
+        lastVerificationStartedAt = Date()
+        sessionPhase = .verifying
+        sessionVerification = networkManager.verifyToken(presentsError: false)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] completion in
+                guard let self else { return }
+                self.sessionVerification = nil
+                guard case .failure(let error) = completion else { return }
+                if case .unauthorized = error {
+                    self.invalidateLocalSession()
+                } else {
+                    self.sessionPhase = .degraded
+                }
+            } receiveValue: { [weak self] response in
+                guard let self,
+                      response.success,
+                      let data = response.data,
+                      data.valid,
+                      data.user.id == self.currentUser?.id else {
+                    self?.invalidateLocalSession()
+                    return
+                }
+                self.currentUser = data.user
+                self.persistUserProjection(data.user)
+                self.verifiedToken = token
+                self.sessionPhase = .verified
+            }
+    }
+
+    func logoutCurrentSession() -> AnyPublisher<Void, NetworkError> {
+        guard isAuthenticated else {
+            invalidateLocalSession()
+            return Just(())
+                .setFailureType(to: NetworkError.self)
+                .eraseToAnyPublisher()
+        }
+
+        return networkManager.logoutCurrentSession(presentsError: false)
+            .receive(on: DispatchQueue.main)
+            .flatMap { response -> AnyPublisher<Void, NetworkError> in
+                guard response.success else {
+                    return Fail(error: NetworkError.unknown)
+                        .eraseToAnyPublisher()
+                }
+                return Just(())
+                    .setFailureType(to: NetworkError.self)
+                    .eraseToAnyPublisher()
+            }
+            .catch { [weak self] error -> AnyPublisher<Void, NetworkError> in
+                if case .unauthorized = error {
+                    self?.invalidateLocalSession()
+                    return Just(())
+                        .setFailureType(to: NetworkError.self)
+                        .eraseToAnyPublisher()
+                }
+                return Fail(error: error).eraseToAnyPublisher()
+            }
+            .handleEvents(receiveOutput: { [weak self] in
+                self?.invalidateLocalSession()
+            })
+            .eraseToAnyPublisher()
     }
     
     // MARK: 发送验证码
@@ -159,6 +254,16 @@ class AuthManager: ObservableObject {
         SessionTokenStore.save(legacyToken)
         authToken = legacyToken
         userDefaults.removeObject(forKey: "auth_token")
+    }
+
+    private func persistUserProjection(_ user: User) {
+        userDefaults.set(user.id, forKey: "actor_id")
+        userDefaults.set(user.username, forKey: "username")
+        userDefaults.set(user.email, forKey: "email")
+        userDefaults.set(user.avatar, forKey: "avatar")
+        userDefaults.set(user.bio, forKey: "bio")
+        userDefaults.set(user.credit, forKey: "credit")
+        userDefaults.set(user.createdAt, forKey: "created_at")
     }
 }
 

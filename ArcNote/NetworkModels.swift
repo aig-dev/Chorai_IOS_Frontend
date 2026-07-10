@@ -314,6 +314,11 @@ struct VerifyTokenResponse: Codable {
     let data: VerifyTokenData?
 }
 
+struct AuthActionResponse: Codable {
+    let success: Bool
+    let message: String?
+}
+
 // MARK: 搜索请求模型
 struct SearchRequest: Codable {
     let query: String

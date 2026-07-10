@@ -11,6 +11,7 @@ import Combine
 import AuthenticationServices
 
 struct ContentView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @State private var showSignUp = false
     @State private var showSignIn = false
     @StateObject private var authManager = AuthManager.shared
@@ -33,8 +34,12 @@ struct ContentView: View {
             }
         }
         .onAppear {
-            // 页面出现时检查登录状态
-            authManager.loadUserSession()
+            authManager.verifyRestoredSession()
+        }
+        .onChange(of: scenePhase) { phase in
+            if phase == .active {
+                authManager.verifyRestoredSession(force: true)
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("UnauthorizedError"))) { _ in
             showUnauthorizedAlert = true
@@ -50,10 +55,19 @@ struct ContentView: View {
         .alert("Authentication Error", isPresented: $showUnauthorizedAlert) {
             Button("OK") {
                 // 用户点击OK后清除用户会话并返回登录页面
-                authManager.logout()
+                authManager.invalidateLocalSession()
             }
         } message: {
             Text("401 Unauthorized - Please sign in again")
+        }
+        .overlay(alignment: .topLeading) {
+            #if DEBUG
+            Text(authManager.sessionPhase.rawValue)
+                .font(.system(size: 1))
+                .foregroundColor(.white.opacity(0.01))
+                .frame(width: 1, height: 1)
+                .accessibilityIdentifier("auth.session.phase")
+            #endif
         }
     }
     

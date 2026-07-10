@@ -327,6 +327,105 @@ final class ArcNoteUITests: XCTestCase {
         )
     }
 
+    func testRevokedSessionRelaunchReturnsToWelcome() throws {
+        let session = try requireFreshSmokeSession()
+        seedAppSession(session)
+        launchAuthenticatedApp()
+
+        waitFor("screen.flow.content", timeout: 30)
+        waitForSessionPhase("verified", timeout: 30)
+
+        app.terminate()
+        try revokeSmokeSession(token: session.token)
+        app.launch()
+
+        waitFor("welcome.login", timeout: 30)
+        waitForSessionPhase("signed-out", timeout: 10)
+        XCTAssertFalse(exists("screen.flow.content", timeout: 1))
+    }
+
+    func testOfflineSessionVerificationKeepsRestoredShell() throws {
+        let session = try requireFreshSmokeSession()
+        seedAppSession(session)
+        app.launchEnvironment["CHORAI_UI_TEST"] = "1"
+        app.launchEnvironment["CHORAI_API_BASE_URL"] = "http://127.0.0.1:1"
+        app.launch()
+
+        waitFor("tab.flow", timeout: 15)
+        waitForSessionPhase("degraded", timeout: 30)
+        XCTAssertTrue(exists("screen.flow.content", timeout: 2))
+    }
+
+    func testSessionActorMismatchClearsLocalProjection() throws {
+        let session = try requireFreshSmokeSession()
+        seedAppSession(session)
+        app.launchEnvironment["CHORAI_UI_TEST"] = "1"
+        app.launchEnvironment["CHORAI_UI_TEST_ACTOR_ID"] = "act_mismatch"
+        if let baseURL = ProcessInfo.processInfo.environment[
+            "CHORAI_API_BASE_URL"
+        ] {
+            app.launchEnvironment["CHORAI_API_BASE_URL"] = baseURL
+        }
+        app.launch()
+
+        waitFor("welcome.login", timeout: 30)
+        waitForSessionPhase("signed-out", timeout: 10)
+    }
+
+    func testSettingsLogoutRevokesCanonicalGoSession() throws {
+        let session = try requireFreshSmokeSession()
+        seedAppSession(session)
+        launchAuthenticatedApp()
+
+        waitForSessionPhase("verified", timeout: 30)
+        tap("side-menu.open")
+        tap("side-menu.settings")
+        waitFor("screen.settings.loaded", timeout: 20)
+        captureVisual("session-settings-before-logout")
+
+        tap("settings.logout")
+        let confirmation = app.alerts.buttons["Log Out"]
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 10))
+        confirmation.tap()
+
+        waitFor("welcome.login", timeout: 30)
+        waitForSessionPhase("signed-out", timeout: 10)
+        XCTAssertFalse(
+            app.alerts.firstMatch.waitForExistence(timeout: 2),
+            "Logout should not leave an authenticated-screen error over welcome"
+        )
+        captureVisual("session-welcome-after-logout")
+        try assertSmokeTokenUnauthorized(session.token)
+    }
+
+    func testSettingsLogoutTransportFailureKeepsRestoredSession() throws {
+        let session = try requireFreshSmokeSession()
+        seedAppSession(session)
+        app.launchEnvironment["CHORAI_UI_TEST"] = "1"
+        app.launchEnvironment["CHORAI_API_BASE_URL"] = "http://127.0.0.1:1"
+        app.launch()
+
+        waitFor("screen.flow.content", timeout: 15)
+        waitForSessionPhase("degraded", timeout: 30)
+        tap("side-menu.open")
+        tap("side-menu.settings")
+        waitFor("screen.settings.loaded", timeout: 20)
+        tap("settings.logout")
+
+        let confirmation = app.alerts.buttons["Log Out"]
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 10))
+        confirmation.tap()
+
+        waitFor("settings.logout.error", timeout: 15)
+        XCTAssertTrue(exists("settings.logout", timeout: 2))
+        XCTAssertFalse(exists("welcome.login", timeout: 2))
+        XCTAssertEqual(
+            try verifySmokeToken(token: session.token).user.id,
+            session.actorId,
+            "A transport failure must not revoke or discard the current session"
+        )
+    }
+
     func testSettingsPersonalDataSaveUpdatesGoProfileMe() throws {
         let session = try requireSmokeSession()
         seedAppSession(session)
@@ -1114,6 +1213,40 @@ final class ArcNoteUITests: XCTestCase {
         add(attachment)
     }
 
+    private func captureVisual(_ name: String) {
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
+    private func waitForSessionPhase(
+        _ expected: String,
+        timeout: TimeInterval,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let deadline = Date().addingTimeInterval(timeout)
+        let phase = app.descendants(matching: .any)["auth.session.phase"]
+        var lastPhase = "missing"
+        while Date() < deadline {
+            if phase.exists {
+                lastPhase = phase.label.trimmingCharacters(
+                    in: .whitespacesAndNewlines
+                )
+                if lastPhase == expected {
+                    return
+                }
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+        }
+        XCTFail(
+            "Session phase did not become \(expected); last phase: \(lastPhase)",
+            file: file,
+            line: line
+        )
+    }
+
     private func mergeAnchorValue(
         _ identifier: String,
         timeout: TimeInterval = 10,
@@ -1873,6 +2006,18 @@ final class ArcNoteUITests: XCTestCase {
         }
     }
 
+    private struct SmokeVerifyTokenResponse: Decodable {
+        let data: VerifyData
+
+        struct VerifyData: Decodable {
+            let user: VerifyUser
+        }
+
+        struct VerifyUser: Decodable {
+            let id: String
+        }
+    }
+
     private func requireSmokeSession(file: StaticString = #filePath, line: UInt = #line) throws -> SmokeSession {
         let environment = ProcessInfo.processInfo.environment
         if let token = environment["CHORAI_UI_TEST_AUTH_TOKEN"], !token.isEmpty {
@@ -1890,6 +2035,88 @@ final class ArcNoteUITests: XCTestCase {
 
         XCTFail("Unable to authenticate against local Go backend", file: file, line: line)
         throw NSError(domain: "ArcNoteUITests", code: 1, userInfo: [NSLocalizedDescriptionKey: "Unable to authenticate against local Go backend"])
+    }
+
+    private func requireFreshSmokeSession(
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) throws -> SmokeSession {
+        if let session = fetchFreshSmokeSession() {
+            return session
+        }
+        XCTFail(
+            "Unable to create a fresh local Go session",
+            file: file,
+            line: line
+        )
+        throw NSError(
+            domain: "ArcNoteUITests",
+            code: 1,
+            userInfo: [NSLocalizedDescriptionKey: "Unable to create a fresh local Go session"]
+        )
+    }
+
+    private func revokeSmokeSession(token: String) throws {
+        let baseURL = ProcessInfo.processInfo.environment[
+            "CHORAI_API_BASE_URL"
+        ] ?? "http://127.0.0.1:8080"
+        guard let url = URL(string: "\(baseURL)/api/auth/logout") else {
+            throw NSError(
+                domain: "ArcNoteUITests",
+                code: 12,
+                userInfo: [NSLocalizedDescriptionKey: "Invalid Go logout URL"]
+            )
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        _ = try sendRawRequest(request)
+    }
+
+    private func verifySmokeToken(
+        token: String
+    ) throws -> SmokeVerifyTokenResponse.VerifyData {
+        let baseURL = ProcessInfo.processInfo.environment[
+            "CHORAI_API_BASE_URL"
+        ] ?? "http://127.0.0.1:8080"
+        guard let url = URL(string: "\(baseURL)/api/auth/verify-token") else {
+            throw NSError(
+                domain: "ArcNoteUITests",
+                code: 12,
+                userInfo: [NSLocalizedDescriptionKey: "Invalid Go verify-token URL"]
+            )
+        }
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        return try sendRequest(
+            request,
+            responseType: SmokeVerifyTokenResponse.self
+        ).data
+    }
+
+    private func assertSmokeTokenUnauthorized(
+        _ token: String,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) throws {
+        let baseURL = ProcessInfo.processInfo.environment[
+            "CHORAI_API_BASE_URL"
+        ] ?? "http://127.0.0.1:8080"
+        guard let url = URL(string: "\(baseURL)/api/auth/verify-token") else {
+            throw NSError(
+                domain: "ArcNoteUITests",
+                code: 12,
+                userInfo: [NSLocalizedDescriptionKey: "Invalid Go verify-token URL"]
+            )
+        }
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        do {
+            _ = try sendRawRequest(request)
+            XCTFail("Go token remained valid after logout", file: file, line: line)
+        } catch let error as NSError {
+            XCTAssertEqual(error.code, 401, file: file, line: line)
+        }
     }
 
     private func createPublicSmokeCard(token: String, searchToken: String) throws -> String {
@@ -2352,6 +2579,13 @@ final class ArcNoteUITests: XCTestCase {
             return cachedSession
         }
 
+        let result = fetchFreshSmokeSession()
+        Self.cachedSmokeSession = result
+        return result
+    }
+
+    private func fetchFreshSmokeSession() -> SmokeSession? {
+
         let environment = ProcessInfo.processInfo.environment
         let email = environment["CHORAI_UI_TEST_EMAIL"] ?? "ios-smoke-a-20260619@example.com"
         let password = environment["CHORAI_UI_TEST_PASSWORD"] ?? "Password123"
@@ -2387,7 +2621,6 @@ final class ArcNoteUITests: XCTestCase {
         }.resume()
 
         _ = semaphore.wait(timeout: .now() + 10)
-        Self.cachedSmokeSession = result
         return result
     }
 

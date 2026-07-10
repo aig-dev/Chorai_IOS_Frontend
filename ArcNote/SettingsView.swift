@@ -89,6 +89,8 @@ struct SettingsView: View {
     @ObservedObject private var userProfileManager = UserProfileManager.shared
     @ObservedObject private var authManager = AuthManager.shared
     @State private var cancellables = Set<AnyCancellable>()
+    @State private var isLoggingOut = false
+    @State private var logoutError: String?
     
     var body: some View {
         ZStack {
@@ -249,18 +251,30 @@ struct SettingsView: View {
                         .padding(.horizontal, 20)
                         
                         // 登出按钮
-                        Button(action: {
-                            showLogoutAlert = true
-                        }) {
-                            Text("Log Out")
-                                .font(.system(size: 16, weight: .medium))
-                                .foregroundColor(.white)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 13)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 30)
-                                        .stroke(Color.white.opacity(0.3), lineWidth: 1)
-                                )
+                        VStack(spacing: 8) {
+                            Button(action: {
+                                showLogoutAlert = true
+                            }) {
+                                Text("Log Out")
+                                    .font(.system(size: 16, weight: .medium))
+                                    .foregroundColor(.white)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 13)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 30)
+                                            .stroke(Color.white.opacity(0.3), lineWidth: 1)
+                                    )
+                            }
+                            .disabled(isLoggingOut)
+                            .accessibilityIdentifier("settings.logout")
+
+                            if let logoutError {
+                                Text(logoutError)
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.white.opacity(0.65))
+                                    .multilineTextAlignment(.center)
+                                    .accessibilityIdentifier("settings.logout.error")
+                            }
                         }
                         .padding(.horizontal, 100)
                         
@@ -313,22 +327,24 @@ struct SettingsView: View {
     
     // MARK: - 执行登出
     private func performLogout() {
-        print("开始执行登出")
-        
-        // 直接调用logout方法清除本地信息
-        authManager.logout()
-        
-        print("登出成功发送登出通知")
-        // 发送登出通知，让应用重新显示登录界面
-        NotificationCenter.default.post(
-            name: NSNotification.Name("UserLoggedOut"),
-            object: nil
-        )
-        
-        // 关闭设置页面
-        DispatchQueue.main.async {
-            presentationMode.wrappedValue.dismiss()
-        }
+        guard !isLoggingOut else { return }
+        isLoggingOut = true
+        logoutError = nil
+
+        authManager.logoutCurrentSession()
+            .sink { completion in
+                isLoggingOut = false
+                if case .failure = completion {
+                    logoutError = "Couldn’t log out. Try again."
+                }
+            } receiveValue: {
+                // AuthManager publishes signed-out state; ContentView replaces
+                // the root. Pop this destination to reveal that new root.
+                DispatchQueue.main.async {
+                    presentationMode.wrappedValue.dismiss()
+                }
+            }
+            .store(in: &cancellables)
     }
 }
 
