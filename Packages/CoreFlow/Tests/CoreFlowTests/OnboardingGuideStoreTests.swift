@@ -327,6 +327,145 @@ final class OnboardingGuideStoreTests: XCTestCase {
     }
 
     @MainActor
+    func testSparkMergeLibraryAndRecordedReplayCompleteCanonicalV1() async {
+        let service = MockOnboardingGuideService()
+        service.statusResults = [
+            .success(status(needs: true, activeSessionID: "onb_1"))
+        ]
+        service.currentResults = [
+            .success(session(state: "product_spark_intro"))
+        ]
+        service.respondResults = [
+            .success(session(state: "product_spark_results")),
+            .success(session(state: "product_save_material")),
+            .success(session(state: "product_merge_intro")),
+            .success(session(state: "product_merge_preview")),
+            .success(session(state: "product_library_intro")),
+            .success(session(state: "product_quick_capture_intro")),
+            .success(session(state: "build_ignite"))
+        ]
+        service.completeResults = [
+            .success(session(status: "completed", state: "completed"))
+        ]
+        let persistence = InMemoryOnboardingGuidePersistence()
+        persistence.saveRecordedCardEvidence(
+            .recordCreated(cardID: "ast_record", content: "First signal"),
+            actorID: "act_1",
+            sessionID: "onb_1"
+        )
+        let store = makeStore(service: service, persistence: persistence)
+        store.load(actorID: "act_1")
+        await settle(3)
+
+        store.receive(.sparkStarted(assetID: "ast_flow"))
+        store.receive(.sparkResultsViewed(activityID: "act_spark"))
+        store.receive(.sparkResultSaved(assetID: "ast_result"))
+        store.receive(.mergeStarted(jobID: "mjob_1"))
+        store.receive(.mergeCommitted(assetID: "ast_merged"))
+        await settle(12)
+
+        XCTAssertEqual(store.session?.state, "product_library_intro")
+        XCTAssertEqual(service.completedSessionIDs, [])
+
+        store.receive(.libraryViewed)
+        await settle(12)
+
+        XCTAssertEqual(
+            service.responses.map(\.input),
+            [
+                .choice("activation:spark.started"),
+                .choice("activation:spark.results_viewed"),
+                .choice("activation:spark.result_saved"),
+                .choice("activation:merge.started"),
+                .choice("activation:merge.committed"),
+                .choice("activation:library.viewed"),
+                .choice("activation:record.created")
+            ]
+        )
+        XCTAssertEqual(service.completedSessionIDs, ["onb_1"])
+        XCTAssertEqual(store.phase, .completed)
+        XCTAssertEqual(store.session?.state, "completed")
+    }
+
+    @MainActor
+    func testLibraryViewedBeforePostCommitSceneIsNotQueued() async {
+        let service = MockOnboardingGuideService()
+        service.statusResults = [
+            .success(status(needs: true, activeSessionID: "onb_1"))
+        ]
+        service.currentResults = [
+            .success(session(state: "product_merge_intro"))
+        ]
+        let persistence = InMemoryOnboardingGuidePersistence()
+        let store = makeStore(service: service, persistence: persistence)
+        store.load(actorID: "act_1")
+        await settle(3)
+
+        store.receive(.libraryViewed)
+
+        XCTAssertTrue(service.responses.isEmpty)
+        XCTAssertTrue(
+            persistence.pendingEvidence(actorID: "act_1", sessionID: "onb_1").isEmpty,
+            "Library must be seen after commit rather than replayed from merge selection"
+        )
+    }
+
+    @MainActor
+    func testMergePreviewAdvancesOnlyFromCommittedCardEvidence() async {
+        let service = MockOnboardingGuideService()
+        service.statusResults = [
+            .success(status(needs: true, activeSessionID: "onb_1"))
+        ]
+        service.currentResults = [
+            .success(session(state: "product_merge_preview"))
+        ]
+        service.respondResults = [
+            .success(session(state: "product_library_intro"))
+        ]
+        let store = makeStore(service: service)
+        store.load(actorID: "act_1")
+        await settle(3)
+
+        store.receive(.mergeStarted(jobID: "mjob_ready"))
+        await settle(2)
+        XCTAssertTrue(service.responses.isEmpty)
+
+        store.receive(.mergeCommitted(assetID: "ast_committed"))
+        await settle(3)
+        XCTAssertEqual(
+            service.responses.map(\.input),
+            [.choice("activation:merge.committed")]
+        )
+        XCTAssertEqual(store.session?.state, "product_library_intro")
+    }
+
+    @MainActor
+    func testCompletionFailureKeepsBuildIgniteRetryable() async {
+        let service = MockOnboardingGuideService()
+        service.statusResults = [
+            .success(status(needs: true, activeSessionID: "onb_1"))
+        ]
+        service.currentResults = [.success(session(state: "build_ignite"))]
+        service.completeResults = [
+            .failure(.offline),
+            .success(session(status: "completed", state: "completed"))
+        ]
+        let store = makeStore(service: service)
+        store.load(actorID: "act_1")
+        await settle(4)
+
+        XCTAssertEqual(store.phase, .active)
+        XCTAssertEqual(store.lastError, .offline)
+        XCTAssertNotNil(store.guideScene)
+
+        store.retryPendingEvidence()
+        await settle(4)
+
+        XCTAssertEqual(service.completedSessionIDs, ["onb_1", "onb_1"])
+        XCTAssertEqual(store.phase, .completed)
+    }
+
+    @MainActor
     private func makeStore(
         service: MockOnboardingGuideService,
         persistence: OnboardingGuidePersisting = InMemoryOnboardingGuidePersistence()

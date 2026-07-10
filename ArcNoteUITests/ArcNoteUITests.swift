@@ -492,6 +492,150 @@ final class ArcNoteUITests: XCTestCase {
         captureVisual("onboarding-v1-resumed")
     }
 
+    func testCanonicalOnboardingCompletesRealGoFirstLoop() throws {
+        let smoke = try requireFreshSmokeSession()
+        let started = try restartSmokeOnboarding(
+            token: smoke.token,
+            flowVersion: 1
+        )
+        XCTAssertEqual(started.state, "elicit_signal")
+
+        seedAppSession(smoke)
+        app.launchEnvironment["CHORAI_UI_TEST_ONBOARDING"] = "1"
+        app.launchEnvironment[
+            "CHORAI_UI_TEST_SPARK_SESSION_SCOPE"
+        ] = sparkSessionScope
+        app.launchEnvironment[
+            "CHORAI_UI_TEST_MERGE_SESSION_SCOPE"
+        ] = sparkSessionScope
+        launchAuthenticatedApp()
+
+        var recordedCardID: String?
+        var savedSparkCardID: String?
+        var committedCardID: String?
+        defer {
+            if let committedCardID {
+                deleteSmokeCard(id: committedCardID, token: smoke.token)
+            }
+            if let savedSparkCardID {
+                deleteFavorite(id: savedSparkCardID, token: smoke.token)
+            }
+            if let recordedCardID {
+                deleteSmokeCard(id: recordedCardID, token: smoke.token)
+            }
+        }
+
+        waitForSessionPhase("verified", timeout: 30)
+        waitForOnboardingAnchor("onboarding.state", value: "elicit_signal")
+        waitFor("record.sheet", timeout: 30)
+        let signal = "iOS complete loop \(Int(Date().timeIntervalSince1970))"
+        replaceText("record.input", with: signal)
+        tapButton("record.save")
+        recordedCardID = waitFor("record.created-card-id", timeout: 30)
+            .label
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        XCTAssertFalse(recordedCardID?.isEmpty ?? true)
+
+        waitForOnboardingAnchor("onboarding.state", value: "deepen_signal")
+        tap("onboarding.choice.accurate")
+        waitForOnboardingAnchor(
+            "onboarding.state",
+            value: "product_explore_card",
+            timeout: 30
+        )
+        let firstFlowCardID = waitFor("flow.visible-card.id", timeout: 30)
+            .label
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        tap("flow.skip.\(firstFlowCardID)")
+        waitForOnboardingAnchor(
+            "onboarding.state",
+            value: "product_spark_intro",
+            timeout: 30
+        )
+
+        let sparkSourceID = waitFor("flow.visible-card.id", timeout: 30)
+            .label
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        openFlowSparkWithResults(startingCardID: sparkSourceID)
+        waitForSmokeOnboardingState(
+            "product_save_material",
+            token: smoke.token,
+            timeout: 30
+        )
+        waitFor("onboarding.guide", timeout: 15)
+        captureVisual("onboarding-spark-save")
+
+        let sparkResultID = try waitForCompactUnfavoritedSparkResult(
+            token: smoke.token
+        )
+        let mergeSearchQuery = mergeCandidateSearchQuery(
+            for: try fetchSmokeCard(id: sparkResultID, token: smoke.token)
+        )
+        savedSparkCardID = sparkResultID
+        waitFor("spark.card.\(sparkResultID)").swipeRight()
+        waitForAssetStatus(
+            kind: "favorites",
+            id: sparkResultID,
+            token: smoke.token,
+            expected: true
+        )
+
+        waitForOnboardingAnchor(
+            "onboarding.state",
+            value: "product_merge_intro",
+            timeout: 30
+        )
+        waitFor("screen.home.content", timeout: 30)
+        captureVisual("onboarding-library-merge-intro")
+
+        guard let recordedCardID else {
+            XCTFail("Record did not expose its canonical card ID")
+            return
+        }
+        waitFor("card.home.\(recordedCardID)", timeout: 30)
+        tap("home.card.menu.\(recordedCardID)")
+        tap("popup-menu.item.merge")
+        waitFor("screen.merge.loaded", timeout: 30)
+        waitForMergeCardsLoaded()
+        let mergeSearchInput = waitFor("merge.search.input", timeout: 10)
+        mergeSearchInput.tap()
+        mergeSearchInput.typeText(mergeSearchQuery)
+        waitFor("merge.card.\(sparkResultID)", timeout: 30)
+        tap("merge.card.\(sparkResultID)")
+        dismissKeyboard()
+        tap("merge.action")
+
+        waitForSmokeOnboardingState(
+            "product_merge_preview",
+            token: smoke.token,
+            timeout: 30
+        )
+        waitFor("onboarding.guide", timeout: 15)
+        waitForMergeArtifactReady(timeout: 90)
+        RunLoop.current.run(until: Date().addingTimeInterval(0.35))
+        captureVisual("onboarding-merge-preview")
+        tap("merge.commit")
+
+        waitForOnboardingAnchor(
+            "onboarding.phase",
+            value: "completed",
+            timeout: 90
+        )
+        waitFor("onboarding.completed", timeout: 10)
+        captureVisual("onboarding-first-loop-complete")
+        waitFor("screen.home.content", timeout: 30)
+        committedCardID = waitFor("record.created-card-id", timeout: 20)
+            .label
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        XCTAssertNotEqual(committedCardID, recordedCardID)
+
+        let status = try fetchSmokeOnboardingStatus(token: smoke.token)
+        XCTAssertTrue(status.completed)
+        XCTAssertFalse(status.needsOnboarding)
+        XCTAssertEqual(status.latestSessionID, started.sessionID)
+        XCTAssertNil(status.activeSessionID)
+    }
+
     func testActiveWebV2OnboardingIsNotMutatedByIOS() throws {
         let smoke = try requireFreshSmokeSession()
         let started = try restartSmokeOnboarding(
@@ -1257,6 +1401,83 @@ final class ArcNoteUITests: XCTestCase {
         navigateToSparkFromFlow(cardID: cardID)
     }
 
+    private func openFlowSparkWithResults(
+        startingCardID: String,
+        maxAttempts: Int = 6,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        var cardID = startingCardID
+
+        for _ in 0..<maxAttempts {
+            tap("flow.spark.\(cardID)", file: file, line: line)
+            if waitForSparkLoadedOrTerminal(file: file, line: line) {
+                return
+            }
+
+            tap("spark.back", file: file, line: line)
+            waitFor("screen.flow.content", timeout: 30, file: file, line: line)
+            tap("flow.skip.\(cardID)", file: file, line: line)
+            cardID = waitForDifferentVisibleFlowCard(
+                from: cardID,
+                timeout: 30,
+                file: file,
+                line: line
+            )
+            waitFor(
+                "flow.spark.\(cardID)",
+                timeout: 20,
+                file: file,
+                line: line
+            )
+        }
+
+        XCTFail(
+            "Flow did not yield a Spark result after \(maxAttempts) cards",
+            file: file,
+            line: line
+        )
+    }
+
+    private func waitForSparkLoadedOrTerminal(
+        timeout: TimeInterval = 90,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        let loaded = app.descendants(matching: .any)["screen.spark.loaded"]
+        let empty = app.descendants(matching: .any)["screen.spark.empty"]
+        let failed = app.descendants(matching: .any)["screen.spark.error"]
+
+        while Date() < deadline {
+            if loaded.exists { return true }
+            if empty.exists || failed.exists { return false }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+        }
+
+        XCTFail(
+            "Spark did not reach loaded, empty, or failed state",
+            file: file,
+            line: line
+        )
+        return false
+    }
+
+    private func mergeCandidateSearchQuery(
+        for card: SmokeCardResponse.SmokeCardData
+    ) -> String {
+        let asciiTokens = card.content
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { token in
+                token.count >= 6
+                    && token.unicodeScalars.allSatisfy { $0.isASCII }
+            }
+        let token = asciiTokens.max { $0.count < $1.count }
+            ?? card.title
+            ?? card.id
+        return String(token.prefix(24))
+    }
+
     private func navigateToSparkFromFlow(cardID: String) {
         openSparkRouteFromFlow(cardID: cardID)
         waitFor("screen.spark.loaded", timeout: 90)
@@ -1481,6 +1702,44 @@ final class ArcNoteUITests: XCTestCase {
             _ = waitForDifferentSparkCard(from: resultID, file: file, line: line)
         }
         throw XCTSkip("No unfavorited Spark result was available")
+    }
+
+    private func waitForCompactUnfavoritedSparkResult(
+        token: String,
+        maximumContentLength: Int = 900,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) throws -> String {
+        for _ in 0..<12 {
+            let resultID = waitFor(
+                "spark.visible-card.id",
+                timeout: 30,
+                file: file,
+                line: line
+            ).label.trimmingCharacters(in: .whitespacesAndNewlines)
+            let card = try fetchSmokeCard(id: resultID, token: token)
+            let isFavorite = try fetchAssetStatus(
+                kind: "favorites",
+                id: resultID,
+                token: token
+            )
+            if !isFavorite, card.content.count <= maximumContentLength {
+                return resultID
+            }
+
+            waitFor(
+                "spark.card.\(resultID)",
+                file: file,
+                line: line
+            ).swipeLeft()
+            _ = waitForDifferentSparkCard(
+                from: resultID,
+                file: file,
+                line: line
+            )
+        }
+
+        throw XCTSkip("No compact unfavorited Spark result was available")
     }
 
     private func waitForUnfavoritedFlowCard(
@@ -2137,6 +2396,24 @@ final class ArcNoteUITests: XCTestCase {
         let data: SmokeOnboardingSession
     }
 
+    private struct SmokeOnboardingStatusResponse: Decodable {
+        let data: SmokeOnboardingStatus
+    }
+
+    private struct SmokeOnboardingStatus: Decodable {
+        let completed: Bool
+        let needsOnboarding: Bool
+        let latestSessionID: String?
+        let activeSessionID: String?
+
+        enum CodingKeys: String, CodingKey {
+            case completed
+            case needsOnboarding = "needs_onboarding"
+            case latestSessionID = "latest_session_id"
+            case activeSessionID = "active_session_id"
+        }
+    }
+
     private struct SmokeOnboardingSession: Decodable {
         let sessionID: String
         let flowVersion: Int
@@ -2265,6 +2542,59 @@ final class ArcNoteUITests: XCTestCase {
         return try sendRequest(
             request,
             responseType: SmokeOnboardingResponse.self
+        ).data
+    }
+
+    private func waitForSmokeOnboardingState(
+        _ expected: String,
+        token: String,
+        timeout: TimeInterval,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let deadline = Date().addingTimeInterval(timeout)
+        var lastState = "missing"
+        var lastError: Error?
+
+        while Date() < deadline {
+            do {
+                let session = try fetchCurrentSmokeOnboarding(token: token)
+                lastState = session.state
+                if lastState == expected { return }
+            } catch {
+                lastError = error
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+        }
+
+        XCTFail(
+            "Go onboarding did not become \(expected); last state: "
+                + "\(lastState), last error: \(String(describing: lastError))",
+            file: file,
+            line: line
+        )
+    }
+
+    private func fetchSmokeOnboardingStatus(
+        token: String
+    ) throws -> SmokeOnboardingStatus {
+        let baseURL = ProcessInfo.processInfo.environment[
+            "CHORAI_API_BASE_URL"
+        ] ?? "http://127.0.0.1:8080"
+        guard let url = URL(string: "\(baseURL)/api/v1/onboarding/status") else {
+            throw NSError(
+                domain: "ArcNoteUITests",
+                code: 16,
+                userInfo: [
+                    NSLocalizedDescriptionKey: "Invalid onboarding status URL"
+                ]
+            )
+        }
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        return try sendRequest(
+            request,
+            responseType: SmokeOnboardingStatusResponse.self
         ).data
     }
 

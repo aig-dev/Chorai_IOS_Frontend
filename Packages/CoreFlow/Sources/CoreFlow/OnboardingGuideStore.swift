@@ -341,6 +341,9 @@ public final class OnboardingGuideStore: ObservableObject {
             return currentState == State.elicitSignal
                 || currentState == State.quickCaptureIntro
         }
+        if case .libraryViewed = evidence {
+            return currentState == State.libraryIntro
+        }
         guard let expected = expectedState(for: evidence),
               let currentIndex = State.order.firstIndex(of: currentState),
               let expectedIndex = State.order.firstIndex(of: expected) else {

@@ -1,8 +1,10 @@
+import CoreFlow
 import SwiftUI
 
 struct HomeView: View {
     @Binding var showSideMenu: Bool
     let refreshID: UUID
+    var onboardingStore: OnboardingGuideStore? = nil
     @State private var selectedSegment = 0 // 0: Notes, 1: AI
 
     @State private var showPopupMenu = false
@@ -217,6 +219,20 @@ struct HomeView: View {
             }
             .padding(.horizontal, 20)
             .padding(.top, 60)
+
+            if let onboardingStore {
+                OnboardingGuideLine(
+                    store: onboardingStore,
+                    allowedStates: [
+                        "product_merge_intro",
+                        "product_library_intro",
+                        "product_quick_capture_intro",
+                        "build_ignite"
+                    ]
+                )
+                .padding(.horizontal, 20)
+                .padding(.top, 10)
+            }
             
             // 筛选标签
             if showFilterTags {
@@ -304,6 +320,7 @@ struct HomeView: View {
                 )
             }
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("screen.home.content")
         .popupMenu(isPresented: $showPopupMenu, layout: popupMenuLayout, cardData: currentMenuCardData ?? getCurrentCard(), isOwnCard: selectedSegment == 0)
         .onAppear {
@@ -987,6 +1004,8 @@ struct NotesCard: View {
                         .font(.title3)
                         .foregroundColor(.white)
                 }
+                .accessibilityLabel("Card menu")
+                .accessibilityIdentifier("home.card.menu.\(card.id)")
             }
             
             // 内容文本
@@ -1017,6 +1036,7 @@ struct NotesCard: View {
         }
         .padding(20)
         .background(notesCardBackground)
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("card.home.\(card.id)")
     }
     
@@ -1306,6 +1326,8 @@ struct HomePostCard: View {
                         .font(.title3)
                         .foregroundColor(.white)
                 }
+                .accessibilityLabel("Card menu")
+                .accessibilityIdentifier("home.card.menu.\(cardId)")
             }
             
             // 内容文本
@@ -1373,6 +1395,7 @@ struct HomePostCard: View {
             }
         )
         .clipShape(RoundedRectangle(cornerRadius: 16))
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("card.home.\(cardId)")
     }
     
@@ -1771,6 +1794,8 @@ struct NotesColorCard: View {
                         .font(.title3)
                         .foregroundColor(.white)
                 }
+                .accessibilityLabel("Card menu")
+                .accessibilityIdentifier("home.card.menu.\(card.id)")
             }
             
             // 内容文本
@@ -1810,6 +1835,7 @@ struct NotesColorCard: View {
             }
         )
         .clipShape(RoundedRectangle(cornerRadius: 16))
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("card.home.\(card.id)")
     }
     

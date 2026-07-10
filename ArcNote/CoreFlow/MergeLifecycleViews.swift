@@ -16,11 +16,14 @@ struct MergeView: View {
     @StateObject private var authManager = AuthManager.shared
     @StateObject private var candidates: MergeCandidateStore
     private let onCommitted: (String) -> Void
+    private let onboardingStore: OnboardingGuideStore?
 
     init(
         cardId: String,
+        onboardingStore: OnboardingGuideStore? = nil,
         onCommitted: @escaping (String) -> Void = { _ in }
     ) {
+        self.onboardingStore = onboardingStore
         self.onCommitted = onCommitted
         _candidates = StateObject(
             wrappedValue: MergeCandidateStore(anchorCardID: cardId)
@@ -36,6 +39,7 @@ struct MergeView: View {
                     anchor: anchor,
                     candidates: candidates,
                     onBack: dismiss.callAsFunction,
+                    onboardingStore: onboardingStore,
                     onCommitted: onCommitted
                 )
             } else if let error = candidates.anchorError {
@@ -209,6 +213,7 @@ private struct MergeLifecycleView: View {
     @State private var showCommittedDetail = false
 
     private let onBack: () -> Void
+    private let onboardingStore: OnboardingGuideStore?
     private let onCommitted: (String) -> Void
 
     init(
@@ -216,10 +221,12 @@ private struct MergeLifecycleView: View {
         anchor: MergeCard,
         candidates: MergeCandidateStore,
         onBack: @escaping () -> Void,
+        onboardingStore: OnboardingGuideStore?,
         onCommitted: @escaping (String) -> Void
     ) {
         self.candidates = candidates
         self.onBack = onBack
+        self.onboardingStore = onboardingStore
         self.onCommitted = onCommitted
         _store = StateObject(
             wrappedValue: MergeSessionStore(
@@ -239,6 +246,17 @@ private struct MergeLifecycleView: View {
 
             VStack(spacing: 0) {
                 header
+                if let onboardingStore {
+                    OnboardingGuideLine(
+                        store: onboardingStore,
+                        allowedStates: [
+                            "product_merge_intro",
+                            "product_merge_preview"
+                        ]
+                    )
+                    .padding(.horizontal, ZenVisualTokens.pageInset)
+                    .padding(.bottom, 10)
+                }
                 phaseContent
             }
 
@@ -263,9 +281,17 @@ private struct MergeLifecycleView: View {
         }
         .task(id: completedAssetID) {
             guard let assetID = completedAssetID else { return }
+            let onboardingState = onboardingStore?.session?.state
+            let isGuidedState = onboardingState.map {
+                ["product_merge_intro", "product_merge_preview"]
+                    .contains($0)
+            } ?? false
+            let isCompletingGuidedMerge = onboardingStore?.phase == .active
+                && isGuidedState
+            onboardingStore?.receive(.mergeCommitted(assetID: assetID))
             onCommitted(assetID)
             committedCardID = assetID
-            showCommittedDetail = true
+            showCommittedDetail = !isCompletingGuidedMerge
             store.acknowledgeCompletion()
         }
         .navigationDestination(isPresented: $showCommittedDetail) {
@@ -278,6 +304,10 @@ private struct MergeLifecycleView: View {
         }
         .onChange(of: searchText) { query in
             candidates.scheduleSearch(query)
+        }
+        .onChange(of: store.job?.jobID) { jobID in
+            guard let jobID, !jobID.isEmpty else { return }
+            onboardingStore?.receive(.mergeStarted(jobID: jobID))
         }
         .gesture(
             DragGesture()

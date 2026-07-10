@@ -3,10 +3,20 @@ import SwiftUI
 
 struct OnboardingGuideLine: View {
     @ObservedObject var store: OnboardingGuideStore
+    let allowedStates: Set<String>?
+
+    init(
+        store: OnboardingGuideStore,
+        allowedStates: Set<String>? = nil
+    ) {
+        self.store = store
+        self.allowedStates = allowedStates
+    }
 
     var body: some View {
         if let scene = store.guideScene,
-           let state = store.session?.state {
+           let state = store.session?.state,
+           allowedStates?.contains(state) != false {
             VStack(alignment: .leading, spacing: 9) {
                 HStack(spacing: 10) {
                     Text("Chora")

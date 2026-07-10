@@ -51,6 +51,7 @@ struct PopupMenuOverlay: View {
     let cardData: UserCard?
     let isOwnCard: Bool
     @State private var animateContent = false
+    @State private var canDismissFromBackdrop = false
     
     var body: some View {
         GeometryReader { geometry in
@@ -60,6 +61,7 @@ struct PopupMenuOverlay: View {
                     .opacity(animateContent ? 0.5 : 0)
                     .ignoresSafeArea()
                     .onTapGesture {
+                        guard canDismissFromBackdrop else { return }
                         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                             animateContent = false
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
@@ -111,6 +113,14 @@ struct PopupMenuOverlay: View {
             withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                 animateContent = true
             }
+        }
+        .task {
+            try? await Task.sleep(nanoseconds: 450_000_000)
+            guard !Task.isCancelled else { return }
+            canDismissFromBackdrop = true
+        }
+        .onDisappear {
+            canDismissFromBackdrop = false
         }
     }
     

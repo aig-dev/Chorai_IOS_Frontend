@@ -26,16 +26,31 @@ enum FlowTextPreview {
             return cached as String
         }
 
-        let decoded = source.data(using: .utf8).flatMap { data in
-            try? NSAttributedString(
-                data: data,
-                options: [
-                    .documentType: NSAttributedString.DocumentType.html,
-                    .characterEncoding: String.Encoding.utf8.rawValue
-                ],
-                documentAttributes: nil
-            ).string
-        } ?? source
+        // NSAttributedString's HTML importer enters WebKit's run loop. Calling
+        // it from a SwiftUI body can recursively re-enter layout while a card
+        // is being replaced, so previews deliberately use a pure transform.
+        let decoded = source
+            .replacingOccurrences(
+                of: "(?is)<(script|style)[^>]*>.*?</\\1>",
+                with: " ",
+                options: .regularExpression
+            )
+            .replacingOccurrences(
+                of: "(?i)<br\\s*/?>|</p\\s*>|</div\\s*>|</li\\s*>",
+                with: " ",
+                options: .regularExpression
+            )
+            .replacingOccurrences(
+                of: "<[^>]+>",
+                with: " ",
+                options: .regularExpression
+            )
+            .replacingOccurrences(of: "&nbsp;", with: " ")
+            .replacingOccurrences(of: "&quot;", with: "\"")
+            .replacingOccurrences(of: "&#39;", with: "'")
+            .replacingOccurrences(of: "&lt;", with: "<")
+            .replacingOccurrences(of: "&gt;", with: ">")
+            .replacingOccurrences(of: "&amp;", with: "&")
 
         let preview = decoded
             .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
@@ -389,6 +404,7 @@ struct FlowDeckView: View {
                         onCardDismissed(assetID)
                     }
                 )
+                .id(card.id)
             }
         } else {
             FlowStateView(

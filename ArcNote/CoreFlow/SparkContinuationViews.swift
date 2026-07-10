@@ -16,9 +16,17 @@ struct SparkContinuationView: View {
     @State private var presentationRevision = 0
 
     private let actorID: String
+    private let rootCardID: String
+    private let onboardingStore: OnboardingGuideStore?
 
-    init(cardID: String, actorID: String) {
+    init(
+        cardID: String,
+        actorID: String,
+        onboardingStore: OnboardingGuideStore? = nil
+    ) {
         self.actorID = actorID
+        self.rootCardID = cardID
+        self.onboardingStore = onboardingStore
         let scope = ProcessInfo.processInfo.environment[
             "CHORAI_UI_TEST_SPARK_SESSION_SCOPE"
         ]
@@ -42,6 +50,16 @@ struct SparkContinuationView: View {
 
             VStack(spacing: 14) {
                 header
+                if let onboardingStore {
+                    OnboardingGuideLine(
+                        store: onboardingStore,
+                        allowedStates: [
+                            "product_spark_intro",
+                            "product_spark_results",
+                            "product_save_material"
+                        ]
+                    )
+                }
                 sourceStrip
                 phaseContent
                     .id(screenStateIdentifier)
@@ -86,9 +104,23 @@ struct SparkContinuationView: View {
         }
         .task(id: store.savedAssetID) {
             guard let assetID = store.savedAssetID else { return }
+            onboardingStore?.receive(.sparkResultSaved(assetID: assetID))
             try? await Task.sleep(nanoseconds: 3_000_000_000)
             guard !Task.isCancelled else { return }
             store.expireUndo(assetID: assetID)
+        }
+        .onChange(of: store.activeActivityID) { activityID in
+            guard activityID != nil else { return }
+            onboardingStore?.receive(.sparkStarted(assetID: rootCardID))
+        }
+        .onChange(of: store.phase) { phase in
+            guard phase == .loaded,
+                  let activityID = store.activeActivityID else {
+                return
+            }
+            onboardingStore?.receive(
+                .sparkResultsViewed(activityID: activityID)
+            )
         }
         .environment(
             \.dynamicTypeSize,

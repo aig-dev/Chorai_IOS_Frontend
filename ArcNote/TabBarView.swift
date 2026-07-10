@@ -28,6 +28,8 @@ struct TabBarView: View {
     @State private var mergeResumeMetadata: MergeResumeMetadata?
     @State private var didAutoPresentInitialRecord = false
     @State private var visibleFlowCardID: String?
+    @State private var hasObservedActiveOnboarding = false
+    @State private var showOnboardingCompletionAcknowledgement = false
 
     #if DEBUG
     @State private var exploreSearchSmokeInvoked = false
@@ -95,6 +97,30 @@ struct TabBarView: View {
         navigateToMerge = false
         DispatchQueue.main.async {
             navigateToMerge = true
+        }
+    }
+
+    private func routeOnboardingState(_ state: String?) {
+        guard state == "product_merge_intro"
+                || state == "product_library_intro" else {
+            return
+        }
+
+        DispatchQueue.main.async {
+            if !navigationPath.isEmpty {
+                navigationPath.removeLast(navigationPath.count)
+            }
+            navigateToMerge = false
+            coordinator.selectedTab = .library
+
+            guard state == "product_library_intro" else { return }
+            DispatchQueue.main.async {
+                guard onboardingStore.session?.state
+                        == "product_library_intro" else {
+                    return
+                }
+                onboardingStore.receive(.libraryViewed)
+            }
         }
     }
 
@@ -291,7 +317,8 @@ struct TabBarView: View {
                 // Home 页面
                 HomeView(
                     showSideMenu: $showSideMenu,
-                    refreshID: coordinator.libraryRefreshID
+                    refreshID: coordinator.libraryRefreshID,
+                    onboardingStore: onboardingStore
                 )
                     .tag(CoreTab.library)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -340,7 +367,9 @@ struct TabBarView: View {
             .onChange(of: coordinator.selectedTab) { _ in
                 // 切换 tab 时关闭所有 popup
                 closeAllPopups()
-                if coordinator.selectedTab == .library {
+                if coordinator.selectedTab == .library,
+                   onboardingStore.session?.state
+                    == "product_library_intro" {
                     onboardingStore.receive(.libraryViewed)
                 }
             }
@@ -496,6 +525,24 @@ struct TabBarView: View {
                         }
                 }
 
+                if coordinator.recordAcknowledgementID == nil,
+                   showOnboardingCompletionAcknowledgement {
+                    Label("First loop complete", systemImage: "checkmark")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 14)
+                        .frame(minHeight: 36)
+                        .background(Capsule().fill(Color.white.opacity(0.12)))
+                        .accessibilityIdentifier("onboarding.completed")
+                        .task {
+                            try? await Task.sleep(
+                                nanoseconds: 3_000_000_000
+                            )
+                            guard !Task.isCancelled else { return }
+                            showOnboardingCompletionAcknowledgement = false
+                        }
+                }
+
                 if let cardID = coordinator.lastCreatedCardID {
                     Text(cardID)
                         .font(.system(size: 1))
@@ -536,6 +583,7 @@ struct TabBarView: View {
         .navigationDestination(isPresented: $navigateToMerge) {
             MergeView(
                 cardId: selectedMergeCardId ?? "",
+                onboardingStore: onboardingStore,
                 onCommitted: coordinator.mergeCompleted
             )
         }
@@ -555,7 +603,11 @@ struct TabBarView: View {
             switch route {
             case .spark(let cardId):
                 if let actorID = AuthManager.shared.currentUser?.id {
-                    SparkContinuationView(cardID: cardId, actorID: actorID)
+                    SparkContinuationView(
+                        cardID: cardId,
+                        actorID: actorID,
+                        onboardingStore: onboardingStore
+                    )
                 } else {
                     EmptyView()
                 }
@@ -595,6 +647,9 @@ struct TabBarView: View {
             refreshMergeResumeMetadata()
         }
         .onChange(of: authManager.currentUser?.id) { _ in
+            didAutoPresentInitialRecord = false
+            hasObservedActiveOnboarding = false
+            showOnboardingCompletionAcknowledgement = false
             refreshMergeResumeMetadata()
             loadOnboardingIfVerified()
         }
@@ -607,6 +662,19 @@ struct TabBarView: View {
             guard shouldPresent, !didAutoPresentInitialRecord else { return }
             didAutoPresentInitialRecord = true
             coordinator.presentCapture()
+        }
+        .onChange(of: onboardingStore.session?.state) { state in
+            routeOnboardingState(state)
+        }
+        .onChange(of: onboardingStore.phase) { phase in
+            switch phase {
+            case .active:
+                hasObservedActiveOnboarding = true
+            case .completed where hasObservedActiveOnboarding:
+                showOnboardingCompletionAcknowledgement = true
+            default:
+                break
+            }
         }
         .onChange(of: coordinator.isCapturePresented) { isPresented in
             if !isPresented,
