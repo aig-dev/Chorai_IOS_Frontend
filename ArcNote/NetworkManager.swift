@@ -147,6 +147,12 @@ class NetworkManager: ObservableObject {
                     if let data = response.data {
                         self.logResponseData(data, label: "请求失败响应数据")
                         apiError = try? JSONDecoder().decode(GoAPIErrorEnvelope.self, from: data).error
+                        if apiError == nil {
+                            apiError = try? JSONDecoder().decode(
+                                GoAPIErrorPayload.self,
+                                from: data
+                            )
+                        }
                         responseMessage = apiError?.message ?? self.extractMessage(from: data)
                     }
                     if let httpResponse = response.response {
@@ -1579,34 +1585,56 @@ extension NetworkManager {
             .store(in: &cancellables)
     }
 
-    private func createMergeJob(_ request: MergeCardsRequest) -> AnyPublisher<MergeJobResponse, NetworkError> {
+    func createMergeJob(_ request: MergeCardsRequest) -> AnyPublisher<MergeJobResponse, NetworkError> {
         do {
             return self.request(
                 endpoint: "/api/merge/jobs",
                 method: .post,
                 parameters: try encodedParameters(request),
-                responseType: MergeJobResponse.self
+                responseType: MergeJobResponse.self,
+                presentsError: false
             )
         } catch {
             return Fail(error: NetworkError.encodingError).eraseToAnyPublisher()
         }
     }
 
-    private func getMergeJob(jobId: String) -> AnyPublisher<MergeJobResponse, NetworkError> {
+    func getMergeJob(jobId: String) -> AnyPublisher<MergeJobResponse, NetworkError> {
         return self.request(
             endpoint: "/api/merge/jobs/\(jobId)",
             method: .get,
             encoding: URLEncoding.default,
-            responseType: MergeJobResponse.self
+            responseType: MergeJobResponse.self,
+            presentsError: false
         )
     }
 
-    private func getMergeArtifact(jobId: String) -> AnyPublisher<MergeArtifactResponse, NetworkError> {
+    func getMergeArtifact(jobId: String) -> AnyPublisher<MergeArtifactResponse, NetworkError> {
         return self.request(
             endpoint: "/api/merge/jobs/\(jobId)/artifact",
             method: .get,
             encoding: URLEncoding.default,
-            responseType: MergeArtifactResponse.self
+            responseType: MergeArtifactResponse.self,
+            presentsError: false
+        )
+    }
+
+    func cancelMergeJob(jobId: String) -> AnyPublisher<MergeJobResponse, NetworkError> {
+        self.request(
+            endpoint: "/api/merge/jobs/\(jobId)/cancel",
+            method: .post,
+            responseType: MergeJobResponse.self,
+            presentsError: false
+        )
+    }
+
+    func listMergeCapabilities() -> AnyPublisher<MergeCapabilitiesResponse, NetworkError> {
+        self.request(
+            endpoint: "/api/merge/capabilities",
+            method: .get,
+            encoding: URLEncoding.default,
+            responseType: MergeCapabilitiesResponse.self,
+            presentsError: false
         )
     }
 
@@ -1735,22 +1763,34 @@ extension NetworkManager {
         )
     }
 
-    func commitMergeJob(jobId: String, titleOverride: String?) -> AnyPublisher<MergeCommitResponse, NetworkError> {
-        let request = CommitMergeJobRequest(
-            idemKey: "ios-merge-commit-\(jobId)-\(UUID().uuidString)",
-            target: NewCardCommitTarget(titleOverride: titleOverride)
-        )
-
+    func commitMergeJob(
+        jobId: String,
+        request: CommitMergeJobRequest
+    ) -> AnyPublisher<MergeCommitResponse, NetworkError> {
         do {
             return self.request(
                 endpoint: "/api/merge/jobs/\(jobId)/commit",
                 method: .post,
                 parameters: try encodedParameters(request),
-                responseType: MergeCommitResponse.self
+                responseType: MergeCommitResponse.self,
+                presentsError: false
             )
         } catch {
             return Fail(error: NetworkError.encodingError).eraseToAnyPublisher()
         }
+    }
+
+    func commitMergeJob(
+        jobId: String,
+        titleOverride: String?
+    ) -> AnyPublisher<MergeCommitResponse, NetworkError> {
+        commitMergeJob(
+            jobId: jobId,
+            request: CommitMergeJobRequest(
+                idemKey: "ios-legacy-merge-commit-\(jobId)",
+                target: NewCardCommitTarget(titleOverride: titleOverride)
+            )
+        )
     }
 
 
