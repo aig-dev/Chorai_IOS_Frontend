@@ -366,13 +366,85 @@ final class ArcNoteUITests: XCTestCase {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         XCTAssertFalse(visibleCardId.isEmpty, "Visible recommended card id is empty")
 
-        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.52)).tap()
+        waitFor("flow.card.\(visibleCardId)").tap()
 
         waitFor("screen.detail.loaded", timeout: 30)
         let detailCardId = waitFor("screen.detail.card-id", timeout: 10)
             .label
             .trimmingCharacters(in: .whitespacesAndNewlines)
         XCTAssertEqual(detailCardId, visibleCardId)
+    }
+
+    func testFlowLeftSwipeAdvancesWithoutFavoriteMutation() throws {
+        let session = try requireSmokeSession()
+        seedAppSession(session)
+        launchAuthenticatedApp()
+
+        waitFor("tab.explore")
+        waitFor("screen.explore.content", timeout: 20)
+
+        let firstCardId = waitFor("flow.visible-card.id", timeout: 30)
+            .label
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        XCTAssertFalse(firstCardId.isEmpty, "Visible Flow card id is empty")
+
+        let initialFavoriteState = try fetchAssetStatus(
+            kind: "favorites",
+            id: firstCardId,
+            token: session.token
+        )
+
+        waitFor("flow.card.\(firstCardId)").swipeLeft()
+
+        let nextCardId = waitForDifferentVisibleFlowCard(from: firstCardId)
+        XCTAssertNotEqual(nextCardId, firstCardId)
+        XCTAssertEqual(
+            try fetchAssetStatus(kind: "favorites", id: firstCardId, token: session.token),
+            initialFavoriteState,
+            "Left swipe must not mutate favorite state"
+        )
+    }
+
+    func testFlowRightSwipeFavoritesAndUndoRestoresCard() throws {
+        let session = try requireSmokeSession()
+        seedAppSession(session)
+        launchAuthenticatedApp()
+
+        waitFor("tab.explore")
+        waitFor("screen.explore.content", timeout: 20)
+
+        let cardId = try waitForUnfavoritedFlowCard(token: session.token)
+        defer {
+            clearFavoriteLikeState(id: cardId, token: session.token)
+        }
+
+        waitFor("flow.card.\(cardId)").swipeRight()
+        waitForAssetStatus(kind: "favorites", id: cardId, token: session.token, expected: true)
+
+        tap("flow.undo")
+        waitForAssetStatus(kind: "favorites", id: cardId, token: session.token, expected: false)
+
+        let restoredCardId = waitFor("flow.visible-card.id", timeout: 10)
+            .label
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        XCTAssertEqual(restoredCardId, cardId, "Undo must restore the saved card")
+    }
+
+    func testFlowSparkOpensGoSparkScreen() throws {
+        launchAuthenticatedApp()
+
+        waitFor("screen.explore.content", timeout: 20)
+        let cardId = waitFor("flow.visible-card.id", timeout: 30)
+            .label
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        tap("flow.spark.\(cardId)")
+
+        waitFor("spark.screen.loaded", timeout: 20)
+        let sourceCardId = waitFor("spark.source.card-id", timeout: 10)
+            .label
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        XCTAssertEqual(sourceCardId, cardId)
     }
 
     func testRecommendedDetailCommentCreateAppearsInVisibleList() throws {
@@ -490,6 +562,48 @@ final class ArcNoteUITests: XCTestCase {
         let element = app.descendants(matching: .any)[identifier]
         XCTAssertTrue(element.waitForExistence(timeout: timeout), "Missing accessibility identifier: \(identifier)", file: file, line: line)
         return element
+    }
+
+    private func waitForDifferentVisibleFlowCard(
+        from initialCardId: String,
+        timeout: TimeInterval = 10,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) -> String {
+        let anchor = app.staticTexts["flow.visible-card.id"]
+        let deadline = Date().addingTimeInterval(timeout)
+
+        while Date() < deadline {
+            let cardId = anchor.label.trimmingCharacters(in: .whitespacesAndNewlines)
+            if anchor.exists, !cardId.isEmpty, cardId != initialCardId {
+                return cardId
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+        }
+
+        XCTFail("Flow did not advance from card \(initialCardId)", file: file, line: line)
+        return initialCardId
+    }
+
+    private func waitForUnfavoritedFlowCard(
+        token: String,
+        maximumAttempts: Int = 10,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) throws -> String {
+        for _ in 0..<maximumAttempts {
+            let cardId = waitFor("flow.visible-card.id", timeout: 30, file: file, line: line)
+                .label
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if try !fetchAssetStatus(kind: "favorites", id: cardId, token: token) {
+                return cardId
+            }
+
+            waitFor("flow.card.\(cardId)", file: file, line: line).swipeLeft()
+            _ = waitForDifferentVisibleFlowCard(from: cardId, file: file, line: line)
+        }
+
+        throw XCTSkip("No unfavorited recommendation was available for the Flow save test")
     }
 
     private func tap(_ identifier: String, file: StaticString = #filePath, line: UInt = #line) {

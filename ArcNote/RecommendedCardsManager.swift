@@ -46,8 +46,10 @@ class RecommendedCardsManager: ObservableObject {
         return currentIndex > 0
     }
     
-    init() {
-        loadRecommendedCards()
+    init(autoLoad: Bool = true) {
+        if autoLoad {
+            loadRecommendedCards()
+        }
         setupCommentCountNotification()
     }
     

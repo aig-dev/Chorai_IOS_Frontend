@@ -191,7 +191,10 @@ struct TabBarView: View {
 	                showPopupMenu: $showPopupMenu,
 	                selectedFilter: $selectedFilter,
 	                showFilterTags: $showFilterTags,
-	                showSideMenu: $showSideMenu
+	                showSideMenu: $showSideMenu,
+	                onSpark: { cardId in
+	                    navigationPath.append(TabRoute.spark(cardId))
+	                }
 	            )
                 .tag(0)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

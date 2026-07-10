@@ -1,3 +1,4 @@
+import CoreFlow
 import SwiftUI
 
 struct ExploreView: View {
@@ -5,9 +6,11 @@ struct ExploreView: View {
     @Binding var selectedFilter: String
     @Binding var showFilterTags: Bool
     @Binding var showSideMenu: Bool
+    let onSpark: (String) -> Void
     @State private var isSearchMode = false
     @State private var searchText = ""
-    @StateObject private var cardsManager = RecommendedCardsManager()
+    @StateObject private var cardsManager = RecommendedCardsManager(autoLoad: false)
+    @StateObject private var flowStore = FlowDeckStore(service: NetworkCoreFlowService())
     @StateObject private var searchManager = SearchManager.shared
 
     // ExploreView自己的弹窗状态
@@ -342,29 +345,13 @@ struct ExploreView: View {
                     
                     Spacer()
                     
-                    ZStack {
-                        // 背景图片
-                        Image("foryou_bg")
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(height: 15)
-                            .offset(x: -15, y: 7) // 左边对齐，垂直中心点对齐底部
-                        
-                        HStack(spacing: 4) {
-                            Text("For You")
-                                .font(.system(size: 18, weight: .semibold))
-                                .foregroundColor(.white)
-                            
-                            Image(systemName: showFilterTags ? "chevron.up" : "chevron.down")
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundColor(.white)
-                                .animation(.easeInOut(duration: 0.3), value: showFilterTags)
-                        }
-                    }
-                    .onTapGesture {
-                        withAnimation(.easeInOut(duration: 0.3)) {
-//                            showFilterTags.toggle()
-                        }
+                    HStack(spacing: 7) {
+                        Circle()
+                            .fill(ZenVisualTokens.accent)
+                            .frame(width: 7, height: 7)
+                        Text("Flow")
+                            .font(.system(size: 18, weight: .semibold, design: .rounded))
+                            .foregroundColor(.white)
                     }
                     
                     Spacer()
@@ -419,11 +406,11 @@ struct ExploreView: View {
             
             // 卡片内容
             ZStack {
-                // 第三张卡片（最底层）- 空白卡片
-                thirdCardBackground
-                
-                // 第二张卡片（中间层）- 空白卡片
-                secondCardBackground
+                if isSearchMode {
+                    // Search keeps the familiar stack; Flow owns its own restrained next-card hint.
+                    thirdCardBackground
+                    secondCardBackground
+                }
                 
                 // 第一张卡片（最顶层）- 有内容的卡片
                 if isSearchMode {
@@ -505,61 +492,27 @@ struct ExploreView: View {
                         .frame(maxHeight: .infinity)
                         .accessibilityIdentifier("explore.search.empty")
                     }
-                } else if let currentCard = cardsManager.currentCard {
-                    PostCard(
-                        card: currentCard,
-                        cardsManager: cardsManager,
-                        onShowMenu: { cardData in
-                            currentExploreCardData = convertCardToUserCard(cardData)
-                            isCurrentExploreCardOwned = isOwnedByCurrentUser(authorId: cardData.author?.id)
+                } else {
+                    FlowDeckView(
+                        store: flowStore,
+                        onOpenDetail: { card in
+                            selectedCardId = card.id
+                            navigateToDetail = true
+                        },
+                        onOpenAuthor: { card in
+                            guard let actorId = card.author?.id else { return }
+                            selectedActorId = actorId
+                            navigateToUserProfile = true
+                        },
+                        onOpenMenu: { card in
+                            currentExploreCardData = card.asUserCard
+                            isCurrentExploreCardOwned = isOwnedByCurrentUser(authorId: card.author?.id)
                             showExplorePopupMenu = true
                         },
-                        onSwipe: { translation, isEnded in
-                            cardsManager.handleSwipeGesture(translation: translation, isEnded: isEnded)
-                        },
-                        onAvatarTap: { actorId in
-                            selectedActorId = actorId
-                            DispatchQueue.main.async {
-                                navigateToUserProfile = true
-                            }
-                        },
-                        onCardTap: { cardId in
-                            selectedCardId = cardId
-                            DispatchQueue.main.async {
-                                navigateToDetail = true
-                            }
+                        onSpark: { card in
+                            onSpark(card.id)
                         }
                     )
-                    .opacity(1.0)
-                } else if cardsManager.isLoading {
-                    // 旋转的加载图片
-                    VStack {
-                        RotatingLoaderView()
-                    }
-                    .frame(maxHeight: .infinity)
-                } else {
-                    VStack {
-                        RotatingLoaderView()
-                    }
-                    .frame(maxHeight: .infinity)
-                    // 无数据状态
-//                    VStack {
-//                        Text("No cards available")
-//                            .font(.system(size: 16, weight: .medium))
-//                            .foregroundColor(.white.opacity(0.8))
-//                            .padding(.top, 16)
-//                        Button("Retry") {
-//                            cardsManager.refresh()
-//                        }
-//                        .font(.system(size: 14, weight: .medium))
-//                        .foregroundColor(.white)
-//                        .padding(.horizontal, 20)
-//                        .padding(.vertical, 8)
-//                        .background(Color.white.opacity(0.2))
-//                        .cornerRadius(20)
-//                        .padding(.top, 8)
-//                    }
-//                    .frame(maxHeight: .infinity)
                 }
             }
             .padding(.horizontal, 20)
@@ -597,10 +550,7 @@ struct ExploreView: View {
             #endif
         }
         #if DEBUG
-        .onReceive(cardsManager.$cards) { _ in
-            publishVisibleRecommendedCardForUITest()
-        }
-        .onReceive(cardsManager.$currentIndex) { _ in
+        .onReceive(flowStore.$cards) { _ in
             publishVisibleRecommendedCardForUITest()
         }
         #endif
@@ -642,7 +592,7 @@ struct ExploreView: View {
 
     #if DEBUG
     private func publishVisibleRecommendedCardForUITest() {
-        guard !isSearchMode, let cardId = cardsManager.currentCard?.id else {
+        guard !isSearchMode, let cardId = flowStore.currentCard?.id else {
             return
         }
 
@@ -767,7 +717,8 @@ struct ExploreView: View {
         showPopupMenu: .constant(false),
         selectedFilter: .constant("All"),
         showFilterTags: .constant(false),
-        showSideMenu: .constant(false)
+        showSideMenu: .constant(false),
+        onSpark: { _ in }
     )
 }
 
