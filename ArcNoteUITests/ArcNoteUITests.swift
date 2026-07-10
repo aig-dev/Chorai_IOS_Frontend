@@ -464,6 +464,7 @@ final class ArcNoteUITests: XCTestCase {
         let cardId = waitFor("record.created-card-id", timeout: 30)
             .label
             .trimmingCharacters(in: .whitespacesAndNewlines)
+        waitFor("record.acknowledgement", timeout: 5)
         defer {
             deleteSmokeCard(id: cardId, token: session.token)
         }

@@ -58,6 +58,7 @@ struct FlowCardView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.colorSchemeContrast) private var contrast
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var dragOffset: CGSize = .zero
     @State private var isResolvingSwipe = false
 
@@ -212,16 +213,29 @@ struct FlowCardView: View {
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            Label(title, systemImage: systemImage)
-                .font(.caption.weight(.semibold))
-                .lineLimit(1)
-                .frame(maxWidth: .infinity, minHeight: 44)
-                .background(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(fill)
-                )
+            Group {
+                if dynamicTypeSize.isAccessibilitySize {
+                    VStack(spacing: 2) {
+                        Image(systemName: systemImage)
+                            .font(.system(size: 17, weight: .semibold))
+                        Text(title)
+                            .font(.system(size: 11, weight: .semibold, design: .rounded))
+                            .lineLimit(1)
+                    }
+                } else {
+                    Label(title, systemImage: systemImage)
+                        .font(.caption.weight(.semibold))
+                        .lineLimit(1)
+                }
+            }
+            .frame(maxWidth: .infinity, minHeight: 44)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(fill)
+            )
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(title)
     }
 
     private var cardDragGesture: some Gesture {

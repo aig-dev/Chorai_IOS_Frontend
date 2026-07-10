@@ -394,7 +394,7 @@ struct TabBarView: View {
                         .background(Capsule().fill(Color.white.opacity(0.12)))
                         .accessibilityIdentifier("record.acknowledgement")
                         .task(id: acknowledgementID) {
-                            try? await Task.sleep(nanoseconds: 2_000_000_000)
+                            try? await Task.sleep(nanoseconds: 3_000_000_000)
                             guard !Task.isCancelled else { return }
                             coordinator.clearRecordAcknowledgement(cardID: acknowledgementID)
                         }
@@ -408,7 +408,7 @@ struct TabBarView: View {
                         .accessibilityIdentifier("record.created-card-id")
                 }
             }
-            .padding(.top, 54)
+            .padding(.top, 112)
         }
         .popupMenu(isPresented: $showPopupMenu, layout: .grid2x2, cardData: currentMenuCardData)
         .linkPopup()
