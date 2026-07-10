@@ -3,6 +3,18 @@ import XCTest
 
 @MainActor
 final class MergeSessionStoreArtifactTests: XCTestCase {
+    func testArtifactSeedsEditableTitleFromCanonicalDocument() async {
+        let service = MockCoreMergeService()
+        let persistence = InMemoryMergeSessionPersistence()
+        let store = await readyStore(
+            service: service,
+            persistence: persistence
+        )
+
+        XCTAssertEqual(store.titleOverride, "Merged title")
+        XCTAssertFalse(store.isTitleOverrideLocked)
+    }
+
     func testArtifactMismatchFailsWithoutClearingRecoverableSnapshot() async {
         let service = MockCoreMergeService()
         let persistence = InMemoryMergeSessionPersistence()

@@ -510,7 +510,9 @@ public final class MergeSessionStore: ObservableObject {
                 return
             }
             artifact = loaded
-            titleOverride = snapshot?.commitRequest?.target.titleOverride ?? ""
+            titleOverride = snapshot?.commitRequest?.target.titleOverride
+                ?? loaded.document.title
+                ?? ""
             if var value = snapshot {
                 value.artifactID = loaded.artifactID
                 snapshot = value

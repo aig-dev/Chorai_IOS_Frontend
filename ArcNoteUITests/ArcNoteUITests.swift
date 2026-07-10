@@ -133,7 +133,7 @@ final class ArcNoteUITests: XCTestCase {
         waitForChatMessage(conversationId: conversationId, content: messageText, token: session.token)
     }
 
-    func testDetailMergeMenuAttemptsGoMergeJob() throws {
+    func testDetailMergeMenuCreatesArtifactAndCancelsGoJob() throws {
         let session = try requireSmokeSession()
         seedAppSession(session)
 
@@ -149,6 +149,9 @@ final class ArcNoteUITests: XCTestCase {
 
         app.launchArguments.append("--ui-test-open-recommended-detail")
         app.launchEnvironment["CHORAI_UI_TEST_DETAIL_CARD_ID"] = sourceCardId
+        app.launchEnvironment[
+            "CHORAI_UI_TEST_MERGE_SESSION_SCOPE"
+        ] = sparkSessionScope
         launchAuthenticatedApp()
 
         waitFor("screen.detail.loaded", timeout: 30)
@@ -174,13 +177,45 @@ final class ArcNoteUITests: XCTestCase {
         waitFor("merge.card.\(targetCardId)", timeout: 30)
         tap("merge.card.\(targetCardId)")
         XCTAssertEqual(app.descendants(matching: .any)["merge.card.\(targetCardId)"].value as? String, "selected")
+        dismissKeyboard()
+        captureMergeVisual("selection")
 
         tap("merge.action")
+        waitFor("merge.job.id", timeout: 30)
+        captureMergeVisual("processing")
 
-        let terminalState = waitForMergeTerminalState(timeout: 75)
-        XCTAssertTrue(
-            terminalState == "new-insight" || terminalState == "error",
-            "Unexpected merge terminal state: \(terminalState)"
+        waitForMergeArtifactReady(timeout: 90)
+
+        let jobID = mergeAnchorValue("merge.job.id")
+        XCTAssertFalse(jobID.isEmpty)
+        XCTAssertEqual(mergeAnchorValue("merge.job.status"), "ARTIFACT_READY")
+        XCTAssertEqual(
+            try fetchSmokeMergeJob(jobID: jobID, token: session.token).status,
+            "ARTIFACT_READY"
+        )
+
+        let title = waitFor("merge.artifact.title")
+        XCTAssertEqual(title.elementType, .textField)
+        XCTAssertFalse(
+            (title.value as? String ?? "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .isEmpty
+        )
+        let body = waitFor("merge.artifact.body")
+        XCTAssertNotEqual(body.elementType, .textField)
+        XCTAssertNotEqual(body.elementType, .textView)
+        RunLoop.current.run(until: Date().addingTimeInterval(0.35))
+        captureMergeVisual("artifact-ready")
+
+        tap("merge.cancel")
+        let cancel = app.sheets.buttons["Cancel Merge"].firstMatch
+        XCTAssertTrue(cancel.waitForExistence(timeout: 10))
+        cancel.tap()
+        waitFor("merge.phase.cancelled", timeout: 30)
+        captureMergeVisual("cancelled")
+        XCTAssertEqual(
+            try fetchSmokeMergeJob(jobID: jobID, token: session.token).status,
+            "CANCELLED"
         )
     }
 
@@ -964,6 +999,24 @@ final class ArcNoteUITests: XCTestCase {
         add(attachment)
     }
 
+    private func captureMergeVisual(_ name: String) {
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = "merge-\(name)"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
+    private func mergeAnchorValue(
+        _ identifier: String,
+        timeout: TimeInterval = 10,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) -> String {
+        waitFor(identifier, timeout: timeout, file: file, line: line)
+            .label
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     private func sparkAnchorValue(
         _ identifier: String,
         timeout: TimeInterval = 10,
@@ -1241,27 +1294,43 @@ final class ArcNoteUITests: XCTestCase {
         return element
     }
 
-    private func waitForMergeTerminalState(timeout: TimeInterval = 75, file: StaticString = #filePath, line: UInt = #line) -> String {
+    private func waitForMergeArtifactReady(
+        timeout: TimeInterval = 90,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
         let deadline = Date().addingTimeInterval(timeout)
-        let newInsight = app.descendants(matching: .any)["screen.new-insight.loaded"]
-        let error = app.descendants(matching: .any)["merge.error"]
-        var sawLoading = false
+        let ready = app.descendants(matching: .any)["merge.artifact.ready"]
+        let paused = app.descendants(matching: .any)["merge.phase.paused"]
+        let failed = app.descendants(matching: .any)["merge.phase.failed"]
+        var lastStatus = "missing"
 
         while Date() < deadline {
-            if app.descendants(matching: .any)["merge.loading"].exists {
-                sawLoading = true
+            if ready.exists {
+                return
             }
-            if newInsight.exists {
-                return "new-insight"
+            if paused.exists {
+                XCTFail("Merge paused before artifact became ready", file: file, line: line)
+                return
             }
-            if error.exists {
-                return "error"
+            if failed.exists {
+                XCTFail("Merge failed before artifact became ready", file: file, line: line)
+                return
+            }
+            let status = app.descendants(matching: .any)["merge.job.status"]
+            if status.exists {
+                lastStatus = status.label.trimmingCharacters(
+                    in: .whitespacesAndNewlines
+                )
             }
             RunLoop.current.run(until: Date().addingTimeInterval(0.5))
         }
 
-        XCTFail("Timed out waiting for merge UI terminal state; saw loading: \(sawLoading)", file: file, line: line)
-        return "timeout"
+        XCTFail(
+            "Timed out waiting for Merge artifact; last job status: \(lastStatus)",
+            file: file,
+            line: line
+        )
     }
 
     private func waitForMergeCardsLoaded(timeout: TimeInterval = 30, file: StaticString = #filePath, line: UInt = #line) {
@@ -1397,6 +1466,10 @@ final class ArcNoteUITests: XCTestCase {
                 case isPublic = "is_public"
             }
         }
+    }
+
+    private struct SmokeMergeJobResponse: Decodable {
+        let status: String
     }
 
     private struct AssetStatusResponse: Decodable {
@@ -1658,6 +1731,26 @@ final class ArcNoteUITests: XCTestCase {
         var request = URLRequest(url: url)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         return try sendRequest(request, responseType: SmokeCardResponse.self).data
+    }
+
+    private func fetchSmokeMergeJob(
+        jobID: String,
+        token: String
+    ) throws -> SmokeMergeJobResponse {
+        let baseURL = ProcessInfo.processInfo.environment["CHORAI_API_BASE_URL"]
+            ?? "http://127.0.0.1:8080"
+        guard let url = URL(
+            string: "\(baseURL)/api/merge/jobs/\(jobID)"
+        ) else {
+            throw URLError(.badURL)
+        }
+
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        return try sendRequest(
+            request,
+            responseType: SmokeMergeJobResponse.self
+        )
     }
 
     private func clearFavoriteLikeState(id: String, token: String) {

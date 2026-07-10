@@ -1,7 +1,7 @@
 import SwiftUI
 import Combine
 
-struct MergeView: View {
+private struct LegacyMergeView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.presentationMode) var presentationMode
     @State private var searchText = ""
@@ -883,6 +883,10 @@ struct MergeCardView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .clipped()
                     .allowsHitTesting(false)
+
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(Color.black.opacity(0.28))
+                    .allowsHitTesting(false)
                 
             RoundedRectangle(cornerRadius: 16)
                     .stroke(Color.white.opacity(0.1), lineWidth: 1)
@@ -1136,6 +1140,10 @@ struct FixedMergeCardView: View {
                 backgroundImageForRate(card.rate)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .clipped()
+                    .allowsHitTesting(false)
+
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(Color.black.opacity(0.28))
                     .allowsHitTesting(false)
                 
                 // 毛玻璃效果覆盖层
