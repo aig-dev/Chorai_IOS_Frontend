@@ -530,6 +530,65 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertEqual(sparkAnchorValue("spark.depth"), "0")
     }
 
+    func testSparkRelaunchRehydratesActivityWithoutNewTrigger() throws {
+        let session = try requireSmokeSession()
+        let cardID = sparkSeedCardID
+        openSparkFromDetail(cardID: cardID, session: session)
+
+        let activityID = sparkAnchorValue("spark.activity.id")
+        let rootActivityID = sparkAnchorValue("spark.root.id")
+        let depth = sparkAnchorValue("spark.depth")
+        let visibleCardID = sparkAnchorValue("spark.visible-card.id")
+        let historyBefore = try fetchSparkHistoryTotal(
+            cardID: cardID,
+            token: session.token
+        )
+
+        app.terminate()
+        app.launch()
+        navigateToSparkFromFlow(cardID: cardID)
+
+        XCTAssertEqual(sparkAnchorValue("spark.activity.id"), activityID)
+        XCTAssertEqual(sparkAnchorValue("spark.root.id"), rootActivityID)
+        XCTAssertEqual(sparkAnchorValue("spark.depth"), depth)
+        XCTAssertEqual(sparkAnchorValue("spark.visible-card.id"), visibleCardID)
+        XCTAssertEqual(
+            try fetchSparkHistoryTotal(cardID: cardID, token: session.token),
+            historyBefore,
+            "Relaunch replay must not create another Spark activity"
+        )
+    }
+
+    func testSparkTriggerFailureRestoresParentCard() throws {
+        let session = try requireSmokeSession()
+        app.launchEnvironment["CHORAI_UI_TEST_SPARK_FAIL_CHILD_TRIGGER"] = "1"
+        openSparkFromDetail(cardID: sparkSeedCardID, session: session)
+
+        let parentActivityID = sparkAnchorValue("spark.activity.id")
+        let parentVisibleID = sparkAnchorValue("spark.visible-card.id")
+        waitFor("spark.card.\(parentVisibleID)").swipeUp()
+
+        waitFor("screen.spark.error", timeout: 20)
+        XCTAssertEqual(sparkAnchorValue("spark.activity.id"), parentActivityID)
+        XCTAssertEqual(sparkAnchorValue("spark.visible-card.id"), parentVisibleID)
+        waitFor("spark.card.\(parentVisibleID)")
+    }
+
+    func testSparkResultDetailAndMenuRemainReachable() throws {
+        let session = try requireSmokeSession()
+        openSparkFromDetail(cardID: sparkSeedCardID, session: session)
+
+        let visibleCardID = sparkAnchorValue("spark.visible-card.id")
+        tap("spark.card.\(visibleCardID)")
+        waitFor("screen.detail.loaded", timeout: 30)
+        XCTAssertEqual(sparkAnchorValue("screen.detail.card-id"), visibleCardID)
+
+        tap("detail.back")
+        waitFor("screen.spark.loaded", timeout: 20)
+        tap("spark.menu.\(visibleCardID)")
+        waitFor("popup-menu.item.view", timeout: 10)
+    }
+
     func testRecordCreatesPrivateGoCardAndRefreshesLibrary() throws {
         let session = try requireSmokeSession()
         seedAppSession(session)
@@ -750,6 +809,10 @@ final class ArcNoteUITests: XCTestCase {
         app.launchEnvironment["CHORAI_UI_TEST_SPARK_SESSION_SCOPE"] = sparkSessionScope
         launchAuthenticatedApp()
 
+        navigateToSparkFromFlow(cardID: cardID)
+    }
+
+    private func navigateToSparkFromFlow(cardID: String) {
         waitFor("screen.flow.content", timeout: 30)
         tap("explore.card-detail")
         waitFor("screen.detail.loaded", timeout: 30)
@@ -1359,6 +1422,14 @@ final class ArcNoteUITests: XCTestCase {
         }
     }
 
+    private struct SmokeSparkHistoryResponse: Decodable {
+        let data: SmokeSparkHistory
+
+        struct SmokeSparkHistory: Decodable {
+            let total: Int
+        }
+    }
+
     private func requireSmokeNotificationId(file: StaticString = #filePath, line: UInt = #line) throws -> String {
         let notificationId = ProcessInfo.processInfo.environment["CHORAI_UI_TEST_NOTIFICATION_ID"] ?? "ntf_ios_ui_active"
         guard !notificationId.isEmpty else {
@@ -1702,6 +1773,40 @@ final class ArcNoteUITests: XCTestCase {
             request,
             responseType: SmokeSparkActivityResponse.self
         ).data
+    }
+
+    private func fetchSparkHistoryTotal(
+        cardID: String,
+        token: String
+    ) throws -> Int {
+        let baseURL = ProcessInfo.processInfo.environment["CHORAI_API_BASE_URL"]
+            ?? "http://127.0.0.1:8080"
+        guard var components = URLComponents(
+            string: "\(baseURL)/api/v1/assets/\(cardID)/spark/history"
+        ) else {
+            throw NSError(
+                domain: "ArcNoteUITests",
+                code: 14,
+                userInfo: [NSLocalizedDescriptionKey: "Invalid Spark history URL"]
+            )
+        }
+        components.queryItems = [
+            URLQueryItem(name: "offset", value: "0"),
+            URLQueryItem(name: "limit", value: "100")
+        ]
+        guard let url = components.url else {
+            throw NSError(
+                domain: "ArcNoteUITests",
+                code: 15,
+                userInfo: [NSLocalizedDescriptionKey: "Invalid Spark history query"]
+            )
+        }
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        return try sendRequest(
+            request,
+            responseType: SmokeSparkHistoryResponse.self
+        ).data.total
     }
 
     private func deleteFavorite(id: String, token: String) {

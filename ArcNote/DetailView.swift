@@ -96,6 +96,8 @@ struct DetailView: View {
                             .font(.title2)
                             .foregroundColor(.white)
                     }
+                    .accessibilityLabel("Back")
+                    .accessibilityIdentifier("detail.back")
                     
                     Spacer()
                     

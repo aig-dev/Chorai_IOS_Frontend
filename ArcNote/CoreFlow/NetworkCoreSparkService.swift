@@ -25,7 +25,16 @@ struct NetworkCoreSparkService: CoreSparkServing {
         sourceAssetID: String,
         parentActivityID: String?
     ) -> AnyPublisher<SparkActivityPage, CoreSparkError> {
-        network.triggerSpark(
+#if DEBUG
+        if parentActivityID != nil,
+           ProcessInfo.processInfo.environment[
+               "CHORAI_UI_TEST_SPARK_FAIL_CHILD_TRIGGER"
+           ] == "1" {
+            return Fail(error: .retrievalUnavailable)
+                .eraseToAnyPublisher()
+        }
+#endif
+        return network.triggerSpark(
             cardId: sourceAssetID,
             parentActivityId: parentActivityID
         )

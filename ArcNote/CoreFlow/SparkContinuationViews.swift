@@ -42,12 +42,14 @@ struct SparkContinuationView: View {
                 header
                 sourceStrip
                 phaseContent
+                    .id(screenStateIdentifier)
             }
             .padding(.horizontal, ZenVisualTokens.pageInset)
             .padding(.top, 8)
             .padding(.bottom, 18)
 
             automationAnchors
+                .id(automationStateIdentity)
         }
         .foregroundStyle(.white)
         .navigationBarHidden(true)
@@ -376,6 +378,15 @@ struct SparkContinuationView: View {
         case .failed:
             return "screen.spark.error"
         }
+    }
+
+    private var automationStateIdentity: String {
+        [
+            screenStateIdentifier,
+            store.activeActivityID ?? "",
+            store.currentResult?.id ?? "",
+            String(store.visibleIndex)
+        ].joined(separator: "::")
     }
 
     private func automationText(
