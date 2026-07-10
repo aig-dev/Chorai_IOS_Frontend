@@ -116,6 +116,7 @@ public enum SparkResultOrdering {
 public enum CoreSparkError: Error, Equatable, Sendable {
     case unauthorized
     case forbidden
+    case notFound
     case insufficientCredit
     case maximumDepth
     case retrievalUnavailable
