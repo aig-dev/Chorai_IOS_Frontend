@@ -1288,6 +1288,119 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertEqual(try fetchSmokeCard(id: cardID, token: session.token).id, cardID)
     }
 
+    func testCardEditorSavePersistsNormalizedTagsToGo() throws {
+        let session = try requireSmokeSession()
+        seedAppSession(session)
+        let suffix = "editor-save-\(Int(Date().timeIntervalSince1970))"
+        let cardID = try createSmokeCard(
+            token: session.token,
+            searchToken: suffix,
+            isPublic: false
+        )
+        defer {
+            permanentlyCleanUpSmokeCard(id: cardID, token: session.token)
+        }
+
+        launchAuthenticatedApp()
+        tap("tab.library")
+        waitFor("card.home.\(cardID)", timeout: 30).tap()
+        waitFor("screen.card-editor", timeout: 20)
+
+        let editor = waitFor("cardEditorContent", timeout: 20)
+        editor.tap()
+        app.typeText(" #editortag #editortag")
+        tap("cardEditorBackButton")
+        RunLoop.current.run(until: Date().addingTimeInterval(0.5))
+        tap("cardEditorBackButton")
+
+        waitForSmokeCardState(id: cardID, token: session.token) { card in
+            card.content.contains("#editortag")
+                && card.tags.filter { $0 == "editortag" }.count == 1
+        }
+        waitFor("screen.home.content", timeout: 20)
+    }
+
+    func testCardEditorLinkFailureKeepsCanonicalRelationshipList() throws {
+        let session = try requireSmokeSession()
+        seedAppSession(session)
+        let suffix = Int(Date().timeIntervalSince1970)
+        let sourceID = try createSmokeCard(
+            token: session.token,
+            searchToken: "editor-link-source-\(suffix)",
+            isPublic: false
+        )
+        let targetToken = "editor-link-target-\(suffix)"
+        let targetID = try createSmokeCard(
+            token: session.token,
+            searchToken: targetToken,
+            isPublic: false
+        )
+        defer {
+            permanentlyCleanUpSmokeCard(id: sourceID, token: session.token)
+            permanentlyCleanUpSmokeCard(id: targetID, token: session.token)
+        }
+
+        launchAuthenticatedApp()
+        tap("tab.library")
+        waitFor("card.home.\(sourceID)", timeout: 30).tap()
+        waitFor("screen.card-editor", timeout: 20)
+        waitFor("cardEditorContent", timeout: 20).tap()
+        tap("cardEditorLinkButton")
+        waitFor("linkPopup", timeout: 20)
+        let search = waitFor("linkPopupSearch")
+        search.tap()
+        search.typeText(targetToken)
+        waitFor("linkPopupCard.\(targetID)", timeout: 30)
+
+        permanentlyCleanUpSmokeCard(id: targetID, token: session.token)
+        tap("linkPopupCard.\(targetID)")
+
+        XCTAssertEqual(waitFor("linkPopupError", timeout: 20).label, "链接失败")
+        XCTAssertTrue(exists("screen.card-editor", timeout: 2))
+        XCTAssertFalse(exists("cardEditorLink.\(targetID)", timeout: 2))
+        captureVisual("card-editor-link-failure-retained")
+    }
+
+    func testCardEditorBackgroundUploadAndRemovalPersistToGo() throws {
+        let session = try requireSmokeSession()
+        seedAppSession(session)
+        let suffix = "editor-background-\(Int(Date().timeIntervalSince1970))"
+        let cardID = try createSmokeCard(
+            token: session.token,
+            searchToken: suffix,
+            isPublic: false
+        )
+        defer {
+            permanentlyCleanUpSmokeCard(id: cardID, token: session.token)
+        }
+
+        launchAuthenticatedApp()
+        tap("tab.library")
+        waitFor("card.home.\(cardID)", timeout: 30).tap()
+        waitFor("screen.card-editor", timeout: 20)
+        waitFor("cardEditorContent", timeout: 20).tap()
+        revealEditorBackgroundButton()
+        tap("cardEditorBackgroundButton")
+        try selectFirstPhotoFromImagePicker()
+
+        waitForSmokeCardState(id: cardID, token: session.token) {
+            !($0.backgroundMediaRef ?? "").isEmpty
+        }
+        waitFor("cardEditorBackgroundImage", timeout: 20)
+        captureVisual("card-editor-background-uploaded")
+
+        waitFor("cardEditorContent", timeout: 10).tap()
+        revealEditorBackgroundButton()
+        tap("cardEditorBackgroundButton")
+        let remove = app.sheets.buttons["Remove Background"].firstMatch
+        XCTAssertTrue(remove.waitForExistence(timeout: 10))
+        remove.tap()
+
+        waitForSmokeCardState(id: cardID, token: session.token) {
+            $0.backgroundMediaRef == nil
+        }
+    }
+
     func testLibrarySoftDeleteFailureKeepsRetryableConfirmation() throws {
         let session = try requireSmokeSession()
         seedAppSession(session)
@@ -2342,6 +2455,31 @@ final class ArcNoteUITests: XCTestCase {
         }
     }
 
+    private func revealEditorBackgroundButton(
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let button = app.descendants(matching: .any)[
+            "cardEditorBackgroundButton"
+        ]
+        for _ in 0..<4 where !button.isHittable {
+            let start = app.coordinate(
+                withNormalizedOffset: CGVector(dx: 0.84, dy: 0.55)
+            )
+            let end = app.coordinate(
+                withNormalizedOffset: CGVector(dx: 0.18, dy: 0.55)
+            )
+            start.press(forDuration: 0.05, thenDragTo: end)
+            RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+        }
+        XCTAssertTrue(
+            button.isHittable,
+            "Background control was not reachable in the editor toolbar",
+            file: file,
+            line: line
+        )
+    }
+
     private func tapEditProfileSave(file: StaticString = #filePath, line: UInt = #line) {
         _ = waitFor("edit-profile.save", timeout: 10, file: file, line: line)
         let visibleSaveButton = app.buttons["Save"].firstMatch
@@ -2622,11 +2760,14 @@ final class ArcNoteUITests: XCTestCase {
             let content: String
             let isPublic: Bool
             let isPinned: Bool
+            let tags: [String]
+            let backgroundMediaRef: String?
 
             enum CodingKeys: String, CodingKey {
-                case id, title, content
+                case id, title, content, tags
                 case isPublic = "is_public"
                 case isPinned = "is_pinned"
+                case backgroundMediaRef = "background_media_ref"
             }
         }
     }
@@ -3725,7 +3866,7 @@ final class ArcNoteUITests: XCTestCase {
             return cachedSession
         }
 
-        let result = fetchFreshSmokeSession()
+        let result = fetchFreshSmokeSession() ?? fetchLocalPhoneSmokeSession()
         Self.cachedSmokeSession = result
         return result
     }
@@ -3775,6 +3916,68 @@ final class ArcNoteUITests: XCTestCase {
 
         _ = semaphore.wait(timeout: .now() + 10)
         return result
+    }
+
+    private func fetchLocalPhoneSmokeSession() -> SmokeSession? {
+        let environment = ProcessInfo.processInfo.environment
+        let baseURL = environment["CHORAI_API_BASE_URL"]
+            ?? "http://127.0.0.1:8080"
+        let phone = environment["CHORAI_UI_TEST_PHONE"]
+            ?? "+8613907111234"
+        let password = environment["CHORAI_UI_TEST_PASSWORD"]
+            ?? "Password123"
+
+        func request(path: String, body: [String: String]) -> SmokeSession? {
+            guard let url = URL(string: "\(baseURL)\(path)") else {
+                return nil
+            }
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+
+            let semaphore = DispatchSemaphore(value: 0)
+            var result: SmokeSession?
+            URLSession.shared.dataTask(with: request) { data, _, _ in
+                defer { semaphore.signal() }
+                guard let data,
+                      let response = try? JSONDecoder().decode(
+                          LoginResponse.self,
+                          from: data
+                      ) else {
+                    return
+                }
+                result = SmokeSession(
+                    token: response.data.token,
+                    actorId: response.data.user.id,
+                    email: response.data.user.email,
+                    username: response.data.user.username
+                )
+            }.resume()
+            _ = semaphore.wait(timeout: .now() + 10)
+            return result
+        }
+
+        if let session = request(
+            path: "/api/auth/login",
+            body: [
+                "credential_type": "phone",
+                "phone": phone,
+                "password": password
+            ]
+        ) {
+            return session
+        }
+
+        return request(
+            path: "/api/auth/phone/register",
+            body: [
+                "phone": phone,
+                "password": password,
+                "invite_code": environment["CHORAI_UI_TEST_INVITE_CODE"]
+                    ?? "LOCAL-OK"
+            ]
+        )
     }
 
     private func sendRequest<T: Decodable>(_ request: URLRequest, responseType: T.Type) throws -> T {

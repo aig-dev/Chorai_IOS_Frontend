@@ -688,6 +688,53 @@ extension NetworkManager {
         )
     }
 
+    func updateCardForEditing(
+        cardId: String,
+        title: String?,
+        content: String,
+        tags: [String],
+        isPublic: Bool
+    ) -> AnyPublisher<CardResponse, NetworkError> {
+        let parameters: Parameters = [
+            "title": title ?? "",
+            "content": content,
+            "tags": tags,
+            "is_public": isPublic
+        ]
+
+        return request(
+            endpoint: "/api/cards/\(cardId)",
+            method: .put,
+            parameters: parameters,
+            responseType: CardResponse.self,
+            presentsError: false
+        )
+    }
+
+    func updateCardBackground(
+        cardId: String,
+        mediaRef: String
+    ) -> AnyPublisher<CardResponse, NetworkError> {
+        request(
+            endpoint: "/api/cards/\(cardId)/background",
+            method: .patch,
+            parameters: ["background_media_ref": mediaRef],
+            responseType: CardResponse.self,
+            presentsError: false
+        )
+    }
+
+    func clearCardBackground(
+        cardId: String
+    ) -> AnyPublisher<CardResponse, NetworkError> {
+        request(
+            endpoint: "/api/cards/\(cardId)/background",
+            method: .delete,
+            responseType: CardResponse.self,
+            presentsError: false
+        )
+    }
+
     // MARK: 获取对话列表
     func getConversations() -> AnyPublisher<ConversationsResponse, NetworkError> {
         return self.request(
@@ -891,7 +938,11 @@ extension NetworkManager {
         )
     }
 
-    func createCardLink(cardId: String, reques: LinkRequest) -> AnyPublisher<LinkResponse, NetworkError> {
+    func createCardLink(
+        cardId: String,
+        reques: LinkRequest,
+        presentsError: Bool = true
+    ) -> AnyPublisher<LinkResponse, NetworkError> {
         let parameters: Parameters = [
             "linked_card_id": reques.linkedCardId,
             "link_type": "MANUAL"
@@ -901,7 +952,8 @@ extension NetworkManager {
             endpoint: "/api/cards/\(cardId)/links",
             method: .post,
             parameters: parameters,
-            responseType: LinkResponse.self
+            responseType: LinkResponse.self,
+            presentsError: presentsError
         )
     }
 
@@ -1092,6 +1144,70 @@ extension NetworkManager {
         )
     }
     // MARK: - 文件上传API
+    func uploadCardMedia(
+        data: Data,
+        filename: String,
+        mimeType: String
+    ) -> AnyPublisher<UploadResponse, NetworkError> {
+        Future<UploadResponse, NetworkError> { [weak self] promise in
+            guard let self else {
+                promise(.failure(.unknown))
+                return
+            }
+
+            var headers = HTTPHeaders()
+            if let token = self.authToken {
+                headers.add(.authorization(bearerToken: token))
+            }
+
+            DispatchQueue.main.async {
+                self.isLoading = true
+            }
+
+            self.session.upload(
+                multipartFormData: { form in
+                    form.append(
+                        data,
+                        withName: "file",
+                        fileName: filename,
+                        mimeType: mimeType
+                    )
+                    form.append(Data("inline".utf8), withName: "kind")
+                },
+                to: "\(self.baseURL)/api/v1/media/upload",
+                headers: headers
+            )
+            .validate()
+            .responseData { response in
+                DispatchQueue.main.async {
+                    self.isLoading = false
+                }
+
+                switch response.result {
+                case .success(let responseData):
+                    do {
+                        let upload = try JSONDecoder().decode(
+                            UploadResponse.self,
+                            from: responseData
+                        )
+                        guard upload.success else {
+                            promise(.failure(.serverError(0, upload.message)))
+                            return
+                        }
+                        promise(.success(upload))
+                    } catch {
+                        promise(.failure(.decodingError))
+                    }
+                case .failure(let error):
+                    promise(.failure(
+                        self.handleError(error, response: response.response)
+                    ))
+                }
+            }
+        }
+        .eraseToAnyPublisher()
+    }
+
     func uploadFile(data: Data, filename: String, mimeType: String, assetId: String, kind: String = "background") -> AnyPublisher<UploadResponse, NetworkError> {
         return Future<UploadResponse, NetworkError> { [weak self] promise in
             guard let self = self else {

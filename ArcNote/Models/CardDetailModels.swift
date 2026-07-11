@@ -20,6 +20,7 @@ struct CardDetail: Codable {
     let commentCount: Int?
     let rate: Int
     let author: CardDetailAuthor?
+    let backgroundMediaRef: String?
     
     enum CodingKeys: String, CodingKey {
         case id, title, content, tags, rate
@@ -35,6 +36,7 @@ struct CardDetail: Codable {
         case favoriteCount = "favorite_count"
         case commentCount = "comment_count"
         case author
+        case backgroundMediaRef = "background_media_ref"
     }
 
     init(from decoder: Decoder) throws {
@@ -56,6 +58,10 @@ struct CardDetail: Codable {
         commentCount = try container.decode(Int.self, forKey: .commentCount)
         rate = try container.decode(Int.self, forKey: .rate)
         author = try container.decode(CardDetailAuthor.self, forKey: .author)
+        backgroundMediaRef = try container.decodeIfPresent(
+            String.self,
+            forKey: .backgroundMediaRef
+        )
     }
 }
 

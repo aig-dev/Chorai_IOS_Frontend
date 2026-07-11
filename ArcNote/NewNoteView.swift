@@ -1,6 +1,9 @@
 import SwiftUI
 import MarkupEditor
 import Combine
+import CoreFlow
+import PhotosUI
+import UniformTypeIdentifiers
 
 // MARK: 关联笔记数据模型
 struct RelatedNote: Identifiable {
@@ -40,11 +43,37 @@ struct NewNoteView: View, MarkupDelegate {
     @State private var animateDeleteConfirmation = false
     @State private var updatedAt: String? = nil
     @State private var isPinned: Bool = false
+    @State private var shouldDismissAfterSave = false
+    @State private var pendingUnlinkNote: CardLinkItem?
+    @State private var editingFailureMessage: String?
+    @State private var showBackgroundPicker = false
+    @State private var showBackgroundActions = false
+    @State private var selectedBackgroundPhoto: PhotosPickerItem?
+    @StateObject private var editingStore: CardEditingStore
     
     let cardId: String
+    let onCreated: (String, String) -> Void
     
-    init(cardId: String = "") {
+    init(
+        cardId: String = "",
+        onCreated: @escaping (String, String) -> Void = { _, _ in }
+    ) {
         self.cardId = cardId
+        self.onCreated = onCreated
+        _editingStore = StateObject(
+            wrappedValue: CardEditingStore(
+                cardID: cardId,
+                draft: CardEditingDraft(
+                    title: nil,
+                    content: "",
+                    tags: [],
+                    isPublic: false
+                ),
+                backgroundMediaRef: nil,
+                links: [],
+                service: NetworkCoreCardEditingService()
+            )
+        )
     }
     
     private let networkManager = NetworkManager.shared
@@ -69,6 +98,30 @@ struct NewNoteView: View, MarkupDelegate {
             .gesture(swipeGesture)
             .onAppear(perform: onAppearAction)
             .onDisappear(perform: onDisappearAction)
+            .onChange(of: editingStore.phase, perform: handleEditingPhase)
+            .onChange(
+                of: selectedBackgroundPhoto,
+                perform: handleSelectedBackgroundPhoto
+            )
+            .photosPicker(
+                isPresented: $showBackgroundPicker,
+                selection: $selectedBackgroundPhoto,
+                matching: .images
+            )
+            .confirmationDialog(
+                "Card background",
+                isPresented: $showBackgroundActions,
+                titleVisibility: .visible
+            ) {
+                Button("Choose Photo") {
+                    showBackgroundPicker = true
+                }
+                Button("Remove Background", role: .destructive) {
+                    editingFailureMessage = nil
+                    editingStore.removeBackground()
+                }
+                Button("Cancel", role: .cancel) {}
+            }
             .linkPopup()
             .popupMenu(isPresented: $showPopupMenu, layout: .grid3x3, cardData: createTempUserCard(), isOwnCard: true)
             .navigationDestination(isPresented: $navigateToDetail) {
@@ -124,15 +177,51 @@ struct NewNoteView: View, MarkupDelegate {
             Spacer()
             
             // 格式化工具栏
+            if let editingFailureMessage {
+                Text(editingFailureMessage)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(.white.opacity(0.82))
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 8)
+                    .accessibilityIdentifier("cardEditorError")
+            }
+
             formatToolbar
+        }
+        .overlay(alignment: .topLeading) {
+            Text("Card editor")
+                .font(.system(size: 1))
+                .foregroundColor(.white.opacity(0.01))
+                .frame(width: 1, height: 1)
+                .accessibilityIdentifier("screen.card-editor")
         }
     }
     
-    private var backgroundView: some View {
-        Image("home_bg")
-            .resizable()
-            .aspectRatio(contentMode: .fill)
+    @ViewBuilder private var backgroundView: some View {
+        if let mediaRef = editingStore.backgroundMediaRef,
+           let url = URL(
+               string: APIConfiguration.resourceURLString(mediaRef)
+           ) {
+            AsyncImage(url: url) { phase in
+                if let image = phase.image {
+                    image
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .accessibilityIdentifier("cardEditorBackgroundImage")
+                } else {
+                    Image("home_bg")
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                }
+            }
+            .overlay(Color.black.opacity(0.38))
             .ignoresSafeArea(.all)
+        } else {
+            Image("home_bg")
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .ignoresSafeArea(.all)
+        }
     }
     
     private var swipeGesture: some Gesture {
@@ -140,7 +229,7 @@ struct NewNoteView: View, MarkupDelegate {
             .onEnded { value in
                 // 侧滑返回手势
                 if value.translation.width > 100 && abs(value.translation.height) < 50 {
-                    dismiss()
+                    closeEditor()
                 }
             }
     }
@@ -173,6 +262,7 @@ struct NewNoteView: View, MarkupDelegate {
             // 检查是否已存在相同的卡片，避免重复添加
             if !relatedNotes.contains(where: { $0.linkedCardId == selectedItem.id }) {
                 relatedNotes.append(newCardLinkItem)
+                synchronizeEditingLinks()
                 print("已添加关联笔记: \(selectedItem.title)")
             } else {
                 print("关联笔记已存在: \(selectedItem.title)")
@@ -188,8 +278,10 @@ struct NewNoteView: View, MarkupDelegate {
     
     private func onDisappearAction() {
         MarkupEditor.selectedWebView = nil
-        // 退出时自动保存
-        autoSaveNote()
+        LinkPopupManager.shared.onCardSelected = nil
+        if cardId.isEmpty {
+            autoSaveNote()
+        }
     }
     
     private var deleteConfirmationOverlay: some View {
@@ -360,13 +452,15 @@ struct NewNoteView: View, MarkupDelegate {
                         }
                     } else {
                         // 键盘隐藏时，返回上一页
-                    dismiss()
+                        closeEditor()
                     }
                 }) {
                     Image(systemName: isKeyboardVisible ? "checkmark" : "chevron.left")
                         .font(.title2)
                         .foregroundColor(.white)
                 }
+                .disabled(isEditingBusy)
+                .accessibilityIdentifier("cardEditorBackButton")
                 
                 Spacer()
                 
@@ -384,7 +478,7 @@ struct NewNoteView: View, MarkupDelegate {
                 Button(action: {
                     handleMenuButtonTap()
                 }) {
-                    if isPublishing {
+                    if isPublishing || isEditingBusy {
                         ProgressView()
                             .progressViewStyle(CircularProgressViewStyle(tint: .white))
                             .scaleEffect(0.8)
@@ -394,7 +488,7 @@ struct NewNoteView: View, MarkupDelegate {
                             .foregroundColor(.white)
                     }
                 }
-                .disabled(isPublishing)
+                .disabled(isPublishing || isEditingBusy)
             }
             .padding(.horizontal, 20)
             .padding(.top, 10)
@@ -420,6 +514,7 @@ struct NewNoteView: View, MarkupDelegate {
                     MarkupEditorView(markupDelegate: self, configuration: markupConfiguration, html: $noteText, placeholder: "")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .padding(.horizontal, 20)
+                        .accessibilityIdentifier("cardEditorContent")
                         .onTapGesture {
                             // 确保键盘显示
                             isKeyboardVisible = true
@@ -545,17 +640,19 @@ struct NewNoteView: View, MarkupDelegate {
             
             Spacer()
             
-                // 删除按钮
-                Button(action: {
-                    noteToDelete = note
-                    showDeleteConfirmation = true
-                }) {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(.white.opacity(0.8))
-                        .frame(width: 24, height: 24)
+                if note.sourceAssetId.isEmpty
+                    || note.sourceAssetId == (currentNoteId ?? cardId) {
+                    Button(action: {
+                        noteToDelete = note
+                        showDeleteConfirmation = true
+                    }) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(.white.opacity(0.8))
+                            .frame(width: 24, height: 24)
+                    }
+                    .buttonStyle(PlainButtonStyle())
                 }
-                .buttonStyle(PlainButtonStyle())
             }
             .padding(.vertical, 16)
             .contentShape(Rectangle())
@@ -571,6 +668,7 @@ struct NewNoteView: View, MarkupDelegate {
                     .padding(.horizontal, 16)
             }
         }
+        .accessibilityIdentifier("cardEditorLink.\(note.linkedCardId)")
     }
     
     private var formatToolbar: some View {
@@ -592,8 +690,14 @@ struct NewNoteView: View, MarkupDelegate {
                     })
                     FormatButton(imageName: "at", action: {
                         print("At button tapped")
-                            LinkPopupManager.shared.show(cardId: nil) // 不传递cardId，避免API调用
+                        let editingCardID = currentNoteId ?? cardId
+                        guard !editingCardID.isEmpty else { return }
+                        LinkPopupManager.shared.show(
+                            cardId: editingCardID,
+                            navigateAfterLink: false
+                        )
                     })
+                    .accessibilityIdentifier("cardEditorLinkButton")
                     FormatButton(imageName: "list.bullet", action: {
                         print("Bullet list button tapped")
                         insertBulletList()
@@ -602,10 +706,16 @@ struct NewNoteView: View, MarkupDelegate {
                         print("Numbered list button tapped")
                         insertNumberedList()
                     })
-//                    FormatButton(imageName: "photo", action: {
-//                        print("Photo button tapped")
-//                        insertPhotoFormatting()
-//                    })
+                    if !cardId.isEmpty {
+                        FormatButton(imageName: "photo", action: {
+                            if editingStore.backgroundMediaRef == nil {
+                                showBackgroundPicker = true
+                            } else {
+                                showBackgroundActions = true
+                            }
+                        })
+                        .accessibilityIdentifier("cardEditorBackgroundButton")
+                    }
                     
                     // 隐私按钮
                     Button(action: {
@@ -779,6 +889,7 @@ struct NewNoteView: View, MarkupDelegate {
                     print("发布成功笔记ID: \(response.data.id)")
                     publishMessage = "Publish success"
                     currentNoteId = response.data.id
+                    onCreated(response.data.id, content)
                     // 发布成功后打开菜单
                     showPopupMenu = true
                 }
@@ -808,6 +919,123 @@ struct NewNoteView: View, MarkupDelegate {
     }
     
     // MARK:  自动保存方法
+    private var isEditingBusy: Bool {
+        switch editingStore.phase {
+        case .saving, .linking, .updatingBackground:
+            return true
+        case .idle, .ready, .failed:
+            return false
+        }
+    }
+
+    private func closeEditor() {
+        guard !cardId.isEmpty else {
+            dismiss()
+            return
+        }
+
+        let content = noteHtml.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !content.isEmpty else {
+            editingFailureMessage = "Content cannot be empty"
+            return
+        }
+
+        editingFailureMessage = nil
+        shouldDismissAfterSave = true
+        editingStore.updateDraft(
+            CardEditingDraft(
+                title: titleFromHTML(content),
+                content: content,
+                tags: displayedTags,
+                isPublic: isPublic
+            )
+        )
+        editingStore.save()
+    }
+
+    private func titleFromHTML(_ content: String) -> String? {
+        let plainText = content.replacingOccurrences(
+            of: "<[^>]+>",
+            with: "",
+            options: .regularExpression
+        )
+        let title = String(plainText.prefix(50))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return title.isEmpty ? nil : title
+    }
+
+    private func handleEditingPhase(_ phase: CardEditingPhase) {
+        switch phase {
+        case .ready:
+            if let note = pendingUnlinkNote {
+                removeRelatedNote(note)
+                pendingUnlinkNote = nil
+            }
+            if shouldDismissAfterSave {
+                shouldDismissAfterSave = false
+                dismiss()
+            }
+        case .failed:
+            if pendingUnlinkNote != nil {
+                editingFailureMessage = "Couldn't unlink. Try again."
+                pendingUnlinkNote = nil
+            } else if shouldDismissAfterSave {
+                shouldDismissAfterSave = false
+                editingFailureMessage = "Couldn't save. Tap back to retry."
+            } else {
+                editingFailureMessage = "Couldn't update background. Try again."
+            }
+        case .idle, .saving, .linking, .updatingBackground:
+            break
+        }
+    }
+
+    private func handleSelectedBackgroundPhoto(_ item: PhotosPickerItem?) {
+        guard let item else { return }
+        Task {
+            defer { selectedBackgroundPhoto = nil }
+            do {
+                guard let data = try await item.loadTransferable(type: Data.self) else {
+                    editingFailureMessage = "Couldn't read that image."
+                    return
+                }
+                let type = item.supportedContentTypes.first {
+                    $0.conforms(to: .image)
+                } ?? .jpeg
+                let fileExtension = type.preferredFilenameExtension ?? "jpg"
+                editingFailureMessage = nil
+                editingStore.replaceBackground(
+                    with: CardEditingImage(
+                        data: data,
+                        filename: "card-background.\(fileExtension)",
+                        mimeType: type.preferredMIMEType ?? "image/jpeg"
+                    )
+                )
+            } catch {
+                editingFailureMessage = "Couldn't read that image."
+            }
+        }
+    }
+
+    private func synchronizeEditingLinks() {
+        let links = relatedNotes.map { note in
+            CardEditingLink(
+                sourceCardID: note.sourceAssetId.isEmpty
+                    ? cardId
+                    : note.sourceAssetId,
+                targetCardID: note.targetAssetId.isEmpty
+                    ? note.linkedCardId
+                    : note.targetAssetId,
+                title: note.title ?? "Related note"
+            )
+        }
+        editingStore.hydrate(
+            draft: editingStore.draft,
+            backgroundMediaRef: editingStore.backgroundMediaRef,
+            links: links
+        )
+    }
+
     private func autoSaveNote() {
         let content = noteHtml.trimmingCharacters(in: .whitespacesAndNewlines)
         if content.isEmpty {
@@ -866,6 +1094,7 @@ struct NewNoteView: View, MarkupDelegate {
                 receiveValue: { response in
                     print("自动保存成功笔记ID: \(response.data.id)")
                     currentNoteId = response.data.id
+                    onCreated(response.data.id, content)
                     // 自动保存不需要显示提示，直接退出
                     if !showPopupMenu {
                         dismiss()
@@ -960,6 +1189,17 @@ struct NewNoteView: View, MarkupDelegate {
                     isPinned = cardDetail.isPinned ?? false
                     
                     defaultTags = cardDetail.tags
+
+                    editingStore.hydrate(
+                        draft: CardEditingDraft(
+                            title: cardDetail.title,
+                            content: cardDetail.content,
+                            tags: cardDetail.tags,
+                            isPublic: cardDetail.isPublic
+                        ),
+                        backgroundMediaRef: cardDetail.backgroundMediaRef,
+                        links: editingStore.links
+                    )
                     
                     // 更新MarkupEditor内容
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
@@ -1000,6 +1240,7 @@ struct NewNoteView: View, MarkupDelegate {
                         print("关联笔记加载成功")
                         let allLinks = response.data.outgoingLinks + response.data.incomingLinks
                         self.relatedNotes = allLinks
+                        self.synchronizeEditingLinks()
                         print("关联笔记数量: \(allLinks.count)")
                     } else {
                         print("加载关联笔记失败: \(response.message)")
@@ -1136,23 +1377,15 @@ struct NewNoteView: View, MarkupDelegate {
         let sourceAssetId = note.sourceAssetId.isEmpty ? cardId : note.sourceAssetId
         let targetAssetId = note.targetAssetId.isEmpty ? note.linkedCardId : note.targetAssetId
 
-        networkManager.deleteCardLink(cardId: sourceAssetId, linkedCardId: targetAssetId)
-            .receive(on: DispatchQueue.main)
-            .sink(
-                receiveCompletion: { completion in
-                    if case .failure(let error) = completion {
-                        print("删除关联笔记失败: \(error.localizedDescription)")
-//                        publishMessage = " \(error.localizedDescription)"
-//                        showPublishAlert = true
-                        
-                        removeRelatedNote(note)
-                    }
-                },
-                receiveValue: { response in
-                    removeRelatedNote(note)
-                }
+        editingFailureMessage = nil
+        pendingUnlinkNote = note
+        editingStore.deleteLink(
+            CardEditingLink(
+                sourceCardID: sourceAssetId,
+                targetCardID: targetAssetId,
+                title: note.title ?? "Related note"
             )
-            .store(in: &cancellables)
+        )
     }
     
     // MARK: - 处理切换卡片Pin状态

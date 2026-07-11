@@ -1,0 +1,166 @@
+import Combine
+import CoreFlow
+import Foundation
+
+struct NetworkCoreCardEditingService: CoreCardEditingServing, @unchecked Sendable {
+    private let network: NetworkManager
+
+    init(network: NetworkManager = .shared) {
+        self.network = network
+    }
+
+    func save(
+        cardID: String,
+        draft: CardEditingDraft
+    ) async throws -> CardEditingSnapshot {
+        do {
+            let response = try await firstValue(
+                network.updateCardForEditing(
+                    cardId: cardID,
+                    title: draft.title,
+                    content: draft.content,
+                    tags: draft.tags,
+                    isPublic: draft.isPublic
+                )
+            )
+            guard response.success else {
+                throw CardEditingError.transport(code: "card_save_rejected")
+            }
+            return snapshot(from: response.data)
+        } catch {
+            throw Self.mapError(error)
+        }
+    }
+
+    func createLink(_ link: CardEditingLink) async throws {
+        do {
+            let response = try await firstValue(
+                network.createCardLink(
+                    cardId: link.sourceCardID,
+                    reques: LinkRequest(linkedCardId: link.targetCardID),
+                    presentsError: false
+                )
+            )
+            guard response.success else {
+                throw CardEditingError.transport(code: "card_link_rejected")
+            }
+        } catch {
+            throw Self.mapError(error)
+        }
+    }
+
+    func deleteLink(_ link: CardEditingLink) async throws {
+        do {
+            let response = try await firstValue(
+                network.deleteCardLink(
+                    cardId: link.sourceCardID,
+                    linkedCardId: link.targetCardID
+                )
+            )
+            guard response.success, response.data?.removed == true else {
+                throw CardEditingError.transport(code: "card_unlink_rejected")
+            }
+        } catch {
+            throw Self.mapError(error)
+        }
+    }
+
+    func replaceBackground(
+        cardID: String,
+        image: CardEditingImage
+    ) async throws -> String {
+        do {
+            let upload = try await firstValue(
+                network.uploadCardMedia(
+                    data: image.data,
+                    filename: image.filename,
+                    mimeType: image.mimeType
+                )
+            )
+            guard let uploaded = upload.data, !uploaded.mediaRef.isEmpty else {
+                throw CardEditingError.transport(code: "card_media_ref_missing")
+            }
+            let response = try await firstValue(
+                network.updateCardBackground(
+                    cardId: cardID,
+                    mediaRef: uploaded.mediaRef
+                )
+            )
+            guard response.success else {
+                throw CardEditingError.transport(code: "card_background_rejected")
+            }
+            return response.data.backgroundMediaRef ?? uploaded.mediaRef
+        } catch {
+            throw Self.mapError(error)
+        }
+    }
+
+    func removeBackground(cardID: String) async throws {
+        do {
+            let response = try await firstValue(
+                network.clearCardBackground(cardId: cardID)
+            )
+            guard response.success else {
+                throw CardEditingError.transport(code: "card_background_clear_rejected")
+            }
+        } catch {
+            throw Self.mapError(error)
+        }
+    }
+
+    private func snapshot(from card: CreateCardData) -> CardEditingSnapshot {
+        CardEditingSnapshot(
+            id: card.id,
+            title: card.title,
+            content: card.content,
+            tags: card.tags,
+            isPublic: card.isPublic,
+            backgroundMediaRef: card.backgroundMediaRef
+        )
+    }
+
+    private func firstValue<Output>(
+        _ publisher: AnyPublisher<Output, NetworkError>
+    ) async throws -> Output {
+        var iterator = publisher.values.makeAsyncIterator()
+        guard let value = try await iterator.next() else {
+            throw NetworkError.noData
+        }
+        return value
+    }
+
+    private static func mapError(_ error: Error) -> CardEditingError {
+        if let editingError = error as? CardEditingError {
+            return editingError
+        }
+        guard let networkError = error as? NetworkError else {
+            return .transport(code: "card_editing_unknown")
+        }
+        switch networkError {
+        case .api(_, let code, _):
+            return .transport(code: code?.lowercased() ?? "card_editing_api")
+        case .unauthorized:
+            return .transport(code: "card_editing_unauthorized")
+        case .forbidden:
+            return .transport(code: "card_editing_forbidden")
+        case .notFound:
+            return .transport(code: "card_editing_not_found")
+        case .timeout:
+            return .transport(code: "card_editing_timeout")
+        case .networkError:
+            return .transport(code: "card_editing_offline")
+        case .decodingError:
+            return .transport(code: "card_editing_decoding")
+        case .invalidURL:
+            return .transport(code: "card_editing_invalid_url")
+        case .noData:
+            return .transport(code: "card_editing_no_data")
+        case .encodingError:
+            return .transport(code: "card_editing_encoding")
+        case .serverError(let statusCode, _):
+            return .transport(code: "card_editing_server_\(statusCode)")
+        case .unknown:
+            return .transport(code: "card_editing_unknown")
+        }
+    }
+}

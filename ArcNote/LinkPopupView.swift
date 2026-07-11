@@ -40,6 +40,7 @@ class LinkPopupManager: ObservableObject {
     private var currentCardId: String? = nil
     private var searchType: String = "own+favorite" // 默认搜索类型
     private var isInitiatingCardOwned = true
+    private var navigateAfterLink = true
     
     static let shared = LinkPopupManager()
     
@@ -53,10 +54,17 @@ class LinkPopupManager: ObservableObject {
             .store(in: &cancellables)
     }
     
-    func show(cardId: String? = nil, isInitiatingCardOwned: Bool = true) {
+    func show(
+        cardId: String? = nil,
+        isInitiatingCardOwned: Bool = true,
+        navigateAfterLink: Bool = true
+    ) {
+        showErrorAlert = false
+        errorMessage = ""
         isShowing = true
         currentCardId = cardId
         self.isInitiatingCardOwned = isInitiatingCardOwned
+        self.navigateAfterLink = navigateAfterLink
         self.searchType = isInitiatingCardOwned ? "own+favorite" : "own"
         // 打开时获取初始数据（不带关键词）
         searchCards(keyword: "")
@@ -64,10 +72,13 @@ class LinkPopupManager: ObservableObject {
     
     func hide() {
         isShowing = false
+        showErrorAlert = false
+        errorMessage = ""
         searchText = ""
         linkItems = []
         currentCardId = nil
         isInitiatingCardOwned = true
+        navigateAfterLink = true
     }
     
     // MARK: - Link 卡片
@@ -98,7 +109,11 @@ class LinkPopupManager: ObservableObject {
             
             let linkRequest = LinkRequest(linkedCardId: actualLinkedCardId)
             
-            NetworkManager.shared.createCardLink(cardId: actualCardId, reques: linkRequest)
+            NetworkManager.shared.createCardLink(
+                cardId: actualCardId,
+                reques: linkRequest,
+                presentsError: false
+            )
                 .receive(on: DispatchQueue.main)
                 .sink(
                     receiveCompletion: { [weak self] completion in
@@ -127,34 +142,19 @@ class LinkPopupManager: ObservableObject {
                         self?.isLinking = false
                         if response.success {
                             guard let self = self else { return }
+                            let shouldNavigate = self.navigateAfterLink
                             self.hide()
-                            
-                            // 判断被链接的卡片是否属于当前用户
-                            let targetCardId: String
-//                            if self.searchType == "own" {
-//                                // own模式：被链接的卡片是 actualCardId（即 linkItem.id）
-                                targetCardId = actualCardId
-//                            } else {
-//                                // 正常模式：被链接的卡片是 actualLinkedCardId（即 linkItem.id）
-//                                targetCardId = actualLinkedCardId
-//                            }
-                            
-                            // 判断是否为自己的卡片
-                            let isOwnCard = linkItem.authorId == currentActorId
-                            
-                            if isOwnCard {
-                                // 如果是自己的卡片，跳转到编辑页
+
+                            if shouldNavigate {
+                                let isOwnCard = linkItem.authorId == currentActorId
                                 NotificationCenter.default.post(
-                                    name: NSNotification.Name("NavigateToEdit"),
+                                    name: NSNotification.Name(
+                                        isOwnCard
+                                            ? "NavigateToEdit"
+                                            : "NavigateToDetail"
+                                    ),
                                     object: nil,
-                                    userInfo: ["cardId": targetCardId]
-                                )
-                            } else {
-                                // 如果不是自己的卡片，跳转到详情页
-                                NotificationCenter.default.post(
-                                    name: NSNotification.Name("NavigateToDetail"),
-                                    object: nil,
-                                    userInfo: ["cardId": targetCardId]
+                                    userInfo: ["cardId": linkItem.id]
                                 )
                             }
                             
@@ -162,6 +162,8 @@ class LinkPopupManager: ObservableObject {
                             self.onCardSelected?(linkItem)
                         } else {
                             print("失败: \(response.message)")
+                            self?.errorMessage = "链接失败"
+                            self?.showErrorAlert = true
                         }
                     }
                 )
@@ -291,6 +293,7 @@ struct LinkPopupView: View {
                                                 .stroke(Color.white.opacity(0.2), lineWidth: 1)
                                         )
                                 )
+                                .accessibilityIdentifier("linkPopupSearch")
                             
                             Button("Cancel") {
                                 isTextFieldFocused = false
@@ -302,6 +305,16 @@ struct LinkPopupView: View {
                         }
                         .padding(.horizontal, 20)
                         .padding(.vertical, 16)
+
+                        if manager.showErrorAlert {
+                            Text(manager.errorMessage)
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(.red.opacity(0.85))
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 20)
+                                .padding(.bottom, 8)
+                                .accessibilityIdentifier("linkPopupError")
+                        }
                         
                         // Link列表
                         ScrollView {
@@ -331,11 +344,15 @@ struct LinkPopupView: View {
                                     // 数据列表
                                     ForEach(Array(manager.filteredItems.enumerated()), id: \.element.id) { index, item in
                                         VStack(spacing: 0) {
-                                            LinkItemView(item: item)
-                                                .onTapGesture {
-                                                    // 调用 link 方法
-                                                    manager.linkCard(linkItem: item)
-                                                }
+                                            Button {
+                                                manager.linkCard(linkItem: item)
+                                            } label: {
+                                                LinkItemView(item: item)
+                                            }
+                                                .buttonStyle(.plain)
+                                                .accessibilityIdentifier(
+                                                    "linkPopupCard.\(item.id)"
+                                                )
                                             
                                             // 分割线（除了最后一个）
                                             if index < manager.filteredItems.count - 1 {
@@ -364,6 +381,13 @@ struct LinkPopupView: View {
                             .cornerRadius(20)
                     )
                     .clipShape(RoundedRectangle(cornerRadius: 20))
+                    .overlay(alignment: .topLeading) {
+                        Text("Link cards")
+                            .font(.system(size: 1))
+                            .foregroundColor(.white.opacity(0.01))
+                            .frame(width: 1, height: 1)
+                            .accessibilityIdentifier("linkPopup")
+                    }
                     .position(x: geometry.size.width / 2, y: geometry.size.height / 2.8)
                     .transition(.scale.combined(with: .opacity))
                 }
@@ -377,13 +401,6 @@ struct LinkPopupView: View {
                         window.endEditing(true)
                     }
                     disableKeyboardAdjustment()
-                }
-                .alert("Notice", isPresented: $manager.showErrorAlert) {
-                    Button("OK") {
-                        manager.showErrorAlert = false
-                    }
-                } message: {
-                    Text(manager.errorMessage)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)

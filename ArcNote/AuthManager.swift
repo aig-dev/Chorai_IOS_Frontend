@@ -68,6 +68,30 @@ class AuthManager: ObservableObject {
             clearUserSession()
         }
     }
+
+    #if DEBUG
+    func installUITestSession(
+        token: String,
+        actorID: String,
+        email: String,
+        username: String,
+        createdAt: String
+    ) {
+        authToken = token
+        isLoggedIn = true
+        currentUser = User(
+            id: actorID,
+            username: username,
+            email: email,
+            avatar: nil,
+            bio: nil,
+            credit: 0,
+            createdAt: createdAt
+        )
+        sessionPhase = .restored
+        networkManager.setAuthToken(token)
+    }
+    #endif
     
     func saveUserSession(_ authResponse: AuthResponse) {
         // 保存认证信息

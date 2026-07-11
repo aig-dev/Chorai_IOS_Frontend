@@ -50,6 +50,7 @@ private enum APIMigrationUITestSeed {
 
         let defaults = UserDefaults.standard
         if let token = environment["CHORAI_UI_TEST_AUTH_TOKEN"], !token.isEmpty {
+            SessionTokenStore.delete()
             SessionTokenStore.save(token)
             defaults.removeObject(forKey: "auth_token")
             NetworkManager.shared.setAuthToken(token)
@@ -66,7 +67,21 @@ private enum APIMigrationUITestSeed {
                     ?? "2026-01-01T00:00:00Z",
                 forKey: "created_at"
             )
-            AuthManager.shared.loadUserSession()
+            if let token = environment["CHORAI_UI_TEST_AUTH_TOKEN"],
+               !token.isEmpty {
+                AuthManager.shared.installUITestSession(
+                    token: token,
+                    actorID: actorId,
+                    email: environment["CHORAI_UI_TEST_EMAIL"]
+                        ?? "ui-test@example.com",
+                    username: environment["CHORAI_UI_TEST_USERNAME"]
+                        ?? "ui-test-user",
+                    createdAt: environment["CHORAI_UI_TEST_CREATED_AT"]
+                        ?? "2026-01-01T00:00:00Z"
+                )
+            } else {
+                AuthManager.shared.loadUserSession()
+            }
         }
     }
 }

@@ -22,6 +22,17 @@ struct APIConfiguration {
 
         let trimmedBase = baseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         let trimmedPath = pathOrURL.hasPrefix("/") ? String(pathOrURL.dropFirst()) : pathOrURL
+
+        #if DEBUG
+        if trimmedPath.hasPrefix("chorai-assets/"),
+           let apiURL = URL(string: baseURL),
+           let host = apiURL.host,
+           host == "127.0.0.1" || host == "localhost" {
+            let scheme = apiURL.scheme ?? "http"
+            return "\(scheme)://\(host):9000/\(trimmedPath)"
+        }
+        #endif
+
         return "\(trimmedBase)/\(trimmedPath)"
     }
     

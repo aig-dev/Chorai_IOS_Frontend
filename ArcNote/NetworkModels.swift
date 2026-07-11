@@ -417,6 +417,7 @@ struct CreateCardData: Codable {
     let updatedAt: String
     let likeCount: Int
     let isLiked: Bool
+    let backgroundMediaRef: String?
 
     enum CodingKeys: String, CodingKey {
         case id, title, content, tags
@@ -426,6 +427,7 @@ struct CreateCardData: Codable {
         case updatedAt = "updated_at"
         case likeCount = "like_count"
         case isLiked = "is_liked"
+        case backgroundMediaRef = "background_media_ref"
     }
 }
 
