@@ -1,601 +1,475 @@
+import CoreFlow
 import SwiftUI
-import Combine
 
 struct NotificationView: View {
     @Environment(\.dismiss) private var dismiss
-    @StateObject private var viewModel = NotificationViewModel()
+    @StateObject private var store: NotificationInboxStore
     @State private var showFilterTags = false
-    @State private var selectedFilter = "All"
-    @State private var hasAppeared = false
-    
+    @State private var selectedFilter: NotificationFilter = .all
+    @State private var selectedActorID: String?
+    @State private var selectedAssetID: String?
+    @State private var selectedLegacyID: String?
+    @State private var hasLoaded = false
+
+    private let actorID: String?
+    private let usesFixtureDestinations: Bool
+
+    init(
+        service: any CoreNotificationServing = NetworkNotificationService(),
+        actorID: String? = nil,
+        usesFixtureDestinations: Bool = false
+    ) {
+        _store = StateObject(
+            wrappedValue: NotificationInboxStore(service: service)
+        )
+        self.actorID = actorID
+        self.usesFixtureDestinations = usesFixtureDestinations
+    }
+
     var body: some View {
         ZStack {
-            // 背景图片
             Image("home_bg")
                 .resizable()
                 .aspectRatio(contentMode: .fill)
                 .ignoresSafeArea()
-            
+
             VStack(spacing: 0) {
-                // 顶部导航栏
-                HStack {
-                    Button(action: {
-                        dismiss()
-                    }) {
-                        Image(systemName: "chevron.left")
-                            .font(.title2)
-                            .foregroundColor(.white)
-                    }
-                    
-                    Spacer()
-                    
-                    ZStack {
+                header
+                if showFilterTags { filterStrip }
+                content
+            }
 
-                        HStack(spacing: 4) {
-                            Text("Notification")
-                                .font(.system(size: 22, weight: .semibold))
-                                .foregroundColor(.white)
-                            
-                            Image(systemName: showFilterTags ? "chevron.up" : "chevron.down")
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundColor(.white)
-                                .animation(.easeInOut(duration: 0.3), value: showFilterTags)
-                        }
-                    }
-                    .onTapGesture {
-                        withAnimation(.easeInOut(duration: 0.3)) {
-                            showFilterTags.toggle()
-                        }
-                    }
-                    
-                    Spacer()
-                    
-                    Color.clear
-                        .frame(width: 30, height: 30)
+            if store.actionFailure != nil {
+                actionError
+            }
+        }
+        .accessibilityIdentifier("screen.notification-inbox")
+        .navigationBarHidden(true)
+        .navigationBarBackButtonHidden(true)
+        .navigationDestination(isPresented: actorDestinationPresented) {
+            let actorID = selectedActorID ?? ""
+            if usesFixtureDestinations {
+                fixtureDestination(
+                    title: "Profile",
+                    value: actorID,
+                    identifier: "notification.fixture.actor-destination"
+                )
+            } else {
+                UserProfileView(actorId: actorID)
+            }
+        }
+        .navigationDestination(isPresented: assetDestinationPresented) {
+            let assetID = selectedAssetID ?? ""
+            if usesFixtureDestinations {
+                fixtureDestination(
+                    title: "Card",
+                    value: assetID,
+                    identifier: "notification.fixture.asset-destination"
+                )
+            } else {
+                DetailView(cardId: assetID)
+            }
+        }
+        .navigationDestination(isPresented: legacyDestinationPresented) {
+            let notificationID = selectedLegacyID ?? ""
+            if let notification = store.items.first(where: {
+                $0.id == notificationID
+            }) {
+                NotificationDetailView(notification: notification)
+            }
+        }
+        .onAppear {
+            guard !hasLoaded else { return }
+            hasLoaded = true
+            store.load(
+                actorID: actorID ?? AuthManager.shared.currentUser?.id ?? ""
+            )
+        }
+    }
+
+    private var actorDestinationPresented: Binding<Bool> {
+        Binding(
+            get: { selectedActorID != nil },
+            set: { if !$0 { selectedActorID = nil } }
+        )
+    }
+
+    private var assetDestinationPresented: Binding<Bool> {
+        Binding(
+            get: { selectedAssetID != nil },
+            set: { if !$0 { selectedAssetID = nil } }
+        )
+    }
+
+    private var legacyDestinationPresented: Binding<Bool> {
+        Binding(
+            get: { selectedLegacyID != nil },
+            set: { if !$0 { selectedLegacyID = nil } }
+        )
+    }
+
+    private var header: some View {
+        HStack {
+            Button { dismiss() } label: {
+                Image(systemName: "chevron.left")
+                    .font(.title2)
+                    .foregroundColor(.white)
+            }
+
+            Spacer()
+
+            Button {
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    showFilterTags.toggle()
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 60)
-                .padding(.bottom, 20)
-                
-                // 筛选标签
-                if showFilterTags {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 12) {
-                            NotificationFilterTag(title: "All", isSelected: selectedFilter == "All") {
-                                selectedFilter = "All"
-                            }
-                            .frame(width: 95)
-                            NotificationFilterTag(title: "Unread", isSelected: selectedFilter == "Unread") {
-                                selectedFilter = "Unread"
-                            }
-                            .frame(width: 95)
-                            NotificationFilterTag(title: "mention", isSelected: selectedFilter == "mention") {
-                                selectedFilter = "mention"
-                            }
-                            .frame(width: 95)
-                            NotificationFilterTag(title: "system", isSelected: selectedFilter == "system") {
-                                selectedFilter = "system"
-                            }
-                            .frame(width: 95)
-                        }
-                        .padding(.horizontal, 20)
-                    }
-                    .padding(.bottom, 10)
+            } label: {
+                HStack(spacing: 4) {
+                    Text("Notification")
+                        .font(.system(size: 22, weight: .semibold))
+                    Image(systemName: showFilterTags ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 14, weight: .medium))
                 }
-                
-                // 通知列表
-                if viewModel.isLoading {
-                    VStack {
-                        Spacer()
-                        ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                            .scaleEffect(1.2)
-                        Text("Loading...")
-                            .foregroundColor(.white.opacity(0.8))
-                            .padding(.top, 10)
-                        Spacer()
-                    }
-                } else if let errorMessage = viewModel.errorMessage {
-                    VStack {
-                        Spacer()
-                        Image(systemName: "exclamationmark.triangle")
-                            .font(.system(size: 40))
-                            .foregroundColor(.white.opacity(0.6))
-                        Text("Loading Failed")
-                            .font(.system(size: 18, weight: .medium))
+                .foregroundColor(.white)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Notification filters")
+                .accessibilityIdentifier("notification.filter-toggle")
+            }
+            .accessibilityIdentifier("notification.filter-toggle")
+
+            Spacer()
+            Color.clear.frame(width: 30, height: 30)
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 60)
+        .padding(.bottom, 20)
+    }
+
+    private var filterStrip: some View {
+        ZStack(alignment: .trailing) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 12) {
+                    filterTag(.all, title: "All")
+                    filterTag(.unread, title: "Unread")
+                    filterTag(.activity, title: "Activity")
+                    filterTag(.system, title: "System")
+                }
+                .padding(.leading, 20)
+                .padding(.trailing, 108)
+            }
+
+            Button {
+                store.markAllLoadedRead()
+            } label: {
+                Text(store.isMarkingAll ? "Reading…" : "Read All")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(.white)
+                    .frame(width: 72)
+                    .padding(.vertical, 10)
+                    .background(
+                        Capsule().fill(Color.purple.opacity(0.45))
+                    )
+            }
+            .disabled(store.unreadCount == 0 || store.isMarkingAll)
+            .opacity(store.unreadCount == 0 ? 0.45 : 1)
+            .accessibilityIdentifier("notification.read-all")
+            .padding(.trailing, 20)
+        }
+        .padding(.bottom, 10)
+    }
+
+    private func filterTag(
+        _ filter: NotificationFilter,
+        title: String
+    ) -> some View {
+        NotificationFilterTag(
+            title: title,
+            isSelected: selectedFilter == filter
+        ) {
+            selectedFilter = filter
+        }
+        .frame(width: 95)
+        .accessibilityIdentifier("notification.filter.\(filter.rawValue)")
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        switch store.phase {
+        case .idle, .loading:
+            loadingView
+        case .failed(let operation, let error):
+            if operation == .load {
+                loadErrorView(error)
+            } else {
+                notificationList
+            }
+        case .empty:
+            emptyView
+        case .ready, .loadingMore:
+            if store.filteredItems(selectedFilter).isEmpty {
+                emptyView
+            } else {
+                notificationList
+            }
+        }
+    }
+
+    private var loadingView: some View {
+        VStack(spacing: 10) {
+            Spacer()
+            ProgressView().tint(.white).scaleEffect(1.2)
+            Text("Loading…").foregroundColor(.white.opacity(0.8))
+            Spacer()
+        }
+    }
+
+    private func loadErrorView(_ error: NotificationInboxError) -> some View {
+        VStack(spacing: 10) {
+            Spacer()
+            Image(systemName: "exclamationmark.triangle")
+                .font(.system(size: 40))
+                .foregroundColor(.white.opacity(0.6))
+            Text("Loading Failed")
+                .font(.system(size: 18, weight: .medium))
+                .foregroundColor(.white)
+            Text(errorMessage(error))
+                .font(.system(size: 14))
+                .foregroundColor(.white.opacity(0.6))
+            Button("Retry") { store.retryLastFailure() }
+                .foregroundColor(.white)
+                .padding(.top, 10)
+            Spacer()
+        }
+    }
+
+    private var emptyView: some View {
+        VStack(spacing: 12) {
+            Spacer()
+            Image(systemName: "bell.slash")
+                .font(.system(size: 30, weight: .light))
+                .foregroundColor(.white.opacity(0.55))
+            Text("No notifications")
+                .font(.system(size: 16, weight: .medium))
+                .foregroundColor(.white.opacity(0.7))
+                .accessibilityIdentifier("notification.list.empty")
+            Spacer()
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var notificationList: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 24) {
+                Text("Loaded")
+                    .font(.system(size: 1))
+                    .foregroundColor(.clear)
+                    .frame(width: 1, height: 1)
+                    .accessibilityIdentifier("notification.list.loaded")
+
+                ForEach(groupedNotifications, id: \.title) { group in
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text(group.title)
+                            .font(.system(size: 18, weight: .semibold))
                             .foregroundColor(.white)
-                            .padding(.top, 10)
-                        Text(errorMessage)
-                            .font(.system(size: 14))
-                            .foregroundColor(.white.opacity(0.6))
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, 40)
-                            .padding(.top, 5)
-                        Button("Retry") {
-                            viewModel.loadNotifications()
-                        }
-                        .foregroundColor(.white)
-                        .padding(.top, 20)
-                        Spacer()
-                    }
-                } else {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 24) {
-                            let groupedNotifications = viewModel.groupedNotifications(by: selectedFilter)
+                            .padding(.horizontal, 20)
 
-                            if groupedNotifications.isEmpty {
-                                Text("No notifications")
-                                    .font(.system(size: 16, weight: .medium))
-                                    .foregroundColor(.white.opacity(0.7))
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.top, 80)
-                                    .accessibilityIdentifier("notification.list.empty")
-                            }
-
-                            ForEach(Array(groupedNotifications.keys.sorted(by: { key1, key2 in
-                                let order = ["Today", "Yesterday", "This Week", "Earlier"]
-                                let index1 = order.firstIndex(of: key1) ?? 999
-                                let index2 = order.firstIndex(of: key2) ?? 999
-                                return index1 < index2
-                            })), id: \.self) { groupKey in
-                                VStack(alignment: .leading, spacing: 16) {
-                                    Text(groupKey)
-                                        .font(.system(size: 18, weight: .semibold))
-                                        .foregroundColor(.white)
-                                        .padding(.horizontal, 20)
-
-                                    VStack(spacing: 0) {
-                                        if let notifications = groupedNotifications[groupKey] {
-                                            ForEach(Array(notifications.enumerated()), id: \.element.id) { index, notification in
-                                                NavigationLink(destination: NotificationDetailView(notification: notification)) {
-                                                    NotificationItemView(notification: notification)
-                                                }
-                                                .buttonStyle(PlainButtonStyle())
-                                                .accessibilityIdentifier("notification.row.\(notification.id)")
-
-                                                if index < notifications.count - 1 {
-                                                    Divider()
-                                                        .background(Color.white.opacity(0.1))
-                                                        .padding(.leading, 60)
-                                                }
-                                            }
-                                        }
+                        VStack(spacing: 0) {
+                            ForEach(Array(group.items.enumerated()), id: \.element.id) {
+                                index, notification in
+                                Button { open(notification) } label: {
+                                    NotificationItemView(notification: notification)
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityIdentifier("notification.row.\(notification.id)")
+                                .onAppear {
+                                    if notification.id == store
+                                        .filteredItems(selectedFilter).last?.id {
+                                        store.loadMore()
                                     }
-                                    .padding(.vertical, 15)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 16)
-                                            .fill(Color.white.opacity(0.1))
-                                            .overlay(cardTopLeftHighlight)
-                                            .overlay(cardBottomRightHighlight)
-                                            .overlay(cardTopEdgeHighlight)
-                                            .overlay(cardBottomEdgeHighlight)
-                                    )
-                                    .clipShape(RoundedRectangle(cornerRadius: 16))
-                                    .padding(.horizontal, 20)
+                                }
+
+                                if index < group.items.count - 1 {
+                                    Divider()
+                                        .background(Color.white.opacity(0.1))
+                                        .padding(.leading, 60)
                                 }
                             }
                         }
-                        .padding(.bottom, 100)
+                        .padding(.vertical, 15)
+                        .background(notificationCard)
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                        .padding(.horizontal, 20)
                     }
-                    .accessibilityIdentifier("notification.list.loaded")
                 }
-            }
-        }
-        .navigationBarHidden(true)
-        .navigationBarBackButtonHidden(true)
-        .onAppear {
-            // 首次出现时，ViewModel 的 init() 已经加载了数据
-            // 从详情页返回时，刷新数据以更新通知状态
-            if hasAppeared && !viewModel.isLoading {
-                viewModel.loadNotifications()
-            } else {
-                hasAppeared = true
-            }
-        }
-    }
-    
-    // MARK: 卡片高光效果
-    private var cardTopLeftHighlight: some View {
-        RoundedRectangle(cornerRadius: 16)
-            .stroke(Color.white, lineWidth: 1)
-            .offset(x: 0, y: -1)
-            .mask(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(
-                        RadialGradient(
-                            colors: [Color.white, Color.clear],
-                            center: .topLeading,
-                            startRadius: 10,
-                            endRadius: 35
-                        )
-                    )
-            )
-    }
-    
-    private var cardBottomRightHighlight: some View {
-        RoundedRectangle(cornerRadius: 16)
-            .stroke(Color.white, lineWidth: 1)
-            .offset(x: 0, y: 0)
-            .mask(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(
-                        RadialGradient(
-                            colors: [Color.white, Color.clear],
-                            center: .bottomTrailing,
-                            startRadius: 10,
-                            endRadius: 35
-                        )
-                    )
-            )
-    }
-    
-    private var cardTopEdgeHighlight: some View {
-        RoundedRectangle(cornerRadius: 16)
-            .stroke(Color.white, lineWidth: 1)
-            .offset(x: 0, y: -1)
-            .mask(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.white, Color.clear],
-                            startPoint: .top,
-                            endPoint: UnitPoint(x: 0, y: 0.05)
-                        )
-                    )
-            )
-    }
-    
-    private var cardBottomEdgeHighlight: some View {
-        RoundedRectangle(cornerRadius: 16)
-            .stroke(Color.white, lineWidth: 1)
-            .offset(x: 0, y: 1)
-            .mask(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.white, Color.clear],
-                            startPoint: .bottom,
-                            endPoint: UnitPoint(x: 1, y: 0.05)
-                        )
-                    )
-            )
-    }
-}
 
-// MARK: 通知项视图
-struct NotificationItemView: View {
-    let notification: NotificationItem
-    
-    var body: some View {
-        HStack(alignment: .top, spacing: 8) {
-            // 未读圆点
-            if !notification.isRead {
-                Circle()
-                    .fill(Color.purple)
-                    .frame(width: 6, height: 6)
-                    .padding(.top, 6)
-                    .accessibilityIdentifier("notification.unread-dot.\(notification.id)")
-            } else {
-                Spacer()
-                    .frame(width: 6, height: 6)
-            }
-            
-            // 图标或头像
-            if notification.type == .system {
-                ZStack {
-                    Circle()
-                        .fill(Color.gray.opacity(0.3))
-                        .frame(width: 40, height: 40)
-                    
-                    Image(systemName: notification.type.iconName)
-                        .font(.system(size: 18, weight: .medium))
-                        .foregroundColor(.white)
+                if store.phase == .loadingMore {
+                    ProgressView().tint(.white).frame(maxWidth: .infinity)
                 }
-            } else if let relatedUser = notification.relatedUser {
-                AsyncImage(url: URL(string: relatedUser.avatarUrl ?? "")) { image in
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                } placeholder: {
-                    Image("avatar")
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                }
-                .frame(width: 40, height: 40)
-                .clipShape(Circle())
-            } else {
-                Image("avatar")
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .frame(width: 40, height: 40)
-                    .clipShape(Circle())
             }
-            
-            // 内容
-            VStack(alignment: .leading, spacing: 4) {
-                // 根据通知类型显示不同的内容格式
-                if notification.type == .system {
-                    // 系统通知：直接显示内容
-                    Text(notification.content)
-                        .font(.system(size: 16, weight: .regular))
-                        .foregroundColor(.white)
-                        .lineLimit(3)
-                } else {
-                    // 用户通知：根据type显示动作
-                    let (userName, action) = getNotificationDisplayInfo(notification)
-                    HStack(spacing: 0) {
-                        (Text(userName)
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundColor(.white)
-                        +
-                        Text(" \(action)")
-                            .font(.system(size: 16, weight: .regular))
-                            .foregroundColor(.white.opacity(0.8))
-                        )
-                    }
-                    .lineLimit(2)
-                }
-                
-                Text(formatTime(notification.createdAt))
-                    .font(.system(size: 14, weight: .regular))
-                    .foregroundColor(.white.opacity(0.6))
-            }
-            
+            .padding(.bottom, 100)
+        }
+    }
+
+    private var groupedNotifications: [(title: String, items: [CommunityNotification])] {
+        let order = ["Today", "Yesterday", "This Week", "Earlier"]
+        let grouped = Dictionary(grouping: store.filteredItems(selectedFilter)) {
+            sectionTitle(for: $0.createdAt)
+        }
+        return order.compactMap { title in
+            guard let items = grouped[title], !items.isEmpty else { return nil }
+            return (title, items.sorted { $0.createdAt > $1.createdAt })
+        }
+    }
+
+    private var notificationCard: some View {
+        RoundedRectangle(cornerRadius: 16)
+            .fill(Color.white.opacity(0.1))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(Color.white.opacity(0.17), lineWidth: 1)
+            )
+    }
+
+    private var actionError: some View {
+        VStack {
             Spacer()
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 12)
-    }
-    
-    // 根据通知类型获取显示信息
-    private func getNotificationDisplayInfo(_ notification: NotificationItem) -> (String, String) {
-        // 获取用户名
-        let userName: String
-        if let relatedUser = notification.relatedUser {
-            userName = relatedUser.username
-        } else {
-            // 从content中提取用户名（作为备用方案）
-            userName = "User"
-        }
-        
-        // 根据type获取动作文本
-        let action: String
-        switch notification.type {
-        case .follow:
-            action = "Followed you"
-        case .like:
-            action = "Liked your card"
-        case .comment:
-            action = "Commented on your card"
-        case .mention:
-            action = "Mentioned you"
-        case .system:
-            action = "" // 系统通知不显示动作
-        }
-        
-        return (userName, action)
-    }
-    
-    private func formatTime(_ timeString: String) -> String {
-        var date: Date?
-        
-        // 首先尝试 ISO8601DateFormatter
-        let iso8601Formatter = ISO8601DateFormatter()
-        if let parsedDate = iso8601Formatter.date(from: timeString) {
-            date = parsedDate
-        } else {
-            // 如果 ISO8601 失败，尝试其他格式
-            let customFormatter1: DateFormatter = {
-                let formatter = DateFormatter()
-                formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
-                formatter.timeZone = TimeZone(abbreviation: "UTC")
-                return formatter
-            }()
-            
-            let customFormatter2: DateFormatter = {
-                let formatter = DateFormatter()
-                formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss'Z'"
-                formatter.timeZone = TimeZone(abbreviation: "UTC")
-                return formatter
-            }()
-            
-            let formatters: [DateFormatter] = [customFormatter1, customFormatter2]
-            
-            for formatter in formatters {
-                if let parsedDate = formatter.date(from: timeString) {
-                    date = parsedDate
-                    break
-                }
+            HStack(spacing: 10) {
+                Image(systemName: "exclamationmark.circle")
+                Text("Couldn’t update notification. Try again.")
+                    .font(.system(size: 14, weight: .medium))
             }
+            .foregroundColor(.white)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(.ultraThinMaterial, in: Capsule())
+            .padding(.bottom, 34)
+            .accessibilityIdentifier("notification.action-error")
         }
-        
-        guard let validDate = date else {
-            print("无法解析时间: \(timeString)")
-            // 如果无法解析，尝试简单的相对时间显示
-            return "Recently"
+    }
+
+    private func open(_ notification: CommunityNotification) {
+        store.markRead(notificationID: notification.id)
+        switch notification.target {
+        case .actor(let actorID):
+            selectedActorID = actorID
+        case .asset(let assetID):
+            selectedAssetID = assetID
+        case .legacy:
+            selectedLegacyID = notification.id
         }
-        
-        let now = Date()
+    }
+
+    private func sectionTitle(for date: Date) -> String {
         let calendar = Calendar.current
-        
-        // 检查是否是今天
-        if calendar.isDateInToday(validDate) {
-            let timeFormatter = DateFormatter()
-            timeFormatter.dateFormat = "HH:mm"
-            return "Today \(timeFormatter.string(from: validDate))"
+        if calendar.isDateInToday(date) { return "Today" }
+        if calendar.isDateInYesterday(date) { return "Yesterday" }
+        if calendar.isDate(date, equalTo: Date(), toGranularity: .weekOfYear) {
+            return "This Week"
         }
-        
-        // 检查是否是昨天
-        if calendar.isDateInYesterday(validDate) {
-            let timeFormatter = DateFormatter()
-            timeFormatter.dateFormat = "HH:mm"
-            return "Yesterday \(timeFormatter.string(from: validDate))"
+        return "Earlier"
+    }
+
+    private func errorMessage(_ error: NotificationInboxError) -> String {
+        switch error {
+        case .invalidActor: return "Sign in to view notifications."
+        case .unauthorized: return "Your session has expired."
+        case .forbidden: return "Notifications are unavailable."
+        case .notFound: return "Notifications could not be found."
+        case .contract, .transport: return "Check your connection and retry."
         }
-        
-        // 检查是否是本周
-        if calendar.isDate(validDate, equalTo: now, toGranularity: .weekOfYear) {
-            let dayFormatter = DateFormatter()
-            dayFormatter.dateFormat = "EEEE"
-            let timeFormatter = DateFormatter()
-            timeFormatter.dateFormat = "HH:mm"
-            return "\(dayFormatter.string(from: validDate)) \(timeFormatter.string(from: validDate))"
-        }
-        
-        // 计算相对时间
-        let components = calendar.dateComponents([.day, .hour, .minute], from: validDate, to: now)
-        
-        if let days = components.day, days > 0 {
-            if days < 7 {
-                return "\(days) days ago"
-            } else {
-                return "\(days / 7) weeks ago"
+    }
+
+    private func fixtureDestination(
+        title: String,
+        value: String,
+        identifier: String
+    ) -> some View {
+        ZStack {
+            Image("home_bg").resizable().scaledToFill().ignoresSafeArea()
+            VStack(spacing: 12) {
+                Text(title).font(.title2).foregroundColor(.white)
+                Text(value)
+                    .foregroundColor(.white.opacity(0.8))
+                    .accessibilityIdentifier(identifier)
             }
-        } else if let hours = components.hour, hours > 0 {
-            return "\(hours) hours ago"
-        } else if let minutes = components.minute, minutes > 0 {
-            return "\(minutes) minutes ago"
-        } else {
-            return "Just now"
         }
     }
 }
 
-// 用户交互通知项
-struct NotificationItemViewOld: View {
-    let avatar: String
-    let name: String
-    let action: String
-    let highlight: String?
-    let time: String
-    let hasDot: Bool
-    
-    init(avatar: String, name: String, action: String, highlight: String? = nil, time: String, hasDot: Bool = false) {
-        self.avatar = avatar
-        self.name = name
-        self.action = action
-        self.highlight = highlight
-        self.time = time
-        self.hasDot = hasDot
-    }
-    
-    private var combinedText: Text {
-        let nameText = Text(name)
-            .font(.system(size: 16, weight: .semibold))
-            .foregroundColor(.white)
-        
-        let actionText = Text(action)
-            .font(.system(size: 16, weight: .regular))
-            .foregroundColor(.white.opacity(0.8))
-        
-        let highlightText = Text(highlight ?? "")
-            .font(.system(size: 16, weight: .semibold))
-            .foregroundColor(.white)
-        
-        let spaceText = Text(" ")
-        
-        return nameText + spaceText + actionText + spaceText + highlightText
-    }
-    
+struct NotificationItemView: View {
+    let notification: CommunityNotification
+
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
-            // 紫色圆点
-            if hasDot {
-                Circle()
-                    .fill(Color.purple)
-                    .frame(width: 6, height: 6)
-                    .padding(.top, 6) // 向下偏移一点，与头像顶部对齐
-            } else {
-                Spacer()
-                    .frame(width: 6, height: 6)
+            Group {
+                if !notification.isRead {
+                    Circle()
+                        .fill(Color.purple)
+                        .accessibilityIdentifier("notification.unread-dot.\(notification.id)")
+                } else {
+                    Color.clear
+                }
             }
-            
-            // 头像
-            Image(avatar)
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                .frame(width: 40, height: 40)
-                .clipShape(Circle())
-            
-            // 内容
+            .frame(width: 6, height: 6)
+            .padding(.top, 6)
+
+            sourceImage
+
             VStack(alignment: .leading, spacing: 4) {
-                combinedText
-                    .lineLimit(nil)
-                
-                Text(time)
-                    .font(.system(size: 14, weight: .regular))
+                Text(notification.displayText)
+                    .font(.system(size: 16, weight: .regular))
+                    .foregroundColor(.white)
+                    .lineLimit(3)
+                Text(relativeTime(notification.createdAt))
+                    .font(.system(size: 14))
                     .foregroundColor(.white.opacity(0.6))
             }
-            
             Spacer()
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 12)
+        .contentShape(Rectangle())
     }
-}
 
-// 系统通知项
-struct SystemNotificationItem: View {
-    let title: String
-    let description: String
-    let time: String
-    
-    var body: some View {
-        HStack(alignment: .top, spacing: 8) {
-            // 紫色圆点
-            Circle()
-                .fill(Color.purple)
-                .frame(width: 6, height: 6)
-                .padding(.top, 6) // 向下偏移一点，与系统图标顶部对齐
-            
-            // 系统图标
+    @ViewBuilder
+    private var sourceImage: some View {
+        if notification.kind.category == .system {
             ZStack {
-                Circle()
-                    .fill(Color.gray.opacity(0.3))
-                    .frame(width: 40, height: 40)
-                
+                Circle().fill(Color.gray.opacity(0.3))
                 Image(systemName: "bell")
                     .font(.system(size: 18, weight: .medium))
                     .foregroundColor(.white)
             }
-            
-            // 内容
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title)
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(.white)
-                
-                Text(description)
-                    .font(.system(size: 14, weight: .regular))
-                    .foregroundColor(.white.opacity(0.8))
-                    .lineLimit(2)
-                
-                Text(time)
-                    .font(.system(size: 14, weight: .regular))
-                    .foregroundColor(.white.opacity(0.6))
+            .frame(width: 40, height: 40)
+        } else if let avatarURL = notification.sourceActor?.avatarURL,
+                  let url = URL(string: APIConfiguration.resourceURLString(avatarURL)) {
+            AsyncImage(url: url) { image in
+                image.resizable().aspectRatio(contentMode: .fill)
+            } placeholder: {
+                Image("avatar").resizable().aspectRatio(contentMode: .fill)
             }
-            
-            Spacer()
+            .frame(width: 40, height: 40)
+            .clipShape(Circle())
+        } else {
+            Image("avatar")
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .frame(width: 40, height: 40)
+                .clipShape(Circle())
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 10)
-//        .background(
-//            RoundedRectangle(cornerRadius: 12)
-//                .fill(Color.white.opacity(0.1))
-//        )
-//        .padding(.horizontal, 20)
+    }
+
+    private func relativeTime(_ date: Date) -> String {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .short
+        return formatter.localizedString(for: date, relativeTo: Date())
     }
 }
 
-#Preview {
-    NotificationView()
-}
-
-// MARK: 通知筛选标签组件
 struct NotificationFilterTag: View {
     let title: String
     let isSelected: Bool
     let action: () -> Void
-    
+
     var body: some View {
         Button(action: action) {
             Text(title)
@@ -603,83 +477,23 @@ struct NotificationFilterTag: View {
                 .foregroundColor(isSelected ? .white : .white.opacity(0.7))
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 10)
-                .background(tagBackground)
+                .background(
+                    RoundedRectangle(cornerRadius: 20)
+                        .fill(
+                            isSelected
+                                ? Color.white.opacity(0.3)
+                                : Color.white.opacity(0.1)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 20)
+                                .stroke(Color.white.opacity(0.16), lineWidth: 1)
+                        )
+                )
         }
         .animation(.easeInOut(duration: 0.2), value: isSelected)
     }
-    
-    private var tagBackground: some View {
-        RoundedRectangle(cornerRadius: 20)
-            .fill(isSelected ? Color.white.opacity(0.3) : Color.white.opacity(0.1))
-            .overlay(tagTopLeftHighlight)
-            .overlay(tagBottomRightHighlight)
-            .overlay(tagTopEdgeHighlight)
-            .overlay(tagBottomEdgeHighlight)
-    }
-    
-    private var tagTopLeftHighlight: some View {
-        RoundedRectangle(cornerRadius: 20)
-            .stroke(Color.white, lineWidth: 1)
-            .offset(x: 0, y: -1)
-            .mask(
-                RoundedRectangle(cornerRadius: 20)
-                    .fill(
-                        RadialGradient(
-                            colors: [Color.white, Color.clear],
-                            center: .topLeading,
-                            startRadius: 5,
-                            endRadius: 20
-                        )
-                    )
-            )
-    }
-    
-    private var tagBottomRightHighlight: some View {
-        RoundedRectangle(cornerRadius: 20)
-            .stroke(Color.white, lineWidth: 1)
-            .offset(x: 0, y: 0)
-            .mask(
-                RoundedRectangle(cornerRadius: 20)
-                    .fill(
-                        RadialGradient(
-                            colors: [Color.white, Color.clear],
-                            center: .bottomTrailing,
-                            startRadius: 5,
-                            endRadius: 20
-                        )
-                    )
-            )
-    }
-    
-    private var tagTopEdgeHighlight: some View {
-        RoundedRectangle(cornerRadius: 20)
-            .stroke(Color.white, lineWidth: 1)
-            .offset(x: 0, y: -1)
-            .mask(
-                RoundedRectangle(cornerRadius: 20)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.white, Color.clear],
-                            startPoint: .top,
-                            endPoint: UnitPoint(x: 0, y: 0.05)
-                        )
-                    )
-            )
-    }
-    
-    private var tagBottomEdgeHighlight: some View {
-        RoundedRectangle(cornerRadius: 20)
-            .stroke(Color.white, lineWidth: 1)
-            .offset(x: 0, y: 1)
-            .mask(
-                RoundedRectangle(cornerRadius: 20)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.white, Color.clear],
-                            startPoint: .bottom,
-                            endPoint: UnitPoint(x: 1, y: 0.05)
-                        )
-                    )
-            )
-    }
+}
+
+#Preview {
+    NavigationStack { NotificationView() }
 }

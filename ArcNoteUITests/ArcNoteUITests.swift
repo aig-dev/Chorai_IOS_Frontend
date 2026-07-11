@@ -42,6 +42,80 @@ final class ArcNoteUITests: XCTestCase {
         )
     }
 
+    func testNotificationInboxUIContract() throws {
+        app.launchArguments.append("--ui-test-notification-inbox")
+        app.launchEnvironment["CHORAI_NOTIFICATION_FIXTURE_MODE"] = "loaded"
+        app.launch()
+
+        waitFor("screen.notification-inbox")
+        waitFor("notification.list.loaded")
+        waitFor("notification.row.ntf_follow")
+        waitFor("notification.row.ntf_like")
+        waitFor("notification.row.ntf_system")
+        waitFor("notification.unread-dot.ntf_follow")
+
+        app.buttons["Notification filters"].tap()
+        tap("notification.filter.unread")
+        XCTAssertTrue(app.descendants(matching: .any)["notification.row.ntf_follow"].exists)
+        XCTAssertFalse(app.descendants(matching: .any)["notification.row.ntf_like"].exists)
+
+        tap("notification.filter.activity")
+        XCTAssertTrue(app.descendants(matching: .any)["notification.row.ntf_follow"].exists)
+        XCTAssertTrue(app.descendants(matching: .any)["notification.row.ntf_like"].exists)
+        XCTAssertFalse(app.descendants(matching: .any)["notification.row.ntf_system"].exists)
+
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.62, dy: 0.16))
+            .press(
+                forDuration: 0.1,
+                thenDragTo: app.coordinate(
+                    withNormalizedOffset: CGVector(dx: 0.22, dy: 0.16)
+                )
+            )
+        tap("notification.filter.system")
+        waitFor("notification.row.ntf_system")
+        XCTAssertFalse(app.descendants(matching: .any)["notification.row.ntf_follow"].exists)
+
+        app.terminate()
+        app.launch()
+        waitFor("notification.row.ntf_follow")
+        app.buttons["Notification filters"].tap()
+        app.buttons["Read All"].tap()
+        XCTAssertFalse(
+            app.descendants(matching: .any)["notification.unread-dot.ntf_follow"]
+                .waitForExistence(timeout: 1)
+        )
+
+        tap("notification.row.ntf_follow")
+        XCTAssertEqual(
+            waitFor("notification.fixture.actor-destination").label,
+            "act_source"
+        )
+        app.navigationBars.buttons.firstMatch.tap()
+
+        tap("notification.row.ntf_like")
+        XCTAssertEqual(
+            waitFor("notification.fixture.asset-destination").label,
+            "ast_card"
+        )
+
+        app.terminate()
+        app.launchEnvironment["CHORAI_NOTIFICATION_FIXTURE_MODE"] = "empty"
+        app.launch()
+        XCTAssertTrue(app.staticTexts["No notifications"].waitForExistence(timeout: 10))
+
+        app.terminate()
+        app.launchEnvironment["CHORAI_NOTIFICATION_FIXTURE_MODE"] = "mark-read-failure"
+        app.launch()
+        waitFor("notification.row.ntf_follow")
+        app.buttons["Notification filters"].tap()
+        app.buttons["Read All"].tap()
+        XCTAssertTrue(
+            app.staticTexts["Couldn’t update notification. Try again."]
+                .waitForExistence(timeout: 10)
+        )
+        XCTAssertFalse(app.alerts.firstMatch.exists)
+    }
+
     func testMainTabsRenderAgainstSeededGoSession() throws {
         launchAuthenticatedApp()
 

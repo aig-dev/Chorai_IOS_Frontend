@@ -1,3 +1,4 @@
+import CoreFlow
 import SwiftUI
 
 struct SideMenuView: View {
@@ -8,6 +9,9 @@ struct SideMenuView: View {
     @State private var navigateToMyProfile = false
     @State private var navigateToHelpReport = false
     @ObservedObject private var userProfileManager = UserProfileManager.shared
+    @StateObject private var notificationStore = NotificationInboxStore(
+        service: NetworkNotificationService()
+    )
     
     // 回调函数
     var onMyNotesTapped: (() -> Void)?
@@ -136,7 +140,12 @@ struct SideMenuView: View {
                                                 onFavoritesTapped?()
                                             }
                                         }
-                                        SideMenuItem(imageName: "notification", title: "Notification", accessibilityIdentifier: "side-menu.notification") {
+                                        SideMenuItem(
+                                            imageName: "notification",
+                                            title: "Notification",
+                                            accessibilityIdentifier: "side-menu.notification",
+                                            showsUnreadIndicator: notificationStore.unreadCount > 0
+                                        ) {
                                             navigateToNotification = true
                                         }
                                         SideMenuItem(imageName: "trash", title: "Trash") {
@@ -225,14 +234,24 @@ struct SideMenuView: View {
             // 当侧边栏出现时加载用户资料
             if isPresented {
                 userProfileManager.fetchCurrentUserProfile()
+                refreshNotificationIndicator()
             }
         }
         .onChange(of: isPresented) { isShowing in
             // 当侧边栏显示时加载用户资料
             if isShowing {
                 userProfileManager.fetchCurrentUserProfile()
+                refreshNotificationIndicator()
             }
         }
+    }
+
+    private func refreshNotificationIndicator() {
+        guard let actorID = AuthManager.shared.currentUser?.id,
+              !actorID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return
+        }
+        notificationStore.load(actorID: actorID)
     }
 }
 
@@ -240,12 +259,20 @@ struct SideMenuItem: View {
     let imageName: String
     let title: String
     let accessibilityIdentifier: String?
+    let showsUnreadIndicator: Bool
     let action: () -> Void
 
-    init(imageName: String, title: String, accessibilityIdentifier: String? = nil, action: @escaping () -> Void) {
+    init(
+        imageName: String,
+        title: String,
+        accessibilityIdentifier: String? = nil,
+        showsUnreadIndicator: Bool = false,
+        action: @escaping () -> Void
+    ) {
         self.imageName = imageName
         self.title = title
         self.accessibilityIdentifier = accessibilityIdentifier
+        self.showsUnreadIndicator = showsUnreadIndicator
         self.action = action
     }
     
@@ -261,6 +288,13 @@ struct SideMenuItem: View {
                 Text(title)
                     .font(.system(size: 16, weight: .medium))
                     .foregroundColor(.white)
+
+                if showsUnreadIndicator {
+                    Circle()
+                        .fill(Color.purple)
+                        .frame(width: 6, height: 6)
+                        .accessibilityIdentifier("side-menu.notification.unread-dot")
+                }
                 
                 Spacer()
             }

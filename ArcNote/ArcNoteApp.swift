@@ -21,6 +21,8 @@ struct ArcNoteApp: App {
         .contains("--ui-test-open-interests")
     private let isNotificationContractUITestRoute = ProcessInfo.processInfo.arguments
         .contains("--ui-test-notification-contract")
+    private let isNotificationInboxUITestRoute = ProcessInfo.processInfo.arguments
+        .contains("--ui-test-notification-inbox")
     private let profileUITestActorID: String? = {
         guard ProcessInfo.processInfo.arguments
             .contains("--ui-test-open-profile") else {
@@ -46,6 +48,14 @@ struct ArcNoteApp: App {
                 Color.clear
             } else if isNotificationContractUITestRoute {
                 NotificationContractFixtureView()
+            } else if isNotificationInboxUITestRoute {
+                NavigationStack {
+                    NotificationView(
+                        service: NotificationInboxFixtureService(),
+                        actorID: "act_fixture",
+                        usesFixtureDestinations: true
+                    )
+                }
             } else if isInterestUITestRoute {
                 NavigationStack {
                     ChooseInterestsView()
@@ -66,6 +76,95 @@ struct ArcNoteApp: App {
 }
 
 #if DEBUG
+private actor NotificationInboxFixtureService: CoreNotificationServing {
+    private enum Mode: String {
+        case loaded
+        case empty
+        case markReadFailure = "mark-read-failure"
+    }
+
+    private let mode: Mode
+    private var readIDs: Set<String> = ["ntf_like"]
+
+    init() {
+        mode = Mode(
+            rawValue: ProcessInfo.processInfo.environment[
+                "CHORAI_NOTIFICATION_FIXTURE_MODE"
+            ] ?? "loaded"
+        ) ?? .loaded
+    }
+
+    func notifications(page: Int, perPage: Int) async throws -> NotificationPage {
+        guard mode != .empty else {
+            return NotificationPage(
+                items: [],
+                page: page,
+                perPage: perPage,
+                total: 0,
+                unreadCount: 0
+            )
+        }
+
+        let items = Self.fixtureItems.map { item -> CommunityNotification in
+            var item = item
+            item.isRead = readIDs.contains(item.id)
+            return item
+        }
+        return NotificationPage(
+            items: page == 1 ? items : [],
+            page: page,
+            perPage: perPage,
+            total: items.count,
+            unreadCount: items.filter { !$0.isRead }.count
+        )
+    }
+
+    func markRead(notificationID: String) async throws {
+        if mode == .markReadFailure {
+            throw NotificationInboxError.transport(code: "fixture_mark_read")
+        }
+        readIDs.insert(notificationID)
+    }
+
+    private static let fixtureItems: [CommunityNotification] = [
+        CommunityNotification(
+            id: "ntf_follow",
+            kind: .follow,
+            displayText: "Mira followed you",
+            sourceActor: NotificationSourceActor(
+                actorID: "act_source",
+                username: "Mira",
+                avatarURL: nil
+            ),
+            target: .actor("act_source"),
+            isRead: false,
+            createdAt: Date().addingTimeInterval(-60)
+        ),
+        CommunityNotification(
+            id: "ntf_like",
+            kind: .like,
+            displayText: "Mira liked your card",
+            sourceActor: NotificationSourceActor(
+                actorID: "act_source",
+                username: "Mira",
+                avatarURL: nil
+            ),
+            target: .asset("ast_card"),
+            isRead: true,
+            createdAt: Date().addingTimeInterval(-120)
+        ),
+        CommunityNotification(
+            id: "ntf_system",
+            kind: .system,
+            displayText: "Your weekly knowledge review is ready",
+            sourceActor: nil,
+            target: .legacy,
+            isRead: false,
+            createdAt: Date().addingTimeInterval(-180)
+        )
+    ]
+}
+
 private struct NotificationContractFixtureView: View {
     private struct Values {
         let actor: String
@@ -452,11 +551,15 @@ private final class APIMigrationSmokeRunner {
             }
 
             let notifications = try await expect("notifications") {
-                NetworkManager.shared.getNotifications(GetNotificationsRequest(page: 1, perPage: 5))
+                NetworkManager.shared.getNotificationInbox(
+                    GetNotificationsRequest(page: 1, perPage: 5)
+                )
             }
             if let notification = notifications.data.first {
                 _ = try await expect("notification-mark-read") {
-                    NetworkManager.shared.markNotificationRead(notificationId: notification.id)
+                    NetworkManager.shared.markNotificationRead(
+                        notificationId: notification.notificationID
+                    )
                 }
             } else {
                 log("PASS notification-mark-read-skipped-empty")

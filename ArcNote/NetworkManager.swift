@@ -1326,25 +1326,6 @@ extension NetworkManager {
     }
 
     // MARK: 通知相关API
-    func getNotifications(
-        _ request: GetNotificationsRequest,
-        presentsError: Bool = true
-    ) -> AnyPublisher<NotificationsResponse, NetworkError> {
-        let parameters: [String: Any] = [
-            "page": request.page,
-            "per_page": request.perPage
-        ]
-
-        return self.request(
-            endpoint: "/api/notifications",
-            method: .get,
-            parameters: parameters,
-            encoding: URLEncoding.default,
-            responseType: NotificationsResponse.self,
-            presentsError: presentsError
-        )
-    }
-
     func getNotificationInbox(
         _ request: GetNotificationsRequest,
         presentsError: Bool = false
@@ -1362,25 +1343,6 @@ extension NetworkManager {
             responseType: NotificationInboxResponse.self,
             presentsError: presentsError
         )
-    }
-
-    func getUnreadCount() -> AnyPublisher<UnreadCountResponse, NetworkError> {
-        let parameters: Parameters = [
-            "page": 1,
-            "per_page": 1
-        ]
-
-        return self.request(
-            endpoint: "/api/notifications",
-            method: .get,
-            parameters: parameters,
-            encoding: URLEncoding.default,
-            responseType: NotificationsResponse.self
-        )
-        .map { response in
-            UnreadCountResponse(success: response.success, message: response.message, unreadCount: response.unreadCount)
-        }
-        .eraseToAnyPublisher()
     }
 
     func markNotificationRead(
