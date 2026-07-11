@@ -24,6 +24,31 @@ final class FlowDeckStoreTests: XCTestCase {
     }
 
     @MainActor
+    func testEmptyPageWithNextTokenContinuesUntilFirstCard() async {
+        let service = MockCoreFlowService()
+        service.recommendedResults = [
+            .success(
+                FlowPage(cards: [], nextRefreshToken: "next-page")
+            ),
+            .success(
+                FlowPage(cards: [card("a")], nextRefreshToken: nil)
+            )
+        ]
+        let store = FlowDeckStore(service: service)
+
+        store.loadInitialIfNeeded()
+        await settle()
+        await settle()
+
+        XCTAssertEqual(store.cards.map(\.id), ["a"])
+        XCTAssertEqual(store.phase, .loaded)
+        XCTAssertEqual(
+            service.requestedRefreshTokens,
+            [nil, "next-page"]
+        )
+    }
+
+    @MainActor
     func testDismissPrefetchesWithCanonicalTokenAndDeduplicates() async {
         let service = MockCoreFlowService()
         service.recommendedResults = [

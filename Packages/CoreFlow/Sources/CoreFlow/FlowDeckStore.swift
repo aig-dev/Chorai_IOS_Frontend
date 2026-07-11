@@ -19,8 +19,10 @@ public final class FlowDeckStore: ObservableObject {
 
     private let service: CoreFlowServing
     private let pageSize: Int
+    private let maximumEmptyPageHops = 8
     private var nextRefreshToken: String?
     private var seenAssetIDs: Set<String> = []
+    private var emptyPageHopCount = 0
     private var isLoadingPage = false
     private var pageCancellable: AnyCancellable?
     private var interactionCancellable: AnyCancellable?
@@ -144,6 +146,7 @@ public final class FlowDeckStore: ObservableObject {
             cards = []
             seenAssetIDs = []
             nextRefreshToken = nil
+            emptyPageHopCount = 0
         } else if nextRefreshToken == nil {
             updatePhaseAfterAdvance()
             return
@@ -166,6 +169,16 @@ public final class FlowDeckStore: ObservableObject {
                         self.phase = self.cards.isEmpty
                             ? .failed("Couldn't load your flow.")
                             : .loaded
+                        return
+                    }
+
+                    if self.cards.isEmpty,
+                       self.nextRefreshToken != nil,
+                       self.emptyPageHopCount < self.maximumEmptyPageHops {
+                        self.emptyPageHopCount += 1
+                        self.requestPage(reset: false)
+                    } else {
+                        self.phase = self.cards.isEmpty ? .empty : .loaded
                     }
                 },
                 receiveValue: { [weak self] page in
@@ -176,7 +189,9 @@ public final class FlowDeckStore: ObservableObject {
                         self.cards.append(card)
                     }
                     self.nextRefreshToken = page.nextRefreshToken
-                    self.phase = self.cards.isEmpty ? .empty : .loaded
+                    if !self.cards.isEmpty {
+                        self.emptyPageHopCount = 0
+                    }
                 }
             )
     }
