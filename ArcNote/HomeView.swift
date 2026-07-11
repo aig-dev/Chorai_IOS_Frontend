@@ -4,7 +4,8 @@ import SwiftUI
 struct HomeView: View {
     @Binding var showSideMenu: Bool
     let refreshID: UUID
-    var onboardingStore: OnboardingGuideStore? = nil
+    var onboardingStore: OnboardingGuideStore?
+    let onNoteCreated: (String, String) -> Void
     @State private var selectedSegment = 0 // 0: Notes, 1: AI
 
     @State private var showPopupMenu = false
@@ -18,6 +19,8 @@ struct HomeView: View {
     @State private var showDeleteConfirmation = false
     @State private var cardToDelete: UserCard? = nil
     @State private var animateDeleteConfirmation = false
+    @State private var isDeletingCard = false
+    @State private var deleteCardError: String?
     @State private var navigateToDetail = false
     @State private var navigateToEdit = false
     @State private var selectedCardId: String? = nil
@@ -25,6 +28,18 @@ struct HomeView: View {
     @State private var selectedActorId: String? = nil
     @State private var navigateToRoot = false
     @State private var rootViewType: String? = nil
+
+    init(
+        showSideMenu: Binding<Bool>,
+        refreshID: UUID,
+        onboardingStore: OnboardingGuideStore? = nil,
+        onNoteCreated: @escaping (String, String) -> Void = { _, _ in }
+    ) {
+        _showSideMenu = showSideMenu
+        self.refreshID = refreshID
+        self.onboardingStore = onboardingStore
+        self.onNoteCreated = onNoteCreated
+    }
     
     // MARK: - 分段控制器背景
     private func segmentBackground(for segment: Int) -> some View {
@@ -152,6 +167,7 @@ struct HomeView: View {
                         .aspectRatio(contentMode: .fit)
                         .frame(width: 24, height: 24)
                 }
+                .accessibilityIdentifier("side-menu.open")
                 
                 Spacer()
                 
@@ -224,6 +240,7 @@ struct HomeView: View {
                 OnboardingGuideLine(
                     store: onboardingStore,
                     allowedStates: [
+                        "elicit_signal",
                         "product_merge_intro",
                         "product_library_intro",
                         "product_quick_capture_intro",
@@ -278,7 +295,8 @@ struct HomeView: View {
                         currentMenuCardData = cardData
                         popupMenuLayout = .grid3x3
                         showPopupMenu = true
-                    }
+                    },
+                    onNoteCreated: onNoteCreated
                 )
             } else {
                 // Collect 列表
@@ -322,7 +340,14 @@ struct HomeView: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("screen.home.content")
-        .popupMenu(isPresented: $showPopupMenu, layout: popupMenuLayout, cardData: currentMenuCardData ?? getCurrentCard(), isOwnCard: selectedSegment == 0)
+        .popupMenu(
+            isPresented: $showPopupMenu,
+            layout: popupMenuLayout,
+            cardData: selectedSegment == 0
+                ? (getCurrentCard() ?? currentMenuCardData)
+                : currentMenuCardData,
+            isOwnCard: selectedSegment == 0
+        )
         .onAppear {
             // 使用默认排序（Latest Edited）
             cardsManager.loadUserCards(refresh: true, sortBy: "updated_at", sortOrder: "desc")
@@ -369,6 +394,7 @@ struct HomeView: View {
             // 找到要删除的卡片数据
             if let card = cardsManager.cards.first(where: { $0.id == cardId }) {
                 cardToDelete = card
+                deleteCardError = nil
                 showDeleteConfirmation = true
                 print("显示删除确认弹窗: cardId=\(cardId)")
             } else {
@@ -465,11 +491,13 @@ struct HomeView: View {
                             .opacity(animateDeleteConfirmation ? 0.5 : 0)
                             .ignoresSafeArea()
                             .onTapGesture {
+                                guard !isDeletingCard else { return }
                                 withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                                     animateDeleteConfirmation = false
                                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                                         showDeleteConfirmation = false
                                         cardToDelete = nil
+                                        deleteCardError = nil
                                     }
                                 }
                             }
@@ -480,11 +508,13 @@ struct HomeView: View {
                             HStack {
                                 Spacer()
                                 Button(action: {
+                                    guard !isDeletingCard else { return }
                                     withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                                         animateDeleteConfirmation = false
                                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                                             showDeleteConfirmation = false
                                             cardToDelete = nil
+                                            deleteCardError = nil
                                         }
                                     }
                                 }) {
@@ -492,6 +522,7 @@ struct HomeView: View {
                                         .font(.title2)
                                         .foregroundColor(.white)
                                 }
+                                .accessibilityIdentifier("home.delete.close")
                             }
                             
                             // 确认文本
@@ -499,16 +530,26 @@ struct HomeView: View {
                                 .font(.system(size: 18, weight: .medium))
                                 .foregroundColor(.white)
                                 .multilineTextAlignment(.center)
+
+                            if let deleteCardError {
+                                Text(deleteCardError)
+                                    .font(.system(size: 13, weight: .regular))
+                                    .foregroundColor(.red.opacity(0.9))
+                                    .multilineTextAlignment(.center)
+                                    .accessibilityIdentifier("home.delete.error")
+                            }
                             
                             // 按钮
                             HStack(spacing: 16) {
                                 // 取消按钮
                                 Button(action: {
+                                    guard !isDeletingCard else { return }
                                     withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                                         animateDeleteConfirmation = false
                                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                                             showDeleteConfirmation = false
                                             cardToDelete = nil
+                                            deleteCardError = nil
                                         }
                                     }
                                 }) {
@@ -530,32 +571,43 @@ struct HomeView: View {
                                             )
                                     )
                                 }
+                                .disabled(isDeletingCard)
+                                .accessibilityIdentifier("home.delete.cancel")
                                 
                                 // 确认删除按钮
                                 Button(action: {
-                                    if let card = cardToDelete {
-                                        cardsManager.deleteCard(cardId: card.id) { result in
-                                            switch result {
-                                            case .success:
-                                                print("卡片删除成功")
-                                                // 清除当前卡片ID
-                                                currentCardId = nil
-                                            case .failure(let error):
-                                                print("卡片删除失败: \(error.localizedDescription)")
+                                    guard let card = cardToDelete, !isDeletingCard else { return }
+                                    isDeletingCard = true
+                                    deleteCardError = nil
+                                    cardsManager.deleteCard(cardId: card.id) { result in
+                                        isDeletingCard = false
+                                        switch result {
+                                        case .success:
+                                            print("卡片删除成功")
+                                            currentCardId = nil
+                                            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                                animateDeleteConfirmation = false
+                                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                                    showDeleteConfirmation = false
+                                                    cardToDelete = nil
+                                                    deleteCardError = nil
+                                                }
                                             }
-                                        }
-                                    }
-                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                                        animateDeleteConfirmation = false
-                                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                                            showDeleteConfirmation = false
-                                            cardToDelete = nil
+                                        case .failure(let error):
+                                            print("卡片删除失败: \(error.localizedDescription)")
+                                            deleteCardError = "Couldn’t move this note to Trash. Please try again."
                                         }
                                     }
                                 }) {
                                     HStack(spacing: 8) {
-                                        Image(systemName: "checkmark")
-                                            .font(.system(size: 16, weight: .medium))
+                                        if isDeletingCard {
+                                            ProgressView()
+                                                .progressViewStyle(.circular)
+                                                .tint(.white)
+                                        } else {
+                                            Image(systemName: "checkmark")
+                                                .font(.system(size: 16, weight: .medium))
+                                        }
                                         Text("Yes")
                                             .font(.system(size: 16, weight: .medium))
                                     }
@@ -567,6 +619,8 @@ struct HomeView: View {
                                             .fill(Color.red)
                                     )
                                 }
+                                .disabled(isDeletingCard)
+                                .accessibilityIdentifier("home.delete.confirm")
                             }
                         }
                         .padding(24)
@@ -581,6 +635,8 @@ struct HomeView: View {
                         .padding(.horizontal, 20)
                         .opacity(animateDeleteConfirmation ? 1 : 0)
                         .scaleEffect(animateDeleteConfirmation ? 1 : 0.8)
+                        .accessibilityElement(children: .contain)
+                        .accessibilityIdentifier("home.delete.confirmation")
                     }
                     .onAppear {
                         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
@@ -629,6 +685,7 @@ struct NotesListView: View {
     @Binding var navigateToDetail: Bool
     @Binding var navigateToEdit: Bool
     let onShowMenu: (UserCard) -> Void
+    let onNoteCreated: (String, String) -> Void
     
     var body: some View {
         ZStack {
@@ -730,7 +787,7 @@ struct NotesListView: View {
                 Spacer()
                 HStack {
                     Spacer()
-                    NavigationLink(destination: NewNoteView()) {
+                    NavigationLink(destination: NewNoteView(onCreated: onNoteCreated)) {
                         ZStack {
                             Circle()
                                 .fill(.ultraThinMaterial.opacity(0.3))
@@ -745,6 +802,7 @@ struct NotesListView: View {
                                 .foregroundColor(.white)
                         }
                     }
+                    .accessibilityIdentifier("note.create")
                     .padding(.trailing, 20)
                     .padding(.bottom, 130)
                 }

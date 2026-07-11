@@ -1422,7 +1422,8 @@ extension NetworkManager {
             endpoint: "/api/cards/\(cardId)",
             method: .delete,
             encoding: URLEncoding.default,
-            responseType: NetworkResponse<CardMessageData>.self
+            responseType: NetworkResponse<CardMessageData>.self,
+            presentsError: false
         )
         .sink(
             receiveCompletion: { completionResult in
@@ -1539,7 +1540,8 @@ extension NetworkManager {
         self.request(
             endpoint: "/api/cards/trash/\(cardId)/restore",
             method: .post,
-            responseType: NetworkResponse<CreateCardData>.self
+            responseType: NetworkResponse<CreateCardData>.self,
+            presentsError: false
         )
         .sink(
             receiveCompletion: { completionResult in
@@ -1560,7 +1562,8 @@ extension NetworkManager {
             endpoint: "/api/cards/trash/\(cardId)/permanent",
             method: .delete,
             encoding: URLEncoding.default,
-            responseType: NetworkResponse<CardMessageData>.self
+            responseType: NetworkResponse<CardMessageData>.self,
+            presentsError: false
         )
         .sink(
             receiveCompletion: { completionResult in

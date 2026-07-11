@@ -1207,6 +1207,217 @@ final class ArcNoteUITests: XCTestCase {
         waitFor("card.home.\(cardId)", timeout: 30)
     }
 
+    func testLibraryOwnedCardVisibilityAndPinMutateGoState() throws {
+        let session = try requireSmokeSession()
+        seedAppSession(session)
+        let suffix = "stewardship-\(Int(Date().timeIntervalSince1970))"
+        let cardID = try createSmokeCard(
+            token: session.token,
+            searchToken: suffix,
+            isPublic: false
+        )
+        defer {
+            permanentlyCleanUpSmokeCard(id: cardID, token: session.token)
+        }
+
+        launchAuthenticatedApp()
+        tap("tab.library")
+        waitFor("card.home.\(cardID)", timeout: 30)
+
+        tap("home.card.menu.\(cardID)")
+        tap("popup-menu.item.public")
+        waitForSmokeCardState(id: cardID, token: session.token) {
+            $0.isPublic
+        }
+
+        waitFor("home.card.menu.\(cardID)", timeout: 30).tap()
+        tap("popup-menu.item.private")
+        waitForSmokeCardState(id: cardID, token: session.token) {
+            !$0.isPublic
+        }
+
+        waitFor("home.card.menu.\(cardID)", timeout: 30).tap()
+        tap("popup-menu.item.pin")
+        waitForSmokeCardState(id: cardID, token: session.token) {
+            $0.isPinned
+        }
+
+        waitFor("home.card.menu.\(cardID)", timeout: 30).tap()
+        waitFor("popup-menu.item.unpin", timeout: 20)
+        captureVisual("library-owned-card-pinned")
+        tap("popup-menu.item.unpin")
+        waitForSmokeCardState(id: cardID, token: session.token) {
+            !$0.isPinned
+        }
+    }
+
+    func testLibrarySoftDeleteMovesCardToTrashAndRestoresIt() throws {
+        let session = try requireSmokeSession()
+        seedAppSession(session)
+        let suffix = "trash-restore-\(Int(Date().timeIntervalSince1970))"
+        let cardID = try createSmokeCard(
+            token: session.token,
+            searchToken: suffix,
+            isPublic: false
+        )
+        defer {
+            permanentlyCleanUpSmokeCard(id: cardID, token: session.token)
+        }
+
+        launchAuthenticatedApp()
+        tap("tab.library")
+        waitFor("card.home.\(cardID)", timeout: 30)
+        tap("home.card.menu.\(cardID)")
+        tap("popup-menu.item.remove")
+
+        waitFor("home.delete.confirmation", timeout: 10)
+        captureVisual("library-soft-delete-confirmation")
+        tap("home.delete.confirm")
+        waitForTrashCard(id: cardID, token: session.token, isPresent: true)
+        waitForMissing("card.home.\(cardID)", timeout: 20)
+
+        tap("side-menu.open")
+        tap("side-menu.item.Trash")
+        waitFor("screen.trash", timeout: 20)
+        waitForTrashCardVisible(cardID)
+        captureVisual("trash-card-ready-to-restore")
+
+        tap("trash.card.restore.\(cardID)")
+        waitForTrashCard(id: cardID, token: session.token, isPresent: false)
+        waitForMissing("trash.card.\(cardID)", timeout: 20)
+        XCTAssertEqual(try fetchSmokeCard(id: cardID, token: session.token).id, cardID)
+    }
+
+    func testLibrarySoftDeleteFailureKeepsRetryableConfirmation() throws {
+        let session = try requireSmokeSession()
+        seedAppSession(session)
+        let suffix = "trash-error-\(Int(Date().timeIntervalSince1970))"
+        let cardID = try createSmokeCard(
+            token: session.token,
+            searchToken: suffix,
+            isPublic: false
+        )
+        defer {
+            permanentlyCleanUpSmokeCard(id: cardID, token: session.token)
+        }
+
+        launchAuthenticatedApp()
+        tap("tab.library")
+        waitFor("card.home.\(cardID)", timeout: 30)
+        tap("home.card.menu.\(cardID)")
+        tap("popup-menu.item.remove")
+        waitFor("home.delete.confirmation", timeout: 10)
+
+        deleteSmokeCard(id: cardID, token: session.token)
+        tap("home.delete.confirm")
+
+        waitFor("home.delete.error", timeout: 20)
+        waitFor("home.delete.confirm")
+        XCTAssertFalse(
+            app.alerts["Error"].exists,
+            "The retryable delete dialog must own its error presentation"
+        )
+        captureVisual("library-soft-delete-retryable-error")
+    }
+
+    func testTrashPermanentlyDeletesCardFromGo() throws {
+        let session = try requireSmokeSession()
+        seedAppSession(session)
+        let suffix = "trash-permanent-\(Int(Date().timeIntervalSince1970))"
+        let cardID = try createSmokeCard(
+            token: session.token,
+            searchToken: suffix,
+            isPublic: false
+        )
+        defer {
+            permanentlyCleanUpSmokeCard(id: cardID, token: session.token)
+        }
+        deleteSmokeCard(id: cardID, token: session.token)
+        waitForTrashCard(id: cardID, token: session.token, isPresent: true)
+        XCTAssertEqual(try fetchSmokeTrashCardIDsInOrder(token: session.token).first, cardID)
+
+        launchAuthenticatedApp()
+        tap("side-menu.open")
+        tap("side-menu.item.Trash")
+        waitFor("screen.trash", timeout: 20)
+        waitForTrashCardVisible(cardID)
+        tap("trash.card.delete.\(cardID)")
+        waitFor("trash.delete.confirmation", timeout: 10)
+        captureVisual("trash-permanent-delete-confirmation")
+        tap("trash.delete.confirm")
+
+        waitForTrashCard(id: cardID, token: session.token, isPresent: false)
+        waitForMissing("trash.card.\(cardID)", timeout: 20)
+    }
+
+    func testTrashPermanentDeleteFailureKeepsRetryableConfirmation() throws {
+        let session = try requireSmokeSession()
+        seedAppSession(session)
+        let suffix = "trash-permanent-error-\(Int(Date().timeIntervalSince1970))"
+        let cardID = try createSmokeCard(
+            token: session.token,
+            searchToken: suffix,
+            isPublic: false
+        )
+        defer {
+            permanentlyCleanUpSmokeCard(id: cardID, token: session.token)
+        }
+        deleteSmokeCard(id: cardID, token: session.token)
+        waitForTrashCard(id: cardID, token: session.token, isPresent: true)
+
+        launchAuthenticatedApp()
+        tap("side-menu.open")
+        tap("side-menu.item.Trash")
+        waitFor("screen.trash", timeout: 20)
+        waitForTrashCardVisible(cardID)
+        tap("trash.card.delete.\(cardID)")
+        waitFor("trash.delete.confirmation", timeout: 10)
+
+        permanentlyCleanUpSmokeCard(id: cardID, token: session.token)
+        tap("trash.delete.confirm")
+
+        waitFor("trash.delete.error", timeout: 20)
+        waitFor("trash.delete.confirm")
+        XCTAssertFalse(app.alerts["Error"].exists)
+        captureVisual("trash-permanent-delete-retryable-error")
+
+        tap("trash.delete.cancel")
+        waitForMissing("trash.delete.confirmation", timeout: 10)
+        XCTAssertFalse(app.descendants(matching: .any)["trash.card.error.\(cardID)"].exists)
+    }
+
+    func testTrashRestoreFailureStaysOnCardAndCanRetry() throws {
+        let session = try requireSmokeSession()
+        seedAppSession(session)
+        let suffix = "trash-restore-error-\(Int(Date().timeIntervalSince1970))"
+        let cardID = try createSmokeCard(
+            token: session.token,
+            searchToken: suffix,
+            isPublic: false
+        )
+        defer {
+            permanentlyCleanUpSmokeCard(id: cardID, token: session.token)
+        }
+        deleteSmokeCard(id: cardID, token: session.token)
+        waitForTrashCard(id: cardID, token: session.token, isPresent: true)
+        XCTAssertEqual(try fetchSmokeTrashCardIDsInOrder(token: session.token).first, cardID)
+
+        launchAuthenticatedApp()
+        tap("side-menu.open")
+        tap("side-menu.item.Trash")
+        waitFor("screen.trash", timeout: 20)
+        waitForTrashCardVisible(cardID)
+
+        permanentlyCleanUpSmokeCard(id: cardID, token: session.token)
+        tap("trash.card.restore.\(cardID)")
+
+        waitFor("trash.card.error.\(cardID)", timeout: 20)
+        waitFor("trash.card.restore.\(cardID)")
+        XCTAssertTrue(app.descendants(matching: .any)["trash.card.\(cardID)"].exists)
+        XCTAssertFalse(app.alerts["Error"].exists)
+        captureVisual("trash-restore-retryable-error")
+    }
+
     func testLibraryCardShareLoadsGoArtifactAndOpensNativeShare() throws {
         let session = try requireSmokeSession()
         seedAppSession(session)
@@ -2410,11 +2621,21 @@ final class ArcNoteUITests: XCTestCase {
             let title: String?
             let content: String
             let isPublic: Bool
+            let isPinned: Bool
 
             enum CodingKeys: String, CodingKey {
                 case id, title, content
                 case isPublic = "is_public"
+                case isPinned = "is_pinned"
             }
+        }
+    }
+
+    private struct SmokeTrashListResponse: Decodable {
+        let data: [SmokeTrashCard]
+
+        struct SmokeTrashCard: Decodable {
+            let id: String
         }
     }
 
@@ -2915,6 +3136,14 @@ final class ArcNoteUITests: XCTestCase {
     }
 
     private func createPublicSmokeCard(token: String, searchToken: String) throws -> String {
+        try createSmokeCard(token: token, searchToken: searchToken, isPublic: true)
+    }
+
+    private func createSmokeCard(
+        token: String,
+        searchToken: String,
+        isPublic: Bool
+    ) throws -> String {
         let baseURL = ProcessInfo.processInfo.environment["CHORAI_API_BASE_URL"] ?? "http://127.0.0.1:8080"
         guard let url = URL(string: "\(baseURL)/api/cards") else {
             throw NSError(domain: "ArcNoteUITests", code: 2, userInfo: [NSLocalizedDescriptionKey: "Invalid Go API base URL"])
@@ -2928,7 +3157,7 @@ final class ArcNoteUITests: XCTestCase {
             "title": "iOS typed search UI \(searchToken)",
             "content": "iOS typed search result navigation smoke \(searchToken)",
             "tags": ["ios-ui-smoke", searchToken],
-            "is_public": true
+            "is_public": isPublic
         ])
 
         let response = try sendRequest(request, responseType: SmokeCardResponse.self)
@@ -2945,6 +3174,86 @@ final class ArcNoteUITests: XCTestCase {
         request.httpMethod = "DELETE"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         _ = try? sendRawRequest(request)
+    }
+
+    private func permanentlyCleanUpSmokeCard(id: String, token: String) {
+        deleteSmokeCard(id: id, token: token)
+        let baseURL = ProcessInfo.processInfo.environment["CHORAI_API_BASE_URL"] ?? "http://127.0.0.1:8080"
+        guard let url = URL(string: "\(baseURL)/api/cards/trash/\(id)/permanent") else {
+            return
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        _ = try? sendRawRequest(request)
+    }
+
+    private func waitForSmokeCardState(
+        id: String,
+        token: String,
+        timeout: TimeInterval = 20,
+        predicate: (SmokeCardResponse.SmokeCardData) -> Bool,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if let card = try? fetchSmokeCard(id: id, token: token), predicate(card) {
+                return
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+        }
+        XCTFail("Go card state did not converge for \(id)", file: file, line: line)
+    }
+
+    private func waitForTrashCard(
+        id: String,
+        token: String,
+        isPresent: Bool,
+        timeout: TimeInterval = 20,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if let ids = try? fetchSmokeTrashCardIDs(token: token),
+               ids.contains(id) == isPresent {
+                return
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+        }
+        XCTFail(
+            "Go trash state did not converge for \(id), expected present=\(isPresent)",
+            file: file,
+            line: line
+        )
+    }
+
+    private func waitForTrashCardVisible(
+        _ id: String,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        if app.descendants(matching: .any)["trash.card.\(id)"].waitForExistence(timeout: 20) {
+            return
+        }
+        captureVisual("trash-card-not-visible")
+        XCTFail("Newest Trash card \(id) was not visible on the first page", file: file, line: line)
+    }
+
+    private func fetchSmokeTrashCardIDs(token: String) throws -> Set<String> {
+        Set(try fetchSmokeTrashCardIDsInOrder(token: token))
+    }
+
+    private func fetchSmokeTrashCardIDsInOrder(token: String) throws -> [String] {
+        let baseURL = ProcessInfo.processInfo.environment["CHORAI_API_BASE_URL"] ?? "http://127.0.0.1:8080"
+        guard let url = URL(string: "\(baseURL)/api/cards/trash?page=1&per_page=100") else {
+            throw URLError(.badURL)
+        }
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        let response = try sendRequest(request, responseType: SmokeTrashListResponse.self)
+        return response.data.map(\.id)
     }
 
     private func fetchSmokeCard(

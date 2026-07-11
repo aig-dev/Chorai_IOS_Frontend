@@ -6,6 +6,9 @@ struct TrashView: View {
     @State private var showDeleteConfirmation = false
     @State private var cardToDelete: TrashCard?
     @State private var animateDeleteConfirmation = false
+    @State private var busyCardID: String?
+    @State private var actionError: String?
+    @State private var actionErrorCardID: String?
     
     var body: some View {
         ZStack {
@@ -79,6 +82,22 @@ struct TrashView: View {
                             .padding(.top, 16)
                         Spacer()
                     }
+                    .accessibilityIdentifier("trash.loading")
+                } else if let error = trashManager.error, trashManager.trashCards.isEmpty {
+                    VStack(spacing: 16) {
+                        Spacer()
+                        Text(error.localizedDescription)
+                            .font(.system(size: 14, weight: .regular))
+                            .foregroundColor(.white.opacity(0.8))
+                            .multilineTextAlignment(.center)
+                        Button("Retry") {
+                            trashManager.loadTrashCards(refresh: true)
+                        }
+                        .foregroundColor(.white)
+                        Spacer()
+                    }
+                    .padding(.horizontal, 32)
+                    .accessibilityIdentifier("trash.load.error")
                 } else if trashManager.trashCards.isEmpty {
                     // 空状态
                     VStack {
@@ -100,23 +119,38 @@ struct TrashView: View {
                             .padding(.top, 8)
                         Spacer()
                     }
+                    .accessibilityIdentifier("trash.empty")
                 } else {
                     ScrollView {
                         LazyVStack(spacing: 16) {
                             ForEach(trashManager.trashCards) { card in
                                 TrashCardView(
                                     card: card,
+                                    isBusy: busyCardID == card.id,
+                                    actionError: actionErrorCardID == card.id && !showDeleteConfirmation
+                                        ? actionError
+                                        : nil,
                                     onRestore: {
+                                        guard busyCardID == nil else { return }
+                                        busyCardID = card.id
+                                        actionError = nil
+                                        actionErrorCardID = nil
                                         trashManager.restoreCard(cardId: card.id) { result in
+                                            busyCardID = nil
                                             switch result {
                                             case .success:
                                                 print("卡片恢复成功")
                                             case .failure(let error):
                                                 print("卡片恢复失败: \(error.localizedDescription)")
+                                                actionError = "Couldn’t restore this note. Please try again."
+                                                actionErrorCardID = card.id
                                             }
                                         }
                                     },
                                     onPermanentlyDelete: {
+                                        guard busyCardID == nil else { return }
+                                        actionError = nil
+                                        actionErrorCardID = nil
                                         cardToDelete = card
                                         showDeleteConfirmation = true
                                     }
@@ -139,6 +173,7 @@ struct TrashView: View {
                                         )
                                 }
                                 .padding(.top, 20)
+                                .accessibilityIdentifier("trash.load-more")
                             }
                             
                             if trashManager.isLoading {
@@ -159,6 +194,7 @@ struct TrashView: View {
         }
         .navigationBarHidden(true)
         .navigationBarBackButtonHidden(true)
+        .accessibilityIdentifier("screen.trash")
         .onAppear {
             trashManager.loadTrashCards(refresh: true)
         }
@@ -172,11 +208,14 @@ struct TrashView: View {
                             .opacity(animateDeleteConfirmation ? 0.5 : 0)
                             .ignoresSafeArea()
                             .onTapGesture {
+                                guard busyCardID == nil else { return }
                                 withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                                     animateDeleteConfirmation = false
                                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                                         showDeleteConfirmation = false
                                         cardToDelete = nil
+                                        actionError = nil
+                                        actionErrorCardID = nil
                                     }
                                 }
                             }
@@ -187,11 +226,14 @@ struct TrashView: View {
                             HStack {
                                 Spacer()
                                 Button(action: {
+                                    guard busyCardID == nil else { return }
                                     withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                                         animateDeleteConfirmation = false
                                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                                             showDeleteConfirmation = false
                                             cardToDelete = nil
+                                            actionError = nil
+                                            actionErrorCardID = nil
                                         }
                                     }
                                 }) {
@@ -199,6 +241,7 @@ struct TrashView: View {
                                         .font(.title2)
                                         .foregroundColor(.white)
                                 }
+                                .accessibilityIdentifier("trash.delete.close")
                             }
                             
                             // 确认文本
@@ -206,16 +249,27 @@ struct TrashView: View {
                                 .font(.system(size: 18, weight: .medium))
                                 .foregroundColor(.white)
                                 .multilineTextAlignment(.center)
+
+                            if let actionError {
+                                Text(actionError)
+                                    .font(.system(size: 13, weight: .regular))
+                                    .foregroundColor(.red.opacity(0.9))
+                                    .multilineTextAlignment(.center)
+                                    .accessibilityIdentifier("trash.delete.error")
+                            }
                             
                             // 按钮
                             HStack(spacing: 16) {
                                 // 取消按钮
                                 Button(action: {
+                                    guard busyCardID == nil else { return }
                                     withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                                         animateDeleteConfirmation = false
                                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                                             showDeleteConfirmation = false
                                             cardToDelete = nil
+                                            actionError = nil
+                                            actionErrorCardID = nil
                                         }
                                     }
                                 }) {
@@ -237,30 +291,45 @@ struct TrashView: View {
                                             )
                                     )
                                 }
+                                .disabled(busyCardID != nil)
+                                .accessibilityIdentifier("trash.delete.cancel")
                                 
                                 // 确认删除按钮
                                 Button(action: {
-                                    if let card = cardToDelete {
-                                        trashManager.permanentlyDeleteCard(cardId: card.id) { result in
-                                            switch result {
-                                            case .success:
-                                                print("卡片永久删除成功")
-                                            case .failure(let error):
-                                                print("卡片永久删除失败: \(error.localizedDescription)")
+                                    guard let card = cardToDelete, busyCardID == nil else { return }
+                                    busyCardID = card.id
+                                    actionError = nil
+                                    actionErrorCardID = nil
+                                    trashManager.permanentlyDeleteCard(cardId: card.id) { result in
+                                        busyCardID = nil
+                                        switch result {
+                                        case .success:
+                                            print("卡片永久删除成功")
+                                            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                                animateDeleteConfirmation = false
+                                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                                    showDeleteConfirmation = false
+                                                    cardToDelete = nil
+                                                    actionError = nil
+                                                    actionErrorCardID = nil
+                                                }
                                             }
-                                        }
-                                    }
-                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                                        animateDeleteConfirmation = false
-                                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                                            showDeleteConfirmation = false
-                                            cardToDelete = nil
+                                        case .failure(let error):
+                                            print("卡片永久删除失败: \(error.localizedDescription)")
+                                            actionError = "Couldn’t permanently delete this note. Please try again."
+                                            actionErrorCardID = card.id
                                         }
                                     }
                                 }) {
                                     HStack(spacing: 8) {
-                                        Image(systemName: "checkmark")
-                                            .font(.system(size: 16, weight: .medium))
+                                        if busyCardID == cardToDelete?.id {
+                                            ProgressView()
+                                                .progressViewStyle(.circular)
+                                                .tint(.white)
+                                        } else {
+                                            Image(systemName: "checkmark")
+                                                .font(.system(size: 16, weight: .medium))
+                                        }
                                         Text("Yes")
                                             .font(.system(size: 16, weight: .medium))
                                     }
@@ -272,6 +341,8 @@ struct TrashView: View {
                                             .fill(Color.red)
                                     )
                                 }
+                                .disabled(busyCardID != nil)
+                                .accessibilityIdentifier("trash.delete.confirm")
                             }
                         }
                         .padding(24)
@@ -286,6 +357,8 @@ struct TrashView: View {
                         .padding(.horizontal, 20)
                         .opacity(animateDeleteConfirmation ? 1 : 0)
                         .scaleEffect(animateDeleteConfirmation ? 1 : 0.8)
+                        .accessibilityElement(children: .contain)
+                        .accessibilityIdentifier("trash.delete.confirmation")
                     }
                     .onAppear {
                         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
@@ -297,24 +370,13 @@ struct TrashView: View {
         )
     }
     
-    // MARK: 格式化删除日期
-    private func formatTrashDate(_ dateString: String) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
-        
-        if let date = formatter.date(from: dateString) {
-            let displayFormatter = DateFormatter()
-            displayFormatter.dateFormat = "MMM dd, yyyy"
-            return displayFormatter.string(from: date)
-        }
-        
-        return "Unknown date"
-    }
 }
 
 // 垃圾桶卡片视图
 struct TrashCardView: View {
     let card: TrashCard
+    let isBusy: Bool
+    let actionError: String?
     let onRestore: () -> Void
     let onPermanentlyDelete: () -> Void
     
@@ -349,11 +411,27 @@ struct TrashCardView: View {
             Text("Automatically delete after \(card.daysRemaining) days.")
                 .font(.system(size: 12, weight: .regular))
                 .foregroundColor(.orange)
+
+            if let actionError {
+                Text(actionError)
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundColor(.red.opacity(0.9))
+                    .multilineTextAlignment(.leading)
+                    .accessibilityIdentifier("trash.card.error.\(card.id)")
+            }
             
             // 操作按钮
             HStack(spacing: 12) {
                 Button(action: onRestore) {
-                    Text("Restore")
+                    Group {
+                        if isBusy {
+                            ProgressView()
+                                .progressViewStyle(.circular)
+                                .tint(.white)
+                        } else {
+                            Text("Restore")
+                        }
+                    }
                         .font(.system(size: 14, weight: .medium))
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity)
@@ -367,6 +445,8 @@ struct TrashCardView: View {
                                 .overlay(restoreButtonBottomEdgeHighlight)
                         )
                 }
+                .disabled(isBusy)
+                .accessibilityIdentifier("trash.card.restore.\(card.id)")
                 
                 Button(action: onPermanentlyDelete) {
                     Text("Permanently Delete")
@@ -383,6 +463,8 @@ struct TrashCardView: View {
                                 .overlay(deleteButtonBottomEdgeHighlight)
                         )
                 }
+                .disabled(isBusy)
+                .accessibilityIdentifier("trash.card.delete.\(card.id)")
             }
         }
         .padding(20)
@@ -394,6 +476,8 @@ struct TrashCardView: View {
                 .overlay(cardTopEdgeHighlight)
                 .overlay(cardBottomEdgeHighlight)
         )
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("trash.card.\(card.id)")
     }
     
     // MARK: 卡片高光效果
@@ -599,10 +683,11 @@ struct TrashCardView: View {
     
     // MARK: 格式化删除日期
     private func formatTrashDate(_ dateString: String) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
-        
-        if let date = formatter.date(from: dateString) {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let date = formatter.date(from: dateString) ?? ISO8601DateFormatter().date(from: dateString)
+
+        if let date {
             let displayFormatter = DateFormatter()
             displayFormatter.dateFormat = "MMM dd, yyyy"
             return displayFormatter.string(from: date)

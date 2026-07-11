@@ -272,8 +272,9 @@ class HomeCardsManager: ObservableObject {
                                 rate: self?.cards[index].rate ?? 0
                             )
                         }
-                        // 刷新Notes列表
-                        self?.loadUserCards(refresh: true)
+                        // The visibility response is the committed source state. The card
+                        // list is an asynchronous projection and can briefly lag behind it,
+                        // so an immediate reload would overwrite this value with stale data.
                         completion(.success(true))
                     } else {
                         print("卡片可见性切换失败: \(response.message)")
