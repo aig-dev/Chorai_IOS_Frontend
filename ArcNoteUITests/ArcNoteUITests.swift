@@ -941,6 +941,263 @@ final class ArcNoteUITests: XCTestCase {
         waitForMissing("notification.unread-dot.\(notificationId)", timeout: 10)
     }
 
+    func testFollowNotificationOpensSourceProfileAndPersistsRead() throws {
+        let recipient = try requireSmokeSession()
+        let source = try requireSecondarySmokeSession()
+        try? setSmokeFollowing(actorID: recipient.actorId, token: source.token, following: false)
+        defer {
+            try? setSmokeFollowing(actorID: recipient.actorId, token: source.token, following: false)
+        }
+        let existing = try notificationIDs(
+            sourceType: "FOLLOW",
+            targetID: source.actorId,
+            token: recipient.token
+        )
+        try setSmokeFollowing(actorID: recipient.actorId, token: source.token, following: true)
+        let notification = try waitForSmokeNotification(
+            sourceType: "FOLLOW",
+            targetID: source.actorId,
+            excluding: existing,
+            token: recipient.token
+        )
+
+        seedAppSession(recipient)
+        openNotificationInbox(notificationID: notification.notificationId)
+        captureVisual("notification-follow-unread")
+        tap("notification.row.\(notification.notificationId)")
+
+        waitFor("screen.user-profile", timeout: 30)
+        XCTAssertEqual(
+            waitFor("user-profile.actor-id").label
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+            source.actorId
+        )
+        captureVisual("notification-follow-source-profile")
+        waitForNotificationReadState(
+            notificationId: notification.notificationId,
+            token: recipient.token,
+            expected: true
+        )
+        XCTAssertFalse(app.alerts.firstMatch.exists)
+    }
+
+    func testLikeNotificationOpensCanonicalCard() throws {
+        let recipient = try requireSmokeSession()
+        let source = try requireSecondarySmokeSession()
+        let cardID = try createPublicSmokeCard(
+            token: recipient.token,
+            searchToken: "notification-like-\(Int(Date().timeIntervalSince1970))"
+        )
+        try? setSmokeLikeStatus(false, id: cardID, token: source.token)
+        defer {
+            try? setSmokeLikeStatus(false, id: cardID, token: source.token)
+            deleteSmokeCard(id: cardID, token: recipient.token)
+        }
+        let existing = try notificationIDs(
+            sourceType: "LIKE",
+            targetID: cardID,
+            token: recipient.token
+        )
+        try setSmokeLikeStatus(true, id: cardID, token: source.token)
+        let notification = try waitForSmokeNotification(
+            sourceType: "LIKE",
+            targetID: cardID,
+            excluding: existing,
+            token: recipient.token
+        )
+
+        seedAppSession(recipient)
+        openNotificationInbox(notificationID: notification.notificationId)
+        tap("notification.row.\(notification.notificationId)")
+
+        waitFor("screen.detail.loaded", timeout: 30)
+        XCTAssertEqual(
+            waitFor("screen.detail.card-id").label
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+            cardID
+        )
+        captureVisual("notification-like-canonical-card")
+        waitForNotificationReadState(
+            notificationId: notification.notificationId,
+            token: recipient.token,
+            expected: true
+        )
+        XCTAssertFalse(app.alerts.firstMatch.exists)
+    }
+
+    func testCommentNotificationOpensCanonicalCard() throws {
+        let recipient = try requireSmokeSession()
+        let source = try requireSecondarySmokeSession()
+        let cardID = try createPublicSmokeCard(
+            token: recipient.token,
+            searchToken: "notification-comment-\(Int(Date().timeIntervalSince1970))"
+        )
+        defer { deleteSmokeCard(id: cardID, token: recipient.token) }
+        let existing = try notificationIDs(
+            sourceType: "COMMENT",
+            targetID: cardID,
+            token: recipient.token
+        )
+        try createSmokeComment(
+            cardID: cardID,
+            body: "Notification comment \(UUID().uuidString)",
+            token: source.token
+        )
+        let notification = try waitForSmokeNotification(
+            sourceType: "COMMENT",
+            targetID: cardID,
+            excluding: existing,
+            token: recipient.token
+        )
+
+        seedAppSession(recipient)
+        openNotificationInbox(notificationID: notification.notificationId)
+        tap("notification.row.\(notification.notificationId)")
+
+        waitFor("screen.detail.loaded", timeout: 30)
+        XCTAssertEqual(
+            waitFor("screen.detail.card-id").label
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+            cardID
+        )
+        captureVisual("notification-comment-canonical-card")
+        waitForNotificationReadState(
+            notificationId: notification.notificationId,
+            token: recipient.token,
+            expected: true
+        )
+        XCTAssertFalse(app.alerts.firstMatch.exists)
+    }
+
+    func testNotificationReadAllAndUnreadFilterStayCanonical() throws {
+        let recipient = try requireSmokeSession()
+        let source = try requireSecondarySmokeSession()
+        try? setSmokeFollowing(actorID: recipient.actorId, token: source.token, following: false)
+        let before = try notificationIDs(
+            sourceType: "FOLLOW",
+            targetID: source.actorId,
+            token: recipient.token
+        )
+        try setSmokeFollowing(actorID: recipient.actorId, token: source.token, following: true)
+        defer {
+            try? setSmokeFollowing(actorID: recipient.actorId, token: source.token, following: false)
+        }
+        let notification = try waitForSmokeNotification(
+            sourceType: "FOLLOW",
+            targetID: source.actorId,
+            excluding: before,
+            token: recipient.token
+        )
+
+        seedAppSession(recipient)
+        launchAuthenticatedApp()
+        tap("side-menu.open")
+        waitFor("side-menu.notification-unread", timeout: 30)
+        captureVisual("notification-side-menu-unread-dot")
+        tap("side-menu.notification")
+        waitFor("notification.row.\(notification.notificationId)", timeout: 30)
+        captureVisual("notification-read-all-before")
+        app.buttons["Notification filters"].tap()
+        app.buttons["Read All"].tap()
+        waitForNotificationReadState(
+            notificationId: notification.notificationId,
+            token: recipient.token,
+            expected: true
+        )
+        tap("notification.filter.unread")
+        waitForMissing("notification.row.\(notification.notificationId)", timeout: 15)
+        captureVisual("notification-read-all-filtered")
+        XCTAssertFalse(app.alerts.firstMatch.exists)
+    }
+
+    func testNotificationMutationFailureRemainsInlineAndRestoresUnread() throws {
+        let recipient = try requireFreshSmokeSession()
+        let source = try requireSecondarySmokeSession()
+        try? setSmokeFollowing(actorID: recipient.actorId, token: source.token, following: false)
+        let before = try notificationIDs(
+            sourceType: "FOLLOW",
+            targetID: source.actorId,
+            token: recipient.token
+        )
+        try setSmokeFollowing(actorID: recipient.actorId, token: source.token, following: true)
+        defer {
+            try? setSmokeFollowing(actorID: recipient.actorId, token: source.token, following: false)
+        }
+        let notification = try waitForSmokeNotification(
+            sourceType: "FOLLOW",
+            targetID: source.actorId,
+            excluding: before,
+            token: recipient.token
+        )
+
+        seedAppSession(recipient)
+        openNotificationInbox(notificationID: notification.notificationId)
+        try revokeSmokeSession(token: recipient.token)
+        tap("notification.row.\(notification.notificationId)")
+        XCTAssertTrue(
+            app.staticTexts["Couldn’t update notification. Try again."]
+                .waitForExistence(timeout: 20)
+        )
+        waitFor("screen.notification-inbox")
+        captureVisual("notification-inline-mutation-failure")
+        XCTAssertFalse(app.alerts.firstMatch.exists)
+
+        let password = ProcessInfo.processInfo.environment[
+            "CHORAI_UI_TEST_PASSWORD"
+        ] ?? "Password123"
+        let renewed = recipient.email.isEmpty
+            ? fetchLocalPhoneSmokeSession(
+                phone: ProcessInfo.processInfo.environment[
+                    "CHORAI_UI_TEST_DISPOSABLE_PHONE"
+                ]
+            )
+            : fetchSmokeSession(email: recipient.email, password: password)
+        guard let renewed else {
+            XCTFail("Unable to re-authenticate notification recipient")
+            return
+        }
+        Self.cachedSmokeSession = renewed
+        waitForNotificationReadState(
+            notificationId: notification.notificationId,
+            token: renewed.token,
+            expected: false
+        )
+    }
+
+    func testLegacyNotificationUsesDetailFallback() throws {
+        let recipient = try requireSmokeSession()
+        let notificationID = try requireSmokeNotificationId()
+        guard try fetchNotificationReadState(
+            notificationId: notificationID,
+            token: recipient.token
+        ) == false else {
+            XCTFail("Legacy notification fixture must start unread")
+            return
+        }
+
+        seedAppSession(recipient)
+        openNotificationInbox(notificationID: notificationID)
+        app.buttons["Notification filters"].tap()
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.62, dy: 0.16))
+            .press(
+                forDuration: 0.1,
+                thenDragTo: app.coordinate(
+                    withNormalizedOffset: CGVector(dx: 0.22, dy: 0.16)
+                )
+            )
+        tap("notification.filter.system")
+        tap("notification.row.\(notificationID)")
+        waitFor("notification.detail.loaded", timeout: 20)
+        waitForStaticText("Legacy notification fixture", timeout: 10)
+        captureVisual("notification-legacy-detail")
+        waitForNotificationReadState(
+            notificationId: notificationID,
+            token: recipient.token,
+            expected: true
+        )
+        XCTAssertFalse(app.alerts.firstMatch.exists)
+    }
+
     func testExploreRecommendedCardOpensGoDetailRoute() throws {
         app.launchArguments.append("--ui-test-open-recommended-detail")
         launchAuthenticatedApp()
@@ -2351,10 +2608,14 @@ final class ArcNoteUITests: XCTestCase {
         if let baseURL = environment["CHORAI_API_BASE_URL"], !baseURL.isEmpty {
             app.launchEnvironment["CHORAI_API_BASE_URL"] = baseURL
         }
-        if let token = environment["CHORAI_UI_TEST_AUTH_TOKEN"], !token.isEmpty {
+        if app.launchEnvironment["CHORAI_UI_TEST_AUTH_TOKEN"] == nil,
+           let token = environment["CHORAI_UI_TEST_AUTH_TOKEN"],
+           !token.isEmpty {
             app.launchEnvironment["CHORAI_UI_TEST_AUTH_TOKEN"] = token
         }
-        if let actorId = environment["CHORAI_UI_TEST_ACTOR_ID"], !actorId.isEmpty {
+        if app.launchEnvironment["CHORAI_UI_TEST_ACTOR_ID"] == nil,
+           let actorId = environment["CHORAI_UI_TEST_ACTOR_ID"],
+           !actorId.isEmpty {
             app.launchEnvironment["CHORAI_UI_TEST_ACTOR_ID"] = actorId
         }
         if app.launchEnvironment["CHORAI_UI_TEST_AUTH_TOKEN"] == nil,
@@ -3511,12 +3772,21 @@ final class ArcNoteUITests: XCTestCase {
 
         struct SmokeNotification: Decodable {
             let notificationId: String
+            let sourceType: String
             let isRead: Bool
+            let target: SmokeNotificationTarget?
 
             enum CodingKeys: String, CodingKey {
                 case notificationId = "notification_id"
+                case sourceType = "source_type"
                 case isRead = "is_read"
+                case target
             }
+        }
+
+        struct SmokeNotificationTarget: Decodable {
+            let type: String
+            let id: String
         }
     }
 
@@ -3763,6 +4033,9 @@ final class ArcNoteUITests: XCTestCase {
     }
 
     private func requireSmokeSession(file: StaticString = #filePath, line: UInt = #line) throws -> SmokeSession {
+        if let cached = Self.cachedSmokeSession {
+            return cached
+        }
         let environment = ProcessInfo.processInfo.environment
         if let token = environment["CHORAI_UI_TEST_AUTH_TOKEN"], !token.isEmpty {
             return SmokeSession(
@@ -3804,7 +4077,22 @@ final class ArcNoteUITests: XCTestCase {
         file: StaticString = #filePath,
         line: UInt = #line
     ) throws -> SmokeSession {
-        if let session = fetchLocalPhoneSmokeSession() {
+        let environment = ProcessInfo.processInfo.environment
+        if let token = environment["CHORAI_UI_TEST_DISPOSABLE_AUTH_TOKEN"],
+           let actorID = environment["CHORAI_UI_TEST_DISPOSABLE_ACTOR_ID"],
+           !token.isEmpty,
+           !actorID.isEmpty {
+            return SmokeSession(
+                token: token,
+                actorId: actorID,
+                email: environment["CHORAI_UI_TEST_DISPOSABLE_EMAIL"] ?? "",
+                username: environment["CHORAI_UI_TEST_DISPOSABLE_USERNAME"]
+                    ?? "notification-disposable"
+            )
+        }
+        if let session = fetchLocalPhoneSmokeSession(
+            phone: environment["CHORAI_UI_TEST_DISPOSABLE_PHONE"]
+        ) {
             return session
         }
         XCTFail(
@@ -3827,6 +4115,18 @@ final class ArcNoteUITests: XCTestCase {
         line: UInt = #line
     ) throws -> SmokeSession {
         let environment = ProcessInfo.processInfo.environment
+        if let token = environment["CHORAI_UI_TEST_TARGET_AUTH_TOKEN"],
+           let actorID = environment["CHORAI_UI_TEST_TARGET_ACTOR_ID"],
+           !token.isEmpty,
+           !actorID.isEmpty {
+            return SmokeSession(
+                token: token,
+                actorId: actorID,
+                email: environment["CHORAI_UI_TEST_TARGET_EMAIL"] ?? "",
+                username: environment["CHORAI_UI_TEST_TARGET_USERNAME"]
+                    ?? "notification-source"
+            )
+        }
         let email = environment["CHORAI_UI_TEST_TARGET_EMAIL"]
             ?? "ios-smoke-b-20260619@example.com"
         let password = environment["CHORAI_UI_TEST_TARGET_PASSWORD"]
@@ -4714,13 +5014,21 @@ final class ArcNoteUITests: XCTestCase {
     }
 
     private func fetchNotificationReadState(notificationId: String, token: String) throws -> Bool? {
+        try fetchSmokeNotifications(token: token).first(where: {
+            $0.notificationId == notificationId
+        })?.isRead
+    }
+
+    private func fetchSmokeNotifications(
+        token: String
+    ) throws -> [SmokeNotificationsResponse.SmokeNotification] {
         let baseURL = ProcessInfo.processInfo.environment["CHORAI_API_BASE_URL"] ?? "http://127.0.0.1:8080"
         guard var components = URLComponents(string: "\(baseURL)/api/notifications") else {
             throw NSError(domain: "ArcNoteUITests", code: 10, userInfo: [NSLocalizedDescriptionKey: "Invalid Go notifications URL"])
         }
         components.queryItems = [
             URLQueryItem(name: "page", value: "1"),
-            URLQueryItem(name: "per_page", value: "50")
+            URLQueryItem(name: "per_page", value: "100")
         ]
         guard let url = components.url else {
             throw NSError(domain: "ArcNoteUITests", code: 11, userInfo: [NSLocalizedDescriptionKey: "Invalid encoded Go notifications URL"])
@@ -4731,8 +5039,93 @@ final class ArcNoteUITests: XCTestCase {
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
 
         let response = try sendRequest(request, responseType: SmokeNotificationsResponse.self)
-        return response.data.first(where: { $0.notificationId == notificationId })?.isRead
+        return response.data
     }
+
+    private func notificationIDs(
+        sourceType: String,
+        targetID: String,
+        token: String
+    ) throws -> Set<String> {
+        Set(try fetchSmokeNotifications(token: token).filter {
+            $0.sourceType.uppercased() == sourceType &&
+                $0.target?.id == targetID
+        }.map(\.notificationId))
+    }
+
+    private func waitForSmokeNotification(
+        sourceType: String,
+        targetID: String,
+        excluding: Set<String>,
+        token: String,
+        timeout: TimeInterval = 20,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) throws -> SmokeNotificationsResponse.SmokeNotification {
+        let deadline = Date().addingTimeInterval(timeout)
+        var last: [SmokeNotificationsResponse.SmokeNotification] = []
+        var lastError: Error?
+        while Date() < deadline {
+            do {
+                last = try fetchSmokeNotifications(token: token)
+                if let match = last.first(where: {
+                    !excluding.contains($0.notificationId) &&
+                        $0.sourceType.uppercased() == sourceType &&
+                        $0.target?.id == targetID &&
+                        $0.target?.type.uppercased() == (
+                            sourceType == "FOLLOW" ? "ACTOR" : "ASSET"
+                        ) && !$0.isRead
+                }) {
+                    return match
+                }
+            } catch {
+                lastError = error
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.3))
+        }
+        XCTFail(
+            "Timed out waiting for \(sourceType) notification target \(targetID); last=\(last.map(\.notificationId)), error=\(String(describing: lastError))",
+            file: file,
+            line: line
+        )
+        throw lastError ?? NSError(
+            domain: "ArcNoteUITests",
+            code: 31,
+            userInfo: [NSLocalizedDescriptionKey: "Missing projected notification"]
+        )
+    }
+
+    private func createSmokeComment(
+        cardID: String,
+        body: String,
+        token: String
+    ) throws {
+        let baseURL = ProcessInfo.processInfo.environment[
+            "CHORAI_API_BASE_URL"
+        ] ?? "http://127.0.0.1:8080"
+        guard let url = URL(
+            string: "\(baseURL)/api/cards/\(cardID)/comments"
+        ) else {
+            throw URLError(.badURL)
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(
+            withJSONObject: ["body": body]
+        )
+        _ = try sendRawRequest(request)
+    }
+
+    private func openNotificationInbox(notificationID: String) {
+        launchAuthenticatedApp()
+        waitFor("tab.flow", timeout: 20)
+        tap("side-menu.open")
+        tap("side-menu.notification")
+        waitFor("notification.row.\(notificationID)", timeout: 30)
+    }
+
 
     private func fetchSparkActivity(
         activityID: String,
