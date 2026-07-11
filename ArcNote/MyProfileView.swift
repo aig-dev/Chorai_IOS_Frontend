@@ -1,5 +1,5 @@
 import SwiftUI
-import Combine
+import CoreFlow
 
 struct MyProfileView: View {
     @Environment(\.dismiss) private var dismiss
@@ -15,10 +15,8 @@ struct MyProfileView: View {
     @State private var navigateToDetail = false
     @State private var navigateToEdit = false
     @State private var selectedCardId: String? = nil
-    @State private var navigateToChat = false
-    @State private var conversationId: String? = nil
-    @State private var isCreatingConversation = false
-    @State private var cancellables = Set<AnyCancellable>()
+    @State private var showFollowList = false
+    @State private var followListKind: FollowListKind = .followers
     
     var body: some View {
         VStack(spacing: 0) {
@@ -80,18 +78,14 @@ struct MyProfileView: View {
                                     }
                                     
                                     Spacer()
-                                    
-                                    Button(action: {
-                                        createConversation()
-                                    }) {
-                                        Image("send_chat")
-                                            .resizable()
-                                            .frame(width: 42, height: 42)
-                                    }
                                 }
                                 
                                 // 第二行：统计数据
                                 HStack(spacing: 20) {
+                                    Button {
+                                        followListKind = .following
+                                        showFollowList = true
+                                    } label: {
                                     HStack(spacing: 4) {
                                         if userProfileManager.isLoading {
                                             Text("--")
@@ -106,8 +100,15 @@ struct MyProfileView: View {
                                             .font(.system(size: 17, weight: .regular))
                                             .foregroundColor(.white.opacity(0.7))
                                     }
+                                    }
+                                    .buttonStyle(.plain)
+                                    .accessibilityIdentifier("my-profile.following-count")
                                     
                                     Spacer()
+                                    Button {
+                                        followListKind = .followers
+                                        showFollowList = true
+                                    } label: {
                                     HStack(spacing: 4) {
                                         if userProfileManager.isLoading {
                                             Text("--")
@@ -122,6 +123,9 @@ struct MyProfileView: View {
                                             .font(.system(size: 17, weight: .regular))
                                             .foregroundColor(.white.opacity(0.7))
                                     }
+                                    }
+                                    .buttonStyle(.plain)
+                                    .accessibilityIdentifier("my-profile.followers-count")
                                     
                                     Spacer()
                                     HStack(spacing: 4) {
@@ -272,14 +276,6 @@ struct MyProfileView: View {
                 }
             }
         }
-        .navigationDestination(isPresented: $navigateToChat) {
-            ChatDetailView(
-                conversationId: conversationId ?? "",
-                contactName: userProfileManager.userProfile?.username ?? "User",
-                contactStatus: "Online",
-                contactAvatar: "avatar"
-            )
-        }
         .navigationDestination(isPresented: $navigateToDetail) {
             if let cardId = selectedCardId {
                 DetailView(cardId: cardId)
@@ -295,59 +291,17 @@ struct MyProfileView: View {
             }
         }
         .popupMenu(isPresented: $showPopupMenu, layout: popupMenuLayout, cardData: currentMenuCardData, isOwnCard: true)
-        .linkPopup()
-    }
-    
-    // MARK: 发起会话
-    private func createConversation() {
-        guard !isCreatingConversation else { return }
-        
-        guard let currentUserId = AuthManager.shared.currentUser?.id else {
-            print("无法获取当前用户ID")
-            return
-        }
-        
-        isCreatingConversation = true
-        print("开始发起会话: participantId=\(currentUserId)")
-        
-        let request = CreateConversationRequest(participantId: currentUserId)
-        
-        NetworkManager.shared.createConversation(request: request)
-            .receive(on: DispatchQueue.main)
-            .sink(
-                receiveCompletion: { completion in
-                    isCreatingConversation = false
-                    if case .failure(let error) = completion {
-                        print("发起会话失败: \(error.localizedDescription)")
-                        
-                        // 检查是否是未授权错误
-                        if case .unauthorized = error {
-                            NotificationCenter.default.post(
-                                name: NSNotification.Name("UnauthorizedError"),
-                                object: nil
-                            )
-                        }
-                    }
-                },
-                receiveValue: { response in
-                    if response.success {
-                        print("发起会话成功: conversationId=\(response.conversation.id)")
-                        DispatchQueue.main.async {
-                            conversationId = response.conversation.id
-                            print("conversationId: \(conversationId ?? "")")
-                            
-                            // 延迟一点时间确保状态更新
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                                navigateToChat = true
-                                print("navigateToChat: \(navigateToChat)")
-                            }
-                        }
-                    } else {
-                        print("发起会话失败: 服务器返回失败")
-                    }
-                }
+        .sheet(isPresented: $showFollowList) {
+            FollowListView(
+                actorID: userProfileManager.userProfile?.id
+                    ?? AuthManager.shared.currentUser?.id
+                    ?? "",
+                actorName: userProfileManager.userProfile?.username ?? "User",
+                kind: followListKind,
+                viewerActorID: AuthManager.shared.currentUser?.id ?? ""
             )
-            .store(in: &cancellables)
+        }
+        .linkPopup()
     }
 }
 

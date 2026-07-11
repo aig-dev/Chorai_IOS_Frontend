@@ -6,17 +6,13 @@ struct UserProfileView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var showPopupMenu = false
     @StateObject private var cardsManager = HomeCardsManager()
-    @StateObject private var userProfileManager = UserProfileManager.shared
+    @StateObject private var profileStore: CommunityProfileStore
     
     // 聊天相关状态
     @State private var navigateToChat = false
     @State private var conversationId: String? = nil
     @State private var isCreatingConversation = false
     @State private var cancellables = Set<AnyCancellable>()
-    
-    // 关注相关状态
-    @State private var isFollowing = false
-    @State private var isFollowLoading = false
     
     // 菜单相关状态
     @State private var popupMenuLayout: PopupMenuLayout = .grid2x2
@@ -28,11 +24,29 @@ struct UserProfileView: View {
     @State private var selectedCardId: String? = nil
     @State private var showReport = false
     @State private var showActionSheet = false
+    @State private var showBlockConfirmation = false
+    @State private var showFollowList = false
+    @State private var followListKind: FollowListKind = .followers
     
     let actorId: String
 
-    init(actorId: String) {
+    init(
+        actorId: String,
+        service: any CoreCommunityProfileServing = NetworkCommunityProfileService()
+    ) {
         self.actorId = actorId
+        _profileStore = StateObject(
+            wrappedValue: CommunityProfileStore(service: service)
+        )
+    }
+
+    private var isOwnProfile: Bool {
+        actorId == AuthManager.shared.currentUser?.id
+    }
+
+    private var isFollowLoading: Bool {
+        if case .mutatingFollow = profileStore.phase { return true }
+        return false
     }
     
     var body: some View {
@@ -49,22 +63,27 @@ struct UserProfileView: View {
                 
                 Spacer()
                 
-                Text(userProfileManager.userProfile?.username ?? "User Profile")
+                Text(profileStore.profile?.username ?? "User Profile")
                     .font(.system(size: 20, weight: .semibold))
                     .foregroundColor(.white)
                 
                 Spacer()
                 
-                // 三个点按钮
-                Button(action: {
-                    showActionSheet = true
-                }) {
+                if isOwnProfile {
                     Image(systemName: "ellipsis")
                         .font(.title2)
-                        .foregroundColor(.white)
+                        .foregroundColor(.clear)
+                } else {
+                    Button(action: {
+                        showActionSheet = true
+                    }) {
+                        Image(systemName: "ellipsis")
+                            .font(.title2)
+                            .foregroundColor(.white)
+                    }
+                    .accessibilityLabel("Profile actions")
+                    .accessibilityIdentifier("user-profile.actions")
                 }
-                .accessibilityLabel("Profile actions")
-                .accessibilityIdentifier("user-profile.actions")
             }
             .padding(.horizontal, 20)
             .padding(.bottom, 20)
@@ -92,19 +111,20 @@ struct UserProfileView: View {
                             VStack(alignment: .leading, spacing: 12) {
                                 // 第一行：用户名和按钮
                                 HStack {
-                                    if userProfileManager.isLoading {
+                                    if profileStore.phase == .loading {
                                         Text("Loading...")
                                             .font(.system(size: 22, weight: .semibold))
                                             .foregroundColor(.white.opacity(0.7))
                                     } else {
-                                        Text(userProfileManager.userProfile?.username ?? "User")
+                                        Text(profileStore.profile?.username ?? "User")
                                             .font(.system(size: 22, weight: .semibold))
                                             .foregroundColor(.white)
                                     }
                                     
                                     Spacer()
                                     
-                                    HStack(spacing: 12) {
+                                    if !isOwnProfile {
+                                        HStack(spacing: 12) {
                                         Button(action: {
                                             createConversation()
                                         }) {
@@ -114,7 +134,7 @@ struct UserProfileView: View {
                                         }
                                         
                                         Button(action: {
-                                            toggleFollow()
+                                            profileStore.toggleFollow()
                                         }) {
                                             HStack(spacing: 4) {
                                                 if isFollowLoading {
@@ -122,7 +142,7 @@ struct UserProfileView: View {
                                                         .progressViewStyle(CircularProgressViewStyle(tint: .black))
                                                         .scaleEffect(0.96)
                                                 } else {
-                                                    Text(isFollowing ? "Unfollow" : "Follow")
+                                                    Text(profileStore.profile?.isFollowing == true ? "Unfollow" : "Follow")
                                                         .font(.system(size: 17, weight: .light))
                                                         .foregroundColor(.black)
                                                 }
@@ -134,19 +154,56 @@ struct UserProfileView: View {
                                                     .fill(Color.white)
                                             )
                                         }
-                                        .disabled(isFollowLoading)
+                                        .disabled(isFollowLoading || profileStore.profile == nil)
+                                        .accessibilityIdentifier("user-profile.follow")
+                                        .accessibilityValue(
+                                            profileStore.profile?.isFollowing == true
+                                                ? "following"
+                                                : "not-following"
+                                        )
+                                        }
+                                    }
+                                }
+
+                                if case .failed(let operation, _) = profileStore.phase {
+                                    if operation == .load {
+                                        HStack(spacing: 10) {
+                                            Text("Couldn’t load this profile.")
+                                                .font(.footnote)
+                                                .foregroundColor(.white.opacity(0.72))
+
+                                            Button("Try Again") {
+                                                profileStore.load(actorID: actorId)
+                                            }
+                                            .font(.footnote.weight(.semibold))
+                                            .foregroundColor(.white)
+                                        }
+                                        .accessibilityIdentifier("user-profile.load-error")
+                                    } else if operation == .follow || operation == .block {
+                                        Text(
+                                            operation == .block
+                                                ? "Couldn’t block this user. Try again."
+                                                : "Couldn’t update follow. Try again."
+                                        )
+                                        .font(.footnote)
+                                        .foregroundColor(.white.opacity(0.72))
+                                        .accessibilityIdentifier("user-profile.social-error")
                                     }
                                 }
                                 
                                 // 第二行：统计数据
                                 HStack(spacing: 20) {
+                                    Button {
+                                        followListKind = .following
+                                        showFollowList = true
+                                    } label: {
                                     HStack(spacing: 4) {
-                                        if userProfileManager.isLoading {
+                                        if profileStore.phase == .loading {
                                             Text("--")
                                                 .font(.system(size: 19, weight: .bold))
                                                 .foregroundColor(.white.opacity(0.7))
                                         } else {
-                                            Text("\(userProfileManager.userProfile?.followingCount ?? 0)")
+                                            Text("\(profileStore.profile?.followingCount ?? 0)")
                                                 .font(.system(size: 19, weight: .bold))
                                                 .foregroundColor(.white)
                                         }
@@ -154,15 +211,22 @@ struct UserProfileView: View {
                                             .font(.system(size: 17, weight: .regular))
                                             .foregroundColor(.white.opacity(0.7))
                                     }
+                                    }
+                                    .buttonStyle(.plain)
+                                    .accessibilityIdentifier("user-profile.following-count")
                                     
                                     Spacer()
+                                    Button {
+                                        followListKind = .followers
+                                        showFollowList = true
+                                    } label: {
                                     HStack(spacing: 4) {
-                                        if userProfileManager.isLoading {
+                                        if profileStore.phase == .loading {
                                             Text("--")
                                                 .font(.system(size: 19, weight: .bold))
                                                 .foregroundColor(.white.opacity(0.7))
                                         } else {
-                                            Text("\(userProfileManager.userProfile?.followersCount ?? 0)")
+                                            Text("\(profileStore.profile?.followerCount ?? 0)")
                                                 .font(.system(size: 19, weight: .bold))
                                                 .foregroundColor(.white)
                                         }
@@ -170,6 +234,9 @@ struct UserProfileView: View {
                                             .font(.system(size: 17, weight: .regular))
                                             .foregroundColor(.white.opacity(0.7))
                                     }
+                                    }
+                                    .buttonStyle(.plain)
+                                    .accessibilityIdentifier("user-profile.followers-count")
                                 }
                             }
                             .padding(.horizontal, 20)
@@ -218,8 +285,8 @@ struct UserProfileView: View {
                                             onChatTap: {
                                                 createConversation()
                                             },
-                                            username: userProfileManager.userProfile?.username ?? "User",
-                                            avatarUrl: userProfileManager.userProfile?.avatar,
+                                            username: profileStore.profile?.username ?? "User",
+                                            avatarUrl: profileStore.profile?.avatarURL,
                                             disableFavorite: false
                                         )
                                         .onAppear {
@@ -244,7 +311,7 @@ struct UserProfileView: View {
                         // 头像 - 骑在边框线上
                         HStack {
                             Group {
-                                if let avatarUrl = userProfileManager.userProfile?.avatar, !avatarUrl.isEmpty {
+                                if let avatarUrl = profileStore.profile?.avatarURL, !avatarUrl.isEmpty {
                                     let fullAvatarUrl = APIConfiguration.resourceURLString(avatarUrl)
                                     
                                     AsyncImage(url: URL(string: fullAvatarUrl)) { image in
@@ -291,16 +358,11 @@ struct UserProfileView: View {
             CommentPopupView()
         )
         .onAppear {
-            // 加载用户详情数据
-            print("开始加载用户详情: actorId=\(actorId)")
-            userProfileManager.fetchUserProfile(actorId: actorId)
+            profileStore.load(actorID: actorId)
 
             // 加载用户卡片数据
             print("开始加载用户公开卡片: actorId=\(actorId)")
             cardsManager.loadPublicProfileCards(actorId: actorId, refresh: true)
-            
-            // 检查关注状态
-            checkFollowStatus()
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NavigateToDetail"))) { notification in
             if let cardId = notification.userInfo?["cardId"] as? String {
@@ -324,14 +386,25 @@ struct UserProfileView: View {
                 showReport = true
             }
             Button("Block this user", role: .destructive) {
-                blockUser()
+                showBlockConfirmation = true
             }
             Button("Cancel", role: .cancel) {}
+        }
+        .alert("Block User", isPresented: $showBlockConfirmation) {
+            Button("Cancel", role: .cancel) {}
+            Button("Block", role: .destructive) {
+                profileStore.block()
+            }
+        } message: {
+            Text("Are you sure you want to block this user?")
+        }
+        .onChange(of: profileStore.didBlock) { didBlock in
+            if didBlock { dismiss() }
         }
         .navigationDestination(isPresented: $navigateToChat) {
             ChatDetailView(
                 conversationId: conversationId ?? "",
-                contactName: userProfileManager.userProfile?.username ?? "User",
+                contactName: profileStore.profile?.username ?? "User",
                 contactStatus: "Online",
                 contactAvatar: "avatar"
             )
@@ -353,7 +426,15 @@ struct UserProfileView: View {
         .sheet(isPresented: $showReport) {
             ContentReportView(targetType: .actor, targetID: actorId)
         }
-        .popupMenu(isPresented: $showPopupMenu, layout: popupMenuLayout, cardData: currentMenuCardData, isOwnCard: true)
+        .sheet(isPresented: $showFollowList) {
+            FollowListView(
+                actorID: actorId,
+                actorName: profileStore.profile?.username ?? "User",
+                kind: followListKind,
+                viewerActorID: AuthManager.shared.currentUser?.id ?? ""
+            )
+        }
+        .popupMenu(isPresented: $showPopupMenu, layout: popupMenuLayout, cardData: currentMenuCardData, isOwnCard: false)
         .linkPopup()
         .overlay(alignment: .topLeading) {
             VStack(spacing: 0) {
@@ -442,115 +523,6 @@ struct UserProfileView: View {
             .store(in: &cancellables)
     }
     
-    // MARK: 关注功能
-    private func checkFollowStatus() {
-        guard let currentUserId = AuthManager.shared.currentUser?.id else {
-            print("用户未登录")
-            return
-        }
-        
-        print("关注状态: currentActorId=\(currentUserId), targetActorId=\(actorId)")
-
-        NetworkManager.shared.checkFollowStatus(targetActorIds: [actorId])
-            .receive(on: DispatchQueue.main)
-            .sink(
-                receiveCompletion: { completion in
-                    if case .failure(let error) = completion {
-                        print("检查关注状态失败: \(error.localizedDescription)")
-                    }
-                },
-                receiveValue: { response in
-                    if response.success {
-                        let followStatus = response.data[actorId] ?? false
-                        self.isFollowing = followStatus
-                        print("关注状态: \(followStatus)")
-                    } else {
-                        print("检查关注状态失败: 服务器返回失败")
-                    }
-                }
-            )
-            .store(in: &cancellables)
-    }
-    
-    private func toggleFollow() {
-        guard !isFollowLoading else { return }
-        guard let currentUserId = AuthManager.shared.currentUser?.id else {
-            print("用户未登录，无法关注")
-            return
-        }
-        
-        isFollowLoading = true
-        
-        if isFollowing {
-            // 取消关注
-            NetworkManager.shared.unfollowUser(targetActorId: actorId)
-                .receive(on: DispatchQueue.main)
-                .sink(
-                    receiveCompletion: { completion in
-                        isFollowLoading = false
-                        if case .failure(let error) = completion {
-                            print("取消关注失败: \(error.localizedDescription)")
-                        }
-                    },
-                    receiveValue: { response in
-                        if response.success {
-                            self.isFollowing = false
-                            print("取消关注成功")
-                        } else {
-                            print("取消关注失败: 服务器返回失败")
-                        }
-                    }
-                )
-                .store(in: &cancellables)
-        } else {
-            NetworkManager.shared.followUser(targetActorId: actorId)
-                .receive(on: DispatchQueue.main)
-                .sink(
-                    receiveCompletion: { completion in
-                        isFollowLoading = false
-                        if case .failure(let error) = completion {
-                            print("关注失败: \(error.localizedDescription)")
-                        }
-                    },
-                    receiveValue: { response in
-                        if response.success {
-                            self.isFollowing = true
-                            print("关注成功: \(response.message)")
-                        } else {
-                            print("关注失败: 服务器返回失败")
-                        }
-                    }
-                )
-                .store(in: &cancellables)
-        }
-    }
-    
-    // MARK: - 拉黑用户
-    private func blockUser() {
-        guard let currentUserId = AuthManager.shared.currentUser?.id else {
-            print("用户未登录，无法拉黑")
-            return
-        }
-        
-        
-        NetworkManager.shared.blockUser(blockedActorId: actorId)
-            .receive(on: DispatchQueue.main)
-            .sink(
-                receiveCompletion: { completion in
-                    if case .failure(let error) = completion {
-                        print("拉黑用户失败: \(error.localizedDescription)")
-                    } else {
-                        print("拉黑用户成功")
-                    }
-                },
-                receiveValue: { _ in
-                    print("拉黑用户请求完成")
-                    // 拉黑后关闭页面并移除内容
-                    dismiss()
-                }
-            )
-            .store(in: &cancellables)
-    }
 }
 
 // MARK: - User Post Card

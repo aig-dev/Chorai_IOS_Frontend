@@ -207,8 +207,7 @@ struct SettingsView: View {
                             Divider()
                                 .background(Color.white.opacity(0.2))
                             
-                            SettingsRow(imageName: "account", title: "Account & Password", accessibilityIdentifier: "settings.account-password") {
-                                // 跳转到账户密码页面
+                            SettingsRow(imageName: "account", title: "Account & Privacy", accessibilityIdentifier: "settings.account-privacy") {
                                 navigateToAccountDetails = true
                             }
                             
@@ -306,7 +305,7 @@ struct SettingsView: View {
             Text("Are you sure you want to log out?")
         }
         .navigationDestination(isPresented: $navigateToAccountDetails) {
-            AccountDetailsView()
+            AccountPrivacyView()
         }
         .navigationDestination(isPresented: $navigateToPreferences) {
             PreferencesView()
