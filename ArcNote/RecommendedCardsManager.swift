@@ -1,8 +1,10 @@
 import Foundation
 import Combine
+import CoreFlow
 import SwiftUI
 
 // MARK: - 推荐卡片管理器
+@MainActor
 class RecommendedCardsManager: ObservableObject {
     @Published var cards: [Card] = []
     @Published var currentIndex: Int = 0
@@ -12,6 +14,8 @@ class RecommendedCardsManager: ObservableObject {
     // 点赞状态管理
     @Published var cardLikeStates: [String: Bool] = [:] // cardId -> isLiked
     @Published var cardLikeCounts: [String: Int] = [:] // cardId -> likeCount
+    @Published private(set) var cardLikeMutationIDs: Set<String> = []
+    @Published private(set) var cardLikeErrors: [String: String] = [:]
     
     // 收藏状态管理
     @Published var cardFavoriteStates: [String: Bool] = [:] // cardId -> isFavorited
@@ -27,6 +31,7 @@ class RecommendedCardsManager: ObservableObject {
     private var isLoadingMore: Bool = false
     
     private let networkManager = NetworkManager.shared
+    private let cardLikeService: any CoreCardLikeServing = NetworkCoreCardLikeService()
     private let authManager = AuthManager.shared
     private var cancellables = Set<AnyCancellable>()
     
@@ -51,6 +56,11 @@ class RecommendedCardsManager: ObservableObject {
             loadRecommendedCards()
         }
         setupCommentCountNotification()
+        CardEngagementCenter.shared.likes
+            .sink { [weak self] state in
+                self?.applyLikeState(state)
+            }
+            .store(in: &cancellables)
     }
     
     // MARK: - 加载推荐卡片
@@ -255,19 +265,51 @@ class RecommendedCardsManager: ObservableObject {
     func getLikeCount(for cardId: String) -> Int {
         return cardLikeCounts[cardId] ?? 0
     }
+
+    func isLikeMutationInFlight(for cardId: String) -> Bool {
+        cardLikeMutationIDs.contains(cardId)
+    }
+
+    func likeError(for cardId: String) -> String? {
+        cardLikeErrors[cardId]
+    }
     
     func toggleLike(for cardId: String) {
         guard authManager.currentUser != nil else {
             print("用户未登录")
             return
         }
-        
-        let isCurrentlyLiked = getLikeState(for: cardId)
-        
-        if isCurrentlyLiked {
-            unlikeCard(cardId: cardId)
-        } else {
-            likeCard(cardId: cardId)
+
+        guard !cardLikeMutationIDs.contains(cardId) else { return }
+        let committed = CardLikeState(
+            cardID: cardId,
+            isLiked: getLikeState(for: cardId),
+            likeCount: getLikeCount(for: cardId)
+        )
+        let target = !committed.isLiked
+        cardLikeErrors[cardId] = nil
+        cardLikeMutationIDs.insert(cardId)
+
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await cardLikeService.setLiked(
+                    cardID: cardId,
+                    liked: target
+                )
+                guard cardLikeMutationIDs.contains(cardId) else { return }
+                let next = CardLikeState(
+                    cardID: cardId,
+                    isLiked: target,
+                    likeCount: committed.likeCount + (target ? 1 : -1)
+                )
+                cardLikeMutationIDs.remove(cardId)
+                applyLikeState(next)
+                CardEngagementCenter.shared.publish(next)
+            } catch {
+                cardLikeMutationIDs.remove(cardId)
+                cardLikeErrors[cardId] = "Like failed. Try again."
+            }
         }
     }
     
@@ -300,44 +342,10 @@ class RecommendedCardsManager: ObservableObject {
         }
     }
     
-    private func likeCard(cardId: String) {
-        networkManager.likeCard(cardId: cardId)
-            .receive(on: DispatchQueue.main)
-            .sink(
-                receiveCompletion: { completion in
-                    if case .failure(let error) = completion {
-                        print("点赞失败: \(error)")
-                    }
-                },
-                receiveValue: { [weak self] response in
-                    if response.success {
-                        self?.cardLikeStates[cardId] = true
-                        self?.cardLikeCounts[cardId] = (self?.cardLikeCounts[cardId] ?? 0) + 1
-                        print("点赞成功")
-                    }
-                }
-            )
-            .store(in: &cancellables)
-    }
-    
-    private func unlikeCard(cardId: String) {
-        networkManager.unlikeCard(cardId: cardId)
-            .receive(on: DispatchQueue.main)
-            .sink(
-                receiveCompletion: { completion in
-                    if case .failure(let error) = completion {
-                        print("取消点赞失败: \(error)")
-                    }
-                },
-                receiveValue: { [weak self] response in
-                    if response.success {
-                        self?.cardLikeStates[cardId] = false
-                        self?.cardLikeCounts[cardId] = max(0, (self?.cardLikeCounts[cardId] ?? 0) - 1)
-                        print("取消点赞成功")
-                    }
-                }
-            )
-            .store(in: &cancellables)
+    private func applyLikeState(_ state: CardLikeState) {
+        cardLikeStates[state.cardID] = state.isLiked
+        cardLikeCounts[state.cardID] = state.likeCount
+        cardLikeErrors[state.cardID] = nil
     }
     
     private func addFavorite(cardId: String, completion: ((Bool) -> Void)? = nil) {

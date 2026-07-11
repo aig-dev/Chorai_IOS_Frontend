@@ -864,7 +864,10 @@ extension NetworkManager {
     }
 
     // MARK: - 卡片点赞相关API
-    func likeCard(cardId: String) -> AnyPublisher<NetworkResponse<LikeResponseData>, NetworkError> {
+    func likeCard(
+        cardId: String,
+        presentsError: Bool = true
+    ) -> AnyPublisher<NetworkResponse<LikeResponseData>, NetworkError> {
         let parameters: Parameters = [
             "asset_id": cardId
         ]
@@ -873,15 +876,20 @@ extension NetworkManager {
             endpoint: "/api/v1/actors/me/likes",
             method: .post,
             parameters: parameters,
-            responseType: NetworkResponse<LikeResponseData>.self
+            responseType: NetworkResponse<LikeResponseData>.self,
+            presentsError: presentsError
         )
     }
 
-    func unlikeCard(cardId: String) -> AnyPublisher<NetworkResponse<EmptyResponseData>, NetworkError> {
+    func unlikeCard(
+        cardId: String,
+        presentsError: Bool = true
+    ) -> AnyPublisher<NetworkResponse<EmptyResponseData>, NetworkError> {
         return request(
             endpoint: "/api/v1/actors/me/likes/\(cardId)",
             method: .delete,
-            responseType: NetworkResponse<EmptyResponseData>.self
+            responseType: NetworkResponse<EmptyResponseData>.self,
+            presentsError: presentsError
         )
     }
 

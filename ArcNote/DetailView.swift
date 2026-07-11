@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import CoreFlow
 
 // MARK: 关联笔记数据模型
 struct DetailRelatedNote: Identifiable {
@@ -18,8 +19,7 @@ struct DetailView: View {
     @StateObject private var cardDetailManager = CardDetailManager.shared
     
     // 状态管理
-    @State private var isLiked = false
-    @State private var likeCount = 0
+    @StateObject private var likeStore: CardLikeStore
     @State private var isFavorited = false
     @State private var favoriteCount = 0
     @State private var commentCount = 0
@@ -38,6 +38,17 @@ struct DetailView: View {
     
     init(cardId: String = "") {
         self.cardId = cardId
+        _likeStore = StateObject(
+            wrappedValue: CardLikeStore(
+                state: CardLikeState(
+                    cardID: cardId,
+                    isLiked: false,
+                    likeCount: 0
+                ),
+                service: NetworkCoreCardLikeService(),
+                onCommit: CardEngagementCenter.shared.publish
+            )
+        )
     }
     
     private var isCurrentCardOwned: Bool {
@@ -348,21 +359,24 @@ struct DetailView: View {
                 Spacer()
                 
                 // 底部互动栏
-                HStack(spacing: 24) {
-                    // 点赞按钮
-                    Button(action: {
-                        toggleLike()
-                    }) {
-                    HStack(spacing: 6) {
-                            Image(isLiked ? "like_active" : "like")
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 20, height: 20)
-                            Text("\(likeCount)")
-                            .font(.system(size: 16, weight: .medium))
-                            .foregroundColor(.white)
+                VStack(spacing: 8) {
+                    HStack(spacing: 24) {
+                        // 点赞按钮
+                        Button(action: likeStore.toggle) {
+                            HStack(spacing: 6) {
+                            Image(likeStore.state.isLiked ? "like_active" : "like")
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .frame(width: 20, height: 20)
+                                Text("\(likeStore.state.likeCount)")
+                                    .font(.system(size: 16, weight: .medium))
+                                    .foregroundColor(.white)
+                            }
                         }
-                    }
+                        .disabled(likeStore.isMutating)
+                        .accessibilityLabel(likeStore.state.isLiked ? "Unlike" : "Like")
+                        .accessibilityValue(likeStore.state.isLiked ? "true" : "false")
+                        .accessibilityIdentifier("detail.like.\(cardId)")
                     
                     // 评论按钮
                     CommentButton(cardId: cardId, commentCount: commentCount)
@@ -384,7 +398,14 @@ struct DetailView: View {
                         }
                     }
                     
-                    Spacer()
+                        Spacer()
+                    }
+                    if case .failed = likeStore.phase {
+                        Text("Like failed. Try again.")
+                            .font(.footnote)
+                            .foregroundColor(.white.opacity(0.72))
+                            .accessibilityIdentifier("detail.like.error.\(cardId)")
+                    }
                 }
                 .padding(.horizontal, 20)
                 .padding(.bottom, 30)
@@ -482,6 +503,9 @@ struct DetailView: View {
                 .accessibilityIdentifier("screen.detail.card-id")
             #endif
         }
+        .onReceive(CardEngagementCenter.shared.likes) { state in
+            likeStore.applyCommitted(state)
+        }
     }
     
     // MARK: 加载卡片详情
@@ -496,8 +520,13 @@ struct DetailView: View {
                 
                 // 初始化状态
                 DispatchQueue.main.async {
-                    self.isLiked = cardDetail.isLiked
-                    self.likeCount = cardDetail.likeCount
+                    self.likeStore.hydrate(
+                        CardLikeState(
+                            cardID: cardDetail.id,
+                            isLiked: cardDetail.isLiked,
+                            likeCount: cardDetail.likeCount
+                        )
+                    )
                     self.isFavorited = cardDetail.isFavorited ?? false
                     self.favoriteCount = cardDetail.favoriteCount ?? 0
                     self.commentCount = cardDetail.commentCount ?? 0
@@ -537,56 +566,6 @@ struct DetailView: View {
                 }
             )
             .store(in: &cancellables)
-    }
-    
-    // MARK: 点赞功能
-    private func toggleLike() {
-        guard AuthManager.shared.currentUser != nil else {
-            print("用户未登录")
-            return
-        }
-        
-        let networkManager = NetworkManager.shared
-        
-        if isLiked {
-            // 取消点赞
-            networkManager.unlikeCard(cardId: cardId)
-                .receive(on: DispatchQueue.main)
-                .sink(
-                    receiveCompletion: { completion in
-                        if case .failure(let error) = completion {
-                            print("取消点赞失败: \(error)")
-                        }
-                    },
-                    receiveValue: { response in
-                        if response.success {
-                            self.isLiked = false
-                            self.likeCount = max(0, self.likeCount - 1)
-                            print("取消点赞成功")
-                        }
-                    }
-                )
-                .store(in: &cancellables)
-        } else {
-            // 点赞
-            networkManager.likeCard(cardId: cardId)
-                .receive(on: DispatchQueue.main)
-                .sink(
-                    receiveCompletion: { completion in
-                        if case .failure(let error) = completion {
-                            print("点赞失败: \(error)")
-                        }
-                    },
-                    receiveValue: { response in
-                        if response.success {
-                            self.isLiked = true
-                            self.likeCount += 1
-                            print("点赞成功")
-                        }
-                    }
-                )
-                .store(in: &cancellables)
-        }
     }
     
     // MARK: - 收藏功能

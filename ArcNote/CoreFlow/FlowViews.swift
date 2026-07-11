@@ -63,12 +63,15 @@ enum FlowTextPreview {
 struct FlowCardView: View {
     let card: FlowCard
     let isInteractionLocked: Bool
+    let isLikeMutationInFlight: Bool
+    let likeErrorMessage: String?
     let onOpenDetail: () -> Void
     let onOpenAuthor: () -> Void
     let onOpenMenu: () -> Void
     let onSave: () -> Void
     let onSpark: () -> Void
     let onDismiss: () -> Void
+    let onToggleLike: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
@@ -143,11 +146,29 @@ struct FlowCardView: View {
             Spacer(minLength: 0)
 
             HStack(spacing: 16) {
+                Button(action: onToggleLike) {
+                    likeMetric(
+                        image: card.isLiked ? "like_active" : "like",
+                        count: card.likeCount
+                    )
+                }
+                .buttonStyle(.plain)
+                .disabled(isLikeMutationInFlight)
+                .accessibilityLabel(card.isLiked ? "Unlike" : "Like")
+                .accessibilityValue(card.isLiked ? "true" : "false")
+                .accessibilityIdentifier("flow.like.\(card.id)")
                 Label("\(card.favoriteCount)", systemImage: "bookmark")
                 Label("\(card.commentCount)", systemImage: "bubble.left")
             }
             .font(.caption)
             .foregroundStyle(Color.white.opacity(0.58))
+
+            if let likeErrorMessage {
+                Text(likeErrorMessage)
+                    .font(.footnote)
+                    .foregroundStyle(Color.white.opacity(0.72))
+                    .accessibilityIdentifier("flow.like.error.\(card.id)")
+            }
 
             HStack(spacing: 10) {
                 flowActionButton(
@@ -253,6 +274,20 @@ struct FlowCardView: View {
         .accessibilityLabel(title)
     }
 
+    private func likeMetric(image: String, count: Int) -> some View {
+        HStack(spacing: 6) {
+            Image(image)
+                .resizable()
+                .scaledToFit()
+                .frame(width: 22, height: 22)
+            Text("\(count)")
+                .font(.system(size: 15, weight: .medium, design: .rounded))
+                .monospacedDigit()
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(image) \(count)")
+    }
+
     private var cardDragGesture: some Gesture {
         DragGesture(minimumDistance: 18)
             .onChanged { value in
@@ -305,6 +340,11 @@ struct FlowCardView: View {
 
 struct FlowDeckView: View {
     @ObservedObject var store: FlowDeckStore
+    @StateObject private var likeStore = CardLikeStore(
+        state: CardLikeState(cardID: "", isLiked: false, likeCount: 0),
+        service: NetworkCoreCardLikeService(),
+        onCommit: CardEngagementCenter.shared.publish
+    )
     let onOpenDetail: (FlowCard) -> Void
     let onOpenAuthor: (FlowCard) -> Void
     let onOpenMenu: (FlowCard) -> Void
@@ -368,8 +408,19 @@ struct FlowDeckView: View {
         }
         .onChange(of: store.currentCard?.id) { _ in
             if let card = store.currentCard {
+                likeStore.hydrate(
+                    CardLikeState(
+                        cardID: card.id,
+                        isLiked: card.isLiked,
+                        likeCount: card.likeCount
+                    )
+                )
                 onCardVisible(card)
             }
+        }
+        .onReceive(CardEngagementCenter.shared.likes) { state in
+            store.applyLikeState(state)
+            likeStore.applyCommitted(state)
         }
         .onChange(of: store.notice) { notice in
             if case .saved(let assetID)? = notice {
@@ -393,6 +444,8 @@ struct FlowDeckView: View {
                 FlowCardView(
                     card: card,
                     isInteractionLocked: store.isInteractionLocked,
+                    isLikeMutationInFlight: likeStore.isMutating,
+                    likeErrorMessage: likeErrorMessage(for: card.id),
                     onOpenDetail: { onOpenDetail(card) },
                     onOpenAuthor: { onOpenAuthor(card) },
                     onOpenMenu: { onOpenMenu(card) },
@@ -402,7 +455,8 @@ struct FlowDeckView: View {
                         let assetID = card.id
                         store.dismissCurrent()
                         onCardDismissed(assetID)
-                    }
+                    },
+                    onToggleLike: likeStore.toggle
                 )
                 .id(card.id)
             }
@@ -414,6 +468,14 @@ struct FlowDeckView: View {
                 action: store.refresh
             )
         }
+    }
+
+    private func likeErrorMessage(for cardID: String) -> String? {
+        guard likeStore.state.cardID == cardID,
+              case .failed = likeStore.phase else {
+            return nil
+        }
+        return "Like failed. Try again."
     }
 
     @ViewBuilder

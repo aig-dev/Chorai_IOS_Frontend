@@ -964,13 +964,21 @@ struct PostCard: View {
                                     .foregroundColor(.white.opacity(0.8))
                             }
                         }
+                        .disabled(cardsManager.isLikeMutationInFlight(for: card.id))
                         .accessibilityElement(children: .combine)
-                        .accessibilityLabel("Like")
+                        .accessibilityLabel(cardsManager.getLikeState(for: card.id) ? "Unlike" : "Like")
                         .accessibilityValue(cardsManager.getLikeState(for: card.id) ? "true" : "false")
                         .accessibilityIdentifier("card.like.\(card.id)")
                         
                         CommentButton(cardId: card.id, cardsManager: cardsManager)
                     }
+                }
+
+                if let error = cardsManager.likeError(for: card.id) {
+                    Text(error)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.white.opacity(0.72))
+                        .accessibilityIdentifier("card.like.error.\(card.id)")
                 }
             }
         }

@@ -571,11 +571,21 @@ struct UserPostCard: View {
         self.username = username
         self.avatarUrl = avatarUrl
         self.disableFavorite = disableFavorite
+        _likeStore = StateObject(
+            wrappedValue: CardLikeStore(
+                state: CardLikeState(
+                    cardID: card.id,
+                    isLiked: card.isLiked,
+                    likeCount: card.likeCount
+                ),
+                service: NetworkCoreCardLikeService(),
+                onCommit: CardEngagementCenter.shared.publish
+            )
+        )
     }
     
     // 状态管理
-    @State private var isLiked = false
-    @State private var likeCount = 0
+    @StateObject private var likeStore: CardLikeStore
     @State private var isFavorited = false
     @State private var favoriteCount = 0
     @State private var commentCount = 0
@@ -678,19 +688,21 @@ struct UserPostCard: View {
                 Spacer()
                 
                 // 点赞按钮
-                Button(action: {
-                    toggleLike()
-                }) {
+                Button(action: likeStore.toggle) {
                     HStack(spacing: 4) {
-                        Image(isLiked ? "like_active" : "like")
+                        Image(likeStore.state.isLiked ? "like_active" : "like")
                             .resizable()
                             .aspectRatio(contentMode: .fit)
                             .frame(width: 19, height: 19)
-                        Text("\(likeCount)")
+                        Text("\(likeStore.state.likeCount)")
                             .font(.system(size: 17, weight: .medium))
                             .foregroundColor(.white.opacity(0.8))
                     }
                 }
+                .disabled(likeStore.isMutating)
+                .accessibilityLabel(likeStore.state.isLiked ? "Unlike" : "Like")
+                .accessibilityValue(likeStore.state.isLiked ? "true" : "false")
+                .accessibilityIdentifier("profile.like.\(card.id)")
                 
                 // 评论按钮
                 CommentButton(cardId: card.id, commentCount: commentCount)
@@ -708,69 +720,33 @@ struct UserPostCard: View {
                     }
                 }
             }
+
+            if case .failed = likeStore.phase {
+                Text("Like failed. Try again.")
+                    .font(.footnote)
+                    .foregroundColor(.white.opacity(0.72))
+                    .accessibilityIdentifier("profile.like.error.\(card.id)")
+            }
         }
         .padding(20)
         .background(cardBackground)
         .onAppear {
             // 初始化状态
-            isLiked = card.isLiked
-            likeCount = card.likeCount
+            likeStore.hydrate(
+                CardLikeState(
+                    cardID: card.id,
+                    isLiked: card.isLiked,
+                    likeCount: card.likeCount
+                )
+            )
             isFavorited = card.isFavorited ?? false
             favoriteCount = card.favoriteCount ?? 0
             commentCount = card.commentCount ?? 0
         }
-    }
-    
-    // MARK: 点赞功能
-    private func toggleLike() {
-        guard AuthManager.shared.currentUser != nil else {
-            print("用户未登录，无法点赞")
-            return
-        }
-        
-        let networkManager = NetworkManager.shared
-        
-        if isLiked {
-            // 取消点赞
-            networkManager.unlikeCard(cardId: card.id)
-                .receive(on: DispatchQueue.main)
-                .sink(
-                    receiveCompletion: { completion in
-                        if case .failure(let error) = completion {
-                            print("取消点赞失败: \(error)")
-                        }
-                    },
-                    receiveValue: { response in
-                        if response.success {
-                            self.isLiked = false
-                            self.likeCount = max(0, self.likeCount - 1)
-                            print("取消点赞成功")
-                        }
-                    }
-                )
-                .store(in: &cancellables)
-        } else {
-            // 点赞
-            networkManager.likeCard(cardId: card.id)
-                .receive(on: DispatchQueue.main)
-                .sink(
-                    receiveCompletion: { completion in
-                        if case .failure(let error) = completion {
-                            print("点赞失败: \(error)")
-                        }
-                    },
-                    receiveValue: { response in
-                        if response.success {
-                            self.isLiked = true
-                            self.likeCount += 1
-                            print("点赞成功")
-                        }
-                    }
-                )
-                .store(in: &cancellables)
+        .onReceive(CardEngagementCenter.shared.likes) { state in
+            likeStore.applyCommitted(state)
         }
     }
-    
     // MARK: 收藏功能
     private func toggleFavorite() {
         guard AuthManager.shared.currentUser != nil else {
