@@ -1,5 +1,5 @@
 import SwiftUI
-import Combine
+import CoreFlow
 
 struct DataItem: Identifiable {
     var id: String
@@ -10,12 +10,12 @@ struct DataItem: Identifiable {
     var isSelected = false
     var isMultiSelected = false
     
-    // 从InterestCategory创建DataItem
-    init(from category: InterestCategory) {
-        self.id = category.id
-        self.title = category.nameEn
+    init(from option: InterestSelectionOption) {
+        self.id = option.value
+        self.title = option.value
         self.size = CGFloat.random(in: 100...140) // 随机大小
         self.color = Self.getRandomColor()
+        self.isMultiSelected = option.isSelected
     }
     
     // 获取随机颜色
@@ -26,16 +26,21 @@ struct DataItem: Identifiable {
 }
 
 struct ChooseInterestsView: View {
-    @Environment(\.dismiss) private var dismiss
-    @State private var showNext = false
     @State private var showTabBar = false
-    
-    // 兴趣数据管理器
-    @StateObject private var interestsManager = InterestsManager()
+
+    @StateObject private var store: InterestSelectionStore
     @StateObject private var authManager = AuthManager.shared
     @State private var interests: [DataItem] = []
     @State private var isLayoutComplete = false
-    
+
+    init(
+        service: any CoreInterestSelectionServing = NetworkCoreInterestSelectionService()
+    ) {
+        _store = StateObject(
+            wrappedValue: InterestSelectionStore(service: service)
+        )
+    }
+
     var body: some View {
         GeometryReader { geometry in
             ZStack {
@@ -51,10 +56,7 @@ struct ChooseInterestsView: View {
                         // 顶部状态栏和跳过按钮
                         HStack {
                             Spacer()
-                            Button(action: {
-                                // 跳过逻辑 - 直接进入 Explorer 页面
-                                showTabBar = true
-                            }) {
+                            Button(action: store.skip) {
                                 HStack(spacing: 4) {
                                     Text("skip")
                                         .font(.system(size: 16, weight: .medium))
@@ -64,6 +66,8 @@ struct ChooseInterestsView: View {
                                         .foregroundColor(.white)
                                 }
                             }
+                            .disabled(store.isSaving)
+                            .accessibilityIdentifier("interests.skip")
                         }
                         .padding(.horizontal, 20)
                         .padding(.top, 60)
@@ -87,7 +91,7 @@ struct ChooseInterestsView: View {
                 Spacer()
                 
                 // 加载状态和错误处理
-                if interestsManager.isLoading {
+                if store.phase == .loading {
                     VStack(spacing: 20) {
                         ProgressView()
                             .scaleEffect(1.5)
@@ -98,7 +102,7 @@ struct ChooseInterestsView: View {
                             .foregroundColor(.white.opacity(0.8))
                     }
                     .frame(height: 400)
-                } else if let error = interestsManager.error {
+                } else if let error = loadErrorMessage {
                     VStack(spacing: 20) {
                         Image(systemName: "exclamationmark.triangle")
                             .font(.system(size: 40))
@@ -116,6 +120,7 @@ struct ChooseInterestsView: View {
                         Button("Retry") {
                             loadInterests()
                         }
+                        .accessibilityIdentifier("interests.retry")
                         .font(.system(size: 16, weight: .medium))
                         .foregroundColor(.white)
                         .padding(.horizontal, 20)
@@ -125,6 +130,7 @@ struct ChooseInterestsView: View {
                                 .fill(Color.white.opacity(0.2))
                         )
                     }
+                    .accessibilityIdentifier("interests.load-error")
                     .frame(height: 400)
                 } else {
                     // 兴趣气泡区域 - 完全使用 BubbleView 的实现
@@ -202,14 +208,13 @@ struct ChooseInterestsView: View {
                         .offset(item.offset)
                         .animation(.spring(response: 0.5, dampingFraction: 0.75), value: item.offset)
                         .animation(.spring(response: 0.5, dampingFraction: 0.75), value: item.isMultiSelected)
+                        .accessibilityElement(children: .combine)
+                        .accessibilityIdentifier("interests.option.\(index)")
+                        .accessibilityValue(item.isMultiSelected ? "selected" : "not selected")
                         .onTapGesture {
                             let wasMultiSelected = interests[index].isMultiSelected
-                            
-                            interests[index].isMultiSelected.toggle()
-                            
-                            if !interests[index].isMultiSelected {
-                                interests[index].isSelected = false
-                            }
+                            store.toggle(item.id)
+                            syncSelectionFromStore()
                             
                             DispatchQueue.main.async {
                                 if wasMultiSelected {
@@ -264,26 +269,32 @@ struct ChooseInterestsView: View {
                 .padding(.top, 20)
                 
                 Spacer()
-                
+
+                if let error = saveErrorMessage {
+                    Text(error)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.white)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 30)
+                        .padding(.bottom, 12)
+                        .accessibilityIdentifier("interests.save-error")
+                }
+
                 // 底部按钮
                 HStack(spacing: 40) {
-                    Button(action: {
-                        resetSelection()
-                    }) {
+                    Button(action: resetSelection) {
                         Text("Reset")
                             .font(.system(size: 18, weight: .medium))
                             .foregroundColor(.white)
                     }
                     
-                    Button(action: {
-                        saveSelectedInterests()
-                    }) {
+                    Button(action: store.save) {
                         ZStack {
                             Circle()
                                 .stroke(Color.white, lineWidth: 2)
                                 .frame(width: 80, height: 80)
                             
-                            if interestsManager.isSaving {
+                            if store.isSaving {
                                 ProgressView()
                                     .progressViewStyle(CircularProgressViewStyle(tint: .white))
                                     .scaleEffect(0.8)
@@ -294,7 +305,8 @@ struct ChooseInterestsView: View {
                             }
                         }
                     }
-                    .disabled(interestsManager.isSaving)
+                    .disabled(!store.canSave)
+                    .accessibilityIdentifier("interests.next")
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.bottom, max(30, geometry.safeAreaInsets.bottom + 10))
@@ -305,6 +317,7 @@ struct ChooseInterestsView: View {
             }
         }
         .ignoresSafeArea(.all)
+        .accessibilityIdentifier("screen.interests")
         .navigationBarHidden(true)
         .navigationBarBackButtonHidden(true)
         .navigationDestination(isPresented: $showTabBar) {
@@ -313,22 +326,11 @@ struct ChooseInterestsView: View {
         .onAppear {
             loadInterests()
         }
-        .onChange(of: interestsManager.interests) { newInterests in
-            if !newInterests.isEmpty {
-                interests = newInterests.map { DataItem(from: $0) }
-                layoutBubbles()
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    isLayoutComplete = true
-                }
-            }
+        .onChange(of: store.options) { newOptions in
+            reconcileInterests(with: newOptions)
         }
-        .onChange(of: interestsManager.saveSuccess) { success in
-            if success {
-                showTabBar = true
-            }
-        }
-        .onChange(of: interestsManager.isSaving) { isSaving in
-            if !isSaving && interestsManager.saveSuccess == false {
+        .onChange(of: store.phase) { phase in
+            if phase == .saved || phase == .skipped {
                 showTabBar = true
             }
         }
@@ -336,35 +338,65 @@ struct ChooseInterestsView: View {
     
     // MARK: - 加载兴趣数据
     private func loadInterests() {
-        print("加载兴趣数据")
-        interestsManager.loadInterests()
-    }
-    
-    // MARK: - 保存选中的兴趣
-    private func saveSelectedInterests() {
-        let selectedDomains = interests.filter { $0.isMultiSelected }.map { $0.id }
-        
-        if selectedDomains.isEmpty {
-            showTabBar = true
-            return
-        }
-        
-        guard authManager.currentUser != nil else {
-            showTabBar = true
-            return
-        }
-        
-        print("保存选中的兴趣: \(selectedDomains)")
-        interestsManager.saveUserInterests(domains: selectedDomains)
+        store.load(actorID: authManager.currentUser?.id ?? "")
     }
     
     // 重置选择
     private func resetSelection() {
-        for i in 0..<interests.count {
-            interests[i].isMultiSelected = false
-            interests[i].isSelected = false
-        }
+        store.reset()
+        syncSelectionFromStore()
         layoutBubblesAfterDeselection()
+    }
+
+    private var loadErrorMessage: String? {
+        guard case .failed(.load, let error) = store.phase else { return nil }
+        return message(for: error)
+    }
+
+    private var saveErrorMessage: String? {
+        guard case .failed(.save, let error) = store.phase else { return nil }
+        return "Couldn't save interests. \(message(for: error))"
+    }
+
+    private func message(for error: InterestSelectionError) -> String {
+        switch error {
+        case .invalidActor:
+            return "Your session is missing. Please sign in again."
+        case .transport:
+            return "Check your connection and try again."
+        }
+    }
+
+    private func reconcileInterests(
+        with options: [InterestSelectionOption]
+    ) {
+        guard !options.isEmpty else {
+            interests = []
+            isLayoutComplete = false
+            return
+        }
+
+        if interests.map(\.id) == options.map(\.value) {
+            syncSelectionFromStore()
+            return
+        }
+
+        interests = options.map(DataItem.init(from:))
+        layoutBubbles()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            isLayoutComplete = true
+        }
+    }
+
+    private func syncSelectionFromStore() {
+        let selected = Set(store.selectedDomains.map { $0.lowercased() })
+        for index in interests.indices {
+            let isSelected = selected.contains(interests[index].id.lowercased())
+            interests[index].isMultiSelected = isSelected
+            if !isSelected {
+                interests[index].isSelected = false
+            }
+        }
     }
     
     // 点击后的轻量级布局调整

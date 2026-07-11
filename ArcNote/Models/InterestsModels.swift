@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import Combine
 
 // MARK: 兴趣类别数据模型
 struct InterestCategory: Codable, Identifiable, Equatable {
@@ -73,66 +72,4 @@ struct SaveUserInterestsResponse: Codable {
     let success: Bool
     let message: String?
     let data: InterestDomainsData
-}
-
-// MARK: 兴趣类别管理器
-class InterestsManager: ObservableObject {
-    @Published var interests: [InterestCategory] = []
-    @Published var isLoading = false
-    @Published var isSaving = false
-    @Published var error: String?
-    @Published var saveSuccess = false
-    
-    private let networkManager = NetworkManager.shared
-    private var cancellables = Set<AnyCancellable>()
-    
-    // MARK: 获取兴趣类别
-    func loadInterests() {
-        
-        isLoading = true
-        error = nil
-        
-        networkManager.getInterests()
-            .receive(on: DispatchQueue.main)
-            .sink(
-                receiveCompletion: { [weak self] completion in
-                    self?.isLoading = false
-                    if case .failure(let error) = completion {
-                        self?.error = error.localizedDescription
-                        print("获取失败: \(error)")
-                    }
-                },
-                receiveValue: { [weak self] response in
-                    self?.interests = response.data
-                    print("获取成功")
-                }
-            )
-            .store(in: &cancellables)
-    }
-    
-    // MARK: 保存用户兴趣
-    func saveUserInterests(domains: [String]) {
-        isSaving = true
-        error = nil
-        saveSuccess = false
-        
-        let request = SaveUserInterestsRequest(domains: domains)
-        
-        networkManager.saveUserInterests(request: request)
-            .receive(on: DispatchQueue.main)
-            .sink(
-                receiveCompletion: { [weak self] completion in
-                    self?.isSaving = false
-                    if case .failure(let error) = completion {
-                        self?.error = error.localizedDescription
-                        print("保存失败: \(error)")
-                    }
-                },
-                receiveValue: { [weak self] response in
-                    self?.saveSuccess = true
-                    print("保存成功: \(response.message ?? "OK")")
-                }
-            )
-            .store(in: &cancellables)
-    }
 }

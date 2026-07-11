@@ -805,16 +805,34 @@ extension NetworkManager {
     }
 
     // MARK: - 获取兴趣类别
-    func getInterests() -> AnyPublisher<InterestsResponse, NetworkError> {
+    func getInterests(
+        presentsError: Bool = true
+    ) -> AnyPublisher<InterestsResponse, NetworkError> {
         return self.request(
             endpoint: "/api/v1/profile/interests/options",
             method: .get,
-            responseType: InterestsResponse.self
+            responseType: InterestsResponse.self,
+            presentsError: presentsError
+        )
+    }
+
+    // MARK: - 获取当前用户兴趣
+    func getUserInterests(
+        presentsError: Bool = true
+    ) -> AnyPublisher<SaveUserInterestsResponse, NetworkError> {
+        self.request(
+            endpoint: "/api/v1/profile/interests",
+            method: .get,
+            responseType: SaveUserInterestsResponse.self,
+            presentsError: presentsError
         )
     }
 
     // MARK: - 保存用户兴趣
-    func saveUserInterests(request: SaveUserInterestsRequest) -> AnyPublisher<SaveUserInterestsResponse, NetworkError> {
+    func saveUserInterests(
+        request: SaveUserInterestsRequest,
+        presentsError: Bool = true
+    ) -> AnyPublisher<SaveUserInterestsResponse, NetworkError> {
         let parameters: Parameters = [
             "domains": request.domains
         ]
@@ -823,7 +841,8 @@ extension NetworkManager {
             endpoint: "/api/v1/profile/interests",
             method: .put,
             parameters: parameters,
-            responseType: SaveUserInterestsResponse.self
+            responseType: SaveUserInterestsResponse.self,
+            presentsError: presentsError
         )
     }
 
