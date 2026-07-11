@@ -1326,7 +1326,10 @@ extension NetworkManager {
     }
 
     // MARK: 通知相关API
-    func getNotifications(_ request: GetNotificationsRequest) -> AnyPublisher<NotificationsResponse, NetworkError> {
+    func getNotifications(
+        _ request: GetNotificationsRequest,
+        presentsError: Bool = true
+    ) -> AnyPublisher<NotificationsResponse, NetworkError> {
         let parameters: [String: Any] = [
             "page": request.page,
             "per_page": request.perPage
@@ -1337,7 +1340,27 @@ extension NetworkManager {
             method: .get,
             parameters: parameters,
             encoding: URLEncoding.default,
-            responseType: NotificationsResponse.self
+            responseType: NotificationsResponse.self,
+            presentsError: presentsError
+        )
+    }
+
+    func getNotificationInbox(
+        _ request: GetNotificationsRequest,
+        presentsError: Bool = false
+    ) -> AnyPublisher<NotificationInboxResponse, NetworkError> {
+        let parameters: [String: Any] = [
+            "page": request.page,
+            "per_page": request.perPage
+        ]
+
+        return self.request(
+            endpoint: "/api/notifications",
+            method: .get,
+            parameters: parameters,
+            encoding: URLEncoding.default,
+            responseType: NotificationInboxResponse.self,
+            presentsError: presentsError
         )
     }
 
@@ -1360,11 +1383,15 @@ extension NetworkManager {
         .eraseToAnyPublisher()
     }
 
-    func markNotificationRead(notificationId: String) -> AnyPublisher<SuccessResponse, NetworkError> {
+    func markNotificationRead(
+        notificationId: String,
+        presentsError: Bool = true
+    ) -> AnyPublisher<SuccessResponse, NetworkError> {
         return self.request(
             endpoint: "/api/notifications/\(notificationId)/read",
             method: .patch,
-            responseType: SuccessResponse.self
+            responseType: SuccessResponse.self,
+            presentsError: presentsError
         )
     }
 

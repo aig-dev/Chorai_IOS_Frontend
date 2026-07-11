@@ -16,6 +16,32 @@ final class ArcNoteUITests: XCTestCase {
         sparkSessionScope = "\(name).\(UUID().uuidString)"
     }
 
+    func testNotificationContractFixtureRoute() throws {
+        app.launchArguments.append("--ui-test-notification-contract")
+        app.launch()
+
+        XCTAssertEqual(
+            waitFor("notification.contract.actor").label,
+            "act_source"
+        )
+        XCTAssertEqual(
+            waitFor("notification.contract.asset").label,
+            "ast_1"
+        )
+        XCTAssertEqual(
+            waitFor("notification.contract.legacy").label,
+            "legacy"
+        )
+        XCTAssertEqual(
+            waitFor("notification.contract.unread-count").label,
+            "2"
+        )
+        XCTAssertFalse(
+            app.descendants(matching: .any)["notification.contract.error"]
+                .exists
+        )
+    }
+
     func testMainTabsRenderAgainstSeededGoSession() throws {
         launchAuthenticatedApp()
 

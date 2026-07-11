@@ -5,6 +5,7 @@
 //  Created by 海了个螺 on 2025/7/23.
 //
 
+import CoreFlow
 import SwiftUI
 
 #if DEBUG
@@ -18,6 +19,8 @@ struct ArcNoteApp: App {
     private let isAPIMigrationSmoke = APIMigrationSmokeRunner.isRequested
     private let isInterestUITestRoute = ProcessInfo.processInfo.arguments
         .contains("--ui-test-open-interests")
+    private let isNotificationContractUITestRoute = ProcessInfo.processInfo.arguments
+        .contains("--ui-test-notification-contract")
     private let profileUITestActorID: String? = {
         guard ProcessInfo.processInfo.arguments
             .contains("--ui-test-open-profile") else {
@@ -41,6 +44,8 @@ struct ArcNoteApp: App {
             #if DEBUG
             if isAPIMigrationSmoke {
                 Color.clear
+            } else if isNotificationContractUITestRoute {
+                NotificationContractFixtureView()
             } else if isInterestUITestRoute {
                 NavigationStack {
                     ChooseInterestsView()
@@ -61,6 +66,113 @@ struct ArcNoteApp: App {
 }
 
 #if DEBUG
+private struct NotificationContractFixtureView: View {
+    private struct Values {
+        let actor: String
+        let asset: String
+        let legacy: String
+        let unreadCount: String
+    }
+
+    private let result: Result<Values, Error>
+
+    init() {
+        do {
+            let response = try JSONDecoder().decode(
+                NotificationInboxResponse.self,
+                from: Data(Self.fixtureJSON.utf8)
+            )
+            let page = try NetworkNotificationService.map(response: response)
+            let actor = page.items.compactMap { item -> String? in
+                guard case .actor(let id) = item.target else { return nil }
+                return id
+            }.first ?? "missing"
+            let asset = page.items.compactMap { item -> String? in
+                guard case .asset(let id) = item.target else { return nil }
+                return id
+            }.first ?? "missing"
+            let legacy = page.items.contains(where: { $0.target == .legacy })
+                ? "legacy" : "missing"
+            result = .success(Values(
+                actor: actor,
+                asset: asset,
+                legacy: legacy,
+                unreadCount: String(page.unreadCount)
+            ))
+        } catch {
+            result = .failure(error)
+        }
+    }
+
+    var body: some View {
+        VStack(spacing: 12) {
+            switch result {
+            case .success(let values):
+                fixtureValue(values.actor, id: "notification.contract.actor")
+                fixtureValue(values.asset, id: "notification.contract.asset")
+                fixtureValue(values.legacy, id: "notification.contract.legacy")
+                fixtureValue(
+                    values.unreadCount,
+                    id: "notification.contract.unread-count"
+                )
+            case .failure(let error):
+                Text(String(describing: error))
+                    .accessibilityIdentifier("notification.contract.error")
+            }
+        }
+    }
+
+    private func fixtureValue(_ value: String, id: String) -> some View {
+        Text(value)
+            .accessibilityIdentifier(id)
+    }
+
+    private static let fixtureJSON = #"""
+    {
+      "success": true,
+      "message": null,
+      "data": [
+        {
+          "notification_id": "ntf_follow",
+          "source_type": "FoLlOw",
+          "payload_ref": "Mira followed you",
+          "is_read": false,
+          "created_at": "2026-07-12T01:02:03.456Z",
+          "display_text": "Mira followed you",
+          "source_actor": {
+            "actor_id": "act_source",
+            "username": "Mira",
+            "avatar_url": null
+          },
+          "target": {"type": "ACTOR", "id": "act_source"}
+        },
+        {
+          "notification_id": "ntf_like",
+          "source_type": "LIKE",
+          "payload_ref": "Mira liked your card",
+          "is_read": true,
+          "created_at": "2026-07-12T01:02:02Z",
+          "display_text": "Mira liked your card",
+          "source_actor": null,
+          "target": {"type": "ASSET", "id": "ast_1"}
+        },
+        {
+          "notification_id": "ntf_legacy",
+          "source_type": "unknown",
+          "payload_ref": "Legacy notice",
+          "is_read": false,
+          "created_at": "2026-07-12T01:02:01Z",
+          "display_text": null,
+          "source_actor": null,
+          "target": {"type": "MYSTERY", "id": "unsafe"}
+        }
+      ],
+      "meta": {"total": 3, "page": 1, "per_page": 20},
+      "unread_count": 2
+    }
+    """#
+}
+
 private enum APIMigrationUITestSeed {
     static func applyIfPresent() {
         let environment = ProcessInfo.processInfo.environment
