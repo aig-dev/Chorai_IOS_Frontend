@@ -68,6 +68,28 @@ public struct FlowCard: Identifiable, Equatable, Sendable {
         self.pinnedAt = pinnedAt
         self.author = author
     }
+
+    public func replacingLike(with state: CardLikeState) -> FlowCard {
+        FlowCard(
+            id: id,
+            title: title,
+            content: content,
+            contentHash: contentHash,
+            tags: tags,
+            isPublic: isPublic,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            favoriteCount: favoriteCount,
+            likeCount: state.likeCount,
+            commentCount: commentCount,
+            rate: rate,
+            isFavorited: isFavorited,
+            isLiked: state.isLiked,
+            isPinned: isPinned,
+            pinnedAt: pinnedAt,
+            author: author
+        )
+    }
 }
 
 public struct FlowPage: Equatable, Sendable {

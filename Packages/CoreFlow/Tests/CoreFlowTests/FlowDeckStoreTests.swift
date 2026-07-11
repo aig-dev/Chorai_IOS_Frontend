@@ -227,6 +227,55 @@ final class FlowDeckStoreTests: XCTestCase {
         XCTAssertNil(store.notice)
     }
 
+    @MainActor
+    func testApplyLikeStateUpdatesMatchingCardWithoutAdvancingDeck() async {
+        let service = MockCoreFlowService()
+        service.recommendedResults = [
+            .success(
+                FlowPage(
+                    cards: [card("a"), card("b")],
+                    nextRefreshToken: nil
+                )
+            )
+        ]
+        let store = FlowDeckStore(service: service)
+        store.loadInitialIfNeeded()
+        await settle()
+        let ids = store.cards.map(\.id)
+        let favorite = store.currentCard?.isFavorited
+        let favoriteCount = store.currentCard?.favoriteCount
+
+        store.applyLikeState(
+            .init(cardID: "a", isLiked: true, likeCount: 9)
+        )
+
+        XCTAssertEqual(store.cards.map(\.id), ids)
+        XCTAssertEqual(store.currentCard?.isLiked, true)
+        XCTAssertEqual(store.currentCard?.likeCount, 9)
+        XCTAssertEqual(store.currentCard?.isFavorited, favorite)
+        XCTAssertEqual(store.currentCard?.favoriteCount, favoriteCount)
+    }
+
+    @MainActor
+    func testApplyLikeStateIgnoresUnknownCard() async {
+        let service = MockCoreFlowService()
+        service.recommendedResults = [
+            .success(
+                FlowPage(cards: [card("a")], nextRefreshToken: nil)
+            )
+        ]
+        let store = FlowDeckStore(service: service)
+        store.loadInitialIfNeeded()
+        await settle()
+        let before = store.cards
+
+        store.applyLikeState(
+            .init(cardID: "missing", isLiked: true, likeCount: 1)
+        )
+
+        XCTAssertEqual(store.cards, before)
+    }
+
     private func card(_ id: String, isFavorited: Bool = false) -> FlowCard {
         FlowCard(
             id: id,

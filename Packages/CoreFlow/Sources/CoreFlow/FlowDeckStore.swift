@@ -129,6 +129,14 @@ public final class FlowDeckStore: ObservableObject {
         }
     }
 
+    public func applyLikeState(_ state: CardLikeState) {
+        cards = cards.map { card in
+            card.id == state.cardID
+                ? card.replacingLike(with: state)
+                : card
+        }
+    }
+
     private func requestPage(reset: Bool) {
         guard !isLoadingPage else { return }
 
