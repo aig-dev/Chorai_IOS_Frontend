@@ -879,6 +879,40 @@ struct FollowListResponse: Codable {
     }
 }
 
+struct BlockedActorsResponse: Codable {
+    let success: Bool
+    let message: String?
+    let data: BlockedActorsData
+}
+
+struct BlockedActorsData: Codable {
+    let items: [BlockedActorDTO]
+    let nextCursor: String
+    let hasMore: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case items
+        case nextCursor = "next_cursor"
+        case hasMore = "has_more"
+    }
+}
+
+struct BlockedActorDTO: Codable {
+    let actorID: String
+    let username: String
+    let avatarURL: String?
+    let bio: String?
+    let blockedAt: String
+
+    enum CodingKeys: String, CodingKey {
+        case actorID = "actor_id"
+        case username
+        case avatarURL = "avatar_url"
+        case bio
+        case blockedAt = "blocked_at"
+    }
+}
+
 
 struct UnreadCountResponse: Codable {
     let success: Bool

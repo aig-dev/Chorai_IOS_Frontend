@@ -1034,11 +1034,15 @@ extension NetworkManager {
         )
     }
 
-    func getUserProfile(actorId: String) -> AnyPublisher<UserProfileResponse, NetworkError> {
+    func getUserProfile(
+        actorId: String,
+        presentsError: Bool = true
+    ) -> AnyPublisher<UserProfileResponse, NetworkError> {
         return request(
             endpoint: "/api/v1/profile/\(actorId)",
             method: .get,
-            responseType: UserProfileResponse.self
+            responseType: UserProfileResponse.self,
+            presentsError: presentsError
         )
     }
 
@@ -1139,7 +1143,12 @@ extension NetworkManager {
         )
     }
 
-    func getFollowersList(actorId: String, cursor: String? = nil, limit: Int = 20) -> AnyPublisher<FollowListResponse, NetworkError> {
+    func getFollowersList(
+        actorId: String,
+        cursor: String? = nil,
+        limit: Int = 20,
+        presentsError: Bool = true
+    ) -> AnyPublisher<FollowListResponse, NetworkError> {
         var parameters: Parameters = [
             "limit": limit
         ]
@@ -1151,11 +1160,18 @@ extension NetworkManager {
             endpoint: "/api/v1/actors/\(actorId)/followers",
             method: .get,
             parameters: parameters,
-            responseType: FollowListResponse.self
+            encoding: URLEncoding.default,
+            responseType: FollowListResponse.self,
+            presentsError: presentsError
         )
     }
 
-    func getFollowingList(actorId: String, cursor: String? = nil, limit: Int = 20) -> AnyPublisher<FollowListResponse, NetworkError> {
+    func getFollowingList(
+        actorId: String,
+        cursor: String? = nil,
+        limit: Int = 20,
+        presentsError: Bool = true
+    ) -> AnyPublisher<FollowListResponse, NetworkError> {
         var parameters: Parameters = [
             "limit": limit
         ]
@@ -1167,7 +1183,9 @@ extension NetworkManager {
             endpoint: "/api/v1/actors/\(actorId)/following",
             method: .get,
             parameters: parameters,
-            responseType: FollowListResponse.self
+            encoding: URLEncoding.default,
+            responseType: FollowListResponse.self,
+            presentsError: presentsError
         )
     }
     // MARK: - 文件上传API
@@ -1967,20 +1985,28 @@ extension NetworkManager {
     // MARK: 关注相关API
 
     /// 关注用户
-    func followUser(targetActorId: String) -> AnyPublisher<FollowResponse, NetworkError> {
+    func followUser(
+        targetActorId: String,
+        presentsError: Bool = true
+    ) -> AnyPublisher<FollowResponse, NetworkError> {
         return self.request(
             endpoint: "/api/follows/\(targetActorId)",
             method: .post,
-            responseType: FollowResponse.self
+            responseType: FollowResponse.self,
+            presentsError: presentsError
         )
     }
 
     /// 取消关注用户
-    func unfollowUser(targetActorId: String) -> AnyPublisher<UnfollowResponse, NetworkError> {
+    func unfollowUser(
+        targetActorId: String,
+        presentsError: Bool = true
+    ) -> AnyPublisher<UnfollowResponse, NetworkError> {
         return self.request(
             endpoint: "/api/follows/\(targetActorId)",
             method: .delete,
-            responseType: UnfollowResponse.self
+            responseType: UnfollowResponse.self,
+            presentsError: presentsError
         )
     }
 
@@ -2007,20 +2033,47 @@ extension NetworkManager {
     }
 
     /// 拉黑用户
-    func blockUser(blockedActorId: String) -> AnyPublisher<BlockUserResponse, NetworkError> {
+    func blockUser(
+        blockedActorId: String,
+        presentsError: Bool = true
+    ) -> AnyPublisher<BlockUserResponse, NetworkError> {
         return self.request(
             endpoint: "/api/user-blocks/\(blockedActorId)",
             method: .post,
-            responseType: BlockUserResponse.self
+            responseType: BlockUserResponse.self,
+            presentsError: presentsError
         )
     }
 
     /// 取消拉黑用户
-    func unblockUser(blockedActorId: String) -> AnyPublisher<UnblockUserResponse, NetworkError> {
+    func unblockUser(
+        blockedActorId: String,
+        presentsError: Bool = true
+    ) -> AnyPublisher<UnblockUserResponse, NetworkError> {
         return self.request(
             endpoint: "/api/user-blocks/\(blockedActorId)",
             method: .delete,
-            responseType: UnblockUserResponse.self
+            responseType: UnblockUserResponse.self,
+            presentsError: presentsError
+        )
+    }
+
+    func getBlockedActors(
+        cursor: String? = nil,
+        limit: Int = 20,
+        presentsError: Bool = true
+    ) -> AnyPublisher<BlockedActorsResponse, NetworkError> {
+        var parameters: Parameters = ["limit": limit]
+        if let cursor, !cursor.isEmpty {
+            parameters["cursor"] = cursor
+        }
+        return self.request(
+            endpoint: "/api/user-blocks",
+            method: .get,
+            parameters: parameters,
+            encoding: URLEncoding.default,
+            responseType: BlockedActorsResponse.self,
+            presentsError: presentsError
         )
     }
 
