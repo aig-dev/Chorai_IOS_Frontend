@@ -16,6 +16,8 @@ import Darwin
 struct ArcNoteApp: App {
     #if DEBUG
     private let isAPIMigrationSmoke = APIMigrationSmokeRunner.isRequested
+    private let isInterestUITestRoute = ProcessInfo.processInfo.arguments
+        .contains("--ui-test-open-interests")
     #endif
 
     init() {
@@ -30,6 +32,10 @@ struct ArcNoteApp: App {
             #if DEBUG
             if isAPIMigrationSmoke {
                 Color.clear
+            } else if isInterestUITestRoute {
+                NavigationStack {
+                    ChooseInterestsView()
+                }
             } else {
                 ContentView()
             }

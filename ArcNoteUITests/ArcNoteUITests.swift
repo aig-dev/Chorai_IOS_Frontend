@@ -923,6 +923,226 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertEqual(restoredCardId, cardId, "Undo must restore the saved card")
     }
 
+    func testFlowLikeAndUnlikeStayOnCardAndPersistToGo() throws {
+        let session = try requireSmokeSession()
+        seedAppSession(session)
+        let fixtureID = try createPublicSmokeCard(
+            token: session.token,
+            searchToken: "flow-like-\(Int(Date().timeIntervalSince1970))"
+        )
+        defer {
+            permanentlyCleanUpSmokeCard(id: fixtureID, token: session.token)
+        }
+        launchAuthenticatedApp()
+        waitFor("screen.flow.content", timeout: 30)
+
+        let cardID = flowVisibleCardID()
+        XCTAssertEqual(cardID, fixtureID)
+        let originalLiked = try fetchAssetStatus(
+            kind: "likes",
+            id: cardID,
+            token: session.token
+        )
+        let originalFavorite = try fetchAssetStatus(
+            kind: "favorites",
+            id: cardID,
+            token: session.token
+        )
+        defer {
+            try? setSmokeLikeStatus(
+                originalLiked,
+                id: cardID,
+                token: session.token
+            )
+        }
+
+        if originalLiked {
+            tap("flow.like.\(cardID)")
+            waitForAssetStatus(
+                kind: "likes",
+                id: cardID,
+                token: session.token,
+                expected: false
+            )
+            waitForAccessibilityValue("flow.like.\(cardID)", expected: "false")
+        }
+
+        let baselineCount = anchorLabel("flow.like.count.\(cardID)")
+        let favoriteValue = anchorLabel("flow.favorite.\(cardID)")
+        let favoriteCount = anchorLabel("flow.favorite.count.\(cardID)")
+
+        tap("flow.like.\(cardID)")
+        waitForAssetStatus(
+            kind: "likes",
+            id: cardID,
+            token: session.token,
+            expected: true
+        )
+        waitForAccessibilityValue("flow.like.\(cardID)", expected: "true")
+        XCTAssertEqual(flowVisibleCardID(), cardID)
+        XCTAssertEqual(
+            try fetchAssetStatus(
+                kind: "favorites",
+                id: cardID,
+                token: session.token
+            ),
+            originalFavorite
+        )
+        XCTAssertEqual(anchorLabel("flow.favorite.\(cardID)"), favoriteValue)
+        XCTAssertEqual(anchorLabel("flow.favorite.count.\(cardID)"), favoriteCount)
+        captureVisual("flow-liked-stays-on-card")
+
+        tap("flow.like.\(cardID)")
+        waitForAssetStatus(
+            kind: "likes",
+            id: cardID,
+            token: session.token,
+            expected: false
+        )
+        waitForAccessibilityValue("flow.like.\(cardID)", expected: "false")
+        XCTAssertEqual(flowVisibleCardID(), cardID)
+        XCTAssertEqual(anchorLabel("flow.like.count.\(cardID)"), baselineCount)
+        XCTAssertEqual(anchorLabel("flow.favorite.\(cardID)"), favoriteValue)
+        XCTAssertEqual(anchorLabel("flow.favorite.count.\(cardID)"), favoriteCount)
+        captureVisual("flow-unliked-stays-on-card")
+    }
+
+    func testFlowLikeSynchronizesWithDetail() throws {
+        let session = try requireSmokeSession()
+        seedAppSession(session)
+        let fixtureID = try createPublicSmokeCard(
+            token: session.token,
+            searchToken: "flow-detail-like-\(Int(Date().timeIntervalSince1970))"
+        )
+        defer {
+            permanentlyCleanUpSmokeCard(id: fixtureID, token: session.token)
+        }
+        launchAuthenticatedApp()
+        waitFor("screen.flow.content", timeout: 30)
+
+        let cardID = flowVisibleCardID()
+        XCTAssertEqual(cardID, fixtureID)
+        let originalLiked = try fetchAssetStatus(
+            kind: "likes",
+            id: cardID,
+            token: session.token
+        )
+        defer {
+            try? setSmokeLikeStatus(
+                originalLiked,
+                id: cardID,
+                token: session.token
+            )
+        }
+        if originalLiked {
+            tap("flow.like.\(cardID)")
+            waitForAssetStatus(
+                kind: "likes",
+                id: cardID,
+                token: session.token,
+                expected: false
+            )
+        }
+
+        tap("flow.like.\(cardID)")
+        waitForAssetStatus(
+            kind: "likes",
+            id: cardID,
+            token: session.token,
+            expected: true
+        )
+        tap("flow.card.\(cardID)")
+        waitFor("screen.detail.loaded", timeout: 30)
+        waitForAccessibilityValue("detail.like.\(cardID)", expected: "true")
+        captureVisual("flow-like-synchronized-detail")
+
+        tap("detail.like.\(cardID)")
+        waitForAssetStatus(
+            kind: "likes",
+            id: cardID,
+            token: session.token,
+            expected: false
+        )
+        tap("detail.back")
+        waitFor("screen.flow.content", timeout: 30)
+        XCTAssertEqual(flowVisibleCardID(), cardID)
+        waitForAccessibilityValue("flow.like.\(cardID)", expected: "false")
+    }
+
+    func testFlowLikeSynchronizesWithProfile() throws {
+        let session = try requireSmokeSession()
+        seedAppSession(session)
+        let fixtureID = try createPublicSmokeCard(
+            token: session.token,
+            searchToken: "flow-profile-like-\(Int(Date().timeIntervalSince1970))"
+        )
+        defer {
+            clearFavoriteLikeState(id: fixtureID, token: session.token)
+            permanentlyCleanUpSmokeCard(id: fixtureID, token: session.token)
+        }
+        launchAuthenticatedApp()
+        waitFor("screen.flow.content", timeout: 30)
+        XCTAssertEqual(flowVisibleCardID(), fixtureID)
+
+        tap("flow.like.\(fixtureID)")
+        waitForAssetStatus(
+            kind: "likes",
+            id: fixtureID,
+            token: session.token,
+            expected: true
+        )
+        let authorButton = app.buttons["Open author"]
+        XCTAssertTrue(
+            authorButton.waitForExistence(timeout: 15),
+            "Flow author button was not available"
+        )
+        authorButton.tap()
+
+        waitFor("screen.user-profile", timeout: 30)
+        waitForAccessibilityValue(
+            "profile.like.\(fixtureID)",
+            expected: "true",
+            timeout: 30
+        )
+        captureVisual("flow-like-synchronized-profile")
+    }
+
+    func testFlowLikeFailureKeepsCardAndFavoriteState() throws {
+        let cleanupSession = try requireSmokeSession()
+        let session = try requireDisposableSmokeSession()
+        let fixtureID = try createPublicSmokeCard(
+            token: session.token,
+            searchToken: "flow-like-failure-\(Int(Date().timeIntervalSince1970))"
+        )
+        defer {
+            permanentlyCleanUpSmokeCard(
+                id: fixtureID,
+                token: cleanupSession.token
+            )
+        }
+        seedAppSession(session)
+        launchAuthenticatedApp()
+        waitFor("screen.flow.content", timeout: 30)
+
+        let cardID = flowVisibleCardID()
+        XCTAssertEqual(cardID, fixtureID)
+        let likeValue = accessibilityValue("flow.like.\(cardID)")
+        let likeCount = anchorLabel("flow.like.count.\(cardID)")
+        let favoriteValue = anchorLabel("flow.favorite.\(cardID)")
+        let favoriteCount = anchorLabel("flow.favorite.count.\(cardID)")
+
+        try revokeSmokeSession(token: session.token)
+        tap("flow.like.\(cardID)")
+        waitFor("flow.like.error.\(cardID)", timeout: 30)
+
+        XCTAssertEqual(flowVisibleCardID(), cardID)
+        XCTAssertEqual(accessibilityValue("flow.like.\(cardID)"), likeValue)
+        XCTAssertEqual(anchorLabel("flow.like.count.\(cardID)"), likeCount)
+        XCTAssertEqual(anchorLabel("flow.favorite.\(cardID)"), favoriteValue)
+        XCTAssertEqual(anchorLabel("flow.favorite.count.\(cardID)"), favoriteCount)
+        captureVisual("flow-like-failure-preserves-card")
+    }
+
     func testFlowSparkOpensGoSparkScreen() throws {
         launchAuthenticatedApp()
 
@@ -1791,6 +2011,51 @@ final class ArcNoteUITests: XCTestCase {
         )
     }
 
+    func testFirstRunInterestsLoadAndSaveCanonicalSelection() throws {
+        let session = try requireSmokeSession()
+        let original = try fetchSmokeInterests(token: session.token)
+        let options = try fetchSmokeInterestOptions(token: session.token)
+        guard options.count >= 2 else {
+            throw XCTSkip("Local Go needs at least two canonical interest options")
+        }
+
+        defer {
+            _ = try? saveSmokeInterests(original.domains, token: session.token)
+        }
+
+        _ = try saveSmokeInterests([options[0]], token: session.token)
+        seedAppSession(session)
+        launchInterestTestRoute()
+
+        waitFor("screen.interests", timeout: 30)
+        XCTAssertEqual(waitFor("interests.option.0").value as? String, "selected")
+        tap("interests.option.1")
+        tap("interests.next")
+        waitFor("tab.flow", timeout: 30)
+
+        let saved = try fetchSmokeInterests(token: session.token)
+        XCTAssertEqual(Set(saved.domains), Set(options.prefix(2)))
+        XCTAssertTrue(saved.interestSelectionCompleted)
+    }
+
+    func testFirstRunInterestsSkipDoesNotWrite() throws {
+        let session = try requireSmokeSession()
+        let original = try fetchSmokeInterests(token: session.token)
+        seedAppSession(session)
+        launchInterestTestRoute()
+
+        waitFor("screen.interests", timeout: 30)
+        tap("interests.skip")
+        waitFor("tab.flow", timeout: 30)
+
+        let after = try fetchSmokeInterests(token: session.token)
+        XCTAssertEqual(after.domains, original.domains)
+        XCTAssertEqual(
+            after.interestSelectionCompleted,
+            original.interestSelectionCompleted
+        )
+    }
+
     private func launchAuthenticatedApp() {
         let environment = ProcessInfo.processInfo.environment
 
@@ -1850,6 +2115,16 @@ final class ArcNoteUITests: XCTestCase {
         app.launchEnvironment["CHORAI_UI_TEST_USERNAME"] = session.username
     }
 
+    private func launchInterestTestRoute() {
+        app.launchEnvironment["CHORAI_UI_TEST"] = "1"
+        let environment = ProcessInfo.processInfo.environment
+        if let baseURL = environment["CHORAI_API_BASE_URL"], !baseURL.isEmpty {
+            app.launchEnvironment["CHORAI_API_BASE_URL"] = baseURL
+        }
+        app.launchArguments.append("--ui-test-open-interests")
+        app.launch()
+    }
+
     @discardableResult
     private func waitFor(_ identifier: String, timeout: TimeInterval = 10, file: StaticString = #filePath, line: UInt = #line) -> XCUIElement {
         let element = app.descendants(matching: .any)[identifier]
@@ -1893,6 +2168,42 @@ final class ArcNoteUITests: XCTestCase {
 
         XCTFail("Flow did not advance from card \(initialCardId)", file: file, line: line)
         return initialCardId
+    }
+
+    private func flowVisibleCardID() -> String {
+        anchorLabel("flow.visible-card.id")
+    }
+
+    private func anchorLabel(_ identifier: String) -> String {
+        waitFor(identifier, timeout: 30)
+            .label
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func accessibilityValue(_ identifier: String) -> String {
+        (waitFor(identifier, timeout: 30).value as? String) ?? ""
+    }
+
+    private func waitForAccessibilityValue(
+        _ identifier: String,
+        expected: String,
+        timeout: TimeInterval = 15,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let element = app.descendants(matching: .any)[identifier]
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if (element.value as? String) == expected {
+                return
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+        }
+        XCTFail(
+            "Accessibility value for \(identifier) did not become \(expected)",
+            file: file,
+            line: line
+        )
     }
 
     private func openSparkFromDetail(
@@ -2751,6 +3062,28 @@ final class ArcNoteUITests: XCTestCase {
         let username: String
     }
 
+    private struct SmokeInterestResponse: Decodable {
+        let data: SmokeInterestData
+    }
+
+    private struct SmokeInterestData: Decodable {
+        let domains: [String]
+        let interestSelectionCompleted: Bool
+
+        enum CodingKeys: String, CodingKey {
+            case domains
+            case interestSelectionCompleted = "interest_selection_completed"
+        }
+    }
+
+    private struct SmokeInterestOptionsResponse: Decodable {
+        let data: SmokeInterestOptionsData
+    }
+
+    private struct SmokeInterestOptionsData: Decodable {
+        let domains: [String]
+    }
+
     private struct SmokeCardResponse: Decodable {
         let data: SmokeCardData
 
@@ -3082,6 +3415,28 @@ final class ArcNoteUITests: XCTestCase {
         )
     }
 
+    private func requireDisposableSmokeSession(
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) throws -> SmokeSession {
+        if let session = fetchLocalPhoneSmokeSession() {
+            return session
+        }
+        XCTFail(
+            "Unable to authenticate disposable local Go session",
+            file: file,
+            line: line
+        )
+        throw NSError(
+            domain: "ArcNoteUITests",
+            code: 1,
+            userInfo: [
+                NSLocalizedDescriptionKey:
+                    "Unable to authenticate disposable local Go session"
+            ]
+        )
+    }
+
     private func requireSecondarySmokeSession(
         file: StaticString = #filePath,
         line: UInt = #line
@@ -3124,6 +3479,62 @@ final class ArcNoteUITests: XCTestCase {
         request.httpMethod = "POST"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         _ = try sendRawRequest(request)
+    }
+
+    private func fetchSmokeInterestOptions(token: String) throws -> [String] {
+        let response: SmokeInterestOptionsResponse = try sendAuthenticatedSmokeRequest(
+            path: "/api/v1/profile/interests/options",
+            token: token
+        )
+        return response.data.domains
+    }
+
+    private func fetchSmokeInterests(token: String) throws -> SmokeInterestData {
+        let response: SmokeInterestResponse = try sendAuthenticatedSmokeRequest(
+            path: "/api/v1/profile/interests",
+            token: token
+        )
+        return response.data
+    }
+
+    @discardableResult
+    private func saveSmokeInterests(
+        _ domains: [String],
+        token: String
+    ) throws -> SmokeInterestData {
+        let response: SmokeInterestResponse = try sendAuthenticatedSmokeRequest(
+            path: "/api/v1/profile/interests",
+            token: token,
+            method: "PUT",
+            body: ["domains": domains]
+        )
+        return response.data
+    }
+
+    private func sendAuthenticatedSmokeRequest<T: Decodable>(
+        path: String,
+        token: String,
+        method: String = "GET",
+        body: [String: Any]? = nil
+    ) throws -> T {
+        let baseURL = ProcessInfo.processInfo.environment[
+            "CHORAI_API_BASE_URL"
+        ] ?? "http://127.0.0.1:8080"
+        guard let url = URL(string: "\(baseURL)\(path)") else {
+            throw NSError(
+                domain: "ArcNoteUITests",
+                code: 2,
+                userInfo: [NSLocalizedDescriptionKey: "Invalid Go API URL"]
+            )
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        if let body {
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        }
+        return try sendRequest(request, responseType: T.self)
     }
 
     private func restartSmokeOnboarding(
@@ -3489,6 +3900,32 @@ final class ArcNoteUITests: XCTestCase {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
             _ = try? sendRawRequest(request)
         }
+    }
+
+    private func setSmokeLikeStatus(
+        _ liked: Bool,
+        id: String,
+        token: String
+    ) throws {
+        let baseURL = ProcessInfo.processInfo.environment[
+            "CHORAI_API_BASE_URL"
+        ] ?? "http://127.0.0.1:8080"
+        let path = liked
+            ? "/api/v1/actors/me/likes"
+            : "/api/v1/actors/me/likes/\(id)"
+        guard let url = URL(string: "\(baseURL)\(path)") else {
+            throw URLError(.badURL)
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = liked ? "POST" : "DELETE"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        if liked {
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = try JSONSerialization.data(
+                withJSONObject: ["asset_id": id]
+            )
+        }
+        _ = try sendRawRequest(request)
     }
 
     private func fetchAssetStatus(kind: String, id: String, token: String) throws -> Bool {

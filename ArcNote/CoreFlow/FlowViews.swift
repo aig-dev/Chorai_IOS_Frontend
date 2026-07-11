@@ -397,6 +397,21 @@ struct FlowDeckView: View {
                     .foregroundStyle(Color.white.opacity(0.01))
                     .frame(width: 1, height: 1)
                     .accessibilityIdentifier("flow.visible-card.id")
+                Text("\(card.likeCount)")
+                    .font(.system(size: 1))
+                    .foregroundStyle(Color.white.opacity(0.01))
+                    .frame(width: 1, height: 1)
+                    .accessibilityIdentifier("flow.like.count.\(card.id)")
+                Text(card.isFavorited ? "true" : "false")
+                    .font(.system(size: 1))
+                    .foregroundStyle(Color.white.opacity(0.01))
+                    .frame(width: 1, height: 1)
+                    .accessibilityIdentifier("flow.favorite.\(card.id)")
+                Text("\(card.favoriteCount)")
+                    .font(.system(size: 1))
+                    .foregroundStyle(Color.white.opacity(0.01))
+                    .frame(width: 1, height: 1)
+                    .accessibilityIdentifier("flow.favorite.count.\(card.id)")
             }
         }
         .task { store.loadInitialIfNeeded() }
