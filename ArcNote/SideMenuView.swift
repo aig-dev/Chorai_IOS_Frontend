@@ -293,7 +293,7 @@ struct SideMenuItem: View {
                     Circle()
                         .fill(Color.purple)
                         .frame(width: 6, height: 6)
-                        .accessibilityIdentifier("side-menu.notification.unread-dot")
+                        .accessibilityIdentifier("side-menu.notification-unread")
                 }
                 
                 Spacer()

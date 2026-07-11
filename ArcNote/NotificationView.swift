@@ -9,6 +9,7 @@ struct NotificationView: View {
     @State private var selectedActorID: String?
     @State private var selectedAssetID: String?
     @State private var selectedLegacyID: String?
+    @State private var pendingNotificationID: String?
     @State private var hasLoaded = false
 
     private let actorID: String?
@@ -85,6 +86,16 @@ struct NotificationView: View {
                 actorID: actorID ?? AuthManager.shared.currentUser?.id ?? ""
             )
         }
+        .onChange(of: store.mutatingIDs) { mutatingIDs in
+            guard let pendingNotificationID,
+                  !mutatingIDs.contains(pendingNotificationID) else {
+                return
+            }
+            Task { @MainActor in
+                await Task.yield()
+                completePendingNavigation()
+            }
+        }
     }
 
     private var actorDestinationPresented: Binding<Bool> {
@@ -145,7 +156,7 @@ struct NotificationView: View {
     }
 
     private var filterStrip: some View {
-        ZStack(alignment: .trailing) {
+        VStack(alignment: .trailing, spacing: 8) {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 12) {
                     filterTag(.all, title: "All")
@@ -153,8 +164,7 @@ struct NotificationView: View {
                     filterTag(.activity, title: "Activity")
                     filterTag(.system, title: "System")
                 }
-                .padding(.leading, 20)
-                .padding(.trailing, 108)
+                .padding(.horizontal, 20)
             }
 
             Button {
@@ -347,6 +357,28 @@ struct NotificationView: View {
     }
 
     private func open(_ notification: CommunityNotification) {
+        guard !store.mutatingIDs.contains(notification.id) else { return }
+        if !notification.isRead {
+            pendingNotificationID = notification.id
+            store.markRead(notificationID: notification.id)
+            return
+        }
+        route(notification)
+    }
+
+    private func completePendingNavigation() {
+        guard let pendingNotificationID else { return }
+        defer { self.pendingNotificationID = nil }
+        guard store.actionFailure == nil,
+              let notification = store.items.first(where: {
+                  $0.id == pendingNotificationID
+              }), notification.isRead else {
+            return
+        }
+        route(notification)
+    }
+
+    private func route(_ notification: CommunityNotification) {
         store.markRead(notificationID: notification.id)
         switch notification.target {
         case .actor(let actorID):
