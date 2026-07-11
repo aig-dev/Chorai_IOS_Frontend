@@ -32,38 +32,41 @@ struct FollowListView: View {
                 Image("home_bg")
                     .resizable()
                     .aspectRatio(contentMode: .fill)
-                    .ignoresSafeArea()
+                    .ignoresSafeArea(edges: .bottom)
 
                 VStack(spacing: 0) {
-                    HStack {
-                        Button {
-                            dismiss()
-                        } label: {
-                            Image(systemName: "chevron.left")
-                                .font(.system(size: 20, weight: .medium))
-                                .foregroundColor(.white)
-                        }
-
-                        Spacer()
-
-                        Text(kind == .followers ? "Followers" : "Following")
-                            .font(.system(size: 20, weight: .semibold))
-                            .foregroundColor(.white)
-
-                        Spacer()
-
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 20, weight: .medium))
-                            .foregroundColor(.clear)
-                    }
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 16)
-
                     content
+                        .padding(.top, 56)
                 }
             }
-            .navigationBarHidden(true)
-            .accessibilityIdentifier("screen.follow-list")
+            .toolbarBackground(.hidden, for: .navigationBar)
+            .toolbarColorScheme(.dark, for: .navigationBar)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 20, weight: .medium))
+                            .foregroundColor(.white)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Back")
+                }
+
+                ToolbarItem(placement: .principal) {
+                    Text(kind == .followers ? "Followers" : "Following")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundColor(.white)
+                }
+            }
+            .overlay(alignment: .topLeading) {
+                Text("Follow list")
+                    .font(.system(size: 1))
+                    .foregroundStyle(.clear)
+                    .frame(width: 1, height: 1)
+                    .accessibilityIdentifier("screen.follow-list")
+            }
             .navigationDestination(isPresented: $navigateToProfile) {
                 if let selectedActorID {
                     UserProfileView(actorId: selectedActorID)
@@ -77,6 +80,8 @@ struct FollowListView: View {
                 )
             }
         }
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
     }
 
     @ViewBuilder

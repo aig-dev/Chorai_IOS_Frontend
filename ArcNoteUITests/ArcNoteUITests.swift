@@ -1933,6 +1933,194 @@ final class ArcNoteUITests: XCTestCase {
         captureReportVisual("actor-report-submitted")
     }
 
+    func testOwnPublicProfileHidesSelfSocialActions() throws {
+        let session = try requireSmokeSession()
+        seedAppSession(session)
+        launchProfileTestRoute(actorID: session.actorId)
+
+        waitFor("screen.user-profile", timeout: 30)
+        XCTAssertEqual(
+            waitFor("user-profile.actor-id")
+                .label
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+            session.actorId
+        )
+        waitFor("user-profile.followers-count", timeout: 30)
+        XCTAssertFalse(exists("user-profile.actions", timeout: 2))
+        XCTAssertFalse(exists("user-profile.follow", timeout: 2))
+        XCTAssertFalse(exists("user-profile.chat", timeout: 2))
+        captureVisual("profile-own-no-self-actions")
+    }
+
+    func testPublicProfileFollowAndUnfollowCommitCanonicalCount() throws {
+        let session = try requireSmokeSession()
+        let target = try requireSecondarySmokeSession()
+        XCTAssertNotEqual(session.actorId, target.actorId)
+        try? setSmokeBlocked(
+            actorID: target.actorId,
+            token: session.token,
+            blocked: false
+        )
+        try? setSmokeFollowing(
+            actorID: target.actorId,
+            token: session.token,
+            following: false
+        )
+        defer {
+            try? setSmokeFollowing(
+                actorID: target.actorId,
+                token: session.token,
+                following: false
+            )
+        }
+
+        let initial = try fetchSmokePublicProfile(
+            actorID: target.actorId,
+            token: session.token
+        )
+        XCTAssertFalse(initial.isFollowing)
+        seedAppSession(session)
+        launchProfileTestRoute(actorID: target.actorId)
+
+        waitFor("screen.user-profile", timeout: 30)
+        waitForProfileFollowValue("not-following")
+        tap("user-profile.follow")
+        waitForProfileFollowValue("following", timeout: 30)
+        let followed = waitForSmokePublicProfile(
+            actorID: target.actorId,
+            token: session.token,
+            isFollowing: true
+        )
+        XCTAssertEqual(followed.followerCount, initial.followerCount + 1)
+        waitForAccessibilityValue(
+            "user-profile.followers-count",
+            value: "\(followed.followerCount)"
+        )
+
+        tap("user-profile.follow")
+        waitForProfileFollowValue("not-following", timeout: 30)
+        let unfollowed = waitForSmokePublicProfile(
+            actorID: target.actorId,
+            token: session.token,
+            isFollowing: false
+        )
+        XCTAssertEqual(unfollowed.followerCount, initial.followerCount)
+        captureVisual("profile-follow-round-trip")
+    }
+
+    func testFollowersListHonorsCanonicalPrivacy() throws {
+        let session = try requireSmokeSession()
+        let target = try requireSecondarySmokeSession()
+        let originalPrivacy = try fetchSmokePrivacy(token: target.token)
+        try? setSmokeBlocked(
+            actorID: target.actorId,
+            token: session.token,
+            blocked: false
+        )
+        try setSmokePrivacy(token: target.token, showFollowLists: true)
+        try ensureSmokeFollowing(
+            actorID: target.actorId,
+            token: session.token,
+            following: true
+        )
+        defer {
+            try? ensureSmokeFollowing(
+                actorID: target.actorId,
+                token: session.token,
+                following: false
+            )
+            try? setSmokePrivacy(
+                token: target.token,
+                showFollowLists: originalPrivacy.showFollowLists
+            )
+        }
+
+        seedAppSession(session)
+        launchProfileTestRoute(actorID: target.actorId)
+        waitFor("user-profile.followers-count", timeout: 30).tap()
+        waitFor("screen.follow-list", timeout: 20)
+        waitFor("follow-list.row.\(session.actorId)", timeout: 30)
+        captureVisual("profile-followers-visible")
+
+        app.terminate()
+        try setSmokePrivacy(token: target.token, showFollowLists: false)
+        app.launch()
+        waitFor("user-profile.followers-count", timeout: 30).tap()
+        waitFor("follow-list.private", timeout: 30)
+        captureVisual("profile-followers-private")
+    }
+
+    func testBlockedUserPersistsAcrossRelaunchAndCanBeUnblocked() throws {
+        let session = try requireSmokeSession()
+        let target = try requireSecondarySmokeSession()
+        try? setSmokeBlocked(
+            actorID: target.actorId,
+            token: session.token,
+            blocked: false
+        )
+        defer {
+            try? setSmokeBlocked(
+                actorID: target.actorId,
+                token: session.token,
+                blocked: false
+            )
+        }
+
+        seedAppSession(session)
+        launchProfileTestRoute(actorID: target.actorId)
+        waitFor("screen.user-profile", timeout: 30)
+        tap("user-profile.actions")
+        let blockAction = app.buttons["Block this user"]
+        XCTAssertTrue(blockAction.waitForExistence(timeout: 10))
+        blockAction.tap()
+        let confirmation = app.alerts.buttons["Block"]
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 10))
+        confirmation.tap()
+        waitForSmokeBlockedActor(
+            actorID: target.actorId,
+            token: session.token,
+            blocked: true
+        )
+
+        app.terminate()
+        app.launchArguments.removeAll { $0 == "--ui-test-open-profile" }
+        app.launchEnvironment.removeValue(
+            forKey: "CHORAI_UI_TEST_PROFILE_ACTOR_ID"
+        )
+        launchAuthenticatedApp()
+        tap("side-menu.open")
+        tap("side-menu.settings")
+        waitFor("screen.settings.loaded", timeout: 20)
+        tap("settings.account-privacy")
+        tap("account-privacy.blocked-users")
+        waitFor("screen.blocked-users", timeout: 20)
+        waitFor("blocked-users.row.\(target.actorId)", timeout: 30)
+        captureVisual("profile-blocked-users-restored")
+
+        tap("blocked-users.unblock.\(target.actorId)")
+        waitFor("blocked-users.empty", timeout: 30)
+        waitForSmokeBlockedActor(
+            actorID: target.actorId,
+            token: session.token,
+            blocked: false
+        )
+    }
+
+    func testPublicProfileTransportFailureRemainsInline() throws {
+        let session = try requireSmokeSession()
+        let target = try requireSecondarySmokeSession()
+        seedAppSession(session)
+        app.launchEnvironment["CHORAI_API_BASE_URL"] = "http://127.0.0.1:1"
+        launchProfileTestRoute(actorID: target.actorId)
+
+        waitFor("screen.user-profile", timeout: 15)
+        waitFor("user-profile.load-error", timeout: 20)
+        XCTAssertFalse(
+            app.alerts.firstMatch.waitForExistence(timeout: 2),
+            "Profile transport errors should stay local to the profile screen"
+        )
+    }
+
     func testFailedRecordDraftRestoresAfterRelaunch() throws {
         let session = try requireSmokeSession()
         let healthyBaseURL = ProcessInfo.processInfo.environment["CHORAI_API_BASE_URL"]
@@ -2123,6 +2311,57 @@ final class ArcNoteUITests: XCTestCase {
         }
         app.launchArguments.append("--ui-test-open-interests")
         app.launch()
+    }
+
+    private func launchProfileTestRoute(actorID: String) {
+        app.launchEnvironment["CHORAI_UI_TEST"] = "1"
+        if let baseURL = ProcessInfo.processInfo.environment[
+            "CHORAI_API_BASE_URL"
+        ], app.launchEnvironment["CHORAI_API_BASE_URL"] == nil {
+            app.launchEnvironment["CHORAI_API_BASE_URL"] = baseURL
+        }
+        app.launchEnvironment["CHORAI_UI_TEST_PROFILE_ACTOR_ID"] = actorID
+        if !app.launchArguments.contains("--ui-test-open-profile") {
+            app.launchArguments.append("--ui-test-open-profile")
+        }
+        app.launch()
+    }
+
+    private func waitForProfileFollowValue(
+        _ expected: String,
+        timeout: TimeInterval = 15,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        waitForAccessibilityValue(
+            "user-profile.follow",
+            value: expected,
+            timeout: timeout,
+            file: file,
+            line: line
+        )
+    }
+
+    private func waitForAccessibilityValue(
+        _ identifier: String,
+        value expected: String,
+        timeout: TimeInterval = 15,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let element = waitFor(identifier, timeout: timeout, file: file, line: line)
+        let predicate = NSPredicate(format: "value == %@", expected)
+        let expectation = XCTNSPredicateExpectation(
+            predicate: predicate,
+            object: element
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [expectation], timeout: timeout),
+            .completed,
+            "Timed out waiting for \(identifier) value \(expected)",
+            file: file,
+            line: line
+        )
     }
 
     @discardableResult
@@ -3185,6 +3424,52 @@ final class ArcNoteUITests: XCTestCase {
         let data: SmokeProfile
     }
 
+    private struct SmokePublicProfileResponse: Decodable {
+        let data: SmokePublicProfile
+    }
+
+    private struct SmokePublicProfile: Decodable {
+        let actorID: String
+        let followerCount: Int
+        let followingCount: Int
+        let isFollowing: Bool
+
+        enum CodingKeys: String, CodingKey {
+            case actorID = "actor_id"
+            case followerCount = "follower_count"
+            case followingCount = "following_count"
+            case isFollowing = "is_following"
+        }
+    }
+
+    private struct SmokePrivacyResponse: Decodable {
+        let data: SmokePrivacy
+    }
+
+    private struct SmokePrivacy: Decodable {
+        let showFollowLists: Bool
+
+        enum CodingKeys: String, CodingKey {
+            case showFollowLists = "show_follow_lists"
+        }
+    }
+
+    private struct SmokeBlockedActorsResponse: Decodable {
+        let data: SmokeBlockedActorsPage
+    }
+
+    private struct SmokeBlockedActorsPage: Decodable {
+        let items: [SmokeBlockedActor]
+    }
+
+    private struct SmokeBlockedActor: Decodable {
+        let actorID: String
+
+        enum CodingKeys: String, CodingKey {
+            case actorID = "actor_id"
+        }
+    }
+
     private struct SmokeProfile: Decodable {
         let username: String
         let avatarURL: String
@@ -3447,6 +3732,11 @@ final class ArcNoteUITests: XCTestCase {
         let password = environment["CHORAI_UI_TEST_TARGET_PASSWORD"]
             ?? "Password123"
         if let session = fetchSmokeSession(email: email, password: password) {
+            return session
+        }
+        let phone = environment["CHORAI_UI_TEST_TARGET_PHONE"]
+            ?? "+8613907111235"
+        if let session = fetchLocalPhoneSmokeSession(phone: phone) {
             return session
         }
         XCTFail(
@@ -4023,6 +4313,207 @@ final class ArcNoteUITests: XCTestCase {
         return try sendRequest(request, responseType: SmokeProfileResponse.self).data
     }
 
+    private func fetchSmokePublicProfile(
+        actorID: String,
+        token: String
+    ) throws -> SmokePublicProfile {
+        let baseURL = ProcessInfo.processInfo.environment[
+            "CHORAI_API_BASE_URL"
+        ] ?? "http://127.0.0.1:8080"
+        guard let url = URL(
+            string: "\(baseURL)/api/v1/profile/\(actorID)"
+        ) else {
+            throw URLError(.badURL)
+        }
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        return try sendRequest(
+            request,
+            responseType: SmokePublicProfileResponse.self
+        ).data
+    }
+
+    private func waitForSmokePublicProfile(
+        actorID: String,
+        token: String,
+        isFollowing: Bool,
+        timeout: TimeInterval = 20,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) -> SmokePublicProfile {
+        let deadline = Date().addingTimeInterval(timeout)
+        var last: SmokePublicProfile?
+        var lastError: Error?
+        while Date() < deadline {
+            do {
+                let profile = try fetchSmokePublicProfile(
+                    actorID: actorID,
+                    token: token
+                )
+                last = profile
+                if profile.isFollowing == isFollowing {
+                    return profile
+                }
+            } catch {
+                lastError = error
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.3))
+        }
+        XCTFail(
+            "Timed out waiting for follow=\(isFollowing); last=\(String(describing: last)), error=\(String(describing: lastError))",
+            file: file,
+            line: line
+        )
+        return last ?? SmokePublicProfile(
+            actorID: actorID,
+            followerCount: -1,
+            followingCount: -1,
+            isFollowing: !isFollowing
+        )
+    }
+
+    private func setSmokeFollowing(
+        actorID: String,
+        token: String,
+        following: Bool
+    ) throws {
+        let baseURL = ProcessInfo.processInfo.environment[
+            "CHORAI_API_BASE_URL"
+        ] ?? "http://127.0.0.1:8080"
+        guard let url = URL(
+            string: "\(baseURL)/api/follows/\(actorID)"
+        ) else {
+            throw URLError(.badURL)
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = following ? "POST" : "DELETE"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        _ = try sendRawRequest(request)
+    }
+
+    private func ensureSmokeFollowing(
+        actorID: String,
+        token: String,
+        following: Bool
+    ) throws {
+        let current = try fetchSmokePublicProfile(
+            actorID: actorID,
+            token: token
+        )
+        guard current.isFollowing != following else { return }
+        try setSmokeFollowing(
+            actorID: actorID,
+            token: token,
+            following: following
+        )
+    }
+
+    private func fetchSmokePrivacy(token: String) throws -> SmokePrivacy {
+        let baseURL = ProcessInfo.processInfo.environment[
+            "CHORAI_API_BASE_URL"
+        ] ?? "http://127.0.0.1:8080"
+        guard let url = URL(
+            string: "\(baseURL)/api/v1/profile/me/privacy"
+        ) else {
+            throw URLError(.badURL)
+        }
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        return try sendRequest(
+            request,
+            responseType: SmokePrivacyResponse.self
+        ).data
+    }
+
+    private func setSmokePrivacy(
+        token: String,
+        showFollowLists: Bool
+    ) throws {
+        let baseURL = ProcessInfo.processInfo.environment[
+            "CHORAI_API_BASE_URL"
+        ] ?? "http://127.0.0.1:8080"
+        guard let url = URL(
+            string: "\(baseURL)/api/v1/profile/me/privacy"
+        ) else {
+            throw URLError(.badURL)
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "PUT"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: [
+            "show_follow_lists": showFollowLists
+        ])
+        _ = try sendRawRequest(request)
+    }
+
+    private func setSmokeBlocked(
+        actorID: String,
+        token: String,
+        blocked: Bool
+    ) throws {
+        let baseURL = ProcessInfo.processInfo.environment[
+            "CHORAI_API_BASE_URL"
+        ] ?? "http://127.0.0.1:8080"
+        guard let url = URL(
+            string: "\(baseURL)/api/user-blocks/\(actorID)"
+        ) else {
+            throw URLError(.badURL)
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = blocked ? "POST" : "DELETE"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        _ = try sendRawRequest(request)
+    }
+
+    private func fetchSmokeBlockedActors(
+        token: String
+    ) throws -> [SmokeBlockedActor] {
+        let baseURL = ProcessInfo.processInfo.environment[
+            "CHORAI_API_BASE_URL"
+        ] ?? "http://127.0.0.1:8080"
+        guard let url = URL(
+            string: "\(baseURL)/api/user-blocks?limit=50"
+        ) else {
+            throw URLError(.badURL)
+        }
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        return try sendRequest(
+            request,
+            responseType: SmokeBlockedActorsResponse.self
+        ).data.items
+    }
+
+    private func waitForSmokeBlockedActor(
+        actorID: String,
+        token: String,
+        blocked: Bool,
+        timeout: TimeInterval = 20,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let deadline = Date().addingTimeInterval(timeout)
+        var lastIDs: [String] = []
+        var lastError: Error?
+        while Date() < deadline {
+            do {
+                lastIDs = try fetchSmokeBlockedActors(token: token).map(\.actorID)
+                if lastIDs.contains(actorID) == blocked {
+                    return
+                }
+            } catch {
+                lastError = error
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.3))
+        }
+        XCTFail(
+            "Timed out waiting for blocked=\(blocked); ids=\(lastIDs), error=\(String(describing: lastError))",
+            file: file,
+            line: line
+        )
+    }
+
     private func updateCurrentSmokeProfile(token: String, username: String, avatarURL: String, bio: String, city: String, birthday: String) throws {
         let baseURL = ProcessInfo.processInfo.environment["CHORAI_API_BASE_URL"] ?? "http://127.0.0.1:8080"
         guard let url = URL(string: "\(baseURL)/api/v1/profile/me") else {
@@ -4355,11 +4846,14 @@ final class ArcNoteUITests: XCTestCase {
         return result
     }
 
-    private func fetchLocalPhoneSmokeSession() -> SmokeSession? {
+    private func fetchLocalPhoneSmokeSession(
+        phone phoneOverride: String? = nil
+    ) -> SmokeSession? {
         let environment = ProcessInfo.processInfo.environment
         let baseURL = environment["CHORAI_API_BASE_URL"]
             ?? "http://127.0.0.1:8080"
-        let phone = environment["CHORAI_UI_TEST_PHONE"]
+        let phone = phoneOverride
+            ?? environment["CHORAI_UI_TEST_PHONE"]
             ?? "+8613907111234"
         let password = environment["CHORAI_UI_TEST_PASSWORD"]
             ?? "Password123"

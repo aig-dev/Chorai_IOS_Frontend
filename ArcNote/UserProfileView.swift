@@ -132,6 +132,7 @@ struct UserProfileView: View {
                                                 .resizable()
                                                 .frame(width: 42, height: 42)
                                         }
+                                        .accessibilityIdentifier("user-profile.chat")
                                         
                                         Button(action: {
                                             profileStore.toggleFollow()
@@ -214,6 +215,9 @@ struct UserProfileView: View {
                                     }
                                     .buttonStyle(.plain)
                                     .accessibilityIdentifier("user-profile.following-count")
+                                    .accessibilityValue(
+                                        "\(profileStore.profile?.followingCount ?? 0)"
+                                    )
                                     
                                     Spacer()
                                     Button {
@@ -237,6 +241,9 @@ struct UserProfileView: View {
                                     }
                                     .buttonStyle(.plain)
                                     .accessibilityIdentifier("user-profile.followers-count")
+                                    .accessibilityValue(
+                                        "\(profileStore.profile?.followerCount ?? 0)"
+                                    )
                                 }
                             }
                             .padding(.horizontal, 20)

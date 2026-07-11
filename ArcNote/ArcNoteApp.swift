@@ -18,6 +18,15 @@ struct ArcNoteApp: App {
     private let isAPIMigrationSmoke = APIMigrationSmokeRunner.isRequested
     private let isInterestUITestRoute = ProcessInfo.processInfo.arguments
         .contains("--ui-test-open-interests")
+    private let profileUITestActorID: String? = {
+        guard ProcessInfo.processInfo.arguments
+            .contains("--ui-test-open-profile") else {
+            return nil
+        }
+        return ProcessInfo.processInfo.environment[
+            "CHORAI_UI_TEST_PROFILE_ACTOR_ID"
+        ]
+    }()
     #endif
 
     init() {
@@ -35,6 +44,11 @@ struct ArcNoteApp: App {
             } else if isInterestUITestRoute {
                 NavigationStack {
                     ChooseInterestsView()
+                }
+            } else if let profileUITestActorID,
+                      !profileUITestActorID.isEmpty {
+                NavigationStack {
+                    UserProfileView(actorId: profileUITestActorID)
                 }
             } else {
                 ContentView()

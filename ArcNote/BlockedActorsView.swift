@@ -158,7 +158,13 @@ struct BlockedActorsView: View {
             }
         }
         .navigationBarHidden(true)
-        .accessibilityIdentifier("screen.blocked-users")
+        .overlay(alignment: .topLeading) {
+            Text("Blocked users")
+                .font(.system(size: 1))
+                .foregroundStyle(.clear)
+                .frame(width: 1, height: 1)
+                .accessibilityIdentifier("screen.blocked-users")
+        }
         .onAppear(perform: store.load)
     }
 
@@ -282,6 +288,7 @@ struct BlockedActorsView: View {
                         .lineLimit(1)
                 }
             }
+            .accessibilityIdentifier("blocked-users.row.\(actor.actorID)")
 
             Spacer()
 
@@ -305,7 +312,6 @@ struct BlockedActorsView: View {
             .accessibilityIdentifier("blocked-users.unblock.\(actor.actorID)")
         }
         .padding(.vertical, 14)
-        .accessibilityIdentifier("blocked-users.row.\(actor.actorID)")
     }
 
     private func profileImage(_ avatarURL: String?) -> some View {
