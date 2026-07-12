@@ -13,6 +13,41 @@ public final class NoteImportStore: ObservableObject {
     @Published public private(set) var detail: NoteImportJobDetail?
     @Published public private(set) var phase: NoteImportPhase = .idle
 
+    public var canReload: Bool {
+        guard actorID != nil else { return false }
+        if case .failed = phase { return operationTask == nil }
+        return false
+    }
+
+    public var canRetrySubmission: Bool {
+        guard operationTask == nil,
+              actorID != nil,
+              clientRequestID != nil,
+              Self.validate(selectedFiles) == nil else {
+            return false
+        }
+        return phase == .ambiguous || Self.isFailure(phase)
+    }
+
+    public var needsFileReselectionForRetry: Bool {
+        guard clientRequestID != nil,
+              phase == .ambiguous || Self.isFailure(phase) else {
+            return false
+        }
+        return Self.validate(selectedFiles) != nil
+    }
+
+    public var canCancelCurrentJob: Bool {
+        guard operationTask != nil || phase == .ready else { return false }
+        if let detail {
+            return detail.status == .queued || detail.status == .running
+        }
+        if let receipt {
+            return receipt.status == .queued || receipt.status == .running
+        }
+        return false
+    }
+
     private let service: any CoreNoteImportServing
     private let persistence: any NoteImportRequestIDPersisting
     private let sleeper: any NoteImportSleeping

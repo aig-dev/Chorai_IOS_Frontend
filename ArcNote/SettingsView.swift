@@ -407,6 +407,38 @@ struct SettingsRow: View {
     }
 }
 
+struct SettingsDestinationHeader: View {
+    let title: String
+    let dismiss: () -> Void
+
+    var body: some View {
+        HStack {
+            Button(action: dismiss) {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 20, weight: .medium))
+                    .foregroundColor(.white)
+            }
+            .accessibilityLabel("Back")
+
+            Spacer()
+
+            Text(title)
+                .font(.system(size: 24, weight: .bold))
+                .foregroundColor(.white)
+
+            Spacer()
+
+            Image(systemName: "chevron.left")
+                .font(.system(size: 20, weight: .medium))
+                .foregroundColor(.clear)
+                .accessibilityHidden(true)
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 60)
+        .padding(.bottom, 30)
+    }
+}
+
 #Preview {
     SettingsView()
 } 

@@ -654,6 +654,33 @@ final class ChoraProfileStoreTests: XCTestCase {
         XCTAssertEqual(draft.mimeType, "image/png")
     }
 
+    func testRetryGrowthKeepsIdentityDraftsAndDoesNotReloadIdentity() async {
+        let service = ChoraProfileServiceSpy(
+            identities: [.init(result: .success(.fixture()))],
+            growth: [
+                .init(result: .failure(.failed)),
+                .init(result: .success(.fixture(version: "retried")))
+            ]
+        )
+        let store = ChoraProfileStore(service: service)
+        await store.load(humanActorID: "act_human")
+        await waitUntil {
+            if case .unavailable = store.growthPhase { return true }
+            return false
+        }
+        store.setDisplayNameDraft("Unsaved Chora")
+        store.setPreferredAddressDraft("Unsaved address")
+
+        store.retryGrowth()
+        await waitUntil { store.growth?.version == "retried" }
+
+        let identityCount = await service.identityRequestCount()
+        XCTAssertEqual(identityCount, 1)
+        XCTAssertEqual(store.displayNameDraft, "Unsaved Chora")
+        XCTAssertEqual(store.preferredAddressDraft, "Unsaved address")
+        XCTAssertEqual(store.changedFields, [.displayName, .preferredAddress])
+    }
+
     private func waitUntil(
         timeout: TimeInterval = 1,
         _ predicate: @escaping @MainActor () -> Bool

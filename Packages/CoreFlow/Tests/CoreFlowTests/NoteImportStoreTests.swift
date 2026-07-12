@@ -4,6 +4,32 @@ import XCTest
 
 @MainActor
 final class NoteImportStoreTests: XCTestCase {
+    func testActionCapabilitiesRequireExactRecoverablePrerequisites() async {
+        let failedService = NoteImportServiceSpy(jobsFail: true)
+        let failedStore = makeStore(service: failedService)
+        await failedStore.load(actorID: "act_1")
+        XCTAssertTrue(failedStore.canReload)
+        XCTAssertFalse(failedStore.canRetrySubmission)
+        XCTAssertFalse(failedStore.canCancelCurrentJob)
+
+        let persistence = NoteImportPersistenceSpy(values: ["act_1": "req_old"])
+        let ambiguousStore = makeStore(
+            service: NoteImportServiceSpy(jobLists: [[]]),
+            persistence: persistence
+        )
+        await ambiguousStore.load(actorID: "act_1")
+        XCTAssertTrue(ambiguousStore.needsFileReselectionForRetry)
+        XCTAssertFalse(ambiguousStore.canRetrySubmission)
+
+        let suspendedService = NoteImportServiceSpy(enqueueSuspended: true)
+        let submittingStore = makeStore(service: suspendedService)
+        await submittingStore.load(actorID: "act_1")
+        submittingStore.select([file("one.md", format: .markdown)])
+        submittingStore.start()
+        await waitUntil { await suspendedService.enqueueCount() == 1 }
+        XCTAssertFalse(submittingStore.canCancelCurrentJob)
+    }
+
     func testSelectionAcceptsOnlySupportedNonemptyDescriptorsBeforeServiceCall() async {
         let service = NoteImportServiceSpy()
         let persistence = NoteImportPersistenceSpy()
@@ -844,6 +870,7 @@ private actor NoteImportServiceSpy: CoreNoteImportServing {
     private let cancelThrowsCancellation: Bool
     private let cancelSuspended: Bool
     private let jobsSuspendedCalls: Set<Int>
+    private let jobsFail: Bool
     private var cancelStarted = false
     private var cancelCancellationCount = 0
     private var suspendedJobsStartCount = 0
@@ -859,7 +886,8 @@ private actor NoteImportServiceSpy: CoreNoteImportServing {
         cancelThrowsCancellation: Bool = false,
         cancelSuspended: Bool = false,
         jobsSuspendedCalls: Set<Int> = [],
-        enqueueSuspended: Bool = false
+        enqueueSuspended: Bool = false,
+        jobsFail: Bool = false
     ) {
         self.enqueueResults = enqueueResults
         self.jobLists = jobLists
@@ -871,6 +899,7 @@ private actor NoteImportServiceSpy: CoreNoteImportServing {
         self.cancelSuspended = cancelSuspended
         self.jobsSuspendedCalls = jobsSuspendedCalls
         self.enqueueSuspended = enqueueSuspended
+        self.jobsFail = jobsFail
     }
 
     func enqueue(files: [NoteImportFile], clientRequestID: String) async throws -> NoteImportReceipt {
@@ -889,6 +918,7 @@ private actor NoteImportServiceSpy: CoreNoteImportServing {
 
     func jobs(limit: Int) async throws -> [NoteImportJobSummary] {
         callLog.append("jobs:\(limit)")
+        if jobsFail { throw NoteImportServiceError.requestFailed(code: "offline") }
         let call = callLog.filter { $0 == "jobs:\(limit)" }.count
         if jobsSuspendedCalls.contains(call) {
             suspendedJobsStartCount += 1

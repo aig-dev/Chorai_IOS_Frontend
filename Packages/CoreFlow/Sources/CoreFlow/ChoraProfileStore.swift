@@ -123,6 +123,18 @@ public final class ChoraProfileStore: ObservableObject {
         fieldErrors[.avatar] = nil
     }
 
+    public func retryGrowth() {
+        guard let humanActorID,
+              let agentActorID = identity?.agentActorID else {
+            return
+        }
+        startGrowth(
+            humanActorID: humanActorID,
+            agentActorID: agentActorID,
+            generation: generation
+        )
+    }
+
     public func save() {
         guard !isSaving,
               let identity,

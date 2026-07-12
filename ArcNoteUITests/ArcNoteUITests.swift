@@ -118,15 +118,13 @@ final class ArcNoteUITests: XCTestCase {
         app.launch()
 
         waitFor("screen.choraProfile")
-        XCTAssertEqual(waitFor("chora.order.identity").label, "1")
-        waitFor("chora.identity.section")
+        let identity = waitFor("chora.identity.section")
         waitFor("chora.identity.avatar")
         waitFor("chora.identity.displayName")
         waitFor("chora.identity.preferredAddress")
         waitFor("chora.identity.save")
 
-        XCTAssertEqual(waitFor("chora.order.growth").label, "2")
-        waitFor("chora.growth.section")
+        let growth = waitFor("chora.growth.section")
         XCTAssertEqual(waitFor("chora.growth.stage").label, "Co-Think")
         for dimension in [
             "curiosity", "insight", "creativity", "empathy", "judgment",
@@ -136,17 +134,25 @@ final class ArcNoteUITests: XCTestCase {
         }
 
         app.swipeUp()
-        XCTAssertEqual(waitFor("chora.order.sources").label, "3")
+        let sources = waitFor("chora.sources.section")
         waitFor("chora.sources.localNotes")
         waitFor("chora.sources.notion")
 
         app.swipeUp()
-        XCTAssertEqual(waitFor("chora.order.chat").label, "4")
+        let chat = waitFor("chora.chat.section")
         waitFor("chora.chat.clear")
         XCTAssertTrue(
             app.staticTexts["Previous messages are hidden on this device."]
                 .exists
         )
+        XCTAssertLessThan(identity.frame.minY, growth.frame.minY)
+        XCTAssertLessThan(growth.frame.minY, sources.frame.minY)
+        XCTAssertLessThan(sources.frame.minY, chat.frame.minY)
+
+        let notion = waitFor("chora.sources.notion")
+        XCTAssertTrue((notion.value as? String)?.contains("Collapsed") == true)
+        notion.tap()
+        XCTAssertTrue((notion.value as? String)?.contains("Expanded") == true)
     }
 
     func testChoraProfileFixtureStatesStaySectionLocal() throws {
@@ -156,6 +162,8 @@ final class ArcNoteUITests: XCTestCase {
         launchChoraProfileFixture(mode: "growth-error")
         waitFor("chora.growth.unavailable")
         XCTAssertFalse(app.alerts.firstMatch.exists)
+        tap("chora.growth.unavailable.retry")
+        XCTAssertEqual(waitFor("chora.growth.stage").label, "Co-Think")
 
         for (mode, identifier) in [
             ("local-import-active", "chora.sources.localNotes.active"),
@@ -183,14 +191,28 @@ final class ArcNoteUITests: XCTestCase {
         app.launch()
 
         waitFor("chora.identity.section")
-        waitFor("chora.identity.displayName")
+        let displayName = waitFor("chora.identity.displayName")
+        XCTAssertEqual(displayName.label, "Display name")
+        XCTAssertTrue(displayName.frame.intersects(app.frame))
         app.swipeUp()
         waitFor("chora.growth.section")
+        XCTAssertFalse(waitFor("chora.growth.curiosity").value as? String == "")
         app.swipeUp()
-        waitFor("chora.sources.localNotes")
-        waitFor("chora.sources.notion")
+        let local = waitFor("chora.sources.localNotes")
+        XCTAssertTrue((local.value as? String)?.contains("Collapsed") == true)
+        XCTAssertTrue(local.frame.intersects(app.frame))
+        let notion = waitFor("chora.sources.notion")
+        XCTAssertTrue((notion.value as? String)?.contains("Collapsed") == true)
         app.swipeUp()
-        waitFor("chora.chat.clear")
+        let clear = waitFor("chora.chat.clear")
+        for _ in 0..<4 where !clear.isHittable { app.swipeUp() }
+        XCTAssertTrue(clear.isHittable)
+        clear.tap()
+        let alert = app.alerts["Clear Chat History?"]
+        XCTAssertTrue(alert.waitForExistence(timeout: 5))
+        XCTAssertTrue(alert.staticTexts["Previous messages will be hidden on this device. They are not deleted from Chorai."].exists)
+        XCTAssertTrue(alert.buttons["Hide Previous Messages"].exists)
+        XCTAssertTrue(alert.buttons["Cancel"].exists)
     }
 
     func testChoraProfilePartialSaveKeepsOnlyFailedDraft() throws {
@@ -217,6 +239,38 @@ final class ArcNoteUITests: XCTestCase {
             waitFor("chora.identity.preferredAddress").value as? String,
             "Captain"
         )
+    }
+
+    func testChoraProfileRecoveryAndCanonicalNotionImportFixtures() throws {
+        for (mode, identifiers) in [
+            ("notion-connected", ["chora.sources.notion.page.page_fixture"]),
+            ("notion-connected-error", ["chora.sources.notion.connected", "chora.sources.notion.error"]),
+            ("notion-status-failed", ["chora.sources.notion.unavailable", "chora.sources.notion.retryStatus"]),
+            ("local-initial-load-failure", ["chora.sources.localNotes.reload"]),
+            ("local-relaunch-ambiguity", ["chora.sources.localNotes.reselect"]),
+            ("local-pre-receipt", ["chora.sources.localNotes.submitting"]),
+            ("notion-import-active", ["chora.sources.notion.import.receipt", "chora.sources.notion.import.running"]),
+            ("notion-import-done", ["chora.sources.notion.import.done", "chora.sources.notion.import.imported"]),
+            ("notion-import-failure", ["chora.sources.notion.import.failed", "chora.sources.notion.import.failure.page_fixture"])
+        ] {
+            launchChoraProfileFixture(mode: mode)
+            app.swipeUp()
+            app.swipeUp()
+            let notionOrLocal = mode.hasPrefix("local-")
+                ? "chora.sources.localNotes"
+                : "chora.sources.notion"
+            tap(notionOrLocal)
+            if mode.hasPrefix("notion-import-") {
+                let page = waitFor("chora.sources.notion.page.page_fixture")
+                page.tap()
+                XCTAssertTrue(page.isSelected)
+                tap("chora.sources.notion.import")
+            }
+            for identifier in identifiers { waitFor(identifier) }
+            if mode == "local-pre-receipt" {
+                XCTAssertFalse(app.buttons["chora.sources.localNotes.cancel"].exists)
+            }
+        }
     }
 
     func testNotificationInboxUIContract() throws {

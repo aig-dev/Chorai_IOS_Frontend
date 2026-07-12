@@ -12,6 +12,8 @@ struct ChoraProfileView: View {
     private let humanActorID: String
     private let chatVisibility: ChatHistoryVisibility
     private let now: @Sendable () -> Date
+    private let initialNoteImportFiles: [NoteImportFile]
+    private let automaticallyStartNoteImport: Bool
 
     init(
         humanActorID: String,
@@ -23,11 +25,15 @@ struct ChoraProfileView: View {
         noteImportSleeper: any NoteImportSleeping = SystemNoteImportSleeper(),
         notionSleeper: any NotionSourceSleeping = SystemNotionSourceSleeper(),
         chatVisibility: ChatHistoryVisibility = ChatHistoryVisibility(),
-        now: @escaping @Sendable () -> Date = { Date() }
+        now: @escaping @Sendable () -> Date = { Date() },
+        initialNoteImportFiles: [NoteImportFile] = [],
+        automaticallyStartNoteImport: Bool = false
     ) {
         self.humanActorID = humanActorID
         self.chatVisibility = chatVisibility
         self.now = now
+        self.initialNoteImportFiles = initialNoteImportFiles
+        self.automaticallyStartNoteImport = automaticallyStartNoteImport
         _profileStore = StateObject(
             wrappedValue: ChoraProfileStore(service: profileService)
         )
@@ -63,29 +69,25 @@ struct ChoraProfileView: View {
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
-                header
+                SettingsDestinationHeader(title: "Chora Profile") { dismiss() }
 
                 ScrollView {
                     VStack(spacing: 24) {
-                        orderMarker("1", identifier: "chora.order.identity")
                         ChoraIdentitySection(
                             store: profileStore,
                             humanActorID: humanActorID
                         )
 
-                        orderMarker("2", identifier: "chora.order.growth")
                         ChoraGrowthSection(
                             store: profileStore,
                             humanActorID: humanActorID
                         )
 
-                        orderMarker("3", identifier: "chora.order.sources")
                         ChoraSoulSourcesSection(
                             noteImportStore: noteImportStore,
                             notionStore: notionStore
                         )
 
-                        orderMarker("4", identifier: "chora.order.chat")
                         ChoraChatHistorySection(
                             humanActorID: humanActorID,
                             visibility: chatVisibility,
@@ -114,52 +116,15 @@ struct ChoraProfileView: View {
         }
     }
 
-    private var header: some View {
-        HStack {
-            Button {
-                dismiss()
-            } label: {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 20, weight: .medium))
-                    .foregroundColor(.white)
-                    .frame(minWidth: 44, minHeight: 44)
-            }
-            .accessibilityLabel("Back")
-
-            Spacer()
-
-            Text("Chora Profile")
-                .font(.system(size: 24, weight: .bold))
-                .foregroundColor(.white)
-                .minimumScaleFactor(0.85)
-
-            Spacer()
-
-            Color.clear
-                .frame(width: 44, height: 44)
-                .accessibilityHidden(true)
-        }
-        .padding(.horizontal, 8)
-        .padding(.top, 44)
-        .padding(.bottom, 20)
-    }
-
-    private func orderMarker(
-        _ value: String,
-        identifier: String
-    ) -> some View {
-        Text(value)
-            .font(.system(size: 1))
-            .foregroundColor(.white.opacity(0.01))
-            .frame(width: 1, height: 1)
-            .accessibilityIdentifier(identifier)
-    }
-
     private func load() async {
         await profileStore.load(humanActorID: humanActorID)
         guard !Task.isCancelled, profileStore.identity != nil else { return }
         async let imports: Void = noteImportStore.load(actorID: humanActorID)
         notionStore.load(actorID: humanActorID)
         await imports
+        if !initialNoteImportFiles.isEmpty {
+            noteImportStore.select(initialNoteImportFiles)
+            if automaticallyStartNoteImport { noteImportStore.start() }
+        }
     }
 }

@@ -1,259 +1,5 @@
 import CoreFlow
 import SwiftUI
-import UIKit
-
-struct ChoraIdentitySection: View {
-    @ObservedObject var store: ChoraProfileStore
-    let humanActorID: String
-
-    @State private var selectedImage: UIImage?
-    @State private var showsImagePicker = false
-
-    var body: some View {
-        ChoraSectionSurface(
-            title: "Identity",
-            identifier: "chora.identity.section"
-        ) {
-            switch store.phase {
-            case .idle, .loading:
-                ChoraLoadingRow(
-                    text: "Loading Chora identity…",
-                    identifier: "chora.identity.loading"
-                )
-            case .failed:
-                ChoraInlineError(
-                    text: "Chora’s identity couldn’t be loaded.",
-                    identifier: "chora.identity.error"
-                ) {
-                    Task { await store.load(humanActorID: humanActorID) }
-                }
-            case .ready:
-                identityForm
-            }
-        }
-        .sheet(isPresented: $showsImagePicker) {
-            ImagePicker(selectedImage: $selectedImage)
-        }
-        .onChange(of: selectedImage) { image in
-            guard let image,
-                  let data = image.jpegData(compressionQuality: 0.88) else {
-                return
-            }
-            store.setAvatarDraft(
-                ChoraAvatarDraft(
-                    data: data,
-                    filename: "chora-avatar.jpg",
-                    mimeType: "image/jpeg"
-                )
-            )
-        }
-    }
-
-    private var identityForm: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(alignment: .center, spacing: 16) {
-                Button {
-                    showsImagePicker = true
-                } label: {
-                    avatar
-                        .frame(width: 72, height: 72)
-                        .clipShape(Circle())
-                        .overlay(
-                            Circle().stroke(
-                                Color.white.opacity(0.22),
-                                lineWidth: 1
-                            )
-                        )
-                }
-                .buttonStyle(.plain)
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("Chora avatar. Choose a photo")
-                .accessibilityIdentifier("chora.identity.avatar")
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(store.identity?.displayName ?? "Chora")
-                        .font(.title3.weight(.semibold))
-                        .foregroundColor(.white)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Text("Your bound companion")
-                        .font(.subheadline)
-                        .foregroundColor(.white.opacity(0.58))
-                }
-                Spacer(minLength: 0)
-            }
-
-            ChoraField(
-                label: "Display name",
-                placeholder: "Chora",
-                text: Binding(
-                    get: { store.displayNameDraft },
-                    set: store.setDisplayNameDraft
-                ),
-                identifier: "chora.identity.displayName"
-            )
-
-            ChoraField(
-                label: "Preferred address",
-                placeholder: "How Chora addresses you",
-                text: Binding(
-                    get: { store.preferredAddressDraft ?? "" },
-                    set: { value in
-                        store.setPreferredAddressDraft(
-                            value.isEmpty ? nil : value
-                        )
-                    }
-                ),
-                identifier: "chora.identity.preferredAddress"
-            )
-
-            ForEach(identityErrors, id: \.0) { field, message in
-                Text(message)
-                    .font(.footnote)
-                    .foregroundColor(Color(red: 1, green: 0.56, blue: 0.58))
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityIdentifier(
-                        "chora.identity.error.\(field)"
-                    )
-            }
-
-            Button {
-                store.save()
-            } label: {
-                HStack(spacing: 8) {
-                    if store.isSaving {
-                        ProgressView().tint(.white)
-                    }
-                    Text(store.isSaving ? "Saving…" : "Save")
-                        .font(.body.weight(.medium))
-                }
-                .foregroundColor(.white)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 13)
-                .background(
-                    RoundedRectangle(cornerRadius: 30)
-                        .fill(Color.white.opacity(0.12))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 30)
-                                .stroke(Color.white.opacity(0.24), lineWidth: 1)
-                        )
-                )
-            }
-            .buttonStyle(.plain)
-            .disabled(store.isSaving || store.changedFields.isEmpty)
-            .opacity(
-                store.isSaving || store.changedFields.isEmpty ? 0.55 : 1
-            )
-            .accessibilityIdentifier("chora.identity.save")
-        }
-    }
-
-    @ViewBuilder
-    private var avatar: some View {
-        if let selectedImage {
-            Image(uiImage: selectedImage)
-                .resizable()
-                .aspectRatio(contentMode: .fill)
-        } else if let avatarURL = store.identity?.avatarURL,
-                  !avatarURL.isEmpty,
-                  let url = URL(
-                    string: APIConfiguration.resourceURLString(avatarURL)
-                  ) {
-            AsyncImage(url: url) { phase in
-                if let image = phase.image {
-                    image.resizable().aspectRatio(contentMode: .fill)
-                } else {
-                    Image("bot").resizable().aspectRatio(contentMode: .fill)
-                }
-            }
-        } else {
-            Image("bot")
-                .resizable()
-                .aspectRatio(contentMode: .fill)
-        }
-    }
-
-    private var identityErrors: [(String, String)] {
-        var values: [(String, String)] = []
-        if store.fieldErrors[.displayName] != nil {
-            values.append(("displayName", "Display name wasn’t saved."))
-        }
-        if store.fieldErrors[.preferredAddress] != nil {
-            values.append(("preferredAddress", "Preferred address wasn’t saved."))
-        }
-        if store.fieldErrors[.avatar] != nil {
-            values.append(("avatar", "Avatar wasn’t saved."))
-        }
-        return values
-    }
-}
-
-struct ChoraGrowthSection: View {
-    @ObservedObject var store: ChoraProfileStore
-    let humanActorID: String
-
-    var body: some View {
-        ChoraSectionSurface(
-            title: "Growth",
-            identifier: "chora.growth.section"
-        ) {
-            switch store.growthPhase {
-            case .idle, .loading:
-                ChoraLoadingRow(
-                    text: "Loading Growth…",
-                    identifier: "chora.growth.loading"
-                )
-            case .unavailable:
-                ChoraInlineError(
-                    text: "Growth is unavailable right now.",
-                    identifier: "chora.growth.unavailable"
-                ) {
-                    Task { await store.load(humanActorID: humanActorID) }
-                }
-            case .ready:
-                growthContent
-            }
-        }
-    }
-
-    private var growthContent: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("Stage")
-                    .font(.subheadline)
-                    .foregroundColor(.white.opacity(0.6))
-                Spacer()
-                Text(stageName)
-                    .font(.body.weight(.semibold))
-                    .foregroundColor(.white)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityIdentifier("chora.growth.stage")
-            }
-
-            VStack(spacing: 12) {
-                ForEach(
-                    ChoraGrowthDimension.canonicalRenderOrder,
-                    id: \.rawValue
-                ) { dimension in
-                    ChoraGrowthBar(
-                        dimension: dimension,
-                        value: value(for: dimension)
-                    )
-                }
-            }
-        }
-    }
-
-    private var stageName: String {
-        store.growth?.committedStage.displayName ?? "Unavailable"
-    }
-
-    private func value(for dimension: ChoraGrowthDimension) -> Double? {
-        store.growth?.dimensions.first {
-            $0.dimension == dimension
-        }?.displayValue
-    }
-}
-
 struct ChoraSoulSourcesSection: View {
     @ObservedObject var noteImportStore: NoteImportStore
     @ObservedObject var notionStore: NotionSourceStore
@@ -262,21 +8,23 @@ struct ChoraSoulSourcesSection: View {
     @State private var notionExpanded = false
 
     var body: some View {
-        ChoraSectionSurface(title: "Soul Sources") {
+        ChoraSectionSurface(
+            title: "Soul Sources",
+            identifier: "chora.sources.section"
+        ) {
             VStack(spacing: 0) {
                 ChoraDisclosureRow(
                     imageName: "notes",
                     title: "Local Notes",
                     summary: localNotesSummary,
                     isExpanded: localNotesExpanded,
-                    identifier: "chora.sources.localNotes"
+                    identifier: "chora.sources.localNotes",
+                    statusIdentifier: localNotesStatusIdentifier
                 ) {
                     withAnimation(.easeInOut(duration: 0.2)) {
                         localNotesExpanded.toggle()
                     }
                 }
-
-                localNotesStatusMarker
 
                 if localNotesExpanded {
                     LocalNotesExpandedContent(store: noteImportStore)
@@ -293,19 +41,18 @@ struct ChoraSoulSourcesSection: View {
                     title: "Notion",
                     summary: notionSummary,
                     isExpanded: notionExpanded,
-                    identifier: "chora.sources.notion"
+                    identifier: "chora.sources.notion",
+                    statusIdentifier: notionStatusIdentifier
                 ) {
                     withAnimation(.easeInOut(duration: 0.2)) {
                         notionExpanded.toggle()
                     }
-                    if !notionExpanded,
+                    if notionExpanded,
                        notionStore.status?.state == .connected,
                        notionStore.pages.isEmpty {
                         notionStore.searchPages(query: nil)
                     }
                 }
-
-                notionStatusMarker
 
                 if notionExpanded {
                     NotionExpandedContent(store: notionStore)
@@ -333,26 +80,28 @@ struct ChoraSoulSourcesSection: View {
         }
     }
 
-    @ViewBuilder
-    private var localNotesStatusMarker: some View {
+    private var localNotesStatusIdentifier: String? {
         if let detail = noteImportStore.detail {
             if detail.status == .failed {
-                ChoraStatusMarker(identifier: "chora.sources.localNotes.failure")
+                return "chora.sources.localNotes.failure"
             } else if detail.isSettled {
-                ChoraStatusMarker(identifier: "chora.sources.localNotes.done")
+                return "chora.sources.localNotes.done"
             } else {
-                ChoraStatusMarker(identifier: "chora.sources.localNotes.active")
+                return "chora.sources.localNotes.active"
             }
         } else if case .failed = noteImportStore.phase {
-            ChoraStatusMarker(identifier: "chora.sources.localNotes.error")
+            return "chora.sources.localNotes.error"
         }
+        return nil
     }
 
     private var notionSummary: String {
         if notionStore.isConnecting { return "Connecting…" }
         if notionStore.isDisconnecting { return "Disconnecting…" }
         if notionStore.statusPhase == .loading { return "Checking connection" }
-        if notionStore.inlineError != nil { return "Connection needs attention" }
+        if notionStore.status == nil, notionStore.inlineError != nil {
+            return "Unavailable"
+        }
         guard let status = notionStore.status else { return "Unavailable" }
         switch status.state.knownValue {
         case .connected:
@@ -366,62 +115,17 @@ struct ChoraSoulSourcesSection: View {
         }
     }
 
-    @ViewBuilder
-    private var notionStatusMarker: some View {
+    private var notionStatusIdentifier: String? {
+        if notionStore.status?.state == .connected {
+            return "chora.sources.notion.connected"
+        }
+        if notionStore.status?.state == .disconnected {
+            return "chora.sources.notion.disconnected"
+        }
         if notionStore.inlineError != nil {
-            ChoraStatusMarker(identifier: "chora.sources.notion.error")
-        } else if notionStore.status?.state == .connected {
-            ChoraStatusMarker(identifier: "chora.sources.notion.connected")
-        } else if notionStore.status?.state == .disconnected {
-            ChoraStatusMarker(identifier: "chora.sources.notion.disconnected")
+            return "chora.sources.notion.unavailable"
         }
-    }
-}
-
-struct ChoraChatHistorySection: View {
-    let humanActorID: String
-    let visibility: ChatHistoryVisibility
-    let now: @Sendable () -> Date
-
-    @State private var showsConfirmation = false
-    @State private var didClear = false
-
-    var body: some View {
-        ChoraSectionSurface(title: "Chat History") {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Previous messages are hidden on this device.")
-                    .font(.subheadline)
-                    .foregroundColor(.white.opacity(0.62))
-                    .fixedSize(horizontal: false, vertical: true)
-
-                Button(role: .destructive) {
-                    showsConfirmation = true
-                } label: {
-                    HStack(spacing: 12) {
-                        Image("trash")
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 24, height: 24)
-                        Text(didClear ? "Chat History Hidden" : "Clear Chat History")
-                            .font(.body.weight(.medium))
-                        Spacer()
-                    }
-                    .foregroundColor(Color(red: 1, green: 0.46, blue: 0.5))
-                    .padding(.vertical, 10)
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("chora.chat.clear")
-            }
-        }
-        .alert("Clear Chat History?", isPresented: $showsConfirmation) {
-            Button("Cancel", role: .cancel) {}
-            Button("Hide Previous Messages", role: .destructive) {
-                visibility.clear(actorID: humanActorID, at: now())
-                didClear = true
-            }
-        } message: {
-            Text("Previous messages will be hidden on this device. They are not deleted from Chorai.")
-        }
+        return nil
     }
 }
 
@@ -462,14 +166,30 @@ private struct LocalNotesExpandedContent: View {
                     .accessibilityIdentifier("chora.sources.localNotes.inlineError")
             }
 
-            if canCancel {
+            if store.canCancelCurrentJob {
                 ChoraOutlineButton(title: "Cancel Import", destructive: true) {
                     showsCancelConfirmation = true
                 }
                 .accessibilityIdentifier("chora.sources.localNotes.cancel")
-            } else if canRetry {
+            } else if store.canRetrySubmission {
                 ChoraOutlineButton(title: "Retry") { store.retry() }
                     .accessibilityIdentifier("chora.sources.localNotes.retry")
+            } else if store.canReload, let actorID = store.actorID {
+                ChoraOutlineButton(title: "Retry Loading") {
+                    Task { await store.load(actorID: actorID) }
+                }
+                .accessibilityIdentifier("chora.sources.localNotes.reload")
+            } else if store.needsFileReselectionForRetry {
+                Text("Choose the original files again to reconcile this import.")
+                    .font(.footnote)
+                    .foregroundColor(.white.opacity(0.65))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("chora.sources.localNotes.reselect")
+            } else if store.phase == .submitting || store.phase == .reconciling {
+                Text("Submitting files…")
+                    .font(.footnote)
+                    .foregroundColor(.white.opacity(0.65))
+                    .accessibilityIdentifier("chora.sources.localNotes.submitting")
             } else if !store.selectedFiles.isEmpty {
                 ChoraOutlineButton(title: "Start Import") { store.start() }
                     .accessibilityIdentifier("chora.sources.localNotes.start")
@@ -485,20 +205,6 @@ private struct LocalNotesExpandedContent: View {
             Button("Cancel Import", role: .destructive) { store.cancel() }
         } message: {
             Text("Files already processed will remain in Chorai.")
-        }
-    }
-
-    private var canCancel: Bool {
-        switch store.phase {
-        case .submitting, .reconciling, .polling: true
-        default: false
-        }
-    }
-
-    private var canRetry: Bool {
-        switch store.phase {
-        case .ambiguous, .failed: true
-        default: false
         }
     }
 
@@ -558,6 +264,7 @@ private struct LocalNotesExpandedContent: View {
 private struct NotionExpandedContent: View {
     @ObservedObject var store: NotionSourceStore
     @State private var showsDisconnectConfirmation = false
+    @State private var query = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -566,10 +273,28 @@ private struct NotionExpandedContent: View {
                     .font(.footnote)
                     .foregroundColor(Color(red: 1, green: 0.56, blue: 0.58))
                     .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityIdentifier("chora.sources.notion.inlineError")
+                    .accessibilityIdentifier("chora.sources.notion.error")
             }
 
             if store.status?.state == .connected {
+                HStack(spacing: 10) {
+                    TextField("Search pages", text: $query)
+                        .textFieldStyle(.plain)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 10)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(Color.white.opacity(0.1))
+                        )
+                        .accessibilityIdentifier("chora.sources.notion.search")
+                    Button("Search") {
+                        store.searchPages(query: query.isEmpty ? nil : query)
+                    }
+                    .foregroundColor(.white)
+                    .accessibilityIdentifier("chora.sources.notion.search.submit")
+                }
+
                 if store.pagesPhase == .loading {
                     ProgressView("Loading pages…")
                         .tint(.white)
@@ -586,9 +311,11 @@ private struct NotionExpandedContent: View {
                             store.setSelectedPageIDs(selection)
                         } label: {
                             HStack(alignment: .firstTextBaseline, spacing: 12) {
-                                Image(systemName: store.selectedPageIDs.contains(page.id)
-                                      ? "checkmark.circle.fill"
-                                      : "circle")
+                                Text(store.selectedPageIDs.contains(page.id)
+                                     ? "Selected"
+                                     : "Select")
+                                    .font(.caption)
+                                    .foregroundColor(.white.opacity(0.6))
                                 Text(page.title)
                                     .fixedSize(horizontal: false, vertical: true)
                                 Spacer(minLength: 0)
@@ -598,7 +325,26 @@ private struct NotionExpandedContent: View {
                         }
                         .buttonStyle(.plain)
                         .accessibilityIdentifier("chora.sources.notion.page.\(page.id)")
+                        .accessibilityAddTraits(
+                            store.selectedPageIDs.contains(page.id)
+                                ? .isSelected
+                                : []
+                        )
                     }
+                }
+
+                ForEach(store.status?.pageStatuses ?? [], id: \.pageID) { status in
+                    HStack {
+                        Text(status.pageID).fixedSize(horizontal: false, vertical: true)
+                        Spacer()
+                        Text(status.status.rawValue)
+                    }
+                    .font(.caption)
+                    .foregroundColor(.white.opacity(0.62))
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("Notion page \(status.pageID)")
+                    .accessibilityValue(status.status.rawValue)
+                    .accessibilityIdentifier("chora.sources.notion.sync.\(status.pageID)")
                 }
 
                 if !store.selectedPageIDs.isEmpty {
@@ -616,14 +362,20 @@ private struct NotionExpandedContent: View {
                 }
                 .disabled(store.isDisconnecting)
                 .accessibilityIdentifier("chora.sources.notion.disconnect")
+                notionImportState
             } else {
-                ChoraOutlineButton(
-                    title: store.isConnecting ? "Connecting…" : "Connect Notion"
-                ) {
-                    store.connect()
+                if store.status == nil, store.statusError != nil {
+                    ChoraOutlineButton(title: "Retry") { store.reloadStatus() }
+                        .accessibilityIdentifier("chora.sources.notion.retryStatus")
+                } else {
+                    ChoraOutlineButton(
+                        title: store.isConnecting ? "Connecting…" : "Connect Notion"
+                    ) {
+                        store.connect()
+                    }
+                    .disabled(store.isConnecting)
+                    .accessibilityIdentifier("chora.sources.notion.connect")
                 }
-                .disabled(store.isConnecting)
-                .accessibilityIdentifier("chora.sources.notion.connect")
 
                 if store.authorizationRequest != nil {
                     Text("Continue in the secure Notion sign-in window.")
@@ -642,6 +394,46 @@ private struct NotionExpandedContent: View {
         }
     }
 
+    @ViewBuilder
+    private var notionImportState: some View {
+        if let receipt = store.importReceipt {
+            Text("Job \(receipt.jobID)")
+                .font(.footnote)
+                .foregroundColor(.white.opacity(0.65))
+                .accessibilityLabel("Notion import receipt")
+                .accessibilityValue(receipt.jobID)
+                .accessibilityIdentifier("chora.sources.notion.import.receipt")
+        }
+        if let job = store.importJob {
+            Text(job.status.rawValue.capitalized)
+                .font(.subheadline.weight(.medium))
+                .foregroundColor(.white)
+                .accessibilityIdentifier("chora.sources.notion.import.\(job.status.rawValue)")
+            notionCount("Imported", value: job.imported, id: "imported")
+            notionCount("Updated", value: job.updated, id: "updated")
+            notionCount("Skipped", value: job.skipped, id: "skipped")
+            ForEach(job.failures, id: \.pageID) { failure in
+                Text("\(failure.pageID): \(failure.reason)")
+                    .font(.footnote)
+                    .foregroundColor(Color(red: 1, green: 0.56, blue: 0.58))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityLabel("Notion page \(failure.pageID) failed")
+                    .accessibilityValue(failure.reason)
+                    .accessibilityIdentifier("chora.sources.notion.import.failure.\(failure.pageID)")
+            }
+        }
+    }
+
+    private func notionCount(_ title: String, value: Int, id: String) -> some View {
+        HStack { Text(title); Spacer(); Text("\(value)") }
+            .font(.footnote)
+            .foregroundColor(.white.opacity(0.72))
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(title)
+            .accessibilityValue("\(value)")
+            .accessibilityIdentifier("chora.sources.notion.import.\(id)")
+    }
+
     private func errorText(_ error: NotionSourceError) -> String {
         switch error {
         case .invalidActor: "Notion is unavailable for this account."
@@ -652,7 +444,7 @@ private struct NotionExpandedContent: View {
     }
 }
 
-private struct ChoraField: View {
+struct ChoraField: View {
     let label: String
     let placeholder: String
     @Binding var text: String
@@ -673,12 +465,13 @@ private struct ChoraField: View {
                         .fill(Color.white.opacity(0.1))
                         .cardHighlightEffect()
                 )
+                .accessibilityLabel(label)
                 .accessibilityIdentifier(identifier)
         }
     }
 }
 
-private struct ChoraGrowthBar: View {
+struct ChoraGrowthBar: View {
     let dimension: ChoraGrowthDimension
     let value: Double?
 
@@ -720,7 +513,7 @@ private struct ChoraGrowthBar: View {
     }
 }
 
-private struct ChoraSectionSurface<Content: View>: View {
+struct ChoraSectionSurface<Content: View>: View {
     let title: String
     let identifier: String?
     @ViewBuilder let content: Content
@@ -758,7 +551,7 @@ private struct ChoraSectionSurface<Content: View>: View {
     }
 }
 
-private struct ChoraLoadingRow: View {
+struct ChoraLoadingRow: View {
     let text: String
     let identifier: String
 
@@ -775,7 +568,7 @@ private struct ChoraLoadingRow: View {
     }
 }
 
-private struct ChoraInlineError: View {
+struct ChoraInlineError: View {
     let text: String
     let identifier: String
     let retry: () -> Void
@@ -788,6 +581,7 @@ private struct ChoraInlineError: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier(identifier)
             ChoraOutlineButton(title: "Retry", action: retry)
+                .accessibilityIdentifier("\(identifier).retry")
         }
     }
 }
@@ -798,6 +592,7 @@ private struct ChoraDisclosureRow: View {
     let summary: String
     let isExpanded: Bool
     let identifier: String
+    let statusIdentifier: String?
     let action: () -> Void
 
     var body: some View {
@@ -816,6 +611,9 @@ private struct ChoraDisclosureRow: View {
                         .font(.subheadline)
                         .foregroundColor(.white.opacity(0.55))
                         .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier(
+                            statusIdentifier ?? "\(identifier).summary"
+                        )
                 }
                 Spacer(minLength: 8)
                 Image(systemName: "chevron.right")
@@ -829,7 +627,7 @@ private struct ChoraDisclosureRow: View {
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(title)
-        .accessibilityValue(summary)
+        .accessibilityValue("\(isExpanded ? "Expanded" : "Collapsed"), \(summary)")
         .accessibilityIdentifier(identifier)
     }
 }
@@ -856,17 +654,5 @@ private struct ChoraOutlineButton: View {
                 )
         }
         .buttonStyle(.plain)
-    }
-}
-
-private struct ChoraStatusMarker: View {
-    let identifier: String
-
-    var body: some View {
-        Color.clear
-            .frame(width: 1, height: 1)
-            .accessibilityElement()
-            .accessibilityLabel(identifier)
-            .accessibilityIdentifier(identifier)
     }
 }
