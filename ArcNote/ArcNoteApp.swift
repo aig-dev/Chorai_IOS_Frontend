@@ -1699,7 +1699,7 @@ private struct ChoraProfileContractFixtureView: View {
                 clientRequestID: "scope-metadata"
             )
             metadataResult = "uploaded"
-        } catch NoteImportServiceError.contract(
+        } catch NoteImportServiceError.preflight(
             code: "file_metadata_unavailable"
         ) {
             metadataResult = "metadata-unavailable"

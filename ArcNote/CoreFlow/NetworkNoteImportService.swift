@@ -268,7 +268,7 @@ struct NetworkNoteImportService: CoreNoteImportServing, @unchecked Sendable {
         for url in uniqueURLs {
             guard resourceAccessor.startAccessing(url) else {
                 release(acquiredURLs)
-                throw NoteImportServiceError.contract(
+                throw NoteImportServiceError.preflight(
                     code: "security_scope_denied"
                 )
             }
@@ -282,7 +282,7 @@ struct NetworkNoteImportService: CoreNoteImportServing, @unchecked Sendable {
                 byteCounts[file.url] = try metadataReader.byteCount(for: file)
             }
         } catch {
-            throw NoteImportServiceError.contract(
+            throw NoteImportServiceError.preflight(
                 code: "file_metadata_unavailable"
             )
         }

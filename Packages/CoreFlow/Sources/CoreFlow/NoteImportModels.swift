@@ -292,6 +292,7 @@ public enum NoteImportAmbiguity: Equatable, Sendable {
 
 public enum NoteImportServiceError: Error, Equatable, Sendable {
     case selection(NoteImportSelectionError)
+    case preflight(code: String)
     case ambiguous(NoteImportAmbiguity)
     case contract(code: String)
     case requestFailed(code: String?)

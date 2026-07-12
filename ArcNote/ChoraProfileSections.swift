@@ -251,7 +251,7 @@ private struct LocalNotesExpandedContent: View {
                 SettingsOutlineButton(title: "Retry") { store.retry() }
                     .accessibilityIdentifier("chora.sources.localNotes.retry")
             } else if store.phase == .failed(
-                .contract(code: "file_metadata_unavailable")
+                .preflight(code: "file_metadata_unavailable")
             ) {
                 Text("Choose the file again to retry.")
                     .font(.footnote)
@@ -307,7 +307,7 @@ private struct LocalNotesExpandedContent: View {
         switch store.phase {
         case .ambiguous:
             return "The import outcome is unclear. Retry to reconcile it."
-        case .failed(.contract(code: "file_metadata_unavailable")):
+        case .failed(.preflight(code: "file_metadata_unavailable")):
             return "Couldn’t read file details. Choose the file again."
         case .failed:
             return "Local Notes couldn’t be refreshed. Try again."

@@ -338,7 +338,7 @@ public final class NoteImportStore: ObservableObject {
                     )
                     return
                 }
-                if mapped == .contract(code: "file_metadata_unavailable") {
+                if case .preflight = mapped {
                     self?.publishPreflightFailure(
                         mapped,
                         requestID: stableRequestID,
@@ -709,10 +709,7 @@ public final class NoteImportStore: ObservableObject {
         ) else {
             return
         }
-        if clientRequestID == requestID {
-            persistence.clear(actorID: actorID)
-            clientRequestID = nil
-        }
+        clearUnsubmittedRequest(requestID, actorID: actorID)
         phase = .invalidSelection(error)
     }
 
@@ -730,11 +727,17 @@ public final class NoteImportStore: ObservableObject {
         ) else {
             return
         }
-        if clientRequestID == requestID {
-            persistence.clear(actorID: actorID)
-            clientRequestID = nil
-        }
+        clearUnsubmittedRequest(requestID, actorID: actorID)
         phase = .failed(error)
+    }
+
+    private func clearUnsubmittedRequest(
+        _ requestID: String,
+        actorID: String
+    ) {
+        guard clientRequestID == requestID else { return }
+        persistence.clear(actorID: actorID)
+        clientRequestID = nil
     }
 
     private func publishAmbiguous(
