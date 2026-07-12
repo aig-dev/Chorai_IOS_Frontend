@@ -113,7 +113,14 @@ public final class NoteImportStore: ObservableObject {
     public func start() {
         guard operationTask == nil, let actorID else { return }
         guard let selectionError = Self.validate(selectedFiles) else {
-            beginSubmission(actorID: actorID)
+            if let stableRequestID = clientRequestID {
+                beginReconciliation(
+                    actorID: actorID,
+                    requestID: stableRequestID
+                )
+            } else {
+                beginSubmission(actorID: actorID)
+            }
             return
         }
         phase = .invalidSelection(selectionError)
@@ -128,19 +135,7 @@ public final class NoteImportStore: ObservableObject {
             return
         }
 
-        phase = .reconciling
-        let scope = generation
-        let operationID = UUID()
-        self.operationID = operationID
-        operationTask = Task { [weak self] in
-            guard let self else { return }
-            await self.reconcileBeforeRetry(
-                actorID: actorID,
-                requestID: stableRequestID,
-                generation: scope
-            )
-            self.finishOperation(generation: scope, operationID: operationID)
-        }
+        beginReconciliation(actorID: actorID, requestID: stableRequestID)
     }
 
     public func cancel() {
@@ -158,10 +153,16 @@ public final class NoteImportStore: ObservableObject {
         self.operationID = operationID
         operationTask = Task { [weak self] in
             guard let self else { return }
+            defer {
+                self.finishOperation(
+                    generation: scope,
+                    operationID: operationID
+                )
+            }
             do {
                 try await self.service.cancel(id: jobID)
             } catch is CancellationError {
-                return
+                if Task.isCancelled { return }
             } catch {
                 // Cancellation may have reached the server even when its response did not.
                 // The actor-scoped detail route is the canonical outcome.
@@ -176,12 +177,15 @@ public final class NoteImportStore: ObservableObject {
                     generation: scope
                 )
             } catch is CancellationError {
-                return
+                guard !Task.isCancelled,
+                      self.isCurrent(actorID: actorID, generation: scope) else {
+                    return
+                }
+                self.phase = .failed(.requestFailed(code: "cancelled"))
             } catch {
                 guard self.isCurrent(actorID: actorID, generation: scope) else { return }
                 self.phase = .failed(Self.map(error))
             }
-            self.finishOperation(generation: scope, operationID: operationID)
         }
     }
 
@@ -209,6 +213,12 @@ public final class NoteImportStore: ObservableObject {
         self.operationID = operationID
         let service = self.service
         operationTask = Task { [weak self] in
+            defer {
+                self?.finishOperation(
+                    generation: scope,
+                    operationID: operationID
+                )
+            }
             do {
                 let created = try await service.enqueue(
                     files: files,
@@ -225,7 +235,12 @@ public final class NoteImportStore: ObservableObject {
                     generation: scope
                 )
             } catch is CancellationError {
-                return
+                guard !Task.isCancelled,
+                      let self,
+                      self.isCurrent(actorID: actorID, generation: scope) else {
+                    return
+                }
+                self.phase = .failed(.requestFailed(code: "cancelled"))
             } catch {
                 guard let self,
                       self.isCurrent(actorID: actorID, generation: scope) else {
@@ -238,7 +253,27 @@ public final class NoteImportStore: ObservableObject {
                     generation: scope
                 )
             }
-            self?.finishOperation(generation: scope, operationID: operationID)
+        }
+    }
+
+    private func beginReconciliation(actorID: String, requestID: String) {
+        phase = .reconciling
+        let scope = generation
+        let operationID = UUID()
+        self.operationID = operationID
+        operationTask = Task { [weak self] in
+            guard let self else { return }
+            defer {
+                self.finishOperation(
+                    generation: scope,
+                    operationID: operationID
+                )
+            }
+            await self.reconcileBeforeRetry(
+                actorID: actorID,
+                requestID: requestID,
+                generation: scope
+            )
         }
     }
 
@@ -298,7 +333,11 @@ public final class NoteImportStore: ObservableObject {
                 generation: generation
             )
         } catch is CancellationError {
-            return
+            guard !Task.isCancelled,
+                  isCurrent(actorID: actorID, generation: generation) else {
+                return
+            }
+            phase = .failed(.requestFailed(code: "cancelled"))
         } catch {
             guard isCurrent(actorID: actorID, generation: generation) else { return }
             await acceptSubmissionFailure(
@@ -333,7 +372,11 @@ public final class NoteImportStore: ObservableObject {
                 )
             }
         } catch is CancellationError {
-            return
+            guard !Task.isCancelled,
+                  isCurrent(actorID: actorID, generation: generation) else {
+                return
+            }
+            phase = .failed(.requestFailed(code: "cancelled"))
         } catch {
             guard isCurrent(actorID: actorID, generation: generation) else { return }
             phase = .failed(Self.map(error))
@@ -360,7 +403,11 @@ public final class NoteImportStore: ObservableObject {
                 generation: generation
             )
         } catch is CancellationError {
-            return
+            guard !Task.isCancelled,
+                  isCurrent(actorID: actorID, generation: generation) else {
+                return
+            }
+            phase = .failed(.requestFailed(code: "cancelled"))
         } catch {
             guard isCurrent(actorID: actorID, generation: generation) else { return }
             phase = .failed(Self.map(error))
@@ -390,7 +437,11 @@ public final class NoteImportStore: ObservableObject {
                 generation: generation
             )
         } catch is CancellationError {
-            return
+            guard !Task.isCancelled,
+                  isCurrent(actorID: actorID, generation: generation) else {
+                return
+            }
+            phase = .failed(.requestFailed(code: "cancelled"))
         } catch {
             guard isCurrent(actorID: actorID, generation: generation) else { return }
             phase = .failed(Self.map(error))
@@ -428,6 +479,12 @@ public final class NoteImportStore: ObservableObject {
         let sleeper = self.sleeper
         let service = self.service
         operationTask = Task { [weak self] in
+            defer {
+                self?.finishOperation(
+                    generation: generation,
+                    operationID: operationID
+                )
+            }
             let result: Result<NoteImportJobDetail, Error>
             do {
                 try await sleeper.sleep(nanoseconds: Self.pollIntervalNanoseconds)
@@ -445,10 +502,6 @@ public final class NoteImportStore: ObservableObject {
             case .success(let next):
                 guard next.jobID == jobID else {
                     self.phase = .failed(.contract(code: "job_id_mismatch"))
-                    self.finishOperation(
-                        generation: generation,
-                        operationID: operationID
-                    )
                     return
                 }
                 await self.drive(
@@ -457,13 +510,13 @@ public final class NoteImportStore: ObservableObject {
                     generation: generation
                 )
             case .failure(let error):
-                if error is CancellationError { return }
-                self.phase = .failed(Self.map(error))
+                if error is CancellationError {
+                    if Task.isCancelled { return }
+                    self.phase = .failed(.requestFailed(code: "cancelled"))
+                } else {
+                    self.phase = .failed(Self.map(error))
+                }
             }
-            self.finishOperation(
-                generation: generation,
-                operationID: operationID
-            )
         }
     }
 

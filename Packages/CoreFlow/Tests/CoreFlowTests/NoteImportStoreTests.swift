@@ -34,6 +34,28 @@ final class NoteImportStoreTests: XCTestCase {
         XCTAssertEqual(emptyEnqueues, 0)
     }
 
+    func testEverySupportedExtensionActuallyReachesEnqueue() async {
+        let files = [
+            file("one.md", format: .markdown),
+            file("two.markdown", format: .markdown),
+            file("three.html", format: .html),
+            file("four.htm", format: .html)
+        ]
+        let service = NoteImportServiceSpy(
+            enqueueResults: [.success(.receipt())],
+            details: [.fixture(status: .done)]
+        )
+        let store = makeStore(service: service)
+        await store.load(actorID: "act_1")
+        store.select(files)
+
+        store.start()
+        await waitUntil { store.phase == .terminal }
+
+        let submitted = await service.submittedFiles()
+        XCTAssertEqual(submitted, [files])
+    }
+
     func testStartPersistsActorScopedRequestIDBeforeEnqueueAndIsSingleFlight() async {
         let service = NoteImportServiceSpy(
             details: [.fixture(clientRequestID: "req_fixed", status: .done)],
@@ -50,7 +72,7 @@ final class NoteImportStoreTests: XCTestCase {
 
         store.start()
         store.start()
-        while await service.enqueueCount() == 0 { await Task.yield() }
+        await waitUntil { await service.enqueueCount() == 1 }
 
         XCTAssertEqual(store.clientRequestID, "req_fixed")
         XCTAssertEqual(persistence.events, ["save:act_1:req_fixed"])
@@ -138,6 +160,75 @@ final class NoteImportStoreTests: XCTestCase {
         ])
     }
 
+    func testStartAgainAfterAmbiguityReconcilesExactIDWithoutSecondEnqueue() async {
+        let exact = NoteImportJobSummary.fixture(
+            jobID: "job_exact",
+            clientRequestID: "req_stable",
+            status: .running
+        )
+        let service = NoteImportServiceSpy(
+            enqueueResults: [.failure(.ambiguous(.timeout))],
+            jobLists: [[], [], [exact]],
+            details: [
+                .fixture(
+                    jobID: "job_exact",
+                    clientRequestID: "req_stable",
+                    status: .done
+                )
+            ]
+        )
+        let store = makeStore(service: service, requestID: { "req_stable" })
+        await store.load(actorID: "act_1")
+        store.select([file("one.md", format: .markdown)])
+        store.start()
+        await waitUntil { store.phase == .ambiguous }
+
+        store.start()
+        await waitUntil { store.phase == .terminal }
+
+        let calls = await service.calls()
+        XCTAssertEqual(calls, [
+            "jobs:50",
+            "enqueue:req_stable",
+            "jobs:50",
+            "jobs:50",
+            "job:job_exact"
+        ])
+        let enqueueCount = await service.enqueueCount()
+        XCTAssertEqual(enqueueCount, 1)
+    }
+
+    func testUndecodableSuccessReconcilesByExactRequestID() async {
+        let exact = NoteImportJobSummary.fixture(
+            jobID: "job_exact",
+            clientRequestID: "req_decode"
+        )
+        let service = NoteImportServiceSpy(
+            enqueueResults: [
+                .failure(.ambiguous(.undecodableSuccess(statusCode: 202)))
+            ],
+            jobLists: [[], [exact]],
+            details: [
+                .fixture(
+                    jobID: "job_exact",
+                    clientRequestID: "req_decode",
+                    status: .done
+                )
+            ]
+        )
+        let store = makeStore(service: service, requestID: { "req_decode" })
+        await store.load(actorID: "act_1")
+        store.select([file("one.md", format: .markdown)])
+
+        store.start()
+        await waitUntil { store.phase == .terminal }
+
+        let calls = await service.calls()
+        XCTAssertEqual(calls, [
+            "jobs:50", "enqueue:req_decode", "jobs:50", "job:job_exact"
+        ])
+    }
+
     func testRelaunchRestoresPersistedExactActiveJob() async {
         let persistence = NoteImportPersistenceSpy(values: ["act_1": "req_active"])
         let service = NoteImportServiceSpy(
@@ -158,6 +249,87 @@ final class NoteImportStoreTests: XCTestCase {
         XCTAssertEqual(detailIDs, ["job_active"])
     }
 
+    func testLoadWithoutPersistenceRestoresLatestActiveCanonicalJob() async {
+        let persistence = NoteImportPersistenceSpy()
+        let service = NoteImportServiceSpy(
+            jobLists: [[
+                .fixture(
+                    jobID: "job_terminal",
+                    clientRequestID: "req_terminal",
+                    status: .done,
+                    createdAt: Date(timeIntervalSince1970: 30)
+                ),
+                .fixture(
+                    jobID: "job_old",
+                    clientRequestID: "req_old",
+                    status: .running,
+                    createdAt: Date(timeIntervalSince1970: 10)
+                ),
+                .fixture(
+                    jobID: "job_latest",
+                    clientRequestID: "req_latest",
+                    status: .running,
+                    createdAt: Date(timeIntervalSince1970: 20)
+                )
+            ]],
+            details: [
+                .fixture(
+                    jobID: "job_latest",
+                    clientRequestID: "req_latest",
+                    status: .done
+                )
+            ]
+        )
+        let store = makeStore(service: service, persistence: persistence)
+
+        await store.load(actorID: "act_1")
+        await waitUntil { store.phase == .terminal }
+
+        XCTAssertEqual(store.detail?.jobID, "job_latest")
+        XCTAssertEqual(persistence.events, ["save:act_1:req_latest"])
+    }
+
+    func testUnknownJobAndSoulStatusesStayLosslessAndKeepPolling() async {
+        let persistence = NoteImportPersistenceSpy()
+        let sleeper = NoteImportSleeperSpy()
+        let unknownJob = NoteImportJobStatus(rawValue: "future_job")
+        let unknownSoul = NoteImportSoulStatus(rawValue: "future_soul")
+        let service = NoteImportServiceSpy(
+            enqueueResults: [.success(.receipt())],
+            details: [
+                .fixture(status: unknownJob, soulStatus: .done),
+                .fixture(status: .done, soulStatus: unknownSoul),
+                .fixture(status: .done, soulStatus: .done)
+            ]
+        )
+        let store = makeStore(
+            service: service,
+            persistence: persistence,
+            sleeper: sleeper
+        )
+        await store.load(actorID: "act_1")
+        store.select([file("one.md", format: .markdown)])
+
+        store.start()
+        await waitUntil { await sleeper.callCount() == 1 }
+        XCTAssertEqual(store.detail?.status.rawValue, "future_job")
+        XCTAssertEqual(store.phase, .polling)
+        XCTAssertEqual(persistence.value(actorID: "act_1"), "req_generated")
+        XCTAssertTrue(persistence.clearedActors.isEmpty)
+
+        await sleeper.resumeNext()
+        await waitUntil { await sleeper.callCount() == 2 }
+        XCTAssertEqual(store.detail?.soulStatus.rawValue, "future_soul")
+        XCTAssertEqual(store.detail?.status, .done)
+        XCTAssertEqual(store.phase, .polling)
+        XCTAssertEqual(persistence.value(actorID: "act_1"), "req_generated")
+        XCTAssertTrue(persistence.clearedActors.isEmpty)
+
+        await sleeper.resumeNext()
+        await waitUntil { store.phase == .terminal }
+        XCTAssertEqual(persistence.clearedActors, ["act_1"])
+    }
+
     func testPollingUsesInjectedThreeSecondSleeperAndStopsAtTerminal() async {
         let sleeper = NoteImportSleeperSpy()
         let service = NoteImportServiceSpy(
@@ -173,11 +345,11 @@ final class NoteImportStoreTests: XCTestCase {
         store.select([file("one.md", format: .markdown)])
 
         store.start()
-        await sleeper.waitForCalls(1)
+        await waitUntil { await sleeper.callCount() == 1 }
         let firstSleeps = await sleeper.nanoseconds()
         XCTAssertEqual(firstSleeps, [3_000_000_000])
         await sleeper.resumeNext()
-        await sleeper.waitForCalls(2)
+        await waitUntil { await sleeper.callCount() == 2 }
         let secondSleeps = await sleeper.nanoseconds()
         XCTAssertEqual(secondSleeps, [3_000_000_000, 3_000_000_000])
         await sleeper.resumeNext()
@@ -203,7 +375,7 @@ final class NoteImportStoreTests: XCTestCase {
         await store.load(actorID: "act_1")
         store.select([file("one.md", format: .markdown)])
         store.start()
-        await sleeper.waitForCalls(1)
+        await waitUntil { await sleeper.callCount() == 1 }
 
         store.cancel()
         await waitUntil { store.phase == .terminal }
@@ -228,7 +400,7 @@ final class NoteImportStoreTests: XCTestCase {
         await store.load(actorID: "act_1")
         store.select([file("one.md", format: .markdown)])
         store.start()
-        await sleeper.waitForCalls(1)
+        await waitUntil { await sleeper.callCount() == 1 }
 
         store.cancel()
         await waitUntil { store.phase == .terminal }
@@ -239,6 +411,154 @@ final class NoteImportStoreTests: XCTestCase {
         ])
     }
 
+    func testServiceCancellationDuringEnqueueReleasesLockForReconciledStart() async {
+        let service = NoteImportServiceSpy(
+            jobLists: [[], []],
+            details: [.fixture(status: .done)],
+            enqueueCancellationCalls: [1]
+        )
+        let store = makeStore(service: service)
+        await store.load(actorID: "act_1")
+        store.select([file("one.md", format: .markdown)])
+
+        store.start()
+        await waitUntil {
+            store.phase == .failed(.requestFailed(code: "cancelled"))
+        }
+        store.start()
+        await waitUntil { store.phase == .terminal }
+
+        let calls = await service.calls()
+        XCTAssertEqual(calls, [
+            "jobs:50",
+            "enqueue:req_generated",
+            "jobs:50",
+            "enqueue:req_generated",
+            "job:job_1"
+        ])
+    }
+
+    func testServiceCancellationDuringPollReleasesLockForExactReconciliation() async {
+        let exact = NoteImportJobSummary.fixture(
+            clientRequestID: "req_generated",
+            status: .running
+        )
+        let sleeper = NoteImportSleeperSpy()
+        let service = NoteImportServiceSpy(
+            enqueueResults: [.success(.receipt())],
+            jobLists: [[], [exact]],
+            details: [
+                .fixture(status: .running),
+                .fixture(status: .done)
+            ],
+            jobCancellationCalls: [2]
+        )
+        let store = makeStore(service: service, sleeper: sleeper)
+        await store.load(actorID: "act_1")
+        store.select([file("one.md", format: .markdown)])
+        store.start()
+        await waitUntil { await sleeper.callCount() == 1 }
+
+        await sleeper.resumeNext()
+        await waitUntil {
+            store.phase == .failed(.requestFailed(code: "cancelled"))
+        }
+        store.start()
+        await waitUntil { store.phase == .terminal }
+
+        let calls = await service.calls()
+        XCTAssertEqual(calls, [
+            "jobs:50",
+            "enqueue:req_generated",
+            "job:job_1",
+            "job:job_1",
+            "jobs:50",
+            "job:job_1"
+        ])
+    }
+
+    func testServiceCancellationFromCancelRouteStillReloadsCanonicalDetail() async {
+        let sleeper = NoteImportSleeperSpy()
+        let service = NoteImportServiceSpy(
+            enqueueResults: [.success(.receipt())],
+            details: [
+                .fixture(status: .running),
+                .fixture(status: .cancelled, soulStatus: .cancelled)
+            ],
+            cancelThrowsCancellation: true
+        )
+        let store = makeStore(service: service, sleeper: sleeper)
+        await store.load(actorID: "act_1")
+        store.select([file("one.md", format: .markdown)])
+        store.start()
+        await waitUntil { await sleeper.callCount() == 1 }
+
+        store.cancel()
+        await waitUntil { store.phase == .terminal }
+
+        let calls = await service.calls()
+        XCTAssertEqual(calls, [
+            "jobs:50", "enqueue:req_generated", "job:job_1",
+            "cancel:job_1", "job:job_1"
+        ])
+    }
+
+    func testServiceCancellationFromCancelReloadUnlocksForRetry() async {
+        let sleeper = NoteImportSleeperSpy()
+        let service = NoteImportServiceSpy(
+            enqueueResults: [.success(.receipt())],
+            details: [
+                .fixture(status: .running),
+                .fixture(status: .cancelled, soulStatus: .cancelled)
+            ],
+            jobCancellationCalls: [2]
+        )
+        let store = makeStore(service: service, sleeper: sleeper)
+        await store.load(actorID: "act_1")
+        store.select([file("one.md", format: .markdown)])
+        store.start()
+        await waitUntil { await sleeper.callCount() == 1 }
+
+        store.cancel()
+        await waitUntil {
+            store.phase == .failed(.requestFailed(code: "cancelled"))
+        }
+        store.cancel()
+        await waitUntil { store.phase == .terminal }
+
+        let calls = await service.calls()
+        XCTAssertEqual(calls, [
+            "jobs:50", "enqueue:req_generated", "job:job_1",
+            "cancel:job_1", "job:job_1", "cancel:job_1", "job:job_1"
+        ])
+    }
+
+    func testActorChangeDuringCancelDoesNotReloadOrPublishOldJob() async {
+        let sleeper = NoteImportSleeperSpy()
+        let service = NoteImportServiceSpy(
+            enqueueResults: [.success(.receipt())],
+            jobLists: [[], []],
+            details: [.fixture(status: .running)],
+            cancelSuspended: true
+        )
+        let store = makeStore(service: service, sleeper: sleeper)
+        await store.load(actorID: "act_old")
+        store.select([file("one.md", format: .markdown)])
+        store.start()
+        await waitUntil { await sleeper.callCount() == 1 }
+        store.cancel()
+        await waitUntil { await service.didStartCancel() }
+
+        await store.load(actorID: "act_new")
+        await waitUntil { await service.cancelCancellations() == 1 }
+
+        XCTAssertEqual(store.actorID, "act_new")
+        XCTAssertEqual(store.phase, .ready)
+        XCTAssertNil(store.detail)
+        let detailIDs = await service.detailIDs()
+        XCTAssertEqual(detailIDs, ["job_1"])
+    }
+
     func testActorChangeClearsSelectionAndRequestAndFencesOldCompletion() async {
         let service = NoteImportServiceSpy(enqueueSuspended: true)
         let persistence = NoteImportPersistenceSpy()
@@ -246,7 +566,7 @@ final class NoteImportStoreTests: XCTestCase {
         await store.load(actorID: "act_old")
         store.select([file("old.md", format: .markdown)])
         store.start()
-        while await service.enqueueCount() == 0 { await Task.yield() }
+        await waitUntil { await service.enqueueCount() == 1 }
 
         await store.load(actorID: "act_new")
         await service.resumeEnqueue(with: .success(.receipt(clientRequestID: "req_generated")))
@@ -259,6 +579,31 @@ final class NoteImportStoreTests: XCTestCase {
         XCTAssertNil(store.detail)
         let detailIDs = await service.detailIDs()
         XCTAssertFalse(detailIDs.contains("job_1"))
+    }
+
+    func testActorSwitchDuringPollingCancelsOldPollAndClearsState() async {
+        let sleeper = NoteImportSleeperSpy()
+        let service = NoteImportServiceSpy(
+            enqueueResults: [.success(.receipt())],
+            jobLists: [[], []],
+            details: [.fixture(status: .running)]
+        )
+        let store = makeStore(service: service, sleeper: sleeper)
+        await store.load(actorID: "act_old")
+        store.select([file("old.md", format: .markdown)])
+        store.start()
+        await waitUntil { await sleeper.callCount() == 1 }
+
+        await store.load(actorID: "act_new")
+        await sleeper.resumeNext()
+        await settle()
+
+        XCTAssertEqual(store.actorID, "act_new")
+        XCTAssertEqual(store.phase, .ready)
+        XCTAssertNil(store.clientRequestID)
+        XCTAssertNil(store.detail)
+        let detailIDs = await service.detailIDs()
+        XCTAssertEqual(detailIDs, ["job_1"])
     }
 
     func testTeardownCancelsSuspendedPollingWithoutRetainingStore() async {
@@ -277,7 +622,7 @@ final class NoteImportStoreTests: XCTestCase {
         await store?.load(actorID: "act_1")
         store?.select([file("one.md", format: .markdown)])
         store?.start()
-        while !(await sleeper.didStart()) { await Task.yield() }
+        await waitUntil { await sleeper.didStart() }
 
         store = nil
         for _ in 0..<20 { await Task.yield() }
@@ -289,7 +634,7 @@ final class NoteImportStoreTests: XCTestCase {
 
         XCTAssertTrue(releasedWhileSuspended)
         if releasedWhileSuspended {
-            while await sleeper.cancellations() == 0 { await Task.yield() }
+            await waitUntil { await sleeper.cancellations() == 1 }
             let cancellations = await sleeper.cancellations()
             XCTAssertEqual(cancellations, 1)
         }
@@ -302,7 +647,7 @@ final class NoteImportStoreTests: XCTestCase {
         await store?.load(actorID: "act_1")
         store?.select([file("one.md", format: .markdown)])
         store?.start()
-        while await service.enqueueCount() == 0 { await Task.yield() }
+        await waitUntil { await service.enqueueCount() == 1 }
 
         store = nil
         for _ in 0..<20 { await Task.yield() }
@@ -417,6 +762,10 @@ private final class NoteImportPersistenceSpy: NoteImportRequestIDPersisting, @un
             clearedActors.append(actorID)
         }
     }
+
+    func value(actorID: String) -> String? {
+        lock.withLock { values[actorID] }
+    }
 }
 
 private actor NoteImportServiceSpy: CoreNoteImportServing {
@@ -429,24 +778,43 @@ private actor NoteImportServiceSpy: CoreNoteImportServing {
     private var enqueuedRequestIDs: [String] = []
     private var requestedDetailIDs: [String] = []
     private let cancelResult: Result<Void, NoteImportServiceError>
+    private var enqueuedFiles: [[NoteImportFile]] = []
+    private let enqueueCancellationCalls: Set<Int>
+    private let jobCancellationCalls: Set<Int>
+    private let cancelThrowsCancellation: Bool
+    private let cancelSuspended: Bool
+    private var cancelStarted = false
+    private var cancelCancellationCount = 0
 
     init(
         enqueueResults: [Result<NoteImportReceipt, NoteImportServiceError>] = [],
         jobLists: [[NoteImportJobSummary]] = [[]],
         details: [NoteImportJobDetail] = [.fixture(status: .done)],
         cancelResult: Result<Void, NoteImportServiceError> = .success(()),
+        enqueueCancellationCalls: Set<Int> = [],
+        jobCancellationCalls: Set<Int> = [],
+        cancelThrowsCancellation: Bool = false,
+        cancelSuspended: Bool = false,
         enqueueSuspended: Bool = false
     ) {
         self.enqueueResults = enqueueResults
         self.jobLists = jobLists
         self.details = details
         self.cancelResult = cancelResult
+        self.enqueueCancellationCalls = enqueueCancellationCalls
+        self.jobCancellationCalls = jobCancellationCalls
+        self.cancelThrowsCancellation = cancelThrowsCancellation
+        self.cancelSuspended = cancelSuspended
         self.enqueueSuspended = enqueueSuspended
     }
 
     func enqueue(files: [NoteImportFile], clientRequestID: String) async throws -> NoteImportReceipt {
         callLog.append("enqueue:\(clientRequestID)")
         enqueuedRequestIDs.append(clientRequestID)
+        enqueuedFiles.append(files)
+        if enqueueCancellationCalls.contains(enqueuedRequestIDs.count) {
+            throw CancellationError()
+        }
         if enqueueSuspended {
             return try await withCheckedThrowingContinuation { enqueueContinuation = $0 }
         }
@@ -462,11 +830,24 @@ private actor NoteImportServiceSpy: CoreNoteImportServing {
     func job(id: String) async throws -> NoteImportJobDetail {
         callLog.append("job:\(id)")
         requestedDetailIDs.append(id)
+        if jobCancellationCalls.contains(requestedDetailIDs.count) {
+            throw CancellationError()
+        }
         return details.isEmpty ? .fixture(jobID: id, status: .done) : details.removeFirst()
     }
 
     func cancel(id: String) async throws {
         callLog.append("cancel:\(id)")
+        cancelStarted = true
+        if cancelSuspended {
+            do {
+                try await Task.sleep(nanoseconds: 3_600_000_000_000)
+            } catch is CancellationError {
+                cancelCancellationCount += 1
+                throw CancellationError()
+            }
+        }
+        if cancelThrowsCancellation { throw CancellationError() }
         try cancelResult.get()
     }
 
@@ -480,6 +861,9 @@ private actor NoteImportServiceSpy: CoreNoteImportServing {
     func enqueueRequestIDs() -> [String] { enqueuedRequestIDs }
     func detailIDs() -> [String] { requestedDetailIDs }
     func calls() -> [String] { callLog }
+    func submittedFiles() -> [[NoteImportFile]] { enqueuedFiles }
+    func didStartCancel() -> Bool { cancelStarted }
+    func cancelCancellations() -> Int { cancelCancellationCount }
 }
 
 private actor NoteImportSleeperSpy: NoteImportSleeping {
@@ -495,16 +879,13 @@ private actor NoteImportSleeperSpy: NoteImportSleeping {
         try await withCheckedThrowingContinuation { continuations.append($0) }
     }
 
-    func waitForCalls(_ count: Int) async {
-        while calls.count < count { await Task.yield() }
-    }
-
     func resumeNext() {
         guard !continuations.isEmpty else { return }
         continuations.removeFirst().resume()
     }
 
     func nanoseconds() -> [UInt64] { calls }
+    func callCount() -> Int { calls.count }
 }
 
 private actor CancellableNoteImportSleeper: NoteImportSleeping {

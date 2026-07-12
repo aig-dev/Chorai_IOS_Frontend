@@ -83,6 +83,14 @@ public struct NoteImportSoulStatus: RawRepresentable, Codable, Hashable, Sendabl
     public var isUnsettled: Bool {
         self == .queued || self == .running
     }
+
+    public var isSettled: Bool {
+        self == .notRequested
+            || self == .done
+            || self == .failed
+            || self == .skipped
+            || self == .cancelled
+    }
 }
 
 public struct NoteImportItemStatus: RawRepresentable, Codable, Hashable, Sendable {
@@ -173,7 +181,7 @@ public struct NoteImportJobSummary: Codable, Equatable, Sendable {
     }
 
     public var isSettled: Bool {
-        status.isTerminal && !soulStatus.isUnsettled
+        status.isTerminal && soulStatus.isSettled
     }
 }
 
@@ -266,7 +274,7 @@ public struct NoteImportJobDetail: Codable, Equatable, Sendable {
     }
 
     public var isSettled: Bool {
-        status.isTerminal && !soulStatus.isUnsettled
+        status.isTerminal && soulStatus.isSettled
     }
 }
 
