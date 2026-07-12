@@ -11,13 +11,13 @@ struct NetworkChoraProfileService: CoreChoraProfileServing, @unchecked Sendable 
 
     func identity(humanActorID: String) async throws -> ChoraIdentity {
         async let profileValue = firstValue(
-            network.getChoraAgentProfile(presentsError: false)
+            network.getChoraAgentProfile()
         )
         async let usersValue = firstValue(
-            network.getChoraAgentUsers(presentsError: false)
+            network.getChoraAgentUsers()
         )
         async let ownProfileValue = firstValue(
-            network.getChoraOwnProfile(presentsError: false)
+            network.getChoraOwnProfile()
         )
 
         do {
@@ -42,10 +42,7 @@ struct NetworkChoraProfileService: CoreChoraProfileServing, @unchecked Sendable 
     func growth(agentActorID: String) async throws -> ChoraGrowthSnapshot? {
         do {
             let response = try await firstValue(
-                network.getChoraGrowth(
-                    agentActorID: agentActorID,
-                    presentsError: false
-                )
+                network.getChoraGrowth(agentActorID: agentActorID)
             )
             return try Self.mapGrowth(
                 response.growthView,
@@ -66,8 +63,7 @@ struct NetworkChoraProfileService: CoreChoraProfileServing, @unchecked Sendable 
             let response = try await firstValue(
                 network.updateChoraAgentDisplayName(
                     agentActorID: agentActorID,
-                    displayName: displayName,
-                    presentsError: false
+                    displayName: displayName
                 )
             )
             guard response.data.agentActorID == agentActorID,
@@ -79,14 +75,19 @@ struct NetworkChoraProfileService: CoreChoraProfileServing, @unchecked Sendable 
         }
     }
 
-    func updatePreferredAddress(_ value: String?) async throws {
+    func updatePreferredAddress(
+        humanActorID: String,
+        value: String?
+    ) async throws {
         do {
-            _ = try await firstValue(
+            let response = try await firstValue(
                 network.updateChoraPreferredAddress(
-                    value ?? "",
-                    presentsError: false
+                    value ?? ""
                 )
             )
+            guard response.data.actorID == humanActorID else {
+                throw ChoraProfileError.humanActorMismatch
+            }
         } catch {
             throw Self.mapNetworkError(error)
         }
@@ -102,8 +103,7 @@ struct NetworkChoraProfileService: CoreChoraProfileServing, @unchecked Sendable 
                     agentActorID: agentActorID,
                     data: avatar.data,
                     filename: avatar.filename,
-                    mimeType: avatar.mimeType,
-                    presentsError: false
+                    mimeType: avatar.mimeType
                 )
             )
             guard response.data.actorID == agentActorID else {

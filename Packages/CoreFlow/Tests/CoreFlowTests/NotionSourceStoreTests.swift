@@ -142,21 +142,26 @@ final class NotionSourceStoreTests: XCTestCase {
         let unknown = NotionImportJob(
             id: "job_1",
             status: .init(rawValue: "provider_new_state"),
-            totalPages: 2,
-            completedPages: 0
+            imported: 0,
+            updated: 0,
+            skipped: 0,
+            failures: []
         )
         let running = NotionImportJob(
             id: "job_1",
             status: .running,
-            totalPages: 2,
-            completedPages: 1
+            imported: 1,
+            updated: 0,
+            skipped: 0,
+            failures: []
         )
         let complete = NotionImportJob(
             id: "job_1",
-            status: .completed,
-            totalPages: 2,
-            completedPages: 2,
-            importedAssetIDs: ["asset_a", "asset_b"]
+            status: .done,
+            imported: 1,
+            updated: 1,
+            skipped: 0,
+            failures: []
         )
         let sleeper = ImmediateNotionSleeper()
         let clock = IncrementingNotionClock()
@@ -236,10 +241,11 @@ final class NotionSourceStoreTests: XCTestCase {
         let connected = NotionConnectionStatus(state: .connected, workspaceID: "workspace_1")
         let terminal = NotionImportJob(
             id: "job_1",
-            status: .completed,
-            totalPages: 1,
-            completedPages: 1,
-            importedAssetIDs: ["asset_1"]
+            status: .done,
+            imported: 1,
+            updated: 0,
+            skipped: 0,
+            failures: []
         )
         let service = NotionSourceServiceSpy(
             statuses: [.success(connected)],
@@ -275,6 +281,23 @@ final class NotionSourceStoreTests: XCTestCase {
         XCTAssertEqual(job.rawValue, "provider_future_job")
         XCTAssertNil(job.knownValue)
         XCTAssertFalse(job.isKnownTerminal)
+
+        let running = NotionImportJob(
+            id: "job_running",
+            status: .running,
+            imported: 1,
+            updated: 2,
+            skipped: 3,
+            failures: [.init(pageID: "page_failed", reason: "provider")]
+        )
+        XCTAssertEqual(running.imported, 1)
+        XCTAssertEqual(running.updated, 2)
+        XCTAssertEqual(running.skipped, 3)
+        XCTAssertEqual(
+            running.failures,
+            [.init(pageID: "page_failed", reason: "provider")]
+        )
+        XCTAssertFalse(running.status.isKnownTerminal)
     }
 
     func testDisconnectCancelsAndFencesEveryInFlightSourceCompletion() async {
@@ -555,7 +578,14 @@ final class NotionSourceStoreTests: XCTestCase {
         let sleeper = SuspendedNotionSleeper()
         let service = NotionSourceServiceSpy(
             receipts: [.success(.init(jobID: "job_1", acceptedPageIDs: ["page_a"]))],
-            jobs: [.success(.init(id: "job_1", status: .running, totalPages: 1, completedPages: 0))]
+            jobs: [.success(.init(
+                id: "job_1",
+                status: .running,
+                imported: 0,
+                updated: 0,
+                skipped: 0,
+                failures: []
+            ))]
         )
         var store: NotionSourceStore? = NotionSourceStore(service: service, sleeper: sleeper)
         store?.load(actorID: "human_a")

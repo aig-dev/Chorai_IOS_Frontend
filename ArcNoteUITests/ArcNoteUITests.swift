@@ -46,6 +46,13 @@ final class ArcNoteUITests: XCTestCase {
         app.launchArguments.append("--ui-test-chora-contract")
         app.launch()
 
+        let fixtureError = app.descendants(matching: .any)[
+            "chora.contract.error"
+        ]
+        if fixtureError.waitForExistence(timeout: 2) {
+            XCTFail("Chora contract fixture failed: \(fixtureError.label)")
+        }
+
         let expectedValues = [
             "chora.contract.human-actor-id": "act_human_contract",
             "chora.contract.agent-actor-id": "act_agent_contract",
@@ -71,7 +78,19 @@ final class ArcNoteUITests: XCTestCase {
             "chora.contract.notion.enqueue-job-id": "job_notion_contract",
             "chora.contract.notion.job-id": "job_notion_detail_contract",
             "chora.contract.notion.nullable-fields": "nil,nil",
-            "chora.contract.notion.unknown-job-status": "future_notion_state"
+            "chora.contract.notion.unknown-job-status": "future_notion_state",
+            "chora.contract.notion.unknown-page-status": "future_page_state",
+            "chora.contract.notion.connect-auth-url": "https://api.notion.test/oauth?state=opaque_contract",
+            "chora.contract.notion.connect-state": "state_contract",
+            "chora.contract.notion.disconnect": "disconnected",
+            "chora.contract.request.identity": "GET /api/agent/profile|GET /api/agent/users|GET /api/v1/profile/me|presentsError:false",
+            "chora.contract.request.profile-writes": "PATCH /api/agent/users/:agent_actor_id display_name|PUT /api/v1/profile/me preferred_address|PUT /api/v1/profile/agent/avatar agent_actor_id,avatar|presentsError:false",
+            "chora.contract.request.growth": "GET /api/v1/growth/view actor_id|presentsError:false",
+            "chora.contract.request.note-import": "POST /api/v1/imports/notes files,source_keys,labels,client_request_id threshold=0|GET /api/v1/imports/notes limit|GET /api/v1/imports/notes/:job_id|POST /api/v1/imports/notes/:job_id/cancel|presentsError:false",
+            "chora.contract.request.notion": "GET /api/v1/integrations/notion/connect client=ios|GET /api/v1/integrations/notion/status|GET /api/v1/integrations/notion/pages q|POST /api/v1/integrations/notion/import page_ids|GET /api/v1/integrations/notion/import/:job_id|DELETE /api/v1/integrations/notion/connect|presentsError:false",
+            "chora.contract.scope.atomic-failure": "acquire:a,acquire:b,release:a,no-upload",
+            "chora.contract.scope.cancel-order": "acquire:a,upload,cancel,terminated,release:a",
+            "chora.contract.scope.duplicate-count": "acquire:1,release:1"
         ]
 
         for (identifier, expectedValue) in expectedValues {

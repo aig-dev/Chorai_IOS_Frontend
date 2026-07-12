@@ -174,7 +174,8 @@ public final class ChoraProfileStore: ObservableObject {
             if snapshot.fields.contains(.preferredAddress) {
                 do {
                     try await service.updatePreferredAddress(
-                        snapshot.preferredAddress
+                        humanActorID: snapshot.requestedHuman,
+                        value: snapshot.preferredAddress
                     )
                 } catch {
                     mutationErrors[.preferredAddress] = Self.map(error)

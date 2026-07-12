@@ -2213,77 +2213,74 @@ extension NetworkManager {
 
 // MARK: - Chora profile, note import, and Notion source APIs
 extension NetworkManager {
-    func getChoraAgentProfile(
-        presentsError: Bool = false
-    ) -> AnyPublisher<ChoraDataEnvelope<ChoraAgentProfileResponse>, NetworkError> {
-        request(
-            endpoint: "/api/agent/profile",
-            method: .get,
+    func getChoraAgentProfile() -> AnyPublisher<ChoraDataEnvelope<ChoraAgentProfileResponse>, NetworkError> {
+        let spec = ChoraSourceRequests.agentProfile
+        return request(
+            endpoint: spec.endpoint,
+            method: spec.httpMethod,
             responseType: ChoraDataEnvelope<ChoraAgentProfileResponse>.self,
-            presentsError: presentsError
+            presentsError: spec.presentsError
         )
     }
 
-    func getChoraAgentUsers(
-        presentsError: Bool = false
-    ) -> AnyPublisher<ChoraDataEnvelope<ChoraAgentUsersResponse>, NetworkError> {
-        request(
-            endpoint: "/api/agent/users",
-            method: .get,
+    func getChoraAgentUsers() -> AnyPublisher<ChoraDataEnvelope<ChoraAgentUsersResponse>, NetworkError> {
+        let spec = ChoraSourceRequests.agentUsers
+        return request(
+            endpoint: spec.endpoint,
+            method: spec.httpMethod,
             responseType: ChoraDataEnvelope<ChoraAgentUsersResponse>.self,
-            presentsError: presentsError
+            presentsError: spec.presentsError
         )
     }
 
-    func getChoraOwnProfile(
-        presentsError: Bool = false
-    ) -> AnyPublisher<ChoraDataEnvelope<ChoraOwnProfileResponse>, NetworkError> {
-        request(
-            endpoint: "/api/v1/profile/me",
-            method: .get,
+    func getChoraOwnProfile() -> AnyPublisher<ChoraDataEnvelope<ChoraOwnProfileResponse>, NetworkError> {
+        let spec = ChoraSourceRequests.ownProfile
+        return request(
+            endpoint: spec.endpoint,
+            method: spec.httpMethod,
             responseType: ChoraDataEnvelope<ChoraOwnProfileResponse>.self,
-            presentsError: presentsError
+            presentsError: spec.presentsError
         )
     }
 
     func getChoraGrowth(
-        agentActorID: String,
-        presentsError: Bool = false
+        agentActorID: String
     ) -> AnyPublisher<ChoraGrowthViewEnvelope, NetworkError> {
-        request(
-            endpoint: "/api/v1/growth/view",
-            method: .get,
-            parameters: ["actor_id": agentActorID],
+        let spec = ChoraSourceRequests.growth
+        return request(
+            endpoint: spec.endpoint,
+            method: spec.httpMethod,
+            parameters: [spec.queryFields[0]: agentActorID],
             encoding: URLEncoding.default,
             responseType: ChoraGrowthViewEnvelope.self,
-            presentsError: presentsError
+            presentsError: spec.presentsError
         )
     }
 
     func updateChoraAgentDisplayName(
         agentActorID: String,
-        displayName: String,
-        presentsError: Bool = false
+        displayName: String
     ) -> AnyPublisher<ChoraDataEnvelope<ChoraAgentUserResponse>, NetworkError> {
-        request(
-            endpoint: "/api/agent/users/\(agentActorID)",
-            method: .patch,
-            parameters: ["display_name": displayName],
+        let spec = ChoraSourceRequests.agentDisplayName(agentActorID)
+        return request(
+            endpoint: spec.endpoint,
+            method: spec.httpMethod,
+            parameters: [spec.bodyFields[0]: displayName],
             responseType: ChoraDataEnvelope<ChoraAgentUserResponse>.self,
-            presentsError: presentsError
+            presentsError: spec.presentsError
         )
     }
 
     func updateChoraPreferredAddress(
-        _ value: String,
-        presentsError: Bool = false
+        _ value: String
     ) -> AnyPublisher<ChoraDataEnvelope<ChoraOwnProfileResponse>, NetworkError> {
-        request(
-            endpoint: "/api/v1/profile/me",
-            method: .put,
-            parameters: ["preferred_address": value],
+        let spec = ChoraSourceRequests.preferredAddress
+        return request(
+            endpoint: spec.endpoint,
+            method: spec.httpMethod,
+            parameters: [spec.bodyFields[0]: value],
             responseType: ChoraDataEnvelope<ChoraOwnProfileResponse>.self,
-            presentsError: presentsError
+            presentsError: spec.presentsError
         )
     }
 
@@ -2291,19 +2288,20 @@ extension NetworkManager {
         agentActorID: String,
         data: Data,
         filename: String,
-        mimeType: String,
-        presentsError: Bool = false
+        mimeType: String
     ) -> AnyPublisher<ChoraDataEnvelope<ChoraOwnProfileResponse>, NetworkError> {
-        multipartRequest(
-            endpoint: "/api/v1/profile/agent/avatar",
-            method: .put,
-            presentsError: presentsError,
+        let spec = ChoraSourceRequests.agentAvatar
+        return multipartRequest(
+            spec: spec,
             responseType: ChoraDataEnvelope<ChoraOwnProfileResponse>.self
         ) { form in
-            form.append(Data(agentActorID.utf8), withName: "agent_actor_id")
+            form.append(
+                Data(agentActorID.utf8),
+                withName: spec.multipartFields[0]
+            )
             form.append(
                 data,
-                withName: "avatar",
+                withName: spec.multipartFields[1],
                 fileName: filename,
                 mimeType: mimeType
             )
@@ -2313,26 +2311,32 @@ extension NetworkManager {
     func enqueueNoteImport(
         parts: [NoteImportUploadPart],
         clientRequestID: String,
-        presentsError: Bool = false
+        termination: NoteImportUploadTermination
     ) -> AnyPublisher<NoteImportUploadTransportResult, NetworkError> {
-        multipartDataRequest(
-            endpoint: "/api/v1/imports/notes",
-            method: .post,
-            presentsError: presentsError
+        let spec = ChoraSourceRequests.noteImportEnqueue
+        return multipartDataRequest(
+            spec: spec,
+            termination: termination
         ) { form in
             for part in parts {
                 form.append(
                     part.url,
-                    withName: "files",
+                    withName: spec.multipartFields[0],
                     fileName: part.filename,
                     mimeType: part.mimeType
                 )
-                form.append(Data(part.sourceKey.utf8), withName: "source_keys")
-                form.append(Data(part.label.utf8), withName: "labels")
+                form.append(
+                    Data(part.sourceKey.utf8),
+                    withName: spec.multipartFields[1]
+                )
+                form.append(
+                    Data(part.label.utf8),
+                    withName: spec.multipartFields[2]
+                )
             }
             form.append(
                 Data(clientRequestID.utf8),
-                withName: "client_request_id"
+                withName: spec.multipartFields[3]
             )
         }
         .map { payload in
@@ -2348,119 +2352,115 @@ extension NetworkManager {
     }
 
     func getNoteImportJobs(
-        limit: Int,
-        presentsError: Bool = false
+        limit: Int
     ) -> AnyPublisher<NoteImportJobListResponse, NetworkError> {
-        request(
-            endpoint: "/api/v1/imports/notes",
-            method: .get,
-            parameters: ["limit": limit],
+        let spec = ChoraSourceRequests.noteImportList
+        return request(
+            endpoint: spec.endpoint,
+            method: spec.httpMethod,
+            parameters: [spec.queryFields[0]: limit],
             encoding: URLEncoding.default,
             responseType: NoteImportJobListResponse.self,
-            presentsError: presentsError
+            presentsError: spec.presentsError
         )
     }
 
     func getNoteImportJob(
-        id: String,
-        presentsError: Bool = false
+        id: String
     ) -> AnyPublisher<NoteImportJobDetailResponse, NetworkError> {
-        request(
-            endpoint: "/api/v1/imports/notes/\(id)",
-            method: .get,
+        let spec = ChoraSourceRequests.noteImportDetail(id)
+        return request(
+            endpoint: spec.endpoint,
+            method: spec.httpMethod,
             responseType: NoteImportJobDetailResponse.self,
-            presentsError: presentsError
+            presentsError: spec.presentsError
         )
     }
 
     func cancelNoteImportJob(
-        id: String,
-        presentsError: Bool = false
+        id: String
     ) -> AnyPublisher<NoteImportCancelResponse, NetworkError> {
-        request(
-            endpoint: "/api/v1/imports/notes/\(id)/cancel",
-            method: .post,
+        let spec = ChoraSourceRequests.noteImportCancel(id)
+        return request(
+            endpoint: spec.endpoint,
+            method: spec.httpMethod,
             responseType: NoteImportCancelResponse.self,
-            presentsError: presentsError
+            presentsError: spec.presentsError
         )
     }
 
-    func getNotionStatus(
-        presentsError: Bool = false
-    ) -> AnyPublisher<NotionStatusResponse, NetworkError> {
-        request(
-            endpoint: "/api/v1/integrations/notion/status",
-            method: .get,
+    func getNotionStatus() -> AnyPublisher<NotionStatusResponse, NetworkError> {
+        let spec = ChoraSourceRequests.notionStatus
+        return request(
+            endpoint: spec.endpoint,
+            method: spec.httpMethod,
             responseType: NotionStatusResponse.self,
-            presentsError: presentsError
+            presentsError: spec.presentsError
         )
     }
 
-    func getNotionAuthorizationURL(
-        client: String,
-        presentsError: Bool = false
-    ) -> AnyPublisher<NotionConnectResponse, NetworkError> {
-        request(
-            endpoint: "/api/v1/integrations/notion/connect",
-            method: .get,
-            parameters: ["client": client],
+    func getNotionAuthorizationURL() -> AnyPublisher<NotionConnectResponse, NetworkError> {
+        let spec = ChoraSourceRequests.notionConnect
+        return request(
+            endpoint: spec.endpoint,
+            method: spec.httpMethod,
+            parameters: spec.queryValues,
             encoding: URLEncoding.default,
             responseType: NotionConnectResponse.self,
-            presentsError: presentsError
+            presentsError: spec.presentsError
         )
     }
 
     func getNotionPages(
-        query: String?,
-        presentsError: Bool = false
+        query: String?
     ) -> AnyPublisher<NotionPagesResponse, NetworkError> {
+        let spec = ChoraSourceRequests.notionPages
         var parameters: Parameters?
         if let query {
-            parameters = ["q": query]
+            parameters = [spec.queryFields[0]: query]
         }
         return request(
-            endpoint: "/api/v1/integrations/notion/pages",
-            method: .get,
+            endpoint: spec.endpoint,
+            method: spec.httpMethod,
             parameters: parameters,
             encoding: URLEncoding.default,
             responseType: NotionPagesResponse.self,
-            presentsError: presentsError
+            presentsError: spec.presentsError
         )
     }
 
     func enqueueNotionImport(
-        pageIDs: [String],
-        presentsError: Bool = false
+        pageIDs: [String]
     ) -> AnyPublisher<NotionEnqueueResponse, NetworkError> {
-        request(
-            endpoint: "/api/v1/integrations/notion/import",
-            method: .post,
-            parameters: ["page_ids": pageIDs],
+        let spec = ChoraSourceRequests.notionEnqueue
+        return request(
+            endpoint: spec.endpoint,
+            method: spec.httpMethod,
+            parameters: [spec.bodyFields[0]: pageIDs],
             responseType: NotionEnqueueResponse.self,
-            presentsError: presentsError
+            presentsError: spec.presentsError
         )
     }
 
     func getNotionImportJob(
-        id: String,
-        presentsError: Bool = false
+        id: String
     ) -> AnyPublisher<NotionImportJobResponse, NetworkError> {
-        request(
-            endpoint: "/api/v1/integrations/notion/import/\(id)",
-            method: .get,
+        let spec = ChoraSourceRequests.notionJob(id)
+        return request(
+            endpoint: spec.endpoint,
+            method: spec.httpMethod,
             responseType: NotionImportJobResponse.self,
-            presentsError: presentsError
+            presentsError: spec.presentsError
         )
     }
 
-    func disconnectNotion(
-        presentsError: Bool = false
-    ) -> AnyPublisher<NotionDisconnectResponse, NetworkError> {
-        request(
-            endpoint: "/api/v1/integrations/notion/connect",
-            method: .delete,
+    func disconnectNotion() -> AnyPublisher<NotionDisconnectResponse, NetworkError> {
+        let spec = ChoraSourceRequests.notionDisconnect
+        return request(
+            endpoint: spec.endpoint,
+            method: spec.httpMethod,
             responseType: NotionDisconnectResponse.self,
-            presentsError: presentsError
+            presentsError: spec.presentsError
         )
     }
 
@@ -2470,16 +2470,14 @@ extension NetworkManager {
     }
 
     private func multipartRequest<Response: Decodable>(
-        endpoint: String,
-        method: HTTPMethod,
-        presentsError: Bool,
+        spec: ChoraSourceRequestSpec,
         responseType: Response.Type,
         form: @escaping (MultipartFormData) -> Void
     ) -> AnyPublisher<Response, NetworkError> {
-        multipartDataRequest(
-            endpoint: endpoint,
-            method: method,
-            presentsError: presentsError,
+        let termination = NoteImportUploadTermination()
+        return multipartDataRequest(
+            spec: spec,
+            termination: termination,
             form: form
         )
         .tryMap { payload in
@@ -2494,48 +2492,59 @@ extension NetworkManager {
     }
 
     private func multipartDataRequest(
-        endpoint: String,
-        method: HTTPMethod,
-        presentsError: Bool,
+        spec: ChoraSourceRequestSpec,
+        termination: NoteImportUploadTermination,
         form: @escaping (MultipartFormData) -> Void
     ) -> AnyPublisher<MultipartPayload, NetworkError> {
-        Future<MultipartPayload, NetworkError> { [weak self] promise in
+        Deferred { [weak self] () -> AnyPublisher<MultipartPayload, NetworkError> in
             guard let self else {
-                promise(.failure(.unknown))
-                return
+                termination.signal()
+                return Fail(error: .unknown).eraseToAnyPublisher()
             }
             var headers = self.authorizedHeaders()
             headers.remove(name: "Content-Type")
-            self.session.upload(
+            let request = self.session.upload(
                 multipartFormData: form,
-                to: "\(self.baseURL)\(endpoint)",
-                method: method,
+                to: "\(self.baseURL)\(spec.endpoint)",
+                usingThreshold: spec.multipartEncodingThreshold
+                    ?? MultipartFormData.encodingMemoryThreshold,
+                method: spec.httpMethod,
                 headers: headers
             )
             .validate()
-            .responseData { response in
-                switch response.result {
-                case .success(let data):
-                    promise(.success(MultipartPayload(
-                        data: data,
-                        statusCode: response.response?.statusCode ?? 200
-                    )))
-                case .failure(let error):
-                    if presentsError,
-                       let data = response.data,
-                       let message = self.extractMessage(from: data),
-                       !message.isEmpty {
-                        self.presentErrorAlert(message: message)
+            request.responseData { _ in termination.signal() }
+
+            return request.publishData()
+                .tryMap { response -> MultipartPayload in
+                    switch response.result {
+                    case .success(let data):
+                        return MultipartPayload(
+                            data: data,
+                            statusCode: response.response?.statusCode ?? 200
+                        )
+                    case .failure(let error):
+                        if spec.presentsError,
+                           let data = response.data,
+                           let message = self.extractMessage(from: data),
+                           !message.isEmpty {
+                            self.presentErrorAlert(message: message)
+                        }
+                        throw self.handleError(
+                            error,
+                            response: response.response
+                        )
                     }
-                    promise(.failure(self.handleError(
-                        error,
-                        response: response.response
-                    )))
                 }
-            }
+                .mapError { ($0 as? NetworkError) ?? .unknown }
+                .handleEvents(receiveCancel: { request.cancel() })
+                .eraseToAnyPublisher()
         }
         .eraseToAnyPublisher()
     }
+}
+
+private extension ChoraSourceRequestSpec {
+    var httpMethod: HTTPMethod { HTTPMethod(rawValue: method.rawValue) }
 }
 
 struct CardLinksResponse: Codable {

@@ -101,13 +101,13 @@ public struct NotionImportReceipt: Codable, Equatable, Sendable {
 public enum KnownNotionImportJobStatus: String, Codable, Sendable {
     case queued
     case running
-    case completed
+    case done
     case failed
     case cancelled
 
     public var isTerminal: Bool {
         switch self {
-        case .completed, .failed, .cancelled:
+        case .done, .failed, .cancelled:
             true
         case .queued, .running:
             false
@@ -132,7 +132,7 @@ public struct NotionImportJobStatus: RawRepresentable, Codable, Hashable, Sendab
 
     public static let queued = Self(rawValue: "queued")
     public static let running = Self(rawValue: "running")
-    public static let completed = Self(rawValue: "completed")
+    public static let done = Self(rawValue: "done")
     public static let failed = Self(rawValue: "failed")
     public static let cancelled = Self(rawValue: "cancelled")
 
@@ -147,28 +147,38 @@ public struct NotionImportJobStatus: RawRepresentable, Codable, Hashable, Sendab
     }
 }
 
+public struct NotionPageFailure: Codable, Equatable, Sendable {
+    public let pageID: String
+    public let reason: String
+
+    public init(pageID: String, reason: String) {
+        self.pageID = pageID
+        self.reason = reason
+    }
+}
+
 public struct NotionImportJob: Codable, Equatable, Sendable {
     public let id: String
     public let status: NotionImportJobStatus
-    public let totalPages: Int
-    public let completedPages: Int
-    public let importedAssetIDs: [String]
-    public let failureReason: String?
+    public let imported: Int
+    public let updated: Int
+    public let skipped: Int
+    public let failures: [NotionPageFailure]
 
     public init(
         id: String,
         status: NotionImportJobStatus,
-        totalPages: Int,
-        completedPages: Int,
-        importedAssetIDs: [String] = [],
-        failureReason: String? = nil
+        imported: Int,
+        updated: Int,
+        skipped: Int,
+        failures: [NotionPageFailure]
     ) {
         self.id = id
         self.status = status
-        self.totalPages = totalPages
-        self.completedPages = completedPages
-        self.importedAssetIDs = importedAssetIDs
-        self.failureReason = failureReason
+        self.imported = imported
+        self.updated = updated
+        self.skipped = skipped
+        self.failures = failures
     }
 }
 

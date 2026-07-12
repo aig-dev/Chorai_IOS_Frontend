@@ -2,25 +2,195 @@ import Combine
 import CoreFlow
 import Foundation
 
+protocol SecurityScopedResourceAccessing: Sendable {
+    func startAccessing(_ url: URL) -> Bool
+    func stopAccessing(_ url: URL)
+}
+
+struct SystemSecurityScopedResourceAccessor:
+    SecurityScopedResourceAccessing,
+    Sendable
+{
+    func startAccessing(_ url: URL) -> Bool {
+        url.startAccessingSecurityScopedResource()
+    }
+
+    func stopAccessing(_ url: URL) {
+        url.stopAccessingSecurityScopedResource()
+    }
+}
+
+final class NoteImportUploadTermination: @unchecked Sendable {
+    private let lock = NSLock()
+    private var terminated = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func signal() {
+        lock.lock()
+        guard !terminated else {
+            lock.unlock()
+            return
+        }
+        terminated = true
+        let currentWaiters = waiters
+        waiters.removeAll()
+        lock.unlock()
+        currentWaiters.forEach { $0.resume() }
+    }
+
+    func wait() async {
+        await withCheckedContinuation { continuation in
+            lock.lock()
+            if terminated {
+                lock.unlock()
+                continuation.resume()
+            } else {
+                waiters.append(continuation)
+                lock.unlock()
+            }
+        }
+    }
+}
+
+protocol NoteImportUploading: Sendable {
+    func enqueue(
+        parts: [NoteImportUploadPart],
+        clientRequestID: String,
+        termination: NoteImportUploadTermination
+    ) -> AnyPublisher<NoteImportUploadTransportResult, NetworkError>
+}
+
+private final class NoteImportPublisherAwaitState<Output>:
+    @unchecked Sendable
+{
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<Output, Error>?
+    private var cancellable: AnyCancellable?
+    private var result: Result<Output, Error>?
+
+    func install(
+        continuation: CheckedContinuation<Output, Error>
+    ) {
+        lock.lock()
+        if let result {
+            lock.unlock()
+            continuation.resume(with: result)
+        } else {
+            self.continuation = continuation
+            lock.unlock()
+        }
+    }
+
+    func install(cancellable: AnyCancellable) {
+        lock.lock()
+        if result != nil {
+            lock.unlock()
+            cancellable.cancel()
+        } else {
+            self.cancellable = cancellable
+            lock.unlock()
+        }
+    }
+
+    func resolve(_ result: Result<Output, Error>) {
+        lock.lock()
+        guard self.result == nil else {
+            lock.unlock()
+            return
+        }
+        self.result = result
+        let continuation = self.continuation
+        self.continuation = nil
+        lock.unlock()
+        continuation?.resume(with: result)
+    }
+
+    func cancel() {
+        lock.lock()
+        guard result == nil else {
+            lock.unlock()
+            return
+        }
+        let cancellation = CancellationError()
+        result = .failure(cancellation)
+        let continuation = continuation
+        self.continuation = nil
+        let cancellable = cancellable
+        self.cancellable = nil
+        lock.unlock()
+        cancellable?.cancel()
+        continuation?.resume(throwing: cancellation)
+    }
+
+    func finishWithoutValue(_ completion: Subscribers.Completion<NetworkError>) {
+        switch completion {
+        case .failure(let error):
+            resolve(.failure(error))
+        case .finished:
+            resolve(.failure(NetworkError.noData))
+        }
+        lock.lock()
+        cancellable = nil
+        lock.unlock()
+    }
+}
+
+struct NetworkNoteImportUploader: NoteImportUploading, @unchecked Sendable {
+    let network: NetworkManager
+
+    func enqueue(
+        parts: [NoteImportUploadPart],
+        clientRequestID: String,
+        termination: NoteImportUploadTermination
+    ) -> AnyPublisher<NoteImportUploadTransportResult, NetworkError> {
+        network.enqueueNoteImport(
+            parts: parts,
+            clientRequestID: clientRequestID,
+            termination: termination
+        )
+    }
+}
+
 struct NetworkNoteImportService: CoreNoteImportServing, @unchecked Sendable {
+    private let resourceAccessor: any SecurityScopedResourceAccessing
+    private let uploader: any NoteImportUploading
     private let network: NetworkManager
 
     init(network: NetworkManager = .shared) {
         self.network = network
+        resourceAccessor = SystemSecurityScopedResourceAccessor()
+        uploader = NetworkNoteImportUploader(network: network)
+    }
+
+    init(
+        network: NetworkManager = .shared,
+        resourceAccessor: any SecurityScopedResourceAccessing,
+        uploader: any NoteImportUploading
+    ) {
+        self.network = network
+        self.resourceAccessor = resourceAccessor
+        self.uploader = uploader
     }
 
     func enqueue(
         files: [NoteImportFile],
         clientRequestID: String
     ) async throws -> NoteImportReceipt {
-        var scopedURLs: [URL] = []
-        for file in files where file.url.startAccessingSecurityScopedResource() {
-            scopedURLs.append(file.url)
+        var uniqueURLs: [URL] = []
+        var seenURLs: Set<URL> = []
+        for file in files where seenURLs.insert(file.url).inserted {
+            uniqueURLs.append(file.url)
         }
-        defer {
-            for url in scopedURLs {
-                url.stopAccessingSecurityScopedResource()
+
+        var acquiredURLs: [URL] = []
+        for url in uniqueURLs {
+            guard resourceAccessor.startAccessing(url) else {
+                release(acquiredURLs)
+                throw NoteImportServiceError.contract(
+                    code: "security_scope_denied"
+                )
             }
+            acquiredURLs.append(url)
         }
 
         let parts = files.map {
@@ -33,15 +203,24 @@ struct NetworkNoteImportService: CoreNoteImportServing, @unchecked Sendable {
             )
         }
 
+        let termination = NoteImportUploadTermination()
+        let result: Result<NoteImportUploadTransportResult, Error>
         do {
-            let result = try await firstValue(
-                network.enqueueNoteImport(
+            result = .success(try await firstUploadValue(
+                uploader.enqueue(
                     parts: parts,
                     clientRequestID: clientRequestID,
-                    presentsError: false
+                    termination: termination
                 )
-            )
-            switch result {
+            ))
+        } catch {
+            result = .failure(error)
+        }
+        await termination.wait()
+        release(acquiredURLs)
+
+        do {
+            switch try result.get() {
             case .response(let response):
                 return Self.mapReceipt(response)
             case .undecodableSuccess(let statusCode):
@@ -56,12 +235,44 @@ struct NetworkNoteImportService: CoreNoteImportServing, @unchecked Sendable {
         }
     }
 
+    private func release(_ urls: [URL]) {
+        for url in urls.reversed() {
+            resourceAccessor.stopAccessing(url)
+        }
+    }
+
+    private func firstUploadValue(
+        _ publisher: AnyPublisher<
+            NoteImportUploadTransportResult,
+            NetworkError
+        >
+    ) async throws -> NoteImportUploadTransportResult {
+        let state = NoteImportPublisherAwaitState<
+            NoteImportUploadTransportResult
+        >()
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                state.install(continuation: continuation)
+                let cancellable = publisher.sink(
+                    receiveCompletion: { completion in
+                        state.finishWithoutValue(completion)
+                    },
+                    receiveValue: { value in
+                        state.resolve(.success(value))
+                    }
+                )
+                state.install(cancellable: cancellable)
+            }
+        } onCancel: {
+            state.cancel()
+        }
+    }
+
     func jobs(limit: Int) async throws -> [NoteImportJobSummary] {
         do {
             let response = try await firstValue(
                 network.getNoteImportJobs(
-                    limit: limit,
-                    presentsError: false
+                    limit: limit
                 )
             )
             return try Self.mapJobs(response)
@@ -76,8 +287,7 @@ struct NetworkNoteImportService: CoreNoteImportServing, @unchecked Sendable {
         do {
             let response = try await firstValue(
                 network.getNoteImportJob(
-                    id: id,
-                    presentsError: false
+                    id: id
                 )
             )
             return try Self.mapJob(response)
@@ -92,8 +302,7 @@ struct NetworkNoteImportService: CoreNoteImportServing, @unchecked Sendable {
         do {
             _ = try await firstValue(
                 network.cancelNoteImportJob(
-                    id: id,
-                    presentsError: false
+                    id: id
                 )
             )
         } catch {

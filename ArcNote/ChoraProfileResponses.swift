@@ -1,6 +1,137 @@
 import Foundation
 import CoreFlow
 
+enum ChoraRequestMethod: String {
+    case get = "GET"
+    case post = "POST"
+    case put = "PUT"
+    case patch = "PATCH"
+    case delete = "DELETE"
+}
+
+struct ChoraSourceRequestSpec {
+    let method: ChoraRequestMethod
+    let endpoint: String
+    let queryFields: [String]
+    let queryValues: [String: String]
+    let bodyFields: [String]
+    let multipartFields: [String]
+    let presentsError: Bool
+    let multipartEncodingThreshold: UInt64?
+
+    init(
+        method: ChoraRequestMethod,
+        endpoint: String,
+        queryFields: [String] = [],
+        queryValues: [String: String] = [:],
+        bodyFields: [String] = [],
+        multipartFields: [String] = [],
+        presentsError: Bool = false,
+        multipartEncodingThreshold: UInt64? = nil
+    ) {
+        self.method = method
+        self.endpoint = endpoint
+        self.queryFields = queryFields
+        self.queryValues = queryValues
+        self.bodyFields = bodyFields
+        self.multipartFields = multipartFields
+        self.presentsError = presentsError
+        self.multipartEncodingThreshold = multipartEncodingThreshold
+    }
+}
+
+enum ChoraSourceRequests {
+    static let agentProfile = ChoraSourceRequestSpec(
+        method: .get,
+        endpoint: "/api/agent/profile"
+    )
+    static let agentUsers = ChoraSourceRequestSpec(
+        method: .get,
+        endpoint: "/api/agent/users"
+    )
+    static let ownProfile = ChoraSourceRequestSpec(
+        method: .get,
+        endpoint: "/api/v1/profile/me"
+    )
+    static let growth = ChoraSourceRequestSpec(
+        method: .get,
+        endpoint: "/api/v1/growth/view",
+        queryFields: ["actor_id"]
+    )
+    static func agentDisplayName(_ agentActorID: String) -> ChoraSourceRequestSpec {
+        ChoraSourceRequestSpec(
+            method: .patch,
+            endpoint: "/api/agent/users/\(agentActorID)",
+            bodyFields: ["display_name"]
+        )
+    }
+    static let preferredAddress = ChoraSourceRequestSpec(
+        method: .put,
+        endpoint: "/api/v1/profile/me",
+        bodyFields: ["preferred_address"]
+    )
+    static let agentAvatar = ChoraSourceRequestSpec(
+        method: .put,
+        endpoint: "/api/v1/profile/agent/avatar",
+        multipartFields: ["agent_actor_id", "avatar"]
+    )
+    static let noteImportEnqueue = ChoraSourceRequestSpec(
+        method: .post,
+        endpoint: "/api/v1/imports/notes",
+        multipartFields: [
+            "files", "source_keys", "labels", "client_request_id"
+        ],
+        multipartEncodingThreshold: 0
+    )
+    static let noteImportList = ChoraSourceRequestSpec(
+        method: .get,
+        endpoint: "/api/v1/imports/notes",
+        queryFields: ["limit"]
+    )
+    static func noteImportDetail(_ jobID: String) -> ChoraSourceRequestSpec {
+        ChoraSourceRequestSpec(
+            method: .get,
+            endpoint: "/api/v1/imports/notes/\(jobID)"
+        )
+    }
+    static func noteImportCancel(_ jobID: String) -> ChoraSourceRequestSpec {
+        ChoraSourceRequestSpec(
+            method: .post,
+            endpoint: "/api/v1/imports/notes/\(jobID)/cancel"
+        )
+    }
+    static let notionStatus = ChoraSourceRequestSpec(
+        method: .get,
+        endpoint: "/api/v1/integrations/notion/status"
+    )
+    static let notionConnect = ChoraSourceRequestSpec(
+        method: .get,
+        endpoint: "/api/v1/integrations/notion/connect",
+        queryFields: ["client"],
+        queryValues: ["client": "ios"]
+    )
+    static let notionPages = ChoraSourceRequestSpec(
+        method: .get,
+        endpoint: "/api/v1/integrations/notion/pages",
+        queryFields: ["q"]
+    )
+    static let notionEnqueue = ChoraSourceRequestSpec(
+        method: .post,
+        endpoint: "/api/v1/integrations/notion/import",
+        bodyFields: ["page_ids"]
+    )
+    static func notionJob(_ jobID: String) -> ChoraSourceRequestSpec {
+        ChoraSourceRequestSpec(
+            method: .get,
+            endpoint: "/api/v1/integrations/notion/import/\(jobID)"
+        )
+    }
+    static let notionDisconnect = ChoraSourceRequestSpec(
+        method: .delete,
+        endpoint: "/api/v1/integrations/notion/connect"
+    )
+}
+
 struct ChoraDataEnvelope<Value: Codable>: Codable {
     let success: Bool
     let data: Value

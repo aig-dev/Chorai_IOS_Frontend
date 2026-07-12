@@ -276,10 +276,134 @@ private struct NotificationContractFixtureView: View {
     """#
 }
 
+private final class ChoraScopeContractRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storedValues: [String] = []
+
+    var values: [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return storedValues
+    }
+
+    func append(_ value: String) {
+        lock.lock()
+        storedValues.append(value)
+        lock.unlock()
+    }
+}
+
+private final class ChoraScopeContractAccessor:
+    SecurityScopedResourceAccessing,
+    @unchecked Sendable
+{
+    private let allowedPaths: [String: Bool]
+    private let recorder: ChoraScopeContractRecorder
+    private let lock = NSLock()
+    private var storedAcquireCount = 0
+    private var storedReleaseCount = 0
+
+    init(
+        allowedPaths: [String: Bool],
+        recorder: ChoraScopeContractRecorder
+    ) {
+        self.allowedPaths = allowedPaths
+        self.recorder = recorder
+    }
+
+    var acquireCount: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return storedAcquireCount
+    }
+
+    var releaseCount: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return storedReleaseCount
+    }
+
+    func startAccessing(_ url: URL) -> Bool {
+        lock.lock()
+        storedAcquireCount += 1
+        lock.unlock()
+        recorder.append("acquire:\(url.deletingPathExtension().lastPathComponent)")
+        return allowedPaths[url.lastPathComponent] ?? false
+    }
+
+    func stopAccessing(_ url: URL) {
+        lock.lock()
+        storedReleaseCount += 1
+        lock.unlock()
+        recorder.append("release:\(url.deletingPathExtension().lastPathComponent)")
+    }
+}
+
+private final class ChoraScopeContractUploader:
+    NoteImportUploading,
+    @unchecked Sendable
+{
+    enum Behavior {
+        case unexpected
+        case cancellable(started: NoteImportUploadTermination)
+    }
+
+    private let behavior: Behavior
+    private let recorder: ChoraScopeContractRecorder
+    private let lock = NSLock()
+    private var storedUploadCount = 0
+
+    init(behavior: Behavior, recorder: ChoraScopeContractRecorder) {
+        self.behavior = behavior
+        self.recorder = recorder
+    }
+
+    var uploadCount: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return storedUploadCount
+    }
+
+    func enqueue(
+        parts: [NoteImportUploadPart],
+        clientRequestID: String,
+        termination: NoteImportUploadTermination
+    ) -> AnyPublisher<NoteImportUploadTransportResult, NetworkError> {
+        Deferred { [behavior, recorder, lock] in
+            lock.lock()
+            self.storedUploadCount += 1
+            lock.unlock()
+            recorder.append("upload")
+
+            switch behavior {
+            case .unexpected:
+                termination.signal()
+                return Fail<NoteImportUploadTransportResult, NetworkError>(
+                    error: .unknown
+                )
+                .eraseToAnyPublisher()
+            case .cancellable(let started):
+                started.signal()
+                return Empty<NoteImportUploadTransportResult, NetworkError>(
+                    completeImmediately: false
+                )
+                .handleEvents(receiveCancel: {
+                    recorder.append("cancel")
+                    recorder.append("terminated")
+                    termination.signal()
+                })
+                .eraseToAnyPublisher()
+            }
+        }
+        .eraseToAnyPublisher()
+    }
+}
+
 private struct ChoraProfileContractFixtureView: View {
-    private let result: Result<[String: String], Error>
+    @State private var result: Result<[String: String], Error>
 
     init() {
+        let initialResult: Result<[String: String], Error>
         do {
             let decoder = JSONDecoder()
             let agentProfile = try decoder.decode(
@@ -347,6 +471,22 @@ private struct ChoraProfileContractFixtureView: View {
             let notionStatus = NetworkNotionSourceService.mapStatus(
                 notionStatusResponse
             )
+            let notionPageStatuses = NetworkNotionSourceService.mapPageStatuses(
+                notionStatusResponse
+            )
+            let notionConnectResponse = try decoder.decode(
+                NotionConnectResponse.self,
+                from: Data(Self.notionConnectJSON.utf8)
+            )
+            let notionAuthorization = try NetworkNotionSourceService
+                .mapAuthorization(notionConnectResponse)
+            let notionDisconnectResponse = try decoder.decode(
+                NotionDisconnectResponse.self,
+                from: Data(Self.notionDisconnectJSON.utf8)
+            )
+            try NetworkNotionSourceService.validateDisconnect(
+                notionDisconnectResponse
+            )
             let notionPagesResponse = try decoder.decode(
                 NotionPagesResponse.self,
                 from: Data(Self.notionPagesJSON.utf8)
@@ -372,48 +512,74 @@ private struct ChoraProfileContractFixtureView: View {
             guard let notionPage = notionPages.first else {
                 throw FixtureError.missingNotionPage
             }
+            guard let notionPageStatus = notionPageStatuses.first else {
+                throw FixtureError.missingNotionPageStatus
+            }
 
-            result = .success([
+            var values = Self.requestContractValues()
+
+            let identityValues: [String: String] = [
                 "chora.contract.human-actor-id": identity.humanActorID,
                 "chora.contract.agent-actor-id": identity.agentActorID,
                 "chora.contract.preferred-address": identity.preferredAddress ?? "nil",
-                "chora.contract.avatar-url": identity.avatarURL ?? "nil",
+                "chora.contract.avatar-url": identity.avatarURL ?? "nil"
+            ]
+            values.merge(identityValues) { _, new in new }
+
+            let growthContractValues: [String: String] = [
                 "chora.contract.growth-stage": String(growth.committedStage.rawValue),
                 "chora.contract.growth.curiosity": growthValues["curiosity"] ?? "nil",
                 "chora.contract.growth.insight": growthValues["insight"] ?? "nil",
                 "chora.contract.growth.creativity": growthValues["creativity"] ?? "nil",
                 "chora.contract.growth.empathy": growthValues["empathy"] ?? "nil",
                 "chora.contract.growth.judgment": growthValues["judgment"] ?? "nil",
-                "chora.contract.growth.resonance": growthValues["resonance"] ?? "nil",
+                "chora.contract.growth.resonance": growthValues["resonance"] ?? "nil"
+            ]
+            values.merge(growthContractValues) { _, new in new }
+
+            let importNullableFields: [String?] = [
+                importDetail.soulStatusReason,
+                importDetail.errorMessage,
+                importDetail.completedAt.map(String.init(describing:)),
+                importDetail.cancelRequestedAt.map(String.init(describing:)),
+                importDetail.cancelledAt.map(String.init(describing:)),
+                importItem.assetVersionID,
+                importItem.errorMessage
+            ]
+            let importValues: [String: String] = [
                 "chora.contract.import.client-request-id": importReceipt.clientRequestID ?? "nil",
                 "chora.contract.import.job-id": importReceipt.jobID,
                 "chora.contract.import.total-files": String(importReceipt.totalFiles),
                 "chora.contract.import.imported-count": String(importDetail.importedCount),
                 "chora.contract.import.asset-id": importItem.assetID ?? "nil",
-                "chora.contract.import.nullable-fields": [
-                    importDetail.soulStatusReason,
-                    importDetail.errorMessage,
-                    importDetail.completedAt.map(String.init(describing:)),
-                    importDetail.cancelRequestedAt.map(String.init(describing:)),
-                    importDetail.cancelledAt.map(String.init(describing:)),
-                    importItem.assetVersionID,
-                    importItem.errorMessage
-                ].map { $0 ?? "nil" }.joined(separator: ","),
+                "chora.contract.import.nullable-fields": importNullableFields
+                    .map { $0 ?? "nil" }.joined(separator: ","),
                 "chora.contract.import.unknown-status": importList.first?.status.rawValue ?? "nil",
-                "chora.contract.import.unknown-soul-status": importList.first?.soulStatus.rawValue ?? "nil",
+                "chora.contract.import.unknown-soul-status": importList.first?.soulStatus.rawValue ?? "nil"
+            ]
+            values.merge(importValues) { _, new in new }
+
+            let notionValues: [String: String] = [
                 "chora.contract.notion.workspace-id": notionStatus.workspaceID ?? "nil",
                 "chora.contract.notion.page-id": notionPage.id,
                 "chora.contract.notion.enqueue-job-id": notionReceipt.jobID,
                 "chora.contract.notion.job-id": notionJob.id,
                 "chora.contract.notion.nullable-fields": [
                     notionStatus.workspaceName,
-                    notionJob.failureReason
+                    notionPageStatus.assetID
                 ].map { $0 ?? "nil" }.joined(separator: ","),
-                "chora.contract.notion.unknown-job-status": notionJob.status.rawValue
-            ])
+                "chora.contract.notion.unknown-job-status": notionJob.status.rawValue,
+                "chora.contract.notion.unknown-page-status": notionPageStatus.status,
+                "chora.contract.notion.connect-auth-url": notionAuthorization.url.absoluteString,
+                "chora.contract.notion.connect-state": notionAuthorization.state,
+                "chora.contract.notion.disconnect": "disconnected"
+            ]
+            values.merge(notionValues) { _, new in new }
+            initialResult = .success(values)
         } catch {
-            result = .failure(error)
+            initialResult = .failure(error)
         }
+        _result = State(initialValue: initialResult)
     }
 
     var body: some View {
@@ -431,11 +597,213 @@ private struct ChoraProfileContractFixtureView: View {
                 }
             }
         }
+        .task {
+            guard case .success(var values) = result else {
+                return
+            }
+            do {
+                values.merge(try await Self.scopeContractValues()) {
+                    _, new in new
+                }
+                result = .success(values)
+            } catch {
+                result = .failure(error)
+            }
+        }
     }
 
     private enum FixtureError: Error {
         case missingImportItem
         case missingNotionPage
+        case missingNotionPageStatus
+        case scopeContractMismatch
+    }
+
+    private static func requestContractValues() -> [String: String] {
+        let profileName = ChoraSourceRequests.agentDisplayName(
+            ":agent_actor_id"
+        )
+        let noteDetail = ChoraSourceRequests.noteImportDetail(":job_id")
+        let noteCancel = ChoraSourceRequests.noteImportCancel(":job_id")
+        let notionJob = ChoraSourceRequests.notionJob(":job_id")
+        let specs = [
+            ChoraSourceRequests.agentProfile,
+            ChoraSourceRequests.agentUsers,
+            ChoraSourceRequests.ownProfile,
+            profileName,
+            ChoraSourceRequests.preferredAddress,
+            ChoraSourceRequests.agentAvatar,
+            ChoraSourceRequests.growth,
+            ChoraSourceRequests.noteImportEnqueue,
+            ChoraSourceRequests.noteImportList,
+            noteDetail,
+            noteCancel,
+            ChoraSourceRequests.notionConnect,
+            ChoraSourceRequests.notionStatus,
+            ChoraSourceRequests.notionPages,
+            ChoraSourceRequests.notionEnqueue,
+            notionJob,
+            ChoraSourceRequests.notionDisconnect
+        ]
+        let presentsError = "presentsError:\(specs.contains { $0.presentsError })"
+
+        return [
+            "chora.contract.request.identity": [
+                request(ChoraSourceRequests.agentProfile),
+                request(ChoraSourceRequests.agentUsers),
+                request(ChoraSourceRequests.ownProfile),
+                presentsError
+            ].joined(separator: "|"),
+            "chora.contract.request.profile-writes": [
+                request(profileName, fields: profileName.bodyFields),
+                request(
+                    ChoraSourceRequests.preferredAddress,
+                    fields: ChoraSourceRequests.preferredAddress.bodyFields
+                ),
+                request(
+                    ChoraSourceRequests.agentAvatar,
+                    fields: ChoraSourceRequests.agentAvatar.multipartFields
+                ),
+                presentsError
+            ].joined(separator: "|"),
+            "chora.contract.request.growth": [
+                request(
+                    ChoraSourceRequests.growth,
+                    fields: ChoraSourceRequests.growth.queryFields
+                ),
+                presentsError
+            ].joined(separator: "|"),
+            "chora.contract.request.note-import": [
+                request(
+                    ChoraSourceRequests.noteImportEnqueue,
+                    fields: ChoraSourceRequests.noteImportEnqueue.multipartFields
+                ) + " threshold=\(ChoraSourceRequests.noteImportEnqueue.multipartEncodingThreshold ?? UInt64.max)",
+                request(
+                    ChoraSourceRequests.noteImportList,
+                    fields: ChoraSourceRequests.noteImportList.queryFields
+                ),
+                request(noteDetail),
+                request(noteCancel),
+                presentsError
+            ].joined(separator: "|"),
+            "chora.contract.request.notion": [
+                request(
+                    ChoraSourceRequests.notionConnect,
+                    fields: [
+                        "client=\(ChoraSourceRequests.notionConnect.queryValues["client"] ?? "nil")"
+                    ]
+                ),
+                request(ChoraSourceRequests.notionStatus),
+                request(
+                    ChoraSourceRequests.notionPages,
+                    fields: ChoraSourceRequests.notionPages.queryFields
+                ),
+                request(
+                    ChoraSourceRequests.notionEnqueue,
+                    fields: ChoraSourceRequests.notionEnqueue.bodyFields
+                ),
+                request(notionJob),
+                request(ChoraSourceRequests.notionDisconnect),
+                presentsError
+            ].joined(separator: "|")
+        ]
+    }
+
+    private static func request(
+        _ spec: ChoraSourceRequestSpec,
+        fields: [String] = []
+    ) -> String {
+        let suffix = fields.isEmpty ? "" : " \(fields.joined(separator: ","))"
+        return "\(spec.method.rawValue) \(spec.endpoint)\(suffix)"
+    }
+
+    private static func scopeContractValues() async throws -> [String: String] {
+        let firstURL = URL(fileURLWithPath: "/tmp/a.md")
+        let secondURL = URL(fileURLWithPath: "/tmp/b.md")
+
+        let atomicRecorder = ChoraScopeContractRecorder()
+        let atomicAccessor = ChoraScopeContractAccessor(
+            allowedPaths: ["a.md": true, "b.md": false],
+            recorder: atomicRecorder
+        )
+        let atomicUploader = ChoraScopeContractUploader(
+            behavior: .unexpected,
+            recorder: atomicRecorder
+        )
+        let atomicService = NetworkNoteImportService(
+            resourceAccessor: atomicAccessor,
+            uploader: atomicUploader
+        )
+        _ = try? await atomicService.enqueue(
+            files: [
+                fixtureFile(id: "a", url: firstURL),
+                fixtureFile(id: "b", url: secondURL)
+            ],
+            clientRequestID: "scope-atomic"
+        )
+        if atomicUploader.uploadCount == 0 {
+            atomicRecorder.append("no-upload")
+        }
+        guard atomicRecorder.values == [
+            "acquire:a", "acquire:b", "release:a", "no-upload"
+        ] else {
+            throw FixtureError.scopeContractMismatch
+        }
+
+        let cancelRecorder = ChoraScopeContractRecorder()
+        let cancelAccessor = ChoraScopeContractAccessor(
+            allowedPaths: ["a.md": true],
+            recorder: cancelRecorder
+        )
+        let uploadStarted = NoteImportUploadTermination()
+        let cancelUploader = ChoraScopeContractUploader(
+            behavior: .cancellable(started: uploadStarted),
+            recorder: cancelRecorder
+        )
+        let cancelService = NetworkNoteImportService(
+            resourceAccessor: cancelAccessor,
+            uploader: cancelUploader
+        )
+        let task = Task {
+            _ = try? await cancelService.enqueue(
+                files: [
+                    fixtureFile(id: "first", url: firstURL),
+                    fixtureFile(id: "duplicate", url: firstURL)
+                ],
+                clientRequestID: "scope-cancel"
+            )
+        }
+        await uploadStarted.wait()
+        task.cancel()
+        await task.value
+        guard cancelRecorder.values == [
+            "acquire:a", "upload", "cancel", "terminated", "release:a"
+        ] else {
+            throw FixtureError.scopeContractMismatch
+        }
+
+        return [
+            "chora.contract.scope.atomic-failure": atomicRecorder.values
+                .joined(separator: ","),
+            "chora.contract.scope.cancel-order": cancelRecorder.values
+                .joined(separator: ","),
+            "chora.contract.scope.duplicate-count": [
+                "acquire:\(cancelAccessor.acquireCount)",
+                "release:\(cancelAccessor.releaseCount)"
+            ].joined(separator: ",")
+        ]
+    }
+
+    private static func fixtureFile(id: String, url: URL) -> NoteImportFile {
+        NoteImportFile(
+            id: id,
+            sourceKey: "source-\(id)",
+            url: url,
+            filename: url.lastPathComponent,
+            label: id,
+            format: .markdown,
+            byteCount: 1
+        )
     }
 
     private static let agentProfileJSON = #"""
@@ -579,6 +947,13 @@ private struct ChoraProfileContractFixtureView: View {
     }
     """#
 
+    private static let notionConnectJSON = #"""
+    {
+      "auth_url": "https://api.notion.test/oauth?state=opaque_contract",
+      "state": "state_contract"
+    }
+    """#
+
     private static let notionPagesJSON = #"""
     {
       "pages": [{
@@ -603,6 +978,10 @@ private struct ChoraProfileContractFixtureView: View {
       "skipped": 0,
       "failed": []
     }
+    """#
+
+    private static let notionDisconnectJSON = #"""
+    {"disconnected": true}
     """#
 }
 

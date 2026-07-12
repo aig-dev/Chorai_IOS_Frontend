@@ -359,6 +359,17 @@ final class ChoraProfileStoreTests: XCTestCase {
         XCTAssertTrue(store.changedFields.contains(.preferredAddress))
         XCTAssertNil(store.fieldErrors[.displayName])
         XCTAssertEqual(store.fieldErrors[.preferredAddress], .requestFailed)
+        let requests = await service.updateRequests()
+        XCTAssertEqual(
+            requests,
+            [
+                .displayName(agentActorID: "act_chora", value: "Nova"),
+                .preferredAddress(
+                    humanActorID: "act_human",
+                    value: "Captain"
+                )
+            ]
+        )
     }
 
     func testSuccessfulSubmittedValueDoesNotOverwriteNewerDraft() async {
@@ -711,7 +722,7 @@ private actor ChoraProfileServiceSpy: CoreChoraProfileServing {
 
     enum UpdateRequest: Equatable, Sendable {
         case displayName(agentActorID: String, value: String)
-        case preferredAddress(String?)
+        case preferredAddress(humanActorID: String, value: String?)
         case avatar(agentActorID: String, value: ChoraAvatarDraft)
     }
 
@@ -775,8 +786,14 @@ private actor ChoraProfileServiceSpy: CoreChoraProfileServing {
         try displayNameResults.removeFirst().get()
     }
 
-    func updatePreferredAddress(_ value: String?) async throws {
-        recordedUpdates.append(.preferredAddress(value))
+    func updatePreferredAddress(
+        humanActorID: String,
+        value: String?
+    ) async throws {
+        recordedUpdates.append(.preferredAddress(
+            humanActorID: humanActorID,
+            value: value
+        ))
         try addressResults.removeFirst().get()
     }
 
@@ -816,7 +833,7 @@ private actor SuspendedGrowthService: CoreChoraProfileServing {
     }
 
     func updateDisplayName(agentActorID: String, displayName: String) async throws {}
-    func updatePreferredAddress(_ value: String?) async throws {}
+    func updatePreferredAddress(humanActorID: String, value: String?) async throws {}
     func updateAvatar(agentActorID: String, avatar: ChoraAvatarDraft) async throws {}
 
     func didStartGrowth() -> Bool { started }

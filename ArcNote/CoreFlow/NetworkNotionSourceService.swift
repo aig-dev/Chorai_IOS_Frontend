@@ -2,6 +2,20 @@ import Combine
 import CoreFlow
 import Foundation
 
+struct NotionAuthorizationValues: Equatable {
+    let url: URL
+    let state: String
+}
+
+struct NotionPageSyncProjection: Equatable {
+    let pageID: String
+    let assetID: String?
+    let status: String
+    let lastSyncedAt: String?
+    let errorMessage: String?
+    let retryCount: UInt8
+}
+
 struct NetworkNotionSourceService: CoreNotionSourceServing, @unchecked Sendable {
     private let network: NetworkManager
 
@@ -13,7 +27,7 @@ struct NetworkNotionSourceService: CoreNotionSourceServing, @unchecked Sendable 
         do {
             return Self.mapStatus(
                 try await firstValue(
-                    network.getNotionStatus(presentsError: false)
+                    network.getNotionStatus()
                 )
             )
         } catch {
@@ -26,16 +40,12 @@ struct NetworkNotionSourceService: CoreNotionSourceServing, @unchecked Sendable 
             throw NotionSourceError.requestFailed
         }
         do {
-            let response = try await firstValue(
-                network.getNotionAuthorizationURL(
-                    client: "ios",
-                    presentsError: false
+            return try Self.mapAuthorization(
+                try await firstValue(
+                    network.getNotionAuthorizationURL()
                 )
             )
-            guard let url = URL(string: response.authURL) else {
-                throw NotionSourceError.requestFailed
-            }
-            return url
+            .url
         } catch let error as NotionSourceError {
             throw error
         } catch {
@@ -47,10 +57,7 @@ struct NetworkNotionSourceService: CoreNotionSourceServing, @unchecked Sendable 
         do {
             return Self.mapPages(
                 try await firstValue(
-                    network.getNotionPages(
-                        query: query,
-                        presentsError: false
-                    )
+                    network.getNotionPages(query: query)
                 )
             )
         } catch {
@@ -61,10 +68,7 @@ struct NetworkNotionSourceService: CoreNotionSourceServing, @unchecked Sendable 
     func enqueue(pageIDs: [String]) async throws -> NotionImportReceipt {
         do {
             let response = try await firstValue(
-                network.enqueueNotionImport(
-                    pageIDs: pageIDs,
-                    presentsError: false
-                )
+                network.enqueueNotionImport(pageIDs: pageIDs)
             )
             return Self.mapReceipt(response, acceptedPageIDs: pageIDs)
         } catch {
@@ -76,10 +80,7 @@ struct NetworkNotionSourceService: CoreNotionSourceServing, @unchecked Sendable 
         do {
             return Self.mapJob(
                 try await firstValue(
-                    network.getNotionImportJob(
-                        id: id,
-                        presentsError: false
-                    )
+                    network.getNotionImportJob(id: id)
                 )
             )
         } catch {
@@ -90,11 +91,9 @@ struct NetworkNotionSourceService: CoreNotionSourceServing, @unchecked Sendable 
     func disconnect() async throws {
         do {
             let response = try await firstValue(
-                network.disconnectNotion(presentsError: false)
+                network.disconnectNotion()
             )
-            guard response.disconnected else {
-                throw NotionSourceError.requestFailed
-            }
+            try Self.validateDisconnect(response)
         } catch let error as NotionSourceError {
             throw error
         } catch {
@@ -110,6 +109,38 @@ struct NetworkNotionSourceService: CoreNotionSourceServing, @unchecked Sendable 
             workspaceID: response.workspaceID,
             workspaceName: nil
         )
+    }
+
+    static func mapAuthorization(
+        _ response: NotionConnectResponse
+    ) throws -> NotionAuthorizationValues {
+        guard let url = URL(string: response.authURL) else {
+            throw NotionSourceError.requestFailed
+        }
+        return NotionAuthorizationValues(url: url, state: response.state)
+    }
+
+    static func mapPageStatuses(
+        _ response: NotionStatusResponse
+    ) -> [NotionPageSyncProjection] {
+        response.pages.map {
+            NotionPageSyncProjection(
+                pageID: $0.notionPageID,
+                assetID: $0.assetID,
+                status: $0.status,
+                lastSyncedAt: $0.lastSyncedAt,
+                errorMessage: $0.errorMessage,
+                retryCount: $0.retryCount
+            )
+        }
+    }
+
+    static func validateDisconnect(
+        _ response: NotionDisconnectResponse
+    ) throws {
+        guard response.disconnected else {
+            throw NotionSourceError.requestFailed
+        }
     }
 
     static func mapPages(
@@ -133,24 +164,15 @@ struct NetworkNotionSourceService: CoreNotionSourceServing, @unchecked Sendable 
     static func mapJob(
         _ response: NotionImportJobResponse
     ) -> NotionImportJob {
-        let failedCount = response.failed.count
-        let completedCount = response.imported
-            + response.updated
-            + response.skipped
-            + failedCount
-        let status = response.status == "done"
-            ? NotionImportJobStatus.completed
-            : NotionImportJobStatus(rawValue: response.status)
-        let failureReason = response.failed.isEmpty ? nil : response.failed
-            .map { "\($0.pageID): \($0.reason)" }
-            .joined(separator: "\n")
         return NotionImportJob(
             id: response.jobID,
-            status: status,
-            totalPages: completedCount,
-            completedPages: completedCount,
-            importedAssetIDs: [],
-            failureReason: failureReason
+            status: NotionImportJobStatus(rawValue: response.status),
+            imported: response.imported,
+            updated: response.updated,
+            skipped: response.skipped,
+            failures: response.failed.map {
+                NotionPageFailure(pageID: $0.pageID, reason: $0.reason)
+            }
         )
     }
 
