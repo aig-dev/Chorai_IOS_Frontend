@@ -32,9 +32,16 @@ public final class ChoraProfileStore: ObservableObject {
     private var humanActorID: String?
     private var generation = UUID()
     private var growthTask: Task<Void, Never>?
+    private var activeSaveID: UUID?
+    private var activeSaveTask: Task<Void, Never>?
 
     public init(service: any CoreChoraProfileServing) {
         self.service = service
+    }
+
+    deinit {
+        growthTask?.cancel()
+        activeSaveTask?.cancel()
     }
 
     public func load(humanActorID rawHumanActorID: String) async {
@@ -46,7 +53,9 @@ public final class ChoraProfileStore: ObservableObject {
         preferredAddressDraft = nil
         avatarDraft = nil
         fieldErrors = [:]
-        isSaving = false
+        if activeSaveTask == nil {
+            isSaving = false
+        }
         phase = .idle
         growthPhase = .idle
         let requestedHuman = rawHumanActorID.trimmingCharacters(
@@ -116,10 +125,39 @@ public final class ChoraProfileStore: ObservableObject {
         isSaving = true
         fieldErrors = [:]
         let currentGeneration = generation
-        let expectedAgent = identity.agentActorID
         let displayName = displayNameDraft
         let preferredAddress = preferredAddressDraft
         let avatar = avatarDraft
+        let saveID = UUID()
+        activeSaveID = saveID
+        let task = Task { [weak self] in
+            guard let self else { return }
+            await performSave(
+                fields: fields,
+                requestedHuman: requestedHuman,
+                expectedAgent: identity.agentActorID,
+                generation: currentGeneration,
+                saveID: saveID,
+                displayName: displayName,
+                preferredAddress: preferredAddress,
+                avatar: avatar
+            )
+        }
+        activeSaveTask = task
+        await task.value
+    }
+
+    private func performSave(
+        fields: Set<ChoraProfileField>,
+        requestedHuman: String,
+        expectedAgent: String,
+        generation: UUID,
+        saveID: UUID,
+        displayName: String,
+        preferredAddress: String?,
+        avatar: ChoraAvatarDraft?
+    ) async {
+        defer { finishSave(saveID: saveID) }
         var mutationErrors: [ChoraProfileField: ChoraProfileError] = [:]
 
         if fields.contains(.displayName) {
@@ -131,6 +169,12 @@ public final class ChoraProfileStore: ObservableObject {
             } catch {
                 mutationErrors[.displayName] = Self.map(error)
             }
+            guard isCurrentSave(
+                saveID: saveID,
+                requestedHuman: requestedHuman,
+                expectedAgent: expectedAgent,
+                generation: generation
+            ) else { return }
         }
         if fields.contains(.preferredAddress) {
             do {
@@ -138,6 +182,12 @@ public final class ChoraProfileStore: ObservableObject {
             } catch {
                 mutationErrors[.preferredAddress] = Self.map(error)
             }
+            guard isCurrentSave(
+                saveID: saveID,
+                requestedHuman: requestedHuman,
+                expectedAgent: expectedAgent,
+                generation: generation
+            ) else { return }
         }
         if fields.contains(.avatar), let avatar {
             do {
@@ -148,46 +198,107 @@ public final class ChoraProfileStore: ObservableObject {
             } catch {
                 mutationErrors[.avatar] = Self.map(error)
             }
+            guard isCurrentSave(
+                saveID: saveID,
+                requestedHuman: requestedHuman,
+                expectedAgent: expectedAgent,
+                generation: generation
+            ) else { return }
         }
 
-        guard generation == currentGeneration,
-              humanActorID == requestedHuman,
-              self.identity?.agentActorID == expectedAgent else {
-            return
-        }
+        guard isCurrentSave(
+            saveID: saveID,
+            requestedHuman: requestedHuman,
+            expectedAgent: expectedAgent,
+            generation: generation
+        ) else { return }
 
         do {
             let canonical = try await service.identity(
                 humanActorID: requestedHuman
             )
-            guard generation == currentGeneration,
-                  humanActorID == requestedHuman,
-                  self.identity?.agentActorID == expectedAgent else {
-                return
-            }
+            guard isCurrentSave(
+                saveID: saveID,
+                requestedHuman: requestedHuman,
+                expectedAgent: expectedAgent,
+                generation: generation
+            ) else { return }
             try Self.validateIdentity(
                 canonical,
                 requestedHuman: requestedHuman,
                 expectedAgent: expectedAgent
             )
             self.identity = canonical
-            if fields.contains(.displayName), mutationErrors[.displayName] == nil {
+            if fields.contains(.displayName),
+               displayNameDraft == displayName,
+               mutationErrors[.displayName] == nil {
                 displayNameDraft = canonical.displayName
             }
-            if fields.contains(.preferredAddress), mutationErrors[.preferredAddress] == nil {
+            if fields.contains(.preferredAddress),
+               preferredAddressDraft == preferredAddress,
+               mutationErrors[.preferredAddress] == nil {
                 preferredAddressDraft = canonical.preferredAddress
             }
-            if fields.contains(.avatar), mutationErrors[.avatar] == nil {
+            if fields.contains(.avatar),
+               avatarDraft == avatar,
+               mutationErrors[.avatar] == nil {
                 avatarDraft = nil
             }
-            fieldErrors = mutationErrors
+            fieldErrors = currentErrors(
+                from: mutationErrors,
+                displayName: displayName,
+                preferredAddress: preferredAddress,
+                avatar: avatar
+            )
         } catch {
             let reloadError = Self.map(error)
             for field in fields where mutationErrors[field] == nil {
                 mutationErrors[field] = reloadError
             }
-            fieldErrors = mutationErrors
+            fieldErrors = currentErrors(
+                from: mutationErrors,
+                displayName: displayName,
+                preferredAddress: preferredAddress,
+                avatar: avatar
+            )
         }
+    }
+
+    private func currentErrors(
+        from errors: [ChoraProfileField: ChoraProfileError],
+        displayName: String,
+        preferredAddress: String?,
+        avatar: ChoraAvatarDraft?
+    ) -> [ChoraProfileField: ChoraProfileError] {
+        errors.filter { field, _ in
+            switch field {
+            case .displayName:
+                displayNameDraft == displayName
+            case .preferredAddress:
+                preferredAddressDraft == preferredAddress
+            case .avatar:
+                avatarDraft == avatar
+            }
+        }
+    }
+
+    private func isCurrentSave(
+        saveID: UUID,
+        requestedHuman: String,
+        expectedAgent: String,
+        generation: UUID
+    ) -> Bool {
+        !Task.isCancelled &&
+            activeSaveID == saveID &&
+            self.generation == generation &&
+            humanActorID == requestedHuman &&
+            identity?.agentActorID == expectedAgent
+    }
+
+    private func finishSave(saveID: UUID) {
+        guard activeSaveID == saveID else { return }
+        activeSaveID = nil
+        activeSaveTask = nil
         isSaving = false
     }
 
@@ -199,25 +310,31 @@ public final class ChoraProfileStore: ObservableObject {
         growthTask?.cancel()
         growth = nil
         growthPhase = .loading
-        growthTask = Task { [weak self] in
-            guard let self else { return }
+        let service = service
+        growthTask = Task { [weak self, service] in
             do {
                 let loaded = try await service.growth(agentActorID: agentActorID)
-                guard self.generation == generation,
+                guard let self,
+                      !Task.isCancelled,
+                      self.generation == generation,
                       self.humanActorID == humanActorID,
                       self.identity?.agentActorID == agentActorID else {
                     return
                 }
                 growth = loaded
-                growthPhase = loaded == nil ? .unavailable(.requestFailed) : .ready
+                growthPhase = loaded == nil
+                    ? .unavailable(.noSnapshot)
+                    : .ready
             } catch {
-                guard self.generation == generation,
+                guard let self,
+                      !Task.isCancelled,
+                      self.generation == generation,
                       self.humanActorID == humanActorID,
                       self.identity?.agentActorID == agentActorID else {
                     return
                 }
                 growth = nil
-                growthPhase = .unavailable(Self.map(error))
+                growthPhase = .unavailable(.requestFailed(Self.map(error)))
             }
         }
     }
@@ -236,6 +353,7 @@ public final class ChoraProfileStore: ObservableObject {
     private func invalidateGeneration() {
         generation = UUID()
         growthTask?.cancel()
+        activeSaveTask?.cancel()
     }
 
     private static func validateIdentity(

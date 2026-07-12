@@ -130,11 +130,56 @@ final class ChoraProfileStoreTests: XCTestCase {
         let store = ChoraProfileStore(service: service)
 
         await store.load(humanActorID: "act_human")
-        await waitUntil { store.growthPhase == .unavailable(.requestFailed) }
+        await waitUntil {
+            store.growthPhase == .unavailable(
+                .requestFailed(.requestFailed)
+            )
+        }
 
         XCTAssertEqual(store.identity, .fixture())
         XCTAssertEqual(store.phase, .ready)
         XCTAssertNil(store.growth)
+    }
+
+    func testNilGrowthIsUnavailableWithoutRequestFailure() async {
+        let service = ChoraProfileServiceSpy(
+            identities: [.init(result: .success(.fixture()))],
+            growth: [.init(result: .success(nil))]
+        )
+        let store = ChoraProfileStore(service: service)
+
+        await store.load(humanActorID: "act_human")
+        await waitUntil {
+            store.growthPhase == .unavailable(.noSnapshot)
+        }
+
+        XCTAssertEqual(store.identity, .fixture())
+        XCTAssertNil(store.growth)
+    }
+
+    func testSuspendedGrowthDoesNotRetainStoreAndCancelsOnTeardown() async {
+        let service = SuspendedGrowthService()
+        var store: ChoraProfileStore? = ChoraProfileStore(service: service)
+        weak let weakStore = store
+        await store?.load(humanActorID: "act_human")
+        while !(await service.didStartGrowth()) { await Task.yield() }
+
+        store = nil
+        await Task.yield()
+        let releasedWhileSuspended = weakStore == nil
+        if !releasedWhileSuspended {
+            await service.finishGrowth()
+            while weakStore != nil { await Task.yield() }
+        }
+
+        XCTAssertTrue(releasedWhileSuspended)
+        if releasedWhileSuspended {
+            while await service.cancellationCount() == 0 {
+                await Task.yield()
+            }
+            let cancellationCount = await service.cancellationCount()
+            XCTAssertEqual(cancellationCount, 1)
+        }
     }
 
     func testActorAndGenerationChangesRejectStaleIdentityCompletions() async {
@@ -315,6 +360,117 @@ final class ChoraProfileStoreTests: XCTestCase {
         XCTAssertEqual(store.fieldErrors[.preferredAddress], .requestFailed)
     }
 
+    func testSuccessfulSubmittedValueDoesNotOverwriteNewerDraft() async {
+        let service = ChoraProfileServiceSpy(
+            identities: [
+                .init(result: .success(.fixture())),
+                .init(result: .success(.fixture(displayName: "Submitted")))
+            ],
+            growth: [.init(result: .success(nil))],
+            displayNameResults: [.success(())],
+            displayNameDelays: [150_000_000]
+        )
+        let store = ChoraProfileStore(service: service)
+        await store.load(humanActorID: "act_human")
+        store.setDisplayNameDraft("Submitted")
+
+        let save = Task { await store.save() }
+        while await service.updateRequestCount() < 1 { await Task.yield() }
+        store.setDisplayNameDraft("Newer")
+        await save.value
+
+        XCTAssertEqual(store.identity?.displayName, "Submitted")
+        XCTAssertEqual(store.displayNameDraft, "Newer")
+        XCTAssertTrue(store.changedFields.contains(.displayName))
+        XCTAssertNil(store.fieldErrors[.displayName])
+    }
+
+    func testFailedSubmittedValueDoesNotAttachErrorToNewerDraft() async {
+        let service = ChoraProfileServiceSpy(
+            identities: [
+                .init(result: .success(.fixture())),
+                .init(result: .success(.fixture()))
+            ],
+            growth: [.init(result: .success(nil))],
+            displayNameResults: [.failure(.failed)],
+            displayNameDelays: [150_000_000]
+        )
+        let store = ChoraProfileStore(service: service)
+        await store.load(humanActorID: "act_human")
+        store.setDisplayNameDraft("Submitted")
+
+        let save = Task { await store.save() }
+        while await service.updateRequestCount() < 1 { await Task.yield() }
+        store.setDisplayNameDraft("Newer")
+        await save.value
+
+        XCTAssertEqual(store.identity?.displayName, "Chora")
+        XCTAssertEqual(store.displayNameDraft, "Newer")
+        XCTAssertTrue(store.changedFields.contains(.displayName))
+        XCTAssertNil(store.fieldErrors[.displayName])
+    }
+
+    func testActorChangeCancelsRemainingMutationsAndKeepsSaveLockedUntilExit() async {
+        let service = ChoraProfileServiceSpy(
+            identities: [
+                .init(result: .success(.fixture(
+                    humanActorID: "act_old",
+                    agentActorID: "agent_old"
+                ))),
+                .init(result: .success(.fixture(
+                    humanActorID: "act_new",
+                    agentActorID: "agent_new",
+                    displayName: "New identity"
+                ))),
+                .init(result: .success(.fixture(
+                    humanActorID: "act_new",
+                    agentActorID: "agent_new",
+                    displayName: "New submitted"
+                ))),
+                .init(result: .success(.fixture(
+                    humanActorID: "act_old",
+                    agentActorID: "agent_old",
+                    displayName: "Stale canonical"
+                )))
+            ],
+            growth: [
+                .init(result: .success(nil)),
+                .init(result: .success(nil))
+            ],
+            displayNameResults: [.success(()), .success(())],
+            displayNameDelays: [200_000_000, 0],
+            addressResults: [.success(())]
+        )
+        let store = ChoraProfileStore(service: service)
+        await store.load(humanActorID: "act_old")
+        store.setDisplayNameDraft("Old submitted")
+        store.setPreferredAddressDraft("Old address")
+
+        let oldSave = Task { await store.save() }
+        while await service.updateRequestCount() < 1 { await Task.yield() }
+        await store.load(humanActorID: "act_new")
+        store.setDisplayNameDraft("New submitted")
+
+        await store.save()
+        let requestsWhileOldSaveIsSuspended = await service.updateRequests()
+        XCTAssertEqual(requestsWhileOldSaveIsSuspended, [
+            .displayName(agentActorID: "agent_old", value: "Old submitted")
+        ])
+        XCTAssertTrue(store.isSaving)
+
+        await oldSave.value
+        XCTAssertFalse(store.isSaving)
+        XCTAssertEqual(store.identity?.displayName, "New identity")
+
+        await store.save()
+        let finalRequests = await service.updateRequests()
+        XCTAssertEqual(finalRequests, [
+            .displayName(agentActorID: "agent_old", value: "Old submitted"),
+            .displayName(agentActorID: "agent_new", value: "New submitted")
+        ])
+        XCTAssertEqual(store.identity?.displayName, "New submitted")
+    }
+
     func testCanonicalReloadMustRetainExactAgentIdentity() async {
         let original = ChoraIdentity.fixture(agentActorID: "act_chora")
         let service = ChoraProfileServiceSpy(
@@ -454,6 +610,7 @@ private actor ChoraProfileServiceSpy: CoreChoraProfileServing {
     private var identities: [IdentityScript]
     private var growthScripts: [GrowthScript]
     private var displayNameResults: [Result<Void, TestError>]
+    private var displayNameDelays: [UInt64]
     private var addressResults: [Result<Void, TestError>]
     private var avatarResults: [Result<Void, TestError>]
     private var recordedIdentityCount = 0
@@ -464,12 +621,14 @@ private actor ChoraProfileServiceSpy: CoreChoraProfileServing {
         identities: [IdentityScript],
         growth: [GrowthScript] = [],
         displayNameResults: [Result<Void, TestError>] = [],
+        displayNameDelays: [UInt64] = [],
         addressResults: [Result<Void, TestError>] = [],
         avatarResults: [Result<Void, TestError>] = []
     ) {
         self.identities = identities
         self.growthScripts = growth
         self.displayNameResults = displayNameResults
+        self.displayNameDelays = displayNameDelays
         self.addressResults = addressResults
         self.avatarResults = avatarResults
     }
@@ -493,6 +652,14 @@ private actor ChoraProfileServiceSpy: CoreChoraProfileServing {
             agentActorID: agentActorID,
             value: displayName
         ))
+        let delay = displayNameDelays.isEmpty
+            ? 0
+            : displayNameDelays.removeFirst()
+        if delay > 0 {
+            await Task.detached {
+                try? await Task.sleep(nanoseconds: delay)
+            }.value
+        }
         try displayNameResults.removeFirst().get()
     }
 
@@ -508,9 +675,49 @@ private actor ChoraProfileServiceSpy: CoreChoraProfileServing {
 
     func growthRequests() -> [String] { recordedGrowth }
     func updateRequests() -> [UpdateRequest] { recordedUpdates }
+    func updateRequestCount() -> Int { recordedUpdates.count }
     func identityRequestCount() -> Int { recordedIdentityCount }
 }
 
 private enum TestError: Error, Sendable {
     case failed
+}
+
+private actor SuspendedGrowthService: CoreChoraProfileServing {
+    private var started = false
+    private var cancellations = 0
+    private var continuation: CheckedContinuation<ChoraGrowthSnapshot?, Error>?
+
+    func identity(humanActorID: String) async throws -> ChoraIdentity {
+        .fixture()
+    }
+
+    func growth(agentActorID: String) async throws -> ChoraGrowthSnapshot? {
+        started = true
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                self.continuation = continuation
+            }
+        } onCancel: {
+            Task { await self.cancelGrowth() }
+        }
+    }
+
+    func updateDisplayName(agentActorID: String, displayName: String) async throws {}
+    func updatePreferredAddress(_ value: String?) async throws {}
+    func updateAvatar(agentActorID: String, avatar: ChoraAvatarDraft) async throws {}
+
+    func didStartGrowth() -> Bool { started }
+    func cancellationCount() -> Int { cancellations }
+
+    func finishGrowth() {
+        continuation?.resume(returning: nil)
+        continuation = nil
+    }
+
+    private func cancelGrowth() {
+        cancellations += 1
+        continuation?.resume(throwing: CancellationError())
+        continuation = nil
+    }
 }

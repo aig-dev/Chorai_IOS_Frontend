@@ -207,5 +207,10 @@ public enum ChoraGrowthPhase: Equatable, Sendable {
     case idle
     case loading
     case ready
-    case unavailable(ChoraProfileError)
+    case unavailable(ChoraGrowthUnavailableReason)
+}
+
+public enum ChoraGrowthUnavailableReason: Equatable, Sendable {
+    case noSnapshot
+    case requestFailed(ChoraProfileError)
 }
