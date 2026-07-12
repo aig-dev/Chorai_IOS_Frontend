@@ -29,6 +29,7 @@ public final class ChoraProfileStore: ObservableObject {
     }
 
     private let service: any CoreChoraProfileServing
+    private let saveOperationStart: @MainActor @Sendable () async -> Void
     private var humanActorID: String?
     private var generation = UUID()
     private var growthTask: Task<Void, Never>?
@@ -37,6 +38,15 @@ public final class ChoraProfileStore: ObservableObject {
 
     public init(service: any CoreChoraProfileServing) {
         self.service = service
+        saveOperationStart = {}
+    }
+
+    init(
+        service: any CoreChoraProfileServing,
+        saveOperationStart: @escaping @MainActor @Sendable () async -> Void
+    ) {
+        self.service = service
+        self.saveOperationStart = saveOperationStart
     }
 
     deinit {
@@ -113,7 +123,7 @@ public final class ChoraProfileStore: ObservableObject {
         fieldErrors[.avatar] = nil
     }
 
-    public func save() async {
+    public func save() {
         guard !isSaving,
               let identity,
               let requestedHuman = humanActorID else {
@@ -124,144 +134,142 @@ public final class ChoraProfileStore: ObservableObject {
 
         isSaving = true
         fieldErrors = [:]
-        let currentGeneration = generation
-        let displayName = displayNameDraft
-        let preferredAddress = preferredAddressDraft
-        let avatar = avatarDraft
-        let saveID = UUID()
-        activeSaveID = saveID
-        let task = Task { [weak self] in
-            guard let self else { return }
-            await performSave(
-                fields: fields,
-                requestedHuman: requestedHuman,
-                expectedAgent: identity.agentActorID,
-                generation: currentGeneration,
-                saveID: saveID,
-                displayName: displayName,
-                preferredAddress: preferredAddress,
-                avatar: avatar
-            )
+        let snapshot = SaveSnapshot(
+            fields: fields,
+            requestedHuman: requestedHuman,
+            expectedAgent: identity.agentActorID,
+            generation: generation,
+            saveID: UUID(),
+            displayName: displayNameDraft,
+            preferredAddress: preferredAddressDraft,
+            avatar: avatarDraft
+        )
+        activeSaveID = snapshot.saveID
+        let service = service
+        let saveOperationStart = saveOperationStart
+        let task = Task { @MainActor [
+            weak self,
+            service,
+            saveOperationStart,
+            snapshot
+        ] in
+            defer { self?.finishSave(saveID: snapshot.saveID) }
+            await saveOperationStart()
+            guard self?.isCurrentSave(snapshot) == true else { return }
+            var mutationErrors: [
+                ChoraProfileField: ChoraProfileError
+            ] = [:]
+
+            if snapshot.fields.contains(.displayName) {
+                do {
+                    try await service.updateDisplayName(
+                        agentActorID: snapshot.expectedAgent,
+                        displayName: snapshot.displayName
+                    )
+                } catch {
+                    mutationErrors[.displayName] = Self.map(error)
+                }
+                guard self?.isCurrentSave(snapshot) == true else { return }
+            }
+            if snapshot.fields.contains(.preferredAddress) {
+                do {
+                    try await service.updatePreferredAddress(
+                        snapshot.preferredAddress
+                    )
+                } catch {
+                    mutationErrors[.preferredAddress] = Self.map(error)
+                }
+                guard self?.isCurrentSave(snapshot) == true else { return }
+            }
+            if snapshot.fields.contains(.avatar), let avatar = snapshot.avatar {
+                do {
+                    try await service.updateAvatar(
+                        agentActorID: snapshot.expectedAgent,
+                        avatar: avatar
+                    )
+                } catch {
+                    mutationErrors[.avatar] = Self.map(error)
+                }
+                guard self?.isCurrentSave(snapshot) == true else { return }
+            }
+
+            guard self?.isCurrentSave(snapshot) == true else { return }
+            do {
+                let canonical = try await service.identity(
+                    humanActorID: snapshot.requestedHuman
+                )
+                guard self?.isCurrentSave(snapshot) == true else { return }
+                try Self.validateIdentity(
+                    canonical,
+                    requestedHuman: snapshot.requestedHuman,
+                    expectedAgent: snapshot.expectedAgent
+                )
+                self?.publishCanonical(
+                    canonical,
+                    mutationErrors: mutationErrors,
+                    snapshot: snapshot
+                )
+            } catch {
+                guard self?.isCurrentSave(snapshot) == true else { return }
+                let reloadError = Self.map(error)
+                for field in snapshot.fields
+                where mutationErrors[field] == nil {
+                    mutationErrors[field] = reloadError
+                }
+                self?.publishErrors(
+                    mutationErrors,
+                    snapshot: snapshot
+                )
+            }
         }
         activeSaveTask = task
-        await task.value
     }
 
-    private func performSave(
-        fields: Set<ChoraProfileField>,
-        requestedHuman: String,
-        expectedAgent: String,
-        generation: UUID,
-        saveID: UUID,
-        displayName: String,
-        preferredAddress: String?,
-        avatar: ChoraAvatarDraft?
-    ) async {
-        defer { finishSave(saveID: saveID) }
-        var mutationErrors: [ChoraProfileField: ChoraProfileError] = [:]
+    private struct SaveSnapshot: Sendable {
+        let fields: Set<ChoraProfileField>
+        let requestedHuman: String
+        let expectedAgent: String
+        let generation: UUID
+        let saveID: UUID
+        let displayName: String
+        let preferredAddress: String?
+        let avatar: ChoraAvatarDraft?
+    }
 
-        if fields.contains(.displayName) {
-            do {
-                try await service.updateDisplayName(
-                    agentActorID: expectedAgent,
-                    displayName: displayName
-                )
-            } catch {
-                mutationErrors[.displayName] = Self.map(error)
-            }
-            guard isCurrentSave(
-                saveID: saveID,
-                requestedHuman: requestedHuman,
-                expectedAgent: expectedAgent,
-                generation: generation
-            ) else { return }
+    private func publishCanonical(
+        _ canonical: ChoraIdentity,
+        mutationErrors: [ChoraProfileField: ChoraProfileError],
+        snapshot: SaveSnapshot
+    ) {
+        identity = canonical
+        if snapshot.fields.contains(.displayName),
+           displayNameDraft == snapshot.displayName,
+           mutationErrors[.displayName] == nil {
+            displayNameDraft = canonical.displayName
         }
-        if fields.contains(.preferredAddress) {
-            do {
-                try await service.updatePreferredAddress(preferredAddress)
-            } catch {
-                mutationErrors[.preferredAddress] = Self.map(error)
-            }
-            guard isCurrentSave(
-                saveID: saveID,
-                requestedHuman: requestedHuman,
-                expectedAgent: expectedAgent,
-                generation: generation
-            ) else { return }
+        if snapshot.fields.contains(.preferredAddress),
+           preferredAddressDraft == snapshot.preferredAddress,
+           mutationErrors[.preferredAddress] == nil {
+            preferredAddressDraft = canonical.preferredAddress
         }
-        if fields.contains(.avatar), let avatar {
-            do {
-                try await service.updateAvatar(
-                    agentActorID: expectedAgent,
-                    avatar: avatar
-                )
-            } catch {
-                mutationErrors[.avatar] = Self.map(error)
-            }
-            guard isCurrentSave(
-                saveID: saveID,
-                requestedHuman: requestedHuman,
-                expectedAgent: expectedAgent,
-                generation: generation
-            ) else { return }
+        if snapshot.fields.contains(.avatar),
+           avatarDraft == snapshot.avatar,
+           mutationErrors[.avatar] == nil {
+            avatarDraft = nil
         }
+        publishErrors(mutationErrors, snapshot: snapshot)
+    }
 
-        guard isCurrentSave(
-            saveID: saveID,
-            requestedHuman: requestedHuman,
-            expectedAgent: expectedAgent,
-            generation: generation
-        ) else { return }
-
-        do {
-            let canonical = try await service.identity(
-                humanActorID: requestedHuman
-            )
-            guard isCurrentSave(
-                saveID: saveID,
-                requestedHuman: requestedHuman,
-                expectedAgent: expectedAgent,
-                generation: generation
-            ) else { return }
-            try Self.validateIdentity(
-                canonical,
-                requestedHuman: requestedHuman,
-                expectedAgent: expectedAgent
-            )
-            self.identity = canonical
-            if fields.contains(.displayName),
-               displayNameDraft == displayName,
-               mutationErrors[.displayName] == nil {
-                displayNameDraft = canonical.displayName
-            }
-            if fields.contains(.preferredAddress),
-               preferredAddressDraft == preferredAddress,
-               mutationErrors[.preferredAddress] == nil {
-                preferredAddressDraft = canonical.preferredAddress
-            }
-            if fields.contains(.avatar),
-               avatarDraft == avatar,
-               mutationErrors[.avatar] == nil {
-                avatarDraft = nil
-            }
-            fieldErrors = currentErrors(
-                from: mutationErrors,
-                displayName: displayName,
-                preferredAddress: preferredAddress,
-                avatar: avatar
-            )
-        } catch {
-            let reloadError = Self.map(error)
-            for field in fields where mutationErrors[field] == nil {
-                mutationErrors[field] = reloadError
-            }
-            fieldErrors = currentErrors(
-                from: mutationErrors,
-                displayName: displayName,
-                preferredAddress: preferredAddress,
-                avatar: avatar
-            )
-        }
+    private func publishErrors(
+        _ errors: [ChoraProfileField: ChoraProfileError],
+        snapshot: SaveSnapshot
+    ) {
+        fieldErrors = currentErrors(
+            from: errors,
+            displayName: snapshot.displayName,
+            preferredAddress: snapshot.preferredAddress,
+            avatar: snapshot.avatar
+        )
     }
 
     private func currentErrors(
@@ -282,17 +290,12 @@ public final class ChoraProfileStore: ObservableObject {
         }
     }
 
-    private func isCurrentSave(
-        saveID: UUID,
-        requestedHuman: String,
-        expectedAgent: String,
-        generation: UUID
-    ) -> Bool {
+    private func isCurrentSave(_ snapshot: SaveSnapshot) -> Bool {
         !Task.isCancelled &&
-            activeSaveID == saveID &&
-            self.generation == generation &&
-            humanActorID == requestedHuman &&
-            identity?.agentActorID == expectedAgent
+            activeSaveID == snapshot.saveID &&
+            generation == snapshot.generation &&
+            humanActorID == snapshot.requestedHuman &&
+            identity?.agentActorID == snapshot.expectedAgent
     }
 
     private func finishSave(saveID: UUID) {

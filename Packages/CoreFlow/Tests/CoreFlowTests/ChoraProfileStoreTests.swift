@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import XCTest
 @testable import CoreFlow
@@ -317,10 +318,9 @@ final class ChoraProfileStoreTests: XCTestCase {
         await store.load(humanActorID: "act_human")
         store.setDisplayNameDraft("Nova")
 
-        let firstSave = Task { await store.save() }
-        await Task.yield()
-        await store.save()
-        await firstSave.value
+        store.save()
+        store.save()
+        await waitUntil { !store.isSaving }
 
         let updateRequests = await service.updateRequests()
         XCTAssertEqual(
@@ -349,7 +349,8 @@ final class ChoraProfileStoreTests: XCTestCase {
         store.setDisplayNameDraft("Nova")
         store.setPreferredAddressDraft("Captain")
 
-        await store.save()
+        store.save()
+        await waitUntil { !store.isSaving }
 
         XCTAssertEqual(store.identity?.displayName, "Nova")
         XCTAssertEqual(store.displayNameDraft, "Nova")
@@ -374,10 +375,10 @@ final class ChoraProfileStoreTests: XCTestCase {
         await store.load(humanActorID: "act_human")
         store.setDisplayNameDraft("Submitted")
 
-        let save = Task { await store.save() }
+        store.save()
         while await service.updateRequestCount() < 1 { await Task.yield() }
         store.setDisplayNameDraft("Newer")
-        await save.value
+        await waitUntil { !store.isSaving }
 
         XCTAssertEqual(store.identity?.displayName, "Submitted")
         XCTAssertEqual(store.displayNameDraft, "Newer")
@@ -399,10 +400,10 @@ final class ChoraProfileStoreTests: XCTestCase {
         await store.load(humanActorID: "act_human")
         store.setDisplayNameDraft("Submitted")
 
-        let save = Task { await store.save() }
+        store.save()
         while await service.updateRequestCount() < 1 { await Task.yield() }
         store.setDisplayNameDraft("Newer")
-        await save.value
+        await waitUntil { !store.isSaving }
 
         XCTAssertEqual(store.identity?.displayName, "Chora")
         XCTAssertEqual(store.displayNameDraft, "Newer")
@@ -446,29 +447,94 @@ final class ChoraProfileStoreTests: XCTestCase {
         store.setDisplayNameDraft("Old submitted")
         store.setPreferredAddressDraft("Old address")
 
-        let oldSave = Task { await store.save() }
+        store.save()
         while await service.updateRequestCount() < 1 { await Task.yield() }
         await store.load(humanActorID: "act_new")
         store.setDisplayNameDraft("New submitted")
 
-        await store.save()
+        store.save()
         let requestsWhileOldSaveIsSuspended = await service.updateRequests()
         XCTAssertEqual(requestsWhileOldSaveIsSuspended, [
             .displayName(agentActorID: "agent_old", value: "Old submitted")
         ])
         XCTAssertTrue(store.isSaving)
 
-        await oldSave.value
+        await waitUntil { !store.isSaving }
         XCTAssertFalse(store.isSaving)
         XCTAssertEqual(store.identity?.displayName, "New identity")
 
-        await store.save()
+        store.save()
+        await waitUntil { !store.isSaving }
         let finalRequests = await service.updateRequests()
         XCTAssertEqual(finalRequests, [
             .displayName(agentActorID: "agent_old", value: "Old submitted"),
             .displayName(agentActorID: "agent_new", value: "New submitted")
         ])
         XCTAssertEqual(store.identity?.displayName, "New submitted")
+    }
+
+    func testCancellationBeforeOperationReleaseIssuesNoOldMutation() async {
+        let startGate = SaveOperationStartGate()
+        let service = ChoraProfileServiceSpy(
+            identities: [
+                .init(result: .success(.fixture(
+                    humanActorID: "act_old",
+                    agentActorID: "agent_old"
+                ))),
+                .init(result: .success(.fixture(
+                    humanActorID: "act_new",
+                    agentActorID: "agent_new"
+                )))
+            ],
+            growth: [
+                .init(result: .success(nil)),
+                .init(result: .success(nil))
+            ],
+            displayNameResults: [.success(())]
+        )
+        let store = ChoraProfileStore(
+            service: service,
+            saveOperationStart: { await startGate.wait() }
+        )
+        await store.load(humanActorID: "act_old")
+        store.setDisplayNameDraft("Old submitted")
+
+        store.save()
+        while !(await startGate.hasWaiter()) { await Task.yield() }
+        await store.load(humanActorID: "act_new")
+        await startGate.open()
+        while store.isSaving { await Task.yield() }
+
+        let updateRequests = await service.updateRequests()
+        XCTAssertTrue(updateRequests.isEmpty)
+        XCTAssertEqual(store.identity?.humanActorID, "act_new")
+    }
+
+    func testSuspendedSaveMutationDoesNotRetainStore() async {
+        let service = ChoraProfileServiceSpy(
+            identities: [
+                .init(result: .success(.fixture())),
+                .init(result: .success(.fixture(displayName: "Submitted")))
+            ],
+            growth: [.init(result: .success(nil))],
+            displayNameResults: [.success(())],
+            displayNameDelays: [180_000_000]
+        )
+        var store: ChoraProfileStore? = ChoraProfileStore(service: service)
+        weak let weakStore = store
+        await store?.load(humanActorID: "act_human")
+        store?.setDisplayNameDraft("Submitted")
+
+        store?.save()
+        while await service.updateRequestCount() < 1 { await Task.yield() }
+        store = nil
+        await Task.yield()
+        let releasedWhileSuspended = weakStore == nil
+        try? await Task.sleep(nanoseconds: 220_000_000)
+        let identityRequestCount = await service.identityRequestCount()
+
+        XCTAssertTrue(releasedWhileSuspended)
+        XCTAssertEqual(identityRequestCount, 1)
     }
 
     func testCanonicalReloadMustRetainExactAgentIdentity() async {
@@ -485,7 +551,8 @@ final class ChoraProfileStoreTests: XCTestCase {
         await store.load(humanActorID: "act_human")
         store.setDisplayNameDraft("Nova")
 
-        await store.save()
+        store.save()
+        await waitUntil { !store.isSaving }
 
         XCTAssertEqual(store.identity, original)
         XCTAssertEqual(store.displayNameDraft, "Nova")
@@ -513,14 +580,55 @@ final class ChoraProfileStoreTests: XCTestCase {
         await store.load(humanActorID: "act_human")
         store.setDisplayNameDraft("Stale save")
 
-        let save = Task { await store.save() }
+        store.save()
         while await service.identityRequestCount() < 2 { await Task.yield() }
         await store.load(humanActorID: "act_human")
-        await save.value
+        await waitUntil { !store.isSaving }
 
         XCTAssertEqual(store.identity?.displayName, "Fresh load")
         XCTAssertEqual(store.displayNameDraft, "Fresh load")
         XCTAssertFalse(store.isSaving)
+    }
+
+    func testLateCanonicalReloadFailureCannotAttachErrorsToNewGeneration() async {
+        let service = ChoraProfileServiceSpy(
+            identities: [
+                .init(result: .success(.fixture(
+                    humanActorID: "act_old",
+                    agentActorID: "agent_old"
+                ))),
+                .init(delay: 180_000_000, result: .failure(.failed)),
+                .init(result: .success(.fixture(
+                    humanActorID: "act_new",
+                    agentActorID: "agent_new",
+                    displayName: "New identity"
+                )))
+            ],
+            growth: [
+                .init(result: .success(nil)),
+                .init(result: .success(nil))
+            ],
+            displayNameResults: [.success(())]
+        )
+        let store = ChoraProfileStore(service: service)
+        await store.load(humanActorID: "act_old")
+        store.setDisplayNameDraft("Old submitted")
+
+        store.save()
+        while await service.identityRequestCount() < 2 { await Task.yield() }
+        await store.load(humanActorID: "act_new")
+        var fieldErrorPublications = 0
+        let token = store.$fieldErrors.dropFirst().sink { _ in
+            fieldErrorPublications += 1
+        }
+        await waitUntil { !store.isSaving }
+
+        XCTAssertEqual(store.identity?.humanActorID, "act_new")
+        XCTAssertEqual(store.identity?.displayName, "New identity")
+        XCTAssertEqual(store.displayNameDraft, "New identity")
+        XCTAssertTrue(store.fieldErrors.isEmpty)
+        XCTAssertEqual(fieldErrorPublications, 0)
+        withExtendedLifetime(token) {}
     }
 
     func testAvatarDraftHasTransportNeutralBytesAndMetadata() {
@@ -636,7 +744,11 @@ private actor ChoraProfileServiceSpy: CoreChoraProfileServing {
     func identity(humanActorID: String) async throws -> ChoraIdentity {
         recordedIdentityCount += 1
         let script = identities.removeFirst()
-        if script.delay > 0 { try? await Task.sleep(nanoseconds: script.delay) }
+        if script.delay > 0 {
+            await Task.detached {
+                try? await Task.sleep(nanoseconds: script.delay)
+            }.value
+        }
         return try script.result.get()
     }
 
@@ -718,6 +830,23 @@ private actor SuspendedGrowthService: CoreChoraProfileServing {
     private func cancelGrowth() {
         cancellations += 1
         continuation?.resume(throwing: CancellationError())
+        continuation = nil
+    }
+}
+
+private actor SaveOperationStartGate {
+    private var continuation: CheckedContinuation<Void, Never>?
+
+    func wait() async {
+        await withCheckedContinuation { continuation in
+            self.continuation = continuation
+        }
+    }
+
+    func hasWaiter() -> Bool { continuation != nil }
+
+    func open() {
+        continuation?.resume()
         continuation = nil
     }
 }
