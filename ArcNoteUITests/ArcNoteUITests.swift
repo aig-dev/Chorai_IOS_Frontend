@@ -124,6 +124,168 @@ final class ArcNoteUITests: XCTestCase {
         waitFor("settings.choraProfile")
     }
 
+    func testChoraProfileFixtureStates() throws {
+        app.launchArguments.append("--ui-test-settings")
+        app.launch()
+
+        waitFor("screen.settings.loaded")
+        if app.alerts.firstMatch.waitForExistence(timeout: 2) {
+            app.alerts.firstMatch.buttons.firstMatch.tap()
+        }
+        let choraRows = app.buttons.matching(
+            identifier: "settings.choraProfile"
+        )
+        XCTAssertEqual(choraRows.count, 1)
+        XCTAssertEqual(choraRows.firstMatch.label, "Chora Profile")
+        for _ in 0..<3 where !choraRows.firstMatch.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(choraRows.firstMatch.isHittable)
+        choraRows.firstMatch.tap()
+        waitFor("screen.choraProfile")
+
+        launchChoraProfileFixture(mode: "loaded")
+        let identity = waitFor("chora.identity.section")
+        let growth = waitFor("chora.growth.section")
+        XCTAssertEqual(waitFor("chora.growth.stage").label, "Co-Think")
+        XCTAssertEqual(
+            waitFor("chora.growth.curiosity").value as? String,
+            "2 out of 12"
+        )
+        app.swipeUp(); app.swipeUp()
+        let sources = waitFor("chora.sources.section")
+        let localNotes = waitFor("chora.sources.localNotes")
+        XCTAssertTrue(
+            (localNotes.value as? String)?.contains("Collapsed") == true
+        )
+        let chat = waitFor("chora.chat.section")
+        XCTAssertLessThan(identity.frame.minY, growth.frame.minY)
+        XCTAssertLessThan(growth.frame.minY, sources.frame.minY)
+        XCTAssertLessThan(sources.frame.minY, chat.frame.minY)
+
+        launchChoraProfileFixture(mode: "partial-save")
+        replaceShortFixtureText("chora.identity.displayName", with: "Nova")
+        replaceShortFixtureText(
+            "chora.identity.preferredAddress",
+            with: "Captain"
+        )
+        tap("chora.identity.save")
+        waitFor("chora.identity.error.preferredAddress")
+        XCTAssertFalse(
+            app.descendants(matching: .any)[
+                "chora.identity.error.displayName"
+            ].exists
+        )
+        XCTAssertEqual(
+            waitFor("chora.identity.displayName").value as? String,
+            "Nova"
+        )
+        XCTAssertEqual(
+            waitFor("chora.identity.preferredAddress").value as? String,
+            "Captain"
+        )
+
+        launchChoraProfileFixture(mode: "saving")
+        replaceShortFixtureText("chora.identity.displayName", with: "Nova")
+        tap("chora.identity.save")
+        let saving = waitFor("chora.identity.save")
+        XCTAssertEqual(saving.label, "Saving…")
+        XCTAssertFalse(saving.isEnabled)
+
+        launchChoraProfileFixture(mode: "local-import-active")
+        app.swipeUp(); app.swipeUp()
+        tap("chora.sources.localNotes")
+        waitFor("chora.sources.localNotes.active")
+        XCTAssertEqual(
+            app.buttons.matching(
+                identifier: "chora.sources.localNotes.cancel"
+            ).count,
+            1
+        )
+        XCTAssertFalse(
+            app.buttons["chora.sources.localNotes.start"].exists
+        )
+        tap("chora.sources.localNotes.cancel")
+        XCTAssertTrue(app.alerts["Cancel Import?"].waitForExistence(timeout: 5))
+        app.alerts["Cancel Import?"].buttons["Keep Importing"].tap()
+
+        launchChoraProfileFixture(mode: "local-import-done")
+        app.swipeUp(); app.swipeUp()
+        tap("chora.sources.localNotes")
+        waitFor("chora.sources.localNotes.done")
+        XCTAssertFalse(app.buttons["chora.sources.localNotes.cancel"].exists)
+        let importedFile = waitFor(
+            "chora.sources.localNotes.file.source_fixture"
+        )
+        XCTAssertEqual(importedFile.value as? String, "Imported")
+        importedFile.tap()
+        XCTAssertEqual(
+            waitFor("screen.detail.card-id", timeout: 10).label,
+            "ast_fixture"
+        )
+
+        launchChoraProfileFixture(mode: "local-import-cancelled")
+        app.swipeUp(); app.swipeUp()
+        let cancelledSummary = waitFor("chora.sources.localNotes")
+        XCTAssertTrue(
+            (cancelledSummary.value as? String)?.contains("Cancelled") == true
+        )
+        tap("chora.sources.localNotes")
+        XCTAssertFalse(app.buttons["chora.sources.localNotes.cancel"].exists)
+
+        launchChoraProfileFixture(mode: "inline-errors")
+        app.swipeUp(); app.swipeUp()
+        tap("chora.sources.localNotes")
+        waitFor("chora.sources.localNotes.error")
+        waitFor("chora.sources.localNotes.inlineError")
+        tap("chora.sources.notion")
+        waitFor("chora.sources.notion.unavailable")
+        waitFor("chora.sources.notion.error")
+
+        launchChoraProfileFixture(mode: "notion-disconnected")
+        app.swipeUp(); app.swipeUp()
+        tap("chora.sources.notion")
+        waitFor("chora.sources.notion.disconnected")
+        waitFor("chora.sources.notion.connect")
+
+        launchChoraProfileFixture(mode: "notion-connected")
+        app.swipeUp(); app.swipeUp()
+        tap("chora.sources.notion")
+        waitFor("chora.sources.notion.connected")
+        let page = waitFor("chora.sources.notion.page.page_fixture")
+        page.tap()
+        XCTAssertTrue(page.isSelected)
+        waitFor("chora.sources.notion.import")
+        tap("chora.sources.notion.disconnect")
+        XCTAssertTrue(
+            app.alerts["Disconnect Notion?"].waitForExistence(timeout: 5)
+        )
+        app.alerts["Disconnect Notion?"].buttons["Keep Connected"].tap()
+
+        launchChoraProfileFixture(mode: "notion-import-active")
+        app.swipeUp(); app.swipeUp()
+        tap("chora.sources.notion")
+        tap("chora.sources.notion.page.page_fixture")
+        tap("chora.sources.notion.import")
+        waitFor("chora.sources.notion.import.running")
+        XCTAssertFalse(waitFor("chora.sources.notion.import").isEnabled)
+
+        app.terminate()
+        app = XCUIApplication()
+        app.launchArguments.append("--ui-test-library")
+        app.launch()
+        let libraryPlus = waitFor("note.create")
+        XCTAssertEqual(
+            app.descendants(matching: .any).matching(
+                identifier: "note.create"
+            ).count,
+            1
+        )
+        XCTAssertTrue(libraryPlus.isHittable)
+        libraryPlus.tap()
+        waitFor("screen.card-editor")
+    }
+
     func testChoraProfileLoadedFixtureRendersOrderedProductionSections() throws {
         app.launchArguments.append("--ui-test-chora-profile")
         app.launchEnvironment["CHORAI_CHORA_PROFILE_FIXTURE_MODE"] = "loaded"

@@ -30,6 +30,8 @@ struct ArcNoteApp: App {
         .contains("--ui-test-chora-profile")
     private let isSettingsUITestRoute = ProcessInfo.processInfo.arguments
         .contains("--ui-test-settings")
+    private let isLibraryUITestRoute = ProcessInfo.processInfo.arguments
+        .contains("--ui-test-library")
     private let isChatVisibilityUITestRoute = ProcessInfo.processInfo.arguments
         .contains("--ui-test-chat-visibility")
     private let isNotificationInboxUITestRoute = ProcessInfo.processInfo.arguments
@@ -65,6 +67,10 @@ struct ArcNoteApp: App {
             } else if isSettingsUITestRoute {
                 NavigationStack {
                     SettingsView()
+                }
+            } else if isLibraryUITestRoute {
+                NavigationStack {
+                    LibraryFixtureScreen()
                 }
             } else if isChatVisibilityUITestRoute {
                 ChatVisibilityFixtureScreen()
@@ -106,10 +112,12 @@ private enum ChoraProfileFixtureMode: String {
     case loading
     case loaded
     case partialSave = "partial-save"
+    case saving
     case growthError = "growth-error"
     case localImportActive = "local-import-active"
     case localImportDone = "local-import-done"
     case localImportFailure = "local-import-failure"
+    case localImportCancelled = "local-import-cancelled"
     case notionDisconnected = "notion-disconnected"
     case notionConnected = "notion-connected"
     case notionConnectedError = "notion-connected-error"
@@ -170,6 +178,7 @@ private extension ChoraProfileFixtureMode {
         self == .localImportActive
             || self == .localImportDone
             || self == .localImportFailure
+            || self == .localImportCancelled
             || self == .localRelaunchAmbiguity
             || self == .localCancelling
             || self == .localUnknown
@@ -221,6 +230,9 @@ private actor ChoraProfileFixtureService: CoreChoraProfileServing {
         agentActorID: String,
         displayName: String
     ) async throws {
+        if mode == .saving {
+            try await Task.sleep(nanoseconds: 60_000_000_000)
+        }
         self.displayName = displayName
     }
 
@@ -230,6 +242,9 @@ private actor ChoraProfileFixtureService: CoreChoraProfileServing {
     ) async throws {
         if mode == .partialSave {
             throw ChoraProfileError.requestFailed
+        }
+        if mode == .saving {
+            try await Task.sleep(nanoseconds: 60_000_000_000)
         }
     }
 
@@ -307,6 +322,12 @@ private actor ChoraNoteImportFixtureService: CoreNoteImportServing {
         let failed: Int
         let errorMessage: String?
         switch mode {
+        case .localImportCancelled:
+            status = .cancelled
+            soul = .cancelled
+            imported = 0
+            failed = 0
+            errorMessage = nil
         case .localUnknown:
             status = .init(rawValue: "future_import_state")
             soul = .notRequested
@@ -348,7 +369,7 @@ private actor ChoraNoteImportFixtureService: CoreNoteImportServing {
             createdAt: date,
             completedAt: status.isTerminal ? date : nil,
             cancelRequestedAt: nil,
-            cancelledAt: nil,
+            cancelledAt: status == .cancelled ? date : nil,
             items: [
                 NoteImportJobItem(
                     sourceKey: "source_fixture",
@@ -359,11 +380,25 @@ private actor ChoraNoteImportFixtureService: CoreNoteImportServing {
                     assetVersionID: nil,
                     status: mode == .localUnknown
                         ? .init(rawValue: "future_item_state")
+                        : mode == .localImportCancelled ? .skipped
                         : failed > 0 ? .failed : .imported,
                     errorMessage: errorMessage,
                     processedAt: date
                 )
             ]
+        )
+    }
+}
+
+@MainActor
+private struct LibraryFixtureScreen: View {
+    @State private var showSideMenu = false
+    private let refreshID = UUID()
+
+    var body: some View {
+        HomeView(
+            showSideMenu: $showSideMenu,
+            refreshID: refreshID
         )
     }
 }

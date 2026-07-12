@@ -88,6 +88,9 @@ struct ChoraSoulSourcesSection: View {
             if !isKnownJobStatus(detail.status) {
                 return "Unavailable"
             }
+            if detail.status == .cancelled {
+                return "Cancelled"
+            }
             if detail.status == .failed {
                 return "Import needs attention"
             }
