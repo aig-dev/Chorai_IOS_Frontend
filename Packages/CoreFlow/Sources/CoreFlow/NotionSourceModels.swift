@@ -178,6 +178,16 @@ public enum NotionAuthorizationResult: Equatable, Sendable {
     case failed
 }
 
+public struct NotionAuthorizationRequest: Equatable, Sendable {
+    public let id: UUID
+    public let url: URL
+
+    public init(id: UUID, url: URL) {
+        self.id = id
+        self.url = url
+    }
+}
+
 public enum NotionSourcePhase: Equatable, Sendable {
     case idle
     case loading

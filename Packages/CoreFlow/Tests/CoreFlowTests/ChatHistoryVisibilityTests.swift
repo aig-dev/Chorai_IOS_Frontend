@@ -11,8 +11,8 @@ final class ChatHistoryVisibilityTests: XCTestCase {
         visibility.clear(actorID: "human_a", at: cutoff)
 
         XCTAssertEqual(persistence.savedActorIDs, ["human_a"])
-        XCTAssertEqual(persistence.cutoff(actorID: "human_a"), cutoff)
-        XCTAssertNil(persistence.cutoff(actorID: "human_b"))
+        XCTAssertEqual(persistence.cutoffDate(actorID: "human_a"), cutoff)
+        XCTAssertNil(persistence.cutoffDate(actorID: "human_b"))
     }
 
     func testActivityAtOrBeforeCutoffIsHiddenAndPostCutoffIsVisible() {
@@ -74,7 +74,7 @@ final class ChatHistoryVisibilityTests: XCTestCase {
         )
     }
 
-    func testUserDefaultsPersistenceStoresNamespacedISO8601CutoffsPerActor() {
+    func testUserDefaultsPersistenceStoresNamespacedPreciseCutoffsPerActor() {
         let suiteName = "ChatHistoryVisibilityTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }
@@ -86,9 +86,63 @@ final class ChatHistoryVisibilityTests: XCTestCase {
 
         persistence.saveCutoff(cutoff, actorID: "human_a")
 
-        XCTAssertEqual(persistence.cutoff(actorID: "human_a"), cutoff)
-        XCTAssertNil(persistence.cutoff(actorID: "human_b"))
-        XCTAssertNotNil(defaults.string(forKey: "test.chat.cutoff.human_a"))
+        XCTAssertEqual(persistence.cutoffRecord(actorID: "human_a"), .valid(cutoff))
+        XCTAssertEqual(persistence.cutoffRecord(actorID: "human_b"), .missing)
+        XCTAssertEqual(
+            defaults.object(forKey: "test.chat.cutoff.human_a") as? Double,
+            cutoff.timeIntervalSince1970
+        )
+    }
+
+    func testUserDefaultsCutoffPreservesSubMillisecondVisibilityBoundary() {
+        let suiteName = "ChatHistoryVisibilityTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let persistence = UserDefaultsChatHistoryCutoffPersistence(
+            defaults: defaults,
+            keyPrefix: "test.chat.precise"
+        )
+        let visibility = ChatHistoryVisibility(persistence: persistence)
+        let cutoff = Date(timeIntervalSince1970: 100.123456)
+        visibility.clear(actorID: "human_a", at: cutoff)
+
+        XCTAssertFalse(
+            visibility.isVisible(
+                timestamp: Date(timeIntervalSince1970: 100.123455),
+                actorID: "human_a"
+            )
+        )
+        XCTAssertTrue(
+            visibility.isVisible(
+                timestamp: Date(timeIntervalSince1970: 100.123457),
+                actorID: "human_a"
+            )
+        )
+    }
+
+    func testCorruptPersistedCutoffFailsClosedForOnlyThatActor() {
+        let suiteName = "ChatHistoryVisibilityTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set("not-a-cutoff", forKey: "test.chat.corrupt.human_a")
+        let persistence = UserDefaultsChatHistoryCutoffPersistence(
+            defaults: defaults,
+            keyPrefix: "test.chat.corrupt"
+        )
+        let visibility = ChatHistoryVisibility(persistence: persistence)
+
+        XCTAssertFalse(
+            visibility.isVisible(
+                timestamp: Date(timeIntervalSince1970: 1_000),
+                actorID: "human_a"
+            )
+        )
+        XCTAssertTrue(
+            visibility.isVisible(
+                timestamp: Date(timeIntervalSince1970: 1),
+                actorID: "human_b"
+            )
+        )
     }
 }
 
@@ -97,8 +151,10 @@ private final class InMemoryChatCutoffPersistence: ChatHistoryCutoffPersisting, 
     private var values: [String: Date] = [:]
     private(set) var savedActorIDs: [String] = []
 
-    func cutoff(actorID: String) -> Date? {
-        lock.withLock { values[actorID] }
+    func cutoffRecord(actorID: String) -> ChatHistoryCutoffRecord {
+        lock.withLock {
+            values[actorID].map(ChatHistoryCutoffRecord.valid) ?? .missing
+        }
     }
 
     func saveCutoff(_ date: Date, actorID: String) {
@@ -106,6 +162,10 @@ private final class InMemoryChatCutoffPersistence: ChatHistoryCutoffPersisting, 
             values[actorID] = date
             savedActorIDs.append(actorID)
         }
+    }
+
+    func cutoffDate(actorID: String) -> Date? {
+        lock.withLock { values[actorID] }
     }
 }
 

@@ -1,7 +1,13 @@
 import Foundation
 
+public enum ChatHistoryCutoffRecord: Equatable, Sendable {
+    case missing
+    case valid(Date)
+    case corrupt
+}
+
 public protocol ChatHistoryCutoffPersisting: Sendable {
-    func cutoff(actorID: String) -> Date?
+    func cutoffRecord(actorID: String) -> ChatHistoryCutoffRecord
     func saveCutoff(_ date: Date, actorID: String)
 }
 
@@ -20,15 +26,21 @@ public final class UserDefaultsChatHistoryCutoffPersistence:
         self.keyPrefix = keyPrefix
     }
 
-    public func cutoff(actorID: String) -> Date? {
-        guard let value = defaults.string(forKey: key(actorID)) else { return nil }
-        return Self.parse(value)
+    public func cutoffRecord(actorID: String) -> ChatHistoryCutoffRecord {
+        guard let value = defaults.object(forKey: key(actorID)) else {
+            return .missing
+        }
+        if let seconds = value as? Double, seconds.isFinite {
+            return .valid(Date(timeIntervalSince1970: seconds))
+        }
+        if let legacy = value as? String, let date = Self.parse(legacy) {
+            return .valid(date)
+        }
+        return .corrupt
     }
 
     public func saveCutoff(_ date: Date, actorID: String) {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        defaults.set(formatter.string(from: date), forKey: key(actorID))
+        defaults.set(date.timeIntervalSince1970, forKey: key(actorID))
     }
 
     private func key(_ actorID: String) -> String {
@@ -58,9 +70,14 @@ public struct ChatHistoryVisibility: Sendable {
     }
 
     public func isVisible(timestamp: Date?, actorID: String) -> Bool {
-        guard let cutoff = persistence.cutoff(actorID: actorID) else { return true }
-        guard let timestamp else { return false }
-        return timestamp > cutoff
+        switch persistence.cutoffRecord(actorID: actorID) {
+        case .missing:
+            true
+        case .corrupt:
+            false
+        case let .valid(cutoff):
+            timestamp.map { $0 > cutoff } ?? false
+        }
     }
 
     public func isVisible(timestampString: String?, actorID: String) -> Bool {

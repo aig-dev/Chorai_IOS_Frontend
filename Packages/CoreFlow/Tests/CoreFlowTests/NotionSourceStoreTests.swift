@@ -48,20 +48,34 @@ final class NotionSourceStoreTests: XCTestCase {
             workspaceName: "Chorai"
         )
         let service = NotionSourceServiceSpy(
-            statuses: [.success(disconnected), .success(connected)]
+            statuses: [.success(disconnected), .success(connected)],
+            authorizationURLs: [
+                .success(URL(string: "https://notion.test/first")!),
+                .success(URL(string: "https://notion.test/second")!)
+            ]
         )
         let store = NotionSourceStore(service: service)
         store.load(actorID: "human_a")
         await waitUntil { store.statusPhase == .ready }
 
-        store.authorizationCompleted(.cancelled)
+        store.connect()
+        await waitUntil { store.authorizationRequest != nil }
+        let cancelledRequest = try! XCTUnwrap(store.authorizationRequest)
+
+        store.authorizationCompleted(id: cancelledRequest.id, result: .cancelled)
         await Task.yield()
         XCTAssertEqual(store.status, disconnected)
         XCTAssertNil(store.inlineError)
         let cancellationRequestCount = await service.statusRequestCount()
         XCTAssertEqual(cancellationRequestCount, 1)
 
-        store.authorizationCompleted(.success)
+        store.connect()
+        await waitUntil {
+            guard let request = store.authorizationRequest else { return false }
+            return request.id != cancelledRequest.id
+        }
+        let successfulRequest = try! XCTUnwrap(store.authorizationRequest)
+        store.authorizationCompleted(id: successfulRequest.id, result: .success)
         await waitUntil { store.status == connected }
         let successRequestCount = await service.statusRequestCount()
         XCTAssertEqual(successRequestCount, 2)
@@ -76,7 +90,10 @@ final class NotionSourceStoreTests: XCTestCase {
         let page = NotionPage(id: "page_committed", title: "Committed")
         let service = NotionSourceServiceSpy(
             statuses: [.success(connected), .failure(.provider)],
-            authorizationURLs: [.init(result: .failure(.provider))],
+            authorizationURLs: [
+                .init(result: .failure(.provider)),
+                .success(URL(string: "https://notion.test/retry")!)
+            ],
             pages: [.success([page]), .failure(.provider)]
         )
         let store = NotionSourceStore(service: service)
@@ -93,7 +110,10 @@ final class NotionSourceStoreTests: XCTestCase {
         await waitUntil { store.pagesPhase == .failed }
         XCTAssertEqual(store.pages, [page])
 
-        store.authorizationCompleted(.success)
+        store.connect()
+        await waitUntil { store.authorizationRequest != nil }
+        let request = try! XCTUnwrap(store.authorizationRequest)
+        store.authorizationCompleted(id: request.id, result: .success)
         await waitUntil { store.statusPhase == .failed }
         XCTAssertEqual(store.status, connected)
     }
@@ -203,7 +223,7 @@ final class NotionSourceStoreTests: XCTestCase {
         store.load(actorID: "human_a")
         await waitUntil { store.status == connected }
 
-        store.authorizationCompleted(.success)
+        store.reloadStatus()
         await waitUntil { store.statusPhase == .loading }
         store.disconnect()
         await waitUntil { store.status == disconnected }
@@ -255,6 +275,154 @@ final class NotionSourceStoreTests: XCTestCase {
         XCTAssertEqual(job.rawValue, "provider_future_job")
         XCTAssertNil(job.knownValue)
         XCTAssertFalse(job.isKnownTerminal)
+    }
+
+    func testDisconnectCancelsAndFencesEveryInFlightSourceCompletion() async {
+        let connected = NotionConnectionStatus(state: .connected, workspaceID: "workspace_1")
+        let disconnected = NotionConnectionStatus(state: .disconnected)
+        let staleURL = URL(string: "https://stale.test/oauth")!
+        let stalePage = NotionPage(id: "stale_page", title: "Stale")
+        let staleReceipt = NotionImportReceipt(jobID: "stale_job", acceptedPageIDs: ["page_1"])
+        let service = NotionSourceServiceSpy(
+            statuses: [.success(connected), .success(disconnected)],
+            authorizationURLs: [.init(delay: 160_000_000, result: .success(staleURL))],
+            pages: [.init(delay: 160_000_000, result: .success([stalePage]))],
+            receipts: [.init(delay: 160_000_000, result: .success(staleReceipt))],
+            disconnects: [.success(())]
+        )
+        let store = NotionSourceStore(service: service)
+        store.load(actorID: "human_a")
+        await waitUntil { store.status == connected }
+        store.setSelectedPageIDs(["page_1"])
+
+        store.connect()
+        store.searchPages(query: "stale")
+        store.startImport()
+        await Task.yield()
+        store.disconnect()
+        await waitUntil { store.status == disconnected }
+        try? await Task.sleep(nanoseconds: 220_000_000)
+
+        XCTAssertNil(store.authorizationURL)
+        XCTAssertTrue(store.pages.isEmpty)
+        XCTAssertNil(store.importReceipt)
+        XCTAssertNil(store.importJob)
+        XCTAssertFalse(store.isConnecting)
+        XCTAssertFalse(store.isImporting)
+    }
+
+    func testReloadStartedDuringDisconnectCannotOverwriteDisconnectStatus() async {
+        let connected = NotionConnectionStatus(state: .connected, workspaceID: "workspace_1")
+        let disconnected = NotionConnectionStatus(state: .disconnected)
+        let service = NotionSourceServiceSpy(
+            statuses: [
+                .success(connected),
+                .success(disconnected)
+            ],
+            disconnects: [.init(delay: 40_000_000, result: .success(()))]
+        )
+        let store = NotionSourceStore(service: service)
+        store.load(actorID: "human_a")
+        await waitUntil { store.status == connected }
+
+        store.disconnect()
+        store.reloadStatus()
+        await waitUntil { store.status == disconnected }
+        try? await Task.sleep(nanoseconds: 220_000_000)
+
+        XCTAssertEqual(store.status, disconnected)
+        let statusCount = await service.statusRequestCount()
+        XCTAssertEqual(statusCount, 2)
+    }
+
+    func testCallbackFromPriorActorDoesNotReloadCurrentActor() async {
+        let actorA = NotionConnectionStatus(state: .disconnected, workspaceID: "actor_a")
+        let actorB = NotionConnectionStatus(state: .disconnected, workspaceID: "actor_b")
+        let unexpected = NotionConnectionStatus(state: .connected, workspaceID: "actor_b")
+        let service = NotionSourceServiceSpy(
+            statuses: [.success(actorA), .success(actorB), .success(unexpected)],
+            authorizationURLs: [.success(URL(string: "https://notion.test/a")!)]
+        )
+        let store = NotionSourceStore(service: service)
+        store.load(actorID: "human_a")
+        await waitUntil { store.status == actorA }
+        store.connect()
+        await waitUntil { store.authorizationRequest != nil }
+        let actorARequest = try! XCTUnwrap(store.authorizationRequest)
+
+        store.load(actorID: "human_b")
+        await waitUntil { store.status == actorB }
+        store.authorizationCompleted(id: actorARequest.id, result: .success)
+        try? await Task.sleep(nanoseconds: 20_000_000)
+
+        XCTAssertEqual(store.status, actorB)
+        let statusCount = await service.statusRequestCount()
+        XCTAssertEqual(statusCount, 2)
+    }
+
+    func testOldAndReplayedAuthorizationCallbacksAreIgnored() async {
+        let disconnected = NotionConnectionStatus(state: .disconnected)
+        let connected = NotionConnectionStatus(state: .connected, workspaceID: "workspace_1")
+        let service = NotionSourceServiceSpy(
+            statuses: [.success(disconnected), .success(connected)],
+            authorizationURLs: [
+                .success(URL(string: "https://notion.test/old")!),
+                .success(URL(string: "https://notion.test/current")!)
+            ]
+        )
+        let store = NotionSourceStore(service: service)
+        store.load(actorID: "human_a")
+        await waitUntil { store.status == disconnected }
+
+        store.connect()
+        await waitUntil { store.authorizationRequest != nil }
+        let oldRequest = try! XCTUnwrap(store.authorizationRequest)
+        store.authorizationCompleted(id: oldRequest.id, result: .cancelled)
+        store.connect()
+        await waitUntil {
+            guard let request = store.authorizationRequest else { return false }
+            return request.id != oldRequest.id
+        }
+        let currentRequest = try! XCTUnwrap(store.authorizationRequest)
+
+        store.authorizationCompleted(id: oldRequest.id, result: .success)
+        await Task.yield()
+        XCTAssertEqual(store.authorizationRequest, currentRequest)
+        let beforeCurrent = await service.statusRequestCount()
+        XCTAssertEqual(beforeCurrent, 1)
+
+        store.authorizationCompleted(id: currentRequest.id, result: .success)
+        await waitUntil { store.status == connected }
+        store.authorizationCompleted(id: currentRequest.id, result: .success)
+        await Task.yield()
+
+        let afterReplay = await service.statusRequestCount()
+        XCTAssertEqual(afterReplay, 2)
+        XCTAssertEqual(store.status, connected)
+    }
+
+    func testDistinctOverlappingPageQueriesPublishOnlyLatestResult() async {
+        let stale = [NotionPage(id: "page_old", title: "Old")]
+        let latest = [NotionPage(id: "page_new", title: "New")]
+        let service = NotionSourceServiceSpy(
+            pages: [
+                .init(delay: 180_000_000, result: .success(stale)),
+                .success(latest)
+            ]
+        )
+        let store = NotionSourceStore(service: service)
+        store.load(actorID: "human_a")
+        await waitUntil { store.statusPhase == .ready }
+
+        store.searchPages(query: "old")
+        await Task.yield()
+        store.searchPages(query: "new")
+        await waitUntil { store.pages == latest }
+        try? await Task.sleep(nanoseconds: 220_000_000)
+
+        XCTAssertEqual(store.pages, latest)
+        let queries = await service.pageQueries()
+        XCTAssertEqual(queries, ["old", "new"])
     }
 
     func testActorChangeFencesStaleCompletionsAcrossOperations() async {
