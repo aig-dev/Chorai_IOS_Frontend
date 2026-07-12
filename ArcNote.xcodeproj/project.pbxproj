@@ -25,6 +25,10 @@
 		C0DEF1142F60000100000003 /* CardEngagementCenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1142F60000100000002 /* CardEngagementCenter.swift */; };
 		C0DEF1152F60000100000003 /* NetworkCommunityProfileService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1152F60000100000002 /* NetworkCommunityProfileService.swift */; };
 		C0DEF1182F60000100000003 /* NetworkNotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1182F60000100000002 /* NetworkNotificationService.swift */; };
+		C0DEF1192F60000100000003 /* ChoraProfileResponses.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1192F60000100000002 /* ChoraProfileResponses.swift */; };
+		C0DEF1202F60000100000003 /* NetworkChoraProfileService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1202F60000100000002 /* NetworkChoraProfileService.swift */; };
+		C0DEF1212F60000100000003 /* NetworkNoteImportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1212F60000100000002 /* NetworkNoteImportService.swift */; };
+		C0DEF1222F60000100000003 /* NetworkNotionSourceService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1222F60000100000002 /* NetworkNotionSourceService.swift */; };
 		C0DEF1162F60000100000003 /* FollowListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1162F60000100000002 /* FollowListView.swift */; };
 		C0DEF1172F60000100000003 /* BlockedActorsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1172F60000100000002 /* BlockedActorsView.swift */; };
 		C0DEF1012F60000100000005 /* FlowViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1012F60000100000004 /* FlowViews.swift */; };
@@ -130,6 +134,10 @@
 		C0DEF1142F60000100000002 /* CardEngagementCenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardEngagementCenter.swift; sourceTree = "<group>"; };
 		C0DEF1152F60000100000002 /* NetworkCommunityProfileService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkCommunityProfileService.swift; sourceTree = "<group>"; };
 		C0DEF1182F60000100000002 /* NetworkNotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkNotificationService.swift; sourceTree = "<group>"; };
+		C0DEF1192F60000100000002 /* ChoraProfileResponses.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChoraProfileResponses.swift; sourceTree = "<group>"; };
+		C0DEF1202F60000100000002 /* NetworkChoraProfileService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkChoraProfileService.swift; sourceTree = "<group>"; };
+		C0DEF1212F60000100000002 /* NetworkNoteImportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkNoteImportService.swift; sourceTree = "<group>"; };
+		C0DEF1222F60000100000002 /* NetworkNotionSourceService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkNotionSourceService.swift; sourceTree = "<group>"; };
 		C0DEF1162F60000100000002 /* FollowListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FollowListView.swift; sourceTree = "<group>"; };
 		C0DEF1172F60000100000002 /* BlockedActorsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlockedActorsView.swift; sourceTree = "<group>"; };
 		C0DEF1012F60000100000004 /* FlowViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlowViews.swift; sourceTree = "<group>"; };
@@ -250,6 +258,9 @@
 				C0DEF1142F60000100000002 /* CardEngagementCenter.swift */,
 				C0DEF1152F60000100000002 /* NetworkCommunityProfileService.swift */,
 				C0DEF1182F60000100000002 /* NetworkNotificationService.swift */,
+				C0DEF1202F60000100000002 /* NetworkChoraProfileService.swift */,
+				C0DEF1212F60000100000002 /* NetworkNoteImportService.swift */,
+				C0DEF1222F60000100000002 /* NetworkNotionSourceService.swift */,
 				C0DEF1012F60000100000004 /* FlowViews.swift */,
 				C0DEF1012F60000100000006 /* CoreShellViews.swift */,
 			);
@@ -301,6 +312,7 @@
 				1B6E6FA72E6AB8A5006898F5 /* APIConfiguration.swift */,
 				1B6E6FA82E6AB8A5006898F5 /* AuthManager.swift */,
 				1B6E6FA92E6AB8A5006898F5 /* NetworkManager.swift */,
+				C0DEF1192F60000100000002 /* ChoraProfileResponses.swift */,
 				1B6E6FAA2E6AB8A5006898F5 /* NetworkModels.swift */,
 				1BA8F4F22E576444001278E6 /* NewNoteView.swift */,
 				1B055F542E4F178400896B01 /* LinkPopupView.swift */,
@@ -518,6 +530,10 @@
 				C0DEF1142F60000100000003 /* CardEngagementCenter.swift in Sources */,
 				C0DEF1152F60000100000003 /* NetworkCommunityProfileService.swift in Sources */,
 				C0DEF1182F60000100000003 /* NetworkNotificationService.swift in Sources */,
+				C0DEF1192F60000100000003 /* ChoraProfileResponses.swift in Sources */,
+				C0DEF1202F60000100000003 /* NetworkChoraProfileService.swift in Sources */,
+				C0DEF1212F60000100000003 /* NetworkNoteImportService.swift in Sources */,
+				C0DEF1222F60000100000003 /* NetworkNotionSourceService.swift in Sources */,
 				C0DEF1162F60000100000003 /* FollowListView.swift in Sources */,
 				C0DEF1172F60000100000003 /* BlockedActorsView.swift in Sources */,
 				C0DEF1012F60000100000005 /* FlowViews.swift in Sources */,

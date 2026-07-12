@@ -42,6 +42,44 @@ final class ArcNoteUITests: XCTestCase {
         )
     }
 
+    func testChoraProfileContractFixtureRoute() throws {
+        app.launchArguments.append("--ui-test-chora-contract")
+        app.launch()
+
+        let expectedValues = [
+            "chora.contract.human-actor-id": "act_human_contract",
+            "chora.contract.agent-actor-id": "act_agent_contract",
+            "chora.contract.preferred-address": "Avery",
+            "chora.contract.avatar-url": "https://cdn.chorai.test/agent.png",
+            "chora.contract.growth-stage": "4",
+            "chora.contract.growth.curiosity": "1.25",
+            "chora.contract.growth.insight": "2.5",
+            "chora.contract.growth.creativity": "3.75",
+            "chora.contract.growth.empathy": "5.0",
+            "chora.contract.growth.judgment": "6.25",
+            "chora.contract.growth.resonance": "7.5",
+            "chora.contract.import.client-request-id": "req_import_contract",
+            "chora.contract.import.job-id": "job_import_contract",
+            "chora.contract.import.total-files": "2",
+            "chora.contract.import.imported-count": "1",
+            "chora.contract.import.asset-id": "ast_import_contract",
+            "chora.contract.import.nullable-fields": "nil,nil,nil,nil,nil,nil,nil",
+            "chora.contract.import.unknown-status": "future_import_state",
+            "chora.contract.import.unknown-soul-status": "future_soul_state",
+            "chora.contract.notion.workspace-id": "workspace_contract",
+            "chora.contract.notion.page-id": "page_contract",
+            "chora.contract.notion.enqueue-job-id": "job_notion_contract",
+            "chora.contract.notion.job-id": "job_notion_detail_contract",
+            "chora.contract.notion.nullable-fields": "nil,nil",
+            "chora.contract.notion.unknown-job-status": "future_notion_state"
+        ]
+
+        for (identifier, expectedValue) in expectedValues {
+            XCTAssertEqual(waitFor(identifier).label, expectedValue)
+        }
+        XCTAssertFalse(app.descendants(matching: .any)["chora.contract.error"].exists)
+    }
+
     func testNotificationInboxUIContract() throws {
         app.launchArguments.append("--ui-test-notification-inbox")
         app.launchEnvironment["CHORAI_NOTIFICATION_FIXTURE_MODE"] = "loaded"

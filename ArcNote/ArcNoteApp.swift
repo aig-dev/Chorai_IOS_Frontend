@@ -21,6 +21,8 @@ struct ArcNoteApp: App {
         .contains("--ui-test-open-interests")
     private let isNotificationContractUITestRoute = ProcessInfo.processInfo.arguments
         .contains("--ui-test-notification-contract")
+    private let isChoraContractUITestRoute = ProcessInfo.processInfo.arguments
+        .contains("--ui-test-chora-contract")
     private let isNotificationInboxUITestRoute = ProcessInfo.processInfo.arguments
         .contains("--ui-test-notification-inbox")
     private let profileUITestActorID: String? = {
@@ -46,6 +48,8 @@ struct ArcNoteApp: App {
             #if DEBUG
             if isAPIMigrationSmoke {
                 Color.clear
+            } else if isChoraContractUITestRoute {
+                ChoraProfileContractFixtureView()
             } else if isNotificationContractUITestRoute {
                 NotificationContractFixtureView()
             } else if isNotificationInboxUITestRoute {
@@ -268,6 +272,336 @@ private struct NotificationContractFixtureView: View {
       ],
       "meta": {"total": 3, "page": 1, "per_page": 20},
       "unread_count": 2
+    }
+    """#
+}
+
+private struct ChoraProfileContractFixtureView: View {
+    private let result: Result<[String: String], Error>
+
+    init() {
+        do {
+            let decoder = JSONDecoder()
+            let agentProfile = try decoder.decode(
+                ChoraDataEnvelope<ChoraAgentProfileResponse>.self,
+                from: Data(Self.agentProfileJSON.utf8)
+            )
+            let agentUsers = try decoder.decode(
+                ChoraDataEnvelope<ChoraAgentUsersResponse>.self,
+                from: Data(Self.agentUsersJSON.utf8)
+            )
+            let ownProfile = try decoder.decode(
+                ChoraDataEnvelope<ChoraOwnProfileResponse>.self,
+                from: Data(Self.ownProfileJSON.utf8)
+            )
+            let identity = try NetworkChoraProfileService.mapIdentity(
+                agentProfile: agentProfile.data,
+                agentUsers: agentUsers.data,
+                ownProfile: ownProfile.data,
+                expectedHumanActorID: "act_human_contract"
+            )
+
+            let growthResponse = try decoder.decode(
+                ChoraGrowthViewEnvelope.self,
+                from: Data(Self.growthJSON.utf8)
+            )
+            let growth = try NetworkChoraProfileService.mapGrowth(
+                growthResponse.growthView,
+                expectedAgentActorID: identity.agentActorID
+            )
+            let growthValues = Dictionary(uniqueKeysWithValues:
+                growth.dimensions.map {
+                    ($0.dimension.rawValue, String($0.value))
+                }
+            )
+
+            let importReceiptResponse = try decoder.decode(
+                NoteImportEnqueueResponse.self,
+                from: Data(Self.importReceiptJSON.utf8)
+            )
+            let importReceipt = NetworkNoteImportService.mapReceipt(
+                importReceiptResponse
+            )
+            let importListResponse = try decoder.decode(
+                NoteImportJobListResponse.self,
+                from: Data(Self.importListJSON.utf8)
+            )
+            let importList = try NetworkNoteImportService.mapJobs(
+                importListResponse
+            )
+            let importDetailResponse = try decoder.decode(
+                NoteImportJobDetailResponse.self,
+                from: Data(Self.importDetailJSON.utf8)
+            )
+            let importDetail = try NetworkNoteImportService.mapJob(
+                importDetailResponse
+            )
+            guard let importItem = importDetail.items.first else {
+                throw FixtureError.missingImportItem
+            }
+
+            let notionStatusResponse = try decoder.decode(
+                NotionStatusResponse.self,
+                from: Data(Self.notionStatusJSON.utf8)
+            )
+            let notionStatus = NetworkNotionSourceService.mapStatus(
+                notionStatusResponse
+            )
+            let notionPagesResponse = try decoder.decode(
+                NotionPagesResponse.self,
+                from: Data(Self.notionPagesJSON.utf8)
+            )
+            let notionPages = NetworkNotionSourceService.mapPages(
+                notionPagesResponse
+            )
+            let notionReceiptResponse = try decoder.decode(
+                NotionEnqueueResponse.self,
+                from: Data(Self.notionReceiptJSON.utf8)
+            )
+            let notionReceipt = NetworkNotionSourceService.mapReceipt(
+                notionReceiptResponse,
+                acceptedPageIDs: notionPages.map(\.id)
+            )
+            let notionJobResponse = try decoder.decode(
+                NotionImportJobResponse.self,
+                from: Data(Self.notionJobJSON.utf8)
+            )
+            let notionJob = NetworkNotionSourceService.mapJob(
+                notionJobResponse
+            )
+            guard let notionPage = notionPages.first else {
+                throw FixtureError.missingNotionPage
+            }
+
+            result = .success([
+                "chora.contract.human-actor-id": identity.humanActorID,
+                "chora.contract.agent-actor-id": identity.agentActorID,
+                "chora.contract.preferred-address": identity.preferredAddress ?? "nil",
+                "chora.contract.avatar-url": identity.avatarURL ?? "nil",
+                "chora.contract.growth-stage": String(growth.committedStage.rawValue),
+                "chora.contract.growth.curiosity": growthValues["curiosity"] ?? "nil",
+                "chora.contract.growth.insight": growthValues["insight"] ?? "nil",
+                "chora.contract.growth.creativity": growthValues["creativity"] ?? "nil",
+                "chora.contract.growth.empathy": growthValues["empathy"] ?? "nil",
+                "chora.contract.growth.judgment": growthValues["judgment"] ?? "nil",
+                "chora.contract.growth.resonance": growthValues["resonance"] ?? "nil",
+                "chora.contract.import.client-request-id": importReceipt.clientRequestID ?? "nil",
+                "chora.contract.import.job-id": importReceipt.jobID,
+                "chora.contract.import.total-files": String(importReceipt.totalFiles),
+                "chora.contract.import.imported-count": String(importDetail.importedCount),
+                "chora.contract.import.asset-id": importItem.assetID ?? "nil",
+                "chora.contract.import.nullable-fields": [
+                    importDetail.soulStatusReason,
+                    importDetail.errorMessage,
+                    importDetail.completedAt.map(String.init(describing:)),
+                    importDetail.cancelRequestedAt.map(String.init(describing:)),
+                    importDetail.cancelledAt.map(String.init(describing:)),
+                    importItem.assetVersionID,
+                    importItem.errorMessage
+                ].map { $0 ?? "nil" }.joined(separator: ","),
+                "chora.contract.import.unknown-status": importList.first?.status.rawValue ?? "nil",
+                "chora.contract.import.unknown-soul-status": importList.first?.soulStatus.rawValue ?? "nil",
+                "chora.contract.notion.workspace-id": notionStatus.workspaceID ?? "nil",
+                "chora.contract.notion.page-id": notionPage.id,
+                "chora.contract.notion.enqueue-job-id": notionReceipt.jobID,
+                "chora.contract.notion.job-id": notionJob.id,
+                "chora.contract.notion.nullable-fields": [
+                    notionStatus.workspaceName,
+                    notionJob.failureReason
+                ].map { $0 ?? "nil" }.joined(separator: ","),
+                "chora.contract.notion.unknown-job-status": notionJob.status.rawValue
+            ])
+        } catch {
+            result = .failure(error)
+        }
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 4) {
+                switch result {
+                case .success(let values):
+                    ForEach(values.keys.sorted(), id: \.self) { key in
+                        Text(values[key] ?? "nil")
+                            .accessibilityIdentifier(key)
+                    }
+                case .failure(let error):
+                    Text(String(describing: error))
+                        .accessibilityIdentifier("chora.contract.error")
+                }
+            }
+        }
+    }
+
+    private enum FixtureError: Error {
+        case missingImportItem
+        case missingNotionPage
+    }
+
+    private static let agentProfileJSON = #"""
+    {
+      "success": true,
+      "data": {
+        "human_actor_id": "act_human_contract",
+        "active_agent_actor_id": "act_agent_contract",
+        "binding_id": "bind_contract",
+        "is_primary": true,
+        "agent_status": "FUTURE_ACTIVE",
+        "soul_version": 7,
+        "proactive_enabled": true,
+        "timezone": "Asia/Shanghai"
+      }
+    }
+    """#
+
+    private static let agentUsersJSON = #"""
+    {
+      "success": true,
+      "data": {
+        "human_actor_id": "act_human_contract",
+        "agent_users": [{
+          "agent_user_id": "agu_contract",
+          "actor_id": "act_agent_contract",
+          "agent_actor_id": "act_agent_contract",
+          "display_name": "Chora Contract",
+          "username": "chora-contract",
+          "avatar_url": "https://cdn.chorai.test/agent.png",
+          "follower_count": 3,
+          "following_count": 4,
+          "agent_kind": "companion",
+          "binding_id": "bind_contract",
+          "binding_type": "PRIMARY",
+          "is_primary": true,
+          "status": "FUTURE_BOUND"
+        }]
+      }
+    }
+    """#
+
+    private static let ownProfileJSON = #"""
+    {
+      "success": true,
+      "data": {
+        "actor_id": "act_human_contract",
+        "username": "avery",
+        "preferred_address": "Avery",
+        "email": "avery@example.com",
+        "follower_count": 10,
+        "following_count": 11,
+        "interest_selection_completed": true,
+        "created_at": "2026-07-12T01:02:03.456Z"
+      }
+    }
+    """#
+
+    private static let growthJSON = #"""
+    {
+      "growth_view": {
+        "actor_id": "act_agent_contract",
+        "growth_version": "growth_v0_1_balanced_seed",
+        "dimension_scores": {
+          "curiosity": 1.25,
+          "insight": 2.5,
+          "creativity": 3.75,
+          "empathy": 5.0,
+          "judgment": 6.25,
+          "resonance": 7.5
+        },
+        "weighted_score": 4.375,
+        "weakest_dimension": "curiosity",
+        "calculated_stage": 5,
+        "committed_stage": 4,
+        "candidate_stage_diagnostics": {"future_gate": true},
+        "computed_at": "2026-07-12T01:02:03.456Z"
+      }
+    }
+    """#
+
+    private static let importReceiptJSON = #"""
+    {
+      "job_id": "job_import_contract",
+      "client_request_id": "req_import_contract",
+      "status": "queued",
+      "total_files": 2,
+      "accepted_files": 2,
+      "rejected_files": 0
+    }
+    """#
+
+    private static let importListJSON = #"""
+    {
+      "jobs": [{
+        "job_id": "job_future_contract",
+        "status": "future_import_state",
+        "soul_status": "future_soul_state",
+        "total_files": 2,
+        "imported_count": 0,
+        "updated_count": 0,
+        "skipped_count": 0,
+        "failed_count": 0,
+        "created_at": "2026-07-12T01:02:03Z"
+      }]
+    }
+    """#
+
+    private static let importDetailJSON = #"""
+    {
+      "job_id": "job_import_contract",
+      "client_request_id": "req_import_contract",
+      "status": "running",
+      "soul_status": "not_requested",
+      "total_files": 2,
+      "imported_count": 1,
+      "updated_count": 0,
+      "skipped_count": 0,
+      "failed_count": 0,
+      "created_at": "2026-07-12T01:02:03.456Z",
+      "items": [{
+        "source_key": "source-contract",
+        "original_filename": "contract.md",
+        "label": "Contract",
+        "original_format": "markdown",
+        "asset_id": "ast_import_contract",
+        "status": "imported"
+      }]
+    }
+    """#
+
+    private static let notionStatusJSON = #"""
+    {
+      "connected": true,
+      "workspace_id": "workspace_contract",
+      "pages": [{
+        "notion_page_id": "page_contract",
+        "status": "future_page_state",
+        "retry_count": 0
+      }]
+    }
+    """#
+
+    private static let notionPagesJSON = #"""
+    {
+      "pages": [{
+        "page_id": "page_contract",
+        "title": "Contract page",
+        "last_edited_time": "2026-07-12T01:02:03.456Z",
+        "url": "https://notion.so/page_contract"
+      }]
+    }
+    """#
+
+    private static let notionReceiptJSON = #"""
+    {"job_id": "job_notion_contract", "status": "queued"}
+    """#
+
+    private static let notionJobJSON = #"""
+    {
+      "job_id": "job_notion_detail_contract",
+      "status": "future_notion_state",
+      "imported": 0,
+      "updated": 0,
+      "skipped": 0,
+      "failed": []
     }
     """#
 }
