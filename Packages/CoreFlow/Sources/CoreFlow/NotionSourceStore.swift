@@ -89,7 +89,12 @@ public final class NotionSourceStore: ObservableObject {
     }
 
     public func reloadStatus() {
-        guard disconnectTask == nil, !isDisconnecting, let actorID else { return }
+        guard disconnectTask == nil,
+              !isDisconnecting,
+              authorizationBinding == nil,
+              let actorID else {
+            return
+        }
         cancelStatusOperation()
         cancelConnectOperation(clearAuthorization: true)
         connectionGeneration = UUID()
@@ -109,6 +114,8 @@ public final class NotionSourceStore: ObservableObject {
             return
         }
         cancelStatusOperation()
+        statusPhase = status == nil ? .idle : .ready
+        statusError = nil
         connectionGeneration = UUID()
         let actorScope = actorGeneration
         let connectionScope = connectionGeneration

@@ -401,6 +401,99 @@ final class NotionSourceStoreTests: XCTestCase {
         XCTAssertEqual(store.status, connected)
     }
 
+    func testGenericReloadPreservesPendingAuthorizationUntilSuccessfulCallback() async {
+        let disconnected = NotionConnectionStatus(state: .disconnected)
+        let connected = NotionConnectionStatus(state: .connected, workspaceID: "workspace_1")
+        let service = NotionSourceServiceSpy(
+            statuses: [.success(disconnected), .success(connected)],
+            authorizationURLs: [.success(URL(string: "https://notion.test/pending")!)]
+        )
+        let store = NotionSourceStore(service: service)
+        store.load(actorID: "human_a")
+        await waitUntil { store.status == disconnected }
+        store.connect()
+        await waitUntil { store.authorizationRequest != nil }
+        let request = try! XCTUnwrap(store.authorizationRequest)
+
+        store.reloadStatus()
+        await Task.yield()
+
+        XCTAssertEqual(store.authorizationRequest, request)
+        let beforeCallback = await service.statusRequestCount()
+        XCTAssertEqual(beforeCallback, 1)
+
+        store.authorizationCompleted(id: request.id, result: .success)
+        await waitUntil { store.status == connected }
+
+        let afterCallback = await service.statusRequestCount()
+        XCTAssertEqual(afterCallback, 2)
+    }
+
+    func testConnectDuringInitialLoadThenCancellationRestoresIdleAndCanRetry() async {
+        let service = NotionSourceServiceSpy(
+            statuses: [
+                .init(
+                    delay: 180_000_000,
+                    result: .success(.init(state: .disconnected))
+                )
+            ],
+            authorizationURLs: [
+                .success(URL(string: "https://notion.test/first")!),
+                .success(URL(string: "https://notion.test/retry")!)
+            ]
+        )
+        let store = NotionSourceStore(service: service)
+        store.load(actorID: "human_a")
+        await waitUntil { store.statusPhase == .loading }
+
+        store.connect()
+        await waitUntil { store.authorizationRequest != nil }
+        let first = try! XCTUnwrap(store.authorizationRequest)
+        store.authorizationCompleted(id: first.id, result: .cancelled)
+
+        XCTAssertEqual(store.statusPhase, .idle)
+        XCTAssertNil(store.status)
+        XCTAssertNil(store.inlineError)
+
+        store.connect()
+        await waitUntil { store.authorizationRequest != nil }
+        let retry = try! XCTUnwrap(store.authorizationRequest)
+        XCTAssertNotEqual(retry.id, first.id)
+    }
+
+    func testConnectDuringRefreshThenFailureRestoresCommittedReadyAndCanRetry() async {
+        let committed = NotionConnectionStatus(state: .connected, workspaceID: "workspace_1")
+        let service = NotionSourceServiceSpy(
+            statuses: [
+                .success(committed),
+                .init(delay: 180_000_000, result: .success(committed))
+            ],
+            authorizationURLs: [
+                .success(URL(string: "https://notion.test/first")!),
+                .success(URL(string: "https://notion.test/retry")!)
+            ]
+        )
+        let store = NotionSourceStore(service: service)
+        store.load(actorID: "human_a")
+        await waitUntil { store.status == committed }
+        store.reloadStatus()
+        await waitUntil { store.statusPhase == .loading }
+
+        store.connect()
+        await waitUntil { store.authorizationRequest != nil }
+        let first = try! XCTUnwrap(store.authorizationRequest)
+        store.authorizationCompleted(id: first.id, result: .failed)
+
+        XCTAssertEqual(store.status, committed)
+        XCTAssertEqual(store.statusPhase, .ready)
+        XCTAssertEqual(store.connectionError, .authorizationFailed)
+
+        store.connect()
+        await waitUntil { store.authorizationRequest != nil }
+        let retry = try! XCTUnwrap(store.authorizationRequest)
+        XCTAssertNotEqual(retry.id, first.id)
+    }
+
     func testDistinctOverlappingPageQueriesPublishOnlyLatestResult() async {
         let stale = [NotionPage(id: "page_old", title: "Old")]
         let latest = [NotionPage(id: "page_new", title: "New")]
