@@ -310,7 +310,21 @@ public final class NotionSourceStore: ObservableObject {
                     }
                     self?.importJob = canonical
                     self?.lastImportPolledAt = clock.now()
-                    if canonical.status.isKnownTerminal { return }
+                    if canonical.status.isKnownTerminal {
+                        let refreshed = try await service.status()
+                        guard self?.isCurrentImport(
+                            operationID: operationID,
+                            actorID: actorID,
+                            actorGeneration: actorScope,
+                            sourceGeneration: sourceScope
+                        ) == true else {
+                            return
+                        }
+                        self?.status = refreshed
+                        self?.statusPhase = .ready
+                        self?.statusError = nil
+                        return
+                    }
                     try await sleeper.sleep(for: pollInterval)
                 }
             } catch is CancellationError {

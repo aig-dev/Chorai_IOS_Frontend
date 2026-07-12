@@ -118,11 +118,15 @@ final class ArcNoteUITests: XCTestCase {
         app.launch()
 
         waitFor("screen.choraProfile")
+        XCTAssertTrue(app.staticTexts["Chora Profile"].exists)
+        XCTAssertTrue(app.buttons["Back"].isHittable)
         let identity = waitFor("chora.identity.section")
         waitFor("chora.identity.avatar")
         waitFor("chora.identity.displayName")
         waitFor("chora.identity.preferredAddress")
-        waitFor("chora.identity.save")
+        let save = waitFor("chora.identity.save")
+        XCTAssertGreaterThanOrEqual(save.frame.height, 44)
+        XCTAssertLessThanOrEqual(save.frame.height, 60)
 
         let growth = waitFor("chora.growth.section")
         XCTAssertEqual(waitFor("chora.growth.stage").label, "Co-Think")
@@ -250,8 +254,8 @@ final class ArcNoteUITests: XCTestCase {
             ("local-relaunch-ambiguity", ["chora.sources.localNotes.reselect"]),
             ("local-pre-receipt", ["chora.sources.localNotes.submitting"]),
             ("notion-import-active", ["chora.sources.notion.import.receipt", "chora.sources.notion.import.running"]),
-            ("notion-import-done", ["chora.sources.notion.import.done", "chora.sources.notion.import.imported"]),
-            ("notion-import-failure", ["chora.sources.notion.import.failed", "chora.sources.notion.import.failure.page_fixture"])
+            ("notion-import-done", ["chora.sources.notion.import.done", "chora.sources.notion.import.imported", "chora.sources.notion.sync.page_fixture"]),
+            ("notion-import-failure", ["chora.sources.notion.import.failed", "chora.sources.notion.import.failure.page_fixture", "chora.sources.notion.sync.page_fixture"])
         ] {
             launchChoraProfileFixture(mode: mode)
             app.swipeUp()
@@ -271,6 +275,40 @@ final class ArcNoteUITests: XCTestCase {
                 XCTAssertFalse(app.buttons["chora.sources.localNotes.cancel"].exists)
             }
         }
+    }
+
+    func testChoraProfileCanonicalUnknownAndCancellingStates() throws {
+        launchChoraProfileFixture(mode: "local-cancelling")
+        app.swipeUp(); app.swipeUp()
+        tap("chora.sources.localNotes")
+        tap("chora.sources.localNotes.cancel")
+        app.alerts["Cancel Import?"].buttons["Cancel Import"].tap()
+        waitFor("chora.sources.localNotes.cancelling")
+        XCTAssertFalse(app.buttons["chora.sources.localNotes.cancel"].exists)
+
+        launchChoraProfileFixture(mode: "notion-connecting")
+        app.swipeUp(); app.swipeUp()
+        tap("chora.sources.notion")
+        waitFor("chora.sources.notion.connecting")
+        XCTAssertFalse(app.buttons["chora.sources.notion.connect"].exists)
+
+        launchChoraProfileFixture(mode: "notion-unknown")
+        app.swipeUp(); app.swipeUp()
+        let notion = waitFor("chora.sources.notion")
+        XCTAssertTrue((notion.value as? String)?.contains("Unavailable") == true)
+        XCTAssertFalse((notion.value as? String)?.contains("future_connection") == true)
+        notion.tap()
+        waitFor("chora.sources.notion.retryStatus")
+        XCTAssertFalse(app.buttons["chora.sources.notion.connect"].exists)
+
+        launchChoraProfileFixture(mode: "notion-unknown-import")
+        app.swipeUp(); app.swipeUp()
+        tap("chora.sources.notion")
+        let page = waitFor("chora.sources.notion.page.page_fixture")
+        page.tap()
+        tap("chora.sources.notion.import")
+        XCTAssertEqual(waitFor("chora.sources.notion.import.unknown").label, "Unknown")
+        XCTAssertEqual(waitFor("chora.sources.notion.sync.page_fixture").value as? String, "Unknown")
     }
 
     func testNotificationInboxUIContract() throws {

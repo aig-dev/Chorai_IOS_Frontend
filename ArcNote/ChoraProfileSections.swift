@@ -122,6 +122,13 @@ struct ChoraSoulSourcesSection: View {
         if notionStore.status?.state == .disconnected {
             return "chora.sources.notion.disconnected"
         }
+        if notionStore.status?.state == .connecting {
+            return "chora.sources.notion.connecting"
+        }
+        if notionStore.status != nil,
+           notionStore.status?.state.knownValue == nil {
+            return "chora.sources.notion.unavailable"
+        }
         if notionStore.inlineError != nil {
             return "chora.sources.notion.unavailable"
         }
@@ -167,15 +174,20 @@ private struct LocalNotesExpandedContent: View {
             }
 
             if store.canCancelCurrentJob {
-                ChoraOutlineButton(title: "Cancel Import", destructive: true) {
+                SettingsOutlineButton(title: "Cancel Import", foregroundColor: Color(red: 1, green: 0.5, blue: 0.54)) {
                     showsCancelConfirmation = true
                 }
                 .accessibilityIdentifier("chora.sources.localNotes.cancel")
+            } else if store.phase == .cancelling {
+                Text("Cancelling import…")
+                    .font(.footnote)
+                    .foregroundColor(.white.opacity(0.65))
+                    .accessibilityIdentifier("chora.sources.localNotes.cancelling")
             } else if store.canRetrySubmission {
-                ChoraOutlineButton(title: "Retry") { store.retry() }
+                SettingsOutlineButton(title: "Retry") { store.retry() }
                     .accessibilityIdentifier("chora.sources.localNotes.retry")
             } else if store.canReload, let actorID = store.actorID {
-                ChoraOutlineButton(title: "Retry Loading") {
+                SettingsOutlineButton(title: "Retry Loading") {
                     Task { await store.load(actorID: actorID) }
                 }
                 .accessibilityIdentifier("chora.sources.localNotes.reload")
@@ -191,7 +203,7 @@ private struct LocalNotesExpandedContent: View {
                     .foregroundColor(.white.opacity(0.65))
                     .accessibilityIdentifier("chora.sources.localNotes.submitting")
             } else if !store.selectedFiles.isEmpty {
-                ChoraOutlineButton(title: "Start Import") { store.start() }
+                SettingsOutlineButton(title: "Start Import") { store.start() }
                     .accessibilityIdentifier("chora.sources.localNotes.start")
             } else {
                 Text("Choose Markdown or HTML files to start a local import.")
@@ -337,18 +349,18 @@ private struct NotionExpandedContent: View {
                     HStack {
                         Text(status.pageID).fixedSize(horizontal: false, vertical: true)
                         Spacer()
-                        Text(status.status.rawValue)
+                        Text(pageSyncText(status.status))
                     }
                     .font(.caption)
                     .foregroundColor(.white.opacity(0.62))
                     .accessibilityElement(children: .combine)
                     .accessibilityLabel("Notion page \(status.pageID)")
-                    .accessibilityValue(status.status.rawValue)
+                    .accessibilityValue(pageSyncText(status.status))
                     .accessibilityIdentifier("chora.sources.notion.sync.\(status.pageID)")
                 }
 
                 if !store.selectedPageIDs.isEmpty {
-                    ChoraOutlineButton(
+                    SettingsOutlineButton(
                         title: store.isImporting ? "Importing…" : "Import Selected"
                     ) {
                         store.startImport()
@@ -357,24 +369,29 @@ private struct NotionExpandedContent: View {
                     .accessibilityIdentifier("chora.sources.notion.import")
                 }
 
-                ChoraOutlineButton(title: "Disconnect", destructive: true) {
+                SettingsOutlineButton(title: "Disconnect", foregroundColor: Color(red: 1, green: 0.5, blue: 0.54)) {
                     showsDisconnectConfirmation = true
                 }
                 .disabled(store.isDisconnecting)
                 .accessibilityIdentifier("chora.sources.notion.disconnect")
                 notionImportState
             } else {
-                if store.status == nil, store.statusError != nil {
-                    ChoraOutlineButton(title: "Retry") { store.reloadStatus() }
-                        .accessibilityIdentifier("chora.sources.notion.retryStatus")
-                } else {
-                    ChoraOutlineButton(
-                        title: store.isConnecting ? "Connecting…" : "Connect Notion"
-                    ) {
+                switch store.status?.state.knownValue {
+                case .disconnected:
+                    SettingsOutlineButton(title: "Connect Notion") {
                         store.connect()
                     }
-                    .disabled(store.isConnecting)
                     .accessibilityIdentifier("chora.sources.notion.connect")
+                case .connecting:
+                    Text("Connecting…")
+                        .font(.subheadline)
+                        .foregroundColor(.white.opacity(0.65))
+                        .accessibilityIdentifier("chora.sources.notion.connecting")
+                case .connected:
+                    EmptyView()
+                case nil:
+                    SettingsOutlineButton(title: "Retry") { store.reloadStatus() }
+                        .accessibilityIdentifier("chora.sources.notion.retryStatus")
                 }
 
                 if store.authorizationRequest != nil {
@@ -405,10 +422,10 @@ private struct NotionExpandedContent: View {
                 .accessibilityIdentifier("chora.sources.notion.import.receipt")
         }
         if let job = store.importJob {
-            Text(job.status.rawValue.capitalized)
+            Text(importStatusText(job.status))
                 .font(.subheadline.weight(.medium))
                 .foregroundColor(.white)
-                .accessibilityIdentifier("chora.sources.notion.import.\(job.status.rawValue)")
+                .accessibilityIdentifier("chora.sources.notion.import.\(job.status.knownValue == nil ? "unknown" : job.status.rawValue)")
             notionCount("Imported", value: job.imported, id: "imported")
             notionCount("Updated", value: job.updated, id: "updated")
             notionCount("Skipped", value: job.skipped, id: "skipped")
@@ -432,6 +449,14 @@ private struct NotionExpandedContent: View {
             .accessibilityLabel(title)
             .accessibilityValue("\(value)")
             .accessibilityIdentifier("chora.sources.notion.import.\(id)")
+    }
+
+    private func pageSyncText(_ status: NotionPageSyncState) -> String {
+        status.knownValue.map { String(describing: $0).capitalized } ?? "Unknown"
+    }
+
+    private func importStatusText(_ status: NotionImportJobStatus) -> String {
+        status.knownValue.map { String(describing: $0).capitalized } ?? "Unknown"
     }
 
     private func errorText(_ error: NotionSourceError) -> String {
@@ -580,7 +605,7 @@ struct ChoraInlineError: View {
                 .foregroundColor(Color(red: 1, green: 0.62, blue: 0.64))
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier(identifier)
-            ChoraOutlineButton(title: "Retry", action: retry)
+            SettingsOutlineButton(title: "Retry", action: retry)
                 .accessibilityIdentifier("\(identifier).retry")
         }
     }
@@ -629,30 +654,5 @@ private struct ChoraDisclosureRow: View {
         .accessibilityLabel(title)
         .accessibilityValue("\(isExpanded ? "Expanded" : "Collapsed"), \(summary)")
         .accessibilityIdentifier(identifier)
-    }
-}
-
-private struct ChoraOutlineButton: View {
-    let title: String
-    var destructive = false
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Text(title)
-                .font(.body.weight(.medium))
-                .foregroundColor(
-                    destructive
-                        ? Color(red: 1, green: 0.5, blue: 0.54)
-                        : .white
-                )
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 12)
-                .background(
-                    RoundedRectangle(cornerRadius: 30)
-                        .stroke(Color.white.opacity(0.28), lineWidth: 1)
-                )
-        }
-        .buttonStyle(.plain)
     }
 }

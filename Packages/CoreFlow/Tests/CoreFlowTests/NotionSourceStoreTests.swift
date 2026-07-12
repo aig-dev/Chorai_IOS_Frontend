@@ -177,6 +177,10 @@ final class NotionSourceStoreTests: XCTestCase {
         let sleeper = ImmediateNotionSleeper()
         let clock = IncrementingNotionClock()
         let service = NotionSourceServiceSpy(
+            statuses: [
+                .success(.init(state: .disconnected)),
+                .success(.init(state: .disconnected))
+            ],
             receipts: [.success(receipt)],
             jobs: [.success(unknown), .success(running), .success(complete)]
         )
@@ -191,7 +195,7 @@ final class NotionSourceStoreTests: XCTestCase {
         store.setSelectedPageIDs(["page_b", "page_a", "page_b"])
 
         store.startImport()
-        await waitUntil { store.importJob == complete }
+        await waitUntil { store.importJob == complete && !store.isImporting }
 
         let enqueueRequests = await service.enqueuedPageIDs()
         let jobRequests = await service.jobIDs()
@@ -202,6 +206,59 @@ final class NotionSourceStoreTests: XCTestCase {
         XCTAssertNotNil(store.lastImportPolledAt)
         XCTAssertFalse(store.isImporting)
         XCTAssertNil(store.inlineError)
+    }
+
+    func testTerminalImportReloadsCanonicalPageSyncStatus() async {
+        let connected = NotionConnectionStatus(state: .connected, workspaceID: "workspace_1")
+        let refreshed = NotionConnectionStatus(
+            state: .connected,
+            workspaceID: "workspace_1",
+            pageStatuses: [.init(pageID: "page_1", assetID: "ast_1", status: .synced, lastSyncedAt: "now", errorMessage: nil, retryCount: 0)]
+        )
+        let terminal = NotionImportJob(id: "job_1", status: .done, imported: 1, updated: 0, skipped: 0, failures: [])
+        let service = NotionSourceServiceSpy(
+            statuses: [.success(connected), .success(refreshed)],
+            receipts: [.success(.init(jobID: "job_1", acceptedPageIDs: ["page_1"]))],
+            jobs: [.success(terminal)]
+        )
+        let store = NotionSourceStore(service: service)
+        store.load(actorID: "human_a")
+        await waitUntil { store.status == connected }
+        store.setSelectedPageIDs(["page_1"])
+
+        store.startImport()
+        await waitUntil { store.status == refreshed && !store.isImporting }
+
+        XCTAssertEqual(store.importJob, terminal)
+        let statusCount = await service.statusRequestCount()
+        XCTAssertEqual(statusCount, 2)
+    }
+
+    func testDisconnectFencesLateTerminalStatusRefresh() async {
+        let connected = NotionConnectionStatus(state: .connected, workspaceID: "workspace_1")
+        let stale = NotionConnectionStatus(state: .connected, workspaceID: "stale")
+        let disconnected = NotionConnectionStatus(state: .disconnected)
+        let terminal = NotionImportJob(id: "job_1", status: .done, imported: 1, updated: 0, skipped: 0, failures: [])
+        let service = NotionSourceServiceSpy(
+            statuses: [
+                .success(connected),
+                .init(delay: 180_000_000, result: .success(stale)),
+                .success(disconnected)
+            ],
+            receipts: [.success(.init(jobID: "job_1", acceptedPageIDs: ["page_1"]))],
+            jobs: [.success(terminal)],
+            disconnects: [.success(())]
+        )
+        let store = NotionSourceStore(service: service)
+        store.load(actorID: "human_a")
+        await waitUntil { store.status == connected }
+        store.setSelectedPageIDs(["page_1"])
+        store.startImport()
+        await waitUntil { store.importJob == terminal }
+        store.disconnect()
+        await waitUntil { store.status == disconnected }
+        try? await Task.sleep(nanoseconds: 220_000_000)
+        XCTAssertEqual(store.status, disconnected)
     }
 
     func testDisconnectIsSingleFlightAndReloadsCanonicalStatus() async {

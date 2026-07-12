@@ -51,12 +51,10 @@ struct ChoraIdentitySection: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("chora.identity.error.\(field)")
             }
-            Button { store.save() } label: {
-                HStack { if store.isSaving { ProgressView().tint(.white) }; Text(store.isSaving ? "Saving…" : "Save") }
-                    .font(.body.weight(.medium)).foregroundColor(.white).frame(maxWidth: .infinity).padding(.vertical, 13)
-                    .background(RoundedRectangle(cornerRadius: 30).fill(Color.white.opacity(0.12)).overlay(RoundedRectangle(cornerRadius: 30).stroke(Color.white.opacity(0.24))))
+            SettingsOutlineButton(title: store.isSaving ? "Saving…" : "Save") {
+                store.save()
             }
-            .buttonStyle(.plain).disabled(store.isSaving || store.changedFields.isEmpty)
+            .disabled(store.isSaving || store.changedFields.isEmpty)
             .opacity(store.isSaving || store.changedFields.isEmpty ? 0.55 : 1)
             .accessibilityIdentifier("chora.identity.save")
         }

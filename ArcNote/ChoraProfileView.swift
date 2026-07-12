@@ -14,6 +14,7 @@ struct ChoraProfileView: View {
     private let now: @Sendable () -> Date
     private let initialNoteImportFiles: [NoteImportFile]
     private let automaticallyStartNoteImport: Bool
+    private let automaticallyCancelNoteImport: Bool
 
     init(
         humanActorID: String,
@@ -27,13 +28,15 @@ struct ChoraProfileView: View {
         chatVisibility: ChatHistoryVisibility = ChatHistoryVisibility(),
         now: @escaping @Sendable () -> Date = { Date() },
         initialNoteImportFiles: [NoteImportFile] = [],
-        automaticallyStartNoteImport: Bool = false
+        automaticallyStartNoteImport: Bool = false,
+        automaticallyCancelNoteImport: Bool = false
     ) {
         self.humanActorID = humanActorID
         self.chatVisibility = chatVisibility
         self.now = now
         self.initialNoteImportFiles = initialNoteImportFiles
         self.automaticallyStartNoteImport = automaticallyStartNoteImport
+        self.automaticallyCancelNoteImport = automaticallyCancelNoteImport
         _profileStore = StateObject(
             wrappedValue: ChoraProfileStore(service: profileService)
         )
@@ -125,6 +128,12 @@ struct ChoraProfileView: View {
         if !initialNoteImportFiles.isEmpty {
             noteImportStore.select(initialNoteImportFiles)
             if automaticallyStartNoteImport { noteImportStore.start() }
+            if automaticallyCancelNoteImport {
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 120_000_000)
+                    noteImportStore.cancel()
+                }
+            }
         }
     }
 }

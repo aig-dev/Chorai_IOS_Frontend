@@ -259,18 +259,8 @@ struct SettingsView: View {
                         
                         // 登出按钮
                         VStack(spacing: 8) {
-                            Button(action: {
+                            SettingsOutlineButton(title: "Log Out") {
                                 showLogoutAlert = true
-                            }) {
-                                Text("Log Out")
-                                    .font(.system(size: 16, weight: .medium))
-                                    .foregroundColor(.white)
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 13)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 30)
-                                            .stroke(Color.white.opacity(0.3), lineWidth: 1)
-                                    )
                             }
                             .disabled(isLoggingOut)
                             .accessibilityIdentifier("settings.logout")
@@ -419,12 +409,14 @@ struct SettingsDestinationHeader: View {
                     .foregroundColor(.white)
             }
             .accessibilityLabel("Back")
+            .accessibilityIdentifier("settings.destination.back")
 
             Spacer()
 
             Text(title)
-                .font(.system(size: 24, weight: .bold))
+                .font(.system(size: 22, weight: .bold))
                 .foregroundColor(.white)
+                .accessibilityIdentifier("settings.destination.title")
 
             Spacer()
 
@@ -436,6 +428,27 @@ struct SettingsDestinationHeader: View {
         .padding(.horizontal, 20)
         .padding(.top, 60)
         .padding(.bottom, 30)
+    }
+}
+
+struct SettingsOutlineButton: View {
+    let title: String
+    var foregroundColor: Color = .white
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 16, weight: .medium))
+                .foregroundColor(foregroundColor)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 13)
+                .background(
+                    RoundedRectangle(cornerRadius: 30)
+                        .stroke(Color.white.opacity(0.3), lineWidth: 1)
+                )
+        }
+        .buttonStyle(.plain)
     }
 }
 

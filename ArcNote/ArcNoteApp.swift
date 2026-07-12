@@ -110,6 +110,10 @@ private enum ChoraProfileFixtureMode: String {
     case localInitialLoadFailure = "local-initial-load-failure"
     case localRelaunchAmbiguity = "local-relaunch-ambiguity"
     case localPreReceipt = "local-pre-receipt"
+    case localCancelling = "local-cancelling"
+    case notionConnecting = "notion-connecting"
+    case notionUnknown = "notion-unknown"
+    case notionUnknownImport = "notion-unknown-import"
     case inlineErrors = "inline-errors"
 }
 
@@ -155,6 +159,7 @@ private extension ChoraProfileFixtureMode {
             || self == .localImportDone
             || self == .localImportFailure
             || self == .localRelaunchAmbiguity
+            || self == .localCancelling
     }
 }
 
@@ -276,7 +281,11 @@ private actor ChoraNoteImportFixtureService: CoreNoteImportServing {
         makeDetail()
     }
 
-    func cancel(id: String) async throws {}
+    func cancel(id: String) async throws {
+        if mode == .localCancelling {
+            try await Task.sleep(nanoseconds: 60_000_000_000)
+        }
+    }
 
     private func makeDetail() -> NoteImportJobDetail {
         let status: NoteImportJobStatus
@@ -285,7 +294,7 @@ private actor ChoraNoteImportFixtureService: CoreNoteImportServing {
         let failed: Int
         let errorMessage: String?
         switch mode {
-        case .localImportActive:
+        case .localImportActive, .localCancelling:
             status = .running
             soul = .notRequested
             imported = 1
@@ -376,22 +385,37 @@ private struct ChoraFixtureSleeper: NoteImportSleeping {
 
 private actor ChoraNotionFixtureService: CoreNotionSourceServing {
     private let mode: ChoraProfileFixtureMode
+    private var statusCalls = 0
 
     init(mode: ChoraProfileFixtureMode) {
         self.mode = mode
     }
 
     func status() async throws -> NotionConnectionStatus {
+        statusCalls += 1
         if mode == .inlineErrors || mode == .notionStatusFailed {
             throw NotionSourceError.requestFailed
         }
+        if mode == .notionConnecting {
+            return NotionConnectionStatus(state: .connecting)
+        }
+        if mode == .notionUnknown {
+            return NotionConnectionStatus(
+                state: .init(rawValue: "future_connection")
+            )
+        }
         if mode == .notionConnected || mode == .notionConnectedError
             || mode == .notionImportActive || mode == .notionImportDone
-            || mode == .notionImportFailure {
+            || mode == .notionImportFailure || mode == .notionUnknownImport {
             return NotionConnectionStatus(
                 state: .connected,
                 workspaceID: "workspace_fixture",
-                workspaceName: "Chorai Workspace"
+                workspaceName: "Chorai Workspace",
+                pageStatuses: mode == .notionUnknownImport
+                    ? [.init(pageID: "page_fixture", assetID: nil, status: .init(rawValue: "future_sync"), lastSyncedAt: nil, errorMessage: nil, retryCount: 0)]
+                    : ((mode == .notionImportDone || mode == .notionImportFailure) && statusCalls > 1
+                        ? [.init(pageID: "page_fixture", assetID: "ast_fixture", status: .synced, lastSyncedAt: "now", errorMessage: nil, retryCount: 0)]
+                        : [])
             )
         }
         return NotionConnectionStatus(state: .disconnected)
@@ -416,9 +440,11 @@ private actor ChoraNotionFixtureService: CoreNotionSourceServing {
     }
 
     func job(id: String) async throws -> NotionImportJob {
-        let status: NotionImportJobStatus = mode == .notionImportActive
-            ? .running
-            : mode == .notionImportFailure ? .failed : .done
+        let status: NotionImportJobStatus = mode == .notionUnknownImport
+            ? .init(rawValue: "provider_future_job")
+            : mode == .notionImportActive
+                ? .running
+                : mode == .notionImportFailure ? .failed : .done
         return NotionImportJob(
             id: id,
             status: status,

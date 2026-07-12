@@ -38,7 +38,7 @@ public final class NoteImportStore: ObservableObject {
     }
 
     public var canCancelCurrentJob: Bool {
-        guard operationTask != nil || phase == .ready else { return false }
+        guard phase != .cancelling, phase != .terminal else { return false }
         if let detail {
             return detail.status == .queued || detail.status == .running
         }
@@ -174,7 +174,8 @@ public final class NoteImportStore: ObservableObject {
     }
 
     public func cancel() {
-        guard let actorID,
+        guard canCancelCurrentJob,
+              let actorID,
               let jobID = detail?.jobID ?? receipt?.jobID,
               phase != .terminal else {
             return

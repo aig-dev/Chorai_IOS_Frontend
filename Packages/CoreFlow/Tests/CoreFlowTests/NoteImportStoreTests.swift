@@ -559,6 +559,33 @@ final class NoteImportStoreTests: XCTestCase {
         ])
     }
 
+    func testCancellingCapabilityLocksDuplicateCancelTaps() async {
+        let sleeper = NoteImportSleeperSpy()
+        let service = NoteImportServiceSpy(
+            enqueueResults: [.success(.receipt())],
+            details: [.fixture(status: .running)],
+            cancelSuspended: true
+        )
+        let store = makeStore(service: service, sleeper: sleeper)
+        await store.load(actorID: "act_1")
+        store.select([file("one.md", format: .markdown)])
+        store.start()
+        await waitUntil { await sleeper.callCount() == 1 }
+        XCTAssertTrue(store.canCancelCurrentJob)
+
+        store.cancel()
+        await waitUntil { await service.didStartCancel() }
+        XCTAssertEqual(store.phase, .cancelling)
+        XCTAssertFalse(store.canCancelCurrentJob)
+        store.cancel()
+        await Task.yield()
+
+        let calls = await service.calls()
+        let cancelCalls = calls.filter { $0 == "cancel:job_1" }
+        XCTAssertEqual(cancelCalls.count, 1)
+        store.stop()
+    }
+
     func testActorChangeDuringCancelDoesNotReloadOrPublishOldJob() async {
         let sleeper = NoteImportSleeperSpy()
         let service = NoteImportServiceSpy(
