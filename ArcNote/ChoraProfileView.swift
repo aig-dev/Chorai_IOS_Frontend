@@ -7,10 +7,12 @@ struct ChoraProfileView: View {
     @StateObject private var profileStore: ChoraProfileStore
     @StateObject private var noteImportStore: NoteImportStore
     @StateObject private var notionStore: NotionSourceStore
+    @StateObject private var notionOAuthHolder: NotionOAuthCoordinatorHolder
+    @EnvironmentObject private var chatHistoryDependency:
+        ChatHistoryVisibilityDependency
     @State private var hasAppeared = false
 
     private let humanActorID: String
-    private let chatVisibility: ChatHistoryVisibility
     private let now: @Sendable () -> Date
     private let initialNoteImportFiles: [NoteImportFile]
     private let automaticallyStartNoteImport: Bool
@@ -25,14 +27,13 @@ struct ChoraProfileView: View {
             UserDefaultsNoteImportRequestIDStore(),
         noteImportSleeper: any NoteImportSleeping = SystemNoteImportSleeper(),
         notionSleeper: any NotionSourceSleeping = SystemNotionSourceSleeper(),
-        chatVisibility: ChatHistoryVisibility = ChatHistoryVisibility(),
+        notionOAuthCoordinator: any NotionOAuthCoordinating,
         now: @escaping @Sendable () -> Date = { Date() },
         initialNoteImportFiles: [NoteImportFile] = [],
         automaticallyStartNoteImport: Bool = false,
         automaticallyCancelNoteImport: Bool = false
     ) {
         self.humanActorID = humanActorID
-        self.chatVisibility = chatVisibility
         self.now = now
         self.initialNoteImportFiles = initialNoteImportFiles
         self.automaticallyStartNoteImport = automaticallyStartNoteImport
@@ -53,6 +54,11 @@ struct ChoraProfileView: View {
                 sleeper: notionSleeper
             )
         )
+        _notionOAuthHolder = StateObject(
+            wrappedValue: NotionOAuthCoordinatorHolder(
+                notionOAuthCoordinator
+            )
+        )
     }
 
     static func production(humanActorID: String) -> ChoraProfileView {
@@ -60,7 +66,8 @@ struct ChoraProfileView: View {
             humanActorID: humanActorID,
             profileService: NetworkChoraProfileService(),
             noteImportService: NetworkNoteImportService(),
-            notionService: NetworkNotionSourceService()
+            notionService: NetworkNotionSourceService(),
+            notionOAuthCoordinator: NotionOAuthCoordinator()
         )
     }
 
@@ -88,12 +95,14 @@ struct ChoraProfileView: View {
 
                         ChoraSoulSourcesSection(
                             noteImportStore: noteImportStore,
-                            notionStore: notionStore
+                            notionStore: notionStore,
+                            notionOAuthCoordinator:
+                                notionOAuthHolder.coordinator
                         )
 
                         ChoraChatHistorySection(
                             humanActorID: humanActorID,
-                            visibility: chatVisibility,
+                            visibility: chatHistoryDependency,
                             now: now
                         )
                     }
@@ -116,6 +125,7 @@ struct ChoraProfileView: View {
         }
         .onDisappear {
             noteImportStore.stop()
+            notionOAuthHolder.coordinator.cancel()
         }
     }
 

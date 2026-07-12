@@ -9,12 +9,15 @@ import CoreFlow
 import SwiftUI
 
 #if DEBUG
+import AuthenticationServices
 import Combine
 import Darwin
 #endif
 
 @main
 struct ArcNoteApp: App {
+    @StateObject private var chatHistoryDependency =
+        ChatHistoryVisibilityDependency()
     #if DEBUG
     private let isAPIMigrationSmoke = APIMigrationSmokeRunner.isRequested
     private let isInterestUITestRoute = ProcessInfo.processInfo.arguments
@@ -27,6 +30,8 @@ struct ArcNoteApp: App {
         .contains("--ui-test-chora-profile")
     private let isSettingsUITestRoute = ProcessInfo.processInfo.arguments
         .contains("--ui-test-settings")
+    private let isChatVisibilityUITestRoute = ProcessInfo.processInfo.arguments
+        .contains("--ui-test-chat-visibility")
     private let isNotificationInboxUITestRoute = ProcessInfo.processInfo.arguments
         .contains("--ui-test-notification-inbox")
     private let profileUITestActorID: String? = {
@@ -49,6 +54,7 @@ struct ArcNoteApp: App {
 
     var body: some Scene {
         WindowGroup {
+            Group {
             #if DEBUG
             if isAPIMigrationSmoke {
                 Color.clear
@@ -60,6 +66,8 @@ struct ArcNoteApp: App {
                 NavigationStack {
                     SettingsView()
                 }
+            } else if isChatVisibilityUITestRoute {
+                ChatVisibilityFixtureScreen()
             } else if isChoraContractUITestRoute {
                 ChoraProfileContractFixtureView()
             } else if isNotificationContractUITestRoute {
@@ -87,6 +95,8 @@ struct ArcNoteApp: App {
             #else
             ContentView()
             #endif
+            }
+            .environmentObject(chatHistoryDependency)
         }
     }
 }
@@ -141,6 +151,7 @@ private struct ChoraProfileFixtureScreen: View {
             ),
             noteImportSleeper: ChoraFixtureSleeper(),
             notionSleeper: ChoraFixtureNotionSleeper(),
+            notionOAuthCoordinator: ChoraFixtureNotionOAuthCoordinator(),
             initialNoteImportFiles: mode == .localPreReceipt
                 ? [Self.fixtureFile]
                 : [],
@@ -470,6 +481,270 @@ private actor ChoraNotionFixtureService: CoreNotionSourceServing {
     func disconnect() async throws {}
 }
 
+@MainActor
+private final class ChoraFixtureNotionOAuthCoordinator:
+    NotionOAuthCoordinating
+{
+    private var cancelled = false
+
+    func authorize(
+        request: NotionAuthorizationRequest,
+        completion: @escaping (UUID, NotionAuthorizationResult) -> Void
+    ) {
+        cancelled = false
+        DispatchQueue.main.async { [weak self] in
+            guard self?.cancelled == false else { return }
+            completion(request.id, .cancelled)
+        }
+    }
+
+    func cancel() {
+        cancelled = true
+    }
+}
+
+@MainActor
+private final class ChatVisibilityFixtureService:
+    ObservableObject,
+    ChatConversationFetching,
+    ChatDetailFetching
+{
+    private let humanActorID: String
+    private let conversationID: String
+    private var hasPostCutoffMessage = false
+    private let conversationSubject:
+        CurrentValueSubject<ConversationsResponse, Never>
+
+    init(humanActorID: String, conversationID: String) {
+        self.humanActorID = humanActorID
+        self.conversationID = conversationID
+        conversationSubject = CurrentValueSubject(
+            Self.conversations(
+                humanActorID: humanActorID,
+                conversationID: conversationID,
+                hasPostCutoffMessage: false
+            )
+        )
+    }
+
+    func publishPostCutoffMessage() {
+        hasPostCutoffMessage = true
+        conversationSubject.send(
+            Self.conversations(
+                humanActorID: humanActorID,
+                conversationID: conversationID,
+                hasPostCutoffMessage: true
+            )
+        )
+    }
+
+    func getConversations() -> AnyPublisher<ConversationsResponse, NetworkError> {
+        conversationSubject
+            .setFailureType(to: NetworkError.self)
+            .eraseToAnyPublisher()
+    }
+
+    func getConversationDetail(
+        conversationId: String
+    ) -> AnyPublisher<ChatDetailResponse, NetworkError> {
+        Just(
+            ChatDetailResponse(
+                success: true,
+                data: ChatDetailConversation(
+                    id: conversationId,
+                    partner: ChatPartner(
+                        id: "partner_\(humanActorID)",
+                        username: "Fixture Partner",
+                        avatarUrl: nil
+                    ),
+                    createdAt: Self.beforeTimestamp,
+                    lastMessageTime: hasPostCutoffMessage
+                        ? Self.afterTimestamp
+                        : Self.beforeTimestamp
+                )
+            )
+        )
+        .setFailureType(to: NetworkError.self)
+        .eraseToAnyPublisher()
+    }
+
+    func getMessages(
+        conversationId: String,
+        page: Int,
+        perPage: Int
+    ) -> AnyPublisher<MessagesListResponse, NetworkError> {
+        var messages = [
+            APIChatMessage(
+                id: "message_before",
+                content: "Before cutoff",
+                senderId: "partner_\(humanActorID)",
+                receiverId: humanActorID,
+                createdAt: Self.beforeTimestamp,
+                messageType: "text",
+                isFromCurrentUser: false
+            )
+        ]
+        if hasPostCutoffMessage {
+            messages.append(
+                APIChatMessage(
+                    id: "message_after",
+                    content: "After cutoff",
+                    senderId: "partner_\(humanActorID)",
+                    receiverId: humanActorID,
+                    createdAt: Self.afterTimestamp,
+                    messageType: "text",
+                    isFromCurrentUser: false
+                )
+            )
+        }
+        return Just(
+            MessagesListResponse(
+                success: true,
+                data: MessagesListData(
+                    items: messages,
+                    pagination: Self.pagination(total: messages.count)
+                )
+            )
+        )
+        .setFailureType(to: NetworkError.self)
+        .eraseToAnyPublisher()
+    }
+
+    func sendMessage(
+        conversationId: String,
+        request: SendMessageRequest
+    ) -> AnyPublisher<SendMessageResponse, NetworkError> {
+        Empty<SendMessageResponse, NetworkError>(completeImmediately: true)
+            .eraseToAnyPublisher()
+    }
+
+    private static func conversations(
+        humanActorID: String,
+        conversationID: String,
+        hasPostCutoffMessage: Bool
+    ) -> ConversationsResponse {
+        let timestamp = hasPostCutoffMessage ? afterTimestamp : beforeTimestamp
+        let messageID = hasPostCutoffMessage ? "message_after" : "message_before"
+        return ConversationsResponse(
+            success: true,
+            data: ConversationsData(
+                items: [
+                    Conversation(
+                        id: conversationID,
+                        partner: ChatPartner(
+                            id: "partner_\(humanActorID)",
+                            username: "Fixture Partner",
+                            avatarUrl: nil
+                        ),
+                        lastMessage: LastMessage(
+                            content: messageID,
+                            createdAt: timestamp,
+                            senderId: "partner_\(humanActorID)"
+                        ),
+                        unreadCount: 0,
+                        createdAt: beforeTimestamp
+                    )
+                ],
+                pagination: pagination(total: 1)
+            )
+        )
+    }
+
+    private static func pagination(total: Int) -> ChatPagination {
+        ChatPagination(
+            page: 1,
+            perPage: 20,
+            total: total,
+            pages: 1,
+            hasNext: false,
+            hasPrev: false
+        )
+    }
+
+    private static let beforeTimestamp = "2020-01-01T00:00:00Z"
+    private static let afterTimestamp = "2099-01-01T00:00:00Z"
+}
+
+@MainActor
+private struct ChatVisibilityFixtureScreen: View {
+    @StateObject private var visibilityDependency =
+        ChatHistoryVisibilityDependency(
+            visibility: ChatHistoryVisibility(
+                persistence: ChatVisibilityFixturePersistence()
+            )
+        )
+    @StateObject private var humanAService = ChatVisibilityFixtureService(
+        humanActorID: "human_a",
+        conversationID: "conversation_before"
+    )
+    @StateObject private var humanBService = ChatVisibilityFixtureService(
+        humanActorID: "human_b",
+        conversationID: "conversation_other_actor"
+    )
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 20) {
+                NavigationLink("Open current actor chat") {
+                    ChatView(
+                        showSideMenu: .constant(false),
+                        humanActorID: "human_a",
+                        conversationFetcher: humanAService,
+                        detailFetcher: humanAService
+                    )
+                }
+                .accessibilityIdentifier("chat.fixture.open-list")
+
+                NavigationLink("Open other actor chat") {
+                    ChatView(
+                        showSideMenu: .constant(false),
+                        humanActorID: "human_b",
+                        conversationFetcher: humanBService,
+                        detailFetcher: humanBService
+                    )
+                }
+                .accessibilityIdentifier("chat.fixture.open-other-list")
+
+                NavigationLink("Open clear chat history") {
+                    ChoraChatHistorySection(
+                        humanActorID: "human_a",
+                        visibility: visibilityDependency,
+                        now: { Date() }
+                    )
+                    .padding(20)
+                }
+                .accessibilityIdentifier("chat.fixture.open-clear")
+
+                Button("Publish post-cutoff message") {
+                    humanAService.publishPostCutoffMessage()
+                }
+                .accessibilityIdentifier("chat.fixture.publish-post-cutoff")
+            }
+        }
+        .environmentObject(visibilityDependency)
+    }
+}
+
+private final class ChatVisibilityFixturePersistence:
+    ChatHistoryCutoffPersisting,
+    @unchecked Sendable
+{
+    private let lock = NSLock()
+    private var values: [String: Date] = [:]
+
+    func cutoffRecord(actorID: String) -> ChatHistoryCutoffRecord {
+        lock.lock()
+        defer { lock.unlock() }
+        return values[actorID].map(ChatHistoryCutoffRecord.valid) ?? .missing
+    }
+
+    func saveCutoff(_ date: Date, actorID: String) {
+        lock.lock()
+        values[actorID] = date
+        lock.unlock()
+    }
+}
+
 private struct ChoraFixtureNotionSleeper: NotionSourceSleeping {
     func sleep(for interval: TimeInterval) async throws {
         try await Task.sleep(nanoseconds: 60_000_000_000)
@@ -698,6 +973,7 @@ private final class ChoraScopeContractAccessor:
     private let lock = NSLock()
     private var storedAcquireCount = 0
     private var storedReleaseCount = 0
+    private var activePaths: Set<String> = []
 
     init(
         allowedPaths: [String: Bool],
@@ -722,16 +998,62 @@ private final class ChoraScopeContractAccessor:
     func startAccessing(_ url: URL) -> Bool {
         lock.lock()
         storedAcquireCount += 1
+        let allowed = allowedPaths[url.lastPathComponent] ?? false
+        if allowed { activePaths.insert(url.path) }
         lock.unlock()
         recorder.append("acquire:\(url.deletingPathExtension().lastPathComponent)")
-        return allowedPaths[url.lastPathComponent] ?? false
+        return allowed
     }
 
     func stopAccessing(_ url: URL) {
         lock.lock()
         storedReleaseCount += 1
+        activePaths.remove(url.path)
         lock.unlock()
         recorder.append("release:\(url.deletingPathExtension().lastPathComponent)")
+    }
+
+    func isAccessing(_ url: URL) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return activePaths.contains(url.path)
+    }
+}
+
+private final class ChoraScopeContractMetadataReader:
+    NoteImportFileMetadataReading,
+    @unchecked Sendable
+{
+    enum Behavior {
+        case size(Int64)
+        case unavailable
+    }
+
+    private let behavior: Behavior
+    private let accessor: ChoraScopeContractAccessor
+    private let recorder: ChoraScopeContractRecorder
+
+    init(
+        behavior: Behavior,
+        accessor: ChoraScopeContractAccessor,
+        recorder: ChoraScopeContractRecorder
+    ) {
+        self.behavior = behavior
+        self.accessor = accessor
+        self.recorder = recorder
+    }
+
+    func byteCount(for file: NoteImportFile) throws -> Int64 {
+        guard accessor.isAccessing(file.url) else {
+            throw NoteImportFileMetadataError.unavailable
+        }
+        recorder.append(
+            "coordinate:\(file.url.deletingPathExtension().lastPathComponent)"
+        )
+        switch behavior {
+        case .size(let size): return size
+        case .unavailable: throw NoteImportFileMetadataError.unavailable
+        }
     }
 }
 
@@ -952,6 +1274,7 @@ private struct ChoraProfileContractFixtureView: View {
             }
 
             var values = Self.requestContractValues()
+            values.merge(Self.platformContractValues()) { _, new in new }
 
             let identityValues: [String: String] = [
                 "chora.contract.human-actor-id": identity.humanActorID,
@@ -1152,6 +1475,130 @@ private struct ChoraProfileContractFixtureView: View {
         ]
     }
 
+    private static func platformContractValues() -> [String: String] {
+        let descriptors = [
+            NoteImportDocumentDescriptorBuilder.descriptor(
+                for: URL(fileURLWithPath: "/tmp/notes.md"),
+                byteCount: 4
+            ),
+            NoteImportDocumentDescriptorBuilder.descriptor(
+                for: URL(fileURLWithPath: "/tmp/page.htm"),
+                byteCount: 5
+            ),
+            NoteImportDocumentDescriptorBuilder.descriptor(
+                for: URL(fileURLWithPath: "/tmp/empty.md"),
+                byteCount: 0
+            ),
+            NoteImportDocumentDescriptorBuilder.descriptor(
+                for: URL(fileURLWithPath: "/tmp/unsupported.txt"),
+                byteCount: 3
+            )
+        ]
+        let successURL = URL(
+            string: "arcnote://notion-connected?result=success&credential=ignored"
+        )!
+        let failedURL = URL(
+            string: "arcnote://arbitrary-target?result=success"
+        )!
+        let duplicateResultURL = URL(
+            string: "arcnote://notion-connected?result=success&result=cancelled"
+        )!
+        let cancellation = NSError(
+            domain: ASWebAuthenticationSessionError.errorDomain,
+            code: ASWebAuthenticationSessionError.Code.canceledLogin.rawValue
+        )
+        let resultText: (NotionAuthorizationResult) -> String = { result in
+            switch result {
+            case .success: "success"
+            case .cancelled: "cancelled"
+            case .failed: "failed"
+            }
+        }
+        let replayID = UUID(
+            uuidString: "00000000-0000-0000-0000-000000000010"
+        )!
+        var requestFence = NotionOAuthRequestFence()
+        let beganRequest = requestFence.begin(replayID)
+        let acceptedFirstCompletion = requestFence.consume(replayID)
+        let ignoredReplay = !requestFence.consume(replayID)
+        var lifecycleCoordinator: ChoraFixtureNotionOAuthCoordinator? =
+            ChoraFixtureNotionOAuthCoordinator()
+        weak var weakLifecycleCoordinator:
+            ChoraFixtureNotionOAuthCoordinator?
+        weakLifecycleCoordinator = lifecycleCoordinator
+        let lifecycleHolder = NotionOAuthCoordinatorHolder(
+            lifecycleCoordinator!
+        )
+        lifecycleCoordinator = nil
+        let lifecycleRetained = weakLifecycleCoordinator != nil
+            && lifecycleHolder.coordinator === weakLifecycleCoordinator
+        let sourceURL = URL(fileURLWithPath: "/private/fixture/a/notes.md")
+        let sameSource = [
+            NoteImportDocumentDescriptorBuilder.descriptor(
+                for: sourceURL,
+                byteCount: 4
+            ),
+            NoteImportDocumentDescriptorBuilder.descriptor(
+                for: sourceURL,
+                byteCount: 4
+            )
+        ]
+        let differentSource = NoteImportDocumentDescriptorBuilder.descriptor(
+            for: URL(fileURLWithPath: "/private/fixture/b/notes.md"),
+            byteCount: 4
+        )
+        let sameKey = sameSource[0].sourceKey == sameSource[1].sourceKey
+        let differentKey = sameSource[0].sourceKey != differentSource.sourceKey
+        let opaqueKey = !sameSource[0].sourceKey.contains("/private/fixture")
+        return [
+            "chora.contract.picker.content-types":
+                NoteImportDocumentDescriptorBuilder.supportedContentTypes
+                    .map(\.identifier).joined(separator: ","),
+            "chora.contract.picker.multiple-selection": String(
+                NoteImportDocumentDescriptorBuilder.allowsMultipleSelection
+            ),
+            "chora.contract.picker.descriptors": descriptors.map {
+                "\($0.filename):\($0.format.rawValue):\($0.byteCount)"
+            }.joined(separator: ","),
+            "chora.contract.picker.source-key": [
+                "same:\(sameKey)",
+                "different:\(differentKey)",
+                "opaque:\(opaqueKey)"
+            ].joined(separator: ","),
+            "chora.contract.oauth.success": resultText(
+                NotionOAuthCoordinator.authorizationResult(
+                    callbackURL: successURL,
+                    error: nil
+                )
+            ),
+            "chora.contract.oauth.cancelled": resultText(
+                NotionOAuthCoordinator.authorizationResult(
+                    callbackURL: nil,
+                    error: cancellation
+                )
+            ),
+            "chora.contract.oauth.failed": resultText(
+                NotionOAuthCoordinator.authorizationResult(
+                    callbackURL: failedURL,
+                    error: nil
+                )
+            ),
+            "chora.contract.oauth.duplicate-result": resultText(
+                NotionOAuthCoordinator.authorizationResult(
+                    callbackURL: duplicateResultURL,
+                    error: nil
+                )
+            ),
+            "chora.contract.oauth.lifecycle-owner": lifecycleRetained
+                ? "retained"
+                : "released",
+            "chora.contract.oauth.request-id-replay":
+                beganRequest && acceptedFirstCompletion && ignoredReplay
+                    ? "ignored"
+                    : "accepted"
+        ]
+    }
+
     private static func request(
         _ spec: ChoraSourceRequestSpec,
         fields: [String] = []
@@ -1191,6 +1638,76 @@ private struct ChoraProfileContractFixtureView: View {
             "acquire:a", "acquire:b", "release:a", "no-upload"
         ] else {
             throw FixtureError.scopeContractMismatch
+        }
+
+        let emptyRecorder = ChoraScopeContractRecorder()
+        let emptyAccessor = ChoraScopeContractAccessor(
+            allowedPaths: ["a.md": true],
+            recorder: emptyRecorder
+        )
+        let emptyUploader = ChoraScopeContractUploader(
+            behavior: .unexpected,
+            recorder: emptyRecorder
+        )
+        let emptyService = NetworkNoteImportService(
+            resourceAccessor: emptyAccessor,
+            uploader: emptyUploader,
+            metadataReader: ChoraScopeContractMetadataReader(
+                behavior: .size(0),
+                accessor: emptyAccessor,
+                recorder: emptyRecorder
+            )
+        )
+        let emptyResult: String
+        do {
+            _ = try await emptyService.enqueue(
+                files: [fixtureFile(id: "a", url: firstURL)],
+                clientRequestID: "scope-empty"
+            )
+            emptyResult = "uploaded"
+        } catch NoteImportServiceError.selection(
+            .emptyFile(let filename)
+        ) {
+            emptyResult = "empty:\(filename)"
+        } catch {
+            emptyResult = "wrong-error"
+        }
+        if emptyUploader.uploadCount == 0 { emptyRecorder.append("no-upload") }
+
+        let metadataRecorder = ChoraScopeContractRecorder()
+        let metadataAccessor = ChoraScopeContractAccessor(
+            allowedPaths: ["a.md": true],
+            recorder: metadataRecorder
+        )
+        let metadataUploader = ChoraScopeContractUploader(
+            behavior: .unexpected,
+            recorder: metadataRecorder
+        )
+        let metadataService = NetworkNoteImportService(
+            resourceAccessor: metadataAccessor,
+            uploader: metadataUploader,
+            metadataReader: ChoraScopeContractMetadataReader(
+                behavior: .unavailable,
+                accessor: metadataAccessor,
+                recorder: metadataRecorder
+            )
+        )
+        let metadataResult: String
+        do {
+            _ = try await metadataService.enqueue(
+                files: [fixtureFile(id: "a", url: firstURL)],
+                clientRequestID: "scope-metadata"
+            )
+            metadataResult = "uploaded"
+        } catch NoteImportServiceError.contract(
+            code: "file_metadata_unavailable"
+        ) {
+            metadataResult = "metadata-unavailable"
+        } catch {
+            metadataResult = "wrong-error"
+        }
+        if metadataUploader.uploadCount == 0 {
+            metadataRecorder.append("no-upload")
         }
 
         let cancelRecorder = ChoraScopeContractRecorder()
@@ -1270,6 +1787,12 @@ private struct ChoraProfileContractFixtureView: View {
                 "acquire:\(cancelAccessor.acquireCount)",
                 "release:\(cancelAccessor.releaseCount)"
             ].joined(separator: ","),
+            "chora.contract.scope.empty-preflight":
+                emptyRecorder.values.joined(separator: ",")
+                    + "|\(emptyResult)",
+            "chora.contract.scope.metadata-failure":
+                metadataRecorder.values.joined(separator: ",")
+                    + "|\(metadataResult)",
             "chora.contract.transport.cancel-immediate": String(
                 cancelImmediate
             ),

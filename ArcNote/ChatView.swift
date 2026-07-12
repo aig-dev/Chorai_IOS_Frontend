@@ -2,11 +2,33 @@ import SwiftUI
 import Combine
 
 struct ChatView: View {
+    @EnvironmentObject private var chatHistoryDependency:
+        ChatHistoryVisibilityDependency
     @Binding var showSideMenu: Bool
     @State private var isSearchMode = false
     @State private var searchText = ""
     @State private var selectedChat: String? = nil
-    @StateObject private var chatManager = ChatManager()
+    @StateObject private var chatManager: ChatManager
+    private let humanActorID: String
+    private let detailFetcher: any ChatDetailFetching
+
+    init(
+        showSideMenu: Binding<Bool>,
+        humanActorID: String = AuthManager.shared.currentUser?.id ?? "",
+        conversationFetcher: any ChatConversationFetching =
+            NetworkManager.shared,
+        detailFetcher: any ChatDetailFetching = NetworkManager.shared
+    ) {
+        _showSideMenu = showSideMenu
+        self.humanActorID = humanActorID
+        self.detailFetcher = detailFetcher
+        _chatManager = StateObject(
+            wrappedValue: ChatManager(
+                humanActorID: humanActorID,
+                fetcher: conversationFetcher
+            )
+        )
+    }
     
     // MARK: 计算属性
     
@@ -209,6 +231,7 @@ struct ChatView: View {
                             Spacer()
                         }
                         .frame(height: 200)
+                        .accessibilityIdentifier("chat.empty")
                     } else {
                         // 对话列表
                         ForEach(Array(chatManager.conversations.enumerated()), id: \.element.id) { index, conversation in
@@ -216,7 +239,9 @@ struct ChatView: View {
                                 conversationId: conversation.id,
                                 contactName: conversation.partner.username ?? conversation.partner.id,
                                 contactStatus: "Online",
-                                contactAvatar: conversation.partner.avatarUrl ?? "avatar"
+                                contactAvatar: conversation.partner.avatarUrl ?? "avatar",
+                                humanActorID: humanActorID,
+                                fetcher: detailFetcher
                             )) {
                                 ChatListCell(
                                     avatar: AnyView(
@@ -260,7 +285,25 @@ struct ChatView: View {
             Spacer()
         }
         .accessibilityIdentifier("screen.chat.content")
+        #if DEBUG
+        .overlay(alignment: .topLeading) {
+            Text([
+                humanActorID,
+                String(chatHistoryDependency.revision),
+                String(chatHistoryDependency.isVisible(
+                    timestampString: "2020-01-01T00:00:00Z",
+                    actorID: humanActorID
+                )),
+                String(chatManager.conversations.count)
+            ].joined(separator: "|"))
+            .font(.system(size: 1))
+            .foregroundColor(.clear)
+            .frame(width: 1, height: 1)
+            .accessibilityIdentifier("chat.visibility.contract")
+        }
+        #endif
         .onAppear {
+            chatManager.bindVisibility(chatHistoryDependency)
             chatManager.loadConversations()
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("CloseAllPopups"))) { _ in

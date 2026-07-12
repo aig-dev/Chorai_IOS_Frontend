@@ -33,6 +33,8 @@
 		C0DEF1242F60000100000003 /* ChoraProfileSections.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1242F60000100000002 /* ChoraProfileSections.swift */; };
 		C0DEF1252F60000100000003 /* ChoraIdentityGrowthSections.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1252F60000100000002 /* ChoraIdentityGrowthSections.swift */; };
 		C0DEF1262F60000100000003 /* ChoraChatHistorySection.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1262F60000100000002 /* ChoraChatHistorySection.swift */; };
+		C0DEF1272F60000100000003 /* NotionOAuthCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1272F60000100000002 /* NotionOAuthCoordinator.swift */; };
+		C0DEF1282F60000100000003 /* NoteImportDocumentPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1282F60000100000002 /* NoteImportDocumentPicker.swift */; };
 		C0DEF1162F60000100000003 /* FollowListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1162F60000100000002 /* FollowListView.swift */; };
 		C0DEF1172F60000100000003 /* BlockedActorsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1172F60000100000002 /* BlockedActorsView.swift */; };
 		C0DEF1012F60000100000005 /* FlowViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1012F60000100000004 /* FlowViews.swift */; };
@@ -146,6 +148,8 @@
 		C0DEF1242F60000100000002 /* ChoraProfileSections.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChoraProfileSections.swift; sourceTree = "<group>"; };
 		C0DEF1252F60000100000002 /* ChoraIdentityGrowthSections.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChoraIdentityGrowthSections.swift; sourceTree = "<group>"; };
 		C0DEF1262F60000100000002 /* ChoraChatHistorySection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChoraChatHistorySection.swift; sourceTree = "<group>"; };
+		C0DEF1272F60000100000002 /* NotionOAuthCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotionOAuthCoordinator.swift; sourceTree = "<group>"; };
+		C0DEF1282F60000100000002 /* NoteImportDocumentPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteImportDocumentPicker.swift; sourceTree = "<group>"; };
 		C0DEF1162F60000100000002 /* FollowListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FollowListView.swift; sourceTree = "<group>"; };
 		C0DEF1172F60000100000002 /* BlockedActorsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlockedActorsView.swift; sourceTree = "<group>"; };
 		C0DEF1012F60000100000004 /* FlowViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlowViews.swift; sourceTree = "<group>"; };
@@ -335,6 +339,8 @@
 				C0DEF1242F60000100000002 /* ChoraProfileSections.swift */,
 				C0DEF1252F60000100000002 /* ChoraIdentityGrowthSections.swift */,
 				C0DEF1262F60000100000002 /* ChoraChatHistorySection.swift */,
+				C0DEF1272F60000100000002 /* NotionOAuthCoordinator.swift */,
+				C0DEF1282F60000100000002 /* NoteImportDocumentPicker.swift */,
 				1BC6B7672E4A0FE400E997B1 /* SettingsView.swift */,
 				1BC6B7652E4A07C400E997B1 /* SearchView.swift */,
 				1BC6B7632E49ED4400E997B1 /* TrashView.swift */,
@@ -550,6 +556,8 @@
 				C0DEF1242F60000100000003 /* ChoraProfileSections.swift in Sources */,
 				C0DEF1252F60000100000003 /* ChoraIdentityGrowthSections.swift in Sources */,
 				C0DEF1262F60000100000003 /* ChoraChatHistorySection.swift in Sources */,
+				C0DEF1272F60000100000003 /* NotionOAuthCoordinator.swift in Sources */,
+				C0DEF1282F60000100000003 /* NoteImportDocumentPicker.swift in Sources */,
 				C0DEF1162F60000100000003 /* FollowListView.swift in Sources */,
 				C0DEF1172F60000100000003 /* BlockedActorsView.swift in Sources */,
 				C0DEF1012F60000100000005 /* FlowViews.swift in Sources */,

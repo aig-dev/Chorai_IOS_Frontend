@@ -3,7 +3,7 @@ import SwiftUI
 
 struct ChoraChatHistorySection: View {
     let humanActorID: String
-    let visibility: ChatHistoryVisibility
+    let visibility: ChatHistoryVisibilityDependency
     let now: @Sendable () -> Date
     @State private var showsConfirmation = false
     @State private var didClear = false

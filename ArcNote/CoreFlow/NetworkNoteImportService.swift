@@ -7,6 +7,61 @@ protocol SecurityScopedResourceAccessing: Sendable {
     func stopAccessing(_ url: URL)
 }
 
+enum NoteImportFileMetadataError: Error {
+    case unavailable
+}
+
+protocol NoteImportFileMetadataReading: Sendable {
+    func byteCount(for file: NoteImportFile) throws -> Int64
+}
+
+struct CoordinatedNoteImportFileMetadataReader:
+    NoteImportFileMetadataReading,
+    Sendable
+{
+    func byteCount(for file: NoteImportFile) throws -> Int64 {
+        let coordinator = NSFileCoordinator()
+        var coordinationError: NSError?
+        var result: Result<Int64, Error>?
+        coordinator.coordinate(
+            readingItemAt: file.url,
+            options: .withoutChanges,
+            error: &coordinationError
+        ) { coordinatedURL in
+            do {
+                let values = try coordinatedURL.resourceValues(
+                    forKeys: [.fileSizeKey]
+                )
+                guard let fileSize = values.fileSize else {
+                    throw NoteImportFileMetadataError.unavailable
+                }
+                result = .success(Int64(fileSize))
+            } catch {
+                result = .failure(error)
+            }
+        }
+        if coordinationError != nil {
+            throw NoteImportFileMetadataError.unavailable
+        }
+        guard let result else {
+            throw NoteImportFileMetadataError.unavailable
+        }
+        return try result.get()
+    }
+}
+
+struct DeclaredNoteImportFileMetadataReader:
+    NoteImportFileMetadataReading,
+    Sendable
+{
+    func byteCount(for file: NoteImportFile) throws -> Int64 {
+        guard file.byteCount >= 0 else {
+            throw NoteImportFileMetadataError.unavailable
+        }
+        return file.byteCount
+    }
+}
+
 struct SystemSecurityScopedResourceAccessor:
     SecurityScopedResourceAccessing,
     Sendable
@@ -175,23 +230,28 @@ struct NetworkNoteImportUploader: NoteImportUploading, @unchecked Sendable {
 
 struct NetworkNoteImportService: CoreNoteImportServing, @unchecked Sendable {
     private let resourceAccessor: any SecurityScopedResourceAccessing
+    private let metadataReader: any NoteImportFileMetadataReading
     private let uploader: any NoteImportUploading
     private let network: NetworkManager
 
     init(network: NetworkManager = .shared) {
         self.network = network
         resourceAccessor = SystemSecurityScopedResourceAccessor()
+        metadataReader = CoordinatedNoteImportFileMetadataReader()
         uploader = NetworkNoteImportUploader(network: network)
     }
 
     init(
         network: NetworkManager = .shared,
         resourceAccessor: any SecurityScopedResourceAccessing,
-        uploader: any NoteImportUploading
+        uploader: any NoteImportUploading,
+        metadataReader: any NoteImportFileMetadataReading =
+            DeclaredNoteImportFileMetadataReader()
     ) {
         self.network = network
         self.resourceAccessor = resourceAccessor
         self.uploader = uploader
+        self.metadataReader = metadataReader
     }
 
     func enqueue(
@@ -213,6 +273,23 @@ struct NetworkNoteImportService: CoreNoteImportServing, @unchecked Sendable {
                 )
             }
             acquiredURLs.append(url)
+        }
+        defer { release(acquiredURLs) }
+
+        var byteCounts: [URL: Int64] = [:]
+        do {
+            for file in files where byteCounts[file.url] == nil {
+                byteCounts[file.url] = try metadataReader.byteCount(for: file)
+            }
+        } catch {
+            throw NoteImportServiceError.contract(
+                code: "file_metadata_unavailable"
+            )
+        }
+        for file in files where byteCounts[file.url] == 0 {
+            throw NoteImportServiceError.selection(
+                .emptyFile(filename: file.filename)
+            )
         }
 
         let parts = files.map {
@@ -239,7 +316,6 @@ struct NetworkNoteImportService: CoreNoteImportServing, @unchecked Sendable {
             result = .failure(error)
         }
         await termination.wait()
-        release(acquiredURLs)
 
         do {
             switch try result.get() {

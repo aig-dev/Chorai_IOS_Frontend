@@ -60,6 +60,57 @@ final class NoteImportStoreTests: XCTestCase {
         XCTAssertEqual(emptyEnqueues, 0)
     }
 
+    func testAdapterDetectedEmptyFileReturnsToSelectionAndClearsRequestID() async {
+        let service = NoteImportServiceSpy(
+            enqueueResults: [
+                .failure(.selection(.emptyFile(filename: "provider.md")))
+            ]
+        )
+        let persistence = NoteImportPersistenceSpy()
+        let store = makeStore(service: service, persistence: persistence)
+        await store.load(actorID: "act_1")
+        store.select([
+            file("provider.md", format: .markdown, byteCount: -1)
+        ])
+
+        store.start()
+        await waitUntil {
+            store.phase == .invalidSelection(
+                .emptyFile(filename: "provider.md")
+            )
+        }
+
+        XCTAssertNil(store.clientRequestID)
+        XCTAssertNil(persistence.value(actorID: "act_1"))
+        XCTAssertEqual(persistence.clearedActors, ["act_1"])
+    }
+
+    func testAdapterMetadataFailureStaysDistinctAndClearsRequestID() async {
+        let service = NoteImportServiceSpy(
+            enqueueResults: [
+                .failure(.contract(code: "file_metadata_unavailable"))
+            ]
+        )
+        let persistence = NoteImportPersistenceSpy()
+        let store = makeStore(service: service, persistence: persistence)
+        await store.load(actorID: "act_1")
+        store.select([
+            file("provider.md", format: .markdown, byteCount: -1)
+        ])
+
+        store.start()
+        await waitUntil {
+            store.phase == .failed(
+                .contract(code: "file_metadata_unavailable")
+            )
+        }
+
+        XCTAssertNil(store.clientRequestID)
+        XCTAssertNil(persistence.value(actorID: "act_1"))
+        XCTAssertEqual(persistence.clearedActors, ["act_1"])
+        XCTAssertFalse(store.canRetrySubmission)
+    }
+
     func testEverySupportedExtensionActuallyReachesEnqueue() async {
         let files = [
             file("one.md", format: .markdown),

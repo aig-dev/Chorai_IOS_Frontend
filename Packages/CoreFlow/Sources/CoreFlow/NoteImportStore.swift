@@ -328,6 +328,26 @@ public final class NoteImportStore: ObservableObject {
                 )
             case .failure(let error):
                 let mapped = Self.map(error)
+                if case let .selection(selectionError) = mapped {
+                    self?.publishAdapterSelectionError(
+                        selectionError,
+                        requestID: stableRequestID,
+                        actorID: actorID,
+                        generation: scope,
+                        operationID: operationID
+                    )
+                    return
+                }
+                if mapped == .contract(code: "file_metadata_unavailable") {
+                    self?.publishPreflightFailure(
+                        mapped,
+                        requestID: stableRequestID,
+                        actorID: actorID,
+                        generation: scope,
+                        operationID: operationID
+                    )
+                    return
+                }
                 guard case .ambiguous = mapped else {
                     self?.publishReconciliationError(
                         error,
@@ -675,6 +695,48 @@ public final class NoteImportStore: ObservableObject {
         phase = .failed(error)
     }
 
+    private func publishAdapterSelectionError(
+        _ error: NoteImportSelectionError,
+        requestID: String,
+        actorID: String,
+        generation: UUID,
+        operationID: UUID
+    ) {
+        guard isCurrentOperation(
+            actorID: actorID,
+            generation: generation,
+            operationID: operationID
+        ) else {
+            return
+        }
+        if clientRequestID == requestID {
+            persistence.clear(actorID: actorID)
+            clientRequestID = nil
+        }
+        phase = .invalidSelection(error)
+    }
+
+    private func publishPreflightFailure(
+        _ error: NoteImportServiceError,
+        requestID: String,
+        actorID: String,
+        generation: UUID,
+        operationID: UUID
+    ) {
+        guard isCurrentOperation(
+            actorID: actorID,
+            generation: generation,
+            operationID: operationID
+        ) else {
+            return
+        }
+        if clientRequestID == requestID {
+            persistence.clear(actorID: actorID)
+            clientRequestID = nil
+        }
+        phase = .failed(error)
+    }
+
     private func publishAmbiguous(
         actorID: String,
         generation: UUID,
@@ -829,7 +891,7 @@ public final class NoteImportStore: ObservableObject {
                   canonical == file.format else {
                 return .unsupportedFormat(filename: file.filename)
             }
-            guard file.byteCount > 0 else {
+            guard file.byteCount != 0 else {
                 return .emptyFile(filename: file.filename)
             }
         }

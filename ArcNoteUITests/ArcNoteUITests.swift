@@ -93,9 +93,21 @@ final class ArcNoteUITests: XCTestCase {
             "chora.contract.scope.cancel-order": "acquire:a,upload,cancel,terminated,release:a",
             "chora.contract.scope.cancel-result": "CancellationError",
             "chora.contract.scope.duplicate-count": "acquire:1,release:1",
+            "chora.contract.scope.empty-preflight": "acquire:a,coordinate:a,release:a,no-upload|empty:a.md",
+            "chora.contract.scope.metadata-failure": "acquire:a,coordinate:a,release:a,no-upload|metadata-unavailable",
             "chora.contract.transport.cancel-immediate": "true",
             "chora.contract.transport.pending-before-terminal": "true",
-            "chora.contract.transport.terminal-order": "cancel,pending,terminal,release:a,completion"
+            "chora.contract.transport.terminal-order": "cancel,pending,terminal,release:a,completion",
+            "chora.contract.picker.content-types": "net.daringfireball.markdown,public.html",
+            "chora.contract.picker.multiple-selection": "true",
+            "chora.contract.picker.descriptors": "notes.md:markdown:4,page.htm:html:5,empty.md:markdown:0,unsupported.txt:unsupported:3",
+            "chora.contract.picker.source-key": "same:true,different:true,opaque:true",
+            "chora.contract.oauth.success": "success",
+            "chora.contract.oauth.cancelled": "cancelled",
+            "chora.contract.oauth.failed": "failed",
+            "chora.contract.oauth.duplicate-result": "failed",
+            "chora.contract.oauth.lifecycle-owner": "retained",
+            "chora.contract.oauth.request-id-replay": "ignored"
         ]
 
         for (identifier, expectedValue) in expectedValues {
@@ -157,6 +169,86 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertTrue((notion.value as? String)?.contains("Collapsed") == true)
         notion.tap()
         XCTAssertTrue((notion.value as? String)?.contains("Expanded") == true)
+    }
+
+    func testChoraLocalNotesPickerAndExactAssetDestination() throws {
+        launchChoraProfileFixture(mode: "local-import-done")
+        app.swipeUp(); app.swipeUp()
+        tap("chora.sources.localNotes")
+
+        waitFor("chora.sources.localNotes.chooseFiles")
+        tap("chora.sources.localNotes.file.source_fixture")
+
+        XCTAssertEqual(
+            waitFor("screen.detail.card-id", timeout: 10).label,
+            "ast_fixture"
+        )
+    }
+
+    func testChoraDestructiveActionsAndOAuthUseProductionConfirmations() throws {
+        launchChoraProfileFixture(mode: "local-import-active")
+        app.swipeUp(); app.swipeUp()
+        tap("chora.sources.localNotes")
+        tap("chora.sources.localNotes.cancel")
+        XCTAssertTrue(app.alerts["Cancel Import?"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.alerts["Cancel Import?"].buttons["Keep Importing"].exists)
+        app.alerts["Cancel Import?"].buttons["Keep Importing"].tap()
+
+        launchChoraProfileFixture(mode: "notion-connected")
+        app.swipeUp(); app.swipeUp()
+        tap("chora.sources.notion")
+        tap("chora.sources.notion.disconnect")
+        XCTAssertTrue(app.alerts["Disconnect Notion?"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.alerts["Disconnect Notion?"].buttons["Keep Connected"].exists)
+        app.alerts["Disconnect Notion?"].buttons["Keep Connected"].tap()
+
+        launchChoraProfileFixture(mode: "notion-disconnected")
+        app.swipeUp(); app.swipeUp()
+        tap("chora.sources.notion")
+        tap("chora.sources.notion.connect")
+        waitFor("chora.sources.notion.oauth.cancelled")
+        XCTAssertFalse(app.alerts.firstMatch.exists)
+    }
+
+    func testActorScopedChatClearFiltersListAndDetailThenPostCutoffReappears() throws {
+        app.launchArguments.append("--ui-test-chat-visibility")
+        app.launch()
+
+        tap("chat.fixture.open-list")
+        waitFor("chat.conversation.conversation_before")
+        tap("chat.conversation.conversation_before")
+        waitFor("chat.message.message_before")
+        app.buttons["Back"].tap()
+        app.buttons["Back"].tap()
+
+        tap("chat.fixture.open-clear")
+        tap("chora.chat.clear")
+        let alert = app.alerts["Clear Chat History?"]
+        XCTAssertTrue(alert.waitForExistence(timeout: 5))
+        alert.buttons["Hide Previous Messages"].tap()
+        app.buttons["Back"].tap()
+
+        tap("chat.fixture.open-list")
+        XCTAssertEqual(
+            waitFor("chat.visibility.contract").label,
+            "human_a|1|false|0"
+        )
+        XCTAssertFalse(
+            app.descendants(matching: .any)[
+                "chat.conversation.conversation_before"
+            ].exists
+        )
+        app.buttons["Back"].tap()
+
+        tap("chat.fixture.open-other-list")
+        waitFor("chat.conversation.conversation_other_actor")
+        app.buttons["Back"].tap()
+
+        tap("chat.fixture.publish-post-cutoff")
+        tap("chat.fixture.open-list")
+        tap("chat.conversation.conversation_before")
+        waitFor("chat.message.message_after")
+        XCTAssertFalse(app.descendants(matching: .any)["chat.message.message_before"].exists)
     }
 
     func testChoraProfileFixtureStatesStaySectionLocal() throws {

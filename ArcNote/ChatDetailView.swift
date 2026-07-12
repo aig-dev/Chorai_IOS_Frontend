@@ -78,7 +78,7 @@ class SelectCardPopupManager: ObservableObject {
 
 // MARK: 消息数据模型
 struct ChatMessage: Identifiable {
-    let id = UUID()
+    let id: String
     let content: String
     let isFromMe: Bool
     let timestamp: String
@@ -88,6 +88,8 @@ struct ChatMessage: Identifiable {
 
 // MARK: - 聊天详情视图
 struct ChatDetailView: View {
+    @EnvironmentObject private var chatHistoryDependency:
+        ChatHistoryVisibilityDependency
     @Environment(\.dismiss) private var dismiss
     @State private var messageText = ""
     @State private var contactName: String
@@ -96,16 +98,29 @@ struct ChatDetailView: View {
     @State private var searchText = ""
     @FocusState private var isTextFieldFocused: Bool
     @ObservedObject private var selectCardManager = SelectCardPopupManager.shared
-    @StateObject private var chatDetailManager = ChatDetailManager()
+    @StateObject private var chatDetailManager: ChatDetailManager
     
     let conversationId: String
     
     
-    init(conversationId: String, contactName: String = "Thompson", contactStatus: String = "5 minutes ago online", contactAvatar: String = "avatar") {
+    init(
+        conversationId: String,
+        contactName: String = "Thompson",
+        contactStatus: String = "5 minutes ago online",
+        contactAvatar: String = "avatar",
+        humanActorID: String = AuthManager.shared.currentUser?.id ?? "",
+        fetcher: any ChatDetailFetching = NetworkManager.shared
+    ) {
         self.conversationId = conversationId
         self._contactName = State(initialValue: contactName)
         self._contactStatus = State(initialValue: contactStatus)
         self._contactAvatar = State(initialValue: contactAvatar)
+        _chatDetailManager = StateObject(
+            wrappedValue: ChatDetailManager(
+                humanActorID: humanActorID,
+                fetcher: fetcher
+            )
+        )
     }
     
 
@@ -121,6 +136,7 @@ struct ChatDetailView: View {
                         .font(.title2)
                         .foregroundColor(.white)
                 }
+                .accessibilityLabel("Back")
                 
                 HStack(spacing: 10) {
                     // 默认头像
@@ -367,6 +383,7 @@ struct ChatDetailView: View {
         }
         #endif
         .onAppear {
+            chatDetailManager.bindVisibility(chatHistoryDependency)
             chatDetailManager.loadConversationDetail(conversationId: conversationId)
             // loadMessages会在对话详情加载完成后自动调用
         }
@@ -651,6 +668,7 @@ struct ChatMessageView: View {
             }
             
         }
+        .accessibilityIdentifier("chat.message.\(message.id)")
     }
 }
 

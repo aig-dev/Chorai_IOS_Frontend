@@ -1,5 +1,48 @@
 import Foundation
 import Combine
+import CoreFlow
+
+@MainActor
+protocol ChatConversationFetching {
+    func getConversations() -> AnyPublisher<ConversationsResponse, NetworkError>
+}
+
+@MainActor
+protocol ChatDetailFetching {
+    func getConversationDetail(
+        conversationId: String
+    ) -> AnyPublisher<ChatDetailResponse, NetworkError>
+    func getMessages(
+        conversationId: String,
+        page: Int,
+        perPage: Int
+    ) -> AnyPublisher<MessagesListResponse, NetworkError>
+    func sendMessage(
+        conversationId: String,
+        request: SendMessageRequest
+    ) -> AnyPublisher<SendMessageResponse, NetworkError>
+}
+
+extension NetworkManager: ChatConversationFetching, ChatDetailFetching {}
+
+@MainActor
+final class ChatHistoryVisibilityDependency: ObservableObject {
+    let visibility: ChatHistoryVisibility
+    @Published private(set) var revision = 0
+
+    init(visibility: ChatHistoryVisibility = ChatHistoryVisibility()) {
+        self.visibility = visibility
+    }
+
+    func clear(actorID: String, at date: Date) {
+        visibility.clear(actorID: actorID, at: date)
+        revision &+= 1
+    }
+
+    func isVisible(timestampString: String?, actorID: String) -> Bool {
+        visibility.isVisible(timestampString: timestampString, actorID: actorID)
+    }
+}
 
 // MARK: 对话伙伴模型
 struct ChatPartner: Codable {
@@ -220,18 +263,39 @@ struct APIChatMessage: Codable, Identifiable {
 }
 
 // MARK: 聊天详情管理器
+@MainActor
 class ChatDetailManager: ObservableObject {
     @Published var conversation: ChatDetailConversation?
     @Published var messages: [APIChatMessage] = []
     @Published var isLoading = false
     @Published var error: String?
     
-    private let networkManager = NetworkManager.shared
+    private let fetcher: any ChatDetailFetching
+    private let humanActorID: String
+    private var canonicalMessages: [APIChatMessage] = []
+    private weak var visibilityDependency: ChatHistoryVisibilityDependency?
+    private var visibilityCancellable: AnyCancellable?
     private var cancellables = Set<AnyCancellable>()
     
     // 从AuthManager获取当前用户ID
     private var currentUserId: String? {
-        return AuthManager.shared.currentUser?.id
+        humanActorID.isEmpty ? nil : humanActorID
+    }
+
+    init(
+        humanActorID: String = AuthManager.shared.currentUser?.id ?? "",
+        fetcher: any ChatDetailFetching = NetworkManager.shared
+    ) {
+        self.humanActorID = humanActorID
+        self.fetcher = fetcher
+    }
+
+    func bindVisibility(_ dependency: ChatHistoryVisibilityDependency) {
+        guard visibilityDependency !== dependency else { return }
+        visibilityDependency = dependency
+        visibilityCancellable = dependency.$revision
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.publishVisibleMessages() }
     }
     
     func loadConversationDetail(conversationId: String) {
@@ -239,7 +303,7 @@ class ChatDetailManager: ObservableObject {
         error = nil
         
         self.loadMessages(conversationId: conversationId)
-        networkManager.getConversationDetail(conversationId: conversationId)
+        fetcher.getConversationDetail(conversationId: conversationId)
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { [weak self] completion in
@@ -266,7 +330,11 @@ class ChatDetailManager: ObservableObject {
         isLoading = true
         error = nil
         
-        networkManager.getMessages(conversationId: conversationId)
+        fetcher.getMessages(
+            conversationId: conversationId,
+            page: 1,
+            perPage: 20
+        )
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { [weak self] completion in
@@ -277,7 +345,8 @@ class ChatDetailManager: ObservableObject {
                     }
                 },
                 receiveValue: { [weak self] response in
-                    self?.messages = response.messages
+                    self?.canonicalMessages = response.messages
+                    self?.publishVisibleMessages()
                     print("获取成功")
                 }
             )
@@ -289,11 +358,12 @@ class ChatDetailManager: ObservableObject {
             print("无法获取当前用户ID")
             return
         }
-        messages = messages.map { message in
+        canonicalMessages = canonicalMessages.map { message in
             var updatedMessage = message
             updatedMessage.isFromCurrentUser = (message.senderId == userId)
             return updatedMessage
         }
+        publishVisibleMessages()
     }
     
     func sendMessage(conversationId: String, content: String, attachedNotes: [NoteCard]) {
@@ -302,7 +372,7 @@ class ChatDetailManager: ObservableObject {
         
         let request = SendMessageRequest(content: content, attachedCardId: attachedCardId)
         
-        networkManager.sendMessage(conversationId: conversationId, request: request)
+        fetcher.sendMessage(conversationId: conversationId, request: request)
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { [weak self] completion in
@@ -316,7 +386,8 @@ class ChatDetailManager: ObservableObject {
                     var message = response.message
                     message.referencedAssetId = message.referencedAssetId ?? attachedCardId
                     message.attachedCards = attachedNotes
-                    self?.messages.append(message)
+                    self?.canonicalMessages.append(message)
+                    self?.publishVisibleMessages()
                     print("发送消息成功: id=\(response.message.id)")
                 }
             )
@@ -336,11 +407,25 @@ class ChatDetailManager: ObservableObject {
             let isFromMe = apiMessage.senderId == userId
             print("消息: id=\(apiMessage.id), senderId: \(apiMessage.senderId), isFromMe: \(isFromMe)")
             return ChatMessage(
+                id: apiMessage.id,
                 content: apiMessage.content,
                 isFromMe: isFromMe,
                 timestamp: formatMessageTime(apiMessage.createdAt),
                 avatar: "avatar",
                 attachedNotes: apiMessage.attachedCards.isEmpty ? nil : apiMessage.attachedCards
+            )
+        }
+    }
+
+    private func publishVisibleMessages() {
+        guard let visibilityDependency else {
+            messages = canonicalMessages
+            return
+        }
+        messages = canonicalMessages.filter {
+            visibilityDependency.isVisible(
+                timestampString: $0.createdAt,
+                actorID: humanActorID
             )
         }
     }
@@ -379,19 +464,40 @@ class ChatDetailManager: ObservableObject {
 }
 
 // MARK: 对话列表管理器
+@MainActor
 class ChatManager: ObservableObject {
     @Published var conversations: [Conversation] = []
     @Published var isLoading = false
     @Published var error: String?
     
-    private let networkManager = NetworkManager.shared
+    private let fetcher: any ChatConversationFetching
+    private let humanActorID: String
+    private var canonicalConversations: [Conversation] = []
+    private weak var visibilityDependency: ChatHistoryVisibilityDependency?
+    private var visibilityCancellable: AnyCancellable?
     private var cancellables = Set<AnyCancellable>()
+
+    init(
+        humanActorID: String = AuthManager.shared.currentUser?.id ?? "",
+        fetcher: any ChatConversationFetching = NetworkManager.shared
+    ) {
+        self.humanActorID = humanActorID
+        self.fetcher = fetcher
+    }
+
+    func bindVisibility(_ dependency: ChatHistoryVisibilityDependency) {
+        guard visibilityDependency !== dependency else { return }
+        visibilityDependency = dependency
+        visibilityCancellable = dependency.$revision
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.publishVisibleConversations() }
+    }
     
     func loadConversations() {
         isLoading = true
         error = nil
         
-        networkManager.getConversations()
+        fetcher.getConversations()
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { [weak self] completion in
@@ -402,7 +508,8 @@ class ChatManager: ObservableObject {
                     }
                 },
                 receiveValue: { [weak self] response in
-                    self?.conversations = response.conversations
+                    self?.canonicalConversations = response.conversations
+                    self?.publishVisibleConversations()
                     print("获取对话列表成功: \(response.conversations.count) 个对话")
                 }
             )
@@ -411,6 +518,19 @@ class ChatManager: ObservableObject {
     
     func refreshConversations() {
         loadConversations()
+    }
+
+    private func publishVisibleConversations() {
+        guard let visibilityDependency else {
+            conversations = canonicalConversations
+            return
+        }
+        conversations = canonicalConversations.filter {
+            visibilityDependency.isVisible(
+                timestampString: $0.lastMessage?.createdAt ?? $0.createdAt,
+                actorID: humanActorID
+            )
+        }
     }
 }
 

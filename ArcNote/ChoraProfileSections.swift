@@ -3,9 +3,11 @@ import SwiftUI
 struct ChoraSoulSourcesSection: View {
     @ObservedObject var noteImportStore: NoteImportStore
     @ObservedObject var notionStore: NotionSourceStore
+    let notionOAuthCoordinator: any NotionOAuthCoordinating
 
     @State private var localNotesExpanded = false
     @State private var notionExpanded = false
+    @State private var lastAuthorizationResult: NotionAuthorizationResult?
 
     var body: some View {
         ChoraSectionSurface(
@@ -59,6 +61,24 @@ struct ChoraSoulSourcesSection: View {
                         .padding(.top, 14)
                         .transition(.opacity.combined(with: .move(edge: .top)))
                 }
+            }
+        }
+        .onChange(of: notionStore.authorizationRequest) { request in
+            guard let request else { return }
+            notionOAuthCoordinator.authorize(request: request) { id, result in
+                lastAuthorizationResult = result
+                notionStore.authorizationCompleted(id: id, result: result)
+            }
+        }
+        .overlay(alignment: .topLeading) {
+            if let lastAuthorizationResult {
+                Text(authorizationResultText(lastAuthorizationResult))
+                    .font(.system(size: 1))
+                    .foregroundColor(.clear)
+                    .frame(width: 1, height: 1)
+                    .accessibilityIdentifier(
+                        "chora.sources.notion.oauth.\(authorizationResultText(lastAuthorizationResult))"
+                    )
             }
         }
     }
@@ -144,14 +164,48 @@ struct ChoraSoulSourcesSection: View {
         status == .queued || status == .running || status == .done
             || status == .failed || status == .cancelled
     }
+
+    private func authorizationResultText(
+        _ result: NotionAuthorizationResult
+    ) -> String {
+        switch result {
+        case .success: "success"
+        case .cancelled: "cancelled"
+        case .failed: "failed"
+        }
+    }
 }
 
 private struct LocalNotesExpandedContent: View {
     @ObservedObject var store: NoteImportStore
     @State private var showsCancelConfirmation = false
+    @State private var showsDocumentPicker = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
+            SettingsOutlineButton(title: "Choose Files") {
+                showsDocumentPicker = true
+            }
+            .disabled(store.phase == .submitting || store.phase == .reconciling)
+            .accessibilityIdentifier("chora.sources.localNotes.chooseFiles")
+
+            ForEach(store.selectedFiles, id: \.id) { file in
+                HStack {
+                    Text(file.filename)
+                        .font(.subheadline)
+                        .foregroundColor(.white)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 8)
+                    Text(file.byteCount == 0 ? "Empty" : formatText(file.format))
+                        .font(.caption)
+                        .foregroundColor(.white.opacity(0.58))
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier(
+                    "chora.sources.localNotes.selection.\(file.id)"
+                )
+            }
+
             if let detail = store.detail {
                 VStack(alignment: .leading, spacing: 8) {
                     countRow("Imported", value: detail.importedCount)
@@ -196,6 +250,16 @@ private struct LocalNotesExpandedContent: View {
             } else if store.canRetrySubmission {
                 SettingsOutlineButton(title: "Retry") { store.retry() }
                     .accessibilityIdentifier("chora.sources.localNotes.retry")
+            } else if store.phase == .failed(
+                .contract(code: "file_metadata_unavailable")
+            ) {
+                Text("Choose the file again to retry.")
+                    .font(.footnote)
+                    .foregroundColor(.white.opacity(0.65))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier(
+                        "chora.sources.localNotes.reselect"
+                    )
             } else if store.canReload, let actorID = store.actorID {
                 SettingsOutlineButton(title: "Retry Loading") {
                     Task { await store.load(actorID: actorID) }
@@ -228,6 +292,12 @@ private struct LocalNotesExpandedContent: View {
         } message: {
             Text("Files already processed will remain in Chorai.")
         }
+        .sheet(isPresented: $showsDocumentPicker) {
+            NoteImportDocumentPicker { files in
+                store.select(files)
+                showsDocumentPicker = false
+            }
+        }
     }
 
     private var localErrorText: String? {
@@ -237,6 +307,8 @@ private struct LocalNotesExpandedContent: View {
         switch store.phase {
         case .ambiguous:
             return "The import outcome is unclear. Retry to reconcile it."
+        case .failed(.contract(code: "file_metadata_unavailable")):
+            return "Couldn’t read file details. Choose the file again."
         case .failed:
             return "Local Notes couldn’t be refreshed. Try again."
         case .invalidSelection(.noFiles):
@@ -290,6 +362,14 @@ private struct LocalNotesExpandedContent: View {
         case .skipped: "Skipped"
         case .failed: "Failed"
         default: "Unknown"
+        }
+    }
+
+    private func formatText(_ format: NoteImportFormat) -> String {
+        switch format {
+        case .markdown: "Markdown"
+        case .html: "HTML"
+        default: "Unsupported"
         }
     }
 }
