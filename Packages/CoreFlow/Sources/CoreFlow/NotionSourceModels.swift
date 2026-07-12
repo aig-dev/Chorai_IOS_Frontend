@@ -62,19 +62,86 @@ public struct NotionConnectionState: RawRepresentable, Codable, Hashable, Sendab
     }
 }
 
+public enum KnownNotionPageSyncState: String, Codable, Sendable {
+    case pending
+    case synced
+    case stale
+    case error
+}
+
+public struct NotionPageSyncState:
+    RawRepresentable,
+    Codable,
+    Hashable,
+    Sendable
+{
+    public let rawValue: String
+
+    public init(rawValue: String) {
+        self.rawValue = rawValue
+    }
+
+    public var knownValue: KnownNotionPageSyncState? {
+        KnownNotionPageSyncState(rawValue: rawValue)
+    }
+
+    public static let pending = Self(rawValue: "pending")
+    public static let synced = Self(rawValue: "synced")
+    public static let stale = Self(rawValue: "stale")
+    public static let error = Self(rawValue: "error")
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        rawValue = try container.decode(String.self)
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
+    }
+}
+
+public struct NotionPageSyncStatus: Codable, Equatable, Sendable {
+    public let pageID: String
+    public let assetID: String?
+    public let status: NotionPageSyncState
+    public let lastSyncedAt: String?
+    public let errorMessage: String?
+    public let retryCount: UInt8
+
+    public init(
+        pageID: String,
+        assetID: String?,
+        status: NotionPageSyncState,
+        lastSyncedAt: String?,
+        errorMessage: String?,
+        retryCount: UInt8
+    ) {
+        self.pageID = pageID
+        self.assetID = assetID
+        self.status = status
+        self.lastSyncedAt = lastSyncedAt
+        self.errorMessage = errorMessage
+        self.retryCount = retryCount
+    }
+}
+
 public struct NotionConnectionStatus: Codable, Equatable, Sendable {
     public let state: NotionConnectionState
     public let workspaceID: String?
     public let workspaceName: String?
+    public let pageStatuses: [NotionPageSyncStatus]
 
     public init(
         state: NotionConnectionState,
         workspaceID: String? = nil,
-        workspaceName: String? = nil
+        workspaceName: String? = nil,
+        pageStatuses: [NotionPageSyncStatus] = []
     ) {
         self.state = state
         self.workspaceID = workspaceID
         self.workspaceName = workspaceName
+        self.pageStatuses = pageStatuses
     }
 }
 

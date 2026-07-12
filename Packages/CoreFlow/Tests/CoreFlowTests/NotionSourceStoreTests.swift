@@ -4,11 +4,20 @@ import XCTest
 
 @MainActor
 final class NotionSourceStoreTests: XCTestCase {
-    func testLoadPublishesCanonicalDisconnectedStatus() async {
+    func testLoadPublishesLosslessPageSyncStatus() async {
+        let pageStatus = NotionPageSyncStatus(
+            pageID: "page_future",
+            assetID: nil,
+            status: NotionPageSyncState(rawValue: "provider_future_state"),
+            lastSyncedAt: "2026-07-12T01:02:03.456Z",
+            errorMessage: nil,
+            retryCount: 2
+        )
         let status = NotionConnectionStatus(
-            state: .disconnected,
-            workspaceID: nil,
-            workspaceName: nil
+            state: .connected,
+            workspaceID: "workspace_1",
+            workspaceName: nil,
+            pageStatuses: [pageStatus]
         )
         let service = NotionSourceServiceSpy(statuses: [.success(status)])
         let store = NotionSourceStore(service: service)
@@ -18,6 +27,8 @@ final class NotionSourceStoreTests: XCTestCase {
 
         XCTAssertEqual(store.actorID, "human_a")
         XCTAssertEqual(store.status, status)
+        XCTAssertEqual(store.status?.pageStatuses, [pageStatus])
+        XCTAssertNil(pageStatus.status.knownValue)
         XCTAssertNil(store.inlineError)
     }
 

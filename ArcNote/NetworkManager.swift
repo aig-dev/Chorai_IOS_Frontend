@@ -2512,9 +2512,7 @@ extension NetworkManager {
                 headers: headers
             )
             .validate()
-            request.responseData { _ in termination.signal() }
-
-            return request.publishData()
+            let upstream = request.publishData()
                 .tryMap { response -> MultipartPayload in
                     switch response.result {
                     case .success(let data):
@@ -2536,10 +2534,35 @@ extension NetworkManager {
                     }
                 }
                 .mapError { ($0 as? NetworkError) ?? .unknown }
-                .handleEvents(receiveCancel: { request.cancel() })
                 .eraseToAnyPublisher()
+            return MultipartUploadPublisherBuilder.publisher(
+                handle: AlamofireMultipartUploadHandle(request: request),
+                upstream: upstream,
+                termination: termination
+            )
         }
         .eraseToAnyPublisher()
+    }
+}
+
+private final class AlamofireMultipartUploadHandle:
+    MultipartUploadHandling,
+    @unchecked Sendable
+{
+    private let request: UploadRequest
+
+    init(request: UploadRequest) {
+        self.request = request
+    }
+
+    func cancel() {
+        request.cancel()
+    }
+
+    func observeTermination(
+        _ callback: @escaping @Sendable () -> Void
+    ) {
+        request.responseData { _ in callback() }
     }
 }
 

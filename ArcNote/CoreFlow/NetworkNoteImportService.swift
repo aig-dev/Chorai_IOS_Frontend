@@ -52,6 +52,28 @@ final class NoteImportUploadTermination: @unchecked Sendable {
     }
 }
 
+protocol MultipartUploadHandling: Sendable {
+    func cancel()
+    func observeTermination(_ callback: @escaping @Sendable () -> Void)
+}
+
+enum MultipartUploadPublisherBuilder {
+    static func publisher<Output>(
+        handle: any MultipartUploadHandling,
+        upstream: AnyPublisher<Output, NetworkError>,
+        termination: NoteImportUploadTermination
+    ) -> AnyPublisher<Output, NetworkError> {
+        handle.observeTermination {
+            termination.signal()
+        }
+        return upstream
+            .handleEvents(receiveCancel: {
+                handle.cancel()
+            })
+            .eraseToAnyPublisher()
+    }
+}
+
 protocol NoteImportUploading: Sendable {
     func enqueue(
         parts: [NoteImportUploadPart],
@@ -228,6 +250,8 @@ struct NetworkNoteImportService: CoreNoteImportServing, @unchecked Sendable {
                     .undecodableSuccess(statusCode: statusCode)
                 )
             }
+        } catch let error as CancellationError {
+            throw error
         } catch let error as NoteImportServiceError {
             throw error
         } catch {

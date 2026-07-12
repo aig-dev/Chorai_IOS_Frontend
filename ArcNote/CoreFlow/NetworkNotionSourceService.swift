@@ -7,15 +7,6 @@ struct NotionAuthorizationValues: Equatable {
     let state: String
 }
 
-struct NotionPageSyncProjection: Equatable {
-    let pageID: String
-    let assetID: String?
-    let status: String
-    let lastSyncedAt: String?
-    let errorMessage: String?
-    let retryCount: UInt8
-}
-
 struct NetworkNotionSourceService: CoreNotionSourceServing, @unchecked Sendable {
     private let network: NetworkManager
 
@@ -107,7 +98,8 @@ struct NetworkNotionSourceService: CoreNotionSourceServing, @unchecked Sendable 
         NotionConnectionStatus(
             state: response.connected ? .connected : .disconnected,
             workspaceID: response.workspaceID,
-            workspaceName: nil
+            workspaceName: nil,
+            pageStatuses: mapPageStatuses(response)
         )
     }
 
@@ -122,12 +114,12 @@ struct NetworkNotionSourceService: CoreNotionSourceServing, @unchecked Sendable 
 
     static func mapPageStatuses(
         _ response: NotionStatusResponse
-    ) -> [NotionPageSyncProjection] {
+    ) -> [NotionPageSyncStatus] {
         response.pages.map {
-            NotionPageSyncProjection(
+            NotionPageSyncStatus(
                 pageID: $0.notionPageID,
                 assetID: $0.assetID,
-                status: $0.status,
+                status: NotionPageSyncState(rawValue: $0.status),
                 lastSyncedAt: $0.lastSyncedAt,
                 errorMessage: $0.errorMessage,
                 retryCount: $0.retryCount

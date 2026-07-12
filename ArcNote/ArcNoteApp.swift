@@ -345,7 +345,10 @@ private final class ChoraScopeContractUploader:
 {
     enum Behavior {
         case unexpected
-        case cancellable(started: NoteImportUploadTermination)
+        case cancellable(
+            started: NoteImportUploadTermination,
+            handle: ChoraContractUploadHandle
+        )
     }
 
     private let behavior: Behavior
@@ -382,20 +385,59 @@ private final class ChoraScopeContractUploader:
                     error: .unknown
                 )
                 .eraseToAnyPublisher()
-            case .cancellable(let started):
+            case .cancellable(let started, let handle):
                 started.signal()
-                return Empty<NoteImportUploadTransportResult, NetworkError>(
+                let upstream = Empty<
+                    NoteImportUploadTransportResult,
+                    NetworkError
+                >(
                     completeImmediately: false
                 )
-                .handleEvents(receiveCancel: {
-                    recorder.append("cancel")
-                    recorder.append("terminated")
-                    termination.signal()
-                })
                 .eraseToAnyPublisher()
+                return MultipartUploadPublisherBuilder.publisher(
+                    handle: handle,
+                    upstream: upstream,
+                    termination: termination
+                )
             }
         }
         .eraseToAnyPublisher()
+    }
+}
+
+private final class ChoraContractUploadHandle:
+    MultipartUploadHandling,
+    @unchecked Sendable
+{
+    let cancellationObserved = NoteImportUploadTermination()
+
+    private let recorder: ChoraScopeContractRecorder
+    private let lock = NSLock()
+    private var terminalCallback: (@Sendable () -> Void)?
+
+    init(recorder: ChoraScopeContractRecorder) {
+        self.recorder = recorder
+    }
+
+    func cancel() {
+        recorder.append("cancel")
+        cancellationObserved.signal()
+    }
+
+    func observeTermination(
+        _ callback: @escaping @Sendable () -> Void
+    ) {
+        lock.lock()
+        terminalCallback = callback
+        lock.unlock()
+    }
+
+    func reportTerminalResponse() {
+        recorder.append("terminal")
+        lock.lock()
+        let callback = terminalCallback
+        lock.unlock()
+        callback?()
     }
 }
 
@@ -471,9 +513,6 @@ private struct ChoraProfileContractFixtureView: View {
             let notionStatus = NetworkNotionSourceService.mapStatus(
                 notionStatusResponse
             )
-            let notionPageStatuses = NetworkNotionSourceService.mapPageStatuses(
-                notionStatusResponse
-            )
             let notionConnectResponse = try decoder.decode(
                 NotionConnectResponse.self,
                 from: Data(Self.notionConnectJSON.utf8)
@@ -512,7 +551,7 @@ private struct ChoraProfileContractFixtureView: View {
             guard let notionPage = notionPages.first else {
                 throw FixtureError.missingNotionPage
             }
-            guard let notionPageStatus = notionPageStatuses.first else {
+            guard let notionPageStatus = notionStatus.pageStatuses.first else {
                 throw FixtureError.missingNotionPageStatus
             }
 
@@ -569,7 +608,15 @@ private struct ChoraProfileContractFixtureView: View {
                     notionPageStatus.assetID
                 ].map { $0 ?? "nil" }.joined(separator: ","),
                 "chora.contract.notion.unknown-job-status": notionJob.status.rawValue,
-                "chora.contract.notion.unknown-page-status": notionPageStatus.status,
+                "chora.contract.notion.unknown-page-status": notionPageStatus.status.rawValue,
+                "chora.contract.notion.page-sync-fields": [
+                    notionPageStatus.pageID,
+                    notionPageStatus.assetID ?? "nil",
+                    notionPageStatus.status.rawValue,
+                    notionPageStatus.lastSyncedAt ?? "nil",
+                    notionPageStatus.errorMessage ?? "nil",
+                    String(notionPageStatus.retryCount)
+                ].joined(separator: ","),
                 "chora.contract.notion.connect-auth-url": notionAuthorization.url.absoluteString,
                 "chora.contract.notion.connect-state": notionAuthorization.state,
                 "chora.contract.notion.disconnect": "disconnected"
@@ -756,41 +803,85 @@ private struct ChoraProfileContractFixtureView: View {
             recorder: cancelRecorder
         )
         let uploadStarted = NoteImportUploadTermination()
+        let uploadHandle = ChoraContractUploadHandle(
+            recorder: cancelRecorder
+        )
         let cancelUploader = ChoraScopeContractUploader(
-            behavior: .cancellable(started: uploadStarted),
+            behavior: .cancellable(
+                started: uploadStarted,
+                handle: uploadHandle
+            ),
             recorder: cancelRecorder
         )
         let cancelService = NetworkNoteImportService(
             resourceAccessor: cancelAccessor,
             uploader: cancelUploader
         )
-        let task = Task {
-            _ = try? await cancelService.enqueue(
-                files: [
-                    fixtureFile(id: "first", url: firstURL),
-                    fixtureFile(id: "duplicate", url: firstURL)
-                ],
-                clientRequestID: "scope-cancel"
-            )
+        let task = Task { () -> String in
+            defer { cancelRecorder.append("completion") }
+            do {
+                _ = try await cancelService.enqueue(
+                    files: [
+                        fixtureFile(id: "first", url: firstURL),
+                        fixtureFile(id: "duplicate", url: firstURL)
+                    ],
+                    clientRequestID: "scope-cancel"
+                )
+                return "success"
+            } catch is CancellationError {
+                return "CancellationError"
+            } catch {
+                return String(describing: type(of: error))
+            }
         }
         await uploadStarted.wait()
         task.cancel()
-        await task.value
+        await uploadHandle.cancellationObserved.wait()
+        let cancelImmediate = cancelRecorder.values.contains("cancel")
+            && !cancelRecorder.values.contains("terminal")
+        let pendingBeforeTerminal = !cancelRecorder.values.contains("terminal")
+            && !cancelRecorder.values.contains("release:a")
+            && !cancelRecorder.values.contains("completion")
+        cancelRecorder.append("pending")
+        uploadHandle.reportTerminalResponse()
+        let cancellationResult = await task.value
         guard cancelRecorder.values == [
-            "acquire:a", "upload", "cancel", "terminated", "release:a"
+            "acquire:a", "upload", "cancel", "pending", "terminal",
+            "release:a", "completion"
         ] else {
             throw FixtureError.scopeContractMismatch
+        }
+
+        let scopeCancelOrder = cancelRecorder.values.compactMap {
+            value -> String? in
+            switch value {
+            case "pending", "completion": nil
+            case "terminal": "terminated"
+            default: value
+            }
+        }
+        let transportOrder = cancelRecorder.values.filter {
+            !$0.hasPrefix("acquire:") && $0 != "upload"
         }
 
         return [
             "chora.contract.scope.atomic-failure": atomicRecorder.values
                 .joined(separator: ","),
-            "chora.contract.scope.cancel-order": cancelRecorder.values
+            "chora.contract.scope.cancel-order": scopeCancelOrder
                 .joined(separator: ","),
+            "chora.contract.scope.cancel-result": cancellationResult,
             "chora.contract.scope.duplicate-count": [
                 "acquire:\(cancelAccessor.acquireCount)",
                 "release:\(cancelAccessor.releaseCount)"
-            ].joined(separator: ",")
+            ].joined(separator: ","),
+            "chora.contract.transport.cancel-immediate": String(
+                cancelImmediate
+            ),
+            "chora.contract.transport.pending-before-terminal": String(
+                pendingBeforeTerminal
+            ),
+            "chora.contract.transport.terminal-order": transportOrder
+                .joined(separator: ",")
         ]
     }
 

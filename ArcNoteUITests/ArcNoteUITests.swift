@@ -80,6 +80,7 @@ final class ArcNoteUITests: XCTestCase {
             "chora.contract.notion.nullable-fields": "nil,nil",
             "chora.contract.notion.unknown-job-status": "future_notion_state",
             "chora.contract.notion.unknown-page-status": "future_page_state",
+            "chora.contract.notion.page-sync-fields": "page_contract,nil,future_page_state,nil,nil,0",
             "chora.contract.notion.connect-auth-url": "https://api.notion.test/oauth?state=opaque_contract",
             "chora.contract.notion.connect-state": "state_contract",
             "chora.contract.notion.disconnect": "disconnected",
@@ -90,7 +91,11 @@ final class ArcNoteUITests: XCTestCase {
             "chora.contract.request.notion": "GET /api/v1/integrations/notion/connect client=ios|GET /api/v1/integrations/notion/status|GET /api/v1/integrations/notion/pages q|POST /api/v1/integrations/notion/import page_ids|GET /api/v1/integrations/notion/import/:job_id|DELETE /api/v1/integrations/notion/connect|presentsError:false",
             "chora.contract.scope.atomic-failure": "acquire:a,acquire:b,release:a,no-upload",
             "chora.contract.scope.cancel-order": "acquire:a,upload,cancel,terminated,release:a",
-            "chora.contract.scope.duplicate-count": "acquire:1,release:1"
+            "chora.contract.scope.cancel-result": "CancellationError",
+            "chora.contract.scope.duplicate-count": "acquire:1,release:1",
+            "chora.contract.transport.cancel-immediate": "true",
+            "chora.contract.transport.pending-before-terminal": "true",
+            "chora.contract.transport.terminal-order": "cancel,pending,terminal,release:a,completion"
         ]
 
         for (identifier, expectedValue) in expectedValues {
