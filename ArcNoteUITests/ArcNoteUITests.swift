@@ -104,6 +104,121 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertFalse(app.descendants(matching: .any)["chora.contract.error"].exists)
     }
 
+    func testSettingsShowsChoraProfileEntry() throws {
+        app.launchArguments.append("--ui-test-settings")
+        app.launch()
+
+        waitFor("screen.settings.loaded")
+        waitFor("settings.choraProfile")
+    }
+
+    func testChoraProfileLoadedFixtureRendersOrderedProductionSections() throws {
+        app.launchArguments.append("--ui-test-chora-profile")
+        app.launchEnvironment["CHORAI_CHORA_PROFILE_FIXTURE_MODE"] = "loaded"
+        app.launch()
+
+        waitFor("screen.choraProfile")
+        XCTAssertEqual(waitFor("chora.order.identity").label, "1")
+        waitFor("chora.identity.section")
+        waitFor("chora.identity.avatar")
+        waitFor("chora.identity.displayName")
+        waitFor("chora.identity.preferredAddress")
+        waitFor("chora.identity.save")
+
+        XCTAssertEqual(waitFor("chora.order.growth").label, "2")
+        waitFor("chora.growth.section")
+        XCTAssertEqual(waitFor("chora.growth.stage").label, "Co-Think")
+        for dimension in [
+            "curiosity", "insight", "creativity", "empathy", "judgment",
+            "resonance"
+        ] {
+            waitFor("chora.growth.\(dimension)")
+        }
+
+        app.swipeUp()
+        XCTAssertEqual(waitFor("chora.order.sources").label, "3")
+        waitFor("chora.sources.localNotes")
+        waitFor("chora.sources.notion")
+
+        app.swipeUp()
+        XCTAssertEqual(waitFor("chora.order.chat").label, "4")
+        waitFor("chora.chat.clear")
+        XCTAssertTrue(
+            app.staticTexts["Previous messages are hidden on this device."]
+                .exists
+        )
+    }
+
+    func testChoraProfileFixtureStatesStaySectionLocal() throws {
+        launchChoraProfileFixture(mode: "loading")
+        waitFor("chora.identity.loading")
+
+        launchChoraProfileFixture(mode: "growth-error")
+        waitFor("chora.growth.unavailable")
+        XCTAssertFalse(app.alerts.firstMatch.exists)
+
+        for (mode, identifier) in [
+            ("local-import-active", "chora.sources.localNotes.active"),
+            ("local-import-done", "chora.sources.localNotes.done"),
+            ("local-import-failure", "chora.sources.localNotes.failure"),
+            ("notion-disconnected", "chora.sources.notion.disconnected"),
+            ("notion-connected", "chora.sources.notion.connected"),
+            ("inline-errors", "chora.sources.localNotes.error")
+        ] {
+            launchChoraProfileFixture(mode: mode)
+            app.swipeUp()
+            app.swipeUp()
+            waitFor(identifier)
+            XCTAssertFalse(app.alerts.firstMatch.exists)
+        }
+    }
+
+    func testChoraProfileLoadedFixtureSupportsAccessibilityText() throws {
+        app.launchArguments += [
+            "--ui-test-chora-profile",
+            "-UIPreferredContentSizeCategoryName",
+            "UICTContentSizeCategoryAccessibilityXXXL"
+        ]
+        app.launchEnvironment["CHORAI_CHORA_PROFILE_FIXTURE_MODE"] = "loaded"
+        app.launch()
+
+        waitFor("chora.identity.section")
+        waitFor("chora.identity.displayName")
+        app.swipeUp()
+        waitFor("chora.growth.section")
+        app.swipeUp()
+        waitFor("chora.sources.localNotes")
+        waitFor("chora.sources.notion")
+        app.swipeUp()
+        waitFor("chora.chat.clear")
+    }
+
+    func testChoraProfilePartialSaveKeepsOnlyFailedDraft() throws {
+        launchChoraProfileFixture(mode: "partial-save")
+        replaceShortFixtureText("chora.identity.displayName", with: "Nova")
+        replaceShortFixtureText(
+            "chora.identity.preferredAddress",
+            with: "Captain"
+        )
+
+        tap("chora.identity.save")
+
+        waitFor("chora.identity.error.preferredAddress")
+        XCTAssertFalse(
+            app.descendants(matching: .any)[
+                "chora.identity.error.displayName"
+            ].exists
+        )
+        XCTAssertEqual(
+            waitFor("chora.identity.displayName").value as? String,
+            "Nova"
+        )
+        XCTAssertEqual(
+            waitFor("chora.identity.preferredAddress").value as? String,
+            "Captain"
+        )
+    }
+
     func testNotificationInboxUIContract() throws {
         app.launchArguments.append("--ui-test-notification-inbox")
         app.launchEnvironment["CHORAI_NOTIFICATION_FIXTURE_MODE"] = "loaded"
@@ -2785,6 +2900,26 @@ final class ArcNoteUITests: XCTestCase {
             file: file,
             line: line
         )
+    }
+
+    private func launchChoraProfileFixture(mode: String) {
+        if app.state != .notRunning {
+            app.terminate()
+        }
+        app = XCUIApplication()
+        app.launchArguments.append("--ui-test-chora-profile")
+        app.launchEnvironment["CHORAI_CHORA_PROFILE_FIXTURE_MODE"] = mode
+        app.launch()
+        waitFor("screen.choraProfile")
+    }
+
+    private func replaceShortFixtureText(_ identifier: String, with text: String) {
+        let field = waitFor(identifier)
+        field.tap()
+        for _ in 0..<32 {
+            app.typeKey(.delete, modifierFlags: [])
+        }
+        app.typeText(text)
     }
 
     @discardableResult

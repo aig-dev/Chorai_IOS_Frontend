@@ -86,6 +86,7 @@ struct SettingsView: View {
     @State private var navigateToAPIAndPlugins = false
     @State private var navigateToEditProfile = false
     @State private var navigateToUpgradePro = false
+    @State private var navigateToChoraProfile = false
     @ObservedObject private var userProfileManager = UserProfileManager.shared
     @ObservedObject private var authManager = AuthManager.shared
     @State private var cancellables = Set<AnyCancellable>()
@@ -206,6 +207,13 @@ struct SettingsView: View {
                             
                             Divider()
                                 .background(Color.white.opacity(0.2))
+
+                            SettingsRow(imageName: "bot", title: "Chora Profile", accessibilityIdentifier: "settings.choraProfile") {
+                                navigateToChoraProfile = true
+                            }
+
+                            Divider()
+                                .background(Color.white.opacity(0.2))
                             
                             SettingsRow(imageName: "account", title: "Account & Privacy", accessibilityIdentifier: "settings.account-privacy") {
                                 navigateToAccountDetails = true
@@ -318,6 +326,11 @@ struct SettingsView: View {
         }
         .navigationDestination(isPresented: $navigateToUpgradePro) {
             UpgradeProView()
+        }
+        .navigationDestination(isPresented: $navigateToChoraProfile) {
+            ChoraProfileView.production(
+                humanActorID: authManager.currentUser?.id ?? ""
+            )
         }
         .onAppear {
             userProfileManager.fetchCurrentUserProfile()

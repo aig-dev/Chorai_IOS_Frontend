@@ -23,6 +23,10 @@ struct ArcNoteApp: App {
         .contains("--ui-test-notification-contract")
     private let isChoraContractUITestRoute = ProcessInfo.processInfo.arguments
         .contains("--ui-test-chora-contract")
+    private let isChoraProfileUITestRoute = ProcessInfo.processInfo.arguments
+        .contains("--ui-test-chora-profile")
+    private let isSettingsUITestRoute = ProcessInfo.processInfo.arguments
+        .contains("--ui-test-settings")
     private let isNotificationInboxUITestRoute = ProcessInfo.processInfo.arguments
         .contains("--ui-test-notification-inbox")
     private let profileUITestActorID: String? = {
@@ -48,6 +52,14 @@ struct ArcNoteApp: App {
             #if DEBUG
             if isAPIMigrationSmoke {
                 Color.clear
+            } else if isChoraProfileUITestRoute {
+                NavigationStack {
+                    ChoraProfileFixtureScreen()
+                }
+            } else if isSettingsUITestRoute {
+                NavigationStack {
+                    SettingsView()
+                }
             } else if isChoraContractUITestRoute {
                 ChoraProfileContractFixtureView()
             } else if isNotificationContractUITestRoute {
@@ -80,6 +92,318 @@ struct ArcNoteApp: App {
 }
 
 #if DEBUG
+private enum ChoraProfileFixtureMode: String {
+    case loading
+    case loaded
+    case partialSave = "partial-save"
+    case growthError = "growth-error"
+    case localImportActive = "local-import-active"
+    case localImportDone = "local-import-done"
+    case localImportFailure = "local-import-failure"
+    case notionDisconnected = "notion-disconnected"
+    case notionConnected = "notion-connected"
+    case inlineErrors = "inline-errors"
+}
+
+@MainActor
+private struct ChoraProfileFixtureScreen: View {
+    private let mode: ChoraProfileFixtureMode
+
+    init() {
+        mode = ChoraProfileFixtureMode(
+            rawValue: ProcessInfo.processInfo.environment[
+                "CHORAI_CHORA_PROFILE_FIXTURE_MODE"
+            ] ?? "loaded"
+        ) ?? .loaded
+    }
+
+    var body: some View {
+        ChoraProfileView(
+            humanActorID: "act_human_fixture",
+            profileService: ChoraProfileFixtureService(mode: mode),
+            noteImportService: ChoraNoteImportFixtureService(mode: mode),
+            notionService: ChoraNotionFixtureService(mode: mode),
+            noteImportPersistence: ChoraNoteImportFixturePersistence(
+                requestID: mode.hasLocalImport ? "req_fixture" : nil
+            ),
+            noteImportSleeper: ChoraFixtureSleeper(),
+            notionSleeper: ChoraFixtureNotionSleeper()
+        )
+    }
+}
+
+private extension ChoraProfileFixtureMode {
+    var hasLocalImport: Bool {
+        self == .localImportActive
+            || self == .localImportDone
+            || self == .localImportFailure
+    }
+}
+
+private actor ChoraProfileFixtureService: CoreChoraProfileServing {
+    private let mode: ChoraProfileFixtureMode
+    private var displayName: String
+
+    init(mode: ChoraProfileFixtureMode) {
+        self.mode = mode
+        displayName = mode == .partialSave ? "" : "Chora"
+    }
+
+    func identity(humanActorID: String) async throws -> ChoraIdentity {
+        if mode == .loading {
+            try await Task.sleep(nanoseconds: 60_000_000_000)
+        }
+        return ChoraIdentity(
+            humanActorID: humanActorID,
+            agentActorID: "act_agent_fixture",
+            displayName: displayName,
+            avatarURL: nil,
+            preferredAddress: mode == .partialSave ? nil : "Avery"
+        )
+    }
+
+    func growth(agentActorID: String) async throws -> ChoraGrowthSnapshot? {
+        if mode == .growthError {
+            throw ChoraProfileError.requestFailed
+        }
+        return ChoraGrowthSnapshot(
+            version: "fixture",
+            committedStage: ChoraGrowthStage(rawValue: 4),
+            dimensions: zip(
+                ChoraGrowthDimension.canonicalRenderOrder,
+                [2.0, 4.0, 6.0, 8.0, 10.0, 12.0]
+            ).map {
+                ChoraGrowthDimensionValue(dimension: $0.0, value: $0.1)
+            },
+            computedAt: Date(timeIntervalSince1970: 1_786_320_000)
+        )
+    }
+
+    func updateDisplayName(
+        agentActorID: String,
+        displayName: String
+    ) async throws {
+        self.displayName = displayName
+    }
+
+    func updatePreferredAddress(
+        humanActorID: String,
+        value: String?
+    ) async throws {
+        if mode == .partialSave {
+            throw ChoraProfileError.requestFailed
+        }
+    }
+
+    func updateAvatar(
+        agentActorID: String,
+        avatar: ChoraAvatarDraft
+    ) async throws {}
+}
+
+private actor ChoraNoteImportFixtureService: CoreNoteImportServing {
+    private let mode: ChoraProfileFixtureMode
+
+    init(mode: ChoraProfileFixtureMode) {
+        self.mode = mode
+    }
+
+    func enqueue(
+        files: [NoteImportFile],
+        clientRequestID: String
+    ) async throws -> NoteImportReceipt {
+        NoteImportReceipt(
+            jobID: "job_fixture",
+            clientRequestID: clientRequestID,
+            status: .queued,
+            totalFiles: files.count,
+            acceptedFiles: files.count,
+            rejectedFiles: 0
+        )
+    }
+
+    func jobs(limit: Int) async throws -> [NoteImportJobSummary] {
+        if mode == .inlineErrors {
+            throw NoteImportServiceError.requestFailed(code: "fixture")
+        }
+        guard mode.hasLocalImport else { return [] }
+        let detail = makeDetail()
+        return [
+            NoteImportJobSummary(
+                jobID: detail.jobID,
+                clientRequestID: detail.clientRequestID,
+                status: detail.status,
+                soulStatus: detail.soulStatus,
+                soulStatusReason: detail.soulStatusReason,
+                totalFiles: detail.totalFiles,
+                importedCount: detail.importedCount,
+                updatedCount: detail.updatedCount,
+                skippedCount: detail.skippedCount,
+                failedCount: detail.failedCount,
+                createdAt: detail.createdAt,
+                completedAt: detail.completedAt,
+                cancelRequestedAt: detail.cancelRequestedAt,
+                cancelledAt: detail.cancelledAt
+            )
+        ]
+    }
+
+    func job(id: String) async throws -> NoteImportJobDetail {
+        makeDetail()
+    }
+
+    func cancel(id: String) async throws {}
+
+    private func makeDetail() -> NoteImportJobDetail {
+        let status: NoteImportJobStatus
+        let soul: NoteImportSoulStatus
+        let imported: Int
+        let failed: Int
+        let errorMessage: String?
+        switch mode {
+        case .localImportActive:
+            status = .running
+            soul = .notRequested
+            imported = 1
+            failed = 0
+            errorMessage = nil
+        case .localImportFailure:
+            status = .failed
+            soul = .failed
+            imported = 1
+            failed = 1
+            errorMessage = "One file couldn’t be imported."
+        default:
+            status = .done
+            soul = .done
+            imported = 2
+            failed = 0
+            errorMessage = nil
+        }
+        let date = Date(timeIntervalSince1970: 1_786_320_000)
+        return NoteImportJobDetail(
+            jobID: "job_fixture",
+            clientRequestID: "req_fixture",
+            status: status,
+            soulStatus: soul,
+            soulStatusReason: nil,
+            totalFiles: 2,
+            importedCount: imported,
+            updatedCount: 0,
+            skippedCount: 0,
+            failedCount: failed,
+            errorMessage: errorMessage,
+            createdAt: date,
+            completedAt: status.isTerminal ? date : nil,
+            cancelRequestedAt: nil,
+            cancelledAt: nil,
+            items: [
+                NoteImportJobItem(
+                    sourceKey: "source_fixture",
+                    originalFilename: "long-accessible-fixture-name.md",
+                    label: "Fixture",
+                    originalFormat: .markdown,
+                    assetID: imported > 0 ? "ast_fixture" : nil,
+                    assetVersionID: nil,
+                    status: failed > 0 ? .failed : .imported,
+                    errorMessage: errorMessage,
+                    processedAt: date
+                )
+            ]
+        )
+    }
+}
+
+private final class ChoraNoteImportFixturePersistence:
+    NoteImportRequestIDPersisting,
+    @unchecked Sendable
+{
+    private let lock = NSLock()
+    private var requestID: String?
+
+    init(requestID: String?) {
+        self.requestID = requestID
+    }
+
+    func load(actorID: String) -> String? {
+        lock.lock()
+        defer { lock.unlock() }
+        return requestID
+    }
+
+    func save(_ requestID: String, actorID: String) {
+        lock.lock()
+        self.requestID = requestID
+        lock.unlock()
+    }
+
+    func clear(actorID: String) {
+        lock.lock()
+        requestID = nil
+        lock.unlock()
+    }
+}
+
+private struct ChoraFixtureSleeper: NoteImportSleeping {
+    func sleep(nanoseconds: UInt64) async throws {
+        try await Task.sleep(nanoseconds: 60_000_000_000)
+    }
+}
+
+private actor ChoraNotionFixtureService: CoreNotionSourceServing {
+    private let mode: ChoraProfileFixtureMode
+
+    init(mode: ChoraProfileFixtureMode) {
+        self.mode = mode
+    }
+
+    func status() async throws -> NotionConnectionStatus {
+        if mode == .inlineErrors {
+            throw NotionSourceError.requestFailed
+        }
+        if mode == .notionConnected {
+            return NotionConnectionStatus(
+                state: .connected,
+                workspaceID: "workspace_fixture",
+                workspaceName: "Chorai Workspace"
+            )
+        }
+        return NotionConnectionStatus(state: .disconnected)
+    }
+
+    func authorizationURL(client: NotionClient) async throws -> URL {
+        URL(string: "https://notion.example.test/connect")!
+    }
+
+    func pages(query: String?) async throws -> [NotionPage] {
+        [NotionPage(id: "page_fixture", title: "A long Notion page title")]
+    }
+
+    func enqueue(pageIDs: [String]) async throws -> NotionImportReceipt {
+        NotionImportReceipt(
+            jobID: "notion_job_fixture",
+            acceptedPageIDs: pageIDs
+        )
+    }
+
+    func job(id: String) async throws -> NotionImportJob {
+        NotionImportJob(
+            id: id,
+            status: .done,
+            imported: 1,
+            updated: 0,
+            skipped: 0,
+            failures: []
+        )
+    }
+
+    func disconnect() async throws {}
+}
+
+private struct ChoraFixtureNotionSleeper: NotionSourceSleeping {
+    func sleep(for interval: TimeInterval) async throws {}
+}
+
 private actor NotificationInboxFixtureService: CoreNotificationServing {
     private enum Mode: String {
         case loaded
