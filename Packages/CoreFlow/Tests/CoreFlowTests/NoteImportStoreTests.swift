@@ -660,6 +660,66 @@ final class NoteImportStoreTests: XCTestCase {
         XCTAssertTrue(releasedWhileSuspended)
     }
 
+    func testTeardownCancelsSuspendedCancelWithoutRetainingStore() async {
+        let sleeper = NoteImportSleeperSpy()
+        let service = NoteImportServiceSpy(
+            enqueueResults: [.success(.receipt())],
+            details: [.fixture(status: .running)],
+            cancelSuspended: true
+        )
+        var store: NoteImportStore? = makeStore(
+            service: service,
+            sleeper: sleeper
+        )
+        weak let weakStore = store
+        await store?.load(actorID: "act_1")
+        store?.select([file("one.md", format: .markdown)])
+        store?.start()
+        await waitUntil { await sleeper.callCount() == 1 }
+        store?.cancel()
+        await waitUntil { await service.didStartCancel() }
+
+        store = nil
+        await settle()
+        let releasedWhileSuspended = weakStore == nil
+        if !releasedWhileSuspended { weakStore?.stop() }
+        await waitUntil { await service.cancelCancellations() == 1 }
+        await sleeper.resumeNext()
+
+        XCTAssertTrue(releasedWhileSuspended)
+        let cancellations = await service.cancelCancellations()
+        XCTAssertEqual(cancellations, 1)
+    }
+
+    func testTeardownCancelsSuspendedReconciliationWithoutRetainingStore() async {
+        let persistence = NoteImportPersistenceSpy(
+            values: ["act_1": "req_persisted"]
+        )
+        let service = NoteImportServiceSpy(
+            jobLists: [[], []],
+            jobsSuspendedCalls: [2]
+        )
+        var store: NoteImportStore? = makeStore(
+            service: service,
+            persistence: persistence
+        )
+        weak let weakStore = store
+        await store?.load(actorID: "act_1")
+        store?.select([file("one.md", format: .markdown)])
+        store?.start()
+        await waitUntil { await service.suspendedJobsStarts() == 1 }
+
+        store = nil
+        await settle()
+        let releasedWhileSuspended = weakStore == nil
+        if !releasedWhileSuspended { weakStore?.stop() }
+        await waitUntil { await service.jobsCancellations() == 1 }
+
+        XCTAssertTrue(releasedWhileSuspended)
+        let cancellations = await service.jobsCancellations()
+        XCTAssertEqual(cancellations, 1)
+    }
+
     func testTerminalCountsAndPerFileAssetIDsRemainLossless() async {
         let terminal = NoteImportJobDetail.fixture(
             status: .done,
@@ -783,8 +843,11 @@ private actor NoteImportServiceSpy: CoreNoteImportServing {
     private let jobCancellationCalls: Set<Int>
     private let cancelThrowsCancellation: Bool
     private let cancelSuspended: Bool
+    private let jobsSuspendedCalls: Set<Int>
     private var cancelStarted = false
     private var cancelCancellationCount = 0
+    private var suspendedJobsStartCount = 0
+    private var jobsCancellationCount = 0
 
     init(
         enqueueResults: [Result<NoteImportReceipt, NoteImportServiceError>] = [],
@@ -795,6 +858,7 @@ private actor NoteImportServiceSpy: CoreNoteImportServing {
         jobCancellationCalls: Set<Int> = [],
         cancelThrowsCancellation: Bool = false,
         cancelSuspended: Bool = false,
+        jobsSuspendedCalls: Set<Int> = [],
         enqueueSuspended: Bool = false
     ) {
         self.enqueueResults = enqueueResults
@@ -805,6 +869,7 @@ private actor NoteImportServiceSpy: CoreNoteImportServing {
         self.jobCancellationCalls = jobCancellationCalls
         self.cancelThrowsCancellation = cancelThrowsCancellation
         self.cancelSuspended = cancelSuspended
+        self.jobsSuspendedCalls = jobsSuspendedCalls
         self.enqueueSuspended = enqueueSuspended
     }
 
@@ -824,6 +889,16 @@ private actor NoteImportServiceSpy: CoreNoteImportServing {
 
     func jobs(limit: Int) async throws -> [NoteImportJobSummary] {
         callLog.append("jobs:\(limit)")
+        let call = callLog.filter { $0 == "jobs:\(limit)" }.count
+        if jobsSuspendedCalls.contains(call) {
+            suspendedJobsStartCount += 1
+            do {
+                try await Task.sleep(nanoseconds: 3_600_000_000_000)
+            } catch is CancellationError {
+                jobsCancellationCount += 1
+                throw CancellationError()
+            }
+        }
         return jobLists.isEmpty ? [] : jobLists.removeFirst()
     }
 
@@ -864,6 +939,8 @@ private actor NoteImportServiceSpy: CoreNoteImportServing {
     func submittedFiles() -> [[NoteImportFile]] { enqueuedFiles }
     func didStartCancel() -> Bool { cancelStarted }
     func cancelCancellations() -> Int { cancelCancellationCount }
+    func suspendedJobsStarts() -> Int { suspendedJobsStartCount }
+    func jobsCancellations() -> Int { jobsCancellationCount }
 }
 
 private actor NoteImportSleeperSpy: NoteImportSleeping {

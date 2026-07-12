@@ -151,40 +151,71 @@ public final class NoteImportStore: ObservableObject {
         let scope = generation
         let operationID = UUID()
         self.operationID = operationID
+        let service = self.service
+        let expectedRequestID = clientRequestID
         operationTask = Task { [weak self] in
-            guard let self else { return }
             defer {
-                self.finishOperation(
+                self?.finishOperation(
                     generation: scope,
                     operationID: operationID
                 )
             }
             do {
-                try await self.service.cancel(id: jobID)
+                try await service.cancel(id: jobID)
             } catch is CancellationError {
                 if Task.isCancelled { return }
             } catch {
                 // Cancellation may have reached the server even when its response did not.
                 // The actor-scoped detail route is the canonical outcome.
             }
-            guard self.isCurrent(actorID: actorID, generation: scope) else { return }
+            guard self?.isCurrentOperation(
+                actorID: actorID,
+                generation: scope,
+                operationID: operationID
+            ) == true else {
+                return
+            }
+
+            let result: Result<NoteImportJobDetail, Error>
             do {
-                let canonical = try await self.service.job(id: jobID)
-                guard self.isCurrent(actorID: actorID, generation: scope) else { return }
-                await self.drive(
-                    canonical,
-                    actorID: actorID,
-                    generation: scope
-                )
-            } catch is CancellationError {
-                guard !Task.isCancelled,
-                      self.isCurrent(actorID: actorID, generation: scope) else {
-                    return
-                }
-                self.phase = .failed(.requestFailed(code: "cancelled"))
+                result = .success(try await service.job(id: jobID))
             } catch {
-                guard self.isCurrent(actorID: actorID, generation: scope) else { return }
-                self.phase = .failed(Self.map(error))
+                result = .failure(error)
+            }
+            guard self?.isCurrentOperation(
+                actorID: actorID,
+                generation: scope,
+                operationID: operationID
+            ) == true else {
+                return
+            }
+            switch result {
+            case .success(let canonical):
+                self?.publishCanonical(
+                    canonical,
+                    expectedJobID: jobID,
+                    expectedRequestID: expectedRequestID,
+                    actorID: actorID,
+                    generation: scope,
+                    operationID: operationID
+                )
+            case .failure(let error):
+                if error is CancellationError {
+                    if Task.isCancelled { return }
+                    self?.publishOperationFailure(
+                        .requestFailed(code: "cancelled"),
+                        actorID: actorID,
+                        generation: scope,
+                        operationID: operationID
+                    )
+                } else {
+                    self?.publishOperationFailure(
+                        Self.map(error),
+                        actorID: actorID,
+                        generation: scope,
+                        operationID: operationID
+                    )
+                }
             }
         }
     }
@@ -219,38 +250,100 @@ public final class NoteImportStore: ObservableObject {
                     operationID: operationID
                 )
             }
+            let enqueueResult: Result<NoteImportReceipt, Error>
             do {
-                let created = try await service.enqueue(
+                enqueueResult = .success(try await service.enqueue(
                     files: files,
                     clientRequestID: stableRequestID
-                )
-                guard let self,
-                      self.isCurrent(actorID: actorID, generation: scope) else {
-                    return
-                }
-                await self.acceptCreatedReceipt(
-                    created,
-                    actorID: actorID,
-                    requestID: stableRequestID,
-                    generation: scope
-                )
-            } catch is CancellationError {
-                guard !Task.isCancelled,
-                      let self,
-                      self.isCurrent(actorID: actorID, generation: scope) else {
-                    return
-                }
-                self.phase = .failed(.requestFailed(code: "cancelled"))
+                ))
             } catch {
-                guard let self,
-                      self.isCurrent(actorID: actorID, generation: scope) else {
+                enqueueResult = .failure(error)
+            }
+            guard self?.isCurrentOperation(
+                actorID: actorID,
+                generation: scope,
+                operationID: operationID
+            ) == true else {
+                return
+            }
+
+            switch enqueueResult {
+            case .success(let created):
+                guard self?.publishCreatedReceipt(
+                    created,
+                    expectedRequestID: stableRequestID,
+                    actorID: actorID,
+                    generation: scope,
+                    operationID: operationID
+                ) == true else {
                     return
                 }
-                await self.acceptSubmissionFailure(
-                    error,
+                let result = await Self.canonicalResult(
+                    service: service,
+                    jobID: created.jobID
+                )
+                self?.publishCanonicalResult(
+                    result,
+                    expectedJobID: created.jobID,
+                    expectedRequestID: stableRequestID,
                     actorID: actorID,
-                    requestID: stableRequestID,
-                    generation: scope
+                    generation: scope,
+                    operationID: operationID
+                )
+            case .failure(let error):
+                let mapped = Self.map(error)
+                guard case .ambiguous = mapped else {
+                    self?.publishReconciliationError(
+                        error,
+                        actorID: actorID,
+                        generation: scope,
+                        operationID: operationID
+                    )
+                    return
+                }
+
+                let summaries: [NoteImportJobSummary]
+                do {
+                    summaries = try await service.jobs(
+                        limit: Self.reconciliationLimit
+                    )
+                } catch {
+                    self?.publishReconciliationError(
+                        error,
+                        actorID: actorID,
+                        generation: scope,
+                        operationID: operationID
+                    )
+                    return
+                }
+                guard self?.isCurrentOperation(
+                    actorID: actorID,
+                    generation: scope,
+                    operationID: operationID
+                ) == true else {
+                    return
+                }
+                guard let exact = summaries.first(where: {
+                    $0.clientRequestID == stableRequestID
+                }) else {
+                    self?.publishAmbiguous(
+                        actorID: actorID,
+                        generation: scope,
+                        operationID: operationID
+                    )
+                    return
+                }
+                let result = await Self.canonicalResult(
+                    service: service,
+                    jobID: exact.jobID
+                )
+                self?.publishCanonicalResult(
+                    result,
+                    expectedJobID: exact.jobID,
+                    expectedRequestID: stableRequestID,
+                    actorID: actorID,
+                    generation: scope,
+                    operationID: operationID
                 )
             }
         }
@@ -261,157 +354,304 @@ public final class NoteImportStore: ObservableObject {
         let scope = generation
         let operationID = UUID()
         self.operationID = operationID
+        let service = self.service
+        let files = selectedFiles
         operationTask = Task { [weak self] in
-            guard let self else { return }
             defer {
-                self.finishOperation(
+                self?.finishOperation(
                     generation: scope,
                     operationID: operationID
                 )
             }
-            await self.reconcileBeforeRetry(
+
+            let summaries: [NoteImportJobSummary]
+            do {
+                summaries = try await service.jobs(
+                    limit: Self.reconciliationLimit
+                )
+            } catch {
+                self?.publishReconciliationError(
+                    error,
+                    actorID: actorID,
+                    generation: scope,
+                    operationID: operationID
+                )
+                return
+            }
+            guard self?.isCurrentOperation(
                 actorID: actorID,
-                requestID: requestID,
-                generation: scope
-            )
+                generation: scope,
+                operationID: operationID
+            ) == true else {
+                return
+            }
+
+            if let exact = summaries.first(where: {
+                $0.clientRequestID == requestID
+            }) {
+                let result = await Self.canonicalResult(
+                    service: service,
+                    jobID: exact.jobID
+                )
+                self?.publishCanonicalResult(
+                    result,
+                    expectedJobID: exact.jobID,
+                    expectedRequestID: requestID,
+                    actorID: actorID,
+                    generation: scope,
+                    operationID: operationID
+                )
+                return
+            }
+
+            let enqueueResult: Result<NoteImportReceipt, Error>
+            do {
+                enqueueResult = .success(try await service.enqueue(
+                    files: files,
+                    clientRequestID: requestID
+                ))
+            } catch {
+                enqueueResult = .failure(error)
+            }
+            guard self?.isCurrentOperation(
+                actorID: actorID,
+                generation: scope,
+                operationID: operationID
+            ) == true else {
+                return
+            }
+
+            switch enqueueResult {
+            case .success(let created):
+                guard self?.publishCreatedReceipt(
+                    created,
+                    expectedRequestID: requestID,
+                    actorID: actorID,
+                    generation: scope,
+                    operationID: operationID
+                ) == true else {
+                    return
+                }
+                let result = await Self.canonicalResult(
+                    service: service,
+                    jobID: created.jobID
+                )
+                self?.publishCanonicalResult(
+                    result,
+                    expectedJobID: created.jobID,
+                    expectedRequestID: requestID,
+                    actorID: actorID,
+                    generation: scope,
+                    operationID: operationID
+                )
+            case .failure(let error):
+                let mapped = Self.map(error)
+                guard case .ambiguous = mapped else {
+                    self?.publishReconciliationError(
+                        error,
+                        actorID: actorID,
+                        generation: scope,
+                        operationID: operationID
+                    )
+                    return
+                }
+
+                let replaySummaries: [NoteImportJobSummary]
+                do {
+                    replaySummaries = try await service.jobs(
+                        limit: Self.reconciliationLimit
+                    )
+                } catch {
+                    self?.publishReconciliationError(
+                        error,
+                        actorID: actorID,
+                        generation: scope,
+                        operationID: operationID
+                    )
+                    return
+                }
+                guard self?.isCurrentOperation(
+                    actorID: actorID,
+                    generation: scope,
+                    operationID: operationID
+                ) == true else {
+                    return
+                }
+                guard let exact = replaySummaries.first(where: {
+                    $0.clientRequestID == requestID
+                }) else {
+                    self?.publishAmbiguous(
+                        actorID: actorID,
+                        generation: scope,
+                        operationID: operationID
+                    )
+                    return
+                }
+                let result = await Self.canonicalResult(
+                    service: service,
+                    jobID: exact.jobID
+                )
+                self?.publishCanonicalResult(
+                    result,
+                    expectedJobID: exact.jobID,
+                    expectedRequestID: requestID,
+                    actorID: actorID,
+                    generation: scope,
+                    operationID: operationID
+                )
+            }
         }
     }
 
-    private func acceptCreatedReceipt(
+    private static func canonicalResult(
+        service: any CoreNoteImportServing,
+        jobID: String
+    ) async -> Result<NoteImportJobDetail, Error> {
+        do {
+            return .success(try await service.job(id: jobID))
+        } catch {
+            return .failure(error)
+        }
+    }
+
+    private func publishCreatedReceipt(
         _ created: NoteImportReceipt,
+        expectedRequestID: String,
         actorID: String,
-        requestID: String,
-        generation: UUID
-    ) async {
-        guard created.clientRequestID == requestID else {
+        generation: UUID,
+        operationID: UUID
+    ) -> Bool {
+        guard isCurrentOperation(
+            actorID: actorID,
+            generation: generation,
+            operationID: operationID
+        ) else {
+            return false
+        }
+        guard created.clientRequestID == expectedRequestID else {
+            phase = .failed(.contract(code: "client_request_id_mismatch"))
+            return false
+        }
+        receipt = created
+        return true
+    }
+
+    private func publishCanonicalResult(
+        _ result: Result<NoteImportJobDetail, Error>,
+        expectedJobID: String,
+        expectedRequestID: String?,
+        actorID: String,
+        generation: UUID,
+        operationID: UUID
+    ) {
+        guard isCurrentOperation(
+            actorID: actorID,
+            generation: generation,
+            operationID: operationID
+        ) else {
+            return
+        }
+        switch result {
+        case .success(let canonical):
+            publishCanonical(
+                canonical,
+                expectedJobID: expectedJobID,
+                expectedRequestID: expectedRequestID,
+                actorID: actorID,
+                generation: generation,
+                operationID: operationID
+            )
+        case .failure(let error):
+            if error is CancellationError {
+                if Task.isCancelled { return }
+                phase = .failed(.requestFailed(code: "cancelled"))
+            } else {
+                phase = .failed(Self.map(error))
+            }
+        }
+    }
+
+    private func publishCanonical(
+        _ canonical: NoteImportJobDetail,
+        expectedJobID: String,
+        expectedRequestID: String?,
+        actorID: String,
+        generation: UUID,
+        operationID: UUID
+    ) {
+        guard isCurrentOperation(
+            actorID: actorID,
+            generation: generation,
+            operationID: operationID
+        ) else {
+            return
+        }
+        guard canonical.jobID == expectedJobID else {
+            phase = .failed(.contract(code: "job_id_mismatch"))
+            return
+        }
+        if let expectedRequestID,
+           canonical.clientRequestID != expectedRequestID {
             phase = .failed(.contract(code: "client_request_id_mismatch"))
             return
         }
-        receipt = created
-        await loadAndDrive(
-            jobID: created.jobID,
+        drive(
+            canonical,
             actorID: actorID,
             generation: generation
         )
     }
 
-    private func acceptSubmissionFailure(
+    private func publishReconciliationError(
         _ error: Error,
         actorID: String,
-        requestID: String,
-        generation: UUID
-    ) async {
-        let mapped = Self.map(error)
-        if case .ambiguous = mapped {
-            phase = .reconciling
-            await reconcileOnly(
-                actorID: actorID,
-                requestID: requestID,
-                generation: generation
-            )
+        generation: UUID,
+        operationID: UUID
+    ) {
+        guard isCurrentOperation(
+            actorID: actorID,
+            generation: generation,
+            operationID: operationID
+        ) else {
+            return
+        }
+        if error is CancellationError {
+            if Task.isCancelled { return }
+            phase = .failed(.requestFailed(code: "cancelled"))
         } else {
-            phase = .failed(mapped)
-        }
-    }
-
-    private func submit(
-        files: [NoteImportFile],
-        actorID: String,
-        requestID: String,
-        generation: UUID
-    ) async {
-        do {
-            let created = try await service.enqueue(
-                files: files,
-                clientRequestID: requestID
-            )
-            guard isCurrent(actorID: actorID, generation: generation) else { return }
-            await acceptCreatedReceipt(
-                created,
-                actorID: actorID,
-                requestID: requestID,
-                generation: generation
-            )
-        } catch is CancellationError {
-            guard !Task.isCancelled,
-                  isCurrent(actorID: actorID, generation: generation) else {
-                return
-            }
-            phase = .failed(.requestFailed(code: "cancelled"))
-        } catch {
-            guard isCurrent(actorID: actorID, generation: generation) else { return }
-            await acceptSubmissionFailure(
-                error,
-                actorID: actorID,
-                requestID: requestID,
-                generation: generation
-            )
-        }
-    }
-
-    private func reconcileBeforeRetry(
-        actorID: String,
-        requestID: String,
-        generation: UUID
-    ) async {
-        do {
-            let summaries = try await service.jobs(limit: Self.reconciliationLimit)
-            guard isCurrent(actorID: actorID, generation: generation) else { return }
-            if let exact = summaries.first(where: { $0.clientRequestID == requestID }) {
-                await loadAndDrive(
-                    jobID: exact.jobID,
-                    actorID: actorID,
-                    generation: generation
-                )
-            } else {
-                await submit(
-                    files: selectedFiles,
-                    actorID: actorID,
-                    requestID: requestID,
-                    generation: generation
-                )
-            }
-        } catch is CancellationError {
-            guard !Task.isCancelled,
-                  isCurrent(actorID: actorID, generation: generation) else {
-                return
-            }
-            phase = .failed(.requestFailed(code: "cancelled"))
-        } catch {
-            guard isCurrent(actorID: actorID, generation: generation) else { return }
             phase = .failed(Self.map(error))
         }
     }
 
-    private func reconcileOnly(
+    private func publishOperationFailure(
+        _ error: NoteImportServiceError,
         actorID: String,
-        requestID: String,
-        generation: UUID
-    ) async {
-        do {
-            let summaries = try await service.jobs(limit: Self.reconciliationLimit)
-            guard isCurrent(actorID: actorID, generation: generation) else { return }
-            guard let exact = summaries.first(where: {
-                $0.clientRequestID == requestID
-            }) else {
-                phase = .ambiguous
-                return
-            }
-            await loadAndDrive(
-                jobID: exact.jobID,
-                actorID: actorID,
-                generation: generation
-            )
-        } catch is CancellationError {
-            guard !Task.isCancelled,
-                  isCurrent(actorID: actorID, generation: generation) else {
-                return
-            }
-            phase = .failed(.requestFailed(code: "cancelled"))
-        } catch {
-            guard isCurrent(actorID: actorID, generation: generation) else { return }
-            phase = .failed(Self.map(error))
+        generation: UUID,
+        operationID: UUID
+    ) {
+        guard isCurrentOperation(
+            actorID: actorID,
+            generation: generation,
+            operationID: operationID
+        ) else {
+            return
         }
+        phase = .failed(error)
+    }
+
+    private func publishAmbiguous(
+        actorID: String,
+        generation: UUID,
+        operationID: UUID
+    ) {
+        guard isCurrentOperation(
+            actorID: actorID,
+            generation: generation,
+            operationID: operationID
+        ) else {
+            return
+        }
+        phase = .ambiguous
     }
 
     private func loadAndDrive(
@@ -431,7 +671,7 @@ public final class NoteImportStore: ObservableObject {
                 phase = .failed(.contract(code: "client_request_id_mismatch"))
                 return
             }
-            await drive(
+            drive(
                 canonical,
                 actorID: actorID,
                 generation: generation
@@ -452,7 +692,7 @@ public final class NoteImportStore: ObservableObject {
         _ initial: NoteImportJobDetail,
         actorID: String,
         generation: UUID
-    ) async {
+    ) {
         guard isCurrent(actorID: actorID, generation: generation) else { return }
         detail = initial
         if initial.isSettled {
@@ -504,7 +744,7 @@ public final class NoteImportStore: ObservableObject {
                     self.phase = .failed(.contract(code: "job_id_mismatch"))
                     return
                 }
-                await self.drive(
+                self.drive(
                     next,
                     actorID: actorID,
                     generation: generation
@@ -535,6 +775,15 @@ public final class NoteImportStore: ObservableObject {
 
     private func isCurrent(actorID: String, generation: UUID) -> Bool {
         !Task.isCancelled && self.actorID == actorID && self.generation == generation
+    }
+
+    private func isCurrentOperation(
+        actorID: String,
+        generation: UUID,
+        operationID: UUID
+    ) -> Bool {
+        isCurrent(actorID: actorID, generation: generation)
+            && self.operationID == operationID
     }
 
     private static func validate(_ files: [NoteImportFile]) -> NoteImportSelectionError? {
