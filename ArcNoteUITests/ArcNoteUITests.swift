@@ -311,6 +311,21 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertEqual(waitFor("chora.sources.notion.sync.page_fixture").value as? String, "Unknown")
     }
 
+    func testLocalNotesUnknownStatesRenderNormalizedLabels() throws {
+        launchChoraProfileFixture(mode: "local-unknown")
+        app.swipeUp(); app.swipeUp()
+        let local = waitFor("chora.sources.localNotes")
+        XCTAssertTrue((local.value as? String)?.contains("Unavailable") == true)
+        XCTAssertFalse((local.value as? String)?.contains("Importing") == true)
+        XCTAssertFalse((local.value as? String)?.contains("future_import_state") == true)
+        local.tap()
+        waitFor("chora.sources.localNotes.unknown")
+        let file = waitFor("chora.sources.localNotes.file.source_fixture")
+        XCTAssertEqual(file.value as? String, "Unknown")
+        XCTAssertFalse(file.label.contains("future_item_state"))
+        XCTAssertFalse(file.value as? String == "future_item_state")
+    }
+
     func testNotificationInboxUIContract() throws {
         app.launchArguments.append("--ui-test-notification-inbox")
         app.launchEnvironment["CHORAI_NOTIFICATION_FIXTURE_MODE"] = "loaded"

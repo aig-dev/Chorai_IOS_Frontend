@@ -65,6 +65,9 @@ struct ChoraSoulSourcesSection: View {
 
     private var localNotesSummary: String {
         if let detail = noteImportStore.detail {
+            if !isKnownJobStatus(detail.status) {
+                return "Unavailable"
+            }
             if detail.status == .failed {
                 return "Import needs attention"
             }
@@ -82,7 +85,9 @@ struct ChoraSoulSourcesSection: View {
 
     private var localNotesStatusIdentifier: String? {
         if let detail = noteImportStore.detail {
-            if detail.status == .failed {
+            if !isKnownJobStatus(detail.status) {
+                return "chora.sources.localNotes.unknown"
+            } else if detail.status == .failed {
                 return "chora.sources.localNotes.failure"
             } else if detail.isSettled {
                 return "chora.sources.localNotes.done"
@@ -133,6 +138,11 @@ struct ChoraSoulSourcesSection: View {
             return "chora.sources.notion.unavailable"
         }
         return nil
+    }
+
+    private func isKnownJobStatus(_ status: NoteImportJobStatus) -> Bool {
+        status == .queued || status == .running || status == .done
+            || status == .failed || status == .cancelled
     }
 }
 
@@ -259,17 +269,28 @@ private struct LocalNotesExpandedContent: View {
                 .foregroundColor(.white)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 8)
-            Text(item.status.rawValue.capitalized)
+                        Text(itemStatusText(item.status))
                 .font(.caption)
                 .foregroundColor(.white.opacity(0.58))
                 .fixedSize(horizontal: false, vertical: true)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(item.originalFilename)
-        .accessibilityValue(item.status.rawValue)
+        .accessibilityValue(itemStatusText(item.status))
         .accessibilityIdentifier(
             "chora.sources.localNotes.file.\(item.sourceKey)"
         )
+    }
+
+    private func itemStatusText(_ status: NoteImportItemStatus) -> String {
+        switch status {
+        case .pending: "Pending"
+        case .imported: "Imported"
+        case .updated: "Updated"
+        case .skipped: "Skipped"
+        case .failed: "Failed"
+        default: "Unknown"
+        }
     }
 }
 

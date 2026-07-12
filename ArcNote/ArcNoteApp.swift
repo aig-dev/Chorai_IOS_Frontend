@@ -111,6 +111,7 @@ private enum ChoraProfileFixtureMode: String {
     case localRelaunchAmbiguity = "local-relaunch-ambiguity"
     case localPreReceipt = "local-pre-receipt"
     case localCancelling = "local-cancelling"
+    case localUnknown = "local-unknown"
     case notionConnecting = "notion-connecting"
     case notionUnknown = "notion-unknown"
     case notionUnknownImport = "notion-unknown-import"
@@ -160,6 +161,7 @@ private extension ChoraProfileFixtureMode {
             || self == .localImportFailure
             || self == .localRelaunchAmbiguity
             || self == .localCancelling
+            || self == .localUnknown
     }
 }
 
@@ -294,6 +296,12 @@ private actor ChoraNoteImportFixtureService: CoreNoteImportServing {
         let failed: Int
         let errorMessage: String?
         switch mode {
+        case .localUnknown:
+            status = .init(rawValue: "future_import_state")
+            soul = .notRequested
+            imported = 0
+            failed = 0
+            errorMessage = nil
         case .localImportActive, .localCancelling:
             status = .running
             soul = .notRequested
@@ -338,7 +346,9 @@ private actor ChoraNoteImportFixtureService: CoreNoteImportServing {
                     originalFormat: .markdown,
                     assetID: imported > 0 ? "ast_fixture" : nil,
                     assetVersionID: nil,
-                    status: failed > 0 ? .failed : .imported,
+                    status: mode == .localUnknown
+                        ? .init(rawValue: "future_item_state")
+                        : failed > 0 ? .failed : .imported,
                     errorMessage: errorMessage,
                     processedAt: date
                 )
