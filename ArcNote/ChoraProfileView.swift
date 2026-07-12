@@ -110,6 +110,14 @@ struct ChoraProfileView: View {
                     .padding(.bottom, 36)
                     .opacity(hasAppeared ? 1 : 0)
                     .offset(y: hasAppeared ? 0 : 8)
+                    .accessibilityElement(children: .contain)
+                    .accessibilityLabel("Chora Profile sections")
+                    .accessibilityValue(
+                        "Identity, Growth, Soul Sources, Chat History"
+                    )
+                    .accessibilityIdentifier(
+                        "chora.profile.section-order"
+                    )
                 }
             }
         }

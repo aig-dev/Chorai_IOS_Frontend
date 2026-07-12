@@ -92,6 +92,16 @@ struct SettingsView: View {
     @State private var cancellables = Set<AnyCancellable>()
     @State private var isLoggingOut = false
     @State private var logoutError: String?
+    private let loadsProfileOnAppear: Bool
+    private let choraProfileDestination: (() -> AnyView)?
+
+    init(
+        loadsProfileOnAppear: Bool = true,
+        choraProfileDestination: (() -> AnyView)? = nil
+    ) {
+        self.loadsProfileOnAppear = loadsProfileOnAppear
+        self.choraProfileDestination = choraProfileDestination
+    }
     
     var body: some View {
         ZStack {
@@ -288,11 +298,20 @@ struct SettingsView: View {
         }
         .navigationBarHidden(true)
         .overlay(alignment: .topLeading) {
-            Text("Settings loaded")
-                .font(.system(size: 1))
-                .foregroundColor(.white.opacity(0.01))
-                .frame(width: 1, height: 1)
-                .accessibilityIdentifier("screen.settings.loaded")
+            VStack(spacing: 0) {
+                Text("Settings loaded")
+                    .font(.system(size: 1))
+                    .foregroundColor(.white.opacity(0.01))
+                    .frame(width: 1, height: 1)
+                    .accessibilityIdentifier("screen.settings.loaded")
+                #if DEBUG
+                Text(loadsProfileOnAppear ? "enabled" : "disabled")
+                    .font(.system(size: 1))
+                    .foregroundColor(.white.opacity(0.01))
+                    .frame(width: 1, height: 1)
+                    .accessibilityIdentifier("settings.profile.autoload")
+                #endif
+            }
         }
         .alert("Log Out", isPresented: $showLogoutAlert) {
             Button("Cancel", role: .cancel) { }
@@ -318,12 +337,18 @@ struct SettingsView: View {
             UpgradeProView()
         }
         .navigationDestination(isPresented: $navigateToChoraProfile) {
-            ChoraProfileView.production(
-                humanActorID: authManager.currentUser?.id ?? ""
-            )
+            if let choraProfileDestination {
+                choraProfileDestination()
+            } else {
+                ChoraProfileView.production(
+                    humanActorID: authManager.currentUser?.id ?? ""
+                )
+            }
         }
         .onAppear {
-            userProfileManager.fetchCurrentUserProfile()
+            if loadsProfileOnAppear {
+                userProfileManager.fetchCurrentUserProfile()
+            }
         }
     }
     

@@ -129,9 +129,11 @@ final class ArcNoteUITests: XCTestCase {
         app.launch()
 
         waitFor("screen.settings.loaded")
-        if app.alerts.firstMatch.waitForExistence(timeout: 2) {
-            app.alerts.firstMatch.buttons.firstMatch.tap()
-        }
+        XCTAssertEqual(
+            waitFor("settings.profile.autoload").label,
+            "disabled"
+        )
+        XCTAssertFalse(app.alerts.firstMatch.waitForExistence(timeout: 2))
         let choraRows = app.buttons.matching(
             identifier: "settings.choraProfile"
         )
@@ -145,23 +147,32 @@ final class ArcNoteUITests: XCTestCase {
         waitFor("screen.choraProfile")
 
         launchChoraProfileFixture(mode: "loaded")
-        let identity = waitFor("chora.identity.section")
-        let growth = waitFor("chora.growth.section")
+        waitFor("chora.identity.section")
+        waitFor("chora.growth.section")
         XCTAssertEqual(waitFor("chora.growth.stage").label, "Co-Think")
         XCTAssertEqual(
             waitFor("chora.growth.curiosity").value as? String,
             "2 out of 12"
         )
         app.swipeUp(); app.swipeUp()
-        let sources = waitFor("chora.sources.section")
+        waitFor("chora.sources.section")
         let localNotes = waitFor("chora.sources.localNotes")
         XCTAssertTrue(
             (localNotes.value as? String)?.contains("Collapsed") == true
         )
-        let chat = waitFor("chora.chat.section")
-        XCTAssertLessThan(identity.frame.minY, growth.frame.minY)
-        XCTAssertLessThan(growth.frame.minY, sources.frame.minY)
-        XCTAssertLessThan(sources.frame.minY, chat.frame.minY)
+        waitFor("chora.chat.section")
+        XCTAssertEqual(
+            waitFor("chora.profile.section-order").value as? String,
+            "Identity, Growth, Soul Sources, Chat History"
+        )
+        let clearChat = waitFor("chora.chat.clear")
+        for _ in 0..<4 where !clearChat.isHittable { app.swipeUp() }
+        XCTAssertTrue(clearChat.isHittable)
+        clearChat.tap()
+        let clearChatAlert = app.alerts["Clear Chat History?"]
+        XCTAssertTrue(clearChatAlert.waitForExistence(timeout: 5))
+        XCTAssertTrue(clearChatAlert.buttons["Hide Previous Messages"].exists)
+        clearChatAlert.buttons["Cancel"].tap()
 
         launchChoraProfileFixture(mode: "partial-save")
         replaceShortFixtureText("chora.identity.displayName", with: "Nova")
@@ -184,6 +195,11 @@ final class ArcNoteUITests: XCTestCase {
             waitFor("chora.identity.preferredAddress").value as? String,
             "Captain"
         )
+        replaceShortFixtureText(
+            "chora.identity.preferredAddress",
+            with: "Avery"
+        )
+        XCTAssertFalse(waitFor("chora.identity.save").isEnabled)
 
         launchChoraProfileFixture(mode: "saving")
         replaceShortFixtureText("chora.identity.displayName", with: "Nova")
@@ -227,6 +243,7 @@ final class ArcNoteUITests: XCTestCase {
         launchChoraProfileFixture(mode: "local-import-cancelled")
         app.swipeUp(); app.swipeUp()
         let cancelledSummary = waitFor("chora.sources.localNotes")
+        waitFor("chora.sources.localNotes.cancelled")
         XCTAssertTrue(
             (cancelledSummary.value as? String)?.contains("Cancelled") == true
         )
@@ -274,6 +291,8 @@ final class ArcNoteUITests: XCTestCase {
         app = XCUIApplication()
         app.launchArguments.append("--ui-test-library")
         app.launch()
+        XCTAssertEqual(waitFor("home.cards.autoload").label, "disabled")
+        XCTAssertFalse(app.alerts.firstMatch.waitForExistence(timeout: 2))
         let libraryPlus = waitFor("note.create")
         XCTAssertEqual(
             app.descendants(matching: .any).matching(
@@ -3277,10 +3296,16 @@ final class ArcNoteUITests: XCTestCase {
     private func replaceShortFixtureText(_ identifier: String, with text: String) {
         let field = waitFor(identifier)
         field.tap()
-        for _ in 0..<32 {
-            app.typeKey(.delete, modifierFlags: [])
-        }
-        app.typeText(text)
+        RunLoop.current.run(until: Date().addingTimeInterval(0.3))
+        let currentLength = (field.value as? String)?.count ?? 0
+        field.typeText(
+            String(
+                repeating: XCUIKeyboardKey.delete.rawValue,
+                count: currentLength
+            )
+        )
+        field.typeText(text)
+        XCTAssertEqual(field.value as? String, text)
     }
 
     @discardableResult

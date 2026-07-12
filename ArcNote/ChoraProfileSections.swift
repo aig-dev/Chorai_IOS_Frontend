@@ -110,6 +110,8 @@ struct ChoraSoulSourcesSection: View {
         if let detail = noteImportStore.detail {
             if !isKnownJobStatus(detail.status) {
                 return "chora.sources.localNotes.unknown"
+            } else if detail.status == .cancelled {
+                return "chora.sources.localNotes.cancelled"
             } else if detail.status == .failed {
                 return "chora.sources.localNotes.failure"
             } else if detail.isSettled {

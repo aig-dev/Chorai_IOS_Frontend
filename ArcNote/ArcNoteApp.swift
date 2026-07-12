@@ -66,7 +66,12 @@ struct ArcNoteApp: App {
                 }
             } else if isSettingsUITestRoute {
                 NavigationStack {
-                    SettingsView()
+                    SettingsView(
+                        loadsProfileOnAppear: false,
+                        choraProfileDestination: {
+                            AnyView(ChoraProfileFixtureScreen())
+                        }
+                    )
                 }
             } else if isLibraryUITestRoute {
                 NavigationStack {
@@ -204,7 +209,7 @@ private actor ChoraProfileFixtureService: CoreChoraProfileServing {
             agentActorID: "act_agent_fixture",
             displayName: displayName,
             avatarURL: nil,
-            preferredAddress: mode == .partialSave ? nil : "Avery"
+            preferredAddress: "Avery"
         )
     }
 
@@ -398,7 +403,8 @@ private struct LibraryFixtureScreen: View {
     var body: some View {
         HomeView(
             showSideMenu: $showSideMenu,
-            refreshID: refreshID
+            refreshID: refreshID,
+            loadsCardsOnAppear: false
         )
     }
 }

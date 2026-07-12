@@ -6,6 +6,7 @@ struct HomeView: View {
     let refreshID: UUID
     var onboardingStore: OnboardingGuideStore?
     let onNoteCreated: (String, String) -> Void
+    private let loadsCardsOnAppear: Bool
     @State private var selectedSegment = 0 // 0: Notes, 1: AI
 
     @State private var showPopupMenu = false
@@ -33,11 +34,13 @@ struct HomeView: View {
         showSideMenu: Binding<Bool>,
         refreshID: UUID,
         onboardingStore: OnboardingGuideStore? = nil,
+        loadsCardsOnAppear: Bool = true,
         onNoteCreated: @escaping (String, String) -> Void = { _, _ in }
     ) {
         _showSideMenu = showSideMenu
         self.refreshID = refreshID
         self.onboardingStore = onboardingStore
+        self.loadsCardsOnAppear = loadsCardsOnAppear
         self.onNoteCreated = onNoteCreated
     }
     
@@ -340,6 +343,15 @@ struct HomeView: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("screen.home.content")
+        #if DEBUG
+        .overlay(alignment: .topLeading) {
+            Text(loadsCardsOnAppear ? "enabled" : "disabled")
+                .font(.system(size: 1))
+                .foregroundColor(.white.opacity(0.01))
+                .frame(width: 1, height: 1)
+                .accessibilityIdentifier("home.cards.autoload")
+        }
+        #endif
         .popupMenu(
             isPresented: $showPopupMenu,
             layout: popupMenuLayout,
@@ -349,11 +361,14 @@ struct HomeView: View {
             isOwnCard: selectedSegment == 0
         )
         .onAppear {
-            // 使用默认排序（Latest Edited）
-            cardsManager.loadUserCards(refresh: true, sortBy: "updated_at", sortOrder: "desc")
+            if loadsCardsOnAppear {
+                cardsManager.loadUserCards(refresh: true, sortBy: "updated_at", sortOrder: "desc")
+            }
         }
         .onChange(of: refreshID) { _ in
-            cardsManager.loadUserCards(refresh: true, sortBy: "updated_at", sortOrder: "desc")
+            if loadsCardsOnAppear {
+                cardsManager.loadUserCards(refresh: true, sortBy: "updated_at", sortOrder: "desc")
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ShowCardMenu"))) { notification in
             if let userInfo = notification.userInfo,
