@@ -400,12 +400,25 @@ private struct LibraryFixtureScreen: View {
     @State private var showSideMenu = false
     private let refreshID = UUID()
 
+    init() {
+        AuthManager.shared.currentUser = nil
+        AuthManager.shared.isLoggedIn = false
+        AuthManager.shared.authToken = nil
+        NetworkManager.shared.clearAuthToken()
+    }
+
     var body: some View {
         HomeView(
             showSideMenu: $showSideMenu,
-            refreshID: refreshID,
-            loadsCardsOnAppear: false
+            refreshID: refreshID
         )
+        .overlay(alignment: .topLeading) {
+            Text("isolated")
+                .font(.system(size: 1))
+                .foregroundColor(.clear)
+                .frame(width: 1, height: 1)
+                .accessibilityIdentifier("library.fixture.session")
+        }
     }
 }
 

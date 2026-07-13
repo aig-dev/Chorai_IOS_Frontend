@@ -291,7 +291,7 @@ final class ArcNoteUITests: XCTestCase {
         app = XCUIApplication()
         app.launchArguments.append("--ui-test-library")
         app.launch()
-        XCTAssertEqual(waitFor("home.cards.autoload").label, "disabled")
+        XCTAssertEqual(waitFor("library.fixture.session").label, "isolated")
         XCTAssertFalse(app.alerts.firstMatch.waitForExistence(timeout: 2))
         let libraryPlus = waitFor("note.create")
         XCTAssertEqual(
