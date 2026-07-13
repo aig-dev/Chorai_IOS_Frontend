@@ -269,8 +269,18 @@ struct SettingsView: View {
                         
                         // 登出按钮
                         VStack(spacing: 8) {
-                            SettingsOutlineButton(title: "Log Out") {
+                            Button(action: {
                                 showLogoutAlert = true
+                            }) {
+                                Text("Log Out")
+                                    .font(.system(size: 16, weight: .medium))
+                                    .foregroundColor(.white)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 13)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 30)
+                                            .stroke(Color.white.opacity(0.3), lineWidth: 1)
+                                    )
                             }
                             .disabled(isLoggingOut)
                             .accessibilityIdentifier("settings.logout")
