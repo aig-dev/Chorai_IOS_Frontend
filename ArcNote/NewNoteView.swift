@@ -43,8 +43,6 @@ struct NewNoteView: View, MarkupDelegate {
     @State private var animateDeleteConfirmation = false
     @State private var updatedAt: String? = nil
     @State private var isPinned: Bool = false
-    @State private var shouldDismissAfterSave = false
-    @State private var pendingUnlinkNote: CardLinkItem?
     @State private var editingFailureMessage: String?
     @State private var showBackgroundPicker = false
     @State private var showBackgroundActions = false
@@ -62,7 +60,7 @@ struct NewNoteView: View, MarkupDelegate {
         self.onCreated = onCreated
         _editingStore = StateObject(
             wrappedValue: CardEditingStore(
-                cardID: cardId,
+                cardID: cardId.isEmpty ? nil : cardId,
                 draft: CardEditingDraft(
                     title: nil,
                     content: "",
@@ -118,7 +116,9 @@ struct NewNoteView: View, MarkupDelegate {
                 }
                 Button("Remove Background", role: .destructive) {
                     editingFailureMessage = nil
-                    editingStore.removeBackground()
+                    Task {
+                        _ = await editingStore.removeBackground()
+                    }
                 }
                 Button("Cancel", role: .cancel) {}
             }
@@ -941,7 +941,6 @@ struct NewNoteView: View, MarkupDelegate {
         }
 
         editingFailureMessage = nil
-        shouldDismissAfterSave = true
         editingStore.updateDraft(
             CardEditingDraft(
                 title: titleFromHTML(content),
@@ -950,7 +949,14 @@ struct NewNoteView: View, MarkupDelegate {
                 isPublic: isPublic
             )
         )
-        editingStore.save()
+        Task {
+            let didSave = await editingStore.save()
+            guard didSave, !editingStore.isDirty else {
+                editingFailureMessage = "Couldn't save. Tap back to retry."
+                return
+            }
+            dismiss()
+        }
     }
 
     private func titleFromHTML(_ content: String) -> String? {
@@ -967,22 +973,10 @@ struct NewNoteView: View, MarkupDelegate {
     private func handleEditingPhase(_ phase: CardEditingPhase) {
         switch phase {
         case .ready:
-            if let note = pendingUnlinkNote {
-                removeRelatedNote(note)
-                pendingUnlinkNote = nil
-            }
-            if shouldDismissAfterSave {
-                shouldDismissAfterSave = false
-                dismiss()
-            }
+            break
         case .failed:
-            if pendingUnlinkNote != nil {
-                editingFailureMessage = "Couldn't unlink. Try again."
-                pendingUnlinkNote = nil
-            } else if shouldDismissAfterSave {
-                shouldDismissAfterSave = false
-                editingFailureMessage = "Couldn't save. Tap back to retry."
-            } else {
+            if editingStore.failureStage == .replacingBackground
+                || editingStore.failureStage == .removingBackground {
                 editingFailureMessage = "Couldn't update background. Try again."
             }
         case .idle, .saving, .linking, .updatingBackground:
@@ -1004,13 +998,14 @@ struct NewNoteView: View, MarkupDelegate {
                 } ?? .jpeg
                 let fileExtension = type.preferredFilenameExtension ?? "jpg"
                 editingFailureMessage = nil
-                editingStore.replaceBackground(
-                    with: CardEditingImage(
+                editingStore.stageBackground(
+                    CardEditingImage(
                         data: data,
                         filename: "card-background.\(fileExtension)",
                         mimeType: type.preferredMIMEType ?? "image/jpeg"
                     )
                 )
+                _ = await editingStore.save()
             } catch {
                 editingFailureMessage = "Couldn't read that image."
             }
@@ -1029,11 +1024,7 @@ struct NewNoteView: View, MarkupDelegate {
                 title: note.title ?? "Related note"
             )
         }
-        editingStore.hydrate(
-            draft: editingStore.draft,
-            backgroundMediaRef: editingStore.backgroundMediaRef,
-            links: links
-        )
+        editingStore.replaceLinks(links)
     }
 
     private func autoSaveNote() {
@@ -1378,14 +1369,20 @@ struct NewNoteView: View, MarkupDelegate {
         let targetAssetId = note.targetAssetId.isEmpty ? note.linkedCardId : note.targetAssetId
 
         editingFailureMessage = nil
-        pendingUnlinkNote = note
-        editingStore.deleteLink(
-            CardEditingLink(
-                sourceCardID: sourceAssetId,
-                targetCardID: targetAssetId,
-                title: note.title ?? "Related note"
+        Task {
+            let didDelete = await editingStore.deleteLink(
+                CardEditingLink(
+                    sourceCardID: sourceAssetId,
+                    targetCardID: targetAssetId,
+                    title: note.title ?? "Related note"
+                )
             )
-        )
+            if didDelete {
+                removeRelatedNote(note)
+            } else {
+                editingFailureMessage = "Couldn't unlink. Try again."
+            }
+        }
     }
     
     // MARK: - 处理切换卡片Pin状态

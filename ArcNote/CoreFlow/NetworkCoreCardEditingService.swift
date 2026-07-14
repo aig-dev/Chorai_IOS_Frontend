@@ -9,7 +9,30 @@ struct NetworkCoreCardEditingService: CoreCardEditingServing, @unchecked Sendabl
         self.network = network
     }
 
-    func save(
+    func create(draft: CardEditingDraft) async throws -> CardEditingSnapshot {
+        do {
+            let response = try await firstValue(
+                network.createCard(
+                    CreateCardRequest(
+                        title: draft.title,
+                        content: draft.content,
+                        contentJSON: draft.contentJSON,
+                        editorAtmosphere: draft.editorAtmosphere,
+                        tags: draft.tags,
+                        isPublic: draft.isPublic
+                    )
+                )
+            )
+            guard response.success else {
+                throw CardEditingError.transport(code: "card_create_rejected")
+            }
+            return snapshot(from: response.data)
+        } catch {
+            throw Self.mapError(error)
+        }
+    }
+
+    func update(
         cardID: String,
         draft: CardEditingDraft
     ) async throws -> CardEditingSnapshot {

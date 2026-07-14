@@ -1,7 +1,9 @@
 import Foundation
 
 public protocol CoreCardEditingServing: Sendable {
-    func save(
+    func create(draft: CardEditingDraft) async throws -> CardEditingSnapshot
+
+    func update(
         cardID: String,
         draft: CardEditingDraft
     ) async throws -> CardEditingSnapshot

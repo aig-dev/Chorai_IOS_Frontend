@@ -150,3 +150,12 @@ public enum CardEditingPhase: Equatable, Sendable {
     case ready
     case failed(CardEditingError)
 }
+
+public enum CardEditingFailureStage: Equatable, Sendable {
+    case creatingCard
+    case updatingCard
+    case replacingBackground
+    case removingBackground
+    case creatingLink
+    case deletingLink
+}
