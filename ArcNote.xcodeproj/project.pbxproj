@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		C0DEF1002F60000100000001 /* CoreFlow in Frameworks */ = {isa = PBXBuildFile; productRef = C0DEF1002F60000100000003 /* CoreFlow */; };
+		C0DEF2002F70000100000001 /* BlockNoteEditor in Frameworks */ = {isa = PBXBuildFile; productRef = C0DEF2002F70000100000003 /* BlockNoteEditor */; };
 		C0DEF1012F60000100000003 /* NetworkCoreFlowService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1012F60000100000002 /* NetworkCoreFlowService.swift */; };
 		C0DEF1022F60000100000003 /* NetworkCoreSparkService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1022F60000100000002 /* NetworkCoreSparkService.swift */; };
 		C0DEF1022F60000100000005 /* SparkContinuationViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1022F60000100000004 /* SparkContinuationViews.swift */; };
@@ -243,6 +244,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				C0DEF1002F60000100000001 /* CoreFlow in Frameworks */,
+				C0DEF2002F70000100000001 /* BlockNoteEditor in Frameworks */,
 				1B846EF42E84F19100A7E621 /* GoogleSignInSwift in Frameworks */,
 				1B1240302F3C95DD00B53098 /* MarkupEditor in Frameworks */,
 				1BEC65DC2E9E6DFC00075403 /* MarkupEditor in Frameworks */,
@@ -441,6 +443,7 @@
 			name = ArcNote;
 			packageProductDependencies = (
 				C0DEF1002F60000100000003 /* CoreFlow */,
+				C0DEF2002F70000100000003 /* BlockNoteEditor */,
 				1B6E6FBA2E6ABA88006898F5 /* Alamofire */,
 				1B6E6FBD2E6ABB6E006898F5 /* SwiftyJSON */,
 				1B846EF12E84F19100A7E621 /* GoogleSignIn */,
@@ -504,6 +507,7 @@
 			mainGroup = 1B48AE282E30967F0090CF86;
 			packageReferences = (
 				C0DEF1002F60000100000002 /* XCLocalSwiftPackageReference "Packages/CoreFlow" */,
+				C0DEF2002F70000100000002 /* XCLocalSwiftPackageReference "Packages/BlockNoteEditor" */,
 				1B6E6FB92E6ABA88006898F5 /* XCRemoteSwiftPackageReference "Alamofire" */,
 				1B6E6FBC2E6ABB6E006898F5 /* XCRemoteSwiftPackageReference "SwiftyJSON" */,
 				1B846EF02E84F19100A7E621 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
@@ -935,6 +939,10 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/CoreFlow;
 		};
+		C0DEF2002F70000100000002 /* XCLocalSwiftPackageReference "Packages/BlockNoteEditor" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/BlockNoteEditor;
+		};
 		1B1240312F3C960D00B53098 /* XCLocalSwiftPackageReference "Packages/MarkdownEditor" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/MarkdownEditor;
@@ -972,6 +980,10 @@
 		C0DEF1002F60000100000003 /* CoreFlow */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = CoreFlow;
+		};
+		C0DEF2002F70000100000003 /* BlockNoteEditor */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = BlockNoteEditor;
 		};
 		1B12402F2F3C95DD00B53098 /* MarkupEditor */ = {
 			isa = XCSwiftPackageProductDependency;
