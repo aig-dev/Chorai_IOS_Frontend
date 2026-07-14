@@ -57,6 +57,20 @@ struct ArcNoteApp: App {
         #if DEBUG
         APIMigrationUITestSeed.applyIfPresent()
         APIMigrationSmokeRunner.startIfRequested()
+        if ProcessInfo.processInfo.arguments.contains("--ui-test-settings") {
+            UserProfileManager.shared.creditBalance = [
+                CreditBalanceData(
+                    creditTier: "premium_credit",
+                    balance: 4,
+                    updatedAt: "2024-03-09T16:00:00Z"
+                ),
+                CreditBalanceData(
+                    creditTier: "credit",
+                    balance: 12,
+                    updatedAt: "2024-03-09T16:00:00Z"
+                )
+            ]
+        }
         #endif
     }
 
@@ -76,6 +90,9 @@ struct ArcNoteApp: App {
                         loadsProfileOnAppear: false,
                         choraProfileDestination: {
                             AnyView(ChoraProfileFixtureScreen())
+                        },
+                        invitationCreditDestination: {
+                            AnyView(InvitationCreditFixtureScreen())
                         }
                     )
                 }

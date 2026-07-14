@@ -338,6 +338,26 @@ final class ArcNoteUITests: XCTestCase {
         waitFor("settings.choraProfile")
     }
 
+    func testSettingsShowsSingleInvitationCreditsEntry() throws {
+        app.launchArguments.append("--ui-test-settings")
+        app.launch()
+
+        waitFor("screen.settings.loaded")
+        let rows = app.buttons.matching(
+            identifier: "settings.invitation-credits"
+        )
+        XCTAssertEqual(rows.count, 1)
+        XCTAssertEqual(rows.firstMatch.value as? String, "12 Credits")
+        XCTAssertFalse(app.staticTexts["Upgrade"].exists)
+
+        for _ in 0..<3 where !rows.firstMatch.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(rows.firstMatch.isHittable)
+        rows.firstMatch.tap()
+        waitFor("screen.invitation-credits")
+    }
+
     func testChoraProfileFixtureStates() throws {
         app.launchArguments.append("--ui-test-settings")
         app.launch()

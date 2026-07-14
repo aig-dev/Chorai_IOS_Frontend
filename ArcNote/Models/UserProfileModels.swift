@@ -85,6 +85,12 @@ class UserProfileManager: ObservableObject {
         creditBalance.reduce(0) { $0 + $1.balance }
     }
 
+    var regularCreditTotal: Int {
+        creditBalance
+            .filter { $0.creditTier == "credit" }
+            .reduce(0) { $0 + $1.balance }
+    }
+
     // 获取用户资料
     func fetchUserProfile(actorId: String) {
         isLoading = true

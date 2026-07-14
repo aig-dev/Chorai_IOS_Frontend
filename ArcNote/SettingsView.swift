@@ -85,8 +85,8 @@ struct SettingsView: View {
     @State private var navigateToPreferences = false
     @State private var navigateToAPIAndPlugins = false
     @State private var navigateToEditProfile = false
-    @State private var navigateToUpgradePro = false
     @State private var navigateToChoraProfile = false
+    @State private var navigateToInvitationCredits = false
     @ObservedObject private var userProfileManager = UserProfileManager.shared
     @ObservedObject private var authManager = AuthManager.shared
     @State private var cancellables = Set<AnyCancellable>()
@@ -94,13 +94,16 @@ struct SettingsView: View {
     @State private var logoutError: String?
     private let loadsProfileOnAppear: Bool
     private let choraProfileDestination: (() -> AnyView)?
+    private let invitationCreditDestination: (() -> AnyView)?
 
     init(
         loadsProfileOnAppear: Bool = true,
-        choraProfileDestination: (() -> AnyView)? = nil
+        choraProfileDestination: (() -> AnyView)? = nil,
+        invitationCreditDestination: (() -> AnyView)? = nil
     ) {
         self.loadsProfileOnAppear = loadsProfileOnAppear
         self.choraProfileDestination = choraProfileDestination
+        self.invitationCreditDestination = invitationCreditDestination
     }
     
     var body: some View {
@@ -143,72 +146,6 @@ struct SettingsView: View {
                 
                 ScrollView {
                     VStack(spacing: 24) {
-                        // 用户信息卡片
-//                        VStack(alignment: .leading, spacing: 16) {
-//                            HStack {
-//                                VStack(alignment: .leading, spacing: 4) {
-//                                    HStack(spacing: 8) {
-//                                        Text(userProfileManager.userProfile?.username ?? "Loading...")
-//                                            .font(.system(size: 24, weight: .bold))
-//                                            .foregroundColor(.white)
-//                                        
-//                                        Text("PRO")
-//                                            .font(.system(size: 12, weight: .bold))
-//                                            .foregroundColor(.black)
-//                                            .padding(.horizontal, 8)
-//                                            .padding(.vertical, 4)
-//                                            .background(
-//                                                RoundedRectangle(cornerRadius: 12)
-//                                                    .fill(Color.white)
-//                                            )
-//                                        
-//                                        
-//                                        Spacer()
-//                                        
-////                                        Button(action: {
-////                                            navigateToUpgradePro = true
-////                                        }) {
-////                                            HStack(spacing: 6) {
-////                                                Image("pro")
-////                                                    .resizable().frame(width: 20, height: 20)
-////                                                
-////                                                Text("AI+ Privilege")
-////                                                    .font(.system(size: 14, weight: .medium))
-////                                                    .foregroundColor(.white)
-////                                            }
-////                                            .padding(.horizontal, 8)
-////                                            .padding(.vertical, 8)
-////                                            .background(
-////                                                RoundedRectangle(cornerRadius: 20)
-////                                                    .fill(.ultraThinMaterial.opacity(0.1))
-////                                                    .roundedButtonHighlightEffect()
-////                                            )
-////                                        }
-//                                    }
-//                                    
-//                                    (Text("Expired by ")
-//                                        .font(.system(size: 14, weight: .regular))
-//                                        .foregroundColor(.gray)
-//                                    +
-//                                    Text("October 16, 2026")
-//                                        .font(.system(size: 14, weight: .regular))
-//                                        .foregroundColor(.white))
-//                                }
-//                            }
-//                            
-//                            Text("Upgrade membership to enjoy 12+exclusive features")
-//                                .font(.system(size: 14, weight: .regular))
-//                                .foregroundColor(.white)
-//                                .padding(.trailing, 10)
-//                        }
-//                        .padding(20)
-//                        .background(
-//                            RoundedRectangle(cornerRadius: 16)
-//                                .fill(Color.white.opacity(0.1))
-//                                .cardHighlightEffect()
-//                        )
-//                        .padding(.horizontal, 20)
-                        
                         // 设置选项列表
                         VStack(spacing: 0) {
                             SettingsRow(imageName: "personal", title: "Personal Data", accessibilityIdentifier: "settings.personal-data") {
@@ -220,6 +157,20 @@ struct SettingsView: View {
 
                             SettingsRow(imageName: "bot", title: "Chora Profile", accessibilityIdentifier: "settings.choraProfile") {
                                 navigateToChoraProfile = true
+                            }
+
+                            Divider()
+                                .background(Color.white.opacity(0.2))
+
+                            SettingsRow(
+                                imageName: "syn",
+                                title: "Invitations & Credits",
+                                subtitle: userProfileManager.isCreditLoading
+                                    ? "Loading…"
+                                    : "\(userProfileManager.regularCreditTotal.formatted()) Credits",
+                                accessibilityIdentifier: "settings.invitation-credits"
+                            ) {
+                                navigateToInvitationCredits = true
                             }
 
                             Divider()
@@ -343,15 +294,21 @@ struct SettingsView: View {
         .navigationDestination(isPresented: $navigateToEditProfile) {
             EditProfileView()
         }
-        .navigationDestination(isPresented: $navigateToUpgradePro) {
-            UpgradeProView()
-        }
         .navigationDestination(isPresented: $navigateToChoraProfile) {
             if let choraProfileDestination {
                 choraProfileDestination()
             } else {
                 ChoraProfileView.production(
                     humanActorID: authManager.currentUser?.id ?? ""
+                )
+            }
+        }
+        .navigationDestination(isPresented: $navigateToInvitationCredits) {
+            if let invitationCreditDestination {
+                invitationCreditDestination()
+            } else {
+                InvitationCreditView.production(
+                    actorID: authManager.currentUser?.id ?? ""
                 )
             }
         }
@@ -429,6 +386,7 @@ struct SettingsRow: View {
             .padding(.vertical, 16)
         }
         .accessibilityIdentifier(accessibilityIdentifier ?? "settings.row.\(title)")
+        .accessibilityValue(subtitle ?? "")
     }
 }
 
