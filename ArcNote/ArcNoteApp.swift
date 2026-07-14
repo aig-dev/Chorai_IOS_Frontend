@@ -28,6 +28,8 @@ struct ArcNoteApp: App {
         .contains("--ui-test-chora-contract")
     private let isInvitationCreditContractUITestRoute = ProcessInfo.processInfo.arguments
         .contains("--ui-test-invitation-credit-contract")
+    private let isDiscoveryPathContractUITestRoute = ProcessInfo.processInfo.arguments
+        .contains("--ui-test-discovery-path-contract")
     private let isInvitationCreditUITestRoute = ProcessInfo.processInfo.arguments
         .contains("--ui-test-invitation-credits")
     private let isSignupInvitationUITestRoute = ProcessInfo.processInfo.arguments
@@ -106,6 +108,8 @@ struct ArcNoteApp: App {
                 ChoraProfileContractFixtureView()
             } else if isInvitationCreditContractUITestRoute {
                 InvitationCreditContractFixtureView()
+            } else if isDiscoveryPathContractUITestRoute {
+                DiscoveryPathContractFixtureView()
             } else if isInvitationCreditUITestRoute {
                 NavigationStack {
                     InvitationCreditFixtureScreen()
@@ -1812,6 +1816,90 @@ private final class InvitationCreditFixturePersistence:
         defer { lock.unlock() }
         values[actorID] = nil
     }
+}
+
+private struct DiscoveryPathContractFixtureView: View {
+    private let result: Result<DiscoveryPathData, Error>
+
+    init() {
+        do {
+            let response = try JSONDecoder().decode(
+                NetworkResponse<DiscoveryPathData>.self,
+                from: Data(Self.fixtureJSON.utf8)
+            )
+            guard let data = response.data else {
+                throw DiscoveryPathError.requestFailed(
+                    message: "Missing discovery path data"
+                )
+            }
+            result = .success(data)
+        } catch {
+            result = .failure(error)
+        }
+    }
+
+    var body: some View {
+        VStack(spacing: 12) {
+            switch result {
+            case .success(let data):
+                Text(
+                    [
+                        data.targetAssetID,
+                        data.rootActivityID ?? "nil",
+                        String(data.pathLength)
+                    ].joined(separator: ",")
+                )
+                .accessibilityIdentifier("discovery.contract.summary")
+
+                Text(
+                    data.path.map {
+                        [
+                            $0.assetID,
+                            $0.versionID,
+                            $0.activityID,
+                            String($0.depth)
+                        ].joined(separator: ":")
+                    }.joined(separator: ",")
+                )
+                .accessibilityIdentifier("discovery.contract.nodes")
+            case .failure(let error):
+                Text(String(describing: error))
+                    .accessibilityIdentifier("discovery.contract.error")
+            }
+        }
+    }
+
+    private static let fixtureJSON = #"""
+    {
+      "success": true,
+      "message": null,
+      "data": {
+        "target_asset_id": "ast_collected",
+        "root_activity_id": "actv_root",
+        "path": [
+          {
+            "asset_id": "ast_origin",
+            "version_id": "ver_origin",
+            "activity_id": "actv_root",
+            "depth": 0
+          },
+          {
+            "asset_id": "ast_direct",
+            "version_id": "ver_direct",
+            "activity_id": "actv_child",
+            "depth": 1
+          },
+          {
+            "asset_id": "ast_collected",
+            "version_id": "ver_collected",
+            "activity_id": "actv_child",
+            "depth": 2
+          }
+        ],
+        "path_length": 3
+      }
+    }
+    """#
 }
 
 private struct InvitationCreditContractFixtureView: View {

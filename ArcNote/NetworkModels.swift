@@ -127,6 +127,34 @@ struct FavoriteResponseData: Codable {
     }
 }
 
+struct DiscoveryPathData: Codable {
+    let targetAssetID: String
+    let rootActivityID: String?
+    let path: [DiscoveryPathNodeData]
+    let pathLength: Int
+
+    enum CodingKeys: String, CodingKey {
+        case targetAssetID = "target_asset_id"
+        case rootActivityID = "root_activity_id"
+        case path
+        case pathLength = "path_length"
+    }
+}
+
+struct DiscoveryPathNodeData: Codable {
+    let assetID: String
+    let versionID: String
+    let activityID: String
+    let depth: Int
+
+    enum CodingKeys: String, CodingKey {
+        case assetID = "asset_id"
+        case versionID = "version_id"
+        case activityID = "activity_id"
+        case depth
+    }
+}
+
 struct LikeResponseData: Codable {
     let likeId: String?
     let assetId: String

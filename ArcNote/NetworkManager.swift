@@ -956,6 +956,18 @@ extension NetworkManager {
         )
     }
 
+    func getDiscoveryPath(
+        cardId: String,
+        presentsError: Bool = true
+    ) -> AnyPublisher<NetworkResponse<DiscoveryPathData>, NetworkError> {
+        request(
+            endpoint: "/api/v1/actors/me/favorites/\(cardId)/discovery-path",
+            method: .get,
+            responseType: NetworkResponse<DiscoveryPathData>.self,
+            presentsError: presentsError
+        )
+    }
+
 
 
     // MARK: 卡片链接相关API
@@ -1907,13 +1919,21 @@ extension NetworkManager {
     }
 
     // MARK: 获取卡片详细信息
-    func getCardDetail(cardId: String, completion: @escaping (Result<CardDetailResponse, NetworkError>) -> Void) {
-        self.request(
+    func getCardDetailPublisher(
+        cardId: String,
+        presentsError: Bool = true
+    ) -> AnyPublisher<CardDetailResponse, NetworkError> {
+        request(
             endpoint: "/api/cards/\(cardId)",
             method: .get,
             encoding: URLEncoding.default,
-            responseType: CardDetailResponse.self
+            responseType: CardDetailResponse.self,
+            presentsError: presentsError
         )
+    }
+
+    func getCardDetail(cardId: String, completion: @escaping (Result<CardDetailResponse, NetworkError>) -> Void) {
+        getCardDetailPublisher(cardId: cardId)
         .sink(
             receiveCompletion: { completionResult in
                 if case .failure(let error) = completionResult {

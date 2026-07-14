@@ -149,6 +149,24 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertFalse(fixtureError.exists)
     }
 
+    func testDiscoveryPathContractFixtureRoute() throws {
+        app.launchArguments.append("--ui-test-discovery-path-contract")
+        app.launch()
+
+        XCTAssertEqual(
+            waitFor("discovery.contract.summary").label,
+            "ast_collected,actv_root,3"
+        )
+        XCTAssertEqual(
+            waitFor("discovery.contract.nodes").label,
+            "ast_origin:ver_origin:actv_root:0,ast_direct:ver_direct:actv_child:1,ast_collected:ver_collected:actv_child:2"
+        )
+        XCTAssertFalse(
+            app.descendants(matching: .any)["discovery.contract.error"]
+                .exists
+        )
+    }
+
     func testInvitationCreditsLoadedFixture() throws {
         launchInvitationCreditFixture(mode: "success")
 
