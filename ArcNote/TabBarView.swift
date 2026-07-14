@@ -6,10 +6,6 @@ import WebKit
 struct TabBarView: View {
     @StateObject private var authManager = AuthManager.shared
     @StateObject private var coordinator = CoreFlowCoordinator()
-    @StateObject private var captureStore = QuickCaptureStore(
-        service: NetworkCoreFlowService(),
-        draftStore: UserDefaultsCaptureDraftStore()
-    )
     @StateObject private var onboardingStore = OnboardingGuideStore(
         service: NetworkCoreOnboardingService(),
         persistence: UserDefaultsOnboardingGuidePersistence()
@@ -25,7 +21,6 @@ struct TabBarView: View {
     @State private var navigateToMerge = false
     @State private var selectedMergeCardId: String? = nil
     @State private var mergeResumeMetadata: MergeResumeMetadata?
-    @State private var didAutoPresentInitialRecord = false
     @State private var visibleFlowCardID: String?
     @State private var hasObservedActiveOnboarding = false
     @State private var showOnboardingCompletionAcknowledgement = false
@@ -112,7 +107,9 @@ struct TabBarView: View {
     }
 
     private func routeOnboardingState(_ state: String?) {
-        guard state == "product_merge_intro"
+        guard state == "elicit_signal"
+                || state == "product_quick_capture_intro"
+                || state == "product_merge_intro"
                 || state == "product_library_intro" else {
             return
         }
@@ -274,6 +271,30 @@ struct TabBarView: View {
         
         print("已关闭所有 popup")
     }
+
+    private func handleNoteCreated(cardID: String, content: String) {
+        onboardingStore.receive(.recordCreated(cardID: cardID, content: content))
+    }
+
+    private var libraryTab: some View {
+        HomeView(
+            showSideMenu: $showSideMenu,
+            refreshID: coordinator.libraryRefreshID,
+            onboardingStore: onboardingStore,
+            onNoteCreated: handleNoteCreated
+        )
+        .tag(CoreTab.library)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .ignoresSafeArea(.all)
+        .background(
+            Image("home_bg")
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .clipped()
+                .ignoresSafeArea(.all)
+        )
+    }
     
     var body: some View {
         NavigationStack(path: $navigationPath) {
@@ -296,12 +317,10 @@ struct TabBarView: View {
 	                showSideMenu: $showSideMenu,
 	                onSpark: { cardId in
 	                    navigationPath.append(TabRoute.spark(cardId))
-	                },
+                    },
                     onFlowCardVisible: { assetID in
                         visibleFlowCardID = assetID
-                        if !coordinator.isCapturePresented {
-                            onboardingStore.receive(.flowViewed)
-                        }
+                        onboardingStore.receive(.flowViewed)
                     },
                     onFlowCardSaved: { assetID in
                         onboardingStore.receive(.flowCardSaved(assetID: assetID))
@@ -309,9 +328,7 @@ struct TabBarView: View {
                     onFlowCardDismissed: { assetID in
                         onboardingStore.receive(.flowCardDismissed(assetID: assetID))
                     },
-                    onboardingStore: coordinator.recordAcknowledgementID == nil
-                        ? onboardingStore
-                        : nil
+                    onboardingStore: onboardingStore
 	            )
                 .tag(CoreTab.flow)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -326,22 +343,7 @@ struct TabBarView: View {
                 )
                 
                 // Home 页面
-                HomeView(
-                    showSideMenu: $showSideMenu,
-                    refreshID: coordinator.libraryRefreshID,
-                    onboardingStore: onboardingStore
-                )
-                    .tag(CoreTab.library)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .ignoresSafeArea(.all)
-                .background(
-                    Image("home_bg")
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .clipped()
-                        .ignoresSafeArea(.all)
-                )
+                libraryTab
                 
                 // Chat 页面
                 ChatView(showSideMenu: $showSideMenu)
@@ -496,48 +498,12 @@ struct TabBarView: View {
             CommentPopupView()
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            CoreTabBar(
-                selectedTab: $coordinator.selectedTab,
-                onRecord: coordinator.presentCapture
-            )
+            CoreTabBar(selectedTab: $coordinator.selectedTab)
             .padding(.bottom, 6)
-        }
-        .sheet(isPresented: $coordinator.isCapturePresented) {
-            if let actorID = AuthManager.shared.currentUser?.id {
-                QuickCaptureSheet(
-                    store: captureStore,
-                    actorID: actorID,
-                    onCreated: { card in
-                        coordinator.captureCompleted(card)
-                        onboardingStore.receive(
-                            .recordCreated(cardID: card.id, content: card.content)
-                        )
-                    },
-                    onDismiss: coordinator.dismissCapture
-                )
-                .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.visible)
-            }
         }
         .overlay(alignment: .top) {
             ZStack(alignment: .top) {
-                if let acknowledgementID = coordinator.recordAcknowledgementID {
-                    Label("Recorded", systemImage: "checkmark")
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 14)
-                        .frame(minHeight: 36)
-                        .background(Capsule().fill(Color.white.opacity(0.12)))
-                        .accessibilityIdentifier("record.acknowledgement")
-                        .task(id: acknowledgementID) {
-                            try? await Task.sleep(nanoseconds: 3_000_000_000)
-                            guard !Task.isCancelled else { return }
-                            coordinator.clearRecordAcknowledgement(cardID: acknowledgementID)
-                        }
-                }
-
-                if coordinator.recordAcknowledgementID == nil,
-                   showOnboardingCompletionAcknowledgement {
+                if showOnboardingCompletionAcknowledgement {
                     Label("First loop complete", systemImage: "checkmark")
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(.white)
@@ -552,14 +518,6 @@ struct TabBarView: View {
                             guard !Task.isCancelled else { return }
                             showOnboardingCompletionAcknowledgement = false
                         }
-                }
-
-                if let cardID = coordinator.lastCreatedCardID {
-                    Text(cardID)
-                        .font(.system(size: 1))
-                        .foregroundStyle(Color.white.opacity(0.01))
-                        .frame(width: 1, height: 1)
-                        .accessibilityIdentifier("record.created-card-id")
                 }
 
                 if mergeResumeMetadata != nil {
@@ -679,7 +637,6 @@ struct TabBarView: View {
             refreshMergeResumeMetadata()
         }
         .onChange(of: authManager.currentUser?.id) { _ in
-            didAutoPresentInitialRecord = false
             hasObservedActiveOnboarding = false
             showOnboardingCompletionAcknowledgement = false
             refreshMergeResumeMetadata()
@@ -689,11 +646,6 @@ struct TabBarView: View {
             if phase == .verified {
                 loadOnboardingIfVerified()
             }
-        }
-        .onChange(of: onboardingStore.shouldPresentRecord) { shouldPresent in
-            guard shouldPresent, !didAutoPresentInitialRecord else { return }
-            didAutoPresentInitialRecord = true
-            coordinator.presentCapture()
         }
         .onChange(of: onboardingStore.session?.state) { state in
             routeOnboardingState(state)
@@ -706,13 +658,6 @@ struct TabBarView: View {
                 showOnboardingCompletionAcknowledgement = true
             default:
                 break
-            }
-        }
-        .onChange(of: coordinator.isCapturePresented) { isPresented in
-            if !isPresented,
-               coordinator.selectedTab == .flow,
-               visibleFlowCardID != nil {
-                onboardingStore.receive(.flowViewed)
             }
         }
         .onAppear {

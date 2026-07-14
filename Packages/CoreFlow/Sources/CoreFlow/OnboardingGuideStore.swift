@@ -10,15 +10,8 @@ public final class OnboardingGuideStore: ObservableObject {
     @Published public private(set) var isSending = false
     @Published public private(set) var lastError: OnboardingGuideError?
 
-    public var shouldPresentRecord: Bool {
-        phase == .active && session?.state == State.elicitSignal
-    }
-
     public var guideScene: OnboardingGuideScene? {
         guard phase == .active else {
-            return nil
-        }
-        if session?.state == State.elicitSignal, lastError == nil {
             return nil
         }
         return session?.scene

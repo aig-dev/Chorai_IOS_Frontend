@@ -16,7 +16,7 @@ final class OnboardingGuideStoreTests: XCTestCase {
         XCTAssertEqual(service.startFlowVersions, [1])
         XCTAssertEqual(store.phase, .active)
         XCTAssertEqual(store.session?.state, "elicit_signal")
-        XCTAssertTrue(store.shouldPresentRecord)
+        XCTAssertEqual(store.guideScene?.text, "Guide elicit_signal")
     }
 
     @MainActor

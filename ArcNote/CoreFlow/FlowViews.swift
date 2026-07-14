@@ -147,21 +147,24 @@ struct FlowCardView: View {
 
             HStack(spacing: 16) {
                 Button(action: onToggleLike) {
-                    likeMetric(
-                        image: card.isLiked ? "like_active" : "like",
-                        count: card.likeCount
-                    )
+                    if card.isLiked {
+                        flowMetric(
+                            image: "like_active",
+                            count: card.likeCount
+                        )
+                    } else {
+                        flowMetric(image: "like", count: card.likeCount)
+                    }
                 }
                 .buttonStyle(.plain)
                 .disabled(isLikeMutationInFlight)
                 .accessibilityLabel(card.isLiked ? "Unlike" : "Like")
                 .accessibilityValue(card.isLiked ? "true" : "false")
                 .accessibilityIdentifier("flow.like.\(card.id)")
-                Label("\(card.favoriteCount)", systemImage: "bookmark")
-                Label("\(card.commentCount)", systemImage: "bubble.left")
+                flowMetric(image: "comment", count: card.commentCount)
+                flowMetric(image: "favorite", count: card.favoriteCount)
             }
-            .font(.caption)
-            .foregroundStyle(Color.white.opacity(0.58))
+            .foregroundStyle(Color.white.opacity(0.82))
 
             if let likeErrorMessage {
                 Text(likeErrorMessage)
@@ -274,7 +277,7 @@ struct FlowCardView: View {
         .accessibilityLabel(title)
     }
 
-    private func likeMetric(image: String, count: Int) -> some View {
+    private func flowMetric(image: String, count: Int) -> some View {
         HStack(spacing: 6) {
             Image(image)
                 .resizable()
