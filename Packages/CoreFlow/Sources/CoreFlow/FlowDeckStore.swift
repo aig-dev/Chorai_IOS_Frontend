@@ -10,12 +10,6 @@ public final class FlowDeckStore: ObservableObject {
 
     public var currentCard: FlowCard? { cards.first }
     public var nextCard: FlowCard? { cards.dropFirst().first }
-    public var undoAssetID: String? { undoEntry?.card.id }
-
-    private struct UndoEntry {
-        let card: FlowCard
-        let createdFavorite: Bool
-    }
 
     private let service: CoreFlowServing
     private let pageSize: Int
@@ -26,8 +20,6 @@ public final class FlowDeckStore: ObservableObject {
     private var isLoadingPage = false
     private var pageCancellable: AnyCancellable?
     private var interactionCancellable: AnyCancellable?
-    private var pendingSavedCard: FlowCard?
-    private var undoEntry: UndoEntry?
 
     public init(service: CoreFlowServing, pageSize: Int = 20) {
         self.service = service
@@ -51,84 +43,45 @@ public final class FlowDeckStore: ObservableObject {
         prefetchIfNeeded()
     }
 
-    public func saveCurrent() {
+    public func toggleFavoriteCurrent(
+        onFavoriteSucceeded: ((String) -> Void)? = nil
+    ) {
         guard !isInteractionLocked, let card = cards.first else { return }
 
         notice = nil
-        undoEntry = nil
-        cards.removeFirst()
-        updatePhaseAfterAdvance()
-
-        if card.isFavorited {
-            undoEntry = UndoEntry(card: card, createdFavorite: false)
-            notice = .saved(assetID: card.id)
-            prefetchIfNeeded()
-            return
-        }
-
+        let nextIsFavorited = !card.isFavorited
+        let nextFavoriteCount = nextIsFavorited
+            ? card.favoriteCount + 1
+            : max(0, card.favoriteCount - 1)
+        let optimisticCard = card.replacingFavorite(
+            isFavorited: nextIsFavorited,
+            favoriteCount: nextFavoriteCount
+        )
+        cards[0] = optimisticCard
         isInteractionLocked = true
-        pendingSavedCard = card
-        interactionCancellable = service.favorite(assetID: card.id)
+
+        let mutation = nextIsFavorited
+            ? service.favorite(assetID: card.id)
+            : service.unfavorite(assetID: card.id)
+        interactionCancellable = mutation
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { [weak self] completion in
                     guard let self else { return }
 
                     self.isInteractionLocked = false
-                    if case .failure = completion,
-                       let pending = self.pendingSavedCard {
-                        self.cards.insert(pending, at: 0)
-                        self.notice = .saveFailed
-                        self.phase = .loaded
-                    }
-                    self.pendingSavedCard = nil
-                },
-                receiveValue: { [weak self] in
-                    guard let self else { return }
+                    guard case .failure = completion else { return }
 
-                    self.undoEntry = UndoEntry(card: card, createdFavorite: true)
-                    self.notice = .saved(assetID: card.id)
-                    self.prefetchIfNeeded()
+                    self.cards = self.cards.map { current in
+                        current.id == card.id ? card : current
+                    }
+                    self.notice = .favoriteFailed
+                },
+                receiveValue: { _ in
+                    guard nextIsFavorited else { return }
+                    onFavoriteSucceeded?(card.id)
                 }
             )
-    }
-
-    public func undoLastSave() {
-        guard !isInteractionLocked, let entry = undoEntry else { return }
-
-        undoEntry = nil
-        notice = nil
-        cards.insert(entry.card, at: 0)
-        phase = .loaded
-
-        guard entry.createdFavorite else { return }
-
-        isInteractionLocked = true
-        interactionCancellable = service.unfavorite(assetID: entry.card.id)
-            .receive(on: DispatchQueue.main)
-            .sink(
-                receiveCompletion: { [weak self] completion in
-                    guard let self else { return }
-
-                    self.isInteractionLocked = false
-                    if case .failure = completion {
-                        self.cards.removeAll { $0.id == entry.card.id }
-                        self.undoEntry = entry
-                        self.notice = .undoFailed
-                        self.updatePhaseAfterAdvance()
-                    }
-                },
-                receiveValue: { _ in }
-            )
-    }
-
-    public func expireUndo(assetID: String) {
-        guard undoEntry?.card.id == assetID else { return }
-
-        undoEntry = nil
-        if notice == .saved(assetID: assetID) {
-            notice = nil
-        }
     }
 
     public func applyLikeState(_ state: CardLikeState) {

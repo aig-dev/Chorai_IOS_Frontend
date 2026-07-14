@@ -90,6 +90,31 @@ public struct FlowCard: Identifiable, Equatable, Sendable {
             author: author
         )
     }
+
+    public func replacingFavorite(
+        isFavorited: Bool,
+        favoriteCount: Int
+    ) -> FlowCard {
+        FlowCard(
+            id: id,
+            title: title,
+            content: content,
+            contentHash: contentHash,
+            tags: tags,
+            isPublic: isPublic,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            favoriteCount: favoriteCount,
+            likeCount: likeCount,
+            commentCount: commentCount,
+            rate: rate,
+            isFavorited: isFavorited,
+            isLiked: isLiked,
+            isPinned: isPinned,
+            pinnedAt: pinnedAt,
+            author: author
+        )
+    }
 }
 
 public struct FlowPage: Equatable, Sendable {
@@ -120,9 +145,7 @@ public enum FlowDeckPhase: Equatable, Sendable {
 }
 
 public enum FlowNotice: Equatable, Sendable {
-    case saved(assetID: String)
-    case saveFailed
-    case undoFailed
+    case favoriteFailed
 }
 
 public enum CoreTab: Int, CaseIterable, Sendable {
@@ -132,8 +155,8 @@ public enum CoreTab: Int, CaseIterable, Sendable {
 }
 
 public enum FlowSwipeDecision: Equatable, Sendable {
-    case dismiss
-    case save
+    case advanceLeft
+    case advanceRight
     case cancel
 }
 
@@ -145,13 +168,13 @@ public enum FlowSwipeResolver {
         predictionThreshold: Double = 132
     ) -> FlowSwipeDecision {
         if abs(translation) >= translationThreshold {
-            return translation > 0 ? .save : .dismiss
+            return translation > 0 ? .advanceRight : .advanceLeft
         }
 
         guard abs(predictedEndTranslation) >= predictionThreshold else {
             return .cancel
         }
 
-        return predictedEndTranslation > 0 ? .save : .dismiss
+        return predictedEndTranslation > 0 ? .advanceRight : .advanceLeft
     }
 }

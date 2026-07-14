@@ -108,7 +108,7 @@ final class FlowDeckStoreTests: XCTestCase {
     }
 
     @MainActor
-    func testSaveAdvancesAndOffersUndo() async {
+    func testFavoriteToggleActivatesCurrentCardWithoutAdvancingDeck() async {
         let service = MockCoreFlowService()
         service.recommendedResults = [
             .success(FlowPage(cards: [card("a"), card("b")], nextRefreshToken: nil))
@@ -117,99 +117,21 @@ final class FlowDeckStoreTests: XCTestCase {
         let store = FlowDeckStore(service: service)
         store.loadInitialIfNeeded()
         await settle()
+        var succeededAssetID: String?
 
-        store.saveCurrent()
+        store.toggleFavoriteCurrent { succeededAssetID = $0 }
         await settle()
 
-        XCTAssertEqual(store.currentCard?.id, "b")
-        XCTAssertEqual(store.undoAssetID, "a")
-        XCTAssertEqual(store.notice, .saved(assetID: "a"))
+        XCTAssertEqual(store.currentCard?.id, "a")
+        XCTAssertEqual(store.currentCard?.isFavorited, true)
+        XCTAssertEqual(store.currentCard?.favoriteCount, 1)
         XCTAssertEqual(service.favoritedAssetIDs, ["a"])
+        XCTAssertEqual(succeededAssetID, "a")
+        XCTAssertNil(store.notice)
     }
 
     @MainActor
-    func testSaveFailureRestoresExactCard() async {
-        let service = MockCoreFlowService()
-        service.recommendedResults = [
-            .success(FlowPage(cards: [card("a"), card("b")], nextRefreshToken: nil))
-        ]
-        service.favoriteResults = [.failure(.offline)]
-        let store = FlowDeckStore(service: service)
-        store.loadInitialIfNeeded()
-        await settle()
-
-        store.saveCurrent()
-        await settle()
-
-        XCTAssertEqual(store.cards.map(\.id), ["a", "b"])
-        XCTAssertEqual(store.cards.first, card("a"))
-        XCTAssertEqual(store.notice, .saveFailed)
-        XCTAssertNil(store.undoAssetID)
-    }
-
-    @MainActor
-    func testUndoRestoresCardAndUnfavorites() async {
-        let service = MockCoreFlowService()
-        service.recommendedResults = [
-            .success(FlowPage(cards: [card("a"), card("b")], nextRefreshToken: nil))
-        ]
-        service.favoriteResults = [.success(())]
-        service.unfavoriteResults = [.success(())]
-        let store = FlowDeckStore(service: service)
-        store.loadInitialIfNeeded()
-        await settle()
-        store.saveCurrent()
-        await settle()
-
-        store.undoLastSave()
-        await settle()
-
-        XCTAssertEqual(store.cards.map(\.id), ["a", "b"])
-        XCTAssertNil(store.undoAssetID)
-        XCTAssertEqual(service.unfavoritedAssetIDs, ["a"])
-    }
-
-    @MainActor
-    func testUndoFailureRemovesOptimisticRestoreAndOffersRetryNotice() async {
-        let service = MockCoreFlowService()
-        service.recommendedResults = [
-            .success(FlowPage(cards: [card("a"), card("b")], nextRefreshToken: nil))
-        ]
-        service.favoriteResults = [.success(())]
-        service.unfavoriteResults = [.failure(.server)]
-        let store = FlowDeckStore(service: service)
-        store.loadInitialIfNeeded()
-        await settle()
-        store.saveCurrent()
-        await settle()
-
-        store.undoLastSave()
-        await settle()
-
-        XCTAssertEqual(store.cards.map(\.id), ["b"])
-        XCTAssertEqual(store.undoAssetID, "a")
-        XCTAssertEqual(store.notice, .undoFailed)
-    }
-
-    @MainActor
-    func testSaveLocksDuplicateRequestsUntilCompletion() async {
-        let service = MockCoreFlowService()
-        service.recommendedResults = [
-            .success(FlowPage(cards: [card("a"), card("b")], nextRefreshToken: nil))
-        ]
-        service.favoriteResults = [.success(())]
-        let store = FlowDeckStore(service: service)
-        store.loadInitialIfNeeded()
-        await settle()
-
-        store.saveCurrent()
-        store.saveCurrent()
-
-        XCTAssertEqual(service.favoritedAssetIDs, ["a"])
-    }
-
-    @MainActor
-    func testAlreadyFavoritedCardNeverCreatesOrRemovesPriorFavorite() async {
+    func testFavoriteToggleCanDeactivateCurrentCardWithoutAdvancingDeck() async {
         let service = MockCoreFlowService()
         service.recommendedResults = [
             .success(
@@ -219,37 +141,43 @@ final class FlowDeckStoreTests: XCTestCase {
                 )
             )
         ]
+        service.unfavoriteResults = [.success(())]
         let store = FlowDeckStore(service: service)
         store.loadInitialIfNeeded()
         await settle()
+        var succeededAssetID: String?
 
-        store.saveCurrent()
-        store.undoLastSave()
+        store.toggleFavoriteCurrent { succeededAssetID = $0 }
+        await settle()
 
-        XCTAssertEqual(store.cards.map(\.id), ["a", "b"])
-        XCTAssertTrue(service.favoritedAssetIDs.isEmpty)
-        XCTAssertTrue(service.unfavoritedAssetIDs.isEmpty)
+        XCTAssertEqual(store.currentCard?.id, "a")
+        XCTAssertEqual(store.currentCard?.isFavorited, false)
+        XCTAssertEqual(store.currentCard?.favoriteCount, 0)
+        XCTAssertEqual(service.unfavoritedAssetIDs, ["a"])
+        XCTAssertNil(succeededAssetID)
+        XCTAssertNil(store.notice)
     }
 
     @MainActor
-    func testExpireUndoOnlyClearsMatchingSave() async {
+    func testFavoriteToggleFailureRestoresCurrentCardState() async {
         let service = MockCoreFlowService()
         service.recommendedResults = [
             .success(FlowPage(cards: [card("a"), card("b")], nextRefreshToken: nil))
         ]
-        service.favoriteResults = [.success(())]
+        service.favoriteResults = [.failure(.offline)]
         let store = FlowDeckStore(service: service)
         store.loadInitialIfNeeded()
         await settle()
-        store.saveCurrent()
+        var succeededAssetID: String?
+
+        store.toggleFavoriteCurrent { succeededAssetID = $0 }
         await settle()
 
-        store.expireUndo(assetID: "stale")
-        XCTAssertEqual(store.undoAssetID, "a")
-
-        store.expireUndo(assetID: "a")
-        XCTAssertNil(store.undoAssetID)
-        XCTAssertNil(store.notice)
+        XCTAssertEqual(store.currentCard?.id, "a")
+        XCTAssertEqual(store.currentCard?.isFavorited, false)
+        XCTAssertEqual(store.currentCard?.favoriteCount, 0)
+        XCTAssertEqual(store.notice, .favoriteFailed)
+        XCTAssertNil(succeededAssetID)
     }
 
     @MainActor

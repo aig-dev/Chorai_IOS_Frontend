@@ -68,7 +68,7 @@ struct FlowCardView: View {
     let onOpenDetail: () -> Void
     let onOpenAuthor: () -> Void
     let onOpenMenu: () -> Void
-    let onSave: () -> Void
+    let onToggleFavorite: () -> Void
     let onSpark: () -> Void
     let onDismiss: () -> Void
     let onToggleLike: () -> Void
@@ -76,7 +76,6 @@ struct FlowCardView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.colorSchemeContrast) private var contrast
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var dragOffset: CGSize = .zero
     @State private var isResolvingSwipe = false
 
@@ -97,15 +96,29 @@ struct FlowCardView: View {
 
                 Spacer()
 
-                Button(action: onOpenMenu) {
-                    Image(systemName: "ellipsis")
-                        .font(.body.weight(.semibold))
-                        .frame(width: 44, height: 44)
-                        .contentShape(Rectangle())
+                HStack(spacing: 2) {
+                    Button(action: onOpenMenu) {
+                        Image(systemName: "ellipsis")
+                            .font(.body.weight(.semibold))
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("More actions")
+                    .accessibilityIdentifier("flow.menu.\(card.id)")
+
+                    Button(action: onSpark) {
+                        Image("menu_spark")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 22, height: 22)
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Spark")
+                    .accessibilityIdentifier("flow.spark.\(card.id)")
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("More actions")
-                .accessibilityIdentifier("flow.menu.\(card.id)")
             }
 
             VStack(alignment: .leading, spacing: 12) {
@@ -145,9 +158,23 @@ struct FlowCardView: View {
 
             Spacer(minLength: 0)
 
-            HStack(spacing: 16) {
+            HStack(spacing: 10) {
+                Button(action: onToggleFavorite) {
+                    engagementMetric(
+                        image: card.isFavorited ? "favorite_active" : "favorite",
+                        count: card.favoriteCount,
+                        imageOpacity: card.isFavorited ? 1 : 0.58
+                    )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(card.isFavorited ? "Unfavorite" : "Favorite")
+                .accessibilityValue(card.isFavorited ? "true" : "false")
+                .accessibilityIdentifier("flow.favorite.\(card.id)")
+
+                Spacer(minLength: 16)
+
                 Button(action: onToggleLike) {
-                    likeMetric(
+                    engagementMetric(
                         image: card.isLiked ? "like_active" : "like",
                         count: card.likeCount
                     )
@@ -157,10 +184,16 @@ struct FlowCardView: View {
                 .accessibilityLabel(card.isLiked ? "Unlike" : "Like")
                 .accessibilityValue(card.isLiked ? "true" : "false")
                 .accessibilityIdentifier("flow.like.\(card.id)")
-                Label("\(card.favoriteCount)", systemImage: "bookmark")
-                Label("\(card.commentCount)", systemImage: "bubble.left")
+
+                CommentButton(cardId: card.id, commentCount: card.commentCount)
+                    .buttonStyle(.plain)
+                    .frame(minWidth: 44, minHeight: 44)
+                    .contentShape(Rectangle())
+                    .accessibilityLabel("Comments")
+                    .accessibilityValue("\(card.commentCount)")
+                    .accessibilityIdentifier("flow.comment.\(card.id)")
             }
-            .font(.caption)
+            .padding(.bottom, -18)
             .foregroundStyle(Color.white.opacity(0.58))
 
             if let likeErrorMessage {
@@ -170,31 +203,6 @@ struct FlowCardView: View {
                     .accessibilityIdentifier("flow.like.error.\(card.id)")
             }
 
-            HStack(spacing: 10) {
-                flowActionButton(
-                    title: "Skip",
-                    systemImage: "arrow.left",
-                    fill: Color.white.opacity(0.06),
-                    action: onDismiss
-                )
-                .accessibilityIdentifier("flow.skip.\(card.id)")
-
-                flowActionButton(
-                    title: "Save",
-                    systemImage: "bookmark.fill",
-                    fill: ZenVisualTokens.accent,
-                    action: onSave
-                )
-                .accessibilityIdentifier("flow.save.\(card.id)")
-
-                flowActionButton(
-                    title: "Spark",
-                    systemImage: "sparkles",
-                    fill: ZenVisualTokens.accent.opacity(0.15),
-                    action: onSpark
-                )
-                .accessibilityIdentifier("flow.spark.\(card.id)")
-            }
         }
         .padding(22)
         .foregroundStyle(.white)
@@ -242,50 +250,24 @@ struct FlowCardView: View {
         }
     }
 
-    private func flowActionButton(
-        title: String,
-        systemImage: String,
-        fill: Color,
-        action: @escaping () -> Void
+    private func engagementMetric(
+        image: String,
+        count: Int,
+        imageOpacity: Double = 1
     ) -> some View {
-        Button(action: action) {
-            Group {
-                if dynamicTypeSize.isAccessibilitySize {
-                    VStack(spacing: 2) {
-                        Image(systemName: systemImage)
-                            .font(.system(size: 17, weight: .semibold))
-                        Text(title)
-                            .font(.system(size: 11, weight: .semibold, design: .rounded))
-                            .lineLimit(1)
-                    }
-                } else {
-                    Label(title, systemImage: systemImage)
-                        .font(.caption.weight(.semibold))
-                        .lineLimit(1)
-                }
-            }
-            .frame(maxWidth: .infinity, minHeight: 44)
-            .background(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(fill)
-            )
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(title)
-    }
-
-    private func likeMetric(image: String, count: Int) -> some View {
         HStack(spacing: 6) {
             Image(image)
                 .resizable()
                 .scaledToFit()
                 .frame(width: 22, height: 22)
+                .opacity(imageOpacity)
             Text("\(count)")
                 .font(.system(size: 15, weight: .medium, design: .rounded))
                 .monospacedDigit()
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(image) \(count)")
+        .frame(minWidth: 44, minHeight: 44)
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .ignore)
     }
 
     private var cardDragGesture: some Gesture {
@@ -317,23 +299,23 @@ struct FlowCardView: View {
         guard !isResolvingSwipe else { return }
 
         isResolvingSwipe = true
-        let action = decision == .save ? onSave : onDismiss
-        UIImpactFeedbackGenerator(style: decision == .save ? .medium : .light).impactOccurred()
+        let advancesRight = decision == .advanceRight
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
 
         guard !reduceMotion else {
             dragOffset = .zero
             isResolvingSwipe = false
-            action()
+            onDismiss()
             return
         }
 
         withAnimation(.spring(response: ZenVisualTokens.transitionDuration, dampingFraction: 0.86)) {
-            dragOffset.width = decision == .save ? 620 : -620
+            dragOffset.width = advancesRight ? 620 : -620
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + ZenVisualTokens.transitionDuration) {
             dragOffset = .zero
             isResolvingSwipe = false
-            action()
+            onDismiss()
         }
     }
 }
@@ -402,11 +384,6 @@ struct FlowDeckView: View {
                     .foregroundStyle(Color.white.opacity(0.01))
                     .frame(width: 1, height: 1)
                     .accessibilityIdentifier("flow.like.count.\(card.id)")
-                Text(card.isFavorited ? "true" : "false")
-                    .font(.system(size: 1))
-                    .foregroundStyle(Color.white.opacity(0.01))
-                    .frame(width: 1, height: 1)
-                    .accessibilityIdentifier("flow.favorite.\(card.id)")
                 Text("\(card.favoriteCount)")
                     .font(.system(size: 1))
                     .foregroundStyle(Color.white.opacity(0.01))
@@ -415,12 +392,6 @@ struct FlowDeckView: View {
             }
         }
         .task { store.loadInitialIfNeeded() }
-        .task(id: store.undoAssetID) {
-            guard let assetID = store.undoAssetID else { return }
-            try? await Task.sleep(nanoseconds: 3_000_000_000)
-            guard !Task.isCancelled else { return }
-            store.expireUndo(assetID: assetID)
-        }
         .onChange(of: store.currentCard?.id) { _ in
             if let card = store.currentCard {
                 likeStore.hydrate(
@@ -436,11 +407,6 @@ struct FlowDeckView: View {
         .onReceive(CardEngagementCenter.shared.likes) { state in
             store.applyLikeState(state)
             likeStore.applyCommitted(state)
-        }
-        .onChange(of: store.notice) { notice in
-            if case .saved(let assetID)? = notice {
-                onCardSaved(assetID)
-            }
         }
     }
 
@@ -464,7 +430,11 @@ struct FlowDeckView: View {
                     onOpenDetail: { onOpenDetail(card) },
                     onOpenAuthor: { onOpenAuthor(card) },
                     onOpenMenu: { onOpenMenu(card) },
-                    onSave: store.saveCurrent,
+                    onToggleFavorite: {
+                        store.toggleFavoriteCurrent(
+                            onFavoriteSucceeded: onCardSaved
+                        )
+                    },
                     onSpark: { onSpark(card) },
                     onDismiss: {
                         let assetID = card.id
@@ -496,29 +466,11 @@ struct FlowDeckView: View {
     @ViewBuilder
     private var noticeView: some View {
         switch store.notice {
-        case .saved:
-            HStack {
-                Label("Saved", systemImage: "bookmark.fill")
-                    .font(.subheadline.weight(.medium))
-                Spacer()
-                Button("Undo", action: store.undoLastSave)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(ZenVisualTokens.accent)
-                    .accessibilityIdentifier("flow.undo")
-            }
-            .padding(.horizontal, 16)
-            .frame(minHeight: 44)
-            .background(Capsule().fill(Color.white.opacity(0.1)))
-        case .saveFailed:
-            Text("Save failed. The card is back in your flow.")
+        case .favoriteFailed:
+            Text("Favorite failed. Try again.")
                 .font(.footnote)
                 .foregroundStyle(Color.white.opacity(0.72))
-                .accessibilityIdentifier("flow.save.error")
-        case .undoFailed:
-            Button("Undo failed. Try again.", action: store.undoLastSave)
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(ZenVisualTokens.accent)
-                .accessibilityIdentifier("flow.undo")
+                .accessibilityIdentifier("flow.favorite.error")
         case nil:
             EmptyView()
         }

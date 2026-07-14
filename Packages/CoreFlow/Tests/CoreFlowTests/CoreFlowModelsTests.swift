@@ -5,11 +5,11 @@ final class CoreFlowModelsTests: XCTestCase {
     func testSwipeResolverUsesTranslationAndPredictionThresholds() {
         XCTAssertEqual(
             FlowSwipeResolver.resolve(translation: -90, predictedEndTranslation: -100),
-            .dismiss
+            .advanceLeft
         )
         XCTAssertEqual(
             FlowSwipeResolver.resolve(translation: 30, predictedEndTranslation: 140),
-            .save
+            .advanceRight
         )
         XCTAssertEqual(
             FlowSwipeResolver.resolve(translation: 40, predictedEndTranslation: 80),

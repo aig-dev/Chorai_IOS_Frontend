@@ -1506,7 +1506,7 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertFalse(visibleCardID.isEmpty)
         captureVisual("onboarding-flow-guide")
 
-        tap("flow.skip.\(visibleCardID)")
+        waitFor("flow.card.\(visibleCardID)").swipeLeft()
         waitForOnboardingAnchor(
             "onboarding.state",
             value: "product_spark_intro",
@@ -1610,7 +1610,7 @@ final class ArcNoteUITests: XCTestCase {
         let firstFlowCardID = waitFor("flow.visible-card.id", timeout: 30)
             .label
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        tap("flow.skip.\(firstFlowCardID)")
+        waitFor("flow.card.\(firstFlowCardID)").swipeLeft()
         waitForOnboardingAnchor(
             "onboarding.state",
             value: "product_spark_intro",
@@ -2219,7 +2219,7 @@ final class ArcNoteUITests: XCTestCase {
         )
     }
 
-    func testFlowRightSwipeFavoritesAndUndoRestoresCard() throws {
+    func testFlowFavoriteIconActivatesWithoutAdvancingCard() throws {
         let session = try requireSmokeSession()
         seedAppSession(session)
         launchAuthenticatedApp()
@@ -2227,21 +2227,66 @@ final class ArcNoteUITests: XCTestCase {
         waitFor("tab.flow")
         waitFor("screen.flow.content", timeout: 20)
 
-        let cardId = try waitForUnfavoritedFlowCard(token: session.token)
+        let cardID = try waitForUnfavoritedFlowCard(token: session.token)
         defer {
-            clearFavoriteLikeState(id: cardId, token: session.token)
+            clearFavoriteLikeState(id: cardID, token: session.token)
         }
 
+        let favorite = waitForButton("flow.favorite.\(cardID)", timeout: 30)
+        let like = waitForButton("flow.like.\(cardID)", timeout: 30)
+        let comment = waitForButton("flow.comment.\(cardID)", timeout: 30)
+        let spark = waitForButton("flow.spark.\(cardID)", timeout: 30)
+
+        XCTAssertFalse(
+            app.buttons["flow.skip.\(cardID)"].exists,
+            "Flow dismissal should be swipe-only"
+        )
+        XCTAssertLessThan(favorite.frame.midX, like.frame.midX)
+        XCTAssertLessThan(like.frame.midX, comment.frame.midX)
+        XCTAssertLessThan(
+            spark.frame.midY,
+            favorite.frame.midY,
+            "Spark should live in the card header above the engagement footer"
+        )
+
+        favorite.tap()
+        waitForAssetStatus(
+            kind: "favorites",
+            id: cardID,
+            token: session.token,
+            expected: true
+        )
+        waitForAccessibilityValue("flow.favorite.\(cardID)", expected: "true")
+        XCTAssertEqual(flowVisibleCardID(), cardID, "Favorite tap must keep the current card visible")
+        captureVisual("flow-compact-icon-chrome")
+
+        waitFor("flow.card.\(cardID)").swipeLeft()
+        XCTAssertNotEqual(waitForDifferentVisibleFlowCard(from: cardID), cardID)
+    }
+
+    func testFlowRightSwipeAdvancesWithoutFavoriteMutationOrUndo() throws {
+        let session = try requireSmokeSession()
+        seedAppSession(session)
+        launchAuthenticatedApp()
+
+        waitFor("tab.flow")
+        waitFor("screen.flow.content", timeout: 20)
+
+        let cardId = flowVisibleCardID()
+        let initialFavoriteState = try fetchAssetStatus(
+            kind: "favorites",
+            id: cardId,
+            token: session.token
+        )
+
         waitFor("flow.card.\(cardId)").swipeRight()
-        waitForAssetStatus(kind: "favorites", id: cardId, token: session.token, expected: true)
-
-        tap("flow.undo")
-        waitForAssetStatus(kind: "favorites", id: cardId, token: session.token, expected: false)
-
-        let restoredCardId = waitFor("flow.visible-card.id", timeout: 10)
-            .label
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        XCTAssertEqual(restoredCardId, cardId, "Undo must restore the saved card")
+        XCTAssertNotEqual(waitForDifferentVisibleFlowCard(from: cardId), cardId)
+        XCTAssertEqual(
+            try fetchAssetStatus(kind: "favorites", id: cardId, token: session.token),
+            initialFavoriteState,
+            "Right swipe must not mutate favorite state"
+        )
+        XCTAssertFalse(app.buttons["flow.undo"].exists, "Flow must not expose Undo")
     }
 
     func testFlowLikeAndUnlikeStayOnCardAndPersistToGo() throws {
@@ -2289,7 +2334,7 @@ final class ArcNoteUITests: XCTestCase {
         }
 
         let baselineCount = anchorLabel("flow.like.count.\(cardID)")
-        let favoriteValue = anchorLabel("flow.favorite.\(cardID)")
+        let favoriteValue = accessibilityValue("flow.favorite.\(cardID)")
         let favoriteCount = anchorLabel("flow.favorite.count.\(cardID)")
 
         tap("flow.like.\(cardID)")
@@ -2309,7 +2354,7 @@ final class ArcNoteUITests: XCTestCase {
             ),
             originalFavorite
         )
-        XCTAssertEqual(anchorLabel("flow.favorite.\(cardID)"), favoriteValue)
+        XCTAssertEqual(accessibilityValue("flow.favorite.\(cardID)"), favoriteValue)
         XCTAssertEqual(anchorLabel("flow.favorite.count.\(cardID)"), favoriteCount)
         captureVisual("flow-liked-stays-on-card")
 
@@ -2323,7 +2368,7 @@ final class ArcNoteUITests: XCTestCase {
         waitForAccessibilityValue("flow.like.\(cardID)", expected: "false")
         XCTAssertEqual(flowVisibleCardID(), cardID)
         XCTAssertEqual(anchorLabel("flow.like.count.\(cardID)"), baselineCount)
-        XCTAssertEqual(anchorLabel("flow.favorite.\(cardID)"), favoriteValue)
+        XCTAssertEqual(accessibilityValue("flow.favorite.\(cardID)"), favoriteValue)
         XCTAssertEqual(anchorLabel("flow.favorite.count.\(cardID)"), favoriteCount)
         captureVisual("flow-unliked-stays-on-card")
     }
@@ -2449,7 +2494,7 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertEqual(cardID, fixtureID)
         let likeValue = accessibilityValue("flow.like.\(cardID)")
         let likeCount = anchorLabel("flow.like.count.\(cardID)")
-        let favoriteValue = anchorLabel("flow.favorite.\(cardID)")
+        let favoriteValue = accessibilityValue("flow.favorite.\(cardID)")
         let favoriteCount = anchorLabel("flow.favorite.count.\(cardID)")
 
         try revokeSmokeSession(token: session.token)
@@ -2459,7 +2504,7 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertEqual(flowVisibleCardID(), cardID)
         XCTAssertEqual(accessibilityValue("flow.like.\(cardID)"), likeValue)
         XCTAssertEqual(anchorLabel("flow.like.count.\(cardID)"), likeCount)
-        XCTAssertEqual(anchorLabel("flow.favorite.\(cardID)"), favoriteValue)
+        XCTAssertEqual(accessibilityValue("flow.favorite.\(cardID)"), favoriteValue)
         XCTAssertEqual(anchorLabel("flow.favorite.count.\(cardID)"), favoriteCount)
         captureVisual("flow-like-failure-preserves-card")
     }
@@ -4026,7 +4071,7 @@ final class ArcNoteUITests: XCTestCase {
 
             tap("spark.back", file: file, line: line)
             waitFor("screen.flow.content", timeout: 30, file: file, line: line)
-            tap("flow.skip.\(cardID)", file: file, line: line)
+            waitFor("flow.card.\(cardID)", file: file, line: line).swipeLeft()
             cardID = waitForDifferentVisibleFlowCard(
                 from: cardID,
                 timeout: 30,
