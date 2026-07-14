@@ -26,6 +26,8 @@ struct ArcNoteApp: App {
         .contains("--ui-test-notification-contract")
     private let isChoraContractUITestRoute = ProcessInfo.processInfo.arguments
         .contains("--ui-test-chora-contract")
+    private let isInvitationCreditContractUITestRoute = ProcessInfo.processInfo.arguments
+        .contains("--ui-test-invitation-credit-contract")
     private let isChoraProfileUITestRoute = ProcessInfo.processInfo.arguments
         .contains("--ui-test-chora-profile")
     private let isSettingsUITestRoute = ProcessInfo.processInfo.arguments
@@ -81,6 +83,8 @@ struct ArcNoteApp: App {
                 ChatVisibilityFixtureScreen()
             } else if isChoraContractUITestRoute {
                 ChoraProfileContractFixtureView()
+            } else if isInvitationCreditContractUITestRoute {
+                InvitationCreditContractFixtureView()
             } else if isNotificationContractUITestRoute {
                 NotificationContractFixtureView()
             } else if isNotificationInboxUITestRoute {
@@ -1211,6 +1215,245 @@ private final class ChoraContractUploadHandle:
         lock.unlock()
         callback?()
     }
+}
+
+private struct InvitationCreditContractFixtureView: View {
+    private let result: Result<[String: String], Error>
+
+    init() {
+        do {
+            let decoder = JSONDecoder()
+            let referralResponse = try decoder.decode(
+                InvitationReferralResponse.self,
+                from: Data(Self.referralJSON.utf8)
+            )
+            let balanceResponse = try decoder.decode(
+                NetworkResponse<[CreditBalanceData]>.self,
+                from: Data(Self.balanceJSON.utf8)
+            )
+            let recordResponse = try decoder.decode(
+                InvitationRecordsResponse.self,
+                from: Data(Self.recordJSON.utf8)
+            )
+            let rewardResponse = try decoder.decode(
+                InvitationRewardsResponse.self,
+                from: Data(Self.rewardJSON.utf8)
+            )
+            let emptyRecordResponse = try decoder.decode(
+                InvitationRecordsResponse.self,
+                from: Data(Self.emptyPageJSON.utf8)
+            )
+            let emptyRewardResponse = try decoder.decode(
+                InvitationRewardsResponse.self,
+                from: Data(Self.emptyPageJSON.utf8)
+            )
+            let ledgerResponse = try decoder.decode(
+                CreditLedgerResponse.self,
+                from: Data(Self.ledgerJSON.utf8)
+            )
+
+            let referral = try NetworkInvitationCreditService.mapReferral(
+                referralResponse.data
+            )
+            guard let balanceData = balanceResponse.data else {
+                throw InvitationCreditError.contract(code: "missing_balance")
+            }
+            let balances = try NetworkInvitationCreditService.mapBalances(
+                balanceData
+            )
+            let records = try NetworkInvitationCreditService.mapInvitationPage(
+                recordResponse.data
+            )
+            let rewards = try NetworkInvitationCreditService.mapRewardPage(
+                rewardResponse.data
+            )
+            let emptyRecords = try NetworkInvitationCreditService.mapInvitationPage(
+                emptyRecordResponse.data
+            )
+            let emptyRewards = try NetworkInvitationCreditService.mapRewardPage(
+                emptyRewardResponse.data
+            )
+            let ledger = try NetworkInvitationCreditService.mapLedger(
+                ledgerResponse.data
+            )
+            guard let record = records.items.first,
+                  let reward = rewards.items.first,
+                  let entry = ledger.entries.first,
+                  emptyRecords.items.isEmpty,
+                  emptyRecords.total == 0,
+                  emptyRewards.items.isEmpty,
+                  emptyRewards.total == 0 else {
+                throw InvitationCreditError.contract(code: "missing_fixture_item")
+            }
+            let redactedRequestLog = NetworkManager.payloadLogDescription(
+                parameters: ["code": "SecretCode"],
+                suppressesPayloadLogging: true
+            )
+            guard redactedRequestLog == "<redacted>",
+                  !NetworkManager.shouldLogPayload(
+                    suppressesPayloadLogging: true
+                  ) else {
+                throw InvitationCreditError.contract(code: "sensitive_logging")
+            }
+
+            result = .success([
+                "invitation.contract.referral": [
+                    referral.code,
+                    referral.link,
+                    String(referral.usedCount),
+                    referral.nextMilestone.map(String.init) ?? "nil"
+                ].joined(separator: ","),
+                "invitation.contract.balance":
+                    "credit:\(balances.regular),premium_credit:\(balances.premium)",
+                "invitation.contract.record": [
+                    record.id,
+                    record.status.canonical,
+                    String(Int(record.createdAt.timeIntervalSince1970))
+                ].joined(separator: ","),
+                "invitation.contract.reward": [
+                    reward.id,
+                    reward.tier.canonical,
+                    String(reward.amount),
+                    reward.status.canonical,
+                    String(reward.isMilestoneBonus),
+                    String(Int(reward.createdAt.timeIntervalSince1970))
+                ].joined(separator: ","),
+                "invitation.contract.ledger": [
+                    entry.id,
+                    entry.direction.canonical,
+                    String(entry.delta),
+                    entry.tier.canonical,
+                    entry.actionType,
+                    String(entry.runningBalance),
+                    entry.status.canonical,
+                    ledger.cursor ?? "nil",
+                    String(ledger.hasMore)
+                ].joined(separator: ","),
+                "invitation.contract.logging": "request-and-response-redacted",
+                "invitation.contract.empty-pages": "invitations:0,rewards:0",
+                "invitation.contract.auth":
+                    "validate:public|referral,redeem,records,rewards,balance,ledger:authenticated",
+                "invitation.contract.routes":
+                    "GET /api/invitations/referral|POST /api/invitations/validate|POST /api/invitations/redeem|GET /api/invitations/records page,limit|GET /api/invitations/rewards page,limit|GET /api/v1/credits/balance|GET /api/v1/credits/ledger cursor,limit|presentsError:false"
+            ])
+        } catch {
+            result = .failure(error)
+        }
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 8) {
+                switch result {
+                case .success(let values):
+                    ForEach(values.keys.sorted(), id: \.self) { key in
+                        Text(values[key] ?? "")
+                            .accessibilityIdentifier(key)
+                    }
+                case .failure(let error):
+                    Text(String(describing: error))
+                        .accessibilityIdentifier("invitation.contract.error")
+                }
+            }
+            .padding()
+        }
+    }
+
+    private static let referralJSON = #"""
+    {
+      "success": true,
+      "data": {
+        "code": "MixedCase09",
+        "link": "https://chorai.test/r/MixedCase09",
+        "used_count": 3
+      }
+    }
+    """#
+
+    private static let balanceJSON = #"""
+    {
+      "success": true,
+      "data": [
+        {"credit_tier": "premium_credit", "balance": 4, "updated_at": "2024-03-09T16:00:00Z"},
+        {"credit_tier": "credit", "balance": 12, "updated_at": "2024-03-09T16:00:00.000Z"}
+      ]
+    }
+    """#
+
+    private static let recordJSON = #"""
+    {
+      "success": true,
+      "data": {
+        "items": [{
+          "invitation_record_id": "inv_1",
+          "inviter_actor_id": "act_private_inviter",
+          "invitee_actor_id": "act_private_invitee",
+          "status": "registered",
+          "created_at": "2024-03-09T16:00:00Z"
+        }],
+        "total": 1,
+        "page": 1,
+        "limit": 20
+      }
+    }
+    """#
+
+    private static let rewardJSON = #"""
+    {
+      "success": true,
+      "data": {
+        "items": [{
+          "invitation_reward_id": "rew_1",
+          "recipient_role": "inviter",
+          "credit_tier": "credit",
+          "amount": 5,
+          "is_milestone_bonus": true,
+          "status": "issued",
+          "created_at": "2024-03-09T16:00:00Z"
+        }],
+        "total": 1,
+        "page": 1,
+        "limit": 20
+      }
+    }
+    """#
+
+    private static let emptyPageJSON = #"""
+    {
+      "success": true,
+      "data": {
+        "items": [],
+        "total": 0,
+        "page": 1,
+        "limit": 20
+      }
+    }
+    """#
+
+    private static let ledgerJSON = #"""
+    {
+      "success": true,
+      "data": {
+        "entries": [{
+          "log_id": "log_1",
+          "transaction_id": "tx_1",
+          "credit_tier": "credit",
+          "direction": "future_direction",
+          "delta": 5,
+          "running_balance": 7,
+          "status": "future_status",
+          "rule_id": "rule_private",
+          "action_type": "FUTURE_ACTION",
+          "category": "growth",
+          "reference_id": "ref_private",
+          "reference_type": "invitation",
+          "activity_id": null,
+          "created_at": "2024-03-09T16:00:00Z"
+        }],
+        "has_more": false
+      }
+    }
+    """#
 }
 
 private struct ChoraProfileContractFixtureView: View {
@@ -2355,6 +2598,15 @@ private final class APIMigrationSmokeRunner {
             }
             _ = try await expect("invitation-rewards") {
                 NetworkManager.shared.getInvitationRewards(page: 1, limit: 5)
+            }
+            _ = try await expect("credit-balance") {
+                NetworkManager.shared.getUserCredit(presentsError: false)
+            }
+            _ = try await expect("credit-ledger") {
+                NetworkManager.shared.getCreditLedger(
+                    limit: 5,
+                    presentsError: false
+                )
             }
 
             for cardId in createdCardIds.reversed() {

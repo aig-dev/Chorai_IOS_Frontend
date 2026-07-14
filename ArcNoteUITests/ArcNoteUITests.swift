@@ -116,6 +116,39 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertFalse(app.descendants(matching: .any)["chora.contract.error"].exists)
     }
 
+    func testInvitationCreditContractFixtureRoute() throws {
+        app.launchArguments.append("--ui-test-invitation-credit-contract")
+        app.launch()
+
+        let fixtureError = app.descendants(matching: .any)[
+            "invitation.contract.error"
+        ]
+        if fixtureError.waitForExistence(timeout: 2) {
+            XCTFail("Invitation contract fixture failed: \(fixtureError.label)")
+        }
+
+        let expectedValues = [
+            "invitation.contract.referral":
+                "MixedCase09,https://chorai.test/r/MixedCase09,3,nil",
+            "invitation.contract.balance": "credit:12,premium_credit:4",
+            "invitation.contract.record": "inv_1,registered,1710000000",
+            "invitation.contract.reward": "rew_1,credit,5,issued,true,1710000000",
+            "invitation.contract.ledger":
+                "log_1,future_direction,5,credit,FUTURE_ACTION,7,future_status,nil,false",
+            "invitation.contract.logging": "request-and-response-redacted",
+            "invitation.contract.empty-pages": "invitations:0,rewards:0",
+            "invitation.contract.auth":
+                "validate:public|referral,redeem,records,rewards,balance,ledger:authenticated",
+            "invitation.contract.routes":
+                "GET /api/invitations/referral|POST /api/invitations/validate|POST /api/invitations/redeem|GET /api/invitations/records page,limit|GET /api/invitations/rewards page,limit|GET /api/v1/credits/balance|GET /api/v1/credits/ledger cursor,limit|presentsError:false"
+        ]
+
+        for (identifier, expectedValue) in expectedValues {
+            XCTAssertEqual(waitFor(identifier).label, expectedValue)
+        }
+        XCTAssertFalse(fixtureError.exists)
+    }
+
     func testSettingsShowsChoraProfileEntry() throws {
         app.launchArguments.append("--ui-test-settings")
         app.launch()

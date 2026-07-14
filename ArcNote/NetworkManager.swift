@@ -86,7 +86,8 @@ class NetworkManager: ObservableObject {
         encoding: ParameterEncoding = JSONEncoding.default,
         headers: HTTPHeaders? = nil,
         responseType: T.Type,
-        presentsError: Bool = true
+        presentsError: Bool = true,
+        suppressesPayloadLogging: Bool = false
     ) -> AnyPublisher<T, NetworkError> {
 
         return Future<T, NetworkError> { [weak self] promise in
@@ -99,8 +100,11 @@ class NetworkManager: ObservableObject {
 
             print("请求URL: \(url)")
             print("请求方法: \(method.rawValue)")
-            if let parameters = parameters {
-                print("请求参数: \(parameters)")
+            if let description = Self.payloadLogDescription(
+                parameters: parameters,
+                suppressesPayloadLogging: suppressesPayloadLogging
+            ) {
+                print("请求参数: \(description)")
             }
 
             let requestHeaders = self.authorizedHeaders(extra: headers)
@@ -131,7 +135,13 @@ class NetworkManager: ObservableObject {
 
                 switch response.result {
                 case .success(let data):
-                    self.logResponseData(data, label: "响应数据")
+                    if Self.shouldLogPayload(
+                        suppressesPayloadLogging: suppressesPayloadLogging
+                    ) {
+                        self.logResponseData(data, label: "响应数据")
+                    } else {
+                        print("响应数据: <redacted>")
+                    }
 
                     do {
                         let decodedResponse = try JSONDecoder().decode(T.self, from: data)
@@ -146,7 +156,13 @@ class NetworkManager: ObservableObject {
                     var responseMessage: String?
                     var apiError: GoAPIErrorPayload?
                     if let data = response.data {
-                        self.logResponseData(data, label: "请求失败响应数据")
+                        if Self.shouldLogPayload(
+                            suppressesPayloadLogging: suppressesPayloadLogging
+                        ) {
+                            self.logResponseData(data, label: "请求失败响应数据")
+                        } else {
+                            print("请求失败响应数据: <redacted>")
+                        }
                         apiError = try? JSONDecoder().decode(GoAPIErrorEnvelope.self, from: data).error
                         if apiError == nil {
                             apiError = try? JSONDecoder().decode(
@@ -188,6 +204,20 @@ class NetworkManager: ObservableObject {
             }
         }
         .eraseToAnyPublisher()
+    }
+
+    static func payloadLogDescription(
+        parameters: [String: Any]?,
+        suppressesPayloadLogging: Bool
+    ) -> String? {
+        guard let parameters else { return nil }
+        return suppressesPayloadLogging ? "<redacted>" : String(describing: parameters)
+    }
+
+    static func shouldLogPayload(
+        suppressesPayloadLogging: Bool
+    ) -> Bool {
+        !suppressesPayloadLogging
     }
 
     private func requestData(
@@ -1107,11 +1137,35 @@ extension NetworkManager {
         )
     }
 
-    func getUserCredit() -> AnyPublisher<NetworkResponse<[CreditBalanceData]>, NetworkError> {
+    func getUserCredit(
+        presentsError: Bool = false
+    ) -> AnyPublisher<NetworkResponse<[CreditBalanceData]>, NetworkError> {
         return request(
             endpoint: "/api/v1/credits/balance",
             method: .get,
-            responseType: NetworkResponse<[CreditBalanceData]>.self
+            responseType: NetworkResponse<[CreditBalanceData]>.self,
+            presentsError: presentsError,
+            suppressesPayloadLogging: true
+        )
+    }
+
+    func getCreditLedger(
+        cursor: String? = nil,
+        limit: Int = 20,
+        presentsError: Bool = false
+    ) -> AnyPublisher<CreditLedgerResponse, NetworkError> {
+        var parameters: Parameters = ["limit": limit]
+        if let cursor, !cursor.isEmpty {
+            parameters["cursor"] = cursor
+        }
+        return request(
+            endpoint: "/api/v1/credits/ledger",
+            method: .get,
+            parameters: parameters,
+            encoding: URLEncoding.default,
+            responseType: CreditLedgerResponse.self,
+            presentsError: presentsError,
+            suppressesPayloadLogging: true
         )
     }
 
@@ -1358,7 +1412,10 @@ extension NetworkManager {
     }
 
     // MARK: 邀请码相关API
-    func useInvitationCode(_ request: UseInvitationRequest) -> AnyPublisher<InvitationRedeemResponse, NetworkError> {
+    func useInvitationCode(
+        _ request: UseInvitationRequest,
+        presentsError: Bool = false
+    ) -> AnyPublisher<InvitationRedeemResponse, NetworkError> {
         let parameters: Parameters = [
             "code": request.code
         ]
@@ -1367,19 +1424,28 @@ extension NetworkManager {
             endpoint: "/api/invitations/redeem",
             method: .post,
             parameters: parameters,
-            responseType: InvitationRedeemResponse.self
+            responseType: InvitationRedeemResponse.self,
+            presentsError: presentsError,
+            suppressesPayloadLogging: true
         )
     }
 
-    func getUserGroup() -> AnyPublisher<InvitationReferralResponse, NetworkError> {
+    func getUserGroup(
+        presentsError: Bool = false
+    ) -> AnyPublisher<InvitationReferralResponse, NetworkError> {
         return self.request(
             endpoint: "/api/invitations/referral",
             method: .get,
-            responseType: InvitationReferralResponse.self
+            responseType: InvitationReferralResponse.self,
+            presentsError: presentsError,
+            suppressesPayloadLogging: true
         )
     }
 
-    func validateInvitationCode(_ request: ValidateInvitationRequest) -> AnyPublisher<InvitationValidateResponse, NetworkError> {
+    func validateInvitationCode(
+        _ request: ValidateInvitationRequest,
+        presentsError: Bool = false
+    ) -> AnyPublisher<InvitationValidateResponse, NetworkError> {
         let parameters: Parameters = [
             "code": request.code
         ]
@@ -1388,7 +1454,9 @@ extension NetworkManager {
             endpoint: "/api/invitations/validate",
             method: .post,
             parameters: parameters,
-            responseType: InvitationValidateResponse.self
+            responseType: InvitationValidateResponse.self,
+            presentsError: presentsError,
+            suppressesPayloadLogging: true
         )
     }
 
@@ -1404,11 +1472,17 @@ extension NetworkManager {
             endpoint: "/api/invitations/track",
             method: .post,
             parameters: parameters,
-            responseType: InvitationTrackResponse.self
+            responseType: InvitationTrackResponse.self,
+            suppressesPayloadLogging: true
         )
     }
 
-    func getInvitationRecords(page: Int = 1, limit: Int = 20, status: String? = nil) -> AnyPublisher<InvitationRecordsResponse, NetworkError> {
+    func getInvitationRecords(
+        page: Int = 1,
+        limit: Int = 20,
+        status: String? = nil,
+        presentsError: Bool = false
+    ) -> AnyPublisher<InvitationRecordsResponse, NetworkError> {
         var parameters: Parameters = [
             "page": page,
             "limit": limit
@@ -1422,11 +1496,17 @@ extension NetworkManager {
             method: .get,
             parameters: parameters,
             encoding: URLEncoding.default,
-            responseType: InvitationRecordsResponse.self
+            responseType: InvitationRecordsResponse.self,
+            presentsError: presentsError,
+            suppressesPayloadLogging: true
         )
     }
 
-    func getInvitationRewards(page: Int = 1, limit: Int = 20) -> AnyPublisher<InvitationRewardsResponse, NetworkError> {
+    func getInvitationRewards(
+        page: Int = 1,
+        limit: Int = 20,
+        presentsError: Bool = false
+    ) -> AnyPublisher<InvitationRewardsResponse, NetworkError> {
         let parameters: Parameters = [
             "page": page,
             "limit": limit
@@ -1437,7 +1517,9 @@ extension NetworkManager {
             method: .get,
             parameters: parameters,
             encoding: URLEncoding.default,
-            responseType: InvitationRewardsResponse.self
+            responseType: InvitationRewardsResponse.self,
+            presentsError: presentsError,
+            suppressesPayloadLogging: true
         )
     }
 

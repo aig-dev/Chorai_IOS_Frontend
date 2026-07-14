@@ -35,6 +35,9 @@
 		C0DEF1262F60000100000003 /* ChoraChatHistorySection.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1262F60000100000002 /* ChoraChatHistorySection.swift */; };
 		C0DEF1272F60000100000003 /* NotionOAuthCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1272F60000100000002 /* NotionOAuthCoordinator.swift */; };
 		C0DEF1282F60000100000003 /* NoteImportDocumentPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1282F60000100000002 /* NoteImportDocumentPicker.swift */; };
+		C0DEF1292F60000100000003 /* InvitationCreditResponses.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1292F60000100000002 /* InvitationCreditResponses.swift */; };
+		C0DEF1302F60000100000003 /* NetworkInvitationCreditService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1302F60000100000002 /* NetworkInvitationCreditService.swift */; };
+		C0DEF1312F60000100000003 /* NetworkInvitationAccountRegistrar.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1312F60000100000002 /* NetworkInvitationAccountRegistrar.swift */; };
 		C0DEF1162F60000100000003 /* FollowListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1162F60000100000002 /* FollowListView.swift */; };
 		C0DEF1172F60000100000003 /* BlockedActorsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1172F60000100000002 /* BlockedActorsView.swift */; };
 		C0DEF1012F60000100000005 /* FlowViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1012F60000100000004 /* FlowViews.swift */; };
@@ -150,6 +153,9 @@
 		C0DEF1262F60000100000002 /* ChoraChatHistorySection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChoraChatHistorySection.swift; sourceTree = "<group>"; };
 		C0DEF1272F60000100000002 /* NotionOAuthCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotionOAuthCoordinator.swift; sourceTree = "<group>"; };
 		C0DEF1282F60000100000002 /* NoteImportDocumentPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteImportDocumentPicker.swift; sourceTree = "<group>"; };
+		C0DEF1292F60000100000002 /* InvitationCreditResponses.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InvitationCreditResponses.swift; sourceTree = "<group>"; };
+		C0DEF1302F60000100000002 /* NetworkInvitationCreditService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkInvitationCreditService.swift; sourceTree = "<group>"; };
+		C0DEF1312F60000100000002 /* NetworkInvitationAccountRegistrar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkInvitationAccountRegistrar.swift; sourceTree = "<group>"; };
 		C0DEF1162F60000100000002 /* FollowListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FollowListView.swift; sourceTree = "<group>"; };
 		C0DEF1172F60000100000002 /* BlockedActorsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlockedActorsView.swift; sourceTree = "<group>"; };
 		C0DEF1012F60000100000004 /* FlowViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlowViews.swift; sourceTree = "<group>"; };
@@ -273,6 +279,8 @@
 				C0DEF1202F60000100000002 /* NetworkChoraProfileService.swift */,
 				C0DEF1212F60000100000002 /* NetworkNoteImportService.swift */,
 				C0DEF1222F60000100000002 /* NetworkNotionSourceService.swift */,
+				C0DEF1302F60000100000002 /* NetworkInvitationCreditService.swift */,
+				C0DEF1312F60000100000002 /* NetworkInvitationAccountRegistrar.swift */,
 				C0DEF1012F60000100000004 /* FlowViews.swift */,
 				C0DEF1012F60000100000006 /* CoreShellViews.swift */,
 			);
@@ -325,6 +333,7 @@
 				1B6E6FA82E6AB8A5006898F5 /* AuthManager.swift */,
 				1B6E6FA92E6AB8A5006898F5 /* NetworkManager.swift */,
 				C0DEF1192F60000100000002 /* ChoraProfileResponses.swift */,
+				C0DEF1292F60000100000002 /* InvitationCreditResponses.swift */,
 				1B6E6FAA2E6AB8A5006898F5 /* NetworkModels.swift */,
 				1BA8F4F22E576444001278E6 /* NewNoteView.swift */,
 				1B055F542E4F178400896B01 /* LinkPopupView.swift */,
@@ -558,6 +567,9 @@
 				C0DEF1262F60000100000003 /* ChoraChatHistorySection.swift in Sources */,
 				C0DEF1272F60000100000003 /* NotionOAuthCoordinator.swift in Sources */,
 				C0DEF1282F60000100000003 /* NoteImportDocumentPicker.swift in Sources */,
+				C0DEF1292F60000100000003 /* InvitationCreditResponses.swift in Sources */,
+				C0DEF1302F60000100000003 /* NetworkInvitationCreditService.swift in Sources */,
+				C0DEF1312F60000100000003 /* NetworkInvitationAccountRegistrar.swift in Sources */,
 				C0DEF1162F60000100000003 /* FollowListView.swift in Sources */,
 				C0DEF1172F60000100000003 /* BlockedActorsView.swift in Sources */,
 				C0DEF1012F60000100000005 /* FlowViews.swift in Sources */,
