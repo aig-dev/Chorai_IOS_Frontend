@@ -3258,6 +3258,69 @@ final class ArcNoteUITests: XCTestCase {
         captureVisual("profile-followers-private")
     }
 
+    func testAccountPrivacyLoadsAndPersistsCanonicalGoSetting() throws {
+        let session = try requireSmokeSession()
+        let original = try fetchSmokePrivacy(token: session.token)
+        defer {
+            try? setSmokePrivacy(
+                token: session.token,
+                showFollowLists: original.showFollowLists
+            )
+        }
+
+        seedAppSession(session)
+        launchAuthenticatedApp()
+        tap("side-menu.open")
+        tap("side-menu.settings")
+        waitFor("screen.settings.loaded", timeout: 20)
+        tap("settings.account-privacy")
+        waitFor("screen.account-privacy", timeout: 20)
+
+        let identifiers = [
+            "show_follow_lists",
+            "allow_follow",
+            "show_email",
+            "show_phone",
+            "show_location",
+            "show_birthday"
+        ].map { "account-privacy.toggle.\($0)" }
+        for identifier in identifiers {
+            waitFor(identifier, timeout: 30)
+        }
+
+        let toggle = waitFor(
+            "account-privacy.toggle.show_follow_lists",
+            timeout: 30
+        )
+        let originalValue = original.showFollowLists ? "enabled" : "disabled"
+        let changedValue = original.showFollowLists ? "disabled" : "enabled"
+        XCTAssertEqual(toggle.value as? String, originalValue)
+
+        XCTAssertTrue(toggle.isHittable)
+        toggle.tap()
+        waitForAccessibilityValue(
+            "account-privacy.toggle.show_follow_lists",
+            expected: changedValue,
+            timeout: 20
+        )
+        waitForSmokePrivacy(
+            token: session.token,
+            showFollowLists: !original.showFollowLists
+        )
+        captureVisual("account-privacy-canonical-toggle")
+
+        waitFor("account-privacy.toggle.show_follow_lists").tap()
+        waitForAccessibilityValue(
+            "account-privacy.toggle.show_follow_lists",
+            expected: originalValue,
+            timeout: 20
+        )
+        waitForSmokePrivacy(
+            token: session.token,
+            showFollowLists: original.showFollowLists
+        )
+    }
+
     func testBlockedUserPersistsAcrossRelaunchAndCanBeUnblocked() throws {
         let session = try requireSmokeSession()
         let target = try requireSecondarySmokeSession()
@@ -3300,7 +3363,12 @@ final class ArcNoteUITests: XCTestCase {
         tap("side-menu.settings")
         waitFor("screen.settings.loaded", timeout: 20)
         tap("settings.account-privacy")
-        tap("account-privacy.blocked-users")
+        let blockedUsers = waitFor("account-privacy.blocked-users")
+        for _ in 0..<6 where !blockedUsers.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(blockedUsers.isHittable)
+        blockedUsers.tap()
         waitFor("screen.blocked-users", timeout: 20)
         waitFor("blocked-users.row.\(target.actorId)", timeout: 30)
         captureVisual("profile-blocked-users-restored")
@@ -4792,9 +4860,19 @@ final class ArcNoteUITests: XCTestCase {
     }
 
     private struct SmokePrivacy: Decodable {
+        let showEmail: Bool
+        let showPhone: Bool
+        let showLocation: Bool
+        let showBirthday: Bool
+        let allowFollow: Bool
         let showFollowLists: Bool
 
         enum CodingKeys: String, CodingKey {
+            case showEmail = "show_email"
+            case showPhone = "show_phone"
+            case showLocation = "show_location"
+            case showBirthday = "show_birthday"
+            case allowFollow = "allow_follow"
             case showFollowLists = "show_follow_lists"
         }
     }
@@ -5820,6 +5898,35 @@ final class ArcNoteUITests: XCTestCase {
             "show_follow_lists": showFollowLists
         ])
         _ = try sendRawRequest(request)
+    }
+
+    private func waitForSmokePrivacy(
+        token: String,
+        showFollowLists: Bool,
+        timeout: TimeInterval = 20,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let deadline = Date().addingTimeInterval(timeout)
+        var last: SmokePrivacy?
+        var lastError: Error?
+        while Date() < deadline {
+            do {
+                let settings = try fetchSmokePrivacy(token: token)
+                last = settings
+                if settings.showFollowLists == showFollowLists {
+                    return
+                }
+            } catch {
+                lastError = error
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.3))
+        }
+        XCTFail(
+            "Timed out waiting for show_follow_lists=\(showFollowLists); last=\(String(describing: last)), error=\(String(describing: lastError))",
+            file: file,
+            line: line
+        )
     }
 
     private func setSmokeBlocked(
