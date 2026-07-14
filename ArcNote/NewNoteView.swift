@@ -716,17 +716,15 @@ struct NewNoteView: View, MarkupDelegate {
                         print("Numbered list button tapped")
                         insertNumberedList()
                     })
-                    if editingStore.cardID != nil || !cardId.isEmpty {
-                        FormatButton(imageName: "photo", action: {
-                            if editingStore.backgroundMediaRef == nil
-                                && editingStore.pendingBackground == nil {
-                                showBackgroundPicker = true
-                            } else {
-                                showBackgroundActions = true
-                            }
-                        })
-                        .accessibilityIdentifier("cardEditorBackgroundButton")
-                    }
+                    FormatButton(imageName: "photo", action: {
+                        if editingStore.backgroundMediaRef == nil
+                            && editingStore.pendingBackground == nil {
+                            showBackgroundPicker = true
+                        } else {
+                            showBackgroundActions = true
+                        }
+                    })
+                    .accessibilityIdentifier("cardEditorBackgroundButton")
                     
                     // 隐私按钮
                     Button(action: {
