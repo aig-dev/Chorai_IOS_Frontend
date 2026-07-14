@@ -304,10 +304,9 @@ struct PopupMenuOverlay: View {
                     })
                 }
                 HStack(spacing: 15) {
-                    if let card = cardData, card.rate >= 2 {
+                    if let card = cardData {
                         MenuButton(icon: "menu_root", text: "Root", color: .teal, onTap: {
                             isPresented = false
-                            // 发送导航通知
                             NotificationCenter.default.post(
                                 name: NSNotification.Name("NavigateToRoot"),
                                 object: nil,
@@ -333,18 +332,6 @@ struct PopupMenuOverlay: View {
                             })
                         }
                     }
-                    if let card = cardData, card.rate < 2 {
-                        VStack(spacing: 6) {
-                            Color.clear
-                                .frame(width: 38, height: 33)
-                            
-                            Text("")
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundColor(.white)
-                        }
-                        .frame(width: 90, height: 90)
-                    }
-                    
                 }
             }
         case .grid3x2:

@@ -228,7 +228,10 @@ struct SideMenuView: View {
             MyProfileView()
         }
         .navigationDestination(isPresented: $navigateToHelpReport) {
-            WebViewPage(url: URL(string: "https://www.chorai.app/report")!, title: "Help & Report")
+            WebViewPage(
+                url: ChoraiWebDestination.report,
+                title: "Help & Report"
+            )
         }
         .onAppear {
             // 当侧边栏出现时加载用户资料

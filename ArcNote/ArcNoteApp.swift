@@ -22,6 +22,8 @@ struct ArcNoteApp: App {
     private let isAPIMigrationSmoke = APIMigrationSmokeRunner.isRequested
     private let isInterestUITestRoute = ProcessInfo.processInfo.arguments
         .contains("--ui-test-open-interests")
+    private let isSignInUITestRoute = ProcessInfo.processInfo.arguments
+        .contains("--ui-test-sign-in")
     private let isNotificationContractUITestRoute = ProcessInfo.processInfo.arguments
         .contains("--ui-test-notification-contract")
     private let isChoraContractUITestRoute = ProcessInfo.processInfo.arguments
@@ -93,6 +95,10 @@ struct ArcNoteApp: App {
             #if DEBUG
             if isAPIMigrationSmoke {
                 Color.clear
+            } else if isSignInUITestRoute {
+                NavigationStack {
+                    SignInView()
+                }
             } else if isChoraProfileUITestRoute {
                 NavigationStack {
                     ChoraProfileFixtureScreen()

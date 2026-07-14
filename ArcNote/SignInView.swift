@@ -69,19 +69,6 @@ struct SignInView: View {
                 .padding(.horizontal, 24)
                 .padding(.top, 50)
                 
-                // 忘记密码链接
-                HStack {
-                    Button("Forget Password?") {
-                        // 忘记密码逻辑
-                    }
-                    .foregroundColor(.white)
-                    .font(.subheadline)
-                    
-                    Spacer()
-                }
-                .padding(.horizontal, 24)
-                .padding(.top, 16)
-                
                 Spacer()
                 // 登录按钮
                 Button(action: {
@@ -244,7 +231,15 @@ struct SignInView: View {
             showChooseInterests = false
             showTabBar = true
         }
-        .accessibilityIdentifier("screen.signin")
+        #if DEBUG
+        .overlay(alignment: .topLeading) {
+            Text("Sign In loaded")
+                .font(.system(size: 1))
+                .foregroundColor(.white.opacity(0.01))
+                .frame(width: 1, height: 1)
+                .accessibilityIdentifier("screen.sign-in")
+        }
+        #endif
     }
     
     // MARK: - 登录功能

@@ -16,6 +16,19 @@ final class ArcNoteUITests: XCTestCase {
         sparkSessionScope = "\(name).\(UUID().uuidString)"
     }
 
+    func testSignInOnlyShowsSupportedAuthenticationActions() {
+        app.launchArguments.append("--ui-test-sign-in")
+        app.launch()
+
+        waitFor("screen.sign-in")
+        waitFor("signin.email")
+        waitFor("signin.password")
+        waitFor("signin.submit")
+        XCTAssertFalse(
+            app.descendants(matching: .any)["signin.forgot-password"].exists
+        )
+    }
+
     func testNotificationContractFixtureRoute() throws {
         app.launchArguments.append("--ui-test-notification-contract")
         app.launch()
@@ -2780,6 +2793,7 @@ final class ArcNoteUITests: XCTestCase {
         waitFor("card.home.\(cardID)", timeout: 30)
 
         tap("home.card.menu.\(cardID)")
+        waitFor("popup-menu.item.root")
         tap("popup-menu.item.public")
         waitForSmokeCardState(id: cardID, token: session.token) {
             $0.isPublic

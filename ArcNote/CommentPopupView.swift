@@ -1,5 +1,6 @@
-import SwiftUI
 import Combine
+import CoreFlow
+import SwiftUI
 
 // MARK: 禁用键盘调整的扩展
 extension View {
@@ -491,7 +492,10 @@ struct CommentRowView: View {
             Button("Cancel", role: .cancel) {}
         }
         .navigationDestination(isPresented: $navigateToReport) {
-            WebViewPage(url: URL(string: "https://www.chorai.app/report")!, title: "Help & Report")
+            WebViewPage(
+                url: ChoraiWebDestination.report,
+                title: "Help & Report"
+            )
         }
     }
     
