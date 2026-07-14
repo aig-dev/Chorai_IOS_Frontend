@@ -28,6 +28,8 @@ struct ArcNoteApp: App {
         .contains("--ui-test-chora-contract")
     private let isInvitationCreditContractUITestRoute = ProcessInfo.processInfo.arguments
         .contains("--ui-test-invitation-credit-contract")
+    private let isInvitationCreditUITestRoute = ProcessInfo.processInfo.arguments
+        .contains("--ui-test-invitation-credits")
     private let isChoraProfileUITestRoute = ProcessInfo.processInfo.arguments
         .contains("--ui-test-chora-profile")
     private let isSettingsUITestRoute = ProcessInfo.processInfo.arguments
@@ -85,6 +87,10 @@ struct ArcNoteApp: App {
                 ChoraProfileContractFixtureView()
             } else if isInvitationCreditContractUITestRoute {
                 InvitationCreditContractFixtureView()
+            } else if isInvitationCreditUITestRoute {
+                NavigationStack {
+                    InvitationCreditFixtureScreen()
+                }
             } else if isNotificationContractUITestRoute {
                 NotificationContractFixtureView()
             } else if isNotificationInboxUITestRoute {
@@ -1214,6 +1220,298 @@ private final class ChoraContractUploadHandle:
         let callback = terminalCallback
         lock.unlock()
         callback?()
+    }
+}
+
+private enum InvitationCreditFixtureMode: String {
+    case loading
+    case success
+    case referralError = "referral-error"
+    case balanceError = "balance-error"
+    case pendingRedemption = "pending-redemption"
+    case redeemFailure = "redeem-failure"
+    case redeemSuccess = "redeem-success"
+    case historyPagination = "history-pagination"
+    case rewardPagination = "reward-pagination"
+    case ledgerPagination = "ledger-pagination"
+    case historyEmpty = "history-empty"
+    case rewardEmpty = "reward-empty"
+    case ledgerEmpty = "ledger-empty"
+}
+
+@MainActor
+private struct InvitationCreditFixtureScreen: View {
+    private let mode: InvitationCreditFixtureMode
+    private let service: InvitationCreditFixtureService
+    private let persistence: InvitationCreditFixturePersistence
+    @StateObject private var historyStore: InvitationHistoryStore
+    @StateObject private var rewardStore: InvitationRewardStore
+    @StateObject private var ledgerStore: CreditLedgerStore
+
+    init() {
+        let mode = InvitationCreditFixtureMode(
+            rawValue: ProcessInfo.processInfo.environment[
+                "CHORAI_INVITATION_CREDIT_FIXTURE_MODE"
+            ] ?? "success"
+        ) ?? .success
+        let service = InvitationCreditFixtureService(mode: mode)
+        let persistence = InvitationCreditFixturePersistence()
+        if mode == .pendingRedemption {
+            persistence.save(
+                PendingInvitationCode(
+                    actorID: "act_invitation_fixture",
+                    code: "MixedCase09",
+                    needsRetry: true
+                )
+            )
+        }
+        self.mode = mode
+        self.service = service
+        self.persistence = persistence
+        _historyStore = StateObject(
+            wrappedValue: InvitationHistoryStore(
+                service: service,
+                pageSize: 1
+            )
+        )
+        _rewardStore = StateObject(
+            wrappedValue: InvitationRewardStore(
+                service: service,
+                pageSize: 1
+            )
+        )
+        _ledgerStore = StateObject(
+            wrappedValue: CreditLedgerStore(
+                service: service,
+                pageSize: 1
+            )
+        )
+    }
+
+    var body: some View {
+        switch mode {
+        case .historyPagination, .historyEmpty:
+            InvitationHistoryView(
+                actorID: "act_invitation_fixture",
+                store: historyStore
+            )
+        case .rewardPagination, .rewardEmpty:
+            InvitationRewardsView(
+                actorID: "act_invitation_fixture",
+                store: rewardStore
+            )
+        case .ledgerPagination, .ledgerEmpty:
+            CreditLedgerView(
+                actorID: "act_invitation_fixture",
+                store: ledgerStore
+            )
+        default:
+            InvitationCreditView(
+                actorID: "act_invitation_fixture",
+                service: service,
+                persistence: persistence
+            )
+        }
+    }
+}
+
+private actor InvitationCreditFixtureService:
+    CoreInvitationCreditServing {
+    private let mode: InvitationCreditFixtureMode
+    private let fixtureDate = Date(timeIntervalSince1970: 1_710_000_000)
+
+    init(mode: InvitationCreditFixtureMode) {
+        self.mode = mode
+    }
+
+    func referral(actorID: String) async throws -> InvitationReferral {
+        try await pauseIfLoading()
+        if mode == .referralError {
+            throw InvitationCreditError.requestFailed(message: nil)
+        }
+        return InvitationReferral(
+            code: "MixedCase09",
+            link: "https://chorai.test/r/MixedCase09",
+            usedCount: 3,
+            nextMilestone: 5
+        )
+    }
+
+    func validate(code: String) async throws -> InvitationValidation {
+        InvitationValidation(valid: true)
+    }
+
+    func redeem(
+        code: String,
+        actorID: String
+    ) async throws -> InvitationRedemption {
+        if mode == .redeemFailure {
+            throw InvitationCreditError.requestFailed(
+                message: "Try again when the connection is ready."
+            )
+        }
+        return InvitationRedemption(
+            recordID: "inv_redeemed_fixture",
+            status: .registered
+        )
+    }
+
+    func invitations(
+        actorID: String,
+        page: Int,
+        limit: Int
+    ) async throws -> InvitationPage {
+        if mode == .historyEmpty {
+            return InvitationPage(items: [], total: 0, page: page, limit: limit)
+        }
+        if mode == .historyPagination {
+            let id = page == 1 ? "inv_1" : "inv_2"
+            return InvitationPage(
+                items: [
+                    InvitationRecord(
+                        id: id,
+                        status: page == 1 ? .registered : .qualified,
+                        createdAt: fixtureDate
+                    )
+                ],
+                total: 2,
+                page: page,
+                limit: limit
+            )
+        }
+        return InvitationPage(
+            items: [
+                InvitationRecord(
+                    id: "inv_1",
+                    status: .registered,
+                    createdAt: fixtureDate
+                )
+            ],
+            total: 1,
+            page: page,
+            limit: limit
+        )
+    }
+
+    func rewards(
+        actorID: String,
+        page: Int,
+        limit: Int
+    ) async throws -> InvitationRewardPage {
+        if mode == .rewardEmpty {
+            return InvitationRewardPage(
+                items: [],
+                total: 0,
+                page: page,
+                limit: limit
+            )
+        }
+        if mode == .rewardPagination {
+            let id = page == 1 ? "rew_1" : "rew_2"
+            return InvitationRewardPage(
+                items: [
+                    InvitationReward(
+                        id: id,
+                        recipientRole: "inviter",
+                        tier: page == 1 ? .credit : .premiumCredit,
+                        amount: page == 1 ? 5 : 2,
+                        isMilestoneBonus: page == 1,
+                        status: .issued,
+                        createdAt: fixtureDate
+                    )
+                ],
+                total: 2,
+                page: page,
+                limit: limit
+            )
+        }
+        return InvitationRewardPage(
+            items: [],
+            total: 0,
+            page: page,
+            limit: limit
+        )
+    }
+
+    func balances(actorID: String) async throws -> CreditBalances {
+        try await pauseIfLoading()
+        if mode == .balanceError {
+            throw InvitationCreditError.requestFailed(message: nil)
+        }
+        return CreditBalances(regular: 12, premium: 4)
+    }
+
+    func ledger(
+        actorID: String,
+        cursor: String?,
+        limit: Int
+    ) async throws -> CreditLedgerPage {
+        if mode == .ledgerEmpty {
+            return CreditLedgerPage(entries: [], cursor: nil, hasMore: false)
+        }
+        if mode == .ledgerPagination {
+            if cursor == nil {
+                return CreditLedgerPage(
+                    entries: [ledgerEntry(id: "log_1", action: "FUTURE_ACTION")],
+                    cursor: "cursor-2",
+                    hasMore: true
+                )
+            }
+            return CreditLedgerPage(
+                entries: [ledgerEntry(id: "log_2", action: "SPARK_SIMILAR")],
+                cursor: nil,
+                hasMore: false
+            )
+        }
+        return CreditLedgerPage(entries: [], cursor: nil, hasMore: false)
+    }
+
+    private func ledgerEntry(
+        id: String,
+        action: String
+    ) -> CreditLedgerEntry {
+        CreditLedgerEntry(
+            id: id,
+            transactionID: "tx_\(id)",
+            tier: .credit,
+            direction: .earn,
+            delta: 5,
+            runningBalance: 7,
+            status: .settled,
+            actionType: action,
+            category: "future_category",
+            createdAt: fixtureDate
+        )
+    }
+
+    private func pauseIfLoading() async throws {
+        guard mode == .loading else { return }
+        try await Task.sleep(nanoseconds: 60_000_000_000)
+    }
+}
+
+private final class InvitationCreditFixturePersistence:
+    PendingInvitationCodePersisting,
+    @unchecked Sendable {
+    private let lock = NSLock()
+    private var values: [String: PendingInvitationCode] = [:]
+
+    func pending(actorID: String) -> PendingInvitationCode? {
+        lock.lock()
+        defer { lock.unlock() }
+        return values[actorID]
+    }
+
+    func save(_ pending: PendingInvitationCode) {
+        lock.lock()
+        defer { lock.unlock() }
+        values[pending.actorID] = pending
+    }
+
+    func remove(actorID: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        values[actorID] = nil
     }
 }
 

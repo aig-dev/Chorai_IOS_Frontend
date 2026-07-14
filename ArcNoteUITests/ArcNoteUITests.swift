@@ -149,6 +149,113 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertFalse(fixtureError.exists)
     }
 
+    func testInvitationCreditsLoadedFixture() throws {
+        launchInvitationCreditFixture(mode: "success")
+
+        waitFor("screen.invitation-credits")
+        XCTAssertEqual(
+            waitFor("invitation-credits.balance.credit").value as? String,
+            "12"
+        )
+        XCTAssertEqual(
+            waitFor("invitation-credits.balance.premium-credit").value as? String,
+            "4"
+        )
+        waitFor("invitation-credits.referral.share")
+        tap("invitation-credits.referral.copy")
+        XCTAssertEqual(
+            waitFor("invitation-credits.referral.copy-status").label,
+            "Copied"
+        )
+        waitFor("invitation-credits.redeem.disclosure")
+        waitFor("invitation-credits.history.link")
+        waitFor("invitation-credits.rewards.link")
+        waitFor("invitation-credits.ledger.link")
+    }
+
+    func testInvitationCreditsPartialFailureFixture() throws {
+        launchInvitationCreditFixture(mode: "referral-error")
+        XCTAssertEqual(
+            waitFor("invitation-credits.balance.credit").value as? String,
+            "12"
+        )
+        XCTAssertEqual(
+            waitFor("invitation-credits.balance.premium-credit").value as? String,
+            "4"
+        )
+        waitFor("invitation-credits.referral.error")
+        waitFor("invitation-credits.referral.retry")
+
+        launchInvitationCreditFixture(mode: "balance-error")
+        waitFor("invitation-credits.referral.code")
+        waitFor("invitation-credits.referral.share")
+        waitFor("invitation-credits.balance.error")
+        waitFor("invitation-credits.balance.retry")
+    }
+
+    func testInvitationCreditDetailPaginationFixtures() throws {
+        launchInvitationCreditFixture(mode: "history-pagination")
+        waitFor("screen.invitation-history")
+        waitFor("invitation-history.row.inv_1")
+        tap("invitation-history.load-more")
+        waitFor("invitation-history.row.inv_2")
+
+        launchInvitationCreditFixture(mode: "reward-pagination")
+        waitFor("screen.invitation-rewards")
+        XCTAssertTrue(
+            waitFor("invitation-rewards.row.rew_1").label
+                .contains("Milestone bonus")
+        )
+        tap("invitation-rewards.load-more")
+        waitFor("invitation-rewards.row.rew_2")
+
+        launchInvitationCreditFixture(mode: "ledger-pagination")
+        waitFor("screen.credit-ledger")
+        XCTAssertTrue(
+            waitFor("credit-ledger.row.log_1").label.contains("Future action")
+        )
+        tap("credit-ledger.load-more")
+        waitFor("credit-ledger.row.log_2")
+    }
+
+    func testInvitationCreditsRecoveryFixtures() throws {
+        launchInvitationCreditFixture(mode: "pending-redemption")
+        waitFor("invitation-credits.redeem.pending")
+        if !app.descendants(matching: .any)[
+            "invitation-credits.redeem.code"
+        ].exists {
+            tap("invitation-credits.redeem.disclosure")
+        }
+        XCTAssertEqual(
+            waitFor("invitation-credits.redeem.code").value as? String,
+            "MixedCase09"
+        )
+
+        launchInvitationCreditFixture(mode: "redeem-failure")
+        submitInvitationFixtureCode("MixedCase09")
+        waitFor("invitation-credits.redeem.error")
+        waitFor("invitation-credits.redeem.pending")
+        waitFor("invitation-credits.redeem.retry")
+        waitFor("invitation-credits.redeem.discard")
+
+        launchInvitationCreditFixture(mode: "redeem-success")
+        submitInvitationFixtureCode("MixedCase09")
+        waitFor("invitation-credits.redeem.success")
+    }
+
+    func testInvitationCreditsLoadingAndEmptyFixtures() throws {
+        launchInvitationCreditFixture(mode: "loading")
+        waitFor("invitation-credits.balance.loading")
+        waitFor("invitation-credits.referral.loading")
+
+        launchInvitationCreditFixture(mode: "history-empty")
+        waitFor("invitation-history.empty")
+        launchInvitationCreditFixture(mode: "reward-empty")
+        waitFor("invitation-rewards.empty")
+        launchInvitationCreditFixture(mode: "ledger-empty")
+        waitFor("credit-ledger.empty")
+    }
+
     func testSettingsShowsChoraProfileEntry() throws {
         app.launchArguments.append("--ui-test-settings")
         app.launch()
@@ -3324,6 +3431,31 @@ final class ArcNoteUITests: XCTestCase {
         app.launchEnvironment["CHORAI_CHORA_PROFILE_FIXTURE_MODE"] = mode
         app.launch()
         waitFor("screen.choraProfile")
+    }
+
+    private func launchInvitationCreditFixture(mode: String) {
+        if app.state != .notRunning {
+            app.terminate()
+        }
+        app = XCUIApplication()
+        app.launchArguments.append("--ui-test-invitation-credits")
+        app.launchEnvironment["CHORAI_INVITATION_CREDIT_FIXTURE_MODE"] = mode
+        app.launch()
+    }
+
+    private func submitInvitationFixtureCode(_ code: String) {
+        waitFor("screen.invitation-credits")
+        tap("invitation-credits.redeem.disclosure")
+        let field = waitFor("invitation-credits.redeem.code")
+        field.tap()
+        field.typeText(code)
+        app.swipeUp()
+        let submit = waitFor("invitation-credits.redeem.submit")
+        for _ in 0..<4 where !submit.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(submit.isHittable)
+        submit.tap()
     }
 
     private func replaceShortFixtureText(_ identifier: String, with text: String) {
