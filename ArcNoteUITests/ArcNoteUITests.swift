@@ -256,6 +256,80 @@ final class ArcNoteUITests: XCTestCase {
         waitFor("credit-ledger.empty")
     }
 
+    func testSignupInvitationBlankCode() throws {
+        launchSignupInvitationFixture(mode: "blank")
+        tapSignupFixtureAction("signup.create-account")
+        waitForLabel(
+            "signup.fixture.trace",
+            expected: "register,complete"
+        )
+        XCTAssertEqual(waitFor("signup.fixture.registrar-count").label, "1")
+    }
+
+    func testSignupInvitationInvalidCode() throws {
+        launchSignupInvitationFixture(mode: "invalid")
+        tapSignupFixtureAction("signup.create-account")
+        waitForLabel(
+            "signup.fixture.trace",
+            expected: "validate,invalid"
+        )
+        waitFor("signup.invitation.error")
+        XCTAssertEqual(waitFor("signup.fixture.registrar-count").label, "0")
+    }
+
+    func testSignupInvitationPartialSuccessAndRetry() throws {
+        launchSignupInvitationFixture(mode: "redeem-failure")
+        tapSignupFixtureAction("signup.create-account")
+        waitForLabel(
+            "signup.fixture.trace",
+            expected:
+                "validate,register,session-established,redeem,persist-pending"
+        )
+        XCTAssertEqual(waitFor("signup.fixture.normalized-code").label, "MixedCase09")
+        XCTAssertEqual(waitFor("signup.fixture.registrar-count").label, "1")
+        waitFor("signup.invitation.partial")
+
+        tapSignupFixtureAction("signup.invitation.retry")
+        waitForLabel(
+            "signup.fixture.recovery-trace",
+            expected: "redeem,complete"
+        )
+        XCTAssertEqual(waitFor("signup.fixture.registrar-count").label, "1")
+    }
+
+    func testSignupInvitationValidAndTransportFixtures() throws {
+        launchSignupInvitationFixture(mode: "valid")
+        tapSignupFixtureAction("signup.create-account")
+        waitForLabel(
+            "signup.fixture.trace",
+            expected:
+                "validate,register,session-established,redeem,complete"
+        )
+        XCTAssertEqual(waitFor("signup.fixture.normalized-code").label, "MixedCase09")
+
+        launchSignupInvitationFixture(mode: "validation-transport")
+        tapSignupFixtureAction("signup.create-account")
+        waitForLabel(
+            "signup.fixture.trace",
+            expected: "validate,retry-or-remove"
+        )
+        waitFor("signup.invitation.retry-validation")
+        waitFor("signup.invitation.remove-code")
+        XCTAssertEqual(waitFor("signup.fixture.registrar-count").label, "0")
+    }
+
+    func testSignupInvitationContinuePartialFixture() throws {
+        launchSignupInvitationFixture(mode: "redeem-failure")
+        tapSignupFixtureAction("signup.create-account")
+        waitFor("signup.invitation.partial")
+        tapSignupFixtureAction("signup.invitation.continue")
+        waitForLabel(
+            "signup.fixture.recovery-trace",
+            expected: "complete-with-pending"
+        )
+        XCTAssertEqual(waitFor("signup.fixture.registrar-count").label, "1")
+    }
+
     func testSettingsShowsChoraProfileEntry() throws {
         app.launchArguments.append("--ui-test-settings")
         app.launch()
@@ -3441,6 +3515,47 @@ final class ArcNoteUITests: XCTestCase {
         app.launchArguments.append("--ui-test-invitation-credits")
         app.launchEnvironment["CHORAI_INVITATION_CREDIT_FIXTURE_MODE"] = mode
         app.launch()
+    }
+
+    private func launchSignupInvitationFixture(mode: String) {
+        if app.state != .notRunning {
+            app.terminate()
+        }
+        app = XCUIApplication()
+        app.launchArguments.append("--ui-test-signup-invitation")
+        app.launchEnvironment["CHORAI_SIGNUP_INVITATION_FIXTURE_MODE"] = mode
+        app.launch()
+        waitFor("screen.signup")
+    }
+
+    private func tapSignupFixtureAction(_ identifier: String) {
+        let action = waitFor(identifier)
+        for _ in 0..<6 where !action.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(action.isHittable)
+        action.tap()
+    }
+
+    private func waitForLabel(
+        _ identifier: String,
+        expected: String,
+        timeout: TimeInterval = 10,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let element = app.descendants(matching: .any)[identifier]
+        let expectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label == %@", expected),
+            object: element
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [expectation], timeout: timeout),
+            .completed,
+            "Timed out waiting for \(identifier) label \(expected)",
+            file: file,
+            line: line
+        )
     }
 
     private func submitInvitationFixtureCode(_ code: String) {

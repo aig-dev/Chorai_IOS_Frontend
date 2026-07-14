@@ -30,6 +30,8 @@ struct ArcNoteApp: App {
         .contains("--ui-test-invitation-credit-contract")
     private let isInvitationCreditUITestRoute = ProcessInfo.processInfo.arguments
         .contains("--ui-test-invitation-credits")
+    private let isSignupInvitationUITestRoute = ProcessInfo.processInfo.arguments
+        .contains("--ui-test-signup-invitation")
     private let isChoraProfileUITestRoute = ProcessInfo.processInfo.arguments
         .contains("--ui-test-chora-profile")
     private let isSettingsUITestRoute = ProcessInfo.processInfo.arguments
@@ -91,6 +93,8 @@ struct ArcNoteApp: App {
                 NavigationStack {
                     InvitationCreditFixtureScreen()
                 }
+            } else if isSignupInvitationUITestRoute {
+                SignupInvitationFixtureScreen()
             } else if isNotificationContractUITestRoute {
                 NotificationContractFixtureView()
             } else if isNotificationInboxUITestRoute {
@@ -1220,6 +1224,284 @@ private final class ChoraContractUploadHandle:
         let callback = terminalCallback
         lock.unlock()
         callback?()
+    }
+}
+
+private enum SignupInvitationFixtureMode: String {
+    case blank
+    case valid
+    case invalid
+    case validationTransport = "validation-transport"
+    case redeemFailure = "redeem-failure"
+}
+
+@MainActor
+private struct SignupInvitationFixtureScreen: View {
+    @StateObject private var recorder: SignupInvitationFixtureRecorder
+    private let mode: SignupInvitationFixtureMode
+    private let registrar: SignupInvitationFixtureRegistrar
+    private let service: SignupInvitationFixtureService
+    private let persistence: SignupInvitationFixturePersistence
+
+    init() {
+        let mode = SignupInvitationFixtureMode(
+            rawValue: ProcessInfo.processInfo.environment[
+                "CHORAI_SIGNUP_INVITATION_FIXTURE_MODE"
+            ] ?? "blank"
+        ) ?? .blank
+        let recorder = SignupInvitationFixtureRecorder()
+        self.mode = mode
+        self.registrar = SignupInvitationFixtureRegistrar(
+            mode: mode,
+            recorder: recorder
+        )
+        self.service = SignupInvitationFixtureService(
+            mode: mode,
+            recorder: recorder
+        )
+        self.persistence = SignupInvitationFixturePersistence(
+            recorder: recorder
+        )
+        _recorder = StateObject(wrappedValue: recorder)
+    }
+
+    var body: some View {
+        SignUpView(
+            registrar: registrar,
+            invitationService: service,
+            invitationPersistence: persistence,
+            initialValues: SignUpInitialValues(
+                username: "fixture-user",
+                email: "fixture@chorai.test",
+                verificationCode: "123456",
+                password: "fixture-password",
+                confirmPassword: "fixture-password",
+                invitationCode: mode == .blank ? "" : "  MixedCase09  "
+            ),
+            navigatesAfterRegistration: false,
+            onRegistrationComplete: { _, completedWithPendingCode in
+                recorder.recordCompletion(
+                    pendingCode: completedWithPendingCode
+                )
+            }
+        )
+        .overlay(alignment: .topLeading) {
+            VStack(spacing: 0) {
+                if !recorder.events.isEmpty {
+                    fixtureAnchor(
+                        recorder.events.joined(separator: ","),
+                        identifier: "signup.fixture.trace"
+                    )
+                }
+                if !recorder.recoveryEvents.isEmpty {
+                    fixtureAnchor(
+                        recorder.recoveryEvents.joined(separator: ","),
+                        identifier: "signup.fixture.recovery-trace"
+                    )
+                }
+                fixtureAnchor(
+                    String(recorder.registrarCount),
+                    identifier: "signup.fixture.registrar-count"
+                )
+                if let normalizedCode = recorder.normalizedCode {
+                    fixtureAnchor(
+                        normalizedCode,
+                        identifier: "signup.fixture.normalized-code"
+                    )
+                }
+            }
+            .allowsHitTesting(false)
+        }
+    }
+
+    private func fixtureAnchor(
+        _ value: String,
+        identifier: String
+    ) -> some View {
+        Text(value)
+            .font(.system(size: 1))
+            .foregroundStyle(.white.opacity(0.01))
+            .frame(width: 1, height: 1)
+            .accessibilityIdentifier(identifier)
+    }
+}
+
+@MainActor
+private final class SignupInvitationFixtureRecorder: ObservableObject {
+    @Published private(set) var events: [String] = []
+    @Published private(set) var recoveryEvents: [String] = []
+    @Published private(set) var registrarCount = 0
+    @Published private(set) var normalizedCode: String?
+    private var isRecovery = false
+
+    func append(_ event: String) {
+        if isRecovery {
+            recoveryEvents.append(event)
+        } else {
+            events.append(event)
+        }
+    }
+
+    func recordRegistrarCall() {
+        registrarCount += 1
+    }
+
+    func recordCode(_ code: String) {
+        normalizedCode = code
+    }
+
+    func recordPendingPersistence() {
+        events.append("persist-pending")
+        isRecovery = true
+    }
+
+    func recordCompletion(pendingCode: Bool) {
+        if pendingCode {
+            recoveryEvents.append("complete-with-pending")
+        } else if isRecovery {
+            recoveryEvents.append("complete")
+        } else {
+            events.append("complete")
+        }
+    }
+}
+
+private actor SignupInvitationFixtureRegistrar:
+    InvitationAccountRegistering {
+    private let mode: SignupInvitationFixtureMode
+    private let recorder: SignupInvitationFixtureRecorder
+
+    init(
+        mode: SignupInvitationFixtureMode,
+        recorder: SignupInvitationFixtureRecorder
+    ) {
+        self.mode = mode
+        self.recorder = recorder
+    }
+
+    func register(
+        _ request: InvitationAccountRegistrationRequest
+    ) async throws -> InvitationRegisteredAccount {
+        await recorder.recordRegistrarCall()
+        await recorder.append("register")
+        if mode != .blank {
+            await recorder.append("session-established")
+        }
+        return InvitationRegisteredAccount(
+            actorID: "act_signup_fixture",
+            isNewUser: true
+        )
+    }
+}
+
+private actor SignupInvitationFixtureService:
+    CoreInvitationCreditServing {
+    private let mode: SignupInvitationFixtureMode
+    private let recorder: SignupInvitationFixtureRecorder
+    private var redemptionCount = 0
+
+    init(
+        mode: SignupInvitationFixtureMode,
+        recorder: SignupInvitationFixtureRecorder
+    ) {
+        self.mode = mode
+        self.recorder = recorder
+    }
+
+    func validate(code: String) async throws -> InvitationValidation {
+        await recorder.recordCode(code)
+        await recorder.append("validate")
+        switch mode {
+        case .invalid:
+            await recorder.append("invalid")
+            return InvitationValidation(valid: false)
+        case .validationTransport:
+            await recorder.append("retry-or-remove")
+            throw InvitationCreditError.requestFailed(message: nil)
+        default:
+            return InvitationValidation(valid: true)
+        }
+    }
+
+    func redeem(
+        code: String,
+        actorID: String
+    ) async throws -> InvitationRedemption {
+        redemptionCount += 1
+        await recorder.recordCode(code)
+        await recorder.append("redeem")
+        if mode == .redeemFailure, redemptionCount == 1 {
+            throw InvitationCreditError.requestFailed(message: nil)
+        }
+        return InvitationRedemption(
+            recordID: "inv_signup_fixture",
+            status: .registered
+        )
+    }
+
+    func referral(actorID: String) async throws -> InvitationReferral {
+        throw InvitationCreditError.requestFailed(message: nil)
+    }
+
+    func invitations(
+        actorID: String,
+        page: Int,
+        limit: Int
+    ) async throws -> InvitationPage {
+        throw InvitationCreditError.requestFailed(message: nil)
+    }
+
+    func rewards(
+        actorID: String,
+        page: Int,
+        limit: Int
+    ) async throws -> InvitationRewardPage {
+        throw InvitationCreditError.requestFailed(message: nil)
+    }
+
+    func balances(actorID: String) async throws -> CreditBalances {
+        throw InvitationCreditError.requestFailed(message: nil)
+    }
+
+    func ledger(
+        actorID: String,
+        cursor: String?,
+        limit: Int
+    ) async throws -> CreditLedgerPage {
+        throw InvitationCreditError.requestFailed(message: nil)
+    }
+}
+
+private final class SignupInvitationFixturePersistence:
+    PendingInvitationCodePersisting,
+    @unchecked Sendable {
+    private let lock = NSLock()
+    private var values: [String: PendingInvitationCode] = [:]
+    private let recorder: SignupInvitationFixtureRecorder
+
+    init(recorder: SignupInvitationFixtureRecorder) {
+        self.recorder = recorder
+    }
+
+    func pending(actorID: String) -> PendingInvitationCode? {
+        lock.lock()
+        defer { lock.unlock() }
+        return values[actorID]
+    }
+
+    func save(_ pending: PendingInvitationCode) {
+        lock.lock()
+        values[pending.actorID] = pending
+        lock.unlock()
+        Task { @MainActor in
+            recorder.recordPendingPersistence()
+        }
+    }
+
+    func remove(actorID: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        values[actorID] = nil
     }
 }
 

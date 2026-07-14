@@ -7,9 +7,29 @@
 
 import SwiftUI
 import Combine
+import CoreFlow
 import GoogleSignIn
 import AuthenticationServices
 
+struct SignUpInitialValues {
+    let username: String
+    let email: String
+    let verificationCode: String
+    let password: String
+    let confirmPassword: String
+    let invitationCode: String
+
+    static let empty = SignUpInitialValues(
+        username: "",
+        email: "",
+        verificationCode: "",
+        password: "",
+        confirmPassword: "",
+        invitationCode: ""
+    )
+}
+
+@MainActor
 struct SignUpView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var showSignIn = false
@@ -20,6 +40,7 @@ struct SignUpView: View {
     @State private var code = ""
     @State private var password = ""
     @State private var confirmPassword = ""
+    @State private var invitationCode = ""
     
     // 验证码相关状态
     @State private var isCodeSent = false
@@ -29,7 +50,6 @@ struct SignUpView: View {
     @State private var alertMessage = ""
     
     // 注册相关状态
-    @State private var isRegistering = false
     @State private var showSuccessAlert = false
     @State private var showChooseInterests = false
     @State private var showTabBar = false
@@ -40,8 +60,44 @@ struct SignUpView: View {
     
     // 认证管理器
     @StateObject private var authManager = AuthManager.shared
+    @StateObject private var registrationStore: InvitationRegistrationStore
     @State private var cancellables = Set<AnyCancellable>()
     @State private var appleSignInDelegate: AppleSignInDelegate?
+
+    private let navigatesAfterRegistration: Bool
+    private let onRegistrationComplete:
+        @MainActor (InvitationRegisteredAccount, Bool) -> Void
+
+    init(
+        registrar: any InvitationAccountRegistering =
+            NetworkInvitationAccountRegistrar(),
+        invitationService: any CoreInvitationCreditServing =
+            NetworkInvitationCreditService(),
+        invitationPersistence: any PendingInvitationCodePersisting =
+            UserDefaultsPendingInvitationCodeStore(),
+        initialValues: SignUpInitialValues = .empty,
+        navigatesAfterRegistration: Bool = true,
+        onRegistrationComplete: @escaping @MainActor (
+            InvitationRegisteredAccount,
+            Bool
+        ) -> Void = { _, _ in }
+    ) {
+        _username = State(initialValue: initialValues.username)
+        _email = State(initialValue: initialValues.email)
+        _code = State(initialValue: initialValues.verificationCode)
+        _password = State(initialValue: initialValues.password)
+        _confirmPassword = State(initialValue: initialValues.confirmPassword)
+        _invitationCode = State(initialValue: initialValues.invitationCode)
+        _registrationStore = StateObject(
+            wrappedValue: InvitationRegistrationStore(
+                registrar: registrar,
+                invitationService: invitationService,
+                persistence: invitationPersistence
+            )
+        )
+        self.navigatesAfterRegistration = navigatesAfterRegistration
+        self.onRegistrationComplete = onRegistrationComplete
+    }
     
     var body: some View {
         NavigationStack {
@@ -143,21 +199,36 @@ struct SignUpView: View {
                                 
                                 // Confirm Password
                                 InputField(icon: "checkmark", placeholder: "Confirm Password", text: $confirmPassword)
+
+                                InputField(
+                                    icon: "person.2",
+                                    placeholder: "Invitation Code (Optional)",
+                                    text: $invitationCode,
+                                    accessibilityIdentifier: "signup.invitation-code"
+                                )
                             }
                             .padding(.horizontal, 24)
                             .padding(.top, 24)
+
+                            registrationFeedback
+                                .padding(.horizontal, 24)
+                                .padding(.top, 16)
                             
                             // 创建账户按钮
                             Button(action: {
                                 createAccount()
                             }) {
                                 HStack {
-                                    if isRegistering {
+                                    if registrationStore.isBusy {
                                         ProgressView()
                                             .scaleEffect(0.8)
                                             .progressViewStyle(CircularProgressViewStyle(tint: .white))
                                     }
-                                    Text(isRegistering ? "Create..." : "CREATE ACCOUNT")
+                                    Text(
+                                        registrationStore.isBusy
+                                            ? "Create..."
+                                            : "CREATE ACCOUNT"
+                                    )
                                         .font(.headline)
                                         .fontWeight(.bold)
                                         .foregroundColor(.white)
@@ -235,7 +306,11 @@ struct SignUpView: View {
                                         )
                                 )
                             }
-                            .disabled(isRegistering)
+                            .disabled(
+                                registrationStore.isBusy ||
+                                    registrationStore.completedAccount != nil
+                            )
+                            .accessibilityIdentifier("signup.create-account")
                             .padding(.horizontal, 24)
                             .padding(.top, 24)
                             
@@ -381,7 +456,126 @@ struct SignUpView: View {
         } message: {
             Text("Congratulations! Your account has been successfully created. You can now start using ArcNote.")
         }
+        .overlay(alignment: .topLeading) {
+            InvitationCreditScreenAnchor(
+                identifier: "screen.signup",
+                label: "Sign Up"
+            )
         }
+        }
+    }
+
+    @ViewBuilder
+    private var registrationFeedback: some View {
+        switch registrationStore.phase {
+        case .idle:
+            EmptyView()
+        case .validating:
+            signupProgress(
+                "Validating invitation code…",
+                identifier: "signup.invitation.validating"
+            )
+        case .registering:
+            signupProgress(
+                "Creating account…",
+                identifier: "signup.invitation.registering"
+            )
+        case .redeeming:
+            signupProgress(
+                "Redeeming invitation code…",
+                identifier: "signup.invitation.redeeming"
+            )
+        case .failedBeforeAccount(let error):
+            VStack(alignment: .leading, spacing: 12) {
+                Text(
+                    InvitationCreditPresentation.message(
+                        error,
+                        fallback: "The account couldn’t be created."
+                    )
+                )
+                .font(.subheadline)
+                .foregroundColor(Color(red: 1, green: 0.62, blue: 0.64))
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("signup.invitation.error")
+
+                if InvitationCode.normalized(invitationCode) != nil {
+                    HStack(spacing: 12) {
+                        SettingsOutlineButton(title: "Retry") {
+                            createAccount()
+                        }
+                        .accessibilityLabel("Retry invitation validation")
+                        .accessibilityIdentifier(
+                            "signup.invitation.retry-validation"
+                        )
+
+                        SettingsOutlineButton(title: "Remove Code") {
+                            invitationCode = ""
+                            registrationStore.reset()
+                        }
+                        .accessibilityLabel("Remove invitation code")
+                        .accessibilityIdentifier(
+                            "signup.invitation.remove-code"
+                        )
+                    }
+                }
+            }
+        case .accountCreatedPendingRedemption(_, let error):
+            VStack(alignment: .leading, spacing: 12) {
+                Text(
+                    "Your account was created. The invitation code still needs to be redeemed."
+                )
+                .font(.subheadline.weight(.medium))
+                .foregroundColor(.white)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("signup.invitation.partial")
+
+                Text(
+                    InvitationCreditPresentation.message(
+                        error,
+                        fallback: "Try again when the connection is ready."
+                    )
+                )
+                .font(.footnote)
+                .foregroundColor(.white.opacity(0.65))
+                .fixedSize(horizontal: false, vertical: true)
+
+                HStack(spacing: 12) {
+                    SettingsOutlineButton(title: "Retry") {
+                        retryInvitationRedemption()
+                    }
+                    .accessibilityLabel("Retry invitation redemption")
+                    .accessibilityIdentifier("signup.invitation.retry")
+
+                    SettingsOutlineButton(title: "Continue") {
+                        continueAfterPartialRegistration()
+                    }
+                    .accessibilityLabel("Continue with pending invitation")
+                    .accessibilityIdentifier("signup.invitation.continue")
+                }
+            }
+        case .complete:
+            if !navigatesAfterRegistration {
+                Text("Account created")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundColor(.white)
+                    .accessibilityIdentifier("signup.invitation.complete")
+            }
+        }
+    }
+
+    private func signupProgress(
+        _ text: String,
+        identifier: String
+    ) -> some View {
+        HStack(spacing: 10) {
+            ProgressView().tint(.white)
+            Text(text)
+                .font(.subheadline)
+                .foregroundColor(.white.opacity(0.72))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier(identifier)
     }
     
     // MARK: - 发送验证码
@@ -422,105 +616,62 @@ struct SignUpView: View {
     
     // MARK: - 创建账户
     private func createAccount() {
-        // 验证输入
-//        guard !username.isEmpty else {
-//            showAlert(message: "请输入用户名或邮箱")
-//            return
-//        }
-        
-        // 检测用户名格式是否为邮箱（与 SignInView 一致）
-//        if !isValidEmail(username) {
-//            showAlert(message: "请输入有效的邮箱地址")
-//            return
-//        }
-        
-//        guard !email.isEmpty else {
-//            showAlert(message: "请输入邮箱地址")
-//            return
-//        }
-        
-//        guard isValidEmail(email) else {
-//            showAlert(message: "请输入有效的邮箱地址")
-//            return
-//        }
-        
-//        guard !code.isEmpty else {
-//            showAlert(message: "请输入验证码")
-//            return
-//        }
-//        
-//        guard code.count == 6 else {
-//            showAlert(message: "验证码应为6位数字")
-//            return
-//        }
-        
-//        guard !password.isEmpty else {
-//            showAlert(message: "请输入密码")
-//            return
-//        }
-        
-//        guard password.count >= 6 else {
-//            showAlert(message: "密码长度至少6位")
-//            return
-//        }
-        
-//        guard password.count <= 20 else {
-//            showAlert(message: "密码长度不能超过20位")
-//            return
-//        }
-        
-//        guard password == confirmPassword else {
-//            showAlert(message: "两次输入的密码不一致")
-//            return
-//        }
-        
-        // 检查密码强度
-//        guard isStrongPassword(password) else {
-//            showAlert(message: "密码应包含字母和数字")
-//            return
-//        }
-        
-        // 开始注册
-        isRegistering = true
-        
-        // 调用注册API
-        authManager.register(
+        guard !registrationStore.isBusy else { return }
+        let request = InvitationAccountRegistrationRequest(
             username: username,
             email: email,
             password: password,
             verificationCode: code
         )
-        .sink(
-            receiveCompletion: { completion in
-                isRegistering = false
-                if case .failure(let error) = completion {
-                    handleRegistrationError(error)
-                }
-            },
-            receiveValue: { authResponse in
-                isRegistering = false
-                // 先保存用户会话
-                authManager.saveUserSession(authResponse)
-                // 根据 isNewUser 判断跳转到哪个页面
-                if authResponse.data.isNewUser == true {
-                    showChooseInterests = true
-                } else {
-                    // 如果不是新用户，跳转到主页
-                    showTabBar = true
-                }
-            }
-        )
-        .store(in: &cancellables)
+        Task {
+            await registrationStore.submit(
+                request: request,
+                invitationCode: invitationCode
+            )
+            finishRegistrationIfComplete(completedWithPendingCode: false)
+        }
+    }
+
+    private func retryInvitationRedemption() {
+        guard !registrationStore.isBusy else { return }
+        Task {
+            await registrationStore.retryRedemption()
+            finishRegistrationIfComplete(completedWithPendingCode: false)
+        }
+    }
+
+    private func continueAfterPartialRegistration() {
+        guard !registrationStore.isBusy else { return }
+        registrationStore.continueAfterPartialSuccess()
+        finishRegistrationIfComplete(completedWithPendingCode: true)
+    }
+
+    private func finishRegistrationIfComplete(
+        completedWithPendingCode: Bool
+    ) {
+        guard let account = registrationStore.completedAccount else { return }
+        if !completedWithPendingCode {
+            invitationCode = registrationStore.invitationCode
+        }
+        onRegistrationComplete(account, completedWithPendingCode)
+        guard navigatesAfterRegistration else { return }
+        if account.isNewUser {
+            showChooseInterests = true
+        } else {
+            showTabBar = true
+        }
     }
     
     // MARK: - 开始倒计时
     private func startCountdown() {
         countdown = 60
         Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { timer in
-            if countdown > 0 {
-                countdown -= 1
-            } else {
-                timer.invalidate()
+            Task { @MainActor in
+                if countdown > 0 {
+                    countdown -= 1
+                } else {
+                    timer.invalidate()
+                }
             }
         }
     }
