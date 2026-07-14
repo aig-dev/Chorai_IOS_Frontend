@@ -16,12 +16,18 @@ actor InvitationCallRecorder {
 actor InvitationCreditServiceStub: CoreInvitationCreditServing {
     private var referralResults: [Result<InvitationReferral, Error>] = []
     private var balanceResults: [Result<CreditBalances, Error>] = []
+    private var invitationResults: [Result<InvitationPage, Error>] = []
+    private var rewardResults: [Result<InvitationRewardPage, Error>] = []
+    private var ledgerResults: [Result<CreditLedgerPage, Error>] = []
     private var validationResults: [Result<InvitationValidation, Error>] = []
     private var redemptionResults: [Result<InvitationRedemption, Error>] = []
     private var validationDelayNanoseconds: UInt64 = 0
     private var referralDelayNanoseconds: UInt64 = 0
     private(set) var validationCodes: [String] = []
     private(set) var redemptionCalls: [(code: String, actorID: String)] = []
+    private(set) var invitationCalls: [(actorID: String, page: Int, limit: Int)] = []
+    private(set) var rewardCalls: [(actorID: String, page: Int, limit: Int)] = []
+    private(set) var ledgerCalls: [(actorID: String, cursor: String?, limit: Int)] = []
     let recorder: InvitationCallRecorder?
 
     init(recorder: InvitationCallRecorder? = nil) {
@@ -34,6 +40,18 @@ actor InvitationCreditServiceStub: CoreInvitationCreditServing {
 
     func setBalanceResults(_ values: [Result<CreditBalances, Error>]) {
         balanceResults = values
+    }
+
+    func setInvitationResults(_ values: [Result<InvitationPage, Error>]) {
+        invitationResults = values
+    }
+
+    func setRewardResults(_ values: [Result<InvitationRewardPage, Error>]) {
+        rewardResults = values
+    }
+
+    func setLedgerResults(_ values: [Result<CreditLedgerPage, Error>]) {
+        ledgerResults = values
     }
 
     func setReferralDelay(nanoseconds: UInt64) {
@@ -58,6 +76,18 @@ actor InvitationCreditServiceStub: CoreInvitationCreditServing {
 
     func redemptionCallCount() -> Int {
         redemptionCalls.count
+    }
+
+    func invitationCallPages() -> [Int] {
+        invitationCalls.map(\.page)
+    }
+
+    func rewardCallPages() -> [Int] {
+        rewardCalls.map(\.page)
+    }
+
+    func ledgerCallCursors() -> [String?] {
+        ledgerCalls.map(\.cursor)
     }
 
     func referral(actorID: String) async throws -> InvitationReferral {
@@ -96,7 +126,11 @@ actor InvitationCreditServiceStub: CoreInvitationCreditServing {
         page: Int,
         limit: Int
     ) async throws -> InvitationPage {
-        throw InvitationCreditError.requestFailed(message: nil)
+        invitationCalls.append((actorID, page, limit))
+        guard !invitationResults.isEmpty else {
+            throw InvitationCreditError.requestFailed(message: nil)
+        }
+        return try invitationResults.removeFirst().get()
     }
 
     func rewards(
@@ -104,7 +138,11 @@ actor InvitationCreditServiceStub: CoreInvitationCreditServing {
         page: Int,
         limit: Int
     ) async throws -> InvitationRewardPage {
-        throw InvitationCreditError.requestFailed(message: nil)
+        rewardCalls.append((actorID, page, limit))
+        guard !rewardResults.isEmpty else {
+            throw InvitationCreditError.requestFailed(message: nil)
+        }
+        return try rewardResults.removeFirst().get()
     }
 
     func balances(actorID: String) async throws -> CreditBalances {
@@ -119,7 +157,11 @@ actor InvitationCreditServiceStub: CoreInvitationCreditServing {
         cursor: String?,
         limit: Int
     ) async throws -> CreditLedgerPage {
-        throw InvitationCreditError.requestFailed(message: nil)
+        ledgerCalls.append((actorID, cursor, limit))
+        guard !ledgerResults.isEmpty else {
+            throw InvitationCreditError.requestFailed(message: nil)
+        }
+        return try ledgerResults.removeFirst().get()
     }
 }
 
