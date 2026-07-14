@@ -35,6 +35,22 @@ public struct CardEditingDraft: Equatable, Sendable {
         return nil
     }
 
+    public func updatingMetadataAndFallback(
+        title: String?,
+        content: String,
+        tags: [String],
+        isPublic: Bool
+    ) -> CardEditingDraft {
+        CardEditingDraft(
+            title: title,
+            content: content,
+            contentJSON: contentJSON,
+            editorAtmosphere: editorAtmosphere,
+            tags: tags,
+            isPublic: isPublic
+        )
+    }
+
     private static func nonEmpty(_ value: String?) -> String? {
         guard let value,
               !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {

@@ -3,6 +3,7 @@ import MarkupEditor
 import Combine
 import CoreFlow
 import PhotosUI
+import UIKit
 import UniformTypeIdentifiers
 
 // MARK: 关联笔记数据模型
@@ -198,7 +199,15 @@ struct NewNoteView: View, MarkupDelegate {
     }
     
     @ViewBuilder private var backgroundView: some View {
-        if let mediaRef = editingStore.backgroundMediaRef,
+        if let pendingBackground = editingStore.pendingBackground,
+           let image = UIImage(data: pendingBackground.data) {
+            Image(uiImage: image)
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .accessibilityIdentifier("cardEditorPendingBackgroundImage")
+                .overlay(Color.black.opacity(0.38))
+                .ignoresSafeArea(.all)
+        } else if let mediaRef = editingStore.backgroundMediaRef,
            let url = URL(
                string: APIConfiguration.resourceURLString(mediaRef)
            ) {
@@ -243,7 +252,8 @@ struct NewNoteView: View, MarkupDelegate {
             print("选择卡片: \(selectedItem.title)")
             
             // 将选中的卡片添加到关联笔记中
-            let sourceAssetId = !cardId.isEmpty ? cardId : (currentNoteId ?? "")
+            let sourceAssetId = editingStore.cardID
+                ?? (!cardId.isEmpty ? cardId : (currentNoteId ?? ""))
             let newCardLinkItem = CardLinkItem(
                 linkId: selectedItem.id,
                 sourceAssetId: sourceAssetId,
@@ -690,7 +700,7 @@ struct NewNoteView: View, MarkupDelegate {
                     })
                     FormatButton(imageName: "at", action: {
                         print("At button tapped")
-                        let editingCardID = currentNoteId ?? cardId
+                        let editingCardID = editingStore.cardID ?? currentNoteId ?? cardId
                         guard !editingCardID.isEmpty else { return }
                         LinkPopupManager.shared.show(
                             cardId: editingCardID,
@@ -706,9 +716,10 @@ struct NewNoteView: View, MarkupDelegate {
                         print("Numbered list button tapped")
                         insertNumberedList()
                     })
-                    if !cardId.isEmpty {
+                    if editingStore.cardID != nil || !cardId.isEmpty {
                         FormatButton(imageName: "photo", action: {
-                            if editingStore.backgroundMediaRef == nil {
+                            if editingStore.backgroundMediaRef == nil
+                                && editingStore.pendingBackground == nil {
                                 showBackgroundPicker = true
                             } else {
                                 showBackgroundActions = true
@@ -870,11 +881,16 @@ struct NewNoteView: View, MarkupDelegate {
         let request = CreateCardRequest(
             title: title.isEmpty ? nil : title,
             content: content,
+            contentJSON: editingStore.draft.contentJSON,
+            editorAtmosphere: editingStore.draft.editorAtmosphere,
             tags: displayedTags.isEmpty ? nil : displayedTags,
             isPublic: isPublic
         )
         
-        networkManager.createCard(request)
+        networkManager.createCard(
+            request,
+            idempotencyKey: editingStore.createRequestID
+        )
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { completion in
@@ -887,9 +903,9 @@ struct NewNoteView: View, MarkupDelegate {
                 },
                 receiveValue: { response in
                     print("发布成功笔记ID: \(response.data.id)")
+                    guard adoptLegacyCreation(response.data) else { return }
                     publishMessage = "Publish success"
-                    currentNoteId = response.data.id
-                    onCreated(response.data.id, content)
+                    onCreated(response.data.id, response.data.content)
                     // 发布成功后打开菜单
                     showPopupMenu = true
                 }
@@ -900,7 +916,7 @@ struct NewNoteView: View, MarkupDelegate {
     // MARK: - 创建UserCard
     private func createTempUserCard() -> UserCard {
         return UserCard(
-            id: currentNoteId ?? "",
+            id: editingStore.cardID ?? currentNoteId ?? "",
             title: "New Note",
             content: noteHtml,
             contentHash: "",
@@ -942,7 +958,7 @@ struct NewNoteView: View, MarkupDelegate {
 
         editingFailureMessage = nil
         editingStore.updateDraft(
-            CardEditingDraft(
+            editingStore.draft.updatingMetadataAndFallback(
                 title: titleFromHTML(content),
                 content: content,
                 tags: displayedTags,
@@ -998,14 +1014,21 @@ struct NewNoteView: View, MarkupDelegate {
                 } ?? .jpeg
                 let fileExtension = type.preferredFilenameExtension ?? "jpg"
                 editingFailureMessage = nil
-                editingStore.stageBackground(
+                let staged = editingStore.stageBackground(
                     CardEditingImage(
                         data: data,
                         filename: "card-background.\(fileExtension)",
                         mimeType: type.preferredMIMEType ?? "image/jpeg"
                     )
                 )
-                _ = await editingStore.save()
+                guard staged else {
+                    editingFailureMessage = "Couldn't stage that background."
+                    return
+                }
+                let saved = await editingStore.save()
+                if !saved {
+                    editingFailureMessage = "Couldn't update background. Try again."
+                }
             } catch {
                 editingFailureMessage = "Couldn't read that image."
             }
@@ -1016,7 +1039,7 @@ struct NewNoteView: View, MarkupDelegate {
         let links = relatedNotes.map { note in
             CardEditingLink(
                 sourceCardID: note.sourceAssetId.isEmpty
-                    ? cardId
+                    ? (editingStore.cardID ?? currentNoteId ?? cardId)
                     : note.sourceAssetId,
                 targetCardID: note.targetAssetId.isEmpty
                     ? note.linkedCardId
@@ -1067,11 +1090,16 @@ struct NewNoteView: View, MarkupDelegate {
         let request = CreateCardRequest(
             title: title.isEmpty ? nil : title,
             content: content,
+            contentJSON: editingStore.draft.contentJSON,
+            editorAtmosphere: editingStore.draft.editorAtmosphere,
             tags: displayedTags.isEmpty ? nil : displayedTags,
             isPublic: isPublic
         )
         
-        networkManager.createCard(request)
+        networkManager.createCard(
+            request,
+            idempotencyKey: editingStore.createRequestID
+        )
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { completion in
@@ -1084,8 +1112,8 @@ struct NewNoteView: View, MarkupDelegate {
                 },
                 receiveValue: { response in
                     print("自动保存成功笔记ID: \(response.data.id)")
-                    currentNoteId = response.data.id
-                    onCreated(response.data.id, content)
+                    guard adoptLegacyCreation(response.data) else { return }
+                    onCreated(response.data.id, response.data.content)
                     // 自动保存不需要显示提示，直接退出
                     if !showPopupMenu {
                         dismiss()
@@ -1093,6 +1121,28 @@ struct NewNoteView: View, MarkupDelegate {
                 }
             )
             .store(in: &cancellables)
+    }
+
+    @discardableResult
+    private func adoptLegacyCreation(_ card: CreateCardData) -> Bool {
+        guard editingStore.adoptCanonicalCardID(card.id) else {
+            editingFailureMessage = "Couldn't adopt the created card."
+            return false
+        }
+        currentNoteId = card.id
+        editingStore.hydrate(
+            draft: CardEditingDraft(
+                title: card.title,
+                content: card.content,
+                contentJSON: card.contentJSON,
+                editorAtmosphere: card.editorAtmosphere ?? "none",
+                tags: card.tags,
+                isPublic: card.isPublic
+            ),
+            backgroundMediaRef: card.backgroundMediaRef,
+            links: editingStore.links
+        )
+        return true
     }
     
     // MARK: - 更新笔记方法
@@ -1120,6 +1170,8 @@ struct NewNoteView: View, MarkupDelegate {
         let request = UpdateCardRequest(
             title: title.isEmpty ? nil : title,
             content: content,
+            contentJSON: editingStore.draft.contentJSON,
+            editorAtmosphere: editingStore.draft.editorAtmosphere,
             tags: displayedTags.isEmpty ? nil : displayedTags
         )
         
@@ -1185,6 +1237,8 @@ struct NewNoteView: View, MarkupDelegate {
                         draft: CardEditingDraft(
                             title: cardDetail.title,
                             content: cardDetail.content,
+                            contentJSON: cardDetail.contentJSON,
+                            editorAtmosphere: cardDetail.editorAtmosphere ?? "none",
                             tags: cardDetail.tags,
                             isPublic: cardDetail.isPublic
                         ),
@@ -1365,7 +1419,9 @@ struct NewNoteView: View, MarkupDelegate {
             return
         }
         
-        let sourceAssetId = note.sourceAssetId.isEmpty ? cardId : note.sourceAssetId
+        let sourceAssetId = note.sourceAssetId.isEmpty
+            ? (editingStore.cardID ?? currentNoteId ?? cardId)
+            : note.sourceAssetId
         let targetAssetId = note.targetAssetId.isEmpty ? note.linkedCardId : note.targetAssetId
 
         editingFailureMessage = nil

@@ -9,7 +9,10 @@ struct NetworkCoreCardEditingService: CoreCardEditingServing, @unchecked Sendabl
         self.network = network
     }
 
-    func create(draft: CardEditingDraft) async throws -> CardEditingSnapshot {
+    func create(
+        draft: CardEditingDraft,
+        createRequestID: String
+    ) async throws -> CardEditingSnapshot {
         do {
             let response = try await firstValue(
                 network.createCard(
@@ -20,7 +23,8 @@ struct NetworkCoreCardEditingService: CoreCardEditingServing, @unchecked Sendabl
                         editorAtmosphere: draft.editorAtmosphere,
                         tags: draft.tags,
                         isPublic: draft.isPublic
-                    )
+                    ),
+                    idempotencyKey: createRequestID
                 )
             )
             guard response.success else {

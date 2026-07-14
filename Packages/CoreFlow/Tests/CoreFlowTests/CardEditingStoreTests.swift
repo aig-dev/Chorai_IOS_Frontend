@@ -121,6 +121,69 @@ final class CardEditingStoreTests: XCTestCase {
         XCTAssertEqual(store.backgroundMediaRef, "med_1")
     }
 
+    func testCreateRetryReusesLifecycleRequestIDAndExactDraftAfterMutation() async {
+        let initial = CardEditingDraft(
+            title: nil,
+            content: "Initial",
+            tags: ["idea"],
+            isPublic: false
+        )
+        let revised = CardEditingDraft(
+            title: nil,
+            content: "Revised while offline",
+            tags: ["idea", "work"],
+            isPublic: false
+        )
+        let service = MockCardEditingService()
+        service.createResults = [
+            .failure(.transport(code: "response_timeout")),
+            .success(snapshot(id: "ast_1", title: nil, content: "Initial", tags: ["idea"]))
+        ]
+        service.updateResults = [
+            .success(
+                snapshot(
+                    id: "ast_1",
+                    title: nil,
+                    content: revised.content,
+                    tags: revised.tags
+                )
+            )
+        ]
+        let store = CardEditingStore(
+            cardID: nil,
+            draft: initial,
+            backgroundMediaRef: nil,
+            links: [],
+            service: service
+        )
+        guard let lifecycleRequestID = store.createRequestID else {
+            XCTFail("New card lifecycle did not generate a create request ID")
+            return
+        }
+
+        let firstSave = await store.save()
+        XCTAssertFalse(firstSave)
+        store.updateDraft(revised, bodyRevision: 1)
+
+        let retryResult = await store.retry()
+
+        XCTAssertFalse(retryResult)
+        XCTAssertEqual(service.createRequests.map(\.createRequestID), [
+            lifecycleRequestID,
+            lifecycleRequestID
+        ])
+        XCTAssertEqual(service.createRequests.map(\.draft), [initial, initial])
+        XCTAssertEqual(store.cardID, "ast_1")
+        XCTAssertNil(store.createRequestID)
+        XCTAssertEqual(store.draft, revised)
+        XCTAssertTrue(store.isDirty)
+
+        let finalSave = await store.save()
+        XCTAssertTrue(finalSave)
+        XCTAssertEqual(service.updateRequests.map(\.draft), [revised])
+        XCTAssertFalse(store.isDirty)
+    }
+
     func testEnsurePersistedReturnsCreatedIDWithoutOwningPickerPresentation() async {
         let service = MockCardEditingService()
         service.createResults = [
@@ -183,6 +246,29 @@ final class CardEditingStoreTests: XCTestCase {
         XCTAssertEqual(service.createRequests.count, 1)
         XCTAssertTrue(service.createLinkRequests.isEmpty)
         XCTAssertEqual(store.phase, .failed(.transport(code: "offline")))
+    }
+
+    func testEnsurePersistedKeepsPendingBackgroundFailureVisible() async {
+        let service = MockCardEditingService()
+        service.replaceBackgroundResults = [
+            .failure(.transport(code: "upload_failed"))
+        ]
+        let store = CardEditingStore(
+            cardID: "ast_1",
+            draft: .init(title: nil, content: "Body", tags: [], isPublic: false),
+            backgroundMediaRef: "med_old",
+            links: [],
+            service: service
+        )
+        XCTAssertTrue(store.stageBackground(validImage))
+        _ = await store.save()
+
+        let persistedID = await store.ensurePersisted()
+
+        XCTAssertEqual(persistedID, "ast_1")
+        XCTAssertEqual(store.failureStage, .replacingBackground)
+        XCTAssertEqual(store.phase, .failed(.transport(code: "upload_failed")))
+        XCTAssertEqual(store.pendingBackground, validImage)
     }
 
     func testLaterBodyRevisionRemainsDirtyAfterEarlierSaveCompletes() async {
@@ -385,6 +471,82 @@ final class CardEditingStoreTests: XCTestCase {
         XCTAssertFalse(store.isDirty)
     }
 
+    func testHydrateDuringBackgroundFailurePreservesPendingIntentAndRetry() async {
+        let service = MockCardEditingService()
+        let gate = AsyncGate()
+        service.replaceBackgroundGate = gate
+        service.replaceBackgroundResults = [
+            .failure(.transport(code: "upload_failed")),
+            .success("med_uploaded")
+        ]
+        let draft = CardEditingDraft(
+            title: nil,
+            content: "Body",
+            tags: [],
+            isPublic: false
+        )
+        let store = CardEditingStore(
+            cardID: "ast_1",
+            draft: draft,
+            backgroundMediaRef: "med_old",
+            links: [],
+            service: service
+        )
+        _ = store.stageBackground(validImage)
+
+        let saveTask = Task { await store.save() }
+        await waitForStore { service.replaceBackgroundRequests.count == 1 }
+        store.hydrate(
+            draft: draft,
+            backgroundMediaRef: "med_hydrated",
+            links: []
+        )
+        await gate.open()
+
+        let firstSave = await saveTask.value
+        XCTAssertFalse(firstSave)
+        XCTAssertEqual(store.pendingBackground, validImage)
+        XCTAssertEqual(store.failureStage, .replacingBackground)
+        XCTAssertEqual(store.phase, .failed(.transport(code: "upload_failed")))
+
+        let retried = await store.retry()
+        XCTAssertTrue(retried)
+        XCTAssertEqual(service.replaceBackgroundRequests, [validImage, validImage])
+        XCTAssertEqual(store.backgroundMediaRef, "med_uploaded")
+        XCTAssertNil(store.pendingBackground)
+    }
+
+    func testBackgroundRetryUsesCapturedImageAfterNewImageIsStaged() async {
+        let replacement = CardEditingImage(
+            data: Data("replacement".utf8),
+            filename: "replacement.png",
+            mimeType: "image/png"
+        )
+        let service = MockCardEditingService()
+        service.replaceBackgroundResults = [
+            .failure(.transport(code: "upload_failed")),
+            .success("med_original")
+        ]
+        let store = CardEditingStore(
+            cardID: "ast_1",
+            draft: .init(title: nil, content: "Body", tags: [], isPublic: false),
+            backgroundMediaRef: "med_old",
+            links: [],
+            service: service
+        )
+        XCTAssertTrue(store.stageBackground(validImage))
+        _ = await store.save()
+
+        XCTAssertTrue(store.stageBackground(replacement))
+        let retried = await store.retry()
+
+        XCTAssertFalse(retried)
+        XCTAssertEqual(service.replaceBackgroundRequests, [validImage, validImage])
+        XCTAssertEqual(store.backgroundMediaRef, "med_original")
+        XCTAssertEqual(store.pendingBackground, replacement)
+        XCTAssertTrue(store.isDirty)
+    }
+
     func testRemoveBackgroundFromUnsavedCardClearsOnlyStagedPreview() async {
         let service = MockCardEditingService()
         let store = makeNewStore(service: service)
@@ -512,6 +674,56 @@ final class CardEditingStoreTests: XCTestCase {
         XCTAssertTrue(service.updateRequests.isEmpty)
     }
 
+    func testHydrateThenTagEditCapturesStructuredFieldsInUpdate() async {
+        let json = #"[{"id":"b1","type":"paragraph","content":"Body"}]"#
+        let service = MockCardEditingService()
+        service.updateResults = [
+            .success(
+                snapshot(
+                    content: "Body",
+                    contentJSON: json,
+                    editorAtmosphere: "rain",
+                    tags: ["idea", "work"]
+                )
+            )
+        ]
+        let store = CardEditingStore(
+            cardID: "ast_1",
+            draft: .init(title: nil, content: "Legacy", tags: [], isPublic: false),
+            backgroundMediaRef: nil,
+            links: [],
+            service: service
+        )
+        store.hydrate(
+            draft: .init(
+                title: "Canonical",
+                content: "Body",
+                contentJSON: json,
+                editorAtmosphere: "rain",
+                tags: ["idea"],
+                isPublic: false
+            ),
+            backgroundMediaRef: nil,
+            links: []
+        )
+        store.updateDraft(
+            store.draft.updatingMetadataAndFallback(
+                title: store.draft.title,
+                content: store.draft.content,
+                tags: ["idea", "work"],
+                isPublic: store.draft.isPublic
+            )
+        )
+
+        let saved = await store.save()
+
+        XCTAssertTrue(saved)
+        XCTAssertEqual(service.updateRequests.count, 1)
+        XCTAssertEqual(service.updateRequests[0].draft.contentJSON, json)
+        XCTAssertEqual(service.updateRequests[0].draft.editorAtmosphere, "rain")
+        XCTAssertEqual(service.updateRequests[0].draft.tags, ["idea", "work"])
+    }
+
     func testReplaceLinksPreservesUnsavedDraftAndStagedBackground() {
         let service = MockCardEditingService()
         let initial = CardEditingDraft(
@@ -588,12 +800,23 @@ final class CardEditingStoreTests: XCTestCase {
         XCTAssertEqual(service.updateRequests.count, 1)
         XCTAssertEqual(service.updateRequests[0].draft, store.draft)
 
-        _ = await store.save()
+        let laterDraft = store.draft.updatingMetadataAndFallback(
+            title: store.draft.title,
+            content: store.draft.content,
+            tags: store.draft.tags + ["later"],
+            isPublic: store.draft.isPublic
+        )
+        store.updateDraft(laterDraft, bodyRevision: 2)
 
+        let retryResult = await store.retry()
+
+        XCTAssertFalse(retryResult)
         XCTAssertEqual(service.updateRequests.count, 2)
         XCTAssertEqual(service.updateRequests[0], service.updateRequests[1])
         XCTAssertEqual(store.draft.contentJSON, json)
         XCTAssertEqual(store.draft.editorAtmosphere, "rain")
+        XCTAssertEqual(store.draft.tags, ["idea", "work", "extra", "later"])
+        XCTAssertTrue(store.isDirty)
         XCTAssertNil(store.draft.validationError)
     }
 
@@ -790,6 +1013,100 @@ final class CardEditingStoreTests: XCTestCase {
         XCTAssertEqual(service.createLinkRequests, [link, link])
     }
 
+    func testInvalidLinkReplacesOlderRetryContextAtomically() async {
+        let failedLink = CardEditingLink(
+            sourceCardID: "ast_1",
+            targetCardID: "ast_2",
+            title: "Companion"
+        )
+        let invalidLink = CardEditingLink(
+            sourceCardID: "wrong_source",
+            targetCardID: "ast_3",
+            title: "Invalid"
+        )
+        let service = MockCardEditingService()
+        service.createLinkResults = [.failure(.transport(code: "offline"))]
+        let store = CardEditingStore(
+            cardID: "ast_1",
+            draft: .init(title: nil, content: "Body", tags: [], isPublic: false),
+            backgroundMediaRef: nil,
+            links: [],
+            service: service
+        )
+        _ = await store.createLink(failedLink)
+
+        let invalidResult = await store.createLink(invalidLink)
+        let retryResult = await store.retry()
+
+        XCTAssertFalse(invalidResult)
+        XCTAssertFalse(retryResult)
+        XCTAssertNil(store.failureStage)
+        XCTAssertEqual(
+            store.phase,
+            .failed(.invalidDraft(code: "invalid_link_source"))
+        )
+        XCTAssertEqual(service.createLinkRequests, [failedLink])
+    }
+
+    func testInvalidBackgroundDuringSaveDoesNotReplaceActivePhase() async {
+        let service = MockCardEditingService()
+        let gate = AsyncGate()
+        service.updateGate = gate
+        service.updateResults = [
+            .success(snapshot(content: "Revised", tags: []))
+        ]
+        let store = CardEditingStore(
+            cardID: "ast_1",
+            draft: .init(title: nil, content: "Initial", tags: [], isPublic: false),
+            backgroundMediaRef: nil,
+            links: [],
+            service: service
+        )
+        store.updateDraft(
+            .init(title: nil, content: "Revised", tags: [], isPublic: false),
+            bodyRevision: 1
+        )
+        let saveTask = Task { await store.save() }
+        await waitForStore { service.updateRequests.count == 1 }
+        let invalidImage = CardEditingImage(
+            data: Data(),
+            filename: "empty.png",
+            mimeType: "image/png"
+        )
+
+        let staged = store.stageBackground(invalidImage)
+
+        XCTAssertFalse(staged)
+        XCTAssertEqual(store.phase, .saving)
+        XCTAssertNil(store.failureStage)
+        XCTAssertNil(store.pendingBackground)
+        await gate.open()
+        let saveSucceeded = await saveTask.value
+        XCTAssertTrue(saveSucceeded)
+    }
+
+    func testAdoptedLegacyCardIDEnablesCanonicalUnlink() async {
+        let link = CardEditingLink(
+            sourceCardID: "ast_created",
+            targetCardID: "ast_target",
+            title: "Companion"
+        )
+        let service = MockCardEditingService()
+        service.deleteLinkResults = [.success(())]
+        let store = makeNewStore(service: service)
+
+        let adopted = store.adoptCanonicalCardID("ast_created")
+        store.replaceLinks([link])
+        let deleted = await store.deleteLink(link)
+
+        XCTAssertTrue(adopted)
+        XCTAssertTrue(deleted)
+        XCTAssertEqual(store.cardID, "ast_created")
+        XCTAssertNil(store.createRequestID)
+        XCTAssertEqual(service.deleteLinkRequests, [link])
+        XCTAssertTrue(store.links.isEmpty)
+    }
+
     func testHydrateDuringLinkFailurePreservesExactRetryPayload() async {
         let link = CardEditingLink(
             sourceCardID: "ast_1",
@@ -971,6 +1288,7 @@ final class CardEditingStoreTests: XCTestCase {
         }
         XCTFail("Timed out waiting for card editing store state")
     }
+
 }
 
 private final class MockCardEditingService: CoreCardEditingServing, @unchecked Sendable {
@@ -988,6 +1306,11 @@ private final class MockCardEditingService: CoreCardEditingServing, @unchecked S
         let draft: CardEditingDraft
     }
 
+    struct CreateRequest: Equatable {
+        let createRequestID: String
+        let draft: CardEditingDraft
+    }
+
     var createResults: [Result<CardEditingSnapshot, CardEditingError>] = []
     var updateResults: [Result<CardEditingSnapshot, CardEditingError>] = []
     var createLinkResults: [Result<Void, CardEditingError>] = []
@@ -1001,15 +1324,20 @@ private final class MockCardEditingService: CoreCardEditingServing, @unchecked S
     var replaceBackgroundGate: AsyncGate?
 
     private(set) var events: [Event] = []
-    private(set) var createRequests: [CardEditingDraft] = []
+    private(set) var createRequests: [CreateRequest] = []
     private(set) var updateRequests: [SaveRequest] = []
     private(set) var createLinkRequests: [CardEditingLink] = []
     private(set) var deleteLinkRequests: [CardEditingLink] = []
     private(set) var replaceBackgroundRequests: [CardEditingImage] = []
     private(set) var removeBackgroundRequests: [String] = []
 
-    func create(draft: CardEditingDraft) async throws -> CardEditingSnapshot {
-        createRequests.append(draft)
+    func create(
+        draft: CardEditingDraft,
+        createRequestID: String
+    ) async throws -> CardEditingSnapshot {
+        createRequests.append(
+            .init(createRequestID: createRequestID, draft: draft)
+        )
         events.append(.create(draft))
         let result = createResults.removeFirst()
         if let createGate, createRequests.count == 1 {

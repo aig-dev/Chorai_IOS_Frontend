@@ -547,7 +547,10 @@ extension NetworkManager {
         )
     }
 
-    func createCard(_ cardRequest: CreateCardRequest) -> AnyPublisher<CardResponse, NetworkError> {
+    func createCard(
+        _ cardRequest: CreateCardRequest,
+        idempotencyKey: String? = nil
+    ) -> AnyPublisher<CardResponse, NetworkError> {
         var parameters: Parameters = [
             "content": cardRequest.content,
             "tags": cardRequest.tags ?? []
@@ -570,6 +573,7 @@ extension NetworkManager {
             endpoint: "/api/cards",
             method: .post,
             parameters: parameters,
+            headers: idempotencyKey.map { ["Idempotency-Key": $0] },
             responseType: CardResponse.self
         )
     }

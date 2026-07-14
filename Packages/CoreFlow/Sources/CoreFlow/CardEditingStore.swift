@@ -5,6 +5,7 @@ import Foundation
 public final class CardEditingStore: ObservableObject {
     @Published public private(set) var phase: CardEditingPhase = .idle
     @Published public private(set) var cardID: String?
+    @Published public private(set) var createRequestID: String?
     @Published public private(set) var draft: CardEditingDraft
     @Published public private(set) var bodyRevision: Int
     @Published public private(set) var lastCommittedDraft: CardEditingDraft?
@@ -12,15 +13,38 @@ public final class CardEditingStore: ObservableObject {
     @Published public private(set) var backgroundMediaRef: String?
     @Published public private(set) var pendingBackground: CardEditingImage?
     @Published public private(set) var links: [CardEditingLink]
-    @Published public private(set) var failureStage: CardEditingFailureStage?
+
+    private enum RetryOperation: Equatable, Sendable {
+        case create(
+            createRequestID: String,
+            draft: CardEditingDraft,
+            bodyRevision: Int
+        )
+        case update(
+            cardID: String,
+            draft: CardEditingDraft,
+            bodyRevision: Int
+        )
+        case replaceBackground(cardID: String, image: CardEditingImage)
+        case removeBackground(cardID: String)
+        case createLink(CardEditingLink)
+        case deleteLink(CardEditingLink)
+    }
+
+    private struct FailureContext: Equatable, Sendable {
+        let error: CardEditingError
+        let stage: CardEditingFailureStage?
+        let retryOperation: RetryOperation?
+    }
 
     private let service: any CoreCardEditingServing
     private var stateGeneration = 0
     private var activeOperationID: UUID?
-    private var retryLink: CardEditingLink?
+    private var failureContext: FailureContext?
 
     public init(
         cardID: String?,
+        createRequestID: String? = nil,
         draft: CardEditingDraft,
         bodyRevision: Int = 0,
         backgroundMediaRef: String?,
@@ -28,6 +52,9 @@ public final class CardEditingStore: ObservableObject {
         service: any CoreCardEditingServing
     ) {
         self.cardID = cardID
+        self.createRequestID = cardID == nil
+            ? Self.validCreateRequestID(createRequestID) ?? UUID().uuidString
+            : nil
         self.draft = draft
         self.bodyRevision = bodyRevision
         self.backgroundMediaRef = backgroundMediaRef
@@ -40,6 +67,10 @@ public final class CardEditingStore: ObservableObject {
             lastCommittedDraft = draft
             lastCommittedBodyRevision = bodyRevision
         }
+    }
+
+    public var failureStage: CardEditingFailureStage? {
+        failureContext?.stage
     }
 
     public var isDirty: Bool {
@@ -65,17 +96,40 @@ public final class CardEditingStore: ObservableObject {
             lastCommittedBodyRevision = revision
         }
         self.backgroundMediaRef = backgroundMediaRef
-        pendingBackground = nil
         self.links = links
-        failureStage = nil
-        retryLink = nil
-        if !operationIsActive {
+
+        guard !operationIsActive else { return }
+        if let failureContext,
+           failureContext.stage == .replacingBackground,
+           pendingBackground != nil {
+            phase = .failed(failureContext.error)
+        } else {
+            clearFailure()
             phase = .ready
         }
     }
 
     public func replaceLinks(_ links: [CardEditingLink]) {
         self.links = links
+    }
+
+    @discardableResult
+    public func adoptCanonicalCardID(_ value: String) -> Bool {
+        guard !isBusy else { return false }
+        let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else {
+            fail(with: .invalidDraft(code: "invalid_card_id"))
+            return false
+        }
+        if let cardID, cardID != normalized {
+            fail(with: .invalidDraft(code: "conflicting_card_id"))
+            return false
+        }
+        cardID = normalized
+        createRequestID = nil
+        clearFailure()
+        phase = .ready
+        return true
     }
 
     public func updateDraft(
@@ -92,16 +146,20 @@ public final class CardEditingStore: ObservableObject {
         }
     }
 
-    public func stageBackground(_ image: CardEditingImage) {
+    @discardableResult
+    public func stageBackground(_ image: CardEditingImage) -> Bool {
         guard image.isValidBackground else {
-            failureStage = nil
-            phase = .failed(.invalidDraft(code: "invalid_background_image"))
-            return
+            if !isBusy {
+                fail(with: .invalidDraft(code: "invalid_background_image"))
+            }
+            return false
         }
         pendingBackground = image
-        if !isBusy, failureStage == nil {
+        if !isBusy, failureContext?.retryOperation == nil {
+            clearFailure()
             phase = .ready
         }
+        return true
     }
 
     @discardableResult
@@ -109,8 +167,7 @@ public final class CardEditingStore: ObservableObject {
         guard let operationID = beginOperation() else { return false }
         defer { endOperation(operationID) }
         guard validateDraft() else { return false }
-        failureStage = nil
-        retryLink = nil
+        clearFailure()
 
         if isDraftDirty {
             guard await persistDraft() else { return false }
@@ -127,30 +184,50 @@ public final class CardEditingStore: ObservableObject {
         guard let operationID = beginOperation() else { return nil }
         defer { endOperation(operationID) }
         guard validateDraft() else { return nil }
+
+        let retainedFailure = failureContext.flatMap { context -> FailureContext? in
+            switch context.stage {
+            case .replacingBackground, .removingBackground, .creatingLink, .deletingLink:
+                return context
+            case .creatingCard, .updatingCard, .none:
+                return nil
+            }
+        }
+
         if isDraftDirty {
-            failureStage = nil
-            retryLink = nil
+            clearFailure()
             guard await persistDraft() else { return nil }
         }
         guard !isDraftDirty else { return nil }
-        phase = .ready
+
+        if let retainedFailure {
+            failureContext = retainedFailure
+            phase = .failed(retainedFailure.error)
+        } else if let failureContext {
+            phase = .failed(failureContext.error)
+        } else {
+            phase = .ready
+        }
         return cardID
     }
 
     @discardableResult
     public func retry() async -> Bool {
-        guard let failureStage, !isBusy else { return false }
-        switch failureStage {
-        case .creatingCard, .updatingCard, .replacingBackground:
-            return await save()
-        case .removingBackground:
-            return await removeBackground()
-        case .creatingLink:
-            guard let retryLink else { return false }
-            return await createLink(retryLink)
-        case .deletingLink:
-            guard let retryLink else { return false }
-            return await deleteLink(retryLink)
+        guard let retryOperation = failureContext?.retryOperation,
+              !isBusy else {
+            return false
+        }
+        switch retryOperation {
+        case .create, .update:
+            return await retryDraft(retryOperation)
+        case let .replaceBackground(cardID, image):
+            return await retryBackground(cardID: cardID, image: image)
+        case let .removeBackground(cardID):
+            return await retryBackgroundRemoval(cardID: cardID)
+        case let .createLink(link):
+            return await createLink(link)
+        case let .deleteLink(link):
+            return await deleteLink(link)
         }
     }
 
@@ -159,24 +236,24 @@ public final class CardEditingStore: ObservableObject {
         guard let operationID = beginOperation() else { return false }
         defer { endOperation(operationID) }
         guard let cardID, cardID == link.sourceCardID else {
-            phase = .failed(.invalidDraft(code: "invalid_link_source"))
+            fail(with: .invalidDraft(code: "invalid_link_source"))
             return false
         }
-        failureStage = nil
-        retryLink = link
+        clearFailure()
         phase = .linking
         do {
             try await service.createLink(link)
             if !links.contains(link) {
                 links.append(link)
             }
-            retryLink = nil
             phase = .ready
             return true
         } catch {
-            retryLink = link
-            failureStage = .creatingLink
-            phase = .failed(Self.mapError(error))
+            fail(
+                with: Self.mapError(error),
+                stage: .creatingLink,
+                retryOperation: .createLink(link)
+            )
             return false
         }
     }
@@ -186,11 +263,10 @@ public final class CardEditingStore: ObservableObject {
         guard let operationID = beginOperation() else { return false }
         defer { endOperation(operationID) }
         guard cardID == link.sourceCardID else {
-            phase = .failed(.invalidDraft(code: "invalid_link_source"))
+            fail(with: .invalidDraft(code: "invalid_link_source"))
             return false
         }
-        failureStage = nil
-        retryLink = link
+        clearFailure()
         phase = .linking
         do {
             try await service.deleteLink(link)
@@ -198,13 +274,14 @@ public final class CardEditingStore: ObservableObject {
                 $0.sourceCardID == link.sourceCardID
                     && $0.targetCardID == link.targetCardID
             }
-            retryLink = nil
             phase = .ready
             return true
         } catch {
-            retryLink = link
-            failureStage = .deletingLink
-            phase = .failed(Self.mapError(error))
+            fail(
+                with: Self.mapError(error),
+                stage: .deletingLink,
+                retryOperation: .deleteLink(link)
+            )
             return false
         }
     }
@@ -214,29 +291,16 @@ public final class CardEditingStore: ObservableObject {
         guard let operationID = beginOperation() else { return false }
         defer { endOperation(operationID) }
         pendingBackground = nil
+        clearFailure()
         guard let cardID else {
-            failureStage = nil
             phase = .ready
             return true
         }
         guard backgroundMediaRef != nil else {
-            failureStage = nil
             phase = .ready
             return true
         }
-
-        failureStage = nil
-        phase = .updatingBackground
-        do {
-            try await service.removeBackground(cardID: cardID)
-            backgroundMediaRef = nil
-            phase = .ready
-            return true
-        } catch {
-            failureStage = .removingBackground
-            phase = .failed(Self.mapError(error))
-            return false
-        }
+        return await performBackgroundRemoval(cardID: cardID)
     }
 
     private var isDraftDirty: Bool {
@@ -275,30 +339,95 @@ public final class CardEditingStore: ObservableObject {
 
     private func validateDraft() -> Bool {
         guard let validationError = draft.validationError else { return true }
-        failureStage = nil
-        phase = .failed(validationError)
+        fail(with: validationError)
         return false
     }
 
-    private func persistDraft() async -> Bool {
-        let request = draft
-        let requestRevision = bodyRevision
-        let requestGeneration = stateGeneration
-        let originalCardID = cardID
-        let stage: CardEditingFailureStage = originalCardID == nil
-            ? .creatingCard
-            : .updatingCard
-        phase = .saving
+    private func retryDraft(_ retryOperation: RetryOperation) async -> Bool {
+        guard let operationID = beginOperation() else { return false }
+        defer { endOperation(operationID) }
+        clearFailure()
+        guard await persistDraft(retryOperation) else { return false }
+        if pendingBackground != nil {
+            guard await persistPendingBackground() else { return false }
+        }
+        phase = .ready
+        return !isDirty
+    }
 
+    private func retryBackground(cardID: String, image: CardEditingImage) async -> Bool {
+        guard let operationID = beginOperation() else { return false }
+        defer { endOperation(operationID) }
+        clearFailure()
+        guard await persistBackground(cardID: cardID, image: image) else {
+            return false
+        }
+        phase = .ready
+        return !isDirty
+    }
+
+    private func retryBackgroundRemoval(cardID: String) async -> Bool {
+        guard let operationID = beginOperation() else { return false }
+        defer { endOperation(operationID) }
+        clearFailure()
+        return await performBackgroundRemoval(cardID: cardID)
+    }
+
+    private func persistDraft(_ requestedOperation: RetryOperation? = nil) async -> Bool {
+        let operation: RetryOperation
+        if let requestedOperation {
+            operation = requestedOperation
+        } else if let cardID {
+            operation = .update(
+                cardID: cardID,
+                draft: draft,
+                bodyRevision: bodyRevision
+            )
+        } else if let createRequestID {
+            operation = .create(
+                createRequestID: createRequestID,
+                draft: draft,
+                bodyRevision: bodyRevision
+            )
+        } else {
+            fail(with: .transport(code: "create_request_id_missing"))
+            return false
+        }
+
+        let request: CardEditingDraft
+        let requestRevision: Int
+        let originalCardID: String?
+        let stage: CardEditingFailureStage
+        switch operation {
+        case let .create(_, draft, bodyRevision):
+            request = draft
+            requestRevision = bodyRevision
+            originalCardID = nil
+            stage = .creatingCard
+        case let .update(cardID, draft, bodyRevision):
+            request = draft
+            requestRevision = bodyRevision
+            originalCardID = cardID
+            stage = .updatingCard
+        case .replaceBackground, .removeBackground, .createLink, .deleteLink:
+            fail(with: .transport(code: "invalid_draft_retry_operation"))
+            return false
+        }
+
+        let requestGeneration = stateGeneration
+        phase = .saving
         do {
             let saved: CardEditingSnapshot
-            if let originalCardID {
-                saved = try await service.update(
-                    cardID: originalCardID,
-                    draft: request
+            switch operation {
+            case let .create(createRequestID, draft, _):
+                saved = try await service.create(
+                    draft: draft,
+                    createRequestID: createRequestID
                 )
-            } else {
-                saved = try await service.create(draft: request)
+            case let .update(cardID, draft, _):
+                saved = try await service.update(cardID: cardID, draft: draft)
+            case .replaceBackground, .removeBackground, .createLink, .deleteLink:
+                return false
             }
             guard !saved.id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 throw CardEditingError.transport(code: "card_id_missing")
@@ -313,27 +442,33 @@ public final class CardEditingStore: ObservableObject {
                 isPublic: saved.isPublic
             )
             cardID = saved.id
+            if originalCardID == nil {
+                createRequestID = nil
+            }
             lastCommittedDraft = committed
             lastCommittedBodyRevision = requestRevision
             backgroundMediaRef = saved.backgroundMediaRef
             guard requestGeneration == stateGeneration else {
-                failureStage = nil
+                clearFailure()
                 phase = .ready
                 return false
             }
             if draft == request, bodyRevision == requestRevision {
                 draft = committed
             }
-            failureStage = nil
+            clearFailure()
             phase = .ready
             return true
         } catch {
-            guard requestGeneration == stateGeneration else {
+            if requestGeneration != stateGeneration, originalCardID != nil {
                 phase = .ready
                 return false
             }
-            failureStage = stage
-            phase = .failed(Self.mapError(error))
+            fail(
+                with: Self.mapError(error),
+                stage: stage,
+                retryOperation: operation
+            )
             return false
         }
     }
@@ -341,11 +476,16 @@ public final class CardEditingStore: ObservableObject {
     private func persistPendingBackground() async -> Bool {
         guard let image = pendingBackground else { return true }
         guard let cardID else {
-            failureStage = .creatingCard
-            phase = .failed(.transport(code: "card_id_missing"))
+            fail(with: .transport(code: "card_id_missing"))
             return false
         }
-        let requestGeneration = stateGeneration
+        return await persistBackground(cardID: cardID, image: image)
+    }
+
+    private func persistBackground(
+        cardID: String,
+        image: CardEditingImage
+    ) async -> Bool {
         phase = .updatingBackground
         do {
             let mediaRef = try await service.replaceBackground(
@@ -356,18 +496,52 @@ public final class CardEditingStore: ObservableObject {
             if pendingBackground == image {
                 pendingBackground = nil
             }
-            failureStage = nil
+            clearFailure()
             phase = .ready
             return true
         } catch {
-            guard requestGeneration == stateGeneration else {
-                phase = .ready
-                return false
-            }
-            failureStage = .replacingBackground
-            phase = .failed(Self.mapError(error))
+            fail(
+                with: Self.mapError(error),
+                stage: .replacingBackground,
+                retryOperation: .replaceBackground(cardID: cardID, image: image)
+            )
             return false
         }
+    }
+
+    private func performBackgroundRemoval(cardID: String) async -> Bool {
+        phase = .updatingBackground
+        do {
+            try await service.removeBackground(cardID: cardID)
+            backgroundMediaRef = nil
+            clearFailure()
+            phase = .ready
+            return true
+        } catch {
+            fail(
+                with: Self.mapError(error),
+                stage: .removingBackground,
+                retryOperation: .removeBackground(cardID: cardID)
+            )
+            return false
+        }
+    }
+
+    private func fail(
+        with error: CardEditingError,
+        stage: CardEditingFailureStage? = nil,
+        retryOperation: RetryOperation? = nil
+    ) {
+        failureContext = FailureContext(
+            error: error,
+            stage: stage,
+            retryOperation: retryOperation
+        )
+        phase = .failed(error)
+    }
+
+    private func clearFailure() {
+        failureContext = nil
     }
 
     private static func mapError(_ error: Error) -> CardEditingError {
@@ -375,5 +549,11 @@ public final class CardEditingStore: ObservableObject {
             return editingError
         }
         return .transport(code: "card_editing_failed")
+    }
+
+    private static func validCreateRequestID(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return normalized.isEmpty ? nil : normalized
     }
 }
