@@ -136,6 +136,63 @@ final class BlockNoteEditorControllerTests: XCTestCase {
         XCTAssertEqual(controller.pendingSnapshotCount, 0)
     }
 
+    func testCorrelatedStaleSnapshotFailsOnlyMatchingPendingRequestImmediately() async throws {
+        let controller = BlockNoteEditorController()
+        var requestIDs: [String] = []
+        controller.attach { command in
+            if let requestID = command.snapshotRequestID {
+                requestIDs.append(requestID)
+            }
+        }
+
+        let staleTask = Task {
+            try await controller.requestSnapshot(timeoutNanoseconds: 1_000_000_000)
+        }
+        await Task.yield()
+        guard let staleRequestID = requestIDs.first else {
+            return XCTFail("Expected the first snapshot request")
+        }
+
+        let currentTask = Task {
+            try await controller.requestSnapshot(timeoutNanoseconds: 1_000_000_000)
+        }
+        await Task.yield()
+        guard requestIDs.count == 2 else {
+            return XCTFail("Expected the second snapshot request")
+        }
+        let currentRequestID = requestIDs[1]
+
+        BlockNoteBridgeOutputDispatcher(
+            submitCommand: { _ in },
+            emitEvent: { _ in },
+            failSnapshot: { failure in
+                controller.failSnapshot(
+                    requestID: failure.requestID,
+                    with: failure.failure
+                )
+            }
+        ).dispatch(.init(snapshotRequestFailure: .init(
+            requestID: staleRequestID,
+            failure: .bridgeFailed(code: "stale_snapshot_revision")
+        )))
+
+        await assertFailure(
+            staleTask,
+            equals: .bridgeFailed(code: "stale_snapshot_revision")
+        )
+        XCTAssertEqual(controller.pendingSnapshotCount, 1)
+
+        XCTAssertTrue(controller.complete(snapshot: .init(
+            requestID: currentRequestID,
+            revision: 6,
+            contentJSON: "[]",
+            fallbackMarkdown: "Current"
+        )))
+        let currentSnapshot = try await currentTask.value
+        XCTAssertEqual(currentSnapshot.requestID, currentRequestID)
+        XCTAssertEqual(controller.pendingSnapshotCount, 0)
+    }
+
     private func assertFailure(
         _ task: Task<BlockNoteSnapshot, Error>,
         equals expected: BlockNoteEditorFailure

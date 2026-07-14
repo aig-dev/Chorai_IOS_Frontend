@@ -7,48 +7,89 @@ enum BlockNoteNavigationDecision: Equatable {
 }
 
 struct BlockNoteNavigationGate {
-    private let resourceDirectory: URL
-    private let indexURL: URL
+    private let canonicalResourceDirectory: URL
+    private let canonicalIndexURL: URL
+    private let exactIndexURL: String
+    private var bootstrapNavigation: AnyObject?
+    private var didAuthorizeBootstrap = false
     private var didCompleteBootstrap = false
 
     init(resourceDirectory: URL, indexURL: URL) {
-        self.resourceDirectory = resourceDirectory.standardizedFileURL
-        self.indexURL = indexURL.standardizedFileURL
+        canonicalResourceDirectory = resourceDirectory
+            .resolvingSymlinksInPath()
+            .standardizedFileURL
+        canonicalIndexURL = indexURL
+            .resolvingSymlinksInPath()
+            .standardizedFileURL
+        exactIndexURL = indexURL.absoluteString
     }
 
-    func decision(
+    mutating func bindBootstrapNavigation(_ navigation: AnyObject?) {
+        guard bootstrapNavigation == nil, let navigation else { return }
+        bootstrapNavigation = navigation
+    }
+
+    mutating func decision(
         for url: URL?,
         isMainFrame: Bool
     ) -> BlockNoteNavigationDecision {
-        guard let url, url.isFileURL else {
+        guard let url,
+              Self.hasLocalFileAuthority(url) else {
             return .cancel
         }
 
-        let root = resourceDirectory.standardizedFileURL.path
-        let candidate = url.standardizedFileURL.path
+        let root = canonicalResourceDirectory.path
+        let candidate = url
+            .resolvingSymlinksInPath()
+            .standardizedFileURL
+            .path
         let rootPrefix = root.hasSuffix("/") ? root : root + "/"
         guard candidate == root || candidate.hasPrefix(rootPrefix) else {
             return .cancel
         }
 
         if isMainFrame {
-            guard !didCompleteBootstrap,
-                  candidate == indexURL.standardizedFileURL.path else {
+            guard !didAuthorizeBootstrap,
+                  !didCompleteBootstrap,
+                  url.absoluteString == exactIndexURL,
+                  candidate == canonicalIndexURL.path else {
                 return .cancel
             }
+            didAuthorizeBootstrap = true
         }
         return .allow
     }
 
-    mutating func completeBootstrapNavigation(to url: URL?) -> Bool {
-        guard !didCompleteBootstrap,
+    mutating func completeBootstrapNavigation(
+        _ navigation: AnyObject?,
+        to url: URL?
+    ) -> Bool {
+        guard didAuthorizeBootstrap,
+              !didCompleteBootstrap,
+              let navigation,
+              let bootstrapNavigation,
+              navigation === bootstrapNavigation,
               let url,
-              url.isFileURL,
-              url.standardizedFileURL.path == indexURL.standardizedFileURL.path else {
+              Self.hasLocalFileAuthority(url),
+              url.absoluteString == exactIndexURL,
+              url.resolvingSymlinksInPath().standardizedFileURL.path == canonicalIndexURL.path else {
             return false
         }
         didCompleteBootstrap = true
         return true
+    }
+
+    private static func hasLocalFileAuthority(_ url: URL) -> Bool {
+        guard url.isFileURL,
+              url.user == nil,
+              url.password == nil,
+              url.port == nil else {
+            return false
+        }
+        guard let host = url.host, !host.isEmpty else {
+            return true
+        }
+        return host.caseInsensitiveCompare("localhost") == .orderedSame
     }
 }
 
@@ -106,7 +147,11 @@ public final class BlockNoteEditorCoordinator: NSObject {
                 resourceDirectory: directory,
                 indexURL: indexURL
             )
-            webView.loadFileURL(indexURL, allowingReadAccessTo: directory)
+            let navigation = webView.loadFileURL(
+                indexURL,
+                allowingReadAccessTo: directory
+            )
+            navigationGate?.bindBootstrapNavigation(navigation)
         } catch {
             apply(session.bridgeFailure(code: "resource_validation_failed"))
         }
@@ -135,18 +180,26 @@ public final class BlockNoteEditorCoordinator: NSObject {
     }
 
     private func apply(_ output: BlockNoteBridgeSessionOutput) {
-        for event in output.events {
-            eventHandler(event)
-        }
-        if let snapshot = output.snapshot {
-            _ = controller.complete(snapshot: snapshot)
-        }
-        if let failure = output.snapshotFailure {
-            controller.failAllSnapshots(with: failure)
-        }
-        for command in output.commands {
-            evaluate(command)
-        }
+        BlockNoteBridgeOutputDispatcher(
+            submitCommand: { [weak self] command in
+                self?.evaluate(command)
+            },
+            emitEvent: { [weak self] event in
+                self?.eventHandler(event)
+            },
+            completeSnapshot: { [weak controller] snapshot in
+                _ = controller?.complete(snapshot: snapshot)
+            },
+            failSnapshot: { [weak controller] failure in
+                controller?.failSnapshot(
+                    requestID: failure.requestID,
+                    with: failure.failure
+                )
+            },
+            failSnapshots: { [weak controller] failure in
+                controller?.failAllSnapshots(with: failure)
+            }
+        ).dispatch(output)
     }
 
     private func evaluate(_ command: BlockNoteEditorCommand) {
@@ -209,7 +262,10 @@ extension BlockNoteEditorCoordinator: WKScriptMessageHandler {
 extension BlockNoteEditorCoordinator: WKNavigationDelegate {
     public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         guard !isTornDown,
-              navigationGate?.completeBootstrapNavigation(to: webView.url) == true else {
+              navigationGate?.completeBootstrapNavigation(
+                  navigation,
+                  to: webView.url
+              ) == true else {
             return
         }
         apply(session.navigationFinished())
@@ -238,15 +294,14 @@ extension BlockNoteEditorCoordinator: WKNavigationDelegate {
         decidePolicyFor navigationAction: WKNavigationAction,
         decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
     ) {
-        guard !isTornDown, let navigationGate else {
+        guard !isTornDown,
+              let decision = navigationGate?.decision(
+                  for: navigationAction.request.url,
+                  isMainFrame: navigationAction.targetFrame?.isMainFrame ?? true
+              ) else {
             decisionHandler(.cancel)
             return
         }
-
-        let decision = navigationGate.decision(
-            for: navigationAction.request.url,
-            isMainFrame: navigationAction.targetFrame?.isMainFrame ?? true
-        )
         decisionHandler(decision == .allow ? .allow : .cancel)
     }
 }

@@ -81,6 +81,34 @@ final class BlockNoteEditorMessageStateTests: XCTestCase {
         XCTAssertNil(blocked.receive(snapshotMessage).snapshot)
     }
 
+    func testStaleSnapshotRetainsRequestCorrelationForImmediateFailure() {
+        var state = makeReadyState()
+        _ = state.receive(.documentChanged(
+            revision: 5,
+            contentJSON: "[]",
+            fallbackMarkdown: "Latest"
+        ))
+
+        let update = state.receive(.snapshot(
+            requestID: "save-stale",
+            revision: 4,
+            contentJSON: "[]",
+            fallbackMarkdown: "Stale"
+        ))
+
+        XCTAssertNil(update.snapshot)
+        XCTAssertEqual(
+            update.snapshotRequestFailure,
+            .init(
+                requestID: "save-stale",
+                failure: .bridgeFailed(code: "stale_snapshot_revision")
+            )
+        )
+        XCTAssertEqual(update.events, [
+            .bridgeError(code: "stale_snapshot_revision"),
+        ])
+    }
+
     func testAllKnownEventsDecodeFromTaggedEnvelopes() throws {
         let cases: [(String, BlockNoteEditorMessage)] = [
             (#"{"type":"ready","protocolVersion":1,"schemaVersion":1}"#, .ready(protocolVersion: 1, schemaVersion: 1)),

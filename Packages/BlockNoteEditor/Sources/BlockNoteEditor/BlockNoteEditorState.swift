@@ -44,22 +44,30 @@ public enum BlockNoteEditorEvent: Equatable, Sendable {
     case bridgeError(code: String)
 }
 
+struct BlockNoteSnapshotRequestFailure: Equatable, Sendable {
+    let requestID: String
+    let failure: BlockNoteEditorFailure
+}
+
 public struct BlockNoteEditorStateUpdate: Equatable, Sendable {
     public let events: [BlockNoteEditorEvent]
     public let snapshot: BlockNoteSnapshot?
     public let becameReady: Bool
     public let snapshotFailure: BlockNoteEditorFailure?
+    let snapshotRequestFailure: BlockNoteSnapshotRequestFailure?
 
     init(
         events: [BlockNoteEditorEvent] = [],
         snapshot: BlockNoteSnapshot? = nil,
         becameReady: Bool = false,
-        snapshotFailure: BlockNoteEditorFailure? = nil
+        snapshotFailure: BlockNoteEditorFailure? = nil,
+        snapshotRequestFailure: BlockNoteSnapshotRequestFailure? = nil
     ) {
         self.events = events
         self.snapshot = snapshot
         self.becameReady = becameReady
         self.snapshotFailure = snapshotFailure
+        self.snapshotRequestFailure = snapshotRequestFailure
     }
 }
 
@@ -165,7 +173,13 @@ public struct BlockNoteEditorState: Equatable, Sendable {
                 return fail(code: "unexpected_snapshot")
             }
             if let latestDocument, revision < latestDocument.revision {
-                return .init(events: [.bridgeError(code: "stale_snapshot_revision")])
+                return .init(
+                    events: [.bridgeError(code: "stale_snapshot_revision")],
+                    snapshotRequestFailure: .init(
+                        requestID: requestID,
+                        failure: .bridgeFailed(code: "stale_snapshot_revision")
+                    )
+                )
             }
             return .init(snapshot: .init(
                 requestID: requestID,
@@ -244,6 +258,47 @@ struct BlockNoteBridgeSessionOutput: Equatable, Sendable {
     var events: [BlockNoteEditorEvent] = []
     var snapshot: BlockNoteSnapshot?
     var snapshotFailure: BlockNoteEditorFailure?
+    var snapshotRequestFailure: BlockNoteSnapshotRequestFailure?
+}
+
+struct BlockNoteBridgeOutputDispatcher {
+    private let submitCommand: (BlockNoteEditorCommand) -> Void
+    private let emitEvent: (BlockNoteEditorEvent) -> Void
+    private let completeSnapshot: (BlockNoteSnapshot) -> Void
+    private let failSnapshot: (BlockNoteSnapshotRequestFailure) -> Void
+    private let failSnapshots: (BlockNoteEditorFailure) -> Void
+
+    init(
+        submitCommand: @escaping (BlockNoteEditorCommand) -> Void,
+        emitEvent: @escaping (BlockNoteEditorEvent) -> Void,
+        completeSnapshot: @escaping (BlockNoteSnapshot) -> Void = { _ in },
+        failSnapshot: @escaping (BlockNoteSnapshotRequestFailure) -> Void = { _ in },
+        failSnapshots: @escaping (BlockNoteEditorFailure) -> Void = { _ in }
+    ) {
+        self.submitCommand = submitCommand
+        self.emitEvent = emitEvent
+        self.completeSnapshot = completeSnapshot
+        self.failSnapshot = failSnapshot
+        self.failSnapshots = failSnapshots
+    }
+
+    func dispatch(_ output: BlockNoteBridgeSessionOutput) {
+        for command in output.commands {
+            submitCommand(command)
+        }
+        if let snapshot = output.snapshot {
+            completeSnapshot(snapshot)
+        }
+        if let failure = output.snapshotRequestFailure {
+            failSnapshot(failure)
+        }
+        if let failure = output.snapshotFailure {
+            failSnapshots(failure)
+        }
+        for event in output.events {
+            emitEvent(event)
+        }
+    }
 }
 
 struct BlockNoteEditorBridgeSession: Sendable {
@@ -275,16 +330,18 @@ struct BlockNoteEditorBridgeSession: Sendable {
             return .init(events: [.bridgeError(code: "reserved_initialize_command")])
         }
 
+        if let failure = state.currentBlockingFailure {
+            if command.snapshotRequestID != nil {
+                return .init(snapshotFailure: failure)
+            }
+            return .init()
+        }
+
         if state.isBridgeReady {
             guard !command.isMutation || state.mutationAllowed else {
                 return .init(events: [.bridgeError(code: "read_only")])
             }
             return .init(commands: [command])
-        }
-
-        if let failure = state.currentBlockingFailure,
-           command.snapshotRequestID != nil {
-            return .init(snapshotFailure: failure)
         }
 
         queuedCommands.append(command)
@@ -296,11 +353,12 @@ struct BlockNoteEditorBridgeSession: Sendable {
         var output = BlockNoteBridgeSessionOutput(
             events: update.events,
             snapshot: update.snapshot,
-            snapshotFailure: update.snapshotFailure
+            snapshotFailure: update.snapshotFailure,
+            snapshotRequestFailure: update.snapshotRequestFailure
         )
 
         if update.snapshotFailure != nil {
-            queuedCommands.removeAll { $0.snapshotRequestID != nil }
+            queuedCommands.removeAll()
         }
 
         if update.becameReady {
@@ -320,7 +378,7 @@ struct BlockNoteEditorBridgeSession: Sendable {
 
     mutating func malformedMessage() -> BlockNoteBridgeSessionOutput {
         let update = state.failMalformedMessage()
-        queuedCommands.removeAll { $0.snapshotRequestID != nil }
+        queuedCommands.removeAll()
         return .init(
             events: update.events,
             snapshotFailure: update.snapshotFailure
@@ -329,7 +387,7 @@ struct BlockNoteEditorBridgeSession: Sendable {
 
     mutating func bridgeFailure(code: String) -> BlockNoteBridgeSessionOutput {
         let update = state.failBridge(code: code)
-        queuedCommands.removeAll { $0.snapshotRequestID != nil }
+        queuedCommands.removeAll()
         return .init(
             events: update.events,
             snapshotFailure: update.snapshotFailure
