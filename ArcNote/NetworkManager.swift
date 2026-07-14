@@ -560,6 +560,11 @@ extension NetworkManager {
         if let isPublic = cardRequest.isPublic {
             parameters["is_public"] = isPublic
         }
+        addStructuredEditorParameters(
+            contentJSON: cardRequest.contentJSON,
+            editorAtmosphere: cardRequest.editorAtmosphere,
+            to: &parameters
+        )
 
         return request(
             endpoint: "/api/cards",
@@ -575,6 +580,11 @@ extension NetworkManager {
         if let title = request.title { parameters["title"] = title }
         parameters["content"] = request.content
         if let tags = request.tags { parameters["tags"] = tags }
+        addStructuredEditorParameters(
+            contentJSON: request.contentJSON,
+            editorAtmosphere: request.editorAtmosphere,
+            to: &parameters
+        )
 
         return self.request(
             endpoint: "/api/cards/\(id)",
@@ -704,11 +714,16 @@ extension NetworkManager {
 
     // MARK: 更新卡片
     func updateCard(cardId: String, request: UpdateCardRequest) -> AnyPublisher<CardResponse, NetworkError> {
-        let parameters: Parameters = [
+        var parameters: Parameters = [
             "title": request.title ?? "",
             "content": request.content,
             "tags": request.tags ?? []
         ]
+        addStructuredEditorParameters(
+            contentJSON: request.contentJSON,
+            editorAtmosphere: request.editorAtmosphere,
+            to: &parameters
+        )
 
         return self.request(
             endpoint: "/api/cards/\(cardId)",
@@ -722,15 +737,22 @@ extension NetworkManager {
         cardId: String,
         title: String?,
         content: String,
+        contentJSON: String? = nil,
+        editorAtmosphere: String? = nil,
         tags: [String],
         isPublic: Bool
     ) -> AnyPublisher<CardResponse, NetworkError> {
-        let parameters: Parameters = [
+        var parameters: Parameters = [
             "title": title ?? "",
             "content": content,
             "tags": tags,
             "is_public": isPublic
         ]
+        addStructuredEditorParameters(
+            contentJSON: contentJSON,
+            editorAtmosphere: editorAtmosphere,
+            to: &parameters
+        )
 
         return request(
             endpoint: "/api/cards/\(cardId)",
@@ -739,6 +761,20 @@ extension NetworkManager {
             responseType: CardResponse.self,
             presentsError: false
         )
+    }
+
+    private func addStructuredEditorParameters(
+        contentJSON: String?,
+        editorAtmosphere: String?,
+        to parameters: inout Parameters
+    ) {
+        if let contentJSON,
+           !contentJSON.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            parameters["content_json"] = contentJSON
+        }
+        if let editorAtmosphere {
+            parameters["editor_atmosphere"] = editorAtmosphere
+        }
     }
 
     func updateCardBackground(

@@ -103,12 +103,32 @@ struct Card: Codable, Identifiable {
 struct CreateCardRequest: Codable {
     let title: String?
     let content: String
+    let contentJSON: String?
+    let editorAtmosphere: String?
     let tags: [String]?
     let isPublic: Bool?
 
     enum CodingKeys: String, CodingKey {
         case title, content, tags
+        case contentJSON = "content_json"
+        case editorAtmosphere = "editor_atmosphere"
         case isPublic = "is_public"
+    }
+
+    init(
+        title: String?,
+        content: String,
+        contentJSON: String? = nil,
+        editorAtmosphere: String? = nil,
+        tags: [String]?,
+        isPublic: Bool?
+    ) {
+        self.title = title
+        self.content = content
+        self.contentJSON = contentJSON
+        self.editorAtmosphere = editorAtmosphere
+        self.tags = tags
+        self.isPublic = isPublic
     }
 }
 
@@ -438,6 +458,8 @@ struct CreateCardData: Codable {
     let id: String
     let title: String?
     let content: String
+    let contentJSON: String?
+    let editorAtmosphere: String?
     let contentHash: String
     let isPublic: Bool
     let tags: [String]
@@ -449,6 +471,8 @@ struct CreateCardData: Codable {
 
     enum CodingKeys: String, CodingKey {
         case id, title, content, tags
+        case contentJSON = "content_json"
+        case editorAtmosphere = "editor_atmosphere"
         case contentHash = "content_hash"
         case isPublic = "is_public"
         case createdAt = "created_at"

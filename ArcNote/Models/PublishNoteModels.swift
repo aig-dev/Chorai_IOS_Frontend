@@ -5,10 +5,28 @@ import Combine
 struct UpdateCardRequest: Codable {
     let title: String?
     let content: String
+    let contentJSON: String?
+    let editorAtmosphere: String?
     let tags: [String]?
     
     enum CodingKeys: String, CodingKey {
         case title, content, tags
+        case contentJSON = "content_json"
+        case editorAtmosphere = "editor_atmosphere"
+    }
+
+    init(
+        title: String?,
+        content: String,
+        contentJSON: String? = nil,
+        editorAtmosphere: String? = nil,
+        tags: [String]?
+    ) {
+        self.title = title
+        self.content = content
+        self.contentJSON = contentJSON
+        self.editorAtmosphere = editorAtmosphere
+        self.tags = tags
     }
 }
 

@@ -6,6 +6,8 @@ struct CardDetail: Codable {
     let id: String
     let title: String?
     let content: String
+    let contentJSON: String?
+    let editorAtmosphere: String?
     let contentHash: String
     let isPublic: Bool
     let tags: [String]
@@ -24,6 +26,8 @@ struct CardDetail: Codable {
     
     enum CodingKeys: String, CodingKey {
         case id, title, content, tags, rate
+        case contentJSON = "content_json"
+        case editorAtmosphere = "editor_atmosphere"
         case contentHash = "content_hash"
         case isPublic = "is_public"
         case createdAt = "created_at"
@@ -44,6 +48,11 @@ struct CardDetail: Codable {
         id = try container.decode(String.self, forKey: .id)
         title = try container.decode(String.self, forKey: .title)
         content = try container.decode(String.self, forKey: .content)
+        contentJSON = try container.decodeIfPresent(String.self, forKey: .contentJSON)
+        editorAtmosphere = try container.decodeIfPresent(
+            String.self,
+            forKey: .editorAtmosphere
+        )
         contentHash = try container.decode(String.self, forKey: .contentHash)
         isPublic = try container.decode(Bool.self, forKey: .isPublic)
         tags = try container.decode([String].self, forKey: .tags)

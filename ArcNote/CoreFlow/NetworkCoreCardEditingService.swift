@@ -19,6 +19,8 @@ struct NetworkCoreCardEditingService: CoreCardEditingServing, @unchecked Sendabl
                     cardId: cardID,
                     title: draft.title,
                     content: draft.content,
+                    contentJSON: draft.contentJSON,
+                    editorAtmosphere: draft.editorAtmosphere,
                     tags: draft.tags,
                     isPublic: draft.isPublic
                 )
@@ -113,6 +115,8 @@ struct NetworkCoreCardEditingService: CoreCardEditingServing, @unchecked Sendabl
             id: card.id,
             title: card.title,
             content: card.content,
+            contentJSON: card.contentJSON,
+            editorAtmosphere: card.editorAtmosphere ?? "none",
             tags: card.tags,
             isPublic: card.isPublic,
             backgroundMediaRef: card.backgroundMediaRef

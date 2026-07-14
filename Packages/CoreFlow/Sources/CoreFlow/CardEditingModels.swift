@@ -3,19 +3,55 @@ import Foundation
 public struct CardEditingDraft: Equatable, Sendable {
     public let title: String?
     public let content: String
+    public let contentJSON: String?
+    public let editorAtmosphere: String
     public let tags: [String]
     public let isPublic: Bool
 
     public init(
         title: String?,
         content: String,
+        contentJSON: String? = nil,
+        editorAtmosphere: String = "none",
         tags: [String],
         isPublic: Bool
     ) {
         self.title = title
         self.content = content
+        self.contentJSON = Self.nonEmpty(contentJSON)
+        self.editorAtmosphere = editorAtmosphere
         self.tags = Self.normalize(tags)
         self.isPublic = isPublic
+    }
+
+    public var validationError: CardEditingError? {
+        if let contentJSON, !Self.hasStructuredJSONRoot(contentJSON) {
+            return .invalidDraft(code: "invalid_content_json")
+        }
+        if content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+           contentJSON == nil {
+            return .invalidDraft(code: "empty_content")
+        }
+        return nil
+    }
+
+    private static func nonEmpty(_ value: String?) -> String? {
+        guard let value,
+              !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return nil
+        }
+        return value
+    }
+
+    private static func hasStructuredJSONRoot(_ value: String) -> Bool {
+        guard let data = value.data(using: .utf8),
+              let root = try? JSONSerialization.jsonObject(
+                with: data,
+                options: [.fragmentsAllowed]
+              ) else {
+            return false
+        }
+        return root is [Any] || root is [String: Any]
     }
 
     private static func normalize(_ values: [String]) -> [String] {
@@ -42,6 +78,8 @@ public struct CardEditingSnapshot: Equatable, Sendable {
     public let id: String
     public let title: String?
     public let content: String
+    public let contentJSON: String?
+    public let editorAtmosphere: String
     public let tags: [String]
     public let isPublic: Bool
     public let backgroundMediaRef: String?
@@ -50,6 +88,8 @@ public struct CardEditingSnapshot: Equatable, Sendable {
         id: String,
         title: String?,
         content: String,
+        contentJSON: String? = nil,
+        editorAtmosphere: String = "none",
         tags: [String],
         isPublic: Bool,
         backgroundMediaRef: String?
@@ -57,6 +97,8 @@ public struct CardEditingSnapshot: Equatable, Sendable {
         self.id = id
         self.title = title
         self.content = content
+        self.contentJSON = contentJSON
+        self.editorAtmosphere = editorAtmosphere
         self.tags = tags
         self.isPublic = isPublic
         self.backgroundMediaRef = backgroundMediaRef

@@ -44,6 +44,10 @@ public final class CardEditingStore: ObservableObject {
 
     public func save() {
         guard !isBusy else { return }
+        if let validationError = draft.validationError {
+            phase = .failed(validationError)
+            return
+        }
         let request = draft
         phase = .saving
         operationTask = Task { [weak self] in
@@ -54,6 +58,8 @@ public final class CardEditingStore: ObservableObject {
                 draft = CardEditingDraft(
                     title: saved.title,
                     content: saved.content,
+                    contentJSON: saved.contentJSON,
+                    editorAtmosphere: saved.editorAtmosphere,
                     tags: saved.tags,
                     isPublic: saved.isPublic
                 )

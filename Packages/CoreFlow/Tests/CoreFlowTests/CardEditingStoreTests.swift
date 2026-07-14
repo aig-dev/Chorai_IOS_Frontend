@@ -5,6 +5,7 @@ import XCTest
 @MainActor
 final class CardEditingStoreTests: XCTestCase {
     func testHydrateReplacesCanonicalEditorStateWithoutCallingService() {
+        let json = #"[{"id":"b1","type":"paragraph","content":"Server body"}]"#
         let service = MockCardEditingService()
         let store = CardEditingStore(
             cardID: "ast_1",
@@ -23,6 +24,8 @@ final class CardEditingStoreTests: XCTestCase {
             draft: .init(
                 title: "Canonical",
                 content: "Server body",
+                contentJSON: json,
+                editorAtmosphere: "rain",
                 tags: ["#idea", " idea ", "work"],
                 isPublic: true
             ),
@@ -35,6 +38,8 @@ final class CardEditingStoreTests: XCTestCase {
             .init(
                 title: "Canonical",
                 content: "Server body",
+                contentJSON: json,
+                editorAtmosphere: "rain",
                 tags: ["idea", "work"],
                 isPublic: true
             )
@@ -46,6 +51,7 @@ final class CardEditingStoreTests: XCTestCase {
     }
 
     func testUpdateDraftNormalizesTagsWithoutCallingService() {
+        let json = #"[{"id":"b1","type":"paragraph","content":"Typed body"}]"#
         let service = MockCardEditingService()
         let store = CardEditingStore(
             cardID: "ast_1",
@@ -59,6 +65,8 @@ final class CardEditingStoreTests: XCTestCase {
             .init(
                 title: "Local",
                 content: "Typed body",
+                contentJSON: json,
+                editorAtmosphere: "dawn",
                 tags: ["#one", " one ", "two"],
                 isPublic: false
             )
@@ -66,20 +74,67 @@ final class CardEditingStoreTests: XCTestCase {
 
         XCTAssertEqual(store.draft.tags, ["one", "two"])
         XCTAssertEqual(store.draft.content, "Typed body")
+        XCTAssertEqual(store.draft.contentJSON, json)
+        XCTAssertEqual(store.draft.editorAtmosphere, "dawn")
+        XCTAssertTrue(service.saveRequests.isEmpty)
+    }
+
+    func testTagEditDoesNotDiscardStructuredDocument() {
+        let json = #"[{"id":"b1","type":"paragraph","content":"Body"}]"#
+        let service = MockCardEditingService()
+        let store = CardEditingStore(
+            cardID: "ast_1",
+            draft: .init(
+                title: nil,
+                content: "Body",
+                contentJSON: json,
+                editorAtmosphere: "rain",
+                tags: ["idea"],
+                isPublic: false
+            ),
+            backgroundMediaRef: nil,
+            links: [],
+            service: service
+        )
+
+        store.updateDraft(
+            .init(
+                title: nil,
+                content: store.draft.content,
+                contentJSON: store.draft.contentJSON,
+                editorAtmosphere: store.draft.editorAtmosphere,
+                tags: ["#idea", " work "],
+                isPublic: store.draft.isPublic
+            )
+        )
+
+        XCTAssertEqual(store.draft.contentJSON, json)
+        XCTAssertEqual(store.draft.editorAtmosphere, "rain")
+        XCTAssertEqual(store.draft.tags, ["idea", "work"])
         XCTAssertTrue(service.saveRequests.isEmpty)
     }
 
     func testSaveFailureKeepsNormalizedDraftForExactRetry() async {
+        let json = #"[{"id":"b1","type":"paragraph","content":"Revised"}]"#
         let service = MockCardEditingService()
         service.saveResults = [
             .failure(.transport(code: "offline")),
-            .success(snapshot(content: "Revised", tags: ["idea", "work"]))
+            .success(
+                snapshot(
+                    content: "Revised",
+                    contentJSON: json,
+                    editorAtmosphere: "rain",
+                    tags: ["idea", "work"]
+                )
+            )
         ]
         let store = CardEditingStore(
             cardID: "ast_1",
             draft: .init(
                 title: "Revised",
                 content: "Revised",
+                contentJSON: json,
+                editorAtmosphere: "rain",
                 tags: ["#idea", " work ", "idea", "", "extra"],
                 isPublic: false
             ),
@@ -100,6 +155,150 @@ final class CardEditingStoreTests: XCTestCase {
 
         XCTAssertEqual(service.saveRequests.count, 2)
         XCTAssertEqual(service.saveRequests[0], service.saveRequests[1])
+        XCTAssertEqual(store.draft.contentJSON, json)
+        XCTAssertEqual(store.draft.editorAtmosphere, "rain")
+        XCTAssertNil(store.draft.validationError)
+    }
+
+    func testSaveAcceptsObjectStructuredDocument() async {
+        let json = #"{"blocks":[{"type":"paragraph","content":"Body"}]}"#
+        let service = MockCardEditingService()
+        service.saveResults = [
+            .success(
+                snapshot(
+                    content: "Body",
+                    contentJSON: json,
+                    editorAtmosphere: "none",
+                    tags: []
+                )
+            )
+        ]
+        let store = CardEditingStore(
+            cardID: "ast_1",
+            draft: .init(
+                title: nil,
+                content: "Body",
+                contentJSON: json,
+                editorAtmosphere: "none",
+                tags: [],
+                isPublic: false
+            ),
+            backgroundMediaRef: nil,
+            links: [],
+            service: service
+        )
+
+        store.save()
+        await waitForStore { store.phase == .ready }
+
+        XCTAssertEqual(service.saveRequests.count, 1)
+        XCTAssertEqual(service.saveRequests[0].draft.contentJSON, json)
+        XCTAssertNil(store.draft.validationError)
+    }
+
+    func testDraftRejectsMalformedStructuredDocument() {
+        let draft = CardEditingDraft(
+            title: nil,
+            content: "Body",
+            contentJSON: #"[{"type":"paragraph"}"#,
+            editorAtmosphere: "none",
+            tags: [],
+            isPublic: false
+        )
+
+        XCTAssertEqual(
+            draft.validationError,
+            .invalidDraft(code: "invalid_content_json")
+        )
+    }
+
+    func testDraftRejectsScalarStructuredDocument() {
+        let draft = CardEditingDraft(
+            title: nil,
+            content: "Body",
+            contentJSON: #""Body""#,
+            editorAtmosphere: "none",
+            tags: [],
+            isPublic: false
+        )
+
+        XCTAssertEqual(
+            draft.validationError,
+            .invalidDraft(code: "invalid_content_json")
+        )
+    }
+
+    func testDraftRejectsEmptyFallbackAndStructuredBody() {
+        let draft = CardEditingDraft(
+            title: nil,
+            content: " \n ",
+            contentJSON: "  ",
+            editorAtmosphere: "none",
+            tags: [],
+            isPublic: false
+        )
+
+        XCTAssertNil(draft.contentJSON)
+        XCTAssertEqual(
+            draft.validationError,
+            .invalidDraft(code: "empty_content")
+        )
+    }
+
+    func testSaveRejectsInvalidStructuredDocumentWithoutCallingService() async {
+        let service = MockCardEditingService()
+        service.saveResults = [.success(snapshot(content: "Body", tags: []))]
+        let store = CardEditingStore(
+            cardID: "ast_1",
+            draft: .init(
+                title: nil,
+                content: "Body",
+                contentJSON: #"42"#,
+                editorAtmosphere: "none",
+                tags: [],
+                isPublic: false
+            ),
+            backgroundMediaRef: nil,
+            links: [],
+            service: service
+        )
+
+        store.save()
+        await waitForStore { store.phase != .saving }
+
+        XCTAssertEqual(
+            store.phase,
+            .failed(.invalidDraft(code: "invalid_content_json"))
+        )
+        XCTAssertTrue(service.saveRequests.isEmpty)
+    }
+
+    func testSaveRejectsEmptyFallbackAndStructuredBodyWithoutCallingService() async {
+        let service = MockCardEditingService()
+        service.saveResults = [.success(snapshot(content: "Unexpected", tags: []))]
+        let store = CardEditingStore(
+            cardID: "ast_1",
+            draft: .init(
+                title: nil,
+                content: " \n ",
+                contentJSON: nil,
+                editorAtmosphere: "none",
+                tags: [],
+                isPublic: false
+            ),
+            backgroundMediaRef: nil,
+            links: [],
+            service: service
+        )
+
+        store.save()
+        await waitForStore { store.phase != .saving }
+
+        XCTAssertEqual(
+            store.phase,
+            .failed(.invalidDraft(code: "empty_content"))
+        )
+        XCTAssertTrue(service.saveRequests.isEmpty)
     }
 
     func testDeleteLinkFailureRetainsLinkUntilCanonicalSuccess() async {
@@ -245,12 +444,16 @@ final class CardEditingStoreTests: XCTestCase {
 
     private func snapshot(
         content: String,
+        contentJSON: String? = nil,
+        editorAtmosphere: String = "none",
         tags: [String]
     ) -> CardEditingSnapshot {
         CardEditingSnapshot(
             id: "ast_1",
             title: "Revised",
             content: content,
+            contentJSON: contentJSON,
+            editorAtmosphere: editorAtmosphere,
             tags: tags,
             isPublic: false,
             backgroundMediaRef: nil
