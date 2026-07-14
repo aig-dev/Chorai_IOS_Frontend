@@ -358,6 +358,66 @@ final class ArcNoteUITests: XCTestCase {
         waitFor("screen.invitation-credits")
     }
 
+    func testInvitationCreditsDecodeLiveGoResponses() throws {
+        let liveGoBaseURL = "http://127.0.0.1:8081"
+        guard let session = fetchSmokeSession(
+            email: "ios-smoke-a-20260619@example.com",
+            password: "Password123",
+            baseURL: liveGoBaseURL
+        ) else {
+            XCTFail("Unable to authenticate against Go on port 8081")
+            return
+        }
+        seedAppSession(session)
+        app.launchEnvironment["CHORAI_API_BASE_URL"] = liveGoBaseURL
+        launchAuthenticatedApp()
+
+        waitFor("tab.flow", timeout: 30)
+        tap("side-menu.open")
+        tap("side-menu.settings")
+        waitFor("screen.settings.loaded", timeout: 20)
+
+        let settingsRow = waitFor("settings.invitation-credits")
+        for _ in 0..<4 where !settingsRow.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(settingsRow.isHittable)
+        settingsRow.tap()
+
+        waitFor("screen.invitation-credits", timeout: 20)
+        waitFor("invitation-credits.balance.credit", timeout: 20)
+        waitFor("invitation-credits.balance.premium-credit", timeout: 20)
+        waitFor("invitation-credits.referral.code", timeout: 20)
+        XCTAssertFalse(app.descendants(matching: .any)[
+            "invitation-credits.balance.error"
+        ].exists)
+        XCTAssertFalse(app.descendants(matching: .any)[
+            "invitation-credits.referral.error"
+        ].exists)
+
+        openInvitationCreditDetail(
+            link: "invitation-credits.history.link",
+            screen: "screen.invitation-history",
+            empty: "invitation-history.empty",
+            rowPrefix: "invitation-history.row.",
+            error: "invitation-history.error"
+        )
+        openInvitationCreditDetail(
+            link: "invitation-credits.rewards.link",
+            screen: "screen.invitation-rewards",
+            empty: "invitation-rewards.empty",
+            rowPrefix: "invitation-rewards.row.",
+            error: "invitation-rewards.error"
+        )
+        openInvitationCreditDetail(
+            link: "invitation-credits.ledger.link",
+            screen: "screen.credit-ledger",
+            empty: "credit-ledger.empty",
+            rowPrefix: "credit-ledger.row.",
+            error: "credit-ledger.error"
+        )
+    }
+
     func testChoraProfileFixtureStates() throws {
         app.launchArguments.append("--ui-test-settings")
         app.launch()
@@ -3557,6 +3617,38 @@ final class ArcNoteUITests: XCTestCase {
         action.tap()
     }
 
+    private func openInvitationCreditDetail(
+        link: String,
+        screen: String,
+        empty: String,
+        rowPrefix: String,
+        error: String
+    ) {
+        let destination = waitFor(link)
+        for _ in 0..<5 where !destination.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(destination.isHittable)
+        destination.tap()
+
+        waitFor(screen, timeout: 20)
+        let terminalContent = app.descendants(matching: .any).matching(
+            NSPredicate(
+                format: "identifier == %@ OR identifier BEGINSWITH %@",
+                empty,
+                rowPrefix
+            )
+        ).firstMatch
+        XCTAssertTrue(
+            terminalContent.waitForExistence(timeout: 20),
+            "Missing decoded content for \(screen)"
+        )
+        XCTAssertFalse(app.descendants(matching: .any)[error].exists)
+
+        tap("settings.destination.back")
+        waitFor("screen.invitation-credits", timeout: 10)
+    }
+
     private func waitForLabel(
         _ identifier: String,
         expected: String,
@@ -6184,11 +6276,14 @@ final class ArcNoteUITests: XCTestCase {
 
     private func fetchSmokeSession(
         email: String,
-        password: String
+        password: String,
+        baseURL: String? = nil
     ) -> SmokeSession? {
         let environment = ProcessInfo.processInfo.environment
-        let baseURL = environment["CHORAI_API_BASE_URL"] ?? "http://127.0.0.1:8080"
-        guard let url = URL(string: "\(baseURL)/api/auth/login") else {
+        let resolvedBaseURL = baseURL
+            ?? environment["CHORAI_API_BASE_URL"]
+            ?? "http://127.0.0.1:8080"
+        guard let url = URL(string: "\(resolvedBaseURL)/api/auth/login") else {
             return nil
         }
 
