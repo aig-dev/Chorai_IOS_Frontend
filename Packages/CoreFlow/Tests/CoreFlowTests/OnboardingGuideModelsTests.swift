@@ -3,6 +3,35 @@ import XCTest
 @testable import CoreFlow
 
 final class OnboardingGuideModelsTests: XCTestCase {
+    func testPrimaryTabDestinationOnlyRoutesStatesThatOwnAPrimaryTab() {
+        XCTAssertEqual(
+            OnboardingGuidePrimaryTabDestination.forState("elicit_signal"),
+            .library
+        )
+        XCTAssertEqual(
+            OnboardingGuidePrimaryTabDestination.forState(
+                "product_curator_intro"
+            ),
+            .flow
+        )
+        XCTAssertEqual(
+            OnboardingGuidePrimaryTabDestination.forState(
+                "product_merge_intro"
+            ),
+            .library
+        )
+        XCTAssertNil(
+            OnboardingGuidePrimaryTabDestination.forState(
+                "product_spark_intro"
+            )
+        )
+        XCTAssertNil(
+            OnboardingGuidePrimaryTabDestination.forState(
+                "product_merge_preview"
+            )
+        )
+    }
+
     func testGoSessionPayloadDecodesSnakeCaseAndMissingOptionalSceneFields() throws {
         let data = Data(
             """

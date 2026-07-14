@@ -107,7 +107,12 @@ struct TabBarView: View {
     }
 
     private func routeOnboardingState(_ state: String?) {
-        guard let state else { return }
+        guard let state,
+              let destination = OnboardingGuidePrimaryTabDestination.forState(
+                state
+              ) else {
+            return
+        }
 
         DispatchQueue.main.async {
             if !navigationPath.isEmpty {
@@ -115,13 +120,11 @@ struct TabBarView: View {
             }
             navigateToMerge = false
 
-            switch state {
-            case "elicit_signal", "product_merge_intro", "product_library_intro":
+            switch destination {
+            case .library:
                 coordinator.selectedTab = .library
-            case "product_curator_intro", "product_explore_card":
+            case .flow:
                 coordinator.selectedTab = .flow
-            default:
-                return
             }
 
             guard state == "product_library_intro" else { return }

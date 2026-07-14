@@ -219,3 +219,19 @@ public enum OnboardingGuidePhase: Equatable, Sendable {
     case deferred(flowVersion: Int)
     case unavailable
 }
+
+public enum OnboardingGuidePrimaryTabDestination: Equatable, Sendable {
+    case flow
+    case library
+
+    public static func forState(_ state: String) -> Self? {
+        switch state {
+        case "elicit_signal", "product_merge_intro", "product_library_intro":
+            return .library
+        case "product_curator_intro", "product_explore_card":
+            return .flow
+        default:
+            return nil
+        }
+    }
+}
