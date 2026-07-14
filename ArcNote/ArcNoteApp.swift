@@ -30,6 +30,8 @@ struct ArcNoteApp: App {
         .contains("--ui-test-invitation-credit-contract")
     private let isDiscoveryPathContractUITestRoute = ProcessInfo.processInfo.arguments
         .contains("--ui-test-discovery-path-contract")
+    private let isDiscoveryPathUITestRoute = ProcessInfo.processInfo.arguments
+        .contains("--ui-test-discovery-path")
     private let isInvitationCreditUITestRoute = ProcessInfo.processInfo.arguments
         .contains("--ui-test-invitation-credits")
     private let isSignupInvitationUITestRoute = ProcessInfo.processInfo.arguments
@@ -51,6 +53,15 @@ struct ArcNoteApp: App {
         }
         return ProcessInfo.processInfo.environment[
             "CHORAI_UI_TEST_PROFILE_ACTOR_ID"
+        ]
+    }()
+    private let discoveryPathLiveCardID: String? = {
+        guard ProcessInfo.processInfo.arguments
+            .contains("--ui-test-open-discovery-path") else {
+            return nil
+        }
+        return ProcessInfo.processInfo.environment[
+            "CHORAI_UI_TEST_DISCOVERY_PATH_CARD_ID"
         ]
     }()
     #endif
@@ -110,6 +121,10 @@ struct ArcNoteApp: App {
                 InvitationCreditContractFixtureView()
             } else if isDiscoveryPathContractUITestRoute {
                 DiscoveryPathContractFixtureView()
+            } else if isDiscoveryPathUITestRoute {
+                NavigationStack {
+                    DiscoveryPathFixtureScreen()
+                }
             } else if isInvitationCreditUITestRoute {
                 NavigationStack {
                     InvitationCreditFixtureScreen()
@@ -134,6 +149,11 @@ struct ArcNoteApp: App {
                       !profileUITestActorID.isEmpty {
                 NavigationStack {
                     UserProfileView(actorId: profileUITestActorID)
+                }
+            } else if let discoveryPathLiveCardID,
+                      !discoveryPathLiveCardID.isEmpty {
+                NavigationStack {
+                    RootView(cardId: discoveryPathLiveCardID)
                 }
             } else {
                 ContentView()
@@ -1900,6 +1920,107 @@ private struct DiscoveryPathContractFixtureView: View {
       }
     }
     """#
+}
+
+private enum DiscoveryPathFixtureMode: String {
+    case loaded
+    case empty
+    case failure
+}
+
+private struct DiscoveryPathFixtureScreen: View {
+    private let service: DiscoveryPathFixtureService
+
+    init() {
+        let mode = DiscoveryPathFixtureMode(
+            rawValue: ProcessInfo.processInfo.environment[
+                "CHORAI_DISCOVERY_PATH_FIXTURE_MODE"
+            ] ?? "loaded"
+        ) ?? .loaded
+        service = DiscoveryPathFixtureService(mode: mode)
+    }
+
+    var body: some View {
+        RootView(cardId: "ast_collected", service: service)
+    }
+}
+
+private actor DiscoveryPathFixtureService: CoreDiscoveryPathServing {
+    private let mode: DiscoveryPathFixtureMode
+    private var requests = 0
+
+    init(mode: DiscoveryPathFixtureMode) {
+        self.mode = mode
+    }
+
+    func discoveryPath(cardID: String) async throws -> DiscoveryPathSnapshot {
+        requests += 1
+        if mode == .failure, requests == 1 {
+            throw DiscoveryPathError.requestFailed(message: "Connection lost")
+        }
+
+        let collected = Self.card(
+            id: "ast_collected",
+            title: "A saved insight",
+            author: "Avery",
+            rate: 12
+        )
+        guard mode != .empty else {
+            return DiscoveryPathSnapshot(
+                collected: collected,
+                nodes: [],
+                pathLength: 0
+            )
+        }
+
+        return DiscoveryPathSnapshot(
+            collected: collected,
+            nodes: [
+                DiscoveryPathNode(
+                    card: Self.card(
+                        id: "ast_origin",
+                        title: "The original question",
+                        author: "Mira",
+                        rate: 3
+                    ),
+                    versionID: "ver_origin",
+                    activityID: "actv_root",
+                    depth: 0
+                ),
+                DiscoveryPathNode(
+                    card: Self.card(
+                        id: "ast_direct",
+                        title: "A useful connection",
+                        author: "Jon",
+                        rate: 8
+                    ),
+                    versionID: "ver_direct",
+                    activityID: "actv_child",
+                    depth: 1
+                )
+            ],
+            pathLength: 3
+        )
+    }
+
+    private static func card(
+        id: String,
+        title: String,
+        author: String,
+        rate: Int
+    ) -> DiscoveryPathCard {
+        DiscoveryPathCard(
+            id: id,
+            title: title,
+            content: "A compact piece of knowledge connected through Spark.",
+            tags: ["knowledge", "spark"],
+            createdAt: "2026-07-14T02:00:00Z",
+            authorActorID: "act_\(author.lowercased())",
+            authorName: author,
+            avatarURL: nil,
+            rate: rate
+        )
+    }
 }
 
 private struct InvitationCreditContractFixtureView: View {

@@ -69,10 +69,12 @@ final class DiscoveryPathStoreTests: XCTestCase {
         ])
         let store = DiscoveryPathStore(service: service)
 
-        async let first: Void = store.load(cardID: "ast_old")
-        await Task.yield()
+        let first = Task { await store.load(cardID: "ast_old") }
+        while await service.requestCount() == 0 {
+            await Task.yield()
+        }
         await store.load(cardID: "ast_new")
-        _ = await first
+        await first.value
 
         XCTAssertEqual(store.cardID, "ast_new")
         XCTAssertEqual(store.snapshot?.collected.id, "ast_new")
@@ -147,16 +149,20 @@ private actor DiscoveryPathServiceStub: CoreDiscoveryPathServing {
     }
 
     private var scripts: [Script]
+    private var requests = 0
 
     init(scripts: [Script]) {
         self.scripts = scripts
     }
 
     func discoveryPath(cardID: String) async throws -> DiscoveryPathSnapshot {
+        requests += 1
         let script = scripts.removeFirst()
         if script.delay > 0 {
             try await Task.sleep(nanoseconds: script.delay)
         }
         return try script.result.get()
     }
+
+    func requestCount() -> Int { requests }
 }

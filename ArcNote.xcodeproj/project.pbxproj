@@ -42,6 +42,7 @@
 		C0DEF1332F60000100000003 /* InvitationCreditDetailViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1332F60000100000002 /* InvitationCreditDetailViews.swift */; };
 		C0DEF1342F60000100000003 /* InvitationShareController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1342F60000100000002 /* InvitationShareController.swift */; };
 		C0DEF1352F60000100000003 /* NetworkPrivacySettingsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1352F60000100000002 /* NetworkPrivacySettingsService.swift */; };
+		C0DEF1362F60000100000003 /* NetworkDiscoveryPathService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1362F60000100000002 /* NetworkDiscoveryPathService.swift */; };
 		C0DEF1162F60000100000003 /* FollowListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1162F60000100000002 /* FollowListView.swift */; };
 		C0DEF1172F60000100000003 /* BlockedActorsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1172F60000100000002 /* BlockedActorsView.swift */; };
 		C0DEF1012F60000100000005 /* FlowViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1012F60000100000004 /* FlowViews.swift */; };
@@ -159,6 +160,7 @@
 		C0DEF1292F60000100000002 /* InvitationCreditResponses.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InvitationCreditResponses.swift; sourceTree = "<group>"; };
 		C0DEF1302F60000100000002 /* NetworkInvitationCreditService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkInvitationCreditService.swift; sourceTree = "<group>"; };
 		C0DEF1352F60000100000002 /* NetworkPrivacySettingsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkPrivacySettingsService.swift; sourceTree = "<group>"; };
+		C0DEF1362F60000100000002 /* NetworkDiscoveryPathService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkDiscoveryPathService.swift; sourceTree = "<group>"; };
 		C0DEF1312F60000100000002 /* NetworkInvitationAccountRegistrar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkInvitationAccountRegistrar.swift; sourceTree = "<group>"; };
 		C0DEF1322F60000100000002 /* InvitationCreditView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InvitationCreditView.swift; sourceTree = "<group>"; };
 		C0DEF1332F60000100000002 /* InvitationCreditDetailViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InvitationCreditDetailViews.swift; sourceTree = "<group>"; };
@@ -287,6 +289,7 @@
 				C0DEF1222F60000100000002 /* NetworkNotionSourceService.swift */,
 				C0DEF1302F60000100000002 /* NetworkInvitationCreditService.swift */,
 				C0DEF1352F60000100000002 /* NetworkPrivacySettingsService.swift */,
+				C0DEF1362F60000100000002 /* NetworkDiscoveryPathService.swift */,
 				C0DEF1312F60000100000002 /* NetworkInvitationAccountRegistrar.swift */,
 				C0DEF1012F60000100000004 /* FlowViews.swift */,
 				C0DEF1012F60000100000006 /* CoreShellViews.swift */,
@@ -579,6 +582,7 @@
 				C0DEF1292F60000100000003 /* InvitationCreditResponses.swift in Sources */,
 				C0DEF1302F60000100000003 /* NetworkInvitationCreditService.swift in Sources */,
 				C0DEF1352F60000100000003 /* NetworkPrivacySettingsService.swift in Sources */,
+				C0DEF1362F60000100000003 /* NetworkDiscoveryPathService.swift in Sources */,
 				C0DEF1312F60000100000003 /* NetworkInvitationAccountRegistrar.swift in Sources */,
 				C0DEF1322F60000100000003 /* InvitationCreditView.swift in Sources */,
 				C0DEF1332F60000100000003 /* InvitationCreditDetailViews.swift in Sources */,

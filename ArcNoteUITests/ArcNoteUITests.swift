@@ -167,6 +167,44 @@ final class ArcNoteUITests: XCTestCase {
         )
     }
 
+    func testDiscoveryPathFixtureShowsCollectedToOriginOrder() throws {
+        launchDiscoveryPathFixture(mode: "loaded")
+
+        waitFor("screen.discovery-path")
+        waitFor("discovery-path.collected")
+        waitFor("discovery-path.ancestor.ast_direct")
+        waitFor("discovery-path.ancestor.ast_origin")
+        XCTAssertEqual(
+            waitFor("discovery-path.order").label,
+            "ast_direct,ast_origin"
+        )
+        XCTAssertFalse(app.staticTexts["Credits"].exists)
+        XCTAssertFalse(app.staticTexts["Results"].exists)
+    }
+
+    func testDiscoveryPathFixtureShowsNoProvenanceState() throws {
+        launchDiscoveryPathFixture(mode: "empty")
+
+        waitFor("screen.discovery-path")
+        waitFor("discovery-path.collected")
+        waitFor("discovery-path.empty")
+        XCTAssertFalse(
+            app.descendants(matching: .any)["discovery-path.retry"].exists
+        )
+    }
+
+    func testDiscoveryPathFixtureRetriesTransportFailure() throws {
+        launchDiscoveryPathFixture(mode: "failure")
+
+        waitFor("screen.discovery-path")
+        waitFor("discovery-path.error")
+        tap("discovery-path.retry")
+        waitFor("discovery-path.ancestor.ast_direct")
+        XCTAssertFalse(
+            app.descendants(matching: .any)["discovery-path.error"].exists
+        )
+    }
+
     func testInvitationCreditsLoadedFixture() throws {
         launchInvitationCreditFixture(mode: "success")
 
@@ -2460,6 +2498,56 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertEqual(sparkAnchorValue("spark.visible-card.id"), resultID)
     }
 
+    func testDiscoveryPathRendersLiveGoSparkProvenance() throws {
+        let session = try requireSmokeSession()
+        openSparkFromDetail(cardID: sparkSeedCardID, session: session)
+
+        let resultID = try waitForUnfavoritedSparkResult(token: session.token)
+        defer { deleteFavorite(id: resultID, token: session.token) }
+
+        waitFor("spark.card.\(resultID)").swipeRight()
+        waitForAssetStatus(
+            kind: "favorites",
+            id: resultID,
+            token: session.token,
+            expected: true
+        )
+        let discovery = try waitForDiscoveryPath(
+            assetID: resultID,
+            token: session.token
+        )
+        var seen = Set<String>()
+        let expectedAncestors = discovery.path
+            .filter { $0.assetID != resultID }
+            .sorted { $0.depth > $1.depth }
+            .map(\.assetID)
+            .filter { seen.insert($0).inserted }
+        XCTAssertFalse(expectedAncestors.isEmpty)
+
+        app.terminate()
+        seedAppSession(session)
+        app.launchEnvironment["CHORAI_UI_TEST"] = "1"
+        app.launchEnvironment["CHORAI_UI_TEST_DISCOVERY_PATH_CARD_ID"] = resultID
+        app.launchEnvironment["CHORAI_API_BASE_URL"] =
+            ProcessInfo.processInfo.environment["CHORAI_API_BASE_URL"]
+                ?? "http://127.0.0.1:8080"
+        app.launchArguments.append("--ui-test-open-discovery-path")
+        app.launch()
+
+        waitFor("screen.discovery-path", timeout: 20)
+        waitFor("discovery-path.collected", timeout: 30)
+        XCTAssertEqual(
+            waitFor("discovery-path.order", timeout: 30).label,
+            expectedAncestors.joined(separator: ",")
+        )
+        for assetID in expectedAncestors {
+            waitFor("discovery-path.ancestor.\(assetID)", timeout: 30)
+        }
+        XCTAssertFalse(
+            app.descendants(matching: .any)["discovery-path.error"].exists
+        )
+    }
+
     func testSparkUpSwipeCreatesChildAndChainReplayRestoresParent() throws {
         let session = try requireSmokeSession()
         openSparkFromDetail(cardID: sparkSeedCardID, session: session)
@@ -3792,6 +3880,12 @@ final class ArcNoteUITests: XCTestCase {
         submit.tap()
     }
 
+    private func launchDiscoveryPathFixture(mode: String) {
+        app.launchArguments.append("--ui-test-discovery-path")
+        app.launchEnvironment["CHORAI_DISCOVERY_PATH_FIXTURE_MODE"] = mode
+        app.launch()
+    }
+
     private func replaceShortFixtureText(_ identifier: String, with text: String) {
         let field = waitFor(identifier)
         field.tap()
@@ -5039,9 +5133,21 @@ final class ArcNoteUITests: XCTestCase {
 
         struct SmokeDiscoveryPath: Decodable {
             let rootActivityID: String
+            let path: [SmokeDiscoveryPathNode]
 
             enum CodingKeys: String, CodingKey {
                 case rootActivityID = "root_activity_id"
+                case path
+            }
+        }
+
+        struct SmokeDiscoveryPathNode: Decodable {
+            let assetID: String
+            let depth: Int
+
+            enum CodingKeys: String, CodingKey {
+                case assetID = "asset_id"
+                case depth
             }
         }
     }
@@ -6321,6 +6427,13 @@ final class ArcNoteUITests: XCTestCase {
         assetID: String,
         token: String
     ) throws -> String {
+        try fetchDiscoveryPath(assetID: assetID, token: token).rootActivityID
+    }
+
+    private func fetchDiscoveryPath(
+        assetID: String,
+        token: String
+    ) throws -> SmokeDiscoveryPathResponse.SmokeDiscoveryPath {
         let baseURL = ProcessInfo.processInfo.environment["CHORAI_API_BASE_URL"]
             ?? "http://127.0.0.1:8080"
         guard let url = URL(
@@ -6337,7 +6450,36 @@ final class ArcNoteUITests: XCTestCase {
         return try sendRequest(
             request,
             responseType: SmokeDiscoveryPathResponse.self
-        ).data.rootActivityID
+        ).data
+    }
+
+    private func waitForDiscoveryPath(
+        assetID: String,
+        token: String,
+        timeout: TimeInterval = 15,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) throws -> SmokeDiscoveryPathResponse.SmokeDiscoveryPath {
+        let deadline = Date().addingTimeInterval(timeout)
+        var lastError: Error?
+        while Date() < deadline {
+            do {
+                return try fetchDiscoveryPath(assetID: assetID, token: token)
+            } catch {
+                lastError = error
+                RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+            }
+        }
+        XCTFail(
+            "Timed out waiting for discovery path: \(lastError?.localizedDescription ?? "unknown")",
+            file: file,
+            line: line
+        )
+        throw lastError ?? NSError(
+            domain: "ArcNoteUITests",
+            code: 14,
+            userInfo: [NSLocalizedDescriptionKey: "Discovery path timed out"]
+        )
     }
 
     private func waitForDiscoveryRoot(
