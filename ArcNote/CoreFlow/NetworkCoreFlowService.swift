@@ -50,32 +50,6 @@ struct NetworkCoreFlowService: CoreFlowServing {
             .eraseToAnyPublisher()
     }
 
-    func createPrivateCard(
-        content: String
-    ) -> AnyPublisher<CreatedCard, CoreFlowError> {
-        network.createCard(
-            CreateCardRequest(
-                title: nil,
-                content: content,
-                tags: [],
-                isPublic: false
-            )
-        )
-        .tryMap { response in
-            guard response.success else {
-                throw CoreFlowError.server
-            }
-
-            return CreatedCard(
-                id: response.data.id,
-                content: response.data.content,
-                isPublic: response.data.isPublic
-            )
-        }
-        .mapError(Self.mapError)
-        .eraseToAnyPublisher()
-    }
-
     private static func mapError(_ error: Error) -> CoreFlowError {
         if let coreError = error as? CoreFlowError {
             return coreError

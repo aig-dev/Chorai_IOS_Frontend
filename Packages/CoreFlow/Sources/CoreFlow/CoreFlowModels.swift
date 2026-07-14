@@ -102,18 +102,6 @@ public struct FlowPage: Equatable, Sendable {
     }
 }
 
-public struct CreatedCard: Equatable, Sendable {
-    public let id: String
-    public let content: String
-    public let isPublic: Bool
-
-    public init(id: String, content: String, isPublic: Bool) {
-        self.id = id
-        self.content = content
-        self.isPublic = isPublic
-    }
-}
-
 public enum CoreFlowError: Error, Equatable, Sendable {
     case unauthorized
     case offline
@@ -135,12 +123,6 @@ public enum FlowNotice: Equatable, Sendable {
     case saved(assetID: String)
     case saveFailed
     case undoFailed
-}
-
-public enum CapturePhase: Equatable, Sendable {
-    case idle
-    case saving
-    case failed(String)
 }
 
 public enum CoreTab: Int, CaseIterable, Sendable {
