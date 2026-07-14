@@ -82,8 +82,6 @@ struct SettingsView: View {
     @Environment(\.presentationMode) var presentationMode
     @State private var showLogoutAlert = false
     @State private var navigateToAccountDetails = false
-    @State private var navigateToPreferences = false
-    @State private var navigateToAPIAndPlugins = false
     @State private var navigateToEditProfile = false
     @State private var navigateToChoraProfile = false
     @State private var navigateToInvitationCredits = false
@@ -127,18 +125,16 @@ struct SettingsView: View {
                     
                     Spacer()
                     
-                    Text("Setting")
+                    Text("Settings")
                         .font(.system(size: 24, weight: .bold))
                         .foregroundColor(.white)
                     
                     Spacer()
                     
-                    Button(action: {
-                        // 搜索功能
-                    }) {
-                        Image("search")
-                            .resizable().frame(width: 30, height: 30)
-                    }
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 20, weight: .medium))
+                        .foregroundColor(.clear)
+                        .accessibilityHidden(true)
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 60)
@@ -179,41 +175,6 @@ struct SettingsView: View {
                             SettingsRow(imageName: "account", title: "Account & Privacy", accessibilityIdentifier: "settings.account-privacy") {
                                 navigateToAccountDetails = true
                             }
-                            
-                            Divider()
-                                .background(Color.white.opacity(0.2))
-                            
-//                            SettingsRow(imageName: "preference", title: "Preferences") {
-//                                navigateToPreferences = true
-//                            }
-//                            
-//                            Divider()
-//                                .background(Color.white.opacity(0.2))
-//                            
-//                            SettingsRow(imageName: "api", title: "API & Plugins") {
-//                                navigateToAPIAndPlugins = true
-//                            }
-//                            
-//                            Divider()
-//                                .background(Color.white.opacity(0.2))
-//                            
-//                            SettingsRow(imageName: "feedback", title: "Feedback") {
-//                                // 跳转到反馈页面
-//                            }
-//                            
-//                            Divider()
-//                                .background(Color.white.opacity(0.2))
-                            
-                            SettingsRow(imageName: "about", title: "About Us") {
-                                // 跳转到关于我们页面
-                            }
-                            
-                            Divider()
-                                .background(Color.white.opacity(0.2))
-                            
-                            SettingsRow(imageName: "update", title: "Check for Updates", subtitle: "v4.4.1") {
-                                // 检查更新
-                            }
                         }
                         
                         .padding(.horizontal, 20)
@@ -247,12 +208,13 @@ struct SettingsView: View {
                         .padding(.horizontal, 100)
                         
                         // 底部隐私声明
-                        Text("We will never sell your data or run ads, so your subscription is our driving force to keep creating")
+                        Text("Your notes stay yours. We never sell your data or run ads.")
                             .font(.system(size: 12, weight: .regular))
                             .foregroundColor(.gray)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 40)
                             .padding(.top, 20)
+                            .accessibilityIdentifier("settings.footer")
                     }
                 }
             }
@@ -284,12 +246,6 @@ struct SettingsView: View {
         }
         .navigationDestination(isPresented: $navigateToAccountDetails) {
             AccountPrivacyView()
-        }
-        .navigationDestination(isPresented: $navigateToPreferences) {
-            PreferencesView()
-        }
-        .navigationDestination(isPresented: $navigateToAPIAndPlugins) {
-            APIAndPluginsView()
         }
         .navigationDestination(isPresented: $navigateToEditProfile) {
             EditProfileView()

@@ -338,6 +338,27 @@ final class ArcNoteUITests: XCTestCase {
         waitFor("settings.choraProfile")
     }
 
+    func testSettingsOnlyShowsConnectedModules() throws {
+        app.launchArguments.append("--ui-test-settings")
+        app.launch()
+
+        waitFor("screen.settings.loaded")
+        XCTAssertTrue(app.staticTexts["Settings"].exists)
+        XCTAssertTrue(app.buttons["settings.personal-data"].exists)
+        XCTAssertTrue(app.buttons["settings.choraProfile"].exists)
+        XCTAssertTrue(app.buttons["settings.invitation-credits"].exists)
+        XCTAssertTrue(app.buttons["settings.account-privacy"].exists)
+
+        XCTAssertFalse(app.buttons["search"].exists)
+        XCTAssertFalse(app.buttons["settings.row.About Us"].exists)
+        XCTAssertFalse(app.buttons["settings.row.Check for Updates"].exists)
+
+        XCTAssertEqual(
+            waitFor("settings.footer").label,
+            "Your notes stay yours. We never sell your data or run ads."
+        )
+    }
+
     func testSettingsShowsSingleInvitationCreditsEntry() throws {
         app.launchArguments.append("--ui-test-settings")
         app.launch()
