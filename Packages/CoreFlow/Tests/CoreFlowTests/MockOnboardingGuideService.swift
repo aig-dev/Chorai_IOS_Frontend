@@ -62,7 +62,6 @@ final class MockOnboardingGuideService: OnboardingGuideServing {
 
 final class InMemoryOnboardingGuidePersistence: OnboardingGuidePersisting {
     private var pending: [String: [OnboardingGuideEvidence]] = [:]
-    private var recorded: [String: OnboardingGuideEvidence] = [:]
 
     func pendingEvidence(actorID: String, sessionID: String) -> [OnboardingGuideEvidence] {
         pending[key(actorID, sessionID)] ?? []
@@ -76,24 +75,8 @@ final class InMemoryOnboardingGuidePersistence: OnboardingGuidePersisting {
         pending[key(actorID, sessionID)] = evidence
     }
 
-    func recordedCardEvidence(
-        actorID: String,
-        sessionID: String
-    ) -> OnboardingGuideEvidence? {
-        recorded[key(actorID, sessionID)]
-    }
-
-    func saveRecordedCardEvidence(
-        _ evidence: OnboardingGuideEvidence,
-        actorID: String,
-        sessionID: String
-    ) {
-        recorded[key(actorID, sessionID)] = evidence
-    }
-
     func clear(actorID: String, sessionID: String) {
         pending[key(actorID, sessionID)] = nil
-        recorded[key(actorID, sessionID)] = nil
     }
 
     private func key(_ actorID: String, _ sessionID: String) -> String {

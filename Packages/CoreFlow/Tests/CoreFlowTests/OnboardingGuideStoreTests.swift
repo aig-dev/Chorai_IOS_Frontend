@@ -16,7 +16,8 @@ final class OnboardingGuideStoreTests: XCTestCase {
         XCTAssertEqual(service.startFlowVersions, [1])
         XCTAssertEqual(store.phase, .active)
         XCTAssertEqual(store.session?.state, "elicit_signal")
-        XCTAssertTrue(store.shouldPresentRecord)
+        XCTAssertTrue(store.shouldGuideLibraryCreation)
+        XCTAssertNotNil(store.guideScene)
     }
 
     @MainActor
@@ -61,27 +62,32 @@ final class OnboardingGuideStoreTests: XCTestCase {
     }
 
     @MainActor
-    func testRecordSuccessAdvancesElicitWithExactCreatedContent() async {
+    func testLibraryNoteSuccessAdvancesElicitWithExactCreatedContent() async {
         let service = MockOnboardingGuideService()
         service.statusResults = [.success(status(needs: true))]
         service.startResults = [.success(session(state: "elicit_signal"))]
-        service.respondResults = [.success(session(state: "deepen_signal"))]
+        service.respondResults = [
+            .success(session(state: "product_curator_intro"))
+        ]
         let persistence = InMemoryOnboardingGuidePersistence()
         let store = makeStore(service: service, persistence: persistence)
         store.load(actorID: "act_1")
         await settle(3)
 
-        store.receive(.recordCreated(cardID: "ast_record", content: "Keep this signal"))
+        let evidence = OnboardingGuideEvidence.noteCreated(
+            cardID: "ast_note",
+            content: "Keep this Library note"
+        )
+        store.receive(evidence)
         await settle(3)
 
         XCTAssertEqual(service.responses.count, 1)
         XCTAssertEqual(service.responses.first?.sessionID, "onb_1")
-        XCTAssertEqual(service.responses.first?.input, .text("Keep this signal"))
-        XCTAssertEqual(store.session?.state, "deepen_signal")
         XCTAssertEqual(
-            persistence.recordedCardEvidence(actorID: "act_1", sessionID: "onb_1"),
-            .recordCreated(cardID: "ast_record", content: "Keep this signal")
+            service.responses.first?.input,
+            .text("Keep this Library note")
         )
+        XCTAssertEqual(store.session?.state, "product_curator_intro")
         XCTAssertTrue(
             persistence.pendingEvidence(actorID: "act_1", sessionID: "onb_1").isEmpty
         )
@@ -206,7 +212,7 @@ final class OnboardingGuideStoreTests: XCTestCase {
     }
 
     @MainActor
-    func testFailedInitialRecordResponseExposesRetryableGuide() async {
+    func testFailedInitialNoteResponseExposesRetryableGuide() async {
         let service = MockOnboardingGuideService()
         service.statusResults = [.success(status(needs: true))]
         service.startResults = [.success(session(state: "elicit_signal"))]
@@ -215,13 +221,13 @@ final class OnboardingGuideStoreTests: XCTestCase {
         store.load(actorID: "act_1")
         await settle(3)
 
-        store.receive(.recordCreated(cardID: "ast_record", content: "Keep me"))
+        store.receive(.noteCreated(cardID: "ast_note", content: "Keep me"))
         await settle(3)
 
         XCTAssertEqual(store.lastError, .offline)
         XCTAssertNotNil(
             store.guideScene,
-            "A failed Record response must leave a visible retry path"
+            "A failed note response must leave a visible retry path"
         )
     }
 
@@ -327,7 +333,7 @@ final class OnboardingGuideStoreTests: XCTestCase {
     }
 
     @MainActor
-    func testSparkMergeLibraryAndRecordedReplayCompleteCanonicalV1() async {
+    func testSparkMergeAndLibraryCompleteCanonicalV1WithoutRecordReplay() async {
         let service = MockOnboardingGuideService()
         service.statusResults = [
             .success(status(needs: true, activeSessionID: "onb_1"))
@@ -341,19 +347,12 @@ final class OnboardingGuideStoreTests: XCTestCase {
             .success(session(state: "product_merge_intro")),
             .success(session(state: "product_merge_preview")),
             .success(session(state: "product_library_intro")),
-            .success(session(state: "product_quick_capture_intro")),
             .success(session(state: "build_ignite"))
         ]
         service.completeResults = [
             .success(session(status: "completed", state: "completed"))
         ]
-        let persistence = InMemoryOnboardingGuidePersistence()
-        persistence.saveRecordedCardEvidence(
-            .recordCreated(cardID: "ast_record", content: "First signal"),
-            actorID: "act_1",
-            sessionID: "onb_1"
-        )
-        let store = makeStore(service: service, persistence: persistence)
+        let store = makeStore(service: service)
         store.load(actorID: "act_1")
         await settle(3)
 
@@ -378,8 +377,7 @@ final class OnboardingGuideStoreTests: XCTestCase {
                 .choice("activation:spark.result_saved"),
                 .choice("activation:merge.started"),
                 .choice("activation:merge.committed"),
-                .choice("activation:library.viewed"),
-                .choice("activation:record.created")
+                .choice("activation:library.viewed")
             ]
         )
         XCTAssertEqual(service.completedSessionIDs, ["onb_1"])

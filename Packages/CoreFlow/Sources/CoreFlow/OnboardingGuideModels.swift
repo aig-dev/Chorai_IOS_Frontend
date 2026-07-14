@@ -197,7 +197,7 @@ public protocol OnboardingGuideServing {
 }
 
 public enum OnboardingGuideEvidence: Codable, Equatable, Sendable {
-    case recordCreated(cardID: String, content: String)
+    case noteCreated(cardID: String, content: String)
     case deepenChoice(id: String)
     case flowViewed
     case flowCardSaved(assetID: String)

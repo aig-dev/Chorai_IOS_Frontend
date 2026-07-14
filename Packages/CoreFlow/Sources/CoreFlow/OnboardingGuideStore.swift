@@ -10,15 +10,12 @@ public final class OnboardingGuideStore: ObservableObject {
     @Published public private(set) var isSending = false
     @Published public private(set) var lastError: OnboardingGuideError?
 
-    public var shouldPresentRecord: Bool {
+    public var shouldGuideLibraryCreation: Bool {
         phase == .active && session?.state == State.elicitSignal
     }
 
     public var guideScene: OnboardingGuideScene? {
         guard phase == .active else {
-            return nil
-        }
-        if session?.state == State.elicitSignal, lastError == nil {
             return nil
         }
         return session?.scene
@@ -35,7 +32,6 @@ public final class OnboardingGuideStore: ObservableObject {
         static let mergeIntro = "product_merge_intro"
         static let mergePreview = "product_merge_preview"
         static let libraryIntro = "product_library_intro"
-        static let quickCaptureIntro = "product_quick_capture_intro"
         static let buildIgnite = "build_ignite"
 
         static let order: [String] = [
@@ -49,7 +45,6 @@ public final class OnboardingGuideStore: ObservableObject {
             mergeIntro,
             mergePreview,
             libraryIntro,
-            quickCaptureIntro,
             buildIgnite
         ]
     }
@@ -114,14 +109,6 @@ public final class OnboardingGuideStore: ObservableObject {
               let session,
               session.flowVersion == Self.canonicalFlowVersion else {
             return
-        }
-
-        if case .recordCreated = evidence {
-            persistence.saveRecordedCardEvidence(
-                evidence,
-                actorID: actorID,
-                sessionID: session.sessionID
-            )
         }
 
         guard shouldQueue(evidence, for: session.state),
@@ -266,16 +253,6 @@ public final class OnboardingGuideStore: ObservableObject {
             return
         }
 
-        if session.state == State.quickCaptureIntro,
-           let recorded = persistence.recordedCardEvidence(
-               actorID: actorID,
-               sessionID: session.sessionID
-           ),
-           !pendingEvidence.contains(recorded) {
-            pendingEvidence.append(recorded)
-            persistPending(actorID: actorID, sessionID: session.sessionID)
-        }
-
         guard let index = pendingEvidence.firstIndex(
             where: { evidenceMatches($0, state: session.state) }
         ) else {
@@ -283,7 +260,7 @@ public final class OnboardingGuideStore: ObservableObject {
         }
 
         let evidence = pendingEvidence[index]
-        let input = responseInput(for: evidence, state: session.state)
+        let input = responseInput(for: evidence)
         isSending = true
         lastError = nil
         service.respond(sessionID: session.sessionID, input: input)
@@ -337,9 +314,8 @@ public final class OnboardingGuideStore: ObservableObject {
         _ evidence: OnboardingGuideEvidence,
         for currentState: String
     ) -> Bool {
-        if case .recordCreated = evidence {
+        if case .noteCreated = evidence {
             return currentState == State.elicitSignal
-                || currentState == State.quickCaptureIntro
         }
         if case .libraryViewed = evidence {
             return currentState == State.libraryIntro
@@ -372,8 +348,8 @@ public final class OnboardingGuideStore: ObservableObject {
         _ evidence: OnboardingGuideEvidence,
         state: String
     ) -> Bool {
-        if case .recordCreated = evidence {
-            return state == State.elicitSignal || state == State.quickCaptureIntro
+        if case .noteCreated = evidence {
+            return state == State.elicitSignal
         }
         return expectedState(for: evidence) == state
     }
@@ -382,7 +358,7 @@ public final class OnboardingGuideStore: ObservableObject {
         for evidence: OnboardingGuideEvidence
     ) -> String? {
         switch evidence {
-        case .recordCreated:
+        case .noteCreated:
             return State.elicitSignal
         case .deepenChoice:
             return State.deepenSignal
@@ -406,16 +382,13 @@ public final class OnboardingGuideStore: ObservableObject {
     }
 
     private func responseInput(
-        for evidence: OnboardingGuideEvidence,
-        state: String
+        for evidence: OnboardingGuideEvidence
     ) -> OnboardingGuideInput {
         switch evidence {
-        case .recordCreated(_, let content) where state == State.elicitSignal:
+        case .noteCreated(_, let content):
             return .text(content)
         case .deepenChoice(let id):
             return .choice(id)
-        case .recordCreated:
-            return .choice("activation:record.created")
         case .flowViewed:
             return .choice("activation:flow.viewed")
         case .flowCardSaved:
