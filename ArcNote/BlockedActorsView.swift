@@ -3,8 +3,18 @@ import SwiftUI
 
 struct AccountPrivacyView: View {
     @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var authManager = AuthManager.shared
     @ObservedObject private var profileManager = UserProfileManager.shared
+    @StateObject private var privacyStore: PrivacySettingsStore
     @State private var navigateToBlockedUsers = false
+
+    init(
+        service: any CorePrivacySettingsServing = NetworkPrivacySettingsService()
+    ) {
+        _privacyStore = StateObject(
+            wrappedValue: PrivacySettingsStore(service: service)
+        )
+    }
 
     var body: some View {
         ZStack {
@@ -14,15 +24,17 @@ struct AccountPrivacyView: View {
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
-                navigationHeader(title: "Account & Privacy")
+                SettingsDestinationHeader(
+                    title: "Account & Privacy",
+                    dismiss: dismiss.callAsFunction
+                )
 
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 20) {
-                        Text("Account")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundColor(.white)
-
-                        VStack(spacing: 14) {
+                    VStack(spacing: 24) {
+                        ChoraSectionSurface(
+                            title: "Account",
+                            identifier: "account-privacy.account.section"
+                        ) {
                             profileValue(
                                 label: "Username",
                                 value: profileManager.userProfile?.username ?? "—"
@@ -35,23 +47,25 @@ struct AccountPrivacyView: View {
                                 value: profileManager.userProfile?.email ?? "—"
                             )
                         }
-                        .padding(20)
-                        .background(
-                            RoundedRectangle(cornerRadius: 16)
-                                .fill(Color.white.opacity(0.1))
-                                .cardHighlightEffect()
-                        )
 
-                        Text("Community")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundColor(.white)
-
-                        SettingsRow(
-                            imageName: "account",
-                            title: "Blocked Users",
-                            accessibilityIdentifier: "account-privacy.blocked-users"
+                        ChoraSectionSurface(
+                            title: "Audience & Visibility",
+                            identifier: "account-privacy.visibility.section"
                         ) {
-                            navigateToBlockedUsers = true
+                            privacyContent
+                        }
+
+                        ChoraSectionSurface(
+                            title: "Community",
+                            identifier: "account-privacy.community.section"
+                        ) {
+                            SettingsRow(
+                                imageName: "account",
+                                title: "Blocked Users",
+                                accessibilityIdentifier: "account-privacy.blocked-users"
+                            ) {
+                                navigateToBlockedUsers = true
+                            }
                         }
                     }
                     .padding(.horizontal, 20)
@@ -63,36 +77,164 @@ struct AccountPrivacyView: View {
         .navigationDestination(isPresented: $navigateToBlockedUsers) {
             BlockedActorsView()
         }
+        .overlay(alignment: .topLeading) {
+            Text("Account and Privacy")
+                .font(.system(size: 1))
+                .foregroundStyle(.clear)
+                .frame(width: 1, height: 1)
+                .accessibilityIdentifier("screen.account-privacy")
+        }
+        .task(id: actorID) {
+            await privacyStore.load(actorID: actorID)
+        }
         .onAppear {
             profileManager.fetchCurrentUserProfile()
         }
     }
 
-    private func navigationHeader(title: String) -> some View {
-        HStack {
-            Button {
-                dismiss()
-            } label: {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 20, weight: .medium))
-                    .foregroundColor(.white)
+    private var actorID: String {
+        authManager.currentUser?.id ?? profileManager.userProfile?.id ?? ""
+    }
+
+    @ViewBuilder
+    private var privacyContent: some View {
+        switch privacyStore.phase {
+        case .idle, .loading:
+            ChoraLoadingRow(
+                text: "Loading privacy settings…",
+                identifier: "account-privacy.visibility.loading"
+            )
+
+        case .failed(let error):
+            ChoraInlineError(
+                text: privacyMessage(
+                    error,
+                    fallback: "Privacy settings couldn’t be loaded."
+                ),
+                identifier: "account-privacy.visibility.error"
+            ) {
+                Task { await privacyStore.retryLoad() }
             }
 
-            Spacer()
+        case .ready:
+            if privacyStore.settings != nil {
+                VStack(spacing: 0) {
+                    privacyToggle(
+                        .showFollowLists,
+                        title: "Show follow lists",
+                        description: "Let others see who you follow and who follows you."
+                    )
+                    privacyDivider
+                    privacyToggle(
+                        .allowFollow,
+                        title: "Allow follows",
+                        description: "Let new people follow your profile."
+                    )
+                    privacyDivider
+                    privacyToggle(
+                        .showEmail,
+                        title: "Show email",
+                        description: "Display your email on your public profile."
+                    )
+                    privacyDivider
+                    privacyToggle(
+                        .showPhone,
+                        title: "Show phone",
+                        description: "Display your phone number on your public profile."
+                    )
+                    privacyDivider
+                    privacyToggle(
+                        .showLocation,
+                        title: "Show location",
+                        description: "Display your location on your public profile."
+                    )
+                    privacyDivider
+                    privacyToggle(
+                        .showBirthday,
+                        title: "Show birthday",
+                        description: "Display your birthday on your public profile."
+                    )
 
-            Text(title)
-                .font(.system(size: 22, weight: .bold))
-                .foregroundColor(.white)
+                    if privacyStore.savingSetting != nil {
+                        HStack(spacing: 10) {
+                            ProgressView().tint(.white)
+                            Text("Saving…")
+                                .font(.subheadline)
+                                .foregroundColor(.white.opacity(0.64))
+                        }
+                        .padding(.top, 16)
+                        .accessibilityElement(children: .combine)
+                        .accessibilityIdentifier("account-privacy.visibility.saving")
+                    }
 
-            Spacer()
-
-            Image(systemName: "chevron.left")
-                .font(.system(size: 20, weight: .medium))
-                .foregroundColor(.clear)
+                    if let error = privacyStore.updateError {
+                        ChoraInlineError(
+                            text: privacyMessage(
+                                error,
+                                fallback: "That change wasn’t saved. Your previous setting was restored."
+                            ),
+                            identifier: "account-privacy.visibility.update-error"
+                        ) {
+                            Task { await privacyStore.retryFailedUpdate() }
+                        }
+                        .padding(.top, 16)
+                    }
+                }
+            }
         }
-        .padding(.horizontal, 20)
-        .padding(.top, 60)
-        .padding(.bottom, 30)
+    }
+
+    private var privacyDivider: some View {
+        Divider().background(Color.white.opacity(0.16))
+    }
+
+    private func privacyToggle(
+        _ setting: PrivacySetting,
+        title: String,
+        description: String
+    ) -> some View {
+        Toggle(
+            isOn: Binding(
+                get: { privacyStore.settings?.value(for: setting) ?? false },
+                set: { enabled in
+                    Task { await privacyStore.set(setting, enabled: enabled) }
+                }
+            )
+        ) {
+            VStack(alignment: .leading, spacing: 5) {
+                Text(title)
+                    .font(.body.weight(.medium))
+                    .foregroundColor(.white)
+                Text(description)
+                    .font(.subheadline)
+                    .foregroundColor(.white.opacity(0.62))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.trailing, 8)
+        }
+        .toggleStyle(SwitchToggleStyle(tint: .purple))
+        .padding(.vertical, 14)
+        .disabled(privacyStore.savingSetting != nil)
+        .accessibilityIdentifier("account-privacy.toggle.\(setting.rawValue)")
+        .accessibilityValue(
+            privacyStore.settings?.value(for: setting) == true
+                ? "enabled"
+                : "disabled"
+        )
+    }
+
+    private func privacyMessage(
+        _ error: PrivacySettingsError,
+        fallback: String
+    ) -> String {
+        switch error {
+        case .invalidActor, .unauthorized:
+            return "Sign in again to continue."
+        case .requestFailed(let message):
+            return message ?? fallback
+        case .contract:
+            return fallback
+        }
     }
 
     private func profileValue(label: String, value: String) -> some View {

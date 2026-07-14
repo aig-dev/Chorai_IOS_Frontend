@@ -67,6 +67,24 @@ struct UserProfileResponse: Codable {
     let data: UserProfile
 }
 
+struct PrivacySettingsData: Codable, Equatable {
+    let showEmail: Bool
+    let showPhone: Bool
+    let showLocation: Bool
+    let showBirthday: Bool
+    let allowFollow: Bool
+    let showFollowLists: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case showEmail = "show_email"
+        case showPhone = "show_phone"
+        case showLocation = "show_location"
+        case showBirthday = "show_birthday"
+        case allowFollow = "allow_follow"
+        case showFollowLists = "show_follow_lists"
+    }
+}
+
 // MARK: 用户资料管理器
 class UserProfileManager: ObservableObject {
     @Published var userProfile: UserProfile?

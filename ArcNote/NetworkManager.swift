@@ -1177,6 +1177,33 @@ extension NetworkManager {
         )
     }
 
+    func getPrivacySettings(
+        presentsError: Bool = false
+    ) -> AnyPublisher<NetworkResponse<PrivacySettingsData>, NetworkError> {
+        request(
+            endpoint: "/api/v1/profile/me/privacy",
+            method: .get,
+            responseType: NetworkResponse<PrivacySettingsData>.self,
+            presentsError: presentsError,
+            suppressesPayloadLogging: true
+        )
+    }
+
+    func updatePrivacySetting(
+        _ setting: PrivacySetting,
+        enabled: Bool,
+        presentsError: Bool = false
+    ) -> AnyPublisher<NetworkResponse<PrivacySettingsData>, NetworkError> {
+        request(
+            endpoint: "/api/v1/profile/me/privacy",
+            method: .put,
+            parameters: [setting.rawValue: enabled],
+            responseType: NetworkResponse<PrivacySettingsData>.self,
+            presentsError: presentsError,
+            suppressesPayloadLogging: true
+        )
+    }
+
     func getTopUsers() -> AnyPublisher<TopUsersResponse, NetworkError> {
         return request(
             endpoint: "/api/v1/credits/leaderboard",
