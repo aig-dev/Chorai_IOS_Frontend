@@ -48,7 +48,6 @@
 		A00000012F50000100000001 /* ArcNoteUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000012F50000100000002 /* ArcNoteUITests.swift */; };
 		1B055F4E2E4E08EF00896B01 /* ChatDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B055F4D2E4E08EE00896B01 /* ChatDetailView.swift */; };
 		1B055F502E4EFC9000896B01 /* NotificationDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B055F4F2E4EFC9000896B01 /* NotificationDetailView.swift */; };
-		1B055F522E4F021500896B01 /* UpgradeProView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B055F512E4F021500896B01 /* UpgradeProView.swift */; };
 		1B055F552E4F178400896B01 /* LinkPopupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B055F542E4F178400896B01 /* LinkPopupView.swift */; };
 		1B1240302F3C95DD00B53098 /* MarkupEditor in Frameworks */ = {isa = PBXBuildFile; productRef = 1B12402F2F3C95DD00B53098 /* MarkupEditor */; };
 		1B1240332F3C960D00B53098 /* MarkupEditor in Frameworks */ = {isa = PBXBuildFile; productRef = 1B1240322F3C960D00B53098 /* MarkupEditor */; };
@@ -170,7 +169,6 @@
 		A00000012F50000100000003 /* ArcNoteUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ArcNoteUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		1B055F4D2E4E08EE00896B01 /* ChatDetailView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ChatDetailView.swift; sourceTree = "<group>"; };
 		1B055F4F2E4EFC9000896B01 /* NotificationDetailView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = NotificationDetailView.swift; sourceTree = "<group>"; };
-		1B055F512E4F021500896B01 /* UpgradeProView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = UpgradeProView.swift; sourceTree = "<group>"; };
 		1B055F542E4F178400896B01 /* LinkPopupView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = LinkPopupView.swift; sourceTree = "<group>"; };
 		1B21AA9B2E85A32B00C1E5AD /* FollowModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FollowModels.swift; sourceTree = "<group>"; };
 		1B21AA9D2E86913D00C1E5AD /* AppleLoginModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleLoginModels.swift; sourceTree = "<group>"; };
@@ -346,7 +344,6 @@
 				1B6E6FAA2E6AB8A5006898F5 /* NetworkModels.swift */,
 				1BA8F4F22E576444001278E6 /* NewNoteView.swift */,
 				1B055F542E4F178400896B01 /* LinkPopupView.swift */,
-				1B055F512E4F021500896B01 /* UpgradeProView.swift */,
 				1B055F4D2E4E08EE00896B01 /* ChatDetailView.swift */,
 				1BC6B7732E4CAC2A00E997B1 /* CommentPopupView.swift */,
 				1BC6B76F2E4C950900E997B1 /* EditProfileView.swift */,
@@ -623,7 +620,6 @@
 				1B7248B42E34AAE000035D3D /* PopupMenuView.swift in Sources */,
 				1B846EEF2E829CDC00A7E621 /* ChatModels.swift in Sources */,
 				1BC6B7742E4CAC2B00E997B1 /* CommentPopupView.swift in Sources */,
-				1B055F522E4F021500896B01 /* UpgradeProView.swift in Sources */,
 				1B331DD22E7C66E900876A32 /* SearchModels.swift in Sources */,
 				1B598C942E6FF3DF00023CC6 /* HomeCardsManager.swift in Sources */,
 				1BC6B7642E49ED4400E997B1 /* TrashView.swift in Sources */,
