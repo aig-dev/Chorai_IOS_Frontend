@@ -9,6 +9,10 @@ public final class CoreFlowCoordinator: ObservableObject {
 
     public init() {}
 
+    public func noteCreated() {
+        libraryRefreshID = UUID()
+    }
+
     public func mergeCompleted(cardID: String) {
         lastMergedCardID = cardID
         libraryRefreshID = UUID()

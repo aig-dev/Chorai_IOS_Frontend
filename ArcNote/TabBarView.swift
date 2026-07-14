@@ -107,17 +107,22 @@ struct TabBarView: View {
     }
 
     private func routeOnboardingState(_ state: String?) {
-        guard state == "product_merge_intro"
-                || state == "product_library_intro" else {
-            return
-        }
+        guard let state else { return }
 
         DispatchQueue.main.async {
             if !navigationPath.isEmpty {
                 navigationPath.removeLast(navigationPath.count)
             }
             navigateToMerge = false
-            coordinator.selectedTab = .library
+
+            switch state {
+            case "elicit_signal", "product_merge_intro", "product_library_intro":
+                coordinator.selectedTab = .library
+            case "product_curator_intro", "product_explore_card":
+                coordinator.selectedTab = .flow
+            default:
+                return
+            }
 
             guard state == "product_library_intro" else { return }
             DispatchQueue.main.async {
@@ -274,6 +279,7 @@ struct TabBarView: View {
         #if DEBUG
         lastCreatedNoteID = cardID
         #endif
+        coordinator.noteCreated()
         onboardingStore.receive(
             .noteCreated(cardID: cardID, content: content)
         )

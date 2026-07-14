@@ -1467,7 +1467,7 @@ final class ArcNoteUITests: XCTestCase {
         )
     }
 
-    func testCanonicalOnboardingRecordAndFlowResumeGoV1() throws {
+    func testCanonicalOnboardingLibraryNoteAndFlowResumeGoV1() throws {
         let smoke = try requireFreshSmokeSession()
         let started = try restartSmokeOnboarding(
             token: smoke.token,
@@ -1481,17 +1481,18 @@ final class ArcNoteUITests: XCTestCase {
 
         waitForSessionPhase("verified", timeout: 30)
         waitForOnboardingAnchor("onboarding.state", value: "elicit_signal")
-        waitFor("record.sheet", timeout: 30)
-        captureVisual("onboarding-record-handoff")
+        waitFor("screen.home.content", timeout: 30)
+        waitFor("onboarding.guide", timeout: 15)
+        waitFor("note.create.guide-halo", timeout: 15)
+        XCTAssertFalse(exists("record.open", timeout: 1))
+        captureVisual("onboarding-library-plus-handoff")
 
         let signal = "iOS onboarding signal \(Int(Date().timeIntervalSince1970))"
-        replaceText("record.input", with: signal)
-        tapButton("record.save")
-
-        waitForOnboardingAnchor("onboarding.state", value: "deepen_signal")
-        waitFor("onboarding.choice.accurate", timeout: 15)
-        captureVisual("onboarding-deepen-choice")
-        tap("onboarding.choice.accurate")
+        tap("note.create")
+        waitFor("screen.card-editor", timeout: 15)
+        waitFor("cardEditorContent", timeout: 15).tap()
+        app.typeText(signal)
+        closeNewNoteEditor()
 
         waitForOnboardingAnchor(
             "onboarding.state",
@@ -1533,6 +1534,26 @@ final class ArcNoteUITests: XCTestCase {
         captureVisual("onboarding-v1-resumed")
     }
 
+    func testCancellingOnboardingNoteKeepsLibraryStep() throws {
+        let smoke = try requireFreshSmokeSession()
+        _ = try restartSmokeOnboarding(token: smoke.token, flowVersion: 1)
+
+        seedAppSession(smoke)
+        app.launchEnvironment["CHORAI_UI_TEST_ONBOARDING"] = "1"
+        launchAuthenticatedApp()
+
+        waitForSessionPhase("verified", timeout: 30)
+        waitForOnboardingAnchor("onboarding.state", value: "elicit_signal")
+        waitFor("screen.home.content", timeout: 30)
+        tap("note.create")
+        waitFor("screen.card-editor", timeout: 15)
+        closeNewNoteEditor()
+
+        waitForOnboardingAnchor("onboarding.state", value: "elicit_signal")
+        waitFor("screen.home.content", timeout: 15)
+        waitFor("note.create.guide-halo", timeout: 15)
+    }
+
     func testCanonicalOnboardingCompletesRealGoFirstLoop() throws {
         let smoke = try requireFreshSmokeSession()
         let started = try restartSmokeOnboarding(
@@ -1551,7 +1572,7 @@ final class ArcNoteUITests: XCTestCase {
         ] = sparkSessionScope
         launchAuthenticatedApp()
 
-        var recordedCardID: String?
+        var noteCardID: String?
         var savedSparkCardID: String?
         var committedCardID: String?
         defer {
@@ -1561,24 +1582,26 @@ final class ArcNoteUITests: XCTestCase {
             if let savedSparkCardID {
                 deleteFavorite(id: savedSparkCardID, token: smoke.token)
             }
-            if let recordedCardID {
-                deleteSmokeCard(id: recordedCardID, token: smoke.token)
+            if let noteCardID {
+                deleteSmokeCard(id: noteCardID, token: smoke.token)
             }
         }
 
         waitForSessionPhase("verified", timeout: 30)
         waitForOnboardingAnchor("onboarding.state", value: "elicit_signal")
-        waitFor("record.sheet", timeout: 30)
+        waitFor("screen.home.content", timeout: 30)
+        waitFor("note.create.guide-halo", timeout: 15)
         let signal = "iOS complete loop \(Int(Date().timeIntervalSince1970))"
-        replaceText("record.input", with: signal)
-        tapButton("record.save")
-        recordedCardID = waitFor("record.created-card-id", timeout: 30)
+        tap("note.create")
+        waitFor("screen.card-editor", timeout: 15)
+        waitFor("cardEditorContent", timeout: 15).tap()
+        app.typeText(signal)
+        closeNewNoteEditor()
+        noteCardID = waitFor("note.created-card-id", timeout: 30)
             .label
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        XCTAssertFalse(recordedCardID?.isEmpty ?? true)
+        XCTAssertFalse(noteCardID?.isEmpty ?? true)
 
-        waitForOnboardingAnchor("onboarding.state", value: "deepen_signal")
-        tap("onboarding.choice.accurate")
         waitForOnboardingAnchor(
             "onboarding.state",
             value: "product_explore_card",
@@ -1629,12 +1652,12 @@ final class ArcNoteUITests: XCTestCase {
         waitFor("screen.home.content", timeout: 30)
         captureVisual("onboarding-library-merge-intro")
 
-        guard let recordedCardID else {
-            XCTFail("Record did not expose its canonical card ID")
+        guard let noteCardID else {
+            XCTFail("Library note creation did not expose its canonical card ID")
             return
         }
-        waitFor("card.home.\(recordedCardID)", timeout: 30)
-        tap("home.card.menu.\(recordedCardID)")
+        waitFor("card.home.\(noteCardID)", timeout: 30)
+        tap("home.card.menu.\(noteCardID)")
         tap("popup-menu.item.merge")
         waitFor("screen.merge.loaded", timeout: 30)
         waitForMergeCardsLoaded()
@@ -1665,10 +1688,10 @@ final class ArcNoteUITests: XCTestCase {
         waitFor("onboarding.completed", timeout: 10)
         captureVisual("onboarding-first-loop-complete")
         waitFor("screen.home.content", timeout: 30)
-        committedCardID = waitFor("record.created-card-id", timeout: 20)
+        committedCardID = waitFor("merge.committed-card-id", timeout: 20)
             .label
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        XCTAssertNotEqual(committedCardID, recordedCardID)
+        XCTAssertNotEqual(committedCardID, noteCardID)
 
         let status = try fetchSmokeOnboardingStatus(token: smoke.token)
         XCTAssertTrue(status.completed)
@@ -1700,7 +1723,7 @@ final class ArcNoteUITests: XCTestCase {
             value: started.sessionID,
             timeout: 10
         )
-        XCTAssertFalse(exists("record.sheet", timeout: 2))
+        XCTAssertFalse(exists("record.open", timeout: 2))
         XCTAssertFalse(exists("onboarding.guide", timeout: 2))
 
         let unchanged = try fetchCurrentSmokeOnboarding(token: smoke.token)
@@ -2746,32 +2769,31 @@ final class ArcNoteUITests: XCTestCase {
         captureSparkVisual("accessibility-xxxl-contrast-reduced-motion")
     }
 
-    func testRecordCreatesPrivateGoCardAndRefreshesLibrary() throws {
+    func testLibraryPlusCreatesPrivateGoCardAndRefreshesLibrary() throws {
         let session = try requireSmokeSession()
         seedAppSession(session)
         launchAuthenticatedApp()
 
-        let content = "Flow record \(Int(Date().timeIntervalSince1970))"
-        let input = openRecordWithEmptyDraft()
-        input.tap()
-        input.typeText(content)
-        XCTAssertEqual(input.value as? String, content)
-        XCTAssertTrue(waitForButton("record.save").isEnabled, "Record Save should enable for a non-empty draft")
-        tapButton("record.save")
+        tap("tab.library")
+        waitFor("note.create", timeout: 15)
+        let content = "Library note \(Int(Date().timeIntervalSince1970))"
+        tap("note.create")
+        waitFor("screen.card-editor", timeout: 15)
+        waitFor("cardEditorContent", timeout: 15).tap()
+        app.typeText(content)
+        closeNewNoteEditor()
 
-        let cardId = waitFor("record.created-card-id", timeout: 30)
+        let cardId = waitFor("note.created-card-id", timeout: 30)
             .label
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        waitFor("record.acknowledgement", timeout: 5)
         defer {
             deleteSmokeCard(id: cardId, token: session.token)
         }
 
         let card = try fetchSmokeCard(id: cardId, token: session.token)
-        XCTAssertEqual(card.content, content)
+        XCTAssertTrue(card.content.contains(content))
         XCTAssertFalse(card.isPublic)
 
-        tap("tab.library")
         waitFor("card.home.\(cardId)", timeout: 30)
     }
 
@@ -3538,45 +3560,25 @@ final class ArcNoteUITests: XCTestCase {
         )
     }
 
-    func testFailedRecordDraftRestoresAfterRelaunch() throws {
-        let session = try requireSmokeSession()
-        let healthyBaseURL = ProcessInfo.processInfo.environment["CHORAI_API_BASE_URL"]
-            ?? "http://127.0.0.1:8080"
-        seedAppSession(session)
-        app.launchEnvironment["CHORAI_API_BASE_URL"] = "http://127.0.0.1:65535"
-        app.launch()
-
-        let draft = "Recovered draft \(Int(Date().timeIntervalSince1970))"
-        let input = openRecordWithEmptyDraft()
-        input.tap()
-        input.typeText(draft)
-        tapButton("record.save")
-        waitFor("record.error", timeout: 20)
-
-        app.terminate()
-        app.launchEnvironment["CHORAI_API_BASE_URL"] = healthyBaseURL
-        app.launch()
-
-        if !exists("record.input", timeout: 3) {
-            tap("record.open")
-        }
-        XCTAssertEqual(waitFor("record.input").value as? String, draft)
-        tapButton("record.discard")
-        confirmRecordDiscard()
-    }
-
-    func testRecordRemainsVisibleFromEveryPrimaryTab() throws {
+    func testRecordIsAbsentAndLibraryPlusIsTheOnlyCreateEntry() throws {
         let session = try requireSmokeSession()
         seedAppSession(session)
         launchAuthenticatedApp()
 
         for tabId in ["tab.flow", "tab.library", "tab.chat"] {
             tap(tabId)
-            XCTAssertTrue(
-                waitFor("record.open").isHittable,
-                "Record must remain visible on \(tabId)"
+            XCTAssertFalse(
+                exists("record.open", timeout: 1),
+                "Record must be absent on \(tabId)"
             )
         }
+
+        tap("tab.library")
+        let create = waitFor("note.create", timeout: 15)
+        XCTAssertTrue(create.isHittable)
+        create.tap()
+        waitFor("screen.card-editor", timeout: 15)
+        tapButton("cardEditorBackButton")
     }
 
     func testRecommendedDetailCommentCreateAppearsInVisibleList() throws {
@@ -4412,39 +4414,15 @@ final class ArcNoteUITests: XCTestCase {
         _ = waitFor("explore.search.input", timeout: 10, file: file, line: line)
     }
 
-    private func openRecordWithEmptyDraft(
-        file: StaticString = #filePath,
-        line: UInt = #line
-    ) -> XCUIElement {
-        tap("record.open", file: file, line: line)
-        var input = waitFor("record.input", file: file, line: line)
-
-        if let existingDraft = input.value as? String, !existingDraft.isEmpty {
-            tapButton("record.discard", file: file, line: line)
-            confirmRecordDiscard(file: file, line: line)
-            waitForMissing("record.sheet", timeout: 10, file: file, line: line)
-
-            tap("record.open", file: file, line: line)
-            input = waitFor("record.input", file: file, line: line)
-        }
-
-        return input
-    }
-
-    private func confirmRecordDiscard(
+    private func closeNewNoteEditor(
         file: StaticString = #filePath,
         line: UInt = #line
     ) {
-        let discardConfirmation = app.alerts.buttons["Discard"]
-        XCTAssertTrue(
-            discardConfirmation.waitForExistence(timeout: 10),
-            "Missing Record discard confirmation",
-            file: file,
-            line: line
-        )
-        discardConfirmation
-            .coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
-            .tap()
+        tapButton("cardEditorBackButton", file: file, line: line)
+        RunLoop.current.run(until: Date().addingTimeInterval(0.6))
+        if exists("screen.card-editor", timeout: 1) {
+            tapButton("cardEditorBackButton", file: file, line: line)
+        }
     }
 
     private func showExploreSearchResult(searchToken: String, expectedCardId: String, file: StaticString = #filePath, line: UInt = #line) {

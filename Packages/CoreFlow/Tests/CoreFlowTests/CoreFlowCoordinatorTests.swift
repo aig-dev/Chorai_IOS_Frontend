@@ -3,6 +3,16 @@ import XCTest
 
 final class CoreFlowCoordinatorTests: XCTestCase {
     @MainActor
+    func testLibraryNoteCreationRefreshesLibrary() {
+        let coordinator = CoreFlowCoordinator()
+        let previousRefreshID = coordinator.libraryRefreshID
+
+        coordinator.noteCreated()
+
+        XCTAssertNotEqual(coordinator.libraryRefreshID, previousRefreshID)
+    }
+
+    @MainActor
     func testMergeCompletionRefreshesLibraryAndPublishesMergedCard() {
         let coordinator = CoreFlowCoordinator()
         let previousRefreshID = coordinator.libraryRefreshID

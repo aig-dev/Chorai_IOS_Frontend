@@ -243,7 +243,6 @@ struct HomeView: View {
                         "elicit_signal",
                         "product_merge_intro",
                         "product_library_intro",
-                        "product_quick_capture_intro",
                         "build_ignite"
                     ]
                 )
@@ -296,6 +295,7 @@ struct HomeView: View {
                         popupMenuLayout = .grid3x3
                         showPopupMenu = true
                     },
+                    onboardingStore: onboardingStore,
                     onNoteCreated: onNoteCreated
                 )
             } else {
@@ -685,6 +685,7 @@ struct NotesListView: View {
     @Binding var navigateToDetail: Bool
     @Binding var navigateToEdit: Bool
     let onShowMenu: (UserCard) -> Void
+    var onboardingStore: OnboardingGuideStore?
     let onNoteCreated: (String, String) -> Void
     
     var body: some View {
@@ -803,6 +804,12 @@ struct NotesListView: View {
                         }
                     }
                     .accessibilityIdentifier("note.create")
+                    .accessibilityHint("Create a Library note")
+                    .overlay {
+                        if let onboardingStore {
+                            LibraryCreateGuideHalo(store: onboardingStore)
+                        }
+                    }
                     .padding(.trailing, 20)
                     .padding(.bottom, 130)
                 }
@@ -875,6 +882,36 @@ struct NotesListView: View {
                         )
                     )
             )
+    }
+}
+
+private struct LibraryCreateGuideHalo: View {
+    @ObservedObject var store: OnboardingGuideStore
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isExpanded = false
+
+    var body: some View {
+        if store.shouldGuideLibraryCreation {
+            Circle()
+                .stroke(Color.white.opacity(0.78), lineWidth: 1.5)
+                .frame(width: 68, height: 68)
+                .shadow(color: ZenVisualTokens.accent.opacity(0.42), radius: 8)
+                .scaleEffect(reduceMotion ? 1 : (isExpanded ? 1.05 : 0.97))
+                .opacity(reduceMotion ? 0.9 : (isExpanded ? 0.55 : 1))
+                .allowsHitTesting(false)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Create your first Library note")
+                .accessibilityIdentifier("note.create.guide-halo")
+                .onAppear {
+                    guard !reduceMotion else { return }
+                    withAnimation(
+                        .easeInOut(duration: 1.15)
+                        .repeatForever(autoreverses: true)
+                    ) {
+                        isExpanded = true
+                    }
+                }
+        }
     }
 }
 
