@@ -14,15 +14,30 @@ actor InvitationCallRecorder {
 }
 
 actor InvitationCreditServiceStub: CoreInvitationCreditServing {
+    private var referralResults: [Result<InvitationReferral, Error>] = []
+    private var balanceResults: [Result<CreditBalances, Error>] = []
     private var validationResults: [Result<InvitationValidation, Error>] = []
     private var redemptionResults: [Result<InvitationRedemption, Error>] = []
     private var validationDelayNanoseconds: UInt64 = 0
+    private var referralDelayNanoseconds: UInt64 = 0
     private(set) var validationCodes: [String] = []
     private(set) var redemptionCalls: [(code: String, actorID: String)] = []
     let recorder: InvitationCallRecorder?
 
     init(recorder: InvitationCallRecorder? = nil) {
         self.recorder = recorder
+    }
+
+    func setReferralResults(_ values: [Result<InvitationReferral, Error>]) {
+        referralResults = values
+    }
+
+    func setBalanceResults(_ values: [Result<CreditBalances, Error>]) {
+        balanceResults = values
+    }
+
+    func setReferralDelay(nanoseconds: UInt64) {
+        referralDelayNanoseconds = nanoseconds
     }
 
     func setValidationResults(_ values: [Result<InvitationValidation, Error>]) {
@@ -46,7 +61,13 @@ actor InvitationCreditServiceStub: CoreInvitationCreditServing {
     }
 
     func referral(actorID: String) async throws -> InvitationReferral {
-        throw InvitationCreditError.requestFailed(message: nil)
+        if referralDelayNanoseconds > 0 {
+            try? await Task.sleep(nanoseconds: referralDelayNanoseconds)
+        }
+        guard !referralResults.isEmpty else {
+            throw InvitationCreditError.requestFailed(message: nil)
+        }
+        return try referralResults.removeFirst().get()
     }
 
     func validate(code: String) async throws -> InvitationValidation {
@@ -87,7 +108,10 @@ actor InvitationCreditServiceStub: CoreInvitationCreditServing {
     }
 
     func balances(actorID: String) async throws -> CreditBalances {
-        throw InvitationCreditError.requestFailed(message: nil)
+        guard !balanceResults.isEmpty else {
+            throw InvitationCreditError.requestFailed(message: nil)
+        }
+        return try balanceResults.removeFirst().get()
     }
 
     func ledger(
