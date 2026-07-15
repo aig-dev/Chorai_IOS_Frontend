@@ -66,15 +66,18 @@ final class ArcNoteUITests: XCTestCase {
         launchCardEditorFixture(mode: "background")
 
         let content = waitFor("cardEditorContent")
-        let background = waitFor("cardEditorBodyBackground")
-        let pendingImage = waitFor("cardEditorPendingBackgroundImage")
         let tags = waitFor("cardEditorTagsRow")
-        XCTAssertGreaterThanOrEqual(background.frame.minX, content.frame.minX - 1)
-        XCTAssertLessThanOrEqual(background.frame.maxX, content.frame.maxX + 1)
-        XCTAssertGreaterThanOrEqual(background.frame.minY, content.frame.minY - 1)
-        XCTAssertLessThanOrEqual(background.frame.maxY, content.frame.maxY + 1)
-        XCTAssertEqual(pendingImage.frame, background.frame)
-        XCTAssertLessThan(background.frame.maxY, tags.frame.minY)
+        XCTAssertLessThan(content.frame.maxY, tags.frame.minY)
+        for decorativeIdentifier in [
+            "cardEditorBodyBackground",
+            "cardEditorPendingBackgroundImage",
+            "cardEditorBackgroundImage",
+        ] {
+            XCTAssertFalse(
+                app.descendants(matching: .any)[decorativeIdentifier].exists,
+                "Decorative background layers must stay out of accessibility"
+            )
+        }
         captureVisual("card-editor-background")
     }
 
@@ -942,7 +945,7 @@ final class ArcNoteUITests: XCTestCase {
         )
         XCTAssertTrue(libraryPlus.isHittable)
         libraryPlus.tap()
-        waitFor("screen.card-editor")
+        waitFor("cardEditorContent")
     }
 
     func testChoraProfileLoadedFixtureRendersOrderedProductionSections() throws {
@@ -1745,9 +1748,7 @@ final class ArcNoteUITests: XCTestCase {
 
         let signal = "iOS onboarding signal \(Int(Date().timeIntervalSince1970))"
         tap("note.create")
-        waitFor("screen.card-editor", timeout: 15)
-        waitFor("cardEditorContent", timeout: 15).tap()
-        app.typeText(signal)
+        typeInCardEditorBody(signal)
         closeNewNoteEditor()
 
         waitForOnboardingAnchor(
@@ -1802,7 +1803,7 @@ final class ArcNoteUITests: XCTestCase {
         waitForOnboardingAnchor("onboarding.state", value: "elicit_signal")
         waitFor("screen.home.content", timeout: 30)
         tap("note.create")
-        waitFor("screen.card-editor", timeout: 15)
+        waitFor("cardEditorContent", timeout: 15)
         closeNewNoteEditor()
 
         waitForOnboardingAnchor("onboarding.state", value: "elicit_signal")
@@ -1849,9 +1850,7 @@ final class ArcNoteUITests: XCTestCase {
         waitFor("note.create.guide-halo", timeout: 15)
         let signal = "iOS complete loop \(Int(Date().timeIntervalSince1970))"
         tap("note.create")
-        waitFor("screen.card-editor", timeout: 15)
-        waitFor("cardEditorContent", timeout: 15).tap()
-        app.typeText(signal)
+        typeInCardEditorBody(signal)
         closeNewNoteEditor()
         noteCardID = waitFor("note.created-card-id", timeout: 30)
             .label
@@ -3079,9 +3078,7 @@ final class ArcNoteUITests: XCTestCase {
         waitFor("note.create", timeout: 15)
         let content = "Library note \(Int(Date().timeIntervalSince1970))"
         tap("note.create")
-        waitFor("screen.card-editor", timeout: 15)
-        waitFor("cardEditorContent", timeout: 15).tap()
-        app.typeText(content)
+        typeInCardEditorBody(content)
         closeNewNoteEditor()
 
         let cardId = waitFor("note.created-card-id", timeout: 30)
@@ -3196,18 +3193,34 @@ final class ArcNoteUITests: XCTestCase {
         launchAuthenticatedApp()
         tap("tab.library")
         waitFor("card.home.\(cardID)", timeout: 30).tap()
-        waitFor("screen.card-editor", timeout: 20)
+        waitFor("cardEditorContent", timeout: 20)
 
-        let editor = waitFor("cardEditorContent", timeout: 20)
-        editor.tap()
-        app.typeText(" #editortag #editortag")
-        tap("cardEditorBackButton")
-        RunLoop.current.run(until: Date().addingTimeInterval(0.5))
-        tap("cardEditorBackButton")
+        waitForEnabledButton("cardEditorAddTag", timeout: 20).tap()
+        let addTagAlert = app.alerts["Add Tag"]
+        XCTAssertTrue(addTagAlert.waitForExistence(timeout: 10))
+        let tagInput = addTagAlert.textFields.firstMatch
+        XCTAssertTrue(tagInput.waitForExistence(timeout: 10))
+        tagInput.tap()
+        tagInput.typeText("## editortag ")
+        let add = addTagAlert.buttons["Add"].firstMatch
+        XCTAssertTrue(add.waitForExistence(timeout: 10))
+        add.tap()
+
+        waitForEnabledButton("cardEditorAddTag", timeout: 20).tap()
+        XCTAssertTrue(addTagAlert.waitForExistence(timeout: 10))
+        let duplicateInput = addTagAlert.textFields.firstMatch
+        XCTAssertTrue(duplicateInput.waitForExistence(timeout: 10))
+        duplicateInput.tap()
+        duplicateInput.typeText("#editortag")
+        XCTAssertTrue(add.waitForExistence(timeout: 10))
+        add.tap()
+
+        closeNewNoteEditor()
 
         waitForSmokeCardState(id: cardID, token: session.token) { card in
-            card.content.contains("#editortag")
+            !card.content.contains("#editortag")
                 && card.tags.filter { $0 == "editortag" }.count == 1
+                && card.contentJSON != nil
         }
         waitFor("screen.home.content", timeout: 20)
     }
@@ -3235,9 +3248,8 @@ final class ArcNoteUITests: XCTestCase {
         launchAuthenticatedApp()
         tap("tab.library")
         waitFor("card.home.\(sourceID)", timeout: 30).tap()
-        waitFor("screen.card-editor", timeout: 20)
-        waitFor("cardEditorContent", timeout: 20).tap()
-        tap("cardEditorLinkButton")
+        waitFor("cardEditorContent", timeout: 20)
+        waitForEnabledButton("cardEditorAddLink", timeout: 20).tap()
         waitFor("linkPopup", timeout: 20)
         let search = waitFor("linkPopupSearch")
         search.tap()
@@ -3247,10 +3259,196 @@ final class ArcNoteUITests: XCTestCase {
         permanentlyCleanUpSmokeCard(id: targetID, token: session.token)
         tap("linkPopupCard.\(targetID)")
 
-        XCTAssertEqual(waitFor("linkPopupError", timeout: 20).label, "链接失败")
-        XCTAssertTrue(exists("screen.card-editor", timeout: 2))
+        XCTAssertEqual(
+            waitFor("cardEditorSaveMessage", timeout: 20).label,
+            "Couldn't add that link. Retry."
+        )
+        XCTAssertEqual(waitForButton("cardEditorSave").label, "Retry")
+        XCTAssertTrue(exists("cardEditorContent", timeout: 2))
         XCTAssertFalse(exists("cardEditorLink.\(targetID)", timeout: 2))
         captureVisual("card-editor-link-failure-retained")
+    }
+
+    func testNewDirtyCardAddLinkCreatesOnceAndPersistsCanonicalRelation() throws {
+        let session = try requireSmokeSession()
+        seedAppSession(session)
+        let suffix = Int(Date().timeIntervalSince1970)
+        let targetToken = "new-editor-link-target-\(suffix)"
+        let bodyText = "New editor link source \(suffix)"
+        let targetID = try createSmokeCard(
+            token: session.token,
+            searchToken: targetToken,
+            isPublic: false
+        )
+        var createdID: String?
+        defer {
+            permanentlyCleanUpSmokeCard(id: targetID, token: session.token)
+            if let createdID {
+                permanentlyCleanUpSmokeCard(id: createdID, token: session.token)
+            }
+            if let duplicateSources = try? fetchSmokeCards(
+                search: bodyText,
+                token: session.token
+            ) {
+                for card in duplicateSources where card.content.contains(bodyText) {
+                    permanentlyCleanUpSmokeCard(id: card.id, token: session.token)
+                }
+            }
+        }
+
+        launchAuthenticatedApp()
+        tap("tab.library")
+        waitForButton("note.create", timeout: 20).tap()
+        waitFor("cardEditorContent", timeout: 20)
+        typeInCardEditorBody(bodyText)
+
+        waitForEnabledButton("cardEditorAddLink", timeout: 20).tap()
+        waitFor("linkPopup", timeout: 30)
+        let search = waitFor("linkPopupSearch")
+        search.tap()
+        search.typeText(targetToken)
+        waitFor("linkPopupCard.\(targetID)", timeout: 30).tap()
+
+        waitForMissing("linkPopup", timeout: 20)
+        waitFor("cardEditorLink.\(targetID)", timeout: 30)
+        closeNewNoteEditor()
+
+        let canonicalID = waitFor("note.created-card-id", timeout: 30)
+            .label
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        XCTAssertFalse(canonicalID.isEmpty)
+        XCTAssertNotEqual(canonicalID, targetID)
+        createdID = canonicalID
+
+        let card = try fetchSmokeCard(id: canonicalID, token: session.token)
+        XCTAssertTrue(card.content.contains(bodyText))
+        XCTAssertNotNil(card.contentJSON)
+        let matchingSources = try fetchSmokeCards(
+            search: bodyText,
+            token: session.token
+        ).filter { $0.content.contains(bodyText) }
+        XCTAssertEqual(
+            matchingSources.map(\.id),
+            [canonicalID],
+            "Add Link and Back must reuse one canonical new card"
+        )
+        let matchingEdges = try fetchSmokeCardLinks(
+            id: canonicalID,
+            token: session.token
+        ).filter {
+            $0.sourceAssetID == canonicalID && $0.targetAssetID == targetID
+        }
+        XCTAssertEqual(
+            matchingEdges.count,
+            1,
+            "The create-before-picker path must keep one canonical card and one relation"
+        )
+    }
+
+    func testNewCardCreateResponseLossRetryReusesCanonicalCard() throws {
+        let session = try requireSmokeSession()
+        seedAppSession(session)
+        let suffix = Int(Date().timeIntervalSince1970)
+        let bodyText = "New editor response loss \(suffix)"
+        var canonicalID: String?
+        defer {
+            if let matching = try? fetchSmokeCards(
+                search: bodyText,
+                token: session.token
+            ) {
+                for card in matching where card.content.contains(bodyText) {
+                    permanentlyCleanUpSmokeCard(
+                        id: card.id,
+                        token: session.token
+                    )
+                }
+            }
+        }
+
+        app.launchEnvironment[
+            "CHORAI_UI_TEST_CARD_CREATE_RESPONSE_LOSS_TOKEN"
+        ] = bodyText
+        launchAuthenticatedApp()
+        tap("tab.library")
+        waitForButton("note.create", timeout: 20).tap()
+        waitFor("cardEditorContent", timeout: 20)
+        typeInCardEditorBody(bodyText)
+
+        tapButton("cardEditorFloatingBack")
+        XCTAssertEqual(
+            waitFor("cardEditorSaveMessage", timeout: 30).label,
+            "Couldn't save this note. Retry when ready."
+        )
+        XCTAssertEqual(waitForButton("cardEditorSave").label, "Retry")
+        XCTAssertTrue(
+            exists("cardEditorContent", timeout: 2),
+            "A lost create response must keep the editor on screen"
+        )
+
+        let cardsAfterLostResponse = waitForSmokeCards(
+            search: bodyText,
+            token: session.token
+        ) { cards in
+            cards.filter { $0.content.contains(bodyText) }.count == 1
+        }.filter { $0.content.contains(bodyText) }
+        XCTAssertEqual(cardsAfterLostResponse.count, 1)
+        canonicalID = cardsAfterLostResponse.first?.id
+
+        let latestSuffix = " recovered latest \(suffix)"
+        typeInCardEditorBody(latestSuffix)
+        waitForButton("cardEditorSave").tap()
+        waitForMissing("cardEditorContent", timeout: 30)
+        let callbackID = waitFor("note.created-card-id", timeout: 30)
+            .label
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        XCTAssertEqual(callbackID, canonicalID)
+
+        let cardsAfterRetry = waitForSmokeCards(
+            search: bodyText,
+            token: session.token
+        ) { cards in
+            cards.filter { $0.content.contains(bodyText) }.count == 1
+        }.filter { $0.content.contains(bodyText) }
+        XCTAssertEqual(cardsAfterRetry.map(\.id), [callbackID])
+        let latestCard = try fetchSmokeCard(id: callbackID, token: session.token)
+        XCTAssertTrue(latestCard.content.contains(bodyText))
+        XCTAssertTrue(
+            latestCard.content.contains(latestSuffix),
+            "Retry must recover the frozen create before updating the latest draft"
+        )
+    }
+
+    func testCardEditorCardActionsExposeIDScopedNativeActions() throws {
+        let session = try requireSmokeSession()
+        seedAppSession(session)
+        let cardID = try createSmokeCard(
+            token: session.token,
+            searchToken: "editor-actions-\(Int(Date().timeIntervalSince1970))",
+            isPublic: false
+        )
+        defer {
+            permanentlyCleanUpSmokeCard(id: cardID, token: session.token)
+        }
+
+        launchAuthenticatedApp()
+        tap("tab.library")
+        waitFor("card.home.\(cardID)", timeout: 30).tap()
+        waitFor("cardEditorContent", timeout: 20)
+        _ = waitForEnabledButton("cardEditorAddTag", timeout: 20)
+        waitForButton("cardEditorMoreButton").tap()
+        let cardActions = app.buttons["Card Actions"].firstMatch
+        XCTAssertTrue(cardActions.waitForExistence(timeout: 10))
+        cardActions.tap()
+
+        for label in ["Share", "Spark", "Merge", "Root", "Pin", "Remove"] {
+            XCTAssertTrue(
+                app.buttons[label].firstMatch.waitForExistence(timeout: 20),
+                "Missing native card action: \(label)"
+            )
+        }
+        captureVisual("card-editor-native-card-actions")
+        app.buttons["Cancel"].firstMatch.tap()
+        closeNewNoteEditor()
     }
 
     func testCardEditorBackgroundUploadAndRemovalPersistToGo() throws {
@@ -3269,22 +3467,41 @@ final class ArcNoteUITests: XCTestCase {
         launchAuthenticatedApp()
         tap("tab.library")
         waitFor("card.home.\(cardID)", timeout: 30).tap()
-        waitFor("screen.card-editor", timeout: 20)
-        waitFor("cardEditorContent", timeout: 20).tap()
-        revealEditorBackgroundButton()
-        tap("cardEditorBackgroundButton")
+        waitFor("cardEditorContent", timeout: 20)
+        revealEditorBackgroundButton().tap()
         try selectFirstPhotoFromImagePicker()
+
+        waitForButton("cardEditorMoreButton", timeout: 20).tap()
+        XCTAssertTrue(
+            app.buttons["Replace Background"].firstMatch
+                .waitForExistence(timeout: 10),
+            "A selected photo must become the staged background action state"
+        )
+        XCTAssertNil(
+            try fetchSmokeCard(id: cardID, token: session.token)
+                .backgroundMediaRef,
+            "Selecting a photo must stage locally until the exact body snapshot saves"
+        )
+        captureVisual("card-editor-background-staged")
+        app.coordinate(
+            withNormalizedOffset: CGVector(dx: 0.5, dy: 0.75)
+        ).tap()
+        closeNewNoteEditor()
 
         waitForSmokeCardState(id: cardID, token: session.token) {
             !($0.backgroundMediaRef ?? "").isEmpty
         }
-        waitFor("cardEditorBackgroundImage", timeout: 20)
+        waitFor("card.home.\(cardID)", timeout: 30).tap()
+        waitFor("cardEditorContent", timeout: 20)
+        _ = waitForEnabledButton("cardEditorAddTag", timeout: 20)
+        waitForButton("cardEditorMoreButton").tap()
+        XCTAssertTrue(
+            app.buttons["Replace Background"].firstMatch
+                .waitForExistence(timeout: 10)
+        )
         captureVisual("card-editor-background-uploaded")
 
-        waitFor("cardEditorContent", timeout: 10).tap()
-        revealEditorBackgroundButton()
-        tap("cardEditorBackgroundButton")
-        let remove = app.sheets.buttons["Remove Background"].firstMatch
+        let remove = app.buttons["Remove Background"].firstMatch
         XCTAssertTrue(remove.waitForExistence(timeout: 10))
         remove.tap()
 
@@ -3878,8 +4095,8 @@ final class ArcNoteUITests: XCTestCase {
         let create = waitFor("note.create", timeout: 15)
         XCTAssertTrue(create.isHittable)
         create.tap()
-        waitFor("screen.card-editor", timeout: 15)
-        tapButton("cardEditorBackButton")
+        waitFor("cardEditorContent", timeout: 15)
+        closeNewNoteEditor()
     }
 
     func testRecommendedDetailCommentCreateAppearsInVisibleList() throws {
@@ -4327,6 +4544,32 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertTrue(
             button.waitForExistence(timeout: timeout),
             "Missing button accessibility identifier: \(identifier)",
+            file: file,
+            line: line
+        )
+        return button
+    }
+
+    private func waitForEnabledButton(
+        _ identifier: String,
+        timeout: TimeInterval = 10,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) -> XCUIElement {
+        let button = waitForButton(
+            identifier,
+            timeout: timeout,
+            file: file,
+            line: line
+        )
+        let expectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "isEnabled == true"),
+            object: button
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [expectation], timeout: timeout),
+            .completed,
+            "Button never became enabled: \(identifier)",
             file: file,
             line: line
         )
@@ -4806,15 +5049,35 @@ final class ArcNoteUITests: XCTestCase {
         _ = waitFor("explore.search.input", timeout: 10, file: file, line: line)
     }
 
+    private func typeInCardEditorBody(
+        _ text: String,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let body = waitFor(
+            "cardEditorBodyWebView",
+            timeout: 20,
+            file: file,
+            line: line
+        )
+        body.coordinate(
+            withNormalizedOffset: CGVector(dx: 0.22, dy: 0.10)
+        ).tap()
+        XCTAssertTrue(
+            app.keyboards.firstMatch.waitForExistence(timeout: 10),
+            "The body editor never accepted focus",
+            file: file,
+            line: line
+        )
+        app.typeText(text)
+    }
+
     private func closeNewNoteEditor(
         file: StaticString = #filePath,
         line: UInt = #line
     ) {
-        tapButton("cardEditorBackButton", file: file, line: line)
-        RunLoop.current.run(until: Date().addingTimeInterval(0.6))
-        if exists("screen.card-editor", timeout: 1) {
-            tapButton("cardEditorBackButton", file: file, line: line)
-        }
+        tapButton("cardEditorFloatingBack", file: file, line: line)
+        waitForMissing("cardEditorContent", timeout: 30, file: file, line: line)
     }
 
     private func showExploreSearchResult(searchToken: String, expectedCardId: String, file: StaticString = #filePath, line: UInt = #line) {
@@ -4929,26 +5192,32 @@ final class ArcNoteUITests: XCTestCase {
     private func revealEditorBackgroundButton(
         file: StaticString = #filePath,
         line: UInt = #line
-    ) {
-        let button = app.descendants(matching: .any)[
-            "cardEditorBackgroundButton"
-        ]
-        for _ in 0..<4 where !button.isHittable {
-            let start = app.coordinate(
-                withNormalizedOffset: CGVector(dx: 0.84, dy: 0.55)
-            )
-            let end = app.coordinate(
-                withNormalizedOffset: CGVector(dx: 0.18, dy: 0.55)
-            )
-            start.press(forDuration: 0.05, thenDragTo: end)
-            RunLoop.current.run(until: Date().addingTimeInterval(0.25))
-        }
-        XCTAssertTrue(
-            button.isHittable,
-            "Background control was not reachable in the editor toolbar",
+    ) -> XCUIElement {
+        _ = waitForEnabledButton(
+            "cardEditorAddTag",
+            timeout: 20,
             file: file,
             line: line
         )
+        waitForButton("cardEditorMoreButton", file: file, line: line).tap()
+        let identifiedButton = app.descendants(matching: .any)[
+            "cardEditorBackgroundButton"
+        ]
+        if identifiedButton.waitForExistence(timeout: 2),
+           identifiedButton.isHittable {
+            return identifiedButton
+        }
+        let labelButton = ["Add Background", "Replace Background"]
+            .lazy
+            .map { self.app.buttons[$0].firstMatch }
+            .first { $0.waitForExistence(timeout: 3) && $0.isHittable }
+        XCTAssertTrue(
+            labelButton != nil,
+            "Background control was not reachable in the editor More menu",
+            file: file,
+            line: line
+        )
+        return labelButton ?? identifiedButton
     }
 
     private func tapEditProfileSave(file: StaticString = #filePath, line: UInt = #line) {
@@ -5170,19 +5439,40 @@ final class ArcNoteUITests: XCTestCase {
             if firstCell.exists && firstCell.isHittable {
                 firstCell.tap()
                 tapImagePickerConfirmationIfNeeded()
-                return
+                if waitForImagePickerToDismiss(timeout: 3) {
+                    return
+                }
             }
 
             if isSystemImagePickerVisible() {
-                app.coordinate(withNormalizedOffset: CGVector(dx: 0.17, dy: 0.42)).tap()
-                tapImagePickerConfirmationIfNeeded()
-                return
+                for offset in [
+                    CGVector(dx: 0.18, dy: 0.32),
+                    CGVector(dx: 0.50, dy: 0.32),
+                    CGVector(dx: 0.18, dy: 0.48),
+                ] {
+                    app.coordinate(withNormalizedOffset: offset).tap()
+                    tapImagePickerConfirmationIfNeeded()
+                    if waitForImagePickerToDismiss(timeout: 2) {
+                        return
+                    }
+                }
             }
 
             RunLoop.current.run(until: Date().addingTimeInterval(0.4))
         }
 
-        throw XCTSkip("No selectable image was found in the simulator photo library; preload media before running avatar picker smoke")
+        throw XCTSkip("No selectable image was found in the simulator photo library; preload media before running photo-picker smoke")
+    }
+
+    private func waitForImagePickerToDismiss(timeout: TimeInterval) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if !isSystemImagePickerVisible() {
+                return true
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+        }
+        return !isSystemImagePickerVisible()
     }
 
     private func isSystemImagePickerVisible() -> Bool {
@@ -5206,12 +5496,17 @@ final class ArcNoteUITests: XCTestCase {
             "完成"
         ]
 
-        for title in confirmationTitles {
-            let button = app.buttons[title]
-            if button.waitForExistence(timeout: 1) && button.isHittable {
-                button.tap()
-                return
+        let deadline = Date().addingTimeInterval(2)
+        while Date() < deadline {
+            for title in confirmationTitles {
+                let button = app.buttons[title]
+                if button.exists && button.isHittable {
+                    button.tap()
+                    return
+                }
             }
+            if !isSystemImagePickerVisible() { return }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.2))
         }
     }
 
@@ -5251,6 +5546,7 @@ final class ArcNoteUITests: XCTestCase {
             let id: String
             let title: String?
             let content: String
+            let contentJSON: String?
             let isPublic: Bool
             let isPinned: Bool
             let tags: [String]
@@ -5258,10 +5554,42 @@ final class ArcNoteUITests: XCTestCase {
 
             enum CodingKeys: String, CodingKey {
                 case id, title, content, tags
+                case contentJSON = "content_json"
                 case isPublic = "is_public"
                 case isPinned = "is_pinned"
                 case backgroundMediaRef = "background_media_ref"
             }
+        }
+    }
+
+    private struct SmokeCardLinksResponse: Decodable {
+        let data: SmokeCardLinksData
+
+        struct SmokeCardLinksData: Decodable {
+            let outgoingLinks: [SmokeCardLinkEdge]
+
+            enum CodingKeys: String, CodingKey {
+                case outgoingLinks = "outgoing_links"
+            }
+        }
+
+        struct SmokeCardLinkEdge: Decodable {
+            let sourceAssetID: String
+            let targetAssetID: String
+
+            enum CodingKeys: String, CodingKey {
+                case sourceAssetID = "source_asset_id"
+                case targetAssetID = "target_asset_id"
+            }
+        }
+    }
+
+    private struct SmokeCardListResponse: Decodable {
+        let data: [SmokeCardListItem]
+
+        struct SmokeCardListItem: Decodable {
+            let id: String
+            let content: String
         }
     }
 
@@ -6096,6 +6424,91 @@ final class ArcNoteUITests: XCTestCase {
         var request = URLRequest(url: url)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         return try sendRequest(request, responseType: SmokeCardResponse.self).data
+    }
+
+    private func fetchSmokeCards(
+        search: String,
+        token: String
+    ) throws -> [SmokeCardListResponse.SmokeCardListItem] {
+        let baseURL = ProcessInfo.processInfo.environment[
+            "CHORAI_API_BASE_URL"
+        ] ?? "http://127.0.0.1:8080"
+        guard var components = URLComponents(string: "\(baseURL)/api/cards") else {
+            throw NSError(
+                domain: "ArcNoteUITests",
+                code: 16,
+                userInfo: [NSLocalizedDescriptionKey: "Invalid Go card list URL"]
+            )
+        }
+        components.queryItems = [
+            URLQueryItem(name: "page", value: "1"),
+            URLQueryItem(name: "per_page", value: "100"),
+            URLQueryItem(name: "search", value: search),
+        ]
+        guard let url = components.url else {
+            throw NSError(
+                domain: "ArcNoteUITests",
+                code: 17,
+                userInfo: [NSLocalizedDescriptionKey: "Invalid Go card list query"]
+            )
+        }
+
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        return try sendRequest(
+            request,
+            responseType: SmokeCardListResponse.self
+        ).data
+    }
+
+    private func waitForSmokeCards(
+        search: String,
+        token: String,
+        timeout: TimeInterval = 20,
+        predicate: ([SmokeCardListResponse.SmokeCardListItem]) -> Bool,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) -> [SmokeCardListResponse.SmokeCardListItem] {
+        let deadline = Date().addingTimeInterval(timeout)
+        var last: [SmokeCardListResponse.SmokeCardListItem] = []
+        while Date() < deadline {
+            if let cards = try? fetchSmokeCards(search: search, token: token) {
+                last = cards
+                if predicate(cards) {
+                    return cards
+                }
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+        }
+        XCTFail(
+            "Go card list did not converge for search \(search)",
+            file: file,
+            line: line
+        )
+        return last
+    }
+
+    private func fetchSmokeCardLinks(
+        id: String,
+        token: String
+    ) throws -> [SmokeCardLinksResponse.SmokeCardLinkEdge] {
+        let baseURL = ProcessInfo.processInfo.environment[
+            "CHORAI_API_BASE_URL"
+        ] ?? "http://127.0.0.1:8080"
+        guard let url = URL(string: "\(baseURL)/api/cards/\(id)/links") else {
+            throw NSError(
+                domain: "ArcNoteUITests",
+                code: 15,
+                userInfo: [NSLocalizedDescriptionKey: "Invalid Go card links URL"]
+            )
+        }
+
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        return try sendRequest(
+            request,
+            responseType: SmokeCardLinksResponse.self
+        ).data.outgoingLinks
     }
 
     private func fetchSmokeSharePreview(

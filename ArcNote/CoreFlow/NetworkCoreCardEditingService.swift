@@ -2,6 +2,31 @@ import Combine
 import CoreFlow
 import Foundation
 
+#if DEBUG
+private actor CardEditingCreateResponseLossFault {
+    static let shared = CardEditingCreateResponseLossFault()
+
+    private var consumedRequestIDs = Set<String>()
+
+    func shouldLoseResponse(
+        draft: CardEditingDraft,
+        createRequestID: String
+    ) -> Bool {
+        let environment = ProcessInfo.processInfo.environment
+        guard environment["CHORAI_UI_TEST"] == "1",
+              let token = environment[
+                  "CHORAI_UI_TEST_CARD_CREATE_RESPONSE_LOSS_TOKEN"
+              ]?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !token.isEmpty,
+              draft.content.contains(token),
+              consumedRequestIDs.insert(createRequestID).inserted else {
+            return false
+        }
+        return true
+    }
+}
+#endif
+
 struct NetworkCoreCardEditingService: CoreCardEditingServing, @unchecked Sendable {
     private let network: NetworkManager
 
@@ -30,6 +55,16 @@ struct NetworkCoreCardEditingService: CoreCardEditingServing, @unchecked Sendabl
             guard response.success else {
                 throw CardEditingError.transport(code: "card_create_rejected")
             }
+#if DEBUG
+            if await CardEditingCreateResponseLossFault.shared.shouldLoseResponse(
+                draft: draft,
+                createRequestID: createRequestID
+            ) {
+                throw CardEditingError.transport(
+                    code: "ui_test_card_create_response_lost"
+                )
+            }
+#endif
             return snapshot(from: response.data)
         } catch {
             throw Self.mapError(error)

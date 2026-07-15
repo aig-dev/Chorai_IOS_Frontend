@@ -57,8 +57,6 @@
 		1B055F4E2E4E08EF00896B01 /* ChatDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B055F4D2E4E08EE00896B01 /* ChatDetailView.swift */; };
 		1B055F502E4EFC9000896B01 /* NotificationDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B055F4F2E4EFC9000896B01 /* NotificationDetailView.swift */; };
 		1B055F552E4F178400896B01 /* LinkPopupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B055F542E4F178400896B01 /* LinkPopupView.swift */; };
-		1B1240302F3C95DD00B53098 /* MarkupEditor in Frameworks */ = {isa = PBXBuildFile; productRef = 1B12402F2F3C95DD00B53098 /* MarkupEditor */; };
-		1B1240332F3C960D00B53098 /* MarkupEditor in Frameworks */ = {isa = PBXBuildFile; productRef = 1B1240322F3C960D00B53098 /* MarkupEditor */; };
 		1B21AA9C2E85A32B00C1E5AD /* FollowModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B21AA9B2E85A32B00C1E5AD /* FollowModels.swift */; };
 		1B21AA9E2E86913D00C1E5AD /* AppleLoginModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B21AA9D2E86913D00C1E5AD /* AppleLoginModels.swift */; };
 		1B331DC62E79A7C900876A32 /* CommentModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B331DC52E79A7C900876A32 /* CommentModels.swift */; };
@@ -117,8 +115,6 @@
 		1BEC65D22E97654100075403 /* NotificationViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1BEC65D12E97654100075403 /* NotificationViewModel.swift */; };
 		1BEC65D42E97937400075403 /* WebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1BEC65D32E97937400075403 /* WebView.swift */; };
 		1BEC65D62E97B3CB00075403 /* UserAllCardsModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1BEC65D52E97B3CB00075403 /* UserAllCardsModels.swift */; };
-		1BEC65DC2E9E6DFC00075403 /* MarkupEditor in Frameworks */ = {isa = PBXBuildFile; productRef = 1BEC65DB2E9E6DFC00075403 /* MarkupEditor */; };
-		1BEC65DE2E9E6E6000075403 /* MarkupEditor in Frameworks */ = {isa = PBXBuildFile; productRef = 1BEC65DD2E9E6E6000075403 /* MarkupEditor */; };
 		1BF373172E30D07900255F41 /* SignUpView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1BF373162E30D07900255F41 /* SignUpView.swift */; };
 		1BF373192E30D5E100255F41 /* SignInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1BF373182E30D5E100255F41 /* SignInView.swift */; };
 		1BF3731B2E30DA7A00255F41 /* ChooseInterestsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1BF3731A2E30DA7A00255F41 /* ChooseInterestsView.swift */; };
@@ -256,13 +252,9 @@
 				C0DEF1002F60000100000001 /* CoreFlow in Frameworks */,
 				C0DEF2002F70000100000001 /* BlockNoteEditor in Frameworks */,
 				1B846EF42E84F19100A7E621 /* GoogleSignInSwift in Frameworks */,
-				1B1240302F3C95DD00B53098 /* MarkupEditor in Frameworks */,
-				1BEC65DC2E9E6DFC00075403 /* MarkupEditor in Frameworks */,
-				1B1240332F3C960D00B53098 /* MarkupEditor in Frameworks */,
 				1B6E6FBE2E6ABB6E006898F5 /* SwiftyJSON in Frameworks */,
 				1B846EF22E84F19100A7E621 /* GoogleSignIn in Frameworks */,
 				1B6E6FBB2E6ABA88006898F5 /* Alamofire in Frameworks */,
-				1BEC65DE2E9E6E6000075403 /* MarkupEditor in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -471,10 +463,6 @@
 				1B6E6FBD2E6ABB6E006898F5 /* SwiftyJSON */,
 				1B846EF12E84F19100A7E621 /* GoogleSignIn */,
 				1B846EF32E84F19100A7E621 /* GoogleSignInSwift */,
-				1BEC65DB2E9E6DFC00075403 /* MarkupEditor */,
-				1BEC65DD2E9E6E6000075403 /* MarkupEditor */,
-				1B12402F2F3C95DD00B53098 /* MarkupEditor */,
-				1B1240322F3C960D00B53098 /* MarkupEditor */,
 			);
 			productName = ArcNote;
 			productReference = 1B48AE312E30967F0090CF86 /* ArcNote.app */;
@@ -534,7 +522,6 @@
 				1B6E6FB92E6ABA88006898F5 /* XCRemoteSwiftPackageReference "Alamofire" */,
 				1B6E6FBC2E6ABB6E006898F5 /* XCRemoteSwiftPackageReference "SwiftyJSON" */,
 				1B846EF02E84F19100A7E621 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
-				1B1240312F3C960D00B53098 /* XCLocalSwiftPackageReference "Packages/MarkdownEditor" */,
 			);
 			productRefGroup = 1B48AE322E30967F0090CF86 /* Products */;
 			projectDirPath = "";
@@ -971,10 +958,6 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/BlockNoteEditor;
 		};
-		1B1240312F3C960D00B53098 /* XCLocalSwiftPackageReference "Packages/MarkdownEditor" */ = {
-			isa = XCLocalSwiftPackageReference;
-			relativePath = Packages/MarkdownEditor;
-		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCRemoteSwiftPackageReference section */
@@ -1013,14 +996,6 @@
 			isa = XCSwiftPackageProductDependency;
 			productName = BlockNoteEditor;
 		};
-		1B12402F2F3C95DD00B53098 /* MarkupEditor */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = MarkupEditor;
-		};
-		1B1240322F3C960D00B53098 /* MarkupEditor */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = MarkupEditor;
-		};
 		1B6E6FBA2E6ABA88006898F5 /* Alamofire */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 1B6E6FB92E6ABA88006898F5 /* XCRemoteSwiftPackageReference "Alamofire" */;
@@ -1040,14 +1015,6 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 1B846EF02E84F19100A7E621 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
 			productName = GoogleSignInSwift;
-		};
-		1BEC65DB2E9E6DFC00075403 /* MarkupEditor */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = MarkupEditor;
-		};
-		1BEC65DD2E9E6E6000075403 /* MarkupEditor */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = MarkupEditor;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

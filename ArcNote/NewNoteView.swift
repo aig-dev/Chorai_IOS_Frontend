@@ -1,67 +1,62 @@
-import SwiftUI
-import MarkupEditor
+import BlockNoteEditor
 import Combine
 import CoreFlow
+import Foundation
 import PhotosUI
-import UIKit
+import SwiftUI
 import UniformTypeIdentifiers
 
-// MARK: 关联笔记数据模型
-struct RelatedNote: Identifiable {
-    let id = UUID()
-    let avatar: String
-    let title: String
-    let description: String
+private struct CardEditorSeed: Identifiable {
+    let id: UUID
+    let document: BlockNoteInitialDocument
+    let revision: Int
+    let isNew: Bool
+    let initialFocus: Bool
+    let initialIsPublic: Bool
+    let isPinned: Bool
+
+    static func newNote() -> CardEditorSeed {
+        CardEditorSeed(
+            id: UUID(),
+            document: BlockNoteInitialDocument(
+                contentJSON: nil,
+                fallbackMarkdown: ""
+            ),
+            revision: 0,
+            isNew: true,
+            initialFocus: true,
+            initialIsPublic: false,
+            isPinned: false
+        )
+    }
 }
 
-struct NewNoteView: View, MarkupDelegate {
+struct NewNoteView: View {
     @Environment(\.dismiss) private var dismiss
-    @State private var noteText = ""
-    @State private var noteHtml = ""
-    @State private var isKeyboardVisible = false
-    @State private var defaultTags: [String] = [] // 默认标签（从服务器加载）
-    @State private var matchedTags: [String] = [] // 匹配标签（从文本中提取）
-    
-    // 计算属性：合并显示的标签列表
-    private var displayedTags: [String] {
-        return (defaultTags + matchedTags).removingDuplicates()
-    }
-    @State private var isRelatedNotesExpanded = true
-    @State private var isPublishing = false
-    @State private var showPublishAlert = false
-    @State private var publishMessage = ""
-    @State private var isPublic = false
-    @State private var showPopupMenu = false
-    @State private var currentNoteId: String? = nil
-    @State private var isLoadingNote = false
-    @State private var relatedNotes: [CardLinkItem] = []
-    @State private var isLoadingLinks = false
-    @State private var navigateToDetail = false
-    @State private var navigateToEdit = false
-    @State private var selectedCardId: String? = nil
-    @State private var showDeleteConfirmation = false
-    @State private var noteToDelete: CardLinkItem? = nil
-    @State private var animateDeleteConfirmation = false
-    @State private var updatedAt: String? = nil
-    @State private var isPinned: Bool = false
-    @State private var editingFailureMessage: String?
-    @State private var showBackgroundPicker = false
-    @State private var showBackgroundActions = false
-    @State private var selectedBackgroundPhoto: PhotosPickerItem?
-    @StateObject private var editingStore: CardEditingStore
-    
+
     let cardId: String
     let onCreated: (String, String) -> Void
-    
+
+    @StateObject private var editingStore: CardEditingStore
+    @State private var editorSeed: CardEditorSeed?
+    @State private var loadErrorMessage: String?
+    @State private var isLoading = false
+    @State private var didStartLoading = false
+    @State private var cancellables = Set<AnyCancellable>()
+
+    private let networkManager = NetworkManager.shared
+
     init(
         cardId: String = "",
         onCreated: @escaping (String, String) -> Void = { _, _ in }
     ) {
         self.cardId = cardId
         self.onCreated = onCreated
+
+        let isNew = cardId.isEmpty
         _editingStore = StateObject(
             wrappedValue: CardEditingStore(
-                cardID: cardId.isEmpty ? nil : cardId,
+                cardID: isNew ? nil : cardId,
                 draft: CardEditingDraft(
                     title: nil,
                     content: "",
@@ -73,867 +68,325 @@ struct NewNoteView: View, MarkupDelegate {
                 service: NetworkCoreCardEditingService()
             )
         )
+        _editorSeed = State(initialValue: isNew ? .newNote() : nil)
     }
-    
-    private let networkManager = NetworkManager.shared
-    private let authManager = AuthManager.shared
-    @State private var cancellables = Set<AnyCancellable>()
-    
-    private let markupConfiguration: MarkupWKWebViewConfiguration = {
-        let config = MarkupWKWebViewConfiguration()
-        // 配置MarkupEditor的外观和行为
-//        config.markupToolbarStyle = .compact
-//        config.markupColorPalette = MarkupColorPalette()
-//        config.markupMenuBar = false // 隐藏默认菜单栏
-//        config.markupToolbar = false // 隐藏默认工具栏
-        
-        return config
-    }()
-    
-    var body: some View {
-        mainContentView
-            .background(backgroundView)
-            .navigationBarHidden(true)
-            .gesture(swipeGesture)
-            .onAppear(perform: onAppearAction)
-            .onDisappear(perform: onDisappearAction)
-            .onChange(of: editingStore.phase, perform: handleEditingPhase)
-            .onChange(
-                of: selectedBackgroundPhoto,
-                perform: handleSelectedBackgroundPhoto
-            )
-            .photosPicker(
-                isPresented: $showBackgroundPicker,
-                selection: $selectedBackgroundPhoto,
-                matching: .images
-            )
-            .confirmationDialog(
-                "Card background",
-                isPresented: $showBackgroundActions,
-                titleVisibility: .visible
-            ) {
-                Button("Choose Photo") {
-                    showBackgroundPicker = true
-                }
-                Button("Remove Background", role: .destructive) {
-                    editingFailureMessage = nil
-                    Task {
-                        _ = await editingStore.removeBackground()
-                    }
-                }
-                Button("Cancel", role: .cancel) {}
-            }
-            .linkPopup()
-            .popupMenu(isPresented: $showPopupMenu, layout: .grid3x3, cardData: createTempUserCard(), isOwnCard: true)
-            .navigationDestination(isPresented: $navigateToDetail) {
-                DetailView(cardId: selectedCardId ?? "")
-            }
-            .navigationDestination(isPresented: $navigateToEdit) {
-                NewNoteView(cardId: selectedCardId ?? "")
-            }
-            .alert("Publish Result", isPresented: $showPublishAlert) {
-                Button("OK") {
-                    if publishMessage.contains("success") || publishMessage.contains("Success") {
-                        dismiss()
-                    }
-                }
-            } message: {
-                Text(publishMessage)
-            }
-            .overlay(deleteConfirmationOverlay)
-            .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ToggleCardPin"))) { notification in
-                handleToggleCardPin(notification: notification)
-            }
-            .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NavigateToEdit"))) { notification in
-                if let cardId = notification.userInfo?["cardId"] as? String {
-                    selectedCardId = cardId
-                    DispatchQueue.main.async {
-                        navigateToEdit = true
-                    }
-                }
-            }
-    }
-    
-    // MARK: 子视图组件
-    
-    private var mainContentView: some View {
-        VStack(spacing: 0) {
-            // 顶部导航栏
-            topNavigationBar
-            
-            // 文本输入区域
-            textInputArea
-            
-            // 编辑模式状态信息（仅在编辑模式下显示）
-            if !cardId.isEmpty {
-                editModeStatusInfo
-            }
-            
-            // 标签显示区域
-            tagsSection
-            
-            // 关联笔记区域
-            relatedNotesSection
-            
-            Spacer()
-            
-            // 格式化工具栏
-            if let editingFailureMessage {
-                Text(editingFailureMessage)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(.white.opacity(0.82))
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 8)
-                    .accessibilityIdentifier("cardEditorError")
-            }
 
-            formatToolbar
-        }
-        .overlay(alignment: .topLeading) {
-            Text("Card editor")
-                .font(.system(size: 1))
-                .foregroundColor(.white.opacity(0.01))
-                .frame(width: 1, height: 1)
-                .accessibilityIdentifier("screen.card-editor")
-        }
-    }
-    
-    @ViewBuilder private var backgroundView: some View {
-        if let pendingBackground = editingStore.pendingBackground,
-           let image = UIImage(data: pendingBackground.data) {
-            Image(uiImage: image)
-                .resizable()
-                .aspectRatio(contentMode: .fill)
-                .accessibilityIdentifier("cardEditorPendingBackgroundImage")
-                .overlay(Color.black.opacity(0.38))
-                .ignoresSafeArea(.all)
-        } else if let mediaRef = editingStore.backgroundMediaRef,
-           let url = URL(
-               string: APIConfiguration.resourceURLString(mediaRef)
-           ) {
-            AsyncImage(url: url) { phase in
-                if let image = phase.image {
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .accessibilityIdentifier("cardEditorBackgroundImage")
-                } else {
-                    Image("home_bg")
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                }
-            }
-            .overlay(Color.black.opacity(0.38))
-            .ignoresSafeArea(.all)
-        } else {
-            Image("home_bg")
-                .resizable()
-                .aspectRatio(contentMode: .fill)
-                .ignoresSafeArea(.all)
-        }
-    }
-    
-    private var swipeGesture: some Gesture {
-        DragGesture()
-            .onEnded { value in
-                // 侧滑返回手势
-                if value.translation.width > 100 && abs(value.translation.height) < 50 {
-                    closeEditor()
-                }
-            }
-    }
-    
-    private func onAppearAction() {
-        // MarkupEditor初始化
-        print("MarkupEditor initialized")
-        
-        // 设置LinkPopupManager的回调
-        LinkPopupManager.shared.onCardSelected = { [self] selectedItem in
-            print("选择卡片: \(selectedItem.title)")
-            
-            // 将选中的卡片添加到关联笔记中
-            let sourceAssetId = editingStore.cardID
-                ?? (!cardId.isEmpty ? cardId : (currentNoteId ?? ""))
-            let newCardLinkItem = CardLinkItem(
-                linkId: selectedItem.id,
-                sourceAssetId: sourceAssetId,
-                targetAssetId: selectedItem.id,
-                linkedCardId: selectedItem.id,
-                title: selectedItem.title,
-                content: selectedItem.description,
-                createdAt: ISO8601DateFormatter().string(from: Date()),
-                author: CardLinkAuthor(
-                    id: selectedItem.authorId ?? "",
-                    userName: selectedItem.username,
-                    avatar: selectedItem.avatar
+    var body: some View {
+        Group {
+            if let seed = editorSeed {
+                CardEditorSessionView(
+                    seed: seed,
+                    editingStore: editingStore,
+                    onCreated: onCreated
                 )
-            )
-            
-            // 检查是否已存在相同的卡片，避免重复添加
-            if !relatedNotes.contains(where: { $0.linkedCardId == selectedItem.id }) {
-                relatedNotes.append(newCardLinkItem)
-                synchronizeEditingLinks()
-                print("已添加关联笔记: \(selectedItem.title)")
+                .id(seed.id)
             } else {
-                print("关联笔记已存在: \(selectedItem.title)")
-            }
-        }
-        
-        // 加载笔记详情和关联笔记
-        if !cardId.isEmpty {
-            loadNoteDetail()
-            loadRelatedNotes()
-        }
-    }
-    
-    private func onDisappearAction() {
-        MarkupEditor.selectedWebView = nil
-        LinkPopupManager.shared.onCardSelected = nil
-        if cardId.isEmpty {
-            autoSaveNote()
-        }
-    }
-    
-    private var deleteConfirmationOverlay: some View {
-        Group {
-            if showDeleteConfirmation {
-                ZStack {
-                    // 背景遮罩 带渐变动画
-                    Color.black
-                        .opacity(animateDeleteConfirmation ? 0.5 : 0)
-                        .ignoresSafeArea()
-                        .onTapGesture {
-                            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                                animateDeleteConfirmation = false
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                                    showDeleteConfirmation = false
-                                    noteToDelete = nil
-                                }
-                            }
-                        }
-                    
-                    // 对话框 带渐变动画
-                    VStack(spacing: 20) {
-                        // 关闭按钮
-            HStack {
-                            Spacer()
-                Button(action: {
-                                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                                    animateDeleteConfirmation = false
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                                        showDeleteConfirmation = false
-                                        noteToDelete = nil
-                                    }
-                                }
-                            }) {
-                                Image(systemName: "xmark")
-                                    .font(.title2)
-                                    .foregroundColor(.white)
-                            }
-                        }
-                        
-                        // 确认文本
-                        Text("Confirm unlink this note?")
-                            .font(.system(size: 18, weight: .medium))
-                            .foregroundColor(.white)
-                            .multilineTextAlignment(.center)
-                        
-                        // 按钮
-                        HStack(spacing: 16) {
-                            // 取消按钮
-                            Button(action: {
-                                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                                    animateDeleteConfirmation = false
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                                        showDeleteConfirmation = false
-                                        noteToDelete = nil
-                                    }
-                                }
-                            }) {
-                                HStack(spacing: 8) {
-                                    Image(systemName: "xmark")
-                                        .font(.system(size: 16, weight: .medium))
-                                    Text("Cancel")
-                                        .font(.system(size: 16, weight: .medium))
-                                }
-                                .foregroundColor(.white)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 12)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 20)
-                                        .fill(Color.gray.opacity(0.3))
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 20)
-                                                .stroke(Color.white.opacity(0.3), lineWidth: 1)
-                                        )
-                                )
-                            }
-                            
-                            // 确认删除按钮
-                            Button(action: {
-                                if let note = noteToDelete {
-                                    deleteRelatedNote(note)
-                                }
-                                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                                    animateDeleteConfirmation = false
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                                        showDeleteConfirmation = false
-                                        noteToDelete = nil
-                                    }
-                                }
-                            }) {
-                                HStack(spacing: 8) {
-                                    Image(systemName: "checkmark")
-                                        .font(.system(size: 16, weight: .medium))
-                                    Text("Yes")
-                                        .font(.system(size: 16, weight: .medium))
-                                }
-                                .foregroundColor(.white)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 12)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 20)
-                                        .fill(Color.red)
-                                )
-                            }
-                        }
-                    }
-                    .padding(24)
-                    .background(
-                        RoundedRectangle(cornerRadius: 16)
-                            .fill(.ultraThinMaterial.opacity(0.5))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 16)
-                                    .stroke(Color.white.opacity(0.6), lineWidth: 1)
-                            )
-                    )
-                    .padding(.horizontal, 20)
-                    .opacity(animateDeleteConfirmation ? 1 : 0)
-                    .scaleEffect(animateDeleteConfirmation ? 1 : 0.8)
-                }
-                .onAppear {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                        animateDeleteConfirmation = true
-                    }
-                }
-            }
-        }
-    }
-    
-    private var topNavigationBar: some View {
-            HStack {
-                Button(action: {
-                    if isKeyboardVisible {
-                        // 键盘显示时，关闭键盘
-                        // 尝试多种方式关闭键盘
-                        if let webView = MarkupEditor.selectedWebView {
-                            // 通过 JavaScript 让编辑器失去焦点
-                            webView.evaluateJavaScript("""
-                                if (document.activeElement) {
-                                    document.activeElement.blur();
-                                }
-                                if (document.body) {
-                                    document.body.focus();
-                                }
-                                """) { _, _ in }
-                            webView.resignFirstResponder()
-                        }
-                        if let webView = MarkupEditor.observedWebView.selectedWebView {
-                            // 通过 JavaScript 让编辑器失去焦点
-                            webView.evaluateJavaScript("""
-                                if (document.activeElement) {
-                                    document.activeElement.blur();
-                                }
-                                if (document.body) {
-                                    document.body.focus();
-                                }
-                                """) { _, _ in }
-                            webView.resignFirstResponder()
-                        }
-                        // 全局关闭键盘
-                        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-                           let window = windowScene.windows.first {
-                            window.endEditing(false)
-                        }
-                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-                        // 更新状态
-                        DispatchQueue.main.async {
-                            self.isKeyboardVisible = false
-                        }
-                    } else {
-                        // 键盘隐藏时，返回上一页
-                        closeEditor()
-                    }
-                }) {
-                    Image(systemName: isKeyboardVisible ? "checkmark" : "chevron.left")
-                        .font(.title2)
-                        .foregroundColor(.white)
-                }
-                .disabled(isEditingBusy)
-                .accessibilityIdentifier("cardEditorBackButton")
-                
-                Spacer()
-                
-                // 隐私按钮
-                Button(action: {
-                toggleVisibility()
-                }) {
-                    Image(isPublic ? "public_icon" : "private_icon")
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(width: 24, height: 24)
-                }
-                
-                // 菜单按钮
-                Button(action: {
-                    handleMenuButtonTap()
-                }) {
-                    if isPublishing || isEditingBusy {
-                        ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                            .scaleEffect(0.8)
-                    } else {
-                        Image(systemName: "ellipsis")
-                            .font(.title2)
-                            .foregroundColor(.white)
-                    }
-                }
-                .disabled(isPublishing || isEditingBusy)
-            }
-            .padding(.horizontal, 20)
-            .padding(.top, 10)
-            .padding(.bottom, 20)
-    }
-            
-    private var textInputArea: some View {
-            VStack(alignment: .leading, spacing: 16) {
-                if isLoadingNote {
-                    // 加载状态
-                    VStack {
-                        Spacer()
-                        ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                            .scaleEffect(1.2)
-                        Text("Loading note content...")
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundColor(.white.opacity(0.7))
-                            .padding(.top, 10)
-                        Spacer()
-                    }
-                } else {
-                    MarkupEditorView(markupDelegate: self, configuration: markupConfiguration, html: $noteText, placeholder: "")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .padding(.horizontal, 20)
-                        .accessibilityIdentifier("cardEditorContent")
-                        .onTapGesture {
-                            // 确保键盘显示
-                            isKeyboardVisible = true
-                        }
-                        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
-                            isKeyboardVisible = true
-                        }
-                        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
-                            isKeyboardVisible = false
-                    }
-                        }
-                }
-            }
-            
-    private var editModeStatusInfo: some View {
-        HStack(spacing: 8) {
-            // 显示更新时间
-            if let updatedAt = updatedAt {
-                Text(formatDate(updatedAt))
-                    .font(.system(size: 14, weight: .regular))
-                    .foregroundColor(.white.opacity(0.7))
-            }
-            // 只有当卡片是公开状态时才显示open图标
-            if isPublic {
-                Image("open")
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: 18, height: 18)
-            }
-            // 只有当卡片是置顶状态时才显示pin图标
-            if isPinned {
-                Image("pin")
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: 18, height: 18)
-            }
-            
-            Spacer()
-        }
-        .padding(.horizontal, 20)
-        .padding(.bottom, 8)
-    }
-    
-    private var tagsSection: some View {
-        Group {
-            if !displayedTags.isEmpty {
-                VStack(alignment: .leading, spacing: 12) {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                            ForEach(displayedTags, id: \.self) { tag in
-                            EditTagView(tag: tag) {
-                                removeTag(tag)
-                            }
-                        }
-                        }
-                        .padding(.horizontal, 1) // 添加一点内边距，避免标签贴边
-                    }
-                }
-                .padding(.horizontal, 20)
-            }
-        }
-    }
-    
-    private var relatedNotesSection: some View {
-        Group {
-            if !relatedNotes.isEmpty {
-                VStack(spacing: 0) {
-                    // 展开/收起按钮
-                    HStack {
-                        Spacer()
-                        
-                        Button(action: {
-                            withAnimation(.easeInOut(duration: 0.3)) {
-                                isRelatedNotesExpanded.toggle()
-                            }
-                        }) {
-                            Image(systemName: isRelatedNotesExpanded ? "chevron.up" : "chevron.down")
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundColor(.white.opacity(0.8))
-                                .frame(width: 24, height: 24)
-                        }
-                    }
-                    .padding(.horizontal, 16)
-                    // .padding(.vertical, 8)
-                    
-                    // 笔记列表 固定高度，超出滚动
-                    if isRelatedNotesExpanded {
-                        ScrollView {
-                            VStack(spacing: 0) {
-                                ForEach(Array(relatedNotes.enumerated()), id: \.element.id) { index, note in
-                                    relatedNoteItem(note: note, index: index)
-                                }
-                            }
-                        }
-                        .frame(height: 200) // 固定高度 200
-                        .transition(.opacity.combined(with: .move(edge: .bottom)))
-                    }
-                }
-            .padding(.horizontal, 20)
-            .padding(.top, 16)
-            }
-        }
-    }
-    
-    private func relatedNoteItem(note: CardLinkItem, index: Int) -> some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 12) {
-                Image("avatar")
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .frame(width: 40, height: 40)
-                    .clipShape(Circle())
-                
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(note.author?.userName ?? note.title ?? "Related note")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(.white)
-                    
-                    HTMLTextRenderer(htmlContent: note.content ?? "", maxLines: 2)
-                        .font(.system(size: 14, weight: .regular))
-                        .foregroundColor(.white.opacity(0.7))
-                }
-            
-            Spacer()
-            
-                if note.sourceAssetId.isEmpty
-                    || note.sourceAssetId == (currentNoteId ?? cardId) {
-                    Button(action: {
-                        noteToDelete = note
-                        showDeleteConfirmation = true
-                    }) {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundColor(.white.opacity(0.8))
-                            .frame(width: 24, height: 24)
-                    }
-                    .buttonStyle(PlainButtonStyle())
-                }
-            }
-            .padding(.vertical, 16)
-            .contentShape(Rectangle())
-            .onTapGesture {
-                handleRelatedNoteTap(note: note)
-            }
-            
-            // 分割线（除了最后一个）
-            if index < relatedNotes.count - 1 {
-                Rectangle()
-                    .fill(Color.white.opacity(0.1))
-                    .frame(height: 1)
-                    .padding(.horizontal, 16)
-            }
-        }
-        .accessibilityIdentifier("cardEditorLink.\(note.linkedCardId)")
-    }
-    
-    private var formatToolbar: some View {
-        Group {
-            if isKeyboardVisible {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 16) {
-                    FormatButton(imageName: "number", action: {
-                        print("Shape button tapped")
-                        insertFormattingText("#")
-                    })
-                    FormatButton(imageName: "bold", action: {
-                        print("Bold button tapped")
-                        insertBoldFormatting()
-                    })
-                    FormatButton(imageName: "italic", action: {
-                        print("Italic button tapped")
-                        insertItalicFormatting()
-                    })
-                    FormatButton(imageName: "at", action: {
-                        print("At button tapped")
-                        let editingCardID = editingStore.cardID ?? currentNoteId ?? cardId
-                        guard !editingCardID.isEmpty else { return }
-                        LinkPopupManager.shared.show(
-                            cardId: editingCardID,
-                            navigateAfterLink: false
-                        )
-                    })
-                    .accessibilityIdentifier("cardEditorLinkButton")
-                    FormatButton(imageName: "list.bullet", action: {
-                        print("Bullet list button tapped")
-                        insertBulletList()
-                    })
-                    FormatButton(imageName: "list.number", action: {
-                        print("Numbered list button tapped")
-                        insertNumberedList()
-                    })
-                    FormatButton(imageName: "photo", action: {
-                        if editingStore.backgroundMediaRef == nil
-                            && editingStore.pendingBackground == nil {
-                            showBackgroundPicker = true
-                        } else {
-                            showBackgroundActions = true
-                        }
-                    })
-                    .accessibilityIdentifier("cardEditorBackgroundButton")
-                    
-                    // 隐私按钮
-                    Button(action: {
-                        isPublic.toggle()
-                    }) {
-                        Image(isPublic ? "public_icon" : "private_icon")
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 20, height: 20)
-                    }
-                    .buttonStyle(PlainButtonStyle())
-                }
-                .padding(.horizontal, 20)
-                }
-                .padding(.vertical, 10)
-                .background(
-                    Rectangle()
-                        .fill(Color.black.opacity(0.3))
-                        .overlay(
-                            Rectangle()
-                                .stroke(Color.white.opacity(0.1), lineWidth: 0.5)
-                        )
+                CardEditorLoadingView(
+                    isLoading: isLoading,
+                    errorMessage: loadErrorMessage,
+                    onBack: dismiss.callAsFunction,
+                    onRetry: loadExistingCard
                 )
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-                .animation(.easeInOut(duration: 0.3), value: isKeyboardVisible)
             }
         }
+        .navigationBarHidden(true)
+        .navigationBarBackButtonHidden(true)
+        .interactiveDismissDisabled()
+        .task {
+            guard !cardId.isEmpty, !didStartLoading else { return }
+            didStartLoading = true
+            loadExistingCard()
+            loadRelatedLinks()
+        }
     }
-    
-    // MARK: 提取标签方法
-    private func extractTags(from text: String) {
-        // 从HTML内容中提取纯文本，然后查找标签
-        let plainText = text.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
-        
-        let pattern = "#([\\w\\u4e00-\\u9fff]+)"
-        let regex = try? NSRegularExpression(pattern: pattern, options: [])
-        let range = NSRange(location: 0, length: plainText.utf16.count)
-        
-        var tags: [String] = []
-        if let matches = regex?.matches(in: plainText, options: [], range: range) {
-            for match in matches {
-                if let range = Range(match.range(at: 1), in: plainText) {
-                    let tag = String(plainText[range])
-                    if !tags.contains(tag) {
-                        tags.append(tag)
-                    }
+
+    private func loadExistingCard() {
+        guard !cardId.isEmpty, !isLoading else { return }
+        isLoading = true
+        loadErrorMessage = nil
+
+        networkManager.getCardDetail(cardId: cardId) { result in
+            DispatchQueue.main.async {
+                isLoading = false
+                switch result {
+                case let .success(response) where response.success:
+                    hydrateExistingCard(response.data)
+                case let .success(response):
+                    loadErrorMessage = response.message ?? "Couldn't open this note."
+                case let .failure(error):
+                    loadErrorMessage = error.localizedDescription
                 }
             }
         }
-        
-        print("Extracted matched tags: \(tags)")
-        matchedTags = tags
     }
-    
-    // MARK: 移除标签方法
-    private func removeTag(_ tag: String) {
-        // 同时从默认标签和匹配标签中移除
-        if let index = defaultTags.firstIndex(of: tag) {
-            defaultTags.remove(at: index)
-        }
-        if let index = matchedTags.firstIndex(of: tag) {
-            matchedTags.remove(at: index)
-        }
-        
-        // 从HTML原文中删除对应的#标签文本
-        let pattern = "#\(tag)\\b"
-        noteHtml = noteHtml.replacingOccurrences(of: pattern, with: "", options: .regularExpression)
-        noteText = noteHtml
-        
-        // 更新MarkupEditor中的内容
-        if let webView = MarkupEditor.selectedWebView {
-            webView.setHtml(noteHtml)
-        }
-    }
-    
-    // MARK: 插入格式化文本
-    @MainActor private func insertFormattingText(_ text: String) {
-        print("insertFormattingText called")
-        // 使用MarkupEditor API插入文本
-        MarkupEditor.observedWebView.selectedWebView?.insertShape()
-//        MarkupEditor.observedWebView.selectedWebView?.insertText(text)
-    }
-    
-    // MARK: 插入粗体格式化
-    @MainActor private func insertBoldFormatting() {
-        print("insertBoldFormatting called")
-        // 插入HTML粗体标签
-        MarkupEditor.observedWebView.selectedWebView?.bold()
-    }
-    
-    // MARK: 插入无序列表
-    @MainActor private func insertBulletList() {
-        print("insertBulletList called")
-        // 插入HTML无序列表
-        MarkupEditor.observedWebView.selectedWebView?.toggleListItem(type: .UL)
-    }
-    
-    // MARK: 插入有序列表
-    @MainActor private func insertNumberedList() {
-        print("insertNumberedList called")
-        // 插入HTML有序列表
-        MarkupEditor.observedWebView.selectedWebView?.toggleListItem(type: .OL)
-    }
-    
-    // MARK: 插入图片格式化
-    @MainActor private func insertPhotoFormatting() {
-        print("insertPhotoFormatting called")
-        // 使用MarkupEditor API插入图片
-//        MarkupEditor.observedWebView.selectedWebView?.insertImage()
-    }
-    
-    // MARK: 插入斜体格式化
-    @MainActor private func insertItalicFormatting() {
-        print("insertItalicFormatting called")
-        // 插入HTML斜体标签
-        MarkupEditor.observedWebView.selectedWebView?.italic()
-    }
-    
-    // MARK: 处理菜单按钮点击
-    private func handleMenuButtonTap() {
-        if currentNoteId == nil {
-            // 没有笔记ID
-            publishNoteForMenu()
-        } else {
-            // 如果已有笔记ID，直接打开菜单
-            print("已有笔记ID: \(currentNoteId!)")
-            showPopupMenu = true
-        }
-    }
-    
-    // MARK: 为菜单发布笔记
-    private func publishNoteForMenu() {
-        guard authManager.currentUser != nil else {
-            publishMessage = "User not logged in, cannot publish"
-            showPublishAlert = true
-            return
-        }
-        
-        let content = noteHtml.trimmingCharacters(in: .whitespacesAndNewlines)
-        if content.isEmpty {
-            publishMessage = "Content cannot be empty"
-            showPublishAlert = true
-            return
-        }
-        
-        isPublishing = true
-        
-        // 从HTML内容中提取纯文本作为标题（取前50个字符）
-        let plainText = content.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
-        let title = String(plainText.prefix(50))
-        
-        let request = CreateCardRequest(
-            title: title.isEmpty ? nil : title,
-            content: content,
-            contentJSON: editingStore.draft.contentJSON,
-            editorAtmosphere: editingStore.draft.editorAtmosphere,
-            tags: displayedTags.isEmpty ? nil : displayedTags,
-            isPublic: isPublic
+
+    private func hydrateExistingCard(_ card: CardDetail) {
+        guard editorSeed == nil else { return }
+
+        let draft = CardEditingDraft(
+            title: card.title,
+            content: card.content,
+            contentJSON: card.contentJSON,
+            editorAtmosphere: card.editorAtmosphere ?? "none",
+            tags: card.tags,
+            isPublic: card.isPublic
         )
-        
-        networkManager.createCard(
-            request,
-            idempotencyKey: editingStore.createRequestID
+        editingStore.hydrate(
+            draft: draft,
+            bodyRevision: 0,
+            backgroundMediaRef: card.backgroundMediaRef,
+            links: editingStore.links
         )
+        editorSeed = CardEditorSeed(
+            id: UUID(),
+            document: BlockNoteInitialDocument(
+                contentJSON: card.contentJSON,
+                fallbackMarkdown: card.content
+            ),
+            revision: 0,
+            isNew: false,
+            initialFocus: false,
+            initialIsPublic: card.isPublic,
+            isPinned: card.isPinned ?? false
+        )
+    }
+
+    private func loadRelatedLinks() {
+        guard !cardId.isEmpty else { return }
+        networkManager.getCardLinks(cardId: cardId)
             .receive(on: DispatchQueue.main)
             .sink(
-                receiveCompletion: { completion in
-                    isPublishing = false
-                    if case .failure(let error) = completion {
-                        publishMessage = "Publish failed: \(error.localizedDescription)"
-                        showPublishAlert = true
-                        print("发布失败: \(error)")
-                    }
-                },
+                receiveCompletion: { _ in },
                 receiveValue: { response in
-                    print("发布成功笔记ID: \(response.data.id)")
-                    guard adoptLegacyCreation(response.data) else { return }
-                    publishMessage = "Publish success"
-                    onCreated(response.data.id, response.data.content)
-                    // 发布成功后打开菜单
-                    showPopupMenu = true
+                    guard response.success else { return }
+                    let items = response.data.outgoingLinks
+                        + response.data.incomingLinks
+                    let links = items.map { item in
+                        CardEditingLink(
+                            sourceCardID: item.sourceAssetId,
+                            targetCardID: item.targetAssetId,
+                            title: item.title ?? "Related note"
+                        )
+                    }
+                    editingStore.replaceLinks(links)
                 }
             )
             .store(in: &cancellables)
     }
-    
-    // MARK: - 创建UserCard
-    private func createTempUserCard() -> UserCard {
-        return UserCard(
-            id: editingStore.cardID ?? currentNoteId ?? "",
-            title: "New Note",
-            content: noteHtml,
-            contentHash: "",
-            isPublic: isPublic,
-            tags: displayedTags,
-            createdAt: "",
-            updatedAt: updatedAt ?? "",
-            likeCount: 0,
-            commentCount: 0,
-            isLiked: false,
-            isPinned: isPinned,
-            pinnedAt: nil,
-            isFavorited: false,
-            favoriteCount: 0, rate: 0
+}
+
+@MainActor
+private final class CardEditorNativeActionRouter: ObservableObject {
+    var onRequestInlineLink: () -> Void = {}
+    var onRequestInlineImage: () -> Void = {}
+    var onSelectedLink: (LinkItem) -> Void = { _ in }
+
+    func requestInlineLink() {
+        onRequestInlineLink()
+    }
+
+    func requestInlineImage() {
+        onRequestInlineImage()
+    }
+
+    func selectLink(_ item: LinkItem) {
+        onSelectedLink(item)
+    }
+}
+
+@MainActor
+private struct CardEditorSessionView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let seed: CardEditorSeed
+    let onCreated: (String, String) -> Void
+
+    @ObservedObject private var editingStore: CardEditingStore
+    @ObservedObject private var linkPopupManager = LinkPopupManager.shared
+    @StateObject private var bodyModel: BlockNoteCardEditorModel
+    @StateObject private var nativeActionRouter: CardEditorNativeActionRouter
+
+    @State private var showTagEditor = false
+    @State private var tagInput = ""
+    @State private var showBackgroundPicker = false
+    @State private var selectedBackgroundPhoto: PhotosPickerItem?
+    @State private var showInlineImagePicker = false
+    @State private var selectedInlineImagePhoto: PhotosPickerItem?
+    @State private var showInlineLinkSheet = false
+    @State private var showCardActions = false
+    @State private var showRemoveCardConfirmation = false
+    @State private var showCloseWithoutSavingConfirmation = false
+    @State private var pendingOntologyLinkSourceID: String?
+    @State private var saveMessage: String?
+    @State private var retryAction: CardEditorRetryAction?
+    @State private var isSaving = false
+    @State private var isCardActionInFlight = false
+    @State private var didNotifyCreation: Bool
+    @State private var isPinned: Bool
+    @State private var cancellables = Set<AnyCancellable>()
+
+    init(
+        seed: CardEditorSeed,
+        editingStore: CardEditingStore,
+        onCreated: @escaping (String, String) -> Void
+    ) {
+        self.seed = seed
+        self.onCreated = onCreated
+        _editingStore = ObservedObject(wrappedValue: editingStore)
+        _didNotifyCreation = State(initialValue: !seed.isNew)
+        _isPinned = State(initialValue: seed.isPinned)
+
+        let router = CardEditorNativeActionRouter()
+        _nativeActionRouter = StateObject(wrappedValue: router)
+        _bodyModel = StateObject(
+            wrappedValue: BlockNoteCardEditorModel(
+                document: seed.document,
+                initialRevision: seed.revision,
+                initiallyFocused: seed.initialFocus,
+                onDocumentChanged: { revision in
+                    _ = editingStore.applyBodyRevision(
+                        content: revision.fallbackMarkdown,
+                        contentJSON: revision.contentJSON,
+                        revision: revision.revision
+                    )
+                },
+                onRequestInlineLink: router.requestInlineLink,
+                onRequestInlineImage: router.requestInlineImage
+            )
         )
     }
-    
-    // MARK:  自动保存方法
-    private var isEditingBusy: Bool {
+
+    var body: some View {
+        CardEditorShell(
+            bodyModel: bodyModel,
+            tags: editingStore.draft.tags,
+            links: editorLinkItems,
+            background: editorBackground,
+            isPublic: editingStore.draft.isPublic,
+            isMetadataEditable: bodyModel.canMutate && !isBusy,
+            isSaving: isSaving,
+            saveActionTitle: "Retry",
+            saveMessage: saveMessage,
+            onBack: handleBack,
+            onAddTag: presentTagEditor,
+            onRemoveTag: removeTag,
+            onAddLink: addOntologyLink,
+            onRemoveLink: removeOntologyLink,
+            onTogglePrivacy: togglePrivacy,
+            onChooseBackground: { showBackgroundPicker = true },
+            onRemoveBackground: removeBackground,
+            onOpenCardActions: cardActionsHandler,
+            onSave: retryHandler
+        )
+        .linkPopup()
+        .confirmationDialog(
+            "Card Actions",
+            isPresented: $showCardActions,
+            titleVisibility: .visible
+        ) {
+            Button("Share") {
+                postCardAction("ShowCardShare")
+            }
+            .accessibilityIdentifier("cardEditorActionShare")
+
+            Button("Spark") {
+                postCardAction("NavigateToSpark")
+            }
+            .accessibilityIdentifier("cardEditorActionSpark")
+
+            Button("Merge") {
+                postCardAction("NavigateToMerge")
+            }
+            .accessibilityIdentifier("cardEditorActionMerge")
+
+            Button("Root") {
+                postCardAction("NavigateToRoot")
+            }
+            .accessibilityIdentifier("cardEditorActionRoot")
+
+            Button(isPinned ? "Unpin" : "Pin") {
+                togglePinnedCard()
+            }
+            .accessibilityIdentifier("cardEditorActionPin")
+
+            Button("Remove", role: .destructive) {
+                DispatchQueue.main.async {
+                    showRemoveCardConfirmation = true
+                }
+            }
+            .accessibilityIdentifier("cardEditorActionRemove")
+
+            Button("Cancel", role: .cancel) {}
+        }
+        .alert("Remove this note?", isPresented: $showRemoveCardConfirmation) {
+            Button("Cancel", role: .cancel) {}
+            Button("Remove", role: .destructive, action: removeCanonicalCard)
+        } message: {
+            Text("The note will be moved to Trash.")
+        }
+        .alert(
+            "Close without saving?",
+            isPresented: $showCloseWithoutSavingConfirmation
+        ) {
+            Button("Keep Editing", role: .cancel) {}
+            Button("Close", role: .destructive, action: dismiss.callAsFunction)
+                .accessibilityIdentifier("cardEditorDiscardAndClose")
+        } message: {
+            Text(
+                "The editor cannot produce a safe snapshot. "
+                    + "Any unsaved changes will be discarded."
+            )
+        }
+        .photosPicker(
+            isPresented: $showBackgroundPicker,
+            selection: $selectedBackgroundPhoto,
+            matching: .images
+        )
+        .photosPicker(
+            isPresented: $showInlineImagePicker,
+            selection: $selectedInlineImagePhoto,
+            matching: .images
+        )
+        .onChange(
+            of: selectedBackgroundPhoto,
+            perform: handleSelectedBackgroundPhoto
+        )
+        .onChange(
+            of: selectedInlineImagePhoto,
+            perform: handleSelectedInlineImage
+        )
+        .onChange(
+            of: linkPopupManager.isShowing,
+            perform: handleLinkPopupVisibilityChange
+        )
+        .alert("Add Tag", isPresented: $showTagEditor) {
+            TextField("Tag", text: $tagInput)
+                .textInputAutocapitalization(.never)
+                .accessibilityIdentifier("cardEditorTagInput")
+            Button("Cancel", role: .cancel) {
+                tagInput = ""
+            }
+            Button("Add") {
+                addTag(tagInput)
+                tagInput = ""
+            }
+        } message: {
+            Text("Tags are saved with this note.")
+        }
+        .sheet(isPresented: $showInlineLinkSheet) {
+            CardEditorInlineLinkSheet { url, text in
+                bodyModel.insertLink(url: url, text: text)
+            }
+        }
+        .onAppear(perform: configureNativeActions)
+        .onDisappear {
+            bodyModel.dismissKeyboard()
+            LinkPopupManager.shared.onCardSelected = nil
+        }
+    }
+
+    private var isBusy: Bool {
+        if isSaving || isCardActionInFlight { return true }
         switch editingStore.phase {
         case .saving, .linking, .updatingBackground:
             return true
@@ -942,59 +395,285 @@ struct NewNoteView: View, MarkupDelegate {
         }
     }
 
-    private func closeEditor() {
-        guard !cardId.isEmpty else {
+    private var retryHandler: (() -> Void)? {
+        guard retryAction != nil else { return nil }
+        return { retryCurrentFailure() }
+    }
+
+    private var cardActionsHandler: (() -> Void)? {
+        guard bodyModel.canSave, !isBusy else { return nil }
+        return { openCardActions() }
+    }
+
+    private var editorBackground: CardEditorBackgroundSource {
+        if let pending = editingStore.pendingBackground {
+            return .local(pending.data)
+        }
+        guard let mediaRef = editingStore.backgroundMediaRef,
+              let url = URL(
+                  string: APIConfiguration.resourceURLString(mediaRef)
+              ) else {
+            return .none
+        }
+        return .remote(url)
+    }
+
+    private var editorLinkItems: [CardEditorLinkItem] {
+        guard let cardID = editingStore.cardID else { return [] }
+        return editingStore.links.map { link in
+            let linkedCardID = link.sourceCardID == cardID
+                ? link.targetCardID
+                : link.sourceCardID
+            return CardEditorLinkItem(
+                id: linkedCardID,
+                title: link.title,
+                canRemove: link.sourceCardID == cardID
+            )
+        }
+    }
+
+    private func isUntouchedNewSnapshot(_ snapshot: BlockNoteSnapshot) -> Bool {
+        seed.isNew
+            && snapshot.revision == seed.revision
+            && snapshot.fallbackMarkdown
+                .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && editingStore.draft.tags.isEmpty
+            && editingStore.draft.isPublic == seed.initialIsPublic
+            && editingStore.pendingBackground == nil
+            && editingStore.backgroundMediaRef == nil
+    }
+
+    private func configureNativeActions() {
+        nativeActionRouter.onRequestInlineLink = {
+            showInlineLinkSheet = true
+        }
+        nativeActionRouter.onRequestInlineImage = {
+            showInlineImagePicker = true
+        }
+        nativeActionRouter.onSelectedLink = handleSelectedLink
+        LinkPopupManager.shared.onCardSelected = { [weak nativeActionRouter] item in
+            nativeActionRouter?.selectLink(item)
+        }
+    }
+
+    private func handleBack() {
+        guard !isBusy else { return }
+        bodyModel.dismissKeyboard()
+
+        if bodyModel.compatibilityNotice != nil {
             dismiss()
             return
         }
-
-        let content = noteHtml.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !content.isEmpty else {
-            editingFailureMessage = "Content cannot be empty"
+        if bodyModel.bridgeFailureNotice != nil {
+            showCloseWithoutSavingConfirmation = true
             return
         }
+        saveCurrentSnapshot(thenDismiss: true)
+    }
 
-        editingFailureMessage = nil
+    private func saveCurrentSnapshot(thenDismiss: Bool) {
+        guard !isSaving else { return }
+        isSaving = true
+        saveMessage = nil
+        retryAction = nil
+
+        Task {
+            defer { isSaving = false }
+            do {
+                let snapshot = try await applyCurrentSnapshot()
+                if thenDismiss, isUntouchedNewSnapshot(snapshot) {
+                    dismiss()
+                    return
+                }
+                let didRecover = await recoverFailedDraftOperationIfNeeded()
+                let didSave = didRecover
+                    ? await editingStore.save()
+                    : false
+                notifyCreationIfNeeded()
+                guard didSave,
+                      editingStore.lastCommittedBodyRevision == snapshot.revision,
+                      editingStore.bodyRevision == snapshot.revision,
+                      bodyModel.revision == snapshot.revision,
+                      !editingStore.isDirty else {
+                    saveMessage = "Couldn't save this note. Retry when ready."
+                    retryAction = .save(thenDismiss: thenDismiss)
+                    return
+                }
+                saveMessage = nil
+                retryAction = nil
+                if thenDismiss {
+                    dismiss()
+                }
+            } catch CardEditorBodyError.compatibilityBlocked {
+                dismiss()
+            } catch {
+                saveMessage = "Couldn't take a safe editor snapshot. Retry."
+                retryAction = .save(thenDismiss: thenDismiss)
+            }
+        }
+    }
+
+    private func retryCurrentFailure() {
+        guard let retryAction, !isBusy else { return }
+        switch retryAction {
+        case let .save(thenDismiss):
+            saveCurrentSnapshot(thenDismiss: thenDismiss)
+
+        case .addLink:
+            addOntologyLink()
+
+        case .openCardActions:
+            openCardActions()
+
+        case .store:
+            isSaving = true
+            Task {
+                defer { isSaving = false }
+                let didRetry = await editingStore.retry()
+                if didRetry {
+                    saveMessage = nil
+                    self.retryAction = nil
+                } else {
+                    saveMessage = "That change still couldn't be saved. Retry."
+                    self.retryAction = .store
+                }
+            }
+        }
+    }
+
+    private func applyCurrentSnapshot() async throws -> BlockNoteSnapshot {
+        bodyModel.dismissKeyboard()
+        let snapshot = try await bodyModel.requestSnapshot()
+        guard editingStore.applyBodyRevision(
+            content: snapshot.fallbackMarkdown,
+            contentJSON: snapshot.contentJSON,
+            revision: snapshot.revision
+        ) else {
+            throw CardEditorSessionError.staleSnapshot
+        }
+        return snapshot
+    }
+
+    private func recoverFailedDraftOperationIfNeeded() async -> Bool {
+        guard editingStore.failureStage != nil else { return true }
+        let didRetry = await editingStore.retry()
+        if didRetry {
+            return true
+        }
+        guard editingStore.failureStage == nil else { return false }
+        guard editingStore.isDirty else { return true }
+        guard editingStore.cardID != nil else { return false }
+        return await editingStore.save()
+    }
+
+    private func updateMetadata(
+        tags: [String]? = nil,
+        isPublic: Bool? = nil
+    ) {
         editingStore.updateDraft(
-            editingStore.draft.updatingMetadataAndFallback(
-                title: titleFromHTML(content),
-                content: content,
-                tags: displayedTags,
-                isPublic: isPublic
+            CardEditingDraft(
+                title: editingStore.draft.title,
+                content: editingStore.draft.content,
+                contentJSON: editingStore.draft.contentJSON,
+                editorAtmosphere: editingStore.draft.editorAtmosphere,
+                tags: tags ?? editingStore.draft.tags,
+                isPublic: isPublic ?? editingStore.draft.isPublic
             )
         )
+        saveMessage = nil
+        retryAction = nil
+    }
+
+    private func presentTagEditor() {
+        tagInput = ""
+        showTagEditor = true
+    }
+
+    private func addTag(_ tag: String) {
+        updateMetadata(tags: editingStore.draft.tags + [tag])
+    }
+
+    private func removeTag(_ tag: String) {
+        updateMetadata(tags: editingStore.draft.tags.filter { $0 != tag })
+    }
+
+    private func togglePrivacy() {
+        updateMetadata(isPublic: !editingStore.draft.isPublic)
+    }
+
+    private func addOntologyLink() {
+        guard !isBusy else { return }
+        saveMessage = nil
+        retryAction = nil
         Task {
-            let didSave = await editingStore.save()
-            guard didSave, !editingStore.isDirty else {
-                editingFailureMessage = "Couldn't save. Tap back to retry."
-                return
+            do {
+                _ = try await applyCurrentSnapshot()
+                guard await recoverFailedDraftOperationIfNeeded() else {
+                    notifyCreationIfNeeded()
+                    saveMessage = "Save this note before adding a link."
+                    retryAction = .addLink
+                    return
+                }
+                guard let sourceID = await editingStore.ensurePersisted() else {
+                    notifyCreationIfNeeded()
+                    saveMessage = "Save this note before adding a link."
+                    retryAction = .addLink
+                    return
+                }
+                notifyCreationIfNeeded()
+                pendingOntologyLinkSourceID = sourceID
+                LinkPopupManager.shared.show(
+                    cardId: sourceID,
+                    navigateAfterLink: false,
+                    mode: .selectionOnly
+                )
+            } catch {
+                saveMessage = "Couldn't take a safe snapshot for linking."
+                retryAction = .addLink
             }
-            dismiss()
         }
     }
 
-    private func titleFromHTML(_ content: String) -> String? {
-        let plainText = content.replacingOccurrences(
-            of: "<[^>]+>",
-            with: "",
-            options: .regularExpression
+    private func handleSelectedLink(_ item: LinkItem) {
+        guard let sourceID = pendingOntologyLinkSourceID,
+              editingStore.cardID == sourceID else {
+            return
+        }
+        pendingOntologyLinkSourceID = nil
+        let link = CardEditingLink(
+            sourceCardID: sourceID,
+            targetCardID: item.id,
+            title: item.title
         )
-        let title = String(plainText.prefix(50))
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        return title.isEmpty ? nil : title
+        Task {
+            let didCreate = await editingStore.createLink(link)
+            guard didCreate else {
+                saveMessage = "Couldn't add that link. Retry."
+                retryAction = .store
+                return
+            }
+            saveMessage = nil
+            retryAction = nil
+        }
     }
 
-    private func handleEditingPhase(_ phase: CardEditingPhase) {
-        switch phase {
-        case .ready:
-            break
-        case .failed:
-            if editingStore.failureStage == .replacingBackground
-                || editingStore.failureStage == .removingBackground {
-                editingFailureMessage = "Couldn't update background. Try again."
+    private func removeOntologyLink(_ item: CardEditorLinkItem) {
+        guard let sourceID = editingStore.cardID,
+              item.canRemove,
+              let link = editingStore.links.first(where: {
+                  $0.sourceCardID == sourceID && $0.targetCardID == item.id
+              }) else {
+            return
+        }
+        Task {
+            let didDelete = await editingStore.deleteLink(link)
+            if !didDelete {
+                saveMessage = "Couldn't remove that link. Retry."
+                retryAction = .store
+            } else {
+                saveMessage = nil
+                retryAction = nil
             }
-        case .idle, .saving, .linking, .updatingBackground:
-            break
         }
     }
 
@@ -1003,598 +682,313 @@ struct NewNoteView: View, MarkupDelegate {
         Task {
             defer { selectedBackgroundPhoto = nil }
             do {
-                guard let data = try await item.loadTransferable(type: Data.self) else {
-                    editingFailureMessage = "Couldn't read that image."
-                    return
-                }
-                let type = item.supportedContentTypes.first {
-                    $0.conforms(to: .image)
-                } ?? .jpeg
-                let fileExtension = type.preferredFilenameExtension ?? "jpg"
-                editingFailureMessage = nil
-                let staged = editingStore.stageBackground(
-                    CardEditingImage(
-                        data: data,
-                        filename: "card-background.\(fileExtension)",
-                        mimeType: type.preferredMIMEType ?? "image/jpeg"
-                    )
+                let image = try await cardEditingImage(
+                    from: item,
+                    stem: "card-background"
                 )
-                guard staged else {
-                    editingFailureMessage = "Couldn't stage that background."
+                guard editingStore.stageBackground(image) else {
+                    saveMessage = "That background image can't be used."
+                    retryAction = nil
                     return
                 }
-                let saved = await editingStore.save()
-                if !saved {
-                    editingFailureMessage = "Couldn't update background. Try again."
-                }
+                saveMessage = nil
+                retryAction = nil
             } catch {
-                editingFailureMessage = "Couldn't read that image."
+                saveMessage = "Couldn't read that background image."
+                retryAction = nil
             }
         }
     }
 
-    private func synchronizeEditingLinks() {
-        let links = relatedNotes.map { note in
-            CardEditingLink(
-                sourceCardID: note.sourceAssetId.isEmpty
-                    ? (editingStore.cardID ?? currentNoteId ?? cardId)
-                    : note.sourceAssetId,
-                targetCardID: note.targetAssetId.isEmpty
-                    ? note.linkedCardId
-                    : note.targetAssetId,
-                title: note.title ?? "Related note"
-            )
-        }
-        editingStore.replaceLinks(links)
-    }
-
-    private func autoSaveNote() {
-        let content = noteHtml.trimmingCharacters(in: .whitespacesAndNewlines)
-        if content.isEmpty {
-            print("内容为空，跳过自动保存")
-            return
-        }
-        
-        if let noteId = currentNoteId {
-            print("笔记已存在ID: \(noteId), 调用更新接口")
-            updateNote()
-        } else {
-            print("开始自动保存笔记")
-            publishNote()
-        }
-    }
-    
-    // MARK: 发布笔记方法
-    private func publishNote() {
-        guard authManager.currentUser != nil else {
-            publishMessage = "User not logged in, cannot publish"
-            showPublishAlert = true
-            return
-        }
-        
-        let content = noteHtml.trimmingCharacters(in: .whitespacesAndNewlines)
-        if content.isEmpty {
-            publishMessage = "Content cannot be empty"
-            showPublishAlert = true
-            return
-        }
-        
-        isPublishing = true
-        
-        // 从HTML内容中提取纯文本作为标题（取前50个字符）
-        let plainText = content.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
-        let title = String(plainText.prefix(50))
-        
-        let request = CreateCardRequest(
-            title: title.isEmpty ? nil : title,
-            content: content,
-            contentJSON: editingStore.draft.contentJSON,
-            editorAtmosphere: editingStore.draft.editorAtmosphere,
-            tags: displayedTags.isEmpty ? nil : displayedTags,
-            isPublic: isPublic
-        )
-        
-        networkManager.createCard(
-            request,
-            idempotencyKey: editingStore.createRequestID
-        )
-            .receive(on: DispatchQueue.main)
-            .sink(
-                receiveCompletion: { completion in
-                    isPublishing = false
-                    if case .failure(let error) = completion {
-                        publishMessage = "fail: \(error.localizedDescription)"
-                        showPublishAlert = true
-                        print("发布失败: \(error)")
-                    }
-                },
-                receiveValue: { response in
-                    print("自动保存成功笔记ID: \(response.data.id)")
-                    guard adoptLegacyCreation(response.data) else { return }
-                    onCreated(response.data.id, response.data.content)
-                    // 自动保存不需要显示提示，直接退出
-                    if !showPopupMenu {
-                        dismiss()
-                    }
-                }
-            )
-            .store(in: &cancellables)
-    }
-
-    @discardableResult
-    private func adoptLegacyCreation(_ card: CreateCardData) -> Bool {
-        guard editingStore.adoptCanonicalCardID(card.id) else {
-            editingFailureMessage = "Couldn't adopt the created card."
-            return false
-        }
-        currentNoteId = card.id
-        editingStore.hydrate(
-            draft: CardEditingDraft(
-                title: card.title,
-                content: card.content,
-                contentJSON: card.contentJSON,
-                editorAtmosphere: card.editorAtmosphere ?? "none",
-                tags: card.tags,
-                isPublic: card.isPublic
-            ),
-            backgroundMediaRef: card.backgroundMediaRef,
-            links: editingStore.links
-        )
-        return true
-    }
-    
-    // MARK: - 更新笔记方法
-    private func updateNote() {
-        guard authManager.currentUser != nil,
-              let noteId = currentNoteId else {
-            publishMessage = "User not logged in or note ID does not exist, cannot update"
-            showPublishAlert = true
-            return
-        }
-        
-        let content = noteHtml.trimmingCharacters(in: .whitespacesAndNewlines)
-        if content.isEmpty {
-            publishMessage = "Content cannot be empty"
-            showPublishAlert = true
-            return
-        }
-        
-        isPublishing = true
-        
-        // 从HTML内容中提取纯文本作为标题（取前50个字符）
-        let plainText = content.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
-        let title = String(plainText.prefix(50))
-        
-        let request = UpdateCardRequest(
-            title: title.isEmpty ? nil : title,
-            content: content,
-            contentJSON: editingStore.draft.contentJSON,
-            editorAtmosphere: editingStore.draft.editorAtmosphere,
-            tags: displayedTags.isEmpty ? nil : displayedTags
-        )
-        
-        networkManager.updateCard(cardId: noteId, request: request)
-            .receive(on: DispatchQueue.main)
-            .sink(
-                receiveCompletion: { completion in
-                    isPublishing = false
-                    if case .failure(let error) = completion {
-//                        publishMessage = "更新失败: \(error.localizedDescription)"
-//                        showPublishAlert = true
-                        print("更新失败: \(error)")
-                    }
-                },
-                receiveValue: { (response: CardResponse) in
-                    print("更新成功笔记ID: \(response.data.id)")
-                    // 更新成功后直接退出
-                    if !showPopupMenu {
-                        dismiss()
-                    }
-                }
-            )
-            .store(in: &cancellables)
-    }
-    
-    // MARK:  加载笔记详情方法
-    private func loadNoteDetail() {
-        guard !cardId.isEmpty else {
-            return
-        }
-        
-        isLoadingNote = true
-        
-        guard authManager.currentUser != nil else {
-            publishMessage = "User not logged in, cannot load note details"
-            showPublishAlert = true
-            isLoadingNote = false
-            return
-        }
-        
-        networkManager.getCardDetail(cardId: cardId) { result in
-            DispatchQueue.main.async {
-                isLoadingNote = false
-                
-                switch result {
-                case .success(let response):
-                    let cardDetail = response.data
-                    // 设置笔记ID
-                    currentNoteId = cardDetail.id
-                    
-                    noteHtml = cardDetail.content
-                    noteText = cardDetail.content
-                    
-                    isPublic = cardDetail.isPublic
-                    
-                    updatedAt = cardDetail.updatedAt
-                    
-                    isPinned = cardDetail.isPinned ?? false
-                    
-                    defaultTags = cardDetail.tags
-
-                    editingStore.hydrate(
-                        draft: CardEditingDraft(
-                            title: cardDetail.title,
-                            content: cardDetail.content,
-                            contentJSON: cardDetail.contentJSON,
-                            editorAtmosphere: cardDetail.editorAtmosphere ?? "none",
-                            tags: cardDetail.tags,
-                            isPublic: cardDetail.isPublic
-                        ),
-                        backgroundMediaRef: cardDetail.backgroundMediaRef,
-                        links: editingStore.links
-                    )
-                    
-                    // 更新MarkupEditor内容
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                        if let webView = MarkupEditor.selectedWebView {
-                            webView.setHtml(cardDetail.content)
-                        }
-                    }
-                case .failure(let error):
-                    publishMessage = "Failed to load note details: \(error.localizedDescription)"
-                    showPublishAlert = true
-                    print("加载笔记详情失败: \(error)")
-                }
-            }
-        }
-    }
-    
-    // MARK: 加载关联笔记
-    private func loadRelatedNotes() {
-        guard authManager.currentUser != nil else {
-            print("用户未登录")
-            return
-        }
-        
-        isLoadingLinks = true
-        print("开始加载关联笔记: cardId=\(cardId)")
-        
-        networkManager.getCardLinks(cardId: cardId)
-            .receive(on: DispatchQueue.main)
-            .sink(
-                receiveCompletion: { completion in
-                    self.isLoadingLinks = false
-                    if case .failure(let error) = completion {
-                        print("加载关联笔记失败: \(error.localizedDescription)")
-                    }
-                },
-                receiveValue: { response in
-                    if response.success {
-                        print("关联笔记加载成功")
-                        let allLinks = response.data.outgoingLinks + response.data.incomingLinks
-                        self.relatedNotes = allLinks
-                        self.synchronizeEditingLinks()
-                        print("关联笔记数量: \(allLinks.count)")
-                    } else {
-                        print("加载关联笔记失败: \(response.message)")
-                    }
-                }
-            )
-            .store(in: &cancellables)
-    }
-    
-    // MARK: 切换可见性方法
-    private func toggleVisibility() {
-        if let noteId = currentNoteId, !noteId.isEmpty {
-            updateCardVisibility()
-        } else {
-            isPublic.toggle()
-        }
-    }
-    
-    // MARK: 更新卡片可见性
-    private func updateCardVisibility() {
-        guard authManager.currentUser != nil,
-              let noteId = currentNoteId else {
-            publishMessage = "Not ID"
-            showPublishAlert = true
-            return
-        }
-        
-        let newVisibility = !isPublic
-        
-        networkManager.updateCardVisibility(cardId: noteId, isPublic: newVisibility)
-            .receive(on: DispatchQueue.main)
-            .sink(
-                receiveCompletion: { completion in
-                    if case .failure = completion {
-                        DispatchQueue.main.async {
-                            self.isPublic = !newVisibility
-                        }
-                    }
-                },
-                receiveValue: { response in
-                    DispatchQueue.main.async {
-                        self.isPublic = newVisibility
-                    }
-                }
-            )
-            .store(in: &cancellables)
-    }
-    
-    // MARK: 处理关联笔记点击
-    private func handleRelatedNoteTap(note: CardLinkItem) {
-        guard let currentUserId = authManager.currentUser?.id else {
-            print("用户未登录")
-            return
-        }
-        
-        selectedCardId = note.linkedCardId
-        print("关联笔记: \(note.title ?? ""), cardId: \(note.linkedCardId)")
-  
-        
-        // 判断卡片是否属于当前用户
-        if note.author?.id == currentUserId {
-            navigateToDetail = false
-            DispatchQueue.main.async {
-                self.navigateToEdit = true
-            }
-        } else {
-            navigateToEdit = false
-            DispatchQueue.main.async {
-                self.navigateToDetail = true
-            }
-        }
-    }
-    
-    // MARK: 删除关联笔记
-    private func removeRelatedNote(_ note: CardLinkItem) {
-        
-        if let index = relatedNotes.firstIndex(where: { $0.id == note.id }) {
-            relatedNotes.remove(at: index)
-            print("删除关联笔记: \(note.title ?? "")")
-        }
-    }
-    
-    // MARK: 日期格式化方法
-    private func formatDate(_ dateString: String) -> String {
-        let formatter = DateFormatter()
-        // 尝试多种日期格式
-        let dateFormats = [
-            "yyyy-MM-dd'T'HH:mm:ss",
-            "yyyy-MM-dd'T'HH:mm:ss.SSS",
-            "yyyy-MM-dd'T'HH:mm:ss'Z'",
-            "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'"
-        ]
-        
-        var date: Date?
-        for format in dateFormats {
-            formatter.dateFormat = format
-            if let parsedDate = formatter.date(from: dateString) {
-                date = parsedDate
-                break
-            }
-        }
-        
-        if let date = date {
-            let now = Date()
-            let timeInterval = now.timeIntervalSince(date)
-            
-            if timeInterval < 60 {
-                return "just now"
-            } else if timeInterval < 3600 {
-                let minutes = Int(timeInterval / 60)
-                return "\(minutes) minutes ago"
-            } else if timeInterval < 86400 {
-                let hours = Int(timeInterval / 3600)
-                return "\(hours) hours ago"
-            } else if timeInterval < 604800 {
-                let days = Int(timeInterval / 86400)
-                return "\(days) days ago"
-            } else {
-                let displayFormatter = DateFormatter()
-                displayFormatter.dateFormat = "MM-dd"
-                return displayFormatter.string(from: date)
-            }
-        }
-        
-        return dateString
-    }
-    
-    // MARK: - 调用API删除关联笔记
-    private func deleteRelatedNote(_ note: CardLinkItem) {
-        guard authManager.currentUser != nil else {
-            return
-        }
-        
-        let sourceAssetId = note.sourceAssetId.isEmpty
-            ? (editingStore.cardID ?? currentNoteId ?? cardId)
-            : note.sourceAssetId
-        let targetAssetId = note.targetAssetId.isEmpty ? note.linkedCardId : note.targetAssetId
-
-        editingFailureMessage = nil
+    private func removeBackground() {
         Task {
-            let didDelete = await editingStore.deleteLink(
-                CardEditingLink(
-                    sourceCardID: sourceAssetId,
-                    targetCardID: targetAssetId,
-                    title: note.title ?? "Related note"
-                )
-            )
-            if didDelete {
-                removeRelatedNote(note)
+            let didRemove = await editingStore.removeBackground()
+            if !didRemove {
+                saveMessage = "Couldn't remove the background. Retry."
+                retryAction = .store
             } else {
-                editingFailureMessage = "Couldn't unlink. Try again."
+                saveMessage = nil
+                retryAction = nil
             }
         }
     }
-    
-    // MARK: - 处理切换卡片Pin状态
-    private func handleToggleCardPin(notification: Notification) {
-        guard let userInfo = notification.userInfo,
-              let cardId = userInfo["cardId"] as? String else {
-            print("通知缺少必要参数")
-            return
-        }
-        
-        // 检查是否是当前卡片
-        let currentCardId = !self.cardId.isEmpty ? self.cardId : (currentNoteId ?? "")
-        guard cardId == currentCardId else {
-            print("cardId(\(cardId))与当前卡片(\(currentCardId))不匹配，忽略")
-            return
-        }
-        
-        guard authManager.currentUser != nil else {
-            print("用户未登录")
-            return
-        }
-        
-        print("开始切换卡片置顶状态: cardId=\(cardId), 当前状态: \(isPinned)")
-        
-        let previousIsPinned = isPinned
-        
-        isPinned.toggle()
-        print("isPinned=\(isPinned)")
-        
-        if showPopupMenu {
-            showPopupMenu = false
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                self.showPopupMenu = true
+
+    private func handleSelectedInlineImage(_ item: PhotosPickerItem?) {
+        guard let item else { return }
+        Task {
+            defer { selectedInlineImagePhoto = nil }
+            do {
+                let image = try await cardEditingImage(
+                    from: item,
+                    stem: "inline-image"
+                )
+                let uploaded = try await editingStore.uploadInlineImage(image)
+                bodyModel.insertImage(
+                    url: uploaded.url.absoluteString,
+                    alt: "Inline image"
+                )
+                saveMessage = nil
+                retryAction = nil
+            } catch {
+                saveMessage = "Couldn't upload that inline image."
+                retryAction = nil
             }
         }
-        
-        let publisher: AnyPublisher<PinResponse, NetworkError>
-        
-        if previousIsPinned {
-            print("调用Unpin API")
-            publisher = networkManager.unpinCard(cardId: cardId)
-        } else {
-            print("调用Pin API")
-            publisher = networkManager.pinCard(cardId: cardId)
+    }
+
+    private func cardEditingImage(
+        from item: PhotosPickerItem,
+        stem: String
+    ) async throws -> CardEditingImage {
+        guard let data = try await item.loadTransferable(type: Data.self) else {
+            throw CardEditorSessionError.imageUnavailable
         }
-        
-        publisher
+        let type = item.supportedContentTypes.first(where: {
+            $0.conforms(to: .image)
+        }) ?? .jpeg
+        let fileExtension = type.preferredFilenameExtension ?? "jpg"
+        return CardEditingImage(
+            data: data,
+            filename: "\(stem).\(fileExtension)",
+            mimeType: type.preferredMIMEType ?? "image/jpeg"
+        )
+    }
+
+    private func notifyCreationIfNeeded() {
+        guard seed.isNew,
+              !didNotifyCreation,
+              let cardID = editingStore.cardID else {
+            return
+        }
+        didNotifyCreation = true
+        onCreated(
+            cardID,
+            editingStore.lastCommittedDraft?.content
+                ?? editingStore.draft.content
+        )
+    }
+
+    private func openCardActions() {
+        guard !isBusy else { return }
+        saveMessage = nil
+        retryAction = nil
+        Task {
+            do {
+                _ = try await applyCurrentSnapshot()
+                guard await recoverFailedDraftOperationIfNeeded() else {
+                    notifyCreationIfNeeded()
+                    saveMessage = "Save this note before opening card actions."
+                    retryAction = .openCardActions
+                    return
+                }
+                guard await editingStore.ensurePersisted() != nil else {
+                    notifyCreationIfNeeded()
+                    saveMessage = "Save this note before opening card actions."
+                    retryAction = .openCardActions
+                    return
+                }
+                notifyCreationIfNeeded()
+                showCardActions = true
+            } catch {
+                saveMessage = "Couldn't take a safe snapshot for card actions."
+                retryAction = .openCardActions
+            }
+        }
+    }
+
+    private func handleLinkPopupVisibilityChange(_ isShowing: Bool) {
+        guard !isShowing,
+              let sourceID = pendingOntologyLinkSourceID else { return }
+        Task { @MainActor in
+            await Task.yield()
+            if pendingOntologyLinkSourceID == sourceID {
+                pendingOntologyLinkSourceID = nil
+            }
+        }
+    }
+
+    private func postCardAction(_ name: String) {
+        guard let cardID = editingStore.cardID else { return }
+        NotificationCenter.default.post(
+            name: NSNotification.Name(name),
+            object: nil,
+            userInfo: ["cardId": cardID]
+        )
+    }
+
+    private func togglePinnedCard() {
+        guard let cardID = editingStore.cardID,
+              !isCardActionInFlight else { return }
+        isCardActionInFlight = true
+        saveMessage = nil
+        retryAction = nil
+        let request: AnyPublisher<PinResponse, NetworkError> = isPinned
+            ? NetworkManager.shared.unpinCard(cardId: cardID)
+            : NetworkManager.shared.pinCard(cardId: cardID)
+        request
             .receive(on: DispatchQueue.main)
             .sink(
-                receiveCompletion: { _ in
+                receiveCompletion: { completion in
+                    isCardActionInFlight = false
+                    if case .failure = completion {
+                        saveMessage = "Couldn't update pin status."
+                    }
                 },
                 receiveValue: { response in
                     if response.success {
-                        print("切换卡片置顶状态成功: isPinned=\(self.isPinned)")
+                        isPinned.toggle()
                     } else {
-                        print("切换卡片置顶状态失败: \(response.message)")
-                        // 无论成功失败都保持新状态，不恢复
+                        saveMessage = "Couldn't update pin status."
                     }
                 }
             )
             .store(in: &cancellables)
     }
-    
+
+    private func removeCanonicalCard() {
+        guard let cardID = editingStore.cardID,
+              !isCardActionInFlight else { return }
+        isCardActionInFlight = true
+        saveMessage = nil
+        retryAction = nil
+        NetworkManager.shared.deleteCard(id: cardID)
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { completion in
+                    isCardActionInFlight = false
+                    if case .failure = completion {
+                        saveMessage = "Couldn't move this note to Trash."
+                    }
+                },
+                receiveValue: { response in
+                    if response.success {
+                        dismiss()
+                    } else {
+                        saveMessage = "Couldn't move this note to Trash."
+                    }
+                }
+            )
+            .store(in: &cancellables)
+    }
 }
 
-// MARK: 格式化按钮组件
-struct FormatButton: View {
-    let imageName: String
-    let action: () -> Void
-    
+private enum CardEditorSessionError: Error {
+    case staleSnapshot
+    case imageUnavailable
+}
+
+private enum CardEditorRetryAction {
+    case save(thenDismiss: Bool)
+    case addLink
+    case openCardActions
+    case store
+}
+
+private struct CardEditorInlineLinkSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let onInsert: (String, String) -> Void
+
+    @State private var urlText = ""
+    @State private var labelText = ""
+
     var body: some View {
-        Button(action: action) {
-            Image(systemName: imageName)
-                .font(.system(size: 16, weight: .medium))
-                .foregroundColor(.white)
-                .frame(width: 30, height: 30)
+        NavigationStack {
+            Form {
+                TextField("https://example.com", text: $urlText)
+                    .keyboardType(.URL)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .accessibilityIdentifier("cardEditorInlineLinkURL")
+                TextField("Link text", text: $labelText)
+                    .accessibilityIdentifier("cardEditorInlineLinkText")
+            }
+            .navigationTitle("Insert Link")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel", action: dismiss.callAsFunction)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Insert") {
+                        guard let url = normalizedURL else { return }
+                        let label = labelText
+                            .trimmingCharacters(in: .whitespacesAndNewlines)
+                        onInsert(
+                            url.absoluteString,
+                            label.isEmpty ? url.absoluteString : label
+                        )
+                        dismiss()
+                    }
+                    .disabled(normalizedURL == nil)
+                    .accessibilityIdentifier("cardEditorInlineLinkInsert")
+                }
+            }
         }
-        .buttonStyle(PlainButtonStyle())
+        .presentationDetents([.medium])
+    }
+
+    private var normalizedURL: URL? {
+        let value = urlText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty else { return nil }
+        let candidate = value.contains("://") ? value : "https://\(value)"
+        guard let url = URL(string: candidate),
+              let scheme = url.scheme?.lowercased(),
+              ["http", "https"].contains(scheme),
+              url.host != nil else {
+            return nil
+        }
+        return url
+    }
+}
+
+private struct CardEditorLoadingView: View {
+    let isLoading: Bool
+    let errorMessage: String?
+    let onBack: () -> Void
+    let onRetry: () -> Void
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            ZenVisualTokens.background
+                .ignoresSafeArea()
+
+            VStack(spacing: 14) {
+                if isLoading {
+                    ProgressView()
+                        .tint(.white)
+                    Text("Opening note…")
+                        .foregroundStyle(.white.opacity(0.72))
+                } else if let errorMessage {
+                    Text(errorMessage)
+                        .foregroundStyle(.white.opacity(0.82))
+                        .multilineTextAlignment(.center)
+                    Button("Retry", action: onRetry)
+                        .buttonStyle(.borderedProminent)
+                        .accessibilityIdentifier("cardEditorLoadRetry")
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(32)
+
+            Button(action: onBack) {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 44, height: 44)
+                    .background(
+                        Circle().fill(ZenVisualTokens.background.opacity(0.82))
+                    )
+            }
+            .buttonStyle(.plain)
+            .padding(.leading, 16)
+            .padding(.top, 6)
+            .accessibilityLabel("Close note")
+            .accessibilityIdentifier("cardEditorFloatingBack")
+        }
     }
 }
 
 #Preview {
     NewNoteView()
 }
-
-
-
-
-// MARK: - 标签视图组件
-struct EditTagView: View {
-    let tag: String
-    let onRemove: () -> Void
-    
-    var body: some View {
-        HStack(spacing: 6) {
-            Text(tag)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundColor(.white)
-            
-            Button(action: onRemove) {
-                Image(systemName: "xmark")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundColor(.white.opacity(0.8))
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .background(
-            RoundedRectangle(cornerRadius: 15)
-                .fill(Color.white.opacity(0.1))
-                .overlay(tagHighlight)
-        )
-        .fixedSize(horizontal: true, vertical: false)
-    }
-    
-    private var tagHighlight: some View {
-        RoundedRectangle(cornerRadius: 15)
-            .stroke(Color.white.opacity(0.2), lineWidth: 0.5)
-            .mask(
-                RoundedRectangle(cornerRadius: 15)
-                    .fill(
-                        RadialGradient(
-                            colors: [Color.white, Color.clear],
-                            center: .topLeading,
-                            startRadius: 2,
-                            endRadius: 15
-                        )
-                    )
-            )
-    }
-}
-
-// MARK: - MarkupDelegate 实现
-extension NewNoteView {
-    
-    func markupDidLoad(_ view: MarkupWKWebView, handler: (()->Void)?) {
-        MarkupEditor.selectedWebView = view
-        handler?()
-    }
-    
-    func markupInput(_ view: MarkupWKWebView) {
-        // 获取当前HTML内容并提取标签
-        view.getHtml { html in
-            DispatchQueue.main.async {
-                if let html = html {
-                    self.noteHtml = html
-                    self.extractTags(from: html)
-                }
-            }
-        }
-    }
-    
-}
-
-// MARK: 数组去重扩展
-extension Array where Element: Hashable {
-    func removingDuplicates() -> [Element] {
-        var seen = Set<Element>()
-        return filter { seen.insert($0).inserted }
-    }
-} 
