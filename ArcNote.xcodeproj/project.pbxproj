@@ -9,6 +9,11 @@
 /* Begin PBXBuildFile section */
 		C0DEF1002F60000100000001 /* CoreFlow in Frameworks */ = {isa = PBXBuildFile; productRef = C0DEF1002F60000100000003 /* CoreFlow */; };
 		C0DEF2002F70000100000001 /* BlockNoteEditor in Frameworks */ = {isa = PBXBuildFile; productRef = C0DEF2002F70000100000003 /* BlockNoteEditor */; };
+		C0DEF3002F80000100000011 /* BlockNoteCardEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF3002F80000100000021 /* BlockNoteCardEditor.swift */; };
+		C0DEF3002F80000100000012 /* CardEditorShell.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF3002F80000100000022 /* CardEditorShell.swift */; };
+		C0DEF3002F80000100000013 /* CardEditorMetadataRows.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF3002F80000100000023 /* CardEditorMetadataRows.swift */; };
+		C0DEF3002F80000100000014 /* CardEditorFormattingBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF3002F80000100000024 /* CardEditorFormattingBar.swift */; };
+		C0DEF3002F80000100000015 /* CardEditorBackground.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF3002F80000100000025 /* CardEditorBackground.swift */; };
 		C0DEF1012F60000100000003 /* NetworkCoreFlowService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1012F60000100000002 /* NetworkCoreFlowService.swift */; };
 		C0DEF1022F60000100000003 /* NetworkCoreSparkService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1022F60000100000002 /* NetworkCoreSparkService.swift */; };
 		C0DEF1022F60000100000005 /* SparkContinuationViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1022F60000100000004 /* SparkContinuationViews.swift */; };
@@ -170,6 +175,11 @@
 		C0DEF1172F60000100000002 /* BlockedActorsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlockedActorsView.swift; sourceTree = "<group>"; };
 		C0DEF1012F60000100000004 /* FlowViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlowViews.swift; sourceTree = "<group>"; };
 		C0DEF1012F60000100000006 /* CoreShellViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreShellViews.swift; sourceTree = "<group>"; };
+		C0DEF3002F80000100000021 /* BlockNoteCardEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlockNoteCardEditor.swift; sourceTree = "<group>"; };
+		C0DEF3002F80000100000022 /* CardEditorShell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardEditorShell.swift; sourceTree = "<group>"; };
+		C0DEF3002F80000100000023 /* CardEditorMetadataRows.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardEditorMetadataRows.swift; sourceTree = "<group>"; };
+		C0DEF3002F80000100000024 /* CardEditorFormattingBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardEditorFormattingBar.swift; sourceTree = "<group>"; };
+		C0DEF3002F80000100000025 /* CardEditorBackground.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardEditorBackground.swift; sourceTree = "<group>"; };
 		A00000012F50000100000002 /* ArcNoteUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArcNoteUITests.swift; sourceTree = "<group>"; };
 		A00000012F50000100000003 /* ArcNoteUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ArcNoteUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		1B055F4D2E4E08EE00896B01 /* ChatDetailView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ChatDetailView.swift; sourceTree = "<group>"; };
@@ -266,6 +276,18 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		C0DEF3002F80000100000001 /* CardEditor */ = {
+			isa = PBXGroup;
+			children = (
+				C0DEF3002F80000100000021 /* BlockNoteCardEditor.swift */,
+				C0DEF3002F80000100000022 /* CardEditorShell.swift */,
+				C0DEF3002F80000100000023 /* CardEditorMetadataRows.swift */,
+				C0DEF3002F80000100000024 /* CardEditorFormattingBar.swift */,
+				C0DEF3002F80000100000025 /* CardEditorBackground.swift */,
+			);
+			path = CardEditor;
+			sourceTree = "<group>";
+		};
 		C0DEF1012F60000100000001 /* CoreFlow */ = {
 			isa = PBXGroup;
 			children = (
@@ -328,6 +350,7 @@
 		1B48AE332E30967F0090CF86 /* ArcNote */ = {
 			isa = PBXGroup;
 			children = (
+				C0DEF3002F80000100000001 /* CardEditor */,
 				C0DEF1012F60000100000001 /* CoreFlow */,
 				C0DEF1162F60000100000002 /* FollowListView.swift */,
 				C0DEF1172F60000100000002 /* BlockedActorsView.swift */,
@@ -556,6 +579,11 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C0DEF3002F80000100000011 /* BlockNoteCardEditor.swift in Sources */,
+				C0DEF3002F80000100000012 /* CardEditorShell.swift in Sources */,
+				C0DEF3002F80000100000013 /* CardEditorMetadataRows.swift in Sources */,
+				C0DEF3002F80000100000014 /* CardEditorFormattingBar.swift in Sources */,
+				C0DEF3002F80000100000015 /* CardEditorBackground.swift in Sources */,
 				C0DEF1012F60000100000003 /* NetworkCoreFlowService.swift in Sources */,
 				C0DEF1022F60000100000003 /* NetworkCoreSparkService.swift in Sources */,
 				C0DEF1022F60000100000005 /* SparkContinuationViews.swift in Sources */,

@@ -10,7 +10,7 @@ final class BlockNoteEditorCommandTests: XCTestCase {
 
     func testInitializeEncodesExactVersionedEnvelopeIncludingNullDocument() throws {
         let command = BlockNoteEditorCommand.initialize(
-            protocolVersion: 1,
+            protocolVersion: 2,
             documentJSON: nil,
             fallbackMarkdown: "Fallback",
             editable: false
@@ -18,7 +18,7 @@ final class BlockNoteEditorCommandTests: XCTestCase {
 
         XCTAssertEqual(
             String(decoding: try encoder.encode(command), as: UTF8.self),
-            #"{"documentJSON":null,"editable":false,"fallbackMarkdown":"Fallback","protocolVersion":1,"type":"initialize"}"#
+            #"{"documentJSON":null,"editable":false,"fallbackMarkdown":"Fallback","protocolVersion":2,"type":"initialize"}"#
         )
     }
 

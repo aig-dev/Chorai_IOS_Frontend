@@ -73,6 +73,7 @@ public enum BlockNoteEditorMessage: Codable, Equatable, Sendable {
         fallbackMarkdown: String
     )
     case selectionChanged(BlockNoteSelectionState)
+    case bodyFocusChanged(isFocused: Bool)
     case heightChanged(contentHeight: Double)
     case snapshot(
         requestID: String,
@@ -91,6 +92,7 @@ public enum BlockNoteEditorMessage: Codable, Equatable, Sendable {
         case contentJSON
         case fallbackMarkdown
         case selectionState
+        case isFocused
         case contentHeight
         case requestID
         case code
@@ -119,6 +121,11 @@ public enum BlockNoteEditorMessage: Codable, Equatable, Sendable {
         case "selectionChanged":
             self = .selectionChanged(
                 try container.decode(BlockNoteSelectionState.self, forKey: .selectionState)
+            )
+
+        case "bodyFocusChanged":
+            self = .bodyFocusChanged(
+                isFocused: try container.decode(Bool.self, forKey: .isFocused)
             )
 
         case "heightChanged":
@@ -184,6 +191,10 @@ public enum BlockNoteEditorMessage: Codable, Equatable, Sendable {
         case let .selectionChanged(selectionState):
             try container.encode("selectionChanged", forKey: .type)
             try container.encode(selectionState, forKey: .selectionState)
+
+        case let .bodyFocusChanged(isFocused):
+            try container.encode("bodyFocusChanged", forKey: .type)
+            try container.encode(isFocused, forKey: .isFocused)
 
         case let .heightChanged(contentHeight):
             try container.encode("heightChanged", forKey: .type)

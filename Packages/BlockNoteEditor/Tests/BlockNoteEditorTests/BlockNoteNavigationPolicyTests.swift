@@ -1,8 +1,26 @@
 import Foundation
+import WebKit
 import XCTest
 @testable import BlockNoteEditor
 
 final class BlockNoteNavigationPolicyTests: XCTestCase {
+    func testBootstrapQueueIsInstalledAtDocumentStartForTheMainFrame() {
+        let userContentController = WKUserContentController()
+
+        BlockNoteBridgeBootstrap.install(in: userContentController)
+
+        let script = userContentController.userScripts.first
+        XCTAssertEqual(userContentController.userScripts.count, 1)
+        XCTAssertEqual(script?.injectionTime, .atDocumentStart)
+        XCTAssertEqual(script?.isForMainFrameOnly, true)
+        XCTAssertTrue(
+            BlockNoteBridgeBootstrap.contentWorld === WKContentWorld.page
+        )
+        XCTAssertTrue(script?.source.contains("ChoraiBlockNoteEditor") == true)
+        XCTAssertTrue(script?.source.contains("__choraiEditorCommandQueue") == true)
+        XCTAssertTrue(script?.source.contains("pending.push(command)") == true)
+    }
+
     func testOnlyInitialIndexNavigationIsAllowedInMainFrame() {
         let root = URL(fileURLWithPath: "/tmp/BlockNoteResources", isDirectory: true)
         let index = root.appendingPathComponent("index.html")

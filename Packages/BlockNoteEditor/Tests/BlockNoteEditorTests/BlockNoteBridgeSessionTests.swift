@@ -12,21 +12,21 @@ final class BlockNoteBridgeSessionTests: XCTestCase {
         XCTAssertEqual(
             session.navigationFinished().commands,
             [.initialize(
-                protocolVersion: 1,
+                protocolVersion: 2,
                 documentJSON: nil,
                 fallbackMarkdown: "Legacy",
                 editable: true
             )]
         )
 
-        let mismatch = session.receive(.ready(protocolVersion: 2, schemaVersion: 1))
+        let mismatch = session.receive(.ready(protocolVersion: 3, schemaVersion: 1))
         XCTAssertTrue(mismatch.commands.isEmpty)
         XCTAssertFalse(session.state.isBridgeReady)
 
         XCTAssertEqual(
             session.navigationFinished().commands,
             [.initialize(
-                protocolVersion: 1,
+                protocolVersion: 2,
                 documentJSON: nil,
                 fallbackMarkdown: "Legacy",
                 editable: true
@@ -34,7 +34,7 @@ final class BlockNoteBridgeSessionTests: XCTestCase {
         )
         XCTAssertTrue(session.request(.blur).commands.isEmpty)
 
-        let ready = session.receive(.ready(protocolVersion: 1, schemaVersion: 1))
+        let ready = session.receive(.ready(protocolVersion: 2, schemaVersion: 1))
         XCTAssertEqual(ready.commands, [.blur])
         XCTAssertTrue(session.state.isBridgeReady)
     }
@@ -48,7 +48,7 @@ final class BlockNoteBridgeSessionTests: XCTestCase {
         _ = session.request(.focus)
         _ = session.navigationFinished()
 
-        let ready = session.receive(.ready(protocolVersion: 1, schemaVersion: 1))
+        let ready = session.receive(.ready(protocolVersion: 2, schemaVersion: 1))
 
         XCTAssertEqual(ready.commands, [.focus])
         XCTAssertTrue(ready.events.contains(.bridgeError(code: "read_only")))
@@ -82,7 +82,7 @@ final class BlockNoteBridgeSessionTests: XCTestCase {
         )
 
         _ = session.navigationFinished()
-        let recovered = session.receive(.ready(protocolVersion: 1, schemaVersion: 1))
+        let recovered = session.receive(.ready(protocolVersion: 2, schemaVersion: 1))
         XCTAssertTrue(recovered.commands.isEmpty)
     }
 
@@ -110,7 +110,7 @@ final class BlockNoteBridgeSessionTests: XCTestCase {
         )
 
         _ = session.navigationFinished()
-        let recovered = session.receive(.ready(protocolVersion: 1, schemaVersion: 1))
+        let recovered = session.receive(.ready(protocolVersion: 2, schemaVersion: 1))
         XCTAssertTrue(recovered.commands.isEmpty)
     }
 
@@ -121,7 +121,7 @@ final class BlockNoteBridgeSessionTests: XCTestCase {
         harness.controller.focus()
         _ = harness.session.navigationFinished()
         harness.dispatch(harness.session.receive(.ready(
-            protocolVersion: 1,
+            protocolVersion: 2,
             schemaVersion: 1
         )))
 

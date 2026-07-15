@@ -39,6 +39,7 @@ public enum BlockNoteEditorEvent: Equatable, Sendable {
     case availabilityChanged(BlockNoteEditorAvailability)
     case documentChanged(BlockNoteDocumentRevision)
     case selectionChanged(BlockNoteSelectionState)
+    case bodyFocusChanged(isFocused: Bool)
     case heightChanged(Double)
     case compatibilityBlocked(code: String, details: String)
     case bridgeError(code: String)
@@ -160,6 +161,14 @@ public struct BlockNoteEditorState: Equatable, Sendable {
             }
             selectionState = selection
             return .init(events: [.selectionChanged(selection)])
+
+        case let .bodyFocusChanged(isFocused):
+            guard isBridgeReady else {
+                return .init(events: [
+                    .bridgeError(code: "unexpected_body_focus"),
+                ])
+            }
+            return .init(events: [.bodyFocusChanged(isFocused: isFocused)])
 
         case let .heightChanged(contentHeight):
             guard contentHeight.isFinite, contentHeight >= 0 else {

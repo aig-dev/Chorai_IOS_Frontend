@@ -48,6 +48,8 @@ struct ArcNoteApp: App {
         .contains("--ui-test-chat-visibility")
     private let isNotificationInboxUITestRoute = ProcessInfo.processInfo.arguments
         .contains("--ui-test-notification-inbox")
+    private let isCardEditorShellUITestRoute = ProcessInfo.processInfo.arguments
+        .contains("--ui-test-card-editor-shell")
     private let profileUITestActorID: String? = {
         guard ProcessInfo.processInfo.arguments
             .contains("--ui-test-open-profile") else {
@@ -95,6 +97,8 @@ struct ArcNoteApp: App {
             #if DEBUG
             if isAPIMigrationSmoke {
                 Color.clear
+            } else if isCardEditorShellUITestRoute {
+                CardEditorShellFixtureScreen()
             } else if isSignInUITestRoute {
                 NavigationStack {
                     SignInView()

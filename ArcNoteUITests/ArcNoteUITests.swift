@@ -16,6 +16,262 @@ final class ArcNoteUITests: XCTestCase {
         sparkSessionScope = "\(name).\(UUID().uuidString)"
     }
 
+    func testCardEditorShellEmptyHierarchyIsHeaderlessAndAccessible() {
+        launchCardEditorFixture(mode: "empty")
+
+        let content = waitFor("cardEditorContent")
+        let tags = waitFor("cardEditorTagsRow")
+        let links = waitFor("cardEditorLinksRow")
+        XCTAssertLessThan(content.frame.maxY, tags.frame.minY)
+        XCTAssertLessThan(tags.frame.maxY, links.frame.minY)
+        XCTAssertFalse(app.descendants(matching: .any)["cardEditorHeader"].exists)
+        XCTAssertFalse(app.descendants(matching: .any)["cardEditorTitleField"].exists)
+
+        for identifier in [
+            "cardEditorFloatingBack",
+            "cardEditorMoreButton",
+            "cardEditorAddTag",
+            "cardEditorAddLink",
+        ] {
+            assertPrimaryControl(waitFor(identifier), identifier: identifier)
+        }
+        captureVisual("card-editor-empty")
+    }
+
+    func testCardEditorShellPopulatedRowsKeepActionsTrailing() {
+        launchCardEditorFixture(mode: "populated")
+
+        let lastTag = waitFor("cardEditorTag.research")
+        let addTag = waitFor("cardEditorAddTag")
+        assertReadingOrder(lastTag, before: addTag)
+
+        let firstLink = waitFor("cardEditorLink.ast_fixture_a")
+        let secondLink = waitFor("cardEditorLink.ast_fixture_b")
+        let overflow = waitFor("cardEditorLinkOverflow")
+        let addLink = waitFor("cardEditorAddLink")
+        assertReadingOrder(firstLink, before: secondLink)
+        assertReadingOrder(secondLink, before: overflow)
+        assertReadingOrder(overflow, before: addLink)
+        XCTAssertEqual(overflow.label, "+3")
+        XCTAssertFalse(
+            app.descendants(matching: .any)["cardEditorLink.ast_fixture_c"]
+                .exists
+        )
+        assertPrimaryControl(addTag, identifier: "cardEditorAddTag")
+        assertPrimaryControl(addLink, identifier: "cardEditorAddLink")
+        captureVisual("card-editor-populated")
+    }
+
+    func testCardEditorShellBackgroundStopsBeforeMetadata() {
+        launchCardEditorFixture(mode: "background")
+
+        let content = waitFor("cardEditorContent")
+        let background = waitFor("cardEditorBodyBackground")
+        let pendingImage = waitFor("cardEditorPendingBackgroundImage")
+        let tags = waitFor("cardEditorTagsRow")
+        XCTAssertGreaterThanOrEqual(background.frame.minX, content.frame.minX - 1)
+        XCTAssertLessThanOrEqual(background.frame.maxX, content.frame.maxX + 1)
+        XCTAssertGreaterThanOrEqual(background.frame.minY, content.frame.minY - 1)
+        XCTAssertLessThanOrEqual(background.frame.maxY, content.frame.maxY + 1)
+        XCTAssertEqual(pendingImage.frame, background.frame)
+        XCTAssertLessThan(background.frame.maxY, tags.frame.minY)
+        captureVisual("card-editor-background")
+    }
+
+    func testCardEditorShellCompatibilityBlockIsReadOnlyAndCannotSave() {
+        launchCardEditorFixture(mode: "blocked")
+
+        XCTAssertTrue(waitFor("cardEditorCompatibilityNotice").isHittable)
+        XCTAssertEqual(
+            waitFor("cardEditorReadOnlyFallback").label,
+            "A note from a newer editor"
+        )
+        XCTAssertFalse(
+            app.descendants(matching: .any)["cardEditorBodyWebView"].exists
+        )
+        let save = waitForButton("cardEditorSave")
+        XCTAssertFalse(save.isEnabled)
+        XCTAssertFalse(waitForButton("cardEditorAddTag").isEnabled)
+        XCTAssertFalse(waitForButton("cardEditorTag.archive").isEnabled)
+        XCTAssertFalse(waitForButton("cardEditorAddLink").isEnabled)
+        XCTAssertFalse(app.buttons["cardEditorFormatBold"].exists)
+        XCTAssertTrue(waitForButton("cardEditorFloatingBack").isEnabled)
+
+        let preservedLink = waitForButton("cardEditorLink.ast_blocked")
+        XCTAssertTrue(preservedLink.isEnabled)
+        preservedLink.tap()
+        waitFor("cardEditorLinksSheet")
+        XCTAssertTrue(waitFor("cardEditorReadOnlyLink.ast_blocked").exists)
+        XCTAssertFalse(
+            app.descendants(matching: .any)["cardEditorRemoveLink.ast_blocked"]
+                .exists
+        )
+        app.buttons["Done"].tap()
+
+        waitForButton("cardEditorMoreButton").tap()
+        XCTAssertFalse(waitForButton("cardEditorPrivacyButton").isEnabled)
+        XCTAssertFalse(waitForButton("cardEditorBackgroundButton").isEnabled)
+        captureVisual("card-editor-compatibility-blocked")
+    }
+
+    func testCardEditorFormattingBarKeepsDismissFixedAndReflectsSelection() {
+        launchCardEditorFixture(mode: "keyboard")
+
+        let body = waitFor("cardEditorBodyWebView")
+        body.coordinate(
+            withNormalizedOffset: CGVector(dx: 0.25, dy: 0.04)
+        ).tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 10))
+        waitFor("cardEditorFormattingBar")
+        let dismiss = waitForButton("cardEditorKeyboardDismiss")
+        let paragraph = waitForButton("cardEditorFormatParagraph")
+        let heading2 = waitForButton("cardEditorFormatHeading2")
+        let bold = waitForButton("cardEditorFormatBold")
+        XCTAssertLessThan(dismiss.frame.maxX, paragraph.frame.minX)
+        XCTAssertEqual(heading2.value as? String, "selected")
+        XCTAssertEqual(bold.value as? String, "selected")
+        for (identifier, element) in [
+            ("cardEditorKeyboardDismiss", dismiss),
+            ("cardEditorFormatParagraph", paragraph),
+            ("cardEditorFormatHeading2", heading2),
+            ("cardEditorFormatBold", bold),
+        ] {
+            assertPrimaryControl(element, identifier: identifier)
+        }
+        captureVisual("card-editor-formatting")
+
+        dismiss.tap()
+        waitForMissing("cardEditorFormattingBar")
+        waitForElementToDisappear(app.keyboards.firstMatch)
+    }
+
+    func testCardEditorFormattingBarFollowsInteractiveScrollDismissal() {
+        launchCardEditorFixture(mode: "keyboard")
+
+        waitFor("cardEditorBodyWebView")
+        let visibleParagraph = app.staticTexts["Scroll fixture paragraph 0"]
+        XCTAssertTrue(visibleParagraph.waitForExistence(timeout: 10))
+        XCTAssertTrue(visibleParagraph.isHittable)
+        visibleParagraph.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 10))
+        waitFor("cardEditorFormattingBar")
+
+        let scroll = app.scrollViews.firstMatch
+        let start = scroll.coordinate(
+            withNormalizedOffset: CGVector(dx: 0.55, dy: 0.72)
+        )
+        let end = scroll.coordinate(
+            withNormalizedOffset: CGVector(dx: 0.55, dy: 0.28)
+        )
+        start.press(forDuration: 0.05, thenDragTo: end)
+        waitForMissing("cardEditorFormattingBar")
+        waitForElementToDisappear(app.keyboards.firstMatch)
+
+        XCTAssertTrue(visibleParagraph.isHittable)
+        visibleParagraph.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 10))
+        waitFor("cardEditorFormattingBar")
+    }
+
+    func testNativeMetadataInputsDoNotShowBodyFormattingBar() {
+        launchCardEditorFixture(mode: "empty")
+
+        waitForButton("cardEditorAddTag").tap()
+        let tagInput = waitFor("cardEditorNativeTagInput")
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 10))
+        XCTAssertFalse(
+            app.descendants(matching: .any)["cardEditorFormattingBar"].exists
+        )
+        tagInput.typeText("native tag")
+        app.buttons["Done"].tap()
+        waitForMissing("cardEditorNativeTagInput")
+
+        waitForButton("cardEditorAddLink").tap()
+        let linkInput = waitFor("cardEditorNativeLinkInput")
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 10))
+        XCTAssertFalse(
+            app.descendants(matching: .any)["cardEditorFormattingBar"].exists
+        )
+        linkInput.typeText("linked note")
+        app.buttons["Done"].tap()
+        waitForMissing("cardEditorNativeLinkInput")
+    }
+
+    func testCardEditorLinkSheetOnlyDeletesRemovableRelations() {
+        launchCardEditorFixture(mode: "populated")
+
+        waitFor("cardEditorLinkOverflow").tap()
+        waitFor("cardEditorLinksSheet")
+        XCTAssertTrue(
+            waitFor("cardEditorRemoveLink.ast_fixture_a").isEnabled
+        )
+        XCTAssertFalse(
+            app.descendants(matching: .any)[
+                "cardEditorRemoveLink.ast_fixture_c"
+            ].exists
+        )
+        XCTAssertTrue(
+            waitFor("cardEditorNonRemovableLink.ast_fixture_c").exists
+        )
+    }
+
+    func testCardEditorMoreMenuKeepsBackgroundEntryPointStable() {
+        launchCardEditorFixture(mode: "empty")
+
+        waitForButton("cardEditorMoreButton").tap()
+        XCTAssertTrue(waitForButton("cardEditorBackgroundButton").isEnabled)
+        let cardActions = waitForButton("cardEditorCardActionsButton")
+        XCTAssertTrue(cardActions.isEnabled)
+        cardActions.tap()
+        waitFor("cardEditorCardActionsRequested")
+    }
+
+    func testCardEditorLongTagStaysInsideReadableWidth() {
+        app.launchArguments += [
+            "--ui-test-card-editor-shell",
+            "-UIPreferredContentSizeCategoryName",
+            "UICTContentSizeCategoryAccessibilityXXXL",
+        ]
+        app.launchEnvironment["CHORAI_CARD_EDITOR_FIXTURE_MODE"] = "long-tag"
+        app.launch()
+
+        waitFor("screen.card-editor-shell")
+        let tag = waitFor("cardEditorTag.this-is-an-intentionally-long-tag-that-must-compress")
+        let row = waitFor("cardEditorTagsRow")
+        XCTAssertGreaterThanOrEqual(tag.frame.minX, row.frame.minX - 1)
+        XCTAssertLessThanOrEqual(tag.frame.maxX, row.frame.maxX + 1)
+        XCTAssertGreaterThanOrEqual(tag.frame.height, 44)
+        assertReadingOrder(tag, before: waitFor("cardEditorAddTag"))
+    }
+
+    func testCardEditorBootstrapReachesReadyForMinimalDocument() {
+        launchCardEditorFixture(mode: "empty")
+
+        let body = waitFor("cardEditorBodyWebView")
+        XCTAssertTrue(waitForButton("cardEditorSave").isEnabled)
+        body.coordinate(
+            withNormalizedOffset: CGVector(dx: 0.25, dy: 0.04)
+        ).tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 10))
+        app.typeText("x")
+    }
+
+    func testCardEditorShellSupportsAccessibilityTextSize() {
+        app.launchArguments += [
+            "--ui-test-card-editor-shell",
+            "-UIPreferredContentSizeCategoryName",
+            "UICTContentSizeCategoryAccessibilityXXXL",
+        ]
+        app.launchEnvironment["CHORAI_CARD_EDITOR_FIXTURE_MODE"] = "populated"
+        app.launch()
+
+        waitFor("screen.card-editor-shell")
+        let addTag = waitFor("cardEditorAddTag")
+        XCTAssertGreaterThanOrEqual(addTag.frame.height, 44)
+        XCTAssertFalse(app.descendants(matching: .any)["cardEditorHeader"].exists)
+        captureVisual("card-editor-accessibility-text")
+    }
+
     func testSignInOnlyShowsSupportedAuthenticationActions() {
         app.launchArguments.append("--ui-test-sign-in")
         app.launch()
@@ -3945,6 +4201,97 @@ final class ArcNoteUITests: XCTestCase {
         app.launchArguments.append("--ui-test-discovery-path")
         app.launchEnvironment["CHORAI_DISCOVERY_PATH_FIXTURE_MODE"] = mode
         app.launch()
+    }
+
+    private func launchCardEditorFixture(mode: String) {
+        app.launchArguments.append("--ui-test-card-editor-shell")
+        app.launchEnvironment["CHORAI_CARD_EDITOR_FIXTURE_MODE"] = mode
+        app.launch()
+        waitFor("screen.card-editor-shell")
+        if mode != "blocked" {
+            waitForEnabled(waitForButton("cardEditorSave"))
+        }
+    }
+
+    @discardableResult
+    private func waitForEnabled(
+        _ element: XCUIElement,
+        timeout: TimeInterval = 10,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) -> XCUIElement {
+        let expectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "enabled == true"),
+            object: element
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [expectation], timeout: timeout),
+            .completed,
+            "Timed out waiting for \(element) to become enabled",
+            file: file,
+            line: line
+        )
+        return element
+    }
+
+    private func assertPrimaryControl(
+        _ element: XCUIElement,
+        identifier: String,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        XCTAssertTrue(element.isHittable, "\(identifier) must be hittable", file: file, line: line)
+        XCTAssertGreaterThanOrEqual(
+            element.frame.width,
+            44,
+            "\(identifier) must be at least 44 points wide",
+            file: file,
+            line: line
+        )
+        XCTAssertGreaterThanOrEqual(
+            element.frame.height,
+            44,
+            "\(identifier) must be at least 44 points tall",
+            file: file,
+            line: line
+        )
+    }
+
+    private func assertReadingOrder(
+        _ first: XCUIElement,
+        before second: XCUIElement,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let sameLine = abs(first.frame.midY - second.frame.midY) < 4
+        let ordered = sameLine
+            ? first.frame.maxX <= second.frame.minX
+            : first.frame.minY < second.frame.minY
+        XCTAssertTrue(
+            ordered,
+            "Expected \(first.identifier) before \(second.identifier)",
+            file: file,
+            line: line
+        )
+    }
+
+    private func waitForElementToDisappear(
+        _ element: XCUIElement,
+        timeout: TimeInterval = 10,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let expectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == false"),
+            object: element
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [expectation], timeout: timeout),
+            .completed,
+            "Element still exists: \(element)",
+            file: file,
+            line: line
+        )
     }
 
     private func replaceShortFixtureText(_ identifier: String, with text: String) {

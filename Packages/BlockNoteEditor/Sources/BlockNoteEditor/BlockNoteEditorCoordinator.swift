@@ -1,6 +1,43 @@
 import Foundation
 import WebKit
 
+enum BlockNoteBridgeBootstrap {
+    static let contentWorld = WKContentWorld.page
+
+    static var source: String {
+        """
+        (() => {
+          const bridgeWindow = window;
+          const bridgeName = "\(BlockNoteEditorProtocol.javaScriptBridgeName)";
+          const queueName = "\(BlockNoteEditorProtocol.javaScriptQueueName)";
+          const existingQueue = bridgeWindow[queueName];
+          if (
+            existingQueue &&
+            bridgeWindow[bridgeName] === existingQueue.receiver &&
+            Array.isArray(existingQueue.pending)
+          ) return;
+
+          const previous = bridgeWindow[bridgeName];
+          const pending = [];
+          const receiver = {
+            receiveCommand(command) { pending.push(command); }
+          };
+          bridgeWindow[queueName] = { receiver, pending, previous };
+          bridgeWindow[bridgeName] = receiver;
+        })();
+        """
+    }
+
+    static func install(in userContentController: WKUserContentController) {
+        userContentController.addUserScript(WKUserScript(
+            source: source,
+            injectionTime: .atDocumentStart,
+            forMainFrameOnly: true,
+            in: contentWorld
+        ))
+    }
+}
+
 enum BlockNoteNavigationDecision: Equatable {
     case allow
     case cancel
@@ -116,6 +153,7 @@ public final class BlockNoteEditorCoordinator: NSObject {
 
     func makeWebView() -> WKWebView {
         let userContentController = WKUserContentController()
+        BlockNoteBridgeBootstrap.install(in: userContentController)
         userContentController.add(self, name: BlockNoteEditorProtocol.webKitHandlerName)
 
         let configuration = WKWebViewConfiguration()
