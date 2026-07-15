@@ -3,8 +3,8 @@
   "schemaVersion": 1,
   "blockNoteVersion": "0.46.2",
   "hashes": {
-    "editor.css": "e556b3aa34ea96001bbf1247cb64968fe10a36cf3ec05f582d5380b5e3c64b4e",
-    "editor.js": "a9850cba9e29c9721bf651fb82aedd604b40e8075a39ff1be65c4f977877dedf",
+    "editor.css": "395f0155ae26c5f2db708fa2d862c7d36aa153c765cf285377af5fc51539cfcb",
+    "editor.js": "3066074640aa2659a07f5fe887278886ab10ee76d0697cc073eff4be28cb2364",
     "index.html": "2ccd92ebd73ae97846cecd750b68bb69f2c74bca5a02018bbd4cd6a9783396a4"
   }
 }

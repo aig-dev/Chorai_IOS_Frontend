@@ -196,9 +196,10 @@ private struct CardEditorFloatingControls: View {
         ZStack {
             Button(action: onBack) {
                 Image(systemName: "chevron.left")
-                    .font(.body.weight(.semibold))
+                    .font(.system(size: 17, weight: .semibold))
                     .frame(width: 44, height: 44)
                     .background(controlBackground)
+                    .clipShape(Circle())
                     .contentShape(Circle())
             }
             .buttonStyle(.plain)
@@ -243,9 +244,10 @@ private struct CardEditorFloatingControls: View {
                 }
             } label: {
                 Image(systemName: "ellipsis")
-                    .font(.body.weight(.semibold))
+                    .font(.system(size: 17, weight: .semibold))
                     .frame(width: 44, height: 44)
                     .background(controlBackground)
+                    .clipShape(Circle())
                     .contentShape(Circle())
             }
             .buttonStyle(.plain)
@@ -278,6 +280,7 @@ private enum CardEditorShellFixtureMode: String {
     case blocked
     case keyboard
     case longTag = "long-tag"
+    case bridgeFailure = "bridge-failure"
 }
 
 private enum CardEditorNativeInputKind: String, Identifiable {
@@ -318,15 +321,19 @@ struct CardEditorShellFixtureScreen: View {
                 )
             )
             : nil
-        _bodyModel = StateObject(
-            wrappedValue: BlockNoteCardEditorModel(
-                document: Self.document(for: mode),
-                initialContentHeight: mode == .keyboard ? 640 : 248,
-                initialSelection: initialSelection,
-                initiallyFocused: false,
-                initialCompatibilityBlock: blockedCode
-            )
+        let fixtureModel = BlockNoteCardEditorModel(
+            document: Self.document(for: mode),
+            initialContentHeight: mode == .keyboard ? 640 : 248,
+            initialSelection: initialSelection,
+            initiallyFocused: false,
+            initialCompatibilityBlock: blockedCode
         )
+        if mode == .bridgeFailure {
+            fixtureModel.receive(
+                .availabilityChanged(.failed(code: "fixture_bridge_failure"))
+            )
+        }
+        _bodyModel = StateObject(wrappedValue: fixtureModel)
         _tags = State(initialValue: mode.fixtureTags)
         _links = State(initialValue: mode.fixtureLinks)
         _background = State(
@@ -487,7 +494,7 @@ private extension CardEditorShellFixtureMode {
             return ["archive"]
         case .longTag:
             return ["this-is-an-intentionally-long-tag-that-must-compress"]
-        case .empty:
+        case .empty, .bridgeFailure:
             return []
         }
     }

@@ -169,6 +169,60 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         )
     }
 
+    func testFatalBridgeFailureUnmountsTheEditorAndRetriesWithANewSession() throws {
+        let adapter = try source(
+            at: "ArcNote/CardEditor/BlockNoteCardEditor.swift"
+        )
+
+        XCTAssertTrue(adapter.contains("bridgeFailureNotice"))
+        XCTAssertTrue(adapter.contains("if let bridgeFailureNotice"))
+        XCTAssertTrue(adapter.contains("cardEditorBridgeFailureNotice"))
+        XCTAssertTrue(adapter.contains("cardEditorBridgeRetry"))
+        XCTAssertTrue(adapter.contains("func retryAfterBridgeFailure()"))
+        XCTAssertTrue(adapter.contains("editorInstanceID = UUID()"))
+        XCTAssertTrue(adapter.contains("controller = BlockNoteEditorController()"))
+        XCTAssertTrue(adapter.contains(".id(model.editorInstanceID)"))
+        XCTAssertTrue(adapter.contains("from editorInstanceID: UUID"))
+        XCTAssertTrue(adapter.contains("guard editorInstanceID == self.editorInstanceID"))
+    }
+
+    func testUnsupportedSelectionsDisableSelectionCommands() throws {
+        let adapter = try source(
+            at: "ArcNote/CardEditor/BlockNoteCardEditor.swift"
+        )
+        let formatting = try source(
+            at: "ArcNote/CardEditor/CardEditorFormattingBar.swift"
+        )
+
+        XCTAssertTrue(adapter.contains("func canPerform("))
+        XCTAssertTrue(adapter.contains("selectionState?.blockType == .unsupported"))
+        XCTAssertTrue(adapter.contains("guard canPerform(command) else"))
+        XCTAssertTrue(formatting.contains(".disabled(!model.canPerform(command))"))
+    }
+
+    func testFloatingControlSymbolsStayInsideFixedHitTargetsAtLargeType() throws {
+        let shell = try source(
+            at: "ArcNote/CardEditor/CardEditorShell.swift"
+        )
+        let controlsStart = try XCTUnwrap(
+            shell.range(of: "private struct CardEditorFloatingControls")
+        )
+        let controlsEnd = try XCTUnwrap(
+            shell.range(of: "#if DEBUG", range: controlsStart.upperBound..<shell.endIndex)
+        )
+        let controls = shell[controlsStart.lowerBound..<controlsEnd.lowerBound]
+
+        XCTAssertGreaterThanOrEqual(
+            controls.components(separatedBy: ".font(.system(size: 17, weight: .semibold))").count - 1,
+            2
+        )
+        XCTAssertGreaterThanOrEqual(
+            controls.components(separatedBy: ".clipShape(Circle())").count - 1,
+            2
+        )
+        XCTAssertFalse(controls.contains(".font(.body"))
+    }
+
     func testBackgroundSupportsLocalAndRemoteImagesInsideBodySurface() throws {
         let background = try source(
             at: "ArcNote/CardEditor/CardEditorBackground.swift"
@@ -187,6 +241,17 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         XCTAssertTrue(background.contains(".clipped()"))
     }
 
+    func testBackgroundDecorationsNeverEnterTheAccessibilityTree() throws {
+        let background = try source(
+            at: "ArcNote/CardEditor/CardEditorBackground.swift"
+        )
+
+        XCTAssertTrue(background.contains(".accessibilityHidden(true)"))
+        XCTAssertFalse(background.contains("#if DEBUG"))
+        XCTAssertFalse(background.contains(".accessibilityElement("))
+        XCTAssertFalse(background.contains(".accessibilityLabel("))
+    }
+
     func testDebugAppRouteExposesDeterministicCardEditorFixture() throws {
         let app = try source(at: "ArcNote/ArcNoteApp.swift")
         let fixture = try source(at: "ArcNote/CardEditor/CardEditorShell.swift")
@@ -203,6 +268,13 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         )
         XCTAssertTrue(fixture.contains("isMetadataEditable: bodyModel.canMutate"))
         XCTAssertTrue(fixture.contains("case longTag = \"long-tag\""))
+        XCTAssertTrue(fixture.contains("case bridgeFailure = \"bridge-failure\""))
+        XCTAssertTrue(fixture.contains("fixtureModel.receive("))
+        XCTAssertTrue(
+            fixture.contains(
+                ".availabilityChanged(.failed(code: \"fixture_bridge_failure\"))"
+            )
+        )
         XCTAssertTrue(fixture.contains(#""backgroundColor":"default""#))
         XCTAssertTrue(fixture.contains(#""textAlignment":"left""#))
         XCTAssertTrue(fixture.contains("let inlineContentJSON = text.isEmpty"))

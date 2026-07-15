@@ -139,7 +139,7 @@ struct CardEditorFormattingBar: View {
         }
         .buttonStyle(.plain)
         .foregroundStyle(selected ? .white : .white.opacity(0.74))
-        .disabled(!model.canMutate)
+        .disabled(!model.canPerform(command))
         .accessibilityLabel(command.accessibilityLabel)
         .accessibilityValue(selected ? "selected" : "not selected")
         .accessibilityAddTraits(selected ? .isSelected : [])
