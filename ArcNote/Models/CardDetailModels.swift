@@ -46,7 +46,7 @@ struct CardDetail: Codable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(String.self, forKey: .id)
-        title = try container.decode(String.self, forKey: .title)
+        title = try container.decodeIfPresent(String.self, forKey: .title)
         content = try container.decode(String.self, forKey: .content)
         contentJSON = try container.decodeIfPresent(String.self, forKey: .contentJSON)
         editorAtmosphere = try container.decodeIfPresent(

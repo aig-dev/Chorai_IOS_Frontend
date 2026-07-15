@@ -556,9 +556,7 @@ extension NetworkManager {
             "tags": cardRequest.tags ?? []
         ]
 
-        if let title = cardRequest.title {
-            parameters["title"] = title
-        }
+        addCardEditingTitle(cardRequest.title, to: &parameters)
 
         if let isPublic = cardRequest.isPublic {
             parameters["is_public"] = isPublic
@@ -581,7 +579,7 @@ extension NetworkManager {
     func updateCard(id: String, request: UpdateCardRequest) -> AnyPublisher<CardResponse, NetworkError> {
         var parameters: Parameters = [:]
 
-        if let title = request.title { parameters["title"] = title }
+        addCardEditingTitle(request.title, to: &parameters)
         parameters["content"] = request.content
         if let tags = request.tags { parameters["tags"] = tags }
         addStructuredEditorParameters(
@@ -719,10 +717,10 @@ extension NetworkManager {
     // MARK: 更新卡片
     func updateCard(cardId: String, request: UpdateCardRequest) -> AnyPublisher<CardResponse, NetworkError> {
         var parameters: Parameters = [
-            "title": request.title ?? "",
             "content": request.content,
             "tags": request.tags ?? []
         ]
+        addCardEditingTitle(request.title, to: &parameters)
         addStructuredEditorParameters(
             contentJSON: request.contentJSON,
             editorAtmosphere: request.editorAtmosphere,
@@ -747,11 +745,11 @@ extension NetworkManager {
         isPublic: Bool
     ) -> AnyPublisher<CardResponse, NetworkError> {
         var parameters: Parameters = [
-            "title": title ?? "",
             "content": content,
             "tags": tags,
             "is_public": isPublic
         ]
+        addCardEditingTitle(title, to: &parameters)
         addStructuredEditorParameters(
             contentJSON: contentJSON,
             editorAtmosphere: editorAtmosphere,
@@ -765,6 +763,14 @@ extension NetworkManager {
             responseType: CardResponse.self,
             presentsError: false
         )
+    }
+
+    private func addCardEditingTitle(
+        _ value: String?,
+        to parameters: inout Parameters
+    ) {
+        guard let title = CardEditingTitle.normalized(value) else { return }
+        parameters["title"] = title
     }
 
     private func addStructuredEditorParameters(

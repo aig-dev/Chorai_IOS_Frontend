@@ -1,5 +1,15 @@
 import Foundation
 
+public enum CardEditingTitle {
+    public static func normalized(_ value: String?) -> String? {
+        guard let value,
+              !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return nil
+        }
+        return value
+    }
+}
+
 public struct CardEditingDraft: Equatable, Sendable {
     public let title: String?
     public let content: String
@@ -16,7 +26,7 @@ public struct CardEditingDraft: Equatable, Sendable {
         tags: [String],
         isPublic: Bool
     ) {
-        self.title = title
+        self.title = CardEditingTitle.normalized(title)
         self.content = content
         self.contentJSON = Self.nonEmpty(contentJSON)
         self.editorAtmosphere = editorAtmosphere
@@ -111,7 +121,7 @@ public struct CardEditingSnapshot: Equatable, Sendable {
         backgroundMediaRef: String?
     ) {
         self.id = id
-        self.title = title
+        self.title = CardEditingTitle.normalized(title)
         self.content = content
         self.contentJSON = contentJSON
         self.editorAtmosphere = editorAtmosphere
