@@ -51,6 +51,12 @@ final class CardEditingNetworkSourceContractTests: XCTestCase {
         XCTAssertTrue(body.contains("guard upload.success"))
         XCTAssertTrue(body.contains("uploaded.mediaRef"))
         XCTAssertTrue(body.contains("uploaded.publicURL"))
+        XCTAssertTrue(body.contains("CardEditingMediaURLResolver.resolve("))
+        XCTAssertTrue(
+            body.contains(
+                "canonicalizeRelativePath: APIConfiguration.resourceURLString"
+            )
+        )
         XCTAssertTrue(body.contains("CardEditingInlineImageUpload("))
         XCTAssertTrue(body.contains("card_inline_image_url_missing"))
 

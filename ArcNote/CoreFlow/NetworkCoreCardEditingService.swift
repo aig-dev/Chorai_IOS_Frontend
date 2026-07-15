@@ -126,10 +126,10 @@ struct NetworkCoreCardEditingService: CoreCardEditingServing, @unchecked Sendabl
             let publicURL = uploaded.publicURL.trimmingCharacters(
                 in: .whitespacesAndNewlines
             )
-            guard let url = URL(string: publicURL),
-                  let scheme = url.scheme?.lowercased(),
-                  ["http", "https"].contains(scheme),
-                  url.host != nil else {
+            guard let url = CardEditingMediaURLResolver.resolve(
+                publicURL,
+                canonicalizeRelativePath: APIConfiguration.resourceURLString
+            ) else {
                 throw CardEditingError.transport(
                     code: "card_inline_image_url_missing"
                 )

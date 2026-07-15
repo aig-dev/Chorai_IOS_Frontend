@@ -173,6 +173,31 @@ public struct CardEditingInlineImageUpload: Equatable, Sendable {
     }
 }
 
+public enum CardEditingMediaURLResolver {
+    public static func resolve(
+        _ rawValue: String,
+        canonicalizeRelativePath: (String) -> String
+    ) -> URL? {
+        let value = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        if value.hasPrefix("/"), !value.hasPrefix("//") {
+            return validatedHTTPURL(canonicalizeRelativePath(value))
+        }
+        return validatedHTTPURL(value)
+    }
+
+    private static func validatedHTTPURL(_ value: String) -> URL? {
+        guard let url = URL(string: value),
+              let scheme = url.scheme?.lowercased(),
+              ["http", "https"].contains(scheme),
+              url.host != nil,
+              url.user == nil,
+              url.password == nil else {
+            return nil
+        }
+        return url
+    }
+}
+
 public enum CardEditingError: Error, Equatable, Sendable {
     case invalidDraft(code: String)
     case transport(code: String)
