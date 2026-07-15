@@ -5,19 +5,19 @@ final class BlockNoteEditorMessageStateTests: XCTestCase {
     func testReadyHandshakeRequiresInitializationAndMatchingVersions() {
         var state = BlockNoteEditorState(editable: true)
 
-        let premature = state.receive(.ready(protocolVersion: 2, schemaVersion: 1))
+        let premature = state.receive(.ready(protocolVersion: 3, schemaVersion: 1))
         XCTAssertFalse(premature.becameReady)
         XCTAssertFalse(state.isBridgeReady)
         XCTAssertEqual(state.availability, .failed(code: "unexpected_ready"))
 
         state.beginInitialization()
-        let mismatch = state.receive(.ready(protocolVersion: 3, schemaVersion: 1))
+        let mismatch = state.receive(.ready(protocolVersion: 4, schemaVersion: 1))
         XCTAssertFalse(mismatch.becameReady)
         XCTAssertFalse(state.isBridgeReady)
         XCTAssertEqual(state.availability, .readOnly(reason: "protocol_mismatch"))
 
         state.beginInitialization()
-        let ready = state.receive(.ready(protocolVersion: 2, schemaVersion: 1))
+        let ready = state.receive(.ready(protocolVersion: 3, schemaVersion: 1))
         XCTAssertTrue(ready.becameReady)
         XCTAssertTrue(state.isBridgeReady)
         XCTAssertEqual(state.availability, .ready)
@@ -27,7 +27,7 @@ final class BlockNoteEditorMessageStateTests: XCTestCase {
         var state = BlockNoteEditorState(editable: false)
         state.beginInitialization()
 
-        let update = state.receive(.ready(protocolVersion: 2, schemaVersion: 1))
+        let update = state.receive(.ready(protocolVersion: 3, schemaVersion: 1))
 
         XCTAssertTrue(update.becameReady)
         XCTAssertTrue(state.isBridgeReady)
@@ -109,24 +109,66 @@ final class BlockNoteEditorMessageStateTests: XCTestCase {
         ])
     }
 
-    func testAllKnownEventsDecodeFromTaggedEnvelopes() throws {
+    func testAllKnownEventsDecodeAndRoundTripTaggedEnvelopes() throws {
         let cases: [(String, BlockNoteEditorMessage)] = [
-            (#"{"type":"ready","protocolVersion":2,"schemaVersion":1}"#, .ready(protocolVersion: 2, schemaVersion: 1)),
+            (#"{"type":"ready","protocolVersion":3,"schemaVersion":1}"#, .ready(protocolVersion: 3, schemaVersion: 1)),
             (#"{"type":"documentChanged","revision":3,"contentJSON":"[]","fallbackMarkdown":"Body"}"#, .documentChanged(revision: 3, contentJSON: "[]", fallbackMarkdown: "Body")),
             (#"{"type":"selectionChanged","selectionState":{"blockType":"heading2","formats":{"bold":true,"italic":false,"underline":false,"strike":true}}}"#, .selectionChanged(.init(blockType: .heading2, formats: .init(bold: true, italic: false, underline: false, strike: true)))),
             (#"{"type":"bodyFocusChanged","isFocused":true}"#, .bodyFocusChanged(isFocused: true)),
             (#"{"type":"heightChanged","contentHeight":240.5}"#, .heightChanged(contentHeight: 240.5)),
+            (#"{"type":"requestCardLink"}"#, .requestCardLink),
             (#"{"type":"snapshot","requestID":"save-3","revision":3,"contentJSON":"[]","fallbackMarkdown":"Body"}"#, .snapshot(requestID: "save-3", revision: 3, contentJSON: "[]", fallbackMarkdown: "Body")),
             (#"{"type":"compatibilityBlocked","code":"malformed_document","details":"Bad shape"}"#, .compatibilityBlocked(code: "malformed_document", details: "Bad shape")),
             (#"{"type":"bridgeError","code":"read_only"}"#, .bridgeError(code: "read_only")),
         ]
 
         for (json, expected) in cases {
+            let decoded = try JSONDecoder().decode(
+                BlockNoteEditorMessage.self,
+                from: Data(json.utf8)
+            )
+            XCTAssertEqual(decoded, expected)
             XCTAssertEqual(
-                try JSONDecoder().decode(BlockNoteEditorMessage.self, from: Data(json.utf8)),
+                try JSONDecoder().decode(
+                    BlockNoteEditorMessage.self,
+                    from: JSONEncoder().encode(decoded)
+                ),
                 expected
             )
         }
+    }
+
+    func testRequestCardLinkBeforeReadyReturnsANonfatalBridgeError() {
+        var state = BlockNoteEditorState(editable: true)
+
+        let update = state.receive(.requestCardLink)
+
+        XCTAssertEqual(update.events, [
+            .bridgeError(code: "unexpected_card_link_request"),
+        ])
+        XCTAssertFalse(state.isBridgeReady)
+        XCTAssertEqual(state.availability, .loading)
+    }
+
+    func testReadyEditableRequestCardLinkEmitsNativeRequest() {
+        var state = makeReadyState()
+
+        XCTAssertEqual(
+            state.receive(.requestCardLink).events,
+            [.requestCardLink]
+        )
+    }
+
+    func testReadOnlyRequestCardLinkIsRejectedWithoutNativeRequest() {
+        var state = BlockNoteEditorState(editable: false)
+        state.beginInitialization()
+        _ = state.receive(.ready(protocolVersion: 3, schemaVersion: 1))
+
+        let update = state.receive(.requestCardLink)
+
+        XCTAssertEqual(update.events, [.bridgeError(code: "read_only")])
+        XCTAssertFalse(update.events.contains(.requestCardLink))
+        XCTAssertEqual(state.availability, .readOnly(reason: "editable_false"))
     }
 
     func testBodyFocusEventsAreForwardedOnlyAfterTheBridgeIsReady() {
@@ -171,7 +213,7 @@ final class BlockNoteEditorMessageStateTests: XCTestCase {
     private func makeReadyState() -> BlockNoteEditorState {
         var state = BlockNoteEditorState(editable: true)
         state.beginInitialization()
-        _ = state.receive(.ready(protocolVersion: 2, schemaVersion: 1))
+        _ = state.receive(.ready(protocolVersion: 3, schemaVersion: 1))
         return state
     }
 }

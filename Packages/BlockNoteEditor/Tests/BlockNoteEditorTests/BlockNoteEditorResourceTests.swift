@@ -44,7 +44,7 @@ final class BlockNoteEditorResourceTests: XCTestCase {
 
     func testValidationRejectsUnsupportedProtocolVersionBeforeLoadingEditor() throws {
         let manifest = BlockNoteEditorResourceManifest(
-            protocolVersion: 3,
+            protocolVersion: BlockNoteEditorProtocol.version + 1,
             schemaVersion: 1,
             blockNoteVersion: "0.46.2",
             hashes: .init(
@@ -55,7 +55,10 @@ final class BlockNoteEditorResourceTests: XCTestCase {
         )
 
         XCTAssertThrowsError(try BlockNoteEditorResources.validateManifest(manifest)) { error in
-            XCTAssertEqual(error as? BlockNoteEditorResourceError, .unsupportedProtocolVersion(3))
+            XCTAssertEqual(
+                error as? BlockNoteEditorResourceError,
+                .unsupportedProtocolVersion(BlockNoteEditorProtocol.version + 1)
+            )
         }
     }
 
@@ -70,7 +73,7 @@ final class BlockNoteEditorResourceTests: XCTestCase {
         try Data("html".utf8).write(to: directory.appendingPathComponent("index.html"))
 
         let manifest = BlockNoteEditorResourceManifest(
-            protocolVersion: 2,
+            protocolVersion: 3,
             schemaVersion: 1,
             blockNoteVersion: "0.46.2",
             hashes: .init(

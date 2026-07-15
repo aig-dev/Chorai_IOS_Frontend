@@ -1,7 +1,7 @@
 import Foundation
 
 public enum BlockNoteEditorProtocol {
-    public static let version = 2
+    public static let version = 3
     public static let schemaVersion = 1
     public static let webKitHandlerName = "blockNoteEditor"
     static let javaScriptBridgeName = "ChoraiBlockNoteEditor"

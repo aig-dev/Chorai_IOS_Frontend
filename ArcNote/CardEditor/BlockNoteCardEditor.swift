@@ -38,6 +38,7 @@ final class BlockNoteCardEditorModel: ObservableObject {
     private var latestSessionRevision = 0
     private let onDocumentChanged: (BlockNoteDocumentRevision) -> Void
     private let onCompatibilityBlocked: (String) -> Void
+    private let onRequestCardLink: () -> Void
     private let onRequestInlineLink: () -> Void
     private let onRequestInlineImage: () -> Void
 
@@ -51,6 +52,7 @@ final class BlockNoteCardEditorModel: ObservableObject {
         initialCompatibilityBlock: String? = nil,
         onDocumentChanged: @escaping (BlockNoteDocumentRevision) -> Void = { _ in },
         onCompatibilityBlocked: @escaping (String) -> Void = { _ in },
+        onRequestCardLink: @escaping () -> Void = {},
         onRequestInlineLink: @escaping () -> Void = {},
         onRequestInlineImage: @escaping () -> Void = {}
     ) {
@@ -75,6 +77,7 @@ final class BlockNoteCardEditorModel: ObservableObject {
             : .readOnly(reason: initialCompatibilityBlock ?? "compatibility_blocked")
         self.onDocumentChanged = onDocumentChanged
         self.onCompatibilityBlocked = onCompatibilityBlocked
+        self.onRequestCardLink = onRequestCardLink
         self.onRequestInlineLink = onRequestInlineLink
         self.onRequestInlineImage = onRequestInlineImage
     }
@@ -147,6 +150,9 @@ final class BlockNoteCardEditorModel: ObservableObject {
             guard height.isFinite else { return }
             contentHeight = max(248, CGFloat(height))
 
+        case .requestCardLink:
+            onRequestCardLink()
+
         case let .compatibilityBlocked(code, _):
             compatibilityNotice = Self.compatibilityExplanation
             availability = .readOnly(reason: code)
@@ -155,11 +161,12 @@ final class BlockNoteCardEditorModel: ObservableObject {
             onCompatibilityBlocked(code)
 
         case let .bridgeError(code):
-            guard code != "read_only" else {
+            switch code {
+            case "read_only", "unexpected_card_link_request":
                 isBodyFocused = false
-                return
+            default:
+                transitionToBridgeFailure(code: code)
             }
-            transitionToBridgeFailure(code: code)
         }
     }
 

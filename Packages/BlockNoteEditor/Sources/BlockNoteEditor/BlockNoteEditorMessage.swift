@@ -75,6 +75,7 @@ public enum BlockNoteEditorMessage: Codable, Equatable, Sendable {
     case selectionChanged(BlockNoteSelectionState)
     case bodyFocusChanged(isFocused: Bool)
     case heightChanged(contentHeight: Double)
+    case requestCardLink
     case snapshot(
         requestID: String,
         revision: Int,
@@ -139,6 +140,9 @@ public enum BlockNoteEditorMessage: Codable, Equatable, Sendable {
             }
             self = .heightChanged(contentHeight: height)
 
+        case "requestCardLink":
+            self = .requestCardLink
+
         case "snapshot":
             let requestID = try container.decode(String.self, forKey: .requestID)
             guard !requestID.isEmpty else {
@@ -199,6 +203,9 @@ public enum BlockNoteEditorMessage: Codable, Equatable, Sendable {
         case let .heightChanged(contentHeight):
             try container.encode("heightChanged", forKey: .type)
             try container.encode(contentHeight, forKey: .contentHeight)
+
+        case .requestCardLink:
+            try container.encode("requestCardLink", forKey: .type)
 
         case let .snapshot(requestID, revision, contentJSON, fallbackMarkdown):
             try container.encode("snapshot", forKey: .type)

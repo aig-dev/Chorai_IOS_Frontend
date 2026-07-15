@@ -82,6 +82,43 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         XCTAssertTrue(adapter.contains("cardEditorCompatibilityNotice"))
     }
 
+    func testCardLinkBridgeEventUsesDedicatedNativeCallback() throws {
+        let adapter = try source(
+            at: "ArcNote/CardEditor/BlockNoteCardEditor.swift"
+        )
+
+        XCTAssertTrue(adapter.contains("private let onRequestCardLink: () -> Void"))
+        XCTAssertTrue(
+            adapter.contains("onRequestCardLink: @escaping () -> Void = {}")
+        )
+        XCTAssertTrue(adapter.contains("self.onRequestCardLink = onRequestCardLink"))
+
+        let branchStart = try XCTUnwrap(
+            adapter.range(of: "case .requestCardLink:")
+        )
+        let nextBranch = try XCTUnwrap(
+            adapter[branchStart.upperBound...].range(of: "case ")
+        )
+        let branch = adapter[branchStart.lowerBound..<nextBranch.lowerBound]
+        XCTAssertTrue(branch.contains("onRequestCardLink()"))
+        XCTAssertFalse(
+            branch.contains("onRequestInlineLink()"),
+            "Card relations must not reuse the inline URL callback"
+        )
+    }
+
+    func testPrematureCardLinkRequestDoesNotFailAppEditorSession() throws {
+        let adapter = try source(
+            at: "ArcNote/CardEditor/BlockNoteCardEditor.swift"
+        )
+
+        XCTAssertTrue(
+            adapter.contains(
+                #"case "read_only", "unexpected_card_link_request":"#
+            )
+        )
+    }
+
     func testCompatibilityBlockKeepsFallbackAndFocusTracksWebBody() throws {
         let adapter = try source(
             at: "ArcNote/CardEditor/BlockNoteCardEditor.swift"

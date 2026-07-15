@@ -41,6 +41,7 @@ public enum BlockNoteEditorEvent: Equatable, Sendable {
     case selectionChanged(BlockNoteSelectionState)
     case bodyFocusChanged(isFocused: Bool)
     case heightChanged(Double)
+    case requestCardLink
     case compatibilityBlocked(code: String, details: String)
     case bridgeError(code: String)
 }
@@ -176,6 +177,17 @@ public struct BlockNoteEditorState: Equatable, Sendable {
             }
             self.contentHeight = contentHeight
             return .init(events: [.heightChanged(contentHeight)])
+
+        case .requestCardLink:
+            guard isBridgeReady else {
+                return .init(events: [
+                    .bridgeError(code: "unexpected_card_link_request"),
+                ])
+            }
+            guard availability == .ready else {
+                return .init(events: [.bridgeError(code: "read_only")])
+            }
+            return .init(events: [.requestCardLink])
 
         case let .snapshot(requestID, revision, contentJSON, fallbackMarkdown):
             guard isBridgeReady else {

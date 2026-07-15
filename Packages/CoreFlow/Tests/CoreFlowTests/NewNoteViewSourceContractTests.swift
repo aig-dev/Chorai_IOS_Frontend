@@ -179,6 +179,29 @@ final class NewNoteViewSourceContractTests: XCTestCase {
         XCTAssertTrue(source.contains("canRemove: link.sourceCardID == cardID"))
     }
 
+    func testCardLinkBridgeRequestRoutesToExistingOntologyLinkFlow() throws {
+        let source = try Self.newNoteSource()
+        let router = try XCTUnwrap(
+            Self.functionBody(in: source, signature: "func requestCardLink()")
+        )
+        XCTAssertTrue(router.contains("onRequestCardLink()"))
+        XCTAssertFalse(router.contains("onRequestInlineLink()"))
+
+        XCTAssertTrue(
+            source.contains("onRequestCardLink: router.requestCardLink")
+        )
+        let configuration = try XCTUnwrap(
+            Self.functionBody(
+                in: source,
+                signature: "func configureNativeActions()"
+            )
+        )
+        XCTAssertTrue(
+            configuration.contains("nativeActionRouter.onRequestCardLink = {")
+        )
+        XCTAssertTrue(configuration.contains("addOntologyLink()"))
+    }
+
     func testBackgroundStagesWithoutSavingAndInlineImageInsertsOnlyAfterUpload() throws {
         let source = try Self.newNoteSource()
         let background = try XCTUnwrap(

@@ -177,9 +177,14 @@ struct NewNoteView: View {
 
 @MainActor
 private final class CardEditorNativeActionRouter: ObservableObject {
+    var onRequestCardLink: () -> Void = {}
     var onRequestInlineLink: () -> Void = {}
     var onRequestInlineImage: () -> Void = {}
     var onSelectedLink: (LinkItem) -> Void = { _ in }
+
+    func requestCardLink() {
+        onRequestCardLink()
+    }
 
     func requestInlineLink() {
         onRequestInlineLink()
@@ -250,6 +255,7 @@ private struct CardEditorSessionView: View {
                         revision: revision.revision
                     )
                 },
+                onRequestCardLink: router.requestCardLink,
                 onRequestInlineLink: router.requestInlineLink,
                 onRequestInlineImage: router.requestInlineImage
             )
@@ -444,6 +450,9 @@ private struct CardEditorSessionView: View {
     }
 
     private func configureNativeActions() {
+        nativeActionRouter.onRequestCardLink = {
+            addOntologyLink()
+        }
         nativeActionRouter.onRequestInlineLink = {
             showInlineLinkSheet = true
         }
