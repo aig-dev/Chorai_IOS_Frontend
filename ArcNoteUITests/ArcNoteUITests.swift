@@ -3338,6 +3338,12 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertTrue(exists("cardEditorContent", timeout: 2))
         XCTAssertFalse(exists("cardEditorLink.\(targetID)", timeout: 2))
         captureVisual("card-editor-link-failure-retained")
+
+        closeNewNoteEditor()
+        XCTAssertTrue(
+            waitFor("screen.home.content", timeout: 20).exists,
+            "Back must abandon only the failed link intent and leave the editor"
+        )
     }
 
     func testNewDirtyCardAddLinkCreatesOnceAndPersistsCanonicalRelation() throws {
