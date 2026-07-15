@@ -254,6 +254,42 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         XCTAssertFalse(background.contains(".accessibilityLabel("))
     }
 
+    func testEditorRespectsMotionTransparencyAndContrastPreferences() throws {
+        let shell = try source(
+            at: "ArcNote/CardEditor/CardEditorShell.swift"
+        )
+        let background = try source(
+            at: "ArcNote/CardEditor/CardEditorBackground.swift"
+        )
+
+        XCTAssertTrue(
+            shell.contains(
+                "@Environment(\\.accessibilityReduceMotion) private var reduceMotion"
+            )
+        )
+        XCTAssertTrue(
+            shell.contains(
+                "reduceMotion ? nil : .easeOut(duration: 0.18)"
+            ),
+            "The formatting bar must not animate when Reduce Motion is enabled"
+        )
+        XCTAssertTrue(
+            background.contains(
+                "@Environment(\\.accessibilityReduceTransparency) private var reduceTransparency"
+            )
+        )
+        XCTAssertTrue(
+            background.contains(
+                "@Environment(\\.colorSchemeContrast) private var contrast"
+            )
+        )
+        XCTAssertTrue(
+            background.contains(
+                "reduceTransparency || contrast == .increased"
+            )
+        )
+    }
+
     func testDebugAppRouteExposesDeterministicCardEditorFixture() throws {
         let app = try source(at: "ArcNote/ArcNoteApp.swift")
         let fixture = try source(at: "ArcNote/CardEditor/CardEditorShell.swift")

@@ -27,6 +27,22 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertFalse(app.descendants(matching: .any)["cardEditorHeader"].exists)
         XCTAssertFalse(app.descendants(matching: .any)["cardEditorTitleField"].exists)
 
+        let structuralIdentifiers = [
+            "cardEditorContent",
+            "cardEditorTagsRow",
+            "cardEditorLinksRow",
+        ]
+        let accessibilityOrder = app.descendants(matching: .any)
+            .matching(
+                NSPredicate(
+                    format: "identifier IN %@",
+                    structuralIdentifiers
+                )
+            )
+            .allElementsBoundByIndex
+            .map(\.identifier)
+        XCTAssertEqual(accessibilityOrder, structuralIdentifiers)
+
         for identifier in [
             "cardEditorFloatingBack",
             "cardEditorMoreButton",
@@ -283,6 +299,7 @@ final class ArcNoteUITests: XCTestCase {
     }
 
     func testCardEditorBootstrapReachesReadyForMinimalDocument() {
+        app.launchEnvironment["CHORAI_API_BASE_URL"] = "http://127.0.0.1:1"
         launchCardEditorFixture(mode: "empty")
 
         let body = waitFor("cardEditorBodyWebView")
@@ -5266,7 +5283,6 @@ final class ArcNoteUITests: XCTestCase {
             line: line
         )
         app.typeKey("a", modifierFlags: .command)
-        app.typeKey(.delete, modifierFlags: [])
         app.typeText(text)
     }
 

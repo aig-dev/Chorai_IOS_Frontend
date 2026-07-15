@@ -2,6 +2,7 @@ import BlockNoteEditor
 import SwiftUI
 
 struct CardEditorShell: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject var bodyModel: BlockNoteCardEditorModel
 
     let tags: [String]
@@ -144,7 +145,7 @@ struct CardEditorShell: View {
             )
         }
         .animation(
-            .easeOut(duration: 0.18),
+            reduceMotion ? nil : .easeOut(duration: 0.18),
             value: bodyModel.isBodyFocused
         )
     }
