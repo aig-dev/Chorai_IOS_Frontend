@@ -145,7 +145,10 @@ struct NetworkCoreCardEditingService: CoreCardEditingServing, @unchecked Sendabl
                 CardEditingLink(
                     sourceCardID: item.sourceAssetId,
                     targetCardID: item.targetAssetId,
-                    title: item.title ?? "Related note"
+                    title: item.title ?? "Related note",
+                    previewHTML: item.content,
+                    authorName: item.author?.userName,
+                    authorAvatarURL: item.author?.avatar
                 )
             }
         } catch {

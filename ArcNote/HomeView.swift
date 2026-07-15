@@ -1692,16 +1692,25 @@ struct HomePostCard: View {
 struct HTMLTextRenderer: View {
     let htmlContent: String
     let maxLines: Int
+    let font: Font
+    let foregroundColor: Color
     
-    init(htmlContent: String, maxLines: Int = 3) {
+    init(
+        htmlContent: String,
+        maxLines: Int = 3,
+        font: Font = .system(size: 17, weight: .regular),
+        foregroundColor: Color = .white.opacity(0.9)
+    ) {
         self.htmlContent = htmlContent
         self.maxLines = maxLines
+        self.font = font
+        self.foregroundColor = foregroundColor
     }
     
     var body: some View {
         Text(plainText)
-            .font(.system(size: 17, weight: .regular))
-            .foregroundColor(.white.opacity(0.9))
+            .font(font)
+            .foregroundColor(foregroundColor)
             .lineLimit(maxLines)
             .multilineTextAlignment(.leading)
     }

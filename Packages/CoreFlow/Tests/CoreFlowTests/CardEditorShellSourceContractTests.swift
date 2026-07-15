@@ -6,11 +6,12 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         "BlockNoteCardEditor.swift",
         "CardEditorShell.swift",
         "CardEditorMetadataRows.swift",
+        "CardMetadataPresentation.swift",
         "CardEditorFormattingBar.swift",
         "CardEditorBackground.swift",
     ]
 
-    func testAppTargetOwnsTheFiveFocusedCardEditorFiles() throws {
+    func testAppTargetOwnsTheSixFocusedCardEditorFiles() throws {
         let project = try source(at: "ArcNote.xcodeproj/project.pbxproj")
 
         for filename in cardEditorFiles {
@@ -26,6 +27,59 @@ final class CardEditorShellSourceContractTests: XCTestCase {
                 "\(filename) must belong to the ArcNote Sources build phase"
             )
         }
+
+        let presentationURL = Self.repositoryRoot.appendingPathComponent(
+            "ArcNote/CardEditor/CardMetadataPresentation.swift"
+        )
+        guard FileManager.default.fileExists(atPath: presentationURL.path) else {
+            return
+        }
+        let presentation = try source(
+            at: "ArcNote/CardEditor/CardMetadataPresentation.swift"
+        )
+        XCTAssertTrue(presentation.contains("struct CardMetadataTagCapsule: View"))
+        XCTAssertTrue(presentation.contains("let showsRemoveIndicator: Bool"))
+        XCTAssertTrue(presentation.contains(".font(.system(size: 12, weight: .medium))"))
+        XCTAssertTrue(presentation.contains(".foregroundStyle(.white)"))
+        XCTAssertTrue(presentation.contains(".padding(.horizontal, 12)"))
+        XCTAssertTrue(presentation.contains(".padding(.vertical, 6)"))
+        XCTAssertTrue(
+            presentation.contains(
+                "Color(red: 0.2, green: 0.1, blue: 0.3)"
+            )
+        )
+        XCTAssertFalse(presentation.contains(#"#\(tag)"#))
+        XCTAssertFalse(presentation.contains(".stroke("))
+
+        XCTAssertTrue(presentation.contains("struct CardMetadataRelatedRow: View"))
+        XCTAssertTrue(presentation.contains("let avatarURL: String?"))
+        XCTAssertTrue(presentation.contains("let previewHTML: String?"))
+        XCTAssertTrue(presentation.contains(".frame(width: 40, height: 40)"))
+        XCTAssertTrue(presentation.contains(".font(.system(size: 16, weight: .semibold))"))
+        XCTAssertTrue(presentation.contains("font: .system(size: 14, weight: .regular)"))
+        XCTAssertTrue(
+            presentation.contains(
+                "foregroundColor: .white.opacity(0.7)"
+            )
+        )
+
+        let htmlRenderer = try source(at: "ArcNote/HomeView.swift")
+        XCTAssertTrue(htmlRenderer.contains("let font: Font"))
+        XCTAssertTrue(htmlRenderer.contains("let foregroundColor: Color"))
+        XCTAssertTrue(
+            htmlRenderer.contains(
+                "font: Font = .system(size: 17, weight: .regular)"
+            )
+        )
+        XCTAssertTrue(
+            htmlRenderer.contains(
+                "foregroundColor: Color = .white.opacity(0.9)"
+            )
+        )
+        XCTAssertTrue(htmlRenderer.contains(".font(font)"))
+        XCTAssertTrue(
+            htmlRenderer.contains(".foregroundColor(foregroundColor)")
+        )
     }
 
     func testShellUsesStableBodyTagLinkHierarchyWithoutHeaderOrLazyStack() throws {
@@ -152,30 +206,150 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         XCTAssertTrue(keyboardHideImplementation.contains("controller.blur()"))
     }
 
-    func testMetadataRowsKeepActionsTrailingAndLinksCompact() throws {
+    func testMetadataRowsShareViewStylingAndKeepLinksStatic() throws {
         let metadata = try source(
             at: "ArcNote/CardEditor/CardEditorMetadataRows.swift"
         )
+        let shell = try source(at: "ArcNote/CardEditor/CardEditorShell.swift")
 
-        let tagChip = try XCTUnwrap(metadata.range(of: "ForEach(tags"))
+        XCTAssertTrue(metadata.contains("ScrollView(.horizontal, showsIndicators: false)"))
+        let tagCapsule = try XCTUnwrap(
+            metadata.range(of: "CardMetadataTagCapsule(")
+        )
         let addTag = try XCTUnwrap(metadata.range(of: "cardEditorAddTag"))
-        XCTAssertLessThan(tagChip.lowerBound, addTag.lowerBound)
+        XCTAssertLessThan(tagCapsule.lowerBound, addTag.lowerBound)
+        XCTAssertTrue(metadata.contains("showsRemoveIndicator: true"))
+        XCTAssertFalse(metadata.contains("Text(\"#"))
+        XCTAssertGreaterThanOrEqual(
+            metadata.components(separatedBy: ".frame(minWidth: 44, minHeight: 44)").count - 1,
+            2,
+            "Tag actions need compact visuals inside 44-point hit targets"
+        )
 
-        XCTAssertTrue(metadata.contains("Array(links.prefix(2))"))
-        XCTAssertTrue(metadata.contains("links.count - 2"))
-        let linkPrefix = try XCTUnwrap(metadata.range(of: "Array(links.prefix(2))"))
-        let addLink = try XCTUnwrap(metadata.range(of: "cardEditorAddLink"))
-        XCTAssertLessThan(linkPrefix.lowerBound, addLink.lowerBound)
-        XCTAssertTrue(metadata.contains("let canRemove: Bool"))
-        XCTAssertTrue(metadata.contains("if link.canRemove && isEditable"))
-        XCTAssertTrue(metadata.contains(".disabled(!isEditable)"))
-        XCTAssertTrue(metadata.contains("cardEditorRemoveLink."))
+        XCTAssertTrue(metadata.contains("if !links.isEmpty"))
         XCTAssertTrue(
             metadata.contains(
-                "ProposedViewSize(width: availableWidth, height: nil)"
-            ),
-            "Flow children must receive the row width so long chips can compress"
+                "@Environment(\\.accessibilityReduceMotion) private var reduceMotion"
+            )
         )
+        XCTAssertTrue(
+            metadata.contains(
+                "withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.3))"
+            )
+        )
+        XCTAssertTrue(metadata.contains("CardMetadataRelatedRow("))
+        XCTAssertTrue(metadata.contains("cardEditorLinksDisclosure"))
+        XCTAssertTrue(
+            metadata.contains(
+                ".accessibilityValue(isExpanded ? \"Expanded\" : \"Collapsed\")"
+            )
+        )
+        XCTAssertTrue(metadata.contains(".frame(width: 44, height: 44)"))
+        XCTAssertTrue(metadata.contains("Color.white.opacity(0.1)"))
+        for staleContract in [
+            "cardEditorAddLink",
+            "cardEditorLinkOverflow",
+            "CardEditorLinkManagementSheet",
+            "cardEditorRemoveLink.",
+            "Button(action: onOpen)",
+        ] {
+            XCTAssertFalse(
+                metadata.contains(staleContract),
+                "Editor link metadata must be static: \(staleContract)"
+            )
+        }
+        for staleShellContract in [
+            "onAddLink",
+            "onRemoveLink",
+            "isManagingLinks",
+            "CardEditorLinkManagementSheet",
+        ] {
+            XCTAssertFalse(
+                shell.contains(staleShellContract),
+                "The shell must not own link management: \(staleShellContract)"
+            )
+        }
+
+        let nonEmptyLinks = try XCTUnwrap(shell.range(of: "if !links.isEmpty"))
+        let linkRow = try XCTUnwrap(shell.range(of: "CardEditorLinkRow(links: links)"))
+        let linkAccessibility = try XCTUnwrap(
+            shell.range(of: "cardEditorLinksRow")
+        )
+        XCTAssertLessThan(nonEmptyLinks.lowerBound, linkRow.lowerBound)
+        XCTAssertLessThan(linkRow.lowerBound, linkAccessibility.lowerBound)
+    }
+
+    func testDetailViewConsumesSharedMetadataPresentation() throws {
+        let detail = try source(at: "ArcNote/DetailView.swift")
+
+        XCTAssertTrue(detail.contains("CardMetadataTagCapsule("))
+        XCTAssertTrue(detail.contains("CardMetadataRelatedRow("))
+        XCTAssertTrue(detail.contains("if !relatedNotes.isEmpty"))
+        XCTAssertTrue(
+            detail.contains(
+                "@Environment(\\.accessibilityReduceMotion) private var reduceMotion"
+            )
+        )
+        XCTAssertTrue(
+            detail.contains(
+                "withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.3))"
+            )
+        )
+        XCTAssertTrue(detail.contains(".frame(width: 44, height: 44)"))
+        XCTAssertTrue(detail.contains("detailRelatedLinksDisclosure"))
+        XCTAssertTrue(
+            detail.contains(
+                ".accessibilityValue(isRelatedNotesExpanded ? \"Expanded\" : \"Collapsed\")"
+            )
+        )
+    }
+
+    func testLinkPresentationMetadataSurvivesEveryEditorMapping() throws {
+        let models = try source(
+            at: "Packages/CoreFlow/Sources/CoreFlow/CardEditingModels.swift"
+        )
+        for field in [
+            "public let previewHTML: String?",
+            "public let authorName: String?",
+            "public let authorAvatarURL: String?",
+            "previewHTML: String? = nil",
+            "authorName: String? = nil",
+            "authorAvatarURL: String? = nil",
+        ] {
+            XCTAssertTrue(models.contains(field), "Missing CardEditingLink field: \(field)")
+        }
+
+        let networkService = try source(
+            at: "ArcNote/CoreFlow/NetworkCoreCardEditingService.swift"
+        )
+        for mapping in [
+            "previewHTML: item.content",
+            "authorName: item.author?.userName",
+            "authorAvatarURL: item.author?.avatar",
+        ] {
+            XCTAssertTrue(
+                networkService.contains(mapping),
+                "Canonical link fetch must retain \(mapping)"
+            )
+        }
+
+        let newNote = try source(at: "ArcNote/NewNoteView.swift")
+        for mapping in [
+            "previewHTML: item.content",
+            "authorName: item.author?.userName",
+            "authorAvatarURL: item.author?.avatar",
+            "previewHTML: item.description",
+            "authorName: item.username",
+            "authorAvatarURL: item.avatar",
+            "previewHTML: link.previewHTML",
+            "title: link.authorName ?? link.title",
+            "avatarURL: link.authorAvatarURL",
+        ] {
+            XCTAssertTrue(
+                newNote.contains(mapping),
+                "Editor link mapping must retain \(mapping)"
+            )
+        }
     }
 
     func testFormattingDismissIsFixedAndTypedCommandsScrollHorizontally() throws {

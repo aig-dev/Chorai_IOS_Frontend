@@ -135,11 +135,24 @@ public struct CardEditingLink: Equatable, Sendable {
     public let sourceCardID: String
     public let targetCardID: String
     public let title: String
+    public let previewHTML: String?
+    public let authorName: String?
+    public let authorAvatarURL: String?
 
-    public init(sourceCardID: String, targetCardID: String, title: String) {
+    public init(
+        sourceCardID: String,
+        targetCardID: String,
+        title: String,
+        previewHTML: String? = nil,
+        authorName: String? = nil,
+        authorAvatarURL: String? = nil
+    ) {
         self.sourceCardID = sourceCardID
         self.targetCardID = targetCardID
         self.title = title
+        self.previewHTML = previewHTML
+        self.authorName = authorName
+        self.authorAvatarURL = authorAvatarURL
     }
 }
 

@@ -16,15 +16,11 @@ struct CardEditorShell: View {
     let onBack: () -> Void
     let onAddTag: () -> Void
     let onRemoveTag: (String) -> Void
-    let onAddLink: () -> Void
-    let onRemoveLink: (CardEditorLinkItem) -> Void
     let onTogglePrivacy: () -> Void
     let onChooseBackground: () -> Void
     let onRemoveBackground: () -> Void
     let onOpenCardActions: (() -> Void)?
     let onSave: (() -> Void)?
-
-    @State private var isManagingLinks = false
 
     init(
         bodyModel: BlockNoteCardEditorModel,
@@ -39,8 +35,6 @@ struct CardEditorShell: View {
         onBack: @escaping () -> Void,
         onAddTag: @escaping () -> Void,
         onRemoveTag: @escaping (String) -> Void,
-        onAddLink: @escaping () -> Void,
-        onRemoveLink: @escaping (CardEditorLinkItem) -> Void,
         onTogglePrivacy: @escaping () -> Void,
         onChooseBackground: @escaping () -> Void,
         onRemoveBackground: @escaping () -> Void,
@@ -59,8 +53,6 @@ struct CardEditorShell: View {
         self.onBack = onBack
         self.onAddTag = onAddTag
         self.onRemoveTag = onRemoveTag
-        self.onAddLink = onAddLink
-        self.onRemoveLink = onRemoveLink
         self.onTogglePrivacy = onTogglePrivacy
         self.onChooseBackground = onChooseBackground
         self.onRemoveBackground = onRemoveBackground
@@ -90,14 +82,11 @@ struct CardEditorShell: View {
                     .accessibilityElement(children: .contain)
                     .accessibilityIdentifier("cardEditorTagsRow")
 
-                    CardEditorLinkRow(
-                        links: links,
-                        isEditable: isMetadataEditable,
-                        onOpen: { isManagingLinks = true },
-                        onAdd: onAddLink
-                    )
-                    .accessibilityElement(children: .contain)
-                    .accessibilityIdentifier("cardEditorLinksRow")
+                    if !links.isEmpty {
+                        CardEditorLinkRow(links: links)
+                            .accessibilityElement(children: .contain)
+                            .accessibilityIdentifier("cardEditorLinksRow")
+                    }
 
                     if let onSave {
                         inlineSaveAction(onSave)
@@ -136,13 +125,6 @@ struct CardEditorShell: View {
                 CardEditorFormattingBar(model: bodyModel)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
-        }
-        .sheet(isPresented: $isManagingLinks) {
-            CardEditorLinkManagementSheet(
-                links: links,
-                isEditable: isMetadataEditable,
-                onRemove: onRemoveLink
-            )
         }
         .animation(
             reduceMotion ? nil : .easeOut(duration: 0.18),
@@ -284,13 +266,6 @@ private enum CardEditorShellFixtureMode: String {
     case bridgeFailure = "bridge-failure"
 }
 
-private enum CardEditorNativeInputKind: String, Identifiable {
-    case tag
-    case link
-
-    var id: String { rawValue }
-}
-
 @MainActor
 struct CardEditorShellFixtureScreen: View {
     private let mode: CardEditorShellFixtureMode
@@ -299,7 +274,7 @@ struct CardEditorShellFixtureScreen: View {
     @State private var links: [CardEditorLinkItem]
     @State private var background: CardEditorBackgroundSource
     @State private var isPublic = false
-    @State private var nativeInputKind: CardEditorNativeInputKind?
+    @State private var isAddingTag = false
     @State private var didRequestCardActions = false
 
     init() {
@@ -358,14 +333,10 @@ struct CardEditorShellFixtureScreen: View {
                     : nil,
                 onBack: {},
                 onAddTag: {
-                    nativeInputKind = .tag
+                    isAddingTag = true
                 },
                 onRemoveTag: { tag in
                     tags.removeAll { $0 == tag }
-                },
-                onAddLink: { nativeInputKind = .link },
-                onRemoveLink: { link in
-                    links.removeAll { $0.id == link.id }
                 },
                 onTogglePrivacy: { isPublic.toggle() },
                 onChooseBackground: {
@@ -394,9 +365,9 @@ struct CardEditorShellFixtureScreen: View {
                     .allowsHitTesting(false)
             }
         }
-        .sheet(item: $nativeInputKind) { kind in
-            CardEditorNativeInputFixture(kind: kind) {
-                nativeInputKind = nil
+        .sheet(isPresented: $isAddingTag) {
+            CardEditorNativeTagInputFixture {
+                isAddingTag = false
             }
         }
     }
@@ -449,8 +420,7 @@ struct CardEditorShellFixtureScreen: View {
     }()
 }
 
-private struct CardEditorNativeInputFixture: View {
-    let kind: CardEditorNativeInputKind
+private struct CardEditorNativeTagInputFixture: View {
     let onDone: () -> Void
 
     @State private var value = ""
@@ -460,17 +430,13 @@ private struct CardEditorNativeInputFixture: View {
         NavigationStack {
             Form {
                 TextField(
-                    kind == .tag ? "Tag" : "Search linked notes",
+                    "Tag",
                     text: $value
                 )
                 .focused($isFocused)
-                .accessibilityIdentifier(
-                    kind == .tag
-                        ? "cardEditorNativeTagInput"
-                        : "cardEditorNativeLinkInput"
-                )
+                .accessibilityIdentifier("cardEditorNativeTagInput")
             }
-            .navigationTitle(kind == .tag ? "Add Tag" : "Add Link")
+            .navigationTitle("Add Tag")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -502,17 +468,27 @@ private extension CardEditorShellFixtureMode {
 
     var fixtureLinks: [CardEditorLinkItem] {
         if self == .blocked {
-            return [.init(id: "ast_blocked", title: "Preserved relation")]
+            return [
+                .init(
+                    id: "ast_blocked",
+                    title: "Preserved relation",
+                    previewHTML: "Read-only linked note"
+                ),
+            ]
         }
         guard self == .populated || self == .background || self == .keyboard else {
             return []
         }
         return [
-            .init(id: "ast_fixture_a", title: "A"),
-            .init(id: "ast_fixture_b", title: "B"),
-            .init(id: "ast_fixture_c", title: "C", canRemove: false),
-            .init(id: "ast_fixture_d", title: "D"),
-            .init(id: "ast_fixture_e", title: "E"),
+            .init(
+                id: "ast_fixture_a",
+                title: "Ada",
+                previewHTML: "A compact related-note preview."
+            ),
+            .init(id: "ast_fixture_b", title: "Bea"),
+            .init(id: "ast_fixture_c", title: "Chen"),
+            .init(id: "ast_fixture_d", title: "Dev"),
+            .init(id: "ast_fixture_e", title: "Eli"),
         ]
     }
 }

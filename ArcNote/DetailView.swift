@@ -12,6 +12,7 @@ struct DetailRelatedNote: Identifiable {
 
 struct DetailView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var showPopupMenu = false
     @State private var navigateToUserProfile = false
     @State private var isRelatedNotesExpanded = false
@@ -242,114 +243,84 @@ struct DetailView: View {
                             }
                             
                             ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 8) {
+                                HStack(spacing: 8) {
                                     ForEach(cardDetailManager.cardDetail?.tags ?? [], id: \.self) { tag in
-                                    Text(tag)
-                                        .font(.system(size: 12, weight: .medium))
-                                        .foregroundColor(.white)
-                                        .padding(.horizontal, 12)
-                                        .padding(.vertical, 6)
-                                        .background(
-                                            Capsule()
-                                                .fill(Color(red: 0.2, green: 0.1, blue: 0.3))
+                                        CardMetadataTagCapsule(
+                                            tag: tag,
+                                            showsRemoveIndicator: false
                                         )
-                                            .lineLimit(1)
                                     }
                                 }
-                                .padding(.horizontal, 1) // 添加一点内边距避免标签贴边
+                                .padding(.horizontal, 1)
                             }
                         }
                         .padding(.horizontal, 20)
-                        
-                        // 关联笔记展开/收起按钮
-                        HStack {
-                            Spacer()
-                            Button(action: {
-                                withAnimation(.easeInOut(duration: 0.3)) {
-                                    isRelatedNotesExpanded.toggle()
-                                }
-                            }) {
-                                Image(systemName: isRelatedNotesExpanded ? "chevron.up" : "chevron.down")
+
+                        if !relatedNotes.isEmpty {
+                            HStack {
+                                Spacer()
+                                Button {
+                                    withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.3)) {
+                                        isRelatedNotesExpanded.toggle()
+                                    }
+                                } label: {
+                                    Image(
+                                        systemName: isRelatedNotesExpanded
+                                            ? "chevron.up"
+                                            : "chevron.down"
+                                    )
                                     .font(.system(size: 16, weight: .medium))
-                                    .foregroundColor(.white.opacity(0.7))
-                            }
-                        }
-                        .padding(.horizontal, 20)
-                        
-                        // 关联笔记列表
-                        if isRelatedNotesExpanded {
-                            if isLoadingLinks {
-                                VStack {
-                                    ProgressView()
-                                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                    Text("Loading related notes...")
-                                        .font(.system(size: 14, weight: .medium))
-                                        .foregroundColor(.white.opacity(0.7))
-                                        .padding(.top, 8)
+                                    .foregroundStyle(.white.opacity(0.7))
+                                    .frame(width: 44, height: 44)
+                                    .contentShape(Rectangle())
                                 }
-                                .frame(height: 100)
-                            } else if relatedNotes.isEmpty {
-                               
-                            } else {
-                        VStack(spacing: 0) {
-                                ForEach(Array(relatedNotes.enumerated()), id: \.element.id) { index, note in
-                                        VStack {
-                                HStack(spacing: 12) {
-                                    Group {
-                                        if let avatarUrl = note.author?.avatar, !avatarUrl.isEmpty {
-                                            let fullAvatarUrl = APIConfiguration.resourceURLString(avatarUrl)
-                                            
-                                        
-                                            AsyncImage(url: URL(string: fullAvatarUrl)) { image in
-                                                image
-                                                    .resizable()
-                                                    .aspectRatio(contentMode: .fill)
-                                            } placeholder: {
-                                                Image("avatar")
-                                                    .resizable()
-                                                    .aspectRatio(contentMode: .fill)
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("Related notes")
+                                .accessibilityValue(isRelatedNotesExpanded ? "Expanded" : "Collapsed")
+                                .accessibilityIdentifier(
+                                    "detailRelatedLinksDisclosure"
+                                )
+                            }
+                            .padding(.horizontal, 20)
+
+                            if isRelatedNotesExpanded {
+                                VStack(spacing: 0) {
+                                    ForEach(
+                                        Array(relatedNotes.enumerated()),
+                                        id: \.element.id
+                                    ) { index, note in
+                                        Button {
+                                            selectedRelatedCardId = note.linkedCardId
+                                            DispatchQueue.main.async {
+                                                navigateToRelatedDetail = true
                                             }
-                                        } else {
-                                            Image("avatar")
-                                                .resizable()
-                                                .aspectRatio(contentMode: .fill)
+                                        } label: {
+                                            CardMetadataRelatedRow(
+                                                avatarURL: note.author?.avatar,
+                                                title: note.author?.userName
+                                                    ?? note.title
+                                                    ?? "Related note",
+                                                previewHTML: note.content
+                                            )
                                         }
-                                    }
-                                        .frame(width: 40, height: 40)
-                                                    .clipShape(Circle())
-                                    
-                                    VStack(alignment: .leading, spacing: 4) {
-                                                    Text(note.author?.userName ?? note.title ?? "Related note")
-                                            .font(.system(size: 16, weight: .semibold))
-                                            .foregroundColor(.white)
-                                                        .lineLimit(1)
-                                        
-                                                    HTMLTextRenderer(htmlContent: note.content ?? "", maxLines: 2)
-                                            .font(.system(size: 14, weight: .regular))
-                                            .foregroundColor(.white.opacity(0.7))
-                                        }
-                                        
-                                        Spacer()
-                                    }
-                                    .padding(.vertical, 16)
-                                            .contentShape(Rectangle())
-                                            .onTapGesture {
-                                                selectedRelatedCardId = note.linkedCardId
-                                                DispatchQueue.main.async {
-                                                    navigateToRelatedDetail = true
-                                                }
-                                            }
-                                        }
-                                        
-                                    if index < relatedNotes.count - 1 {
+                                        .buttonStyle(.plain)
+                                        .accessibilityLabel(
+                                            note.author?.userName
+                                                ?? note.title
+                                                ?? "Related note"
+                                        )
+
+                                        if index < relatedNotes.count - 1 {
                                             Rectangle()
                                                 .fill(Color.white.opacity(0.1))
                                                 .frame(height: 1)
+                                        }
                                     }
                                 }
-                            }
-                            .padding(.horizontal, 20)
-                            .transition(.opacity.combined(with: .move(edge: .top)))
+                                .padding(.horizontal, 20)
+                                .transition(
+                                    .opacity.combined(with: .move(edge: .top))
+                                )
                             }
                         }
                     }

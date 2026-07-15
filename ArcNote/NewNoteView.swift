@@ -165,7 +165,10 @@ struct NewNoteView: View {
                         CardEditingLink(
                             sourceCardID: item.sourceAssetId,
                             targetCardID: item.targetAssetId,
-                            title: item.title ?? "Related note"
+                            title: item.title ?? "Related note",
+                            previewHTML: item.content,
+                            authorName: item.author?.userName,
+                            authorAvatarURL: item.author?.avatar
                         )
                     }
                     editingStore.replaceLinks(links)
@@ -276,8 +279,6 @@ private struct CardEditorSessionView: View {
             onBack: handleBack,
             onAddTag: presentTagEditor,
             onRemoveTag: removeTag,
-            onAddLink: addOntologyLink,
-            onRemoveLink: removeOntologyLink,
             onTogglePrivacy: togglePrivacy,
             onChooseBackground: { showBackgroundPicker = true },
             onRemoveBackground: removeBackground,
@@ -432,8 +433,9 @@ private struct CardEditorSessionView: View {
                 : link.sourceCardID
             return CardEditorLinkItem(
                 id: linkedCardID,
-                title: link.title,
-                canRemove: link.sourceCardID == cardID
+                title: link.authorName ?? link.title,
+                previewHTML: link.previewHTML,
+                avatarURL: link.authorAvatarURL
             )
         }
     }
@@ -660,7 +662,10 @@ private struct CardEditorSessionView: View {
         let link = CardEditingLink(
             sourceCardID: sourceID,
             targetCardID: item.id,
-            title: item.title
+            title: item.title,
+            previewHTML: item.description,
+            authorName: item.username,
+            authorAvatarURL: item.avatar
         )
         Task {
             let didCreate = await editingStore.createLink(link)
@@ -671,26 +676,6 @@ private struct CardEditorSessionView: View {
             }
             saveMessage = nil
             retryAction = nil
-        }
-    }
-
-    private func removeOntologyLink(_ item: CardEditorLinkItem) {
-        guard let sourceID = editingStore.cardID,
-              item.canRemove,
-              let link = editingStore.links.first(where: {
-                  $0.sourceCardID == sourceID && $0.targetCardID == item.id
-              }) else {
-            return
-        }
-        Task {
-            let didDelete = await editingStore.deleteLink(link)
-            if !didDelete {
-                saveMessage = "Couldn't remove that link. Retry."
-                retryAction = .store
-            } else {
-                saveMessage = nil
-                retryAction = nil
-            }
         }
     }
 
