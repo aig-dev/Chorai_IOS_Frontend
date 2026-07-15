@@ -555,6 +555,9 @@ private struct CardEditorSessionView: View {
     }
 
     private func recoverFailedDraftOperationIfNeeded() async -> Bool {
+        if editingStore.discardFailedRelationshipMutation() {
+            return true
+        }
         guard editingStore.failureStage != nil else { return true }
         let didRetry = await editingStore.retry()
         if didRetry {

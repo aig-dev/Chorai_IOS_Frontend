@@ -1212,6 +1212,111 @@ final class CardEditingStoreTests: XCTestCase {
         XCTAssertEqual(service.createLinkRequests, [link, link])
     }
 
+    func testDiscardFailedCreateLinkIntentPreservesCanonicalLinks() async {
+        let existing = CardEditingLink(
+            sourceCardID: "ast_1",
+            targetCardID: "ast_existing",
+            title: "Existing"
+        )
+        let failed = CardEditingLink(
+            sourceCardID: "ast_1",
+            targetCardID: "ast_missing",
+            title: "Missing"
+        )
+        let service = MockCardEditingService()
+        service.createLinkResults = [.failure(.transport(code: "not_found"))]
+        let store = CardEditingStore(
+            cardID: "ast_1",
+            draft: .init(title: nil, content: "Body", tags: [], isPublic: false),
+            backgroundMediaRef: nil,
+            links: [existing],
+            service: service
+        )
+        _ = await store.createLink(failed)
+
+        let discarded = store.discardFailedRelationshipMutation()
+
+        XCTAssertTrue(discarded)
+        XCTAssertNil(store.failureStage)
+        XCTAssertEqual(store.phase, .ready)
+        XCTAssertEqual(store.links, [existing])
+        let retried = await store.retry()
+        XCTAssertFalse(retried)
+        XCTAssertEqual(service.createLinkRequests, [failed])
+    }
+
+    func testDiscardFailedDeleteLinkIntentRetainsCanonicalLink() async {
+        let link = CardEditingLink(
+            sourceCardID: "ast_1",
+            targetCardID: "ast_2",
+            title: "Companion"
+        )
+        let service = MockCardEditingService()
+        service.deleteLinkResults = [.failure(.transport(code: "offline"))]
+        let store = CardEditingStore(
+            cardID: "ast_1",
+            draft: .init(title: nil, content: "Body", tags: [], isPublic: false),
+            backgroundMediaRef: nil,
+            links: [link],
+            service: service
+        )
+        _ = await store.deleteLink(link)
+
+        let discarded = store.discardFailedRelationshipMutation()
+
+        XCTAssertTrue(discarded)
+        XCTAssertNil(store.failureStage)
+        XCTAssertEqual(store.phase, .ready)
+        XCTAssertEqual(store.links, [link])
+        let retried = await store.retry()
+        XCTAssertFalse(retried)
+        XCTAssertEqual(service.deleteLinkRequests, [link])
+    }
+
+    func testDiscardFailedRelationshipMutationRefusesDraftFailure() async {
+        let draftService = MockCardEditingService()
+        draftService.updateResults = [.failure(.transport(code: "offline"))]
+        let draftStore = CardEditingStore(
+            cardID: "ast_1",
+            draft: .init(title: nil, content: "Before", tags: [], isPublic: false),
+            backgroundMediaRef: nil,
+            links: [],
+            service: draftService
+        )
+        draftStore.updateDraft(
+            .init(title: nil, content: "After", tags: [], isPublic: false),
+            bodyRevision: 1
+        )
+        _ = await draftStore.save()
+
+        XCTAssertFalse(draftStore.discardFailedRelationshipMutation())
+        XCTAssertEqual(draftStore.failureStage, .updatingCard)
+        XCTAssertEqual(draftStore.phase, .failed(.transport(code: "offline")))
+    }
+
+    func testDiscardFailedRelationshipMutationRefusesBackgroundFailure() async {
+        let backgroundService = MockCardEditingService()
+        backgroundService.replaceBackgroundResults = [
+            .failure(.transport(code: "upload_failed"))
+        ]
+        let backgroundStore = CardEditingStore(
+            cardID: "ast_1",
+            draft: .init(title: nil, content: "Body", tags: [], isPublic: false),
+            backgroundMediaRef: nil,
+            links: [],
+            service: backgroundService
+        )
+        _ = backgroundStore.stageBackground(validImage)
+        _ = await backgroundStore.save()
+
+        XCTAssertFalse(backgroundStore.discardFailedRelationshipMutation())
+        XCTAssertEqual(backgroundStore.failureStage, .replacingBackground)
+        XCTAssertEqual(
+            backgroundStore.phase,
+            .failed(.transport(code: "upload_failed"))
+        )
+    }
+
     func testInvalidLinkReplacesOlderRetryContextAtomically() async {
         let failedLink = CardEditingLink(
             sourceCardID: "ast_1",

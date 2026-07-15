@@ -239,6 +239,9 @@ final class NewNoteViewSourceContractTests: XCTestCase {
                 signature: "func recoverFailedDraftOperationIfNeeded()"
             )
         )
+        let discardRelationshipFailure = try XCTUnwrap(
+            recovery.range(of: "editingStore.discardFailedRelationshipMutation()")
+        )
         XCTAssertTrue(recovery.contains("editingStore.failureStage != nil"))
         XCTAssertFalse(
             recovery.contains("case .creatingCard, .updatingCard"),
@@ -249,6 +252,11 @@ final class NewNoteViewSourceContractTests: XCTestCase {
         )
         let latestSave = try XCTUnwrap(
             recovery.range(of: "editingStore.save()")
+        )
+        XCTAssertLessThan(
+            discardRelationshipFailure.lowerBound,
+            exactRetry.lowerBound,
+            "Back and prerequisite actions must abandon only the failed relationship intent before retrying required draft or background writes"
         )
         XCTAssertLessThan(exactRetry.lowerBound, latestSave.lowerBound)
         XCTAssertTrue(recovery.contains("editingStore.failureStage == nil"))

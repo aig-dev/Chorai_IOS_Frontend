@@ -257,6 +257,20 @@ public final class CardEditingStore: ObservableObject {
     }
 
     @discardableResult
+    public func discardFailedRelationshipMutation() -> Bool {
+        guard !isBusy, let failureContext else { return false }
+        switch failureContext.stage {
+        case .creatingLink, .deletingLink:
+            clearFailure()
+            phase = .ready
+            return true
+        case .creatingCard, .updatingCard, .replacingBackground,
+             .removingBackground, .none:
+            return false
+        }
+    }
+
+    @discardableResult
     public func createLink(_ link: CardEditingLink) async -> Bool {
         guard let operationID = beginOperation() else { return false }
         defer { endOperation(operationID) }
