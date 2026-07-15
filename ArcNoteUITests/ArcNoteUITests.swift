@@ -3606,7 +3606,7 @@ final class ArcNoteUITests: XCTestCase {
             )
         }
         captureVisual("card-editor-native-card-actions")
-        app.buttons["Cancel"].firstMatch.tap()
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.12)).tap()
         closeNewNoteEditor()
     }
 
