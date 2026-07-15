@@ -129,6 +129,35 @@ final class ArcNoteUITests: XCTestCase {
         captureVisual("card-editor-background")
     }
 
+    func testCardEditorLegacyHTMLRendersWithoutLiteralMarkup() {
+        launchCardEditorFixture(mode: "legacy-html")
+
+        let renderedLegacyText = app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS[c] %@", "Legacy")
+        ).firstMatch
+        XCTAssertTrue(
+            renderedLegacyText.waitForExistence(timeout: 20),
+            "Legacy HTML content did not hydrate into visible editor text"
+        )
+        for fragment in ["Legacy", "rich", "text"] {
+            XCTAssertTrue(
+                app.staticTexts.matching(
+                    NSPredicate(format: "label CONTAINS[c] %@", fragment)
+                ).firstMatch.waitForExistence(timeout: 10),
+                "Missing hydrated legacy text fragment: \(fragment)"
+            )
+        }
+        for literalTag in ["<p>", "</p>"] {
+            XCTAssertFalse(
+                app.descendants(matching: .any).matching(
+                    NSPredicate(format: "label CONTAINS %@", literalTag)
+                ).firstMatch.exists,
+                "Legacy HTML tag appeared as literal text: \(literalTag)"
+            )
+        }
+        captureVisual("card-editor-legacy-html")
+    }
+
     func testCardEditorBridgeFailureFallbackRetriesIntoFreshWebView() {
         app.launchArguments.append("--ui-test-card-editor-shell")
         app.launchEnvironment["CHORAI_CARD_EDITOR_FIXTURE_MODE"] =
@@ -192,10 +221,12 @@ final class ArcNoteUITests: XCTestCase {
         let privacy = waitForButton("cardEditorPrivacyButton")
         let more = waitForButton("cardEditorMoreButton")
         XCTAssertFalse(privacy.isEnabled)
-        XCTAssertTrue(more.isEnabled)
+        XCTAssertFalse(more.isEnabled)
         assertReadingOrder(privacy, before: more)
-        more.tap()
-        waitFor("cardEditorCardActionsRequested")
+        XCTAssertFalse(
+            app.descendants(matching: .any)["cardEditorCardActionsRequested"]
+                .exists
+        )
         captureVisual("card-editor-compatibility-blocked")
     }
 
@@ -3407,7 +3438,11 @@ final class ArcNoteUITests: XCTestCase {
         waitFor("card.home.\(sourceID)", timeout: 30).tap()
         waitFor("cardEditorContent", timeout: 20)
         openEditorCardActions()
-        waitForEnabledButton("cardEditorActionLink", timeout: 20).tap()
+        waitForEditorCardAction(
+            "cardEditorActionLink",
+            timeout: 20,
+            requireHittable: true
+        ).tap()
         waitFor("linkPopup", timeout: 20)
         let search = waitFor("linkPopupSearch")
         search.tap()
@@ -3469,7 +3504,11 @@ final class ArcNoteUITests: XCTestCase {
         waitForElementToDisappear(app.keyboards.firstMatch)
 
         openEditorCardActions()
-        waitForEnabledButton("cardEditorActionLink", timeout: 20).tap()
+        waitForEditorCardAction(
+            "cardEditorActionLink",
+            timeout: 20,
+            requireHittable: true
+        ).tap()
         waitFor("linkPopup", timeout: 30)
         let search = waitFor("linkPopupSearch")
         search.tap()
@@ -3562,7 +3601,7 @@ final class ArcNoteUITests: XCTestCase {
             "Privacy must remain staged in the unsaved draft"
         )
         XCTAssertEqual(
-            waitForButton("cardEditorBackgroundButton").label,
+            waitForEditorCardAction("cardEditorBackgroundButton").label,
             "Replace Background",
             "The selected photo must remain staged in Card Actions before first save"
         )
@@ -3576,9 +3615,7 @@ final class ArcNoteUITests: XCTestCase {
         )
         captureVisual("card-editor-new-background-privacy-staged")
 
-        app.coordinate(
-            withNormalizedOffset: CGVector(dx: 0.5, dy: 0.75)
-        ).tap()
+        dismissEditorCardActions()
         closeNewNoteEditor()
 
         let callbackID = waitFor("note.created-card-id", timeout: 30)
@@ -3606,19 +3643,6 @@ final class ArcNoteUITests: XCTestCase {
         let session = try requireSmokeSession()
         seedAppSession(session)
         let bodyText = "Card actions no create \(UUID().uuidString.lowercased())"
-        defer {
-            if let leakedCards = try? fetchSmokeCards(
-                search: bodyText,
-                token: session.token
-            ) {
-                for card in leakedCards where card.content.contains(bodyText) {
-                    permanentlyCleanUpSmokeCard(
-                        id: card.id,
-                        token: session.token
-                    )
-                }
-            }
-        }
 
         launchAuthenticatedApp()
         tap("tab.library")
@@ -3628,30 +3652,38 @@ final class ArcNoteUITests: XCTestCase {
         tapButton("cardEditorKeyboardDismiss")
         waitForElementToDisappear(app.keyboards.firstMatch)
 
-        XCTAssertTrue(
-            try fetchSmokeCards(search: bodyText, token: session.token)
-                .filter { $0.content.contains(bodyText) }
-                .isEmpty
-        )
+        let baselineCardIDs = try fetchAllSmokeCardIDs(token: session.token)
+        defer {
+            if let currentIDs = try? fetchAllSmokeCardIDs(token: session.token) {
+                for cardID in currentIDs.subtracting(baselineCardIDs) {
+                    permanentlyCleanUpSmokeCard(
+                        id: cardID,
+                        token: session.token
+                    )
+                }
+            }
+        }
+
         openEditorCardActions()
-        XCTAssertTrue(waitForButton("cardEditorActionLink").isEnabled)
+        XCTAssertTrue(
+            waitForEditorCardAction("cardEditorActionLink").isEnabled
+        )
         XCTAssertEqual(
-            waitForButton("cardEditorBackgroundButton").label,
+            waitForEditorCardAction("cardEditorBackgroundButton").label,
             "Add Background"
         )
         captureVisual("card-editor-card-actions-unsaved")
-        try assertNoSmokeCardsCreated(
-            search: bodyText,
+        try assertNoNewSmokeCardIDs(
+            baseline: baselineCardIDs,
             token: session.token,
             duration: 3
         )
 
-        app.buttons["Cancel"].firstMatch.tap()
+        dismissEditorCardActions()
         app.terminate()
-        XCTAssertTrue(
-            try fetchSmokeCards(search: bodyText, token: session.token)
-                .filter { $0.content.contains(bodyText) }
-                .isEmpty,
+        XCTAssertEqual(
+            try fetchAllSmokeCardIDs(token: session.token),
+            baselineCardIDs,
             "Closing the app after Card Actions must leave the draft local"
         )
     }
@@ -3762,12 +3794,79 @@ final class ArcNoteUITests: XCTestCase {
         ]
         for (identifier, label) in expectedActions {
             XCTAssertTrue(
-                waitForButton(identifier, timeout: 20).exists,
+                waitForEditorCardAction(identifier, timeout: 20).exists,
                 "Missing native card action: \(label)"
             )
         }
         captureVisual("card-editor-card-actions")
-        app.buttons["Cancel"].firstMatch.tap()
+        dismissEditorCardActions()
+        closeNewNoteEditor()
+    }
+
+    func testCardEditorCardActionsRemainUsableAtAccessibilityTextSize() throws {
+        let session = try requireSmokeSession()
+        seedAppSession(session)
+        let cardID = try createSmokeCard(
+            token: session.token,
+            searchToken: "editor-actions-xxxl-\(Int(Date().timeIntervalSince1970))",
+            isPublic: false
+        )
+        defer {
+            permanentlyCleanUpSmokeCard(id: cardID, token: session.token)
+        }
+
+        app.launchArguments += [
+            "-UIPreferredContentSizeCategoryName",
+            "UICTContentSizeCategoryAccessibilityXXXL",
+        ]
+        launchAuthenticatedApp()
+        tap("tab.library")
+        waitFor("card.home.\(cardID)", timeout: 30).tap()
+        waitFor("cardEditorContent", timeout: 20)
+        openEditorCardActions()
+
+        let link = waitForEditorCardAction(
+            "cardEditorActionLink",
+            timeout: 20,
+            requireHittable: true
+        )
+        let background = waitForEditorCardAction(
+            "cardEditorBackgroundButton",
+            timeout: 20,
+            requireHittable: true
+        )
+        XCTAssertFalse(
+            link.frame.intersects(background.frame),
+            "Link and Background actions must remain separately reachable at XXXL"
+        )
+        for identifier in [
+            "cardEditorActionShare",
+            "cardEditorActionSpark",
+            "cardEditorActionMerge",
+            "cardEditorActionRoot",
+            "cardEditorActionPin",
+            "cardEditorActionRemove",
+        ] {
+            XCTAssertTrue(
+                waitForEditorCardAction(identifier, timeout: 20).isEnabled,
+                "Missing enabled Card Actions entry at XXXL: \(identifier)"
+            )
+        }
+        captureVisual("card-editor-card-actions-accessibility-text")
+
+        let dialog = app.sheets["Card Actions"].firstMatch
+        XCTAssertTrue(
+            dialog.waitForExistence(timeout: 5),
+            "Card Actions dialog must remain available for scrolling at XXXL"
+        )
+        dialog.swipeUp()
+        _ = waitForEditorCardAction(
+            "cardEditorActionRemove",
+            timeout: 10,
+            requireHittable: true
+        )
+        captureVisual("card-editor-card-actions-accessibility-text-scrolled")
+        dismissEditorCardActions()
         closeNewNoteEditor()
     }
 
@@ -3793,7 +3892,7 @@ final class ArcNoteUITests: XCTestCase {
 
         openEditorCardActions()
         XCTAssertEqual(
-            waitForButton("cardEditorBackgroundButton").label,
+            waitForEditorCardAction("cardEditorBackgroundButton").label,
             "Replace Background",
             "A selected photo must become the staged background action state"
         )
@@ -3803,9 +3902,7 @@ final class ArcNoteUITests: XCTestCase {
             "Selecting a photo must stage locally until the exact body snapshot saves"
         )
         captureVisual("card-editor-background-staged")
-        app.coordinate(
-            withNormalizedOffset: CGVector(dx: 0.5, dy: 0.75)
-        ).tap()
+        dismissEditorCardActions()
         closeNewNoteEditor()
 
         waitForSmokeCardState(id: cardID, token: session.token) {
@@ -3816,12 +3913,15 @@ final class ArcNoteUITests: XCTestCase {
         _ = waitForEnabledButton("cardEditorAddTag", timeout: 20)
         openEditorCardActions()
         XCTAssertEqual(
-            waitForButton("cardEditorBackgroundButton").label,
+            waitForEditorCardAction("cardEditorBackgroundButton").label,
             "Replace Background"
         )
         captureVisual("card-editor-background-uploaded")
 
-        let remove = waitForButton("cardEditorRemoveBackgroundButton")
+        let remove = waitForEditorCardAction(
+            "cardEditorRemoveBackgroundButton",
+            requireHittable: true
+        )
         remove.tap()
 
         waitForSmokeCardState(id: cardID, token: session.token) {
@@ -5532,6 +5632,45 @@ final class ArcNoteUITests: XCTestCase {
         }
     }
 
+    @discardableResult
+    private func waitForEditorCardAction(
+        _ identifier: String,
+        timeout: TimeInterval = 10,
+        requireEnabled: Bool = true,
+        requireHittable: Bool = false,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) -> XCUIElement {
+        let action = app.buttons[identifier].firstMatch
+        XCTAssertTrue(
+            action.waitForExistence(timeout: timeout),
+            "Missing Card Actions entry: \(identifier)",
+            file: file,
+            line: line
+        )
+        if requireEnabled {
+            _ = waitForEnabled(
+                action,
+                timeout: timeout,
+                file: file,
+                line: line
+            )
+        }
+        if requireHittable {
+            let deadline = Date().addingTimeInterval(timeout)
+            while Date() < deadline && !action.isHittable {
+                RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+            }
+            XCTAssertTrue(
+                action.isHittable,
+                "Card Actions entry is not hittable: \(identifier)",
+                file: file,
+                line: line
+            )
+        }
+        return action
+    }
+
     private func openEditorCardActions(
         file: StaticString = #filePath,
         line: UInt = #line
@@ -5547,14 +5686,139 @@ final class ArcNoteUITests: XCTestCase {
             file: file,
             line: line
         ).tap()
-        _ = waitForButton(
+        _ = waitForEditorCardAction(
             "cardEditorActionLink",
             timeout: 10,
             file: file,
             line: line
         )
-        _ = waitForButton(
+        _ = waitForEditorCardAction(
             "cardEditorBackgroundButton",
+            timeout: 10,
+            file: file,
+            line: line
+        )
+    }
+
+    private func dismissEditorCardActions(
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let dialogSentinel = app.buttons["cardEditorActionLink"].firstMatch
+        let cancel = app.buttons["Cancel"].firstMatch
+        let dialog = app.sheets["Card Actions"].firstMatch
+        if cancel.waitForExistence(timeout: 1), cancel.isHittable {
+            cancel.tap()
+        } else {
+            XCTAssertTrue(
+                dialog.waitForExistence(timeout: 5),
+                "Card Actions dialog did not appear",
+                file: file,
+                line: line
+            )
+            let appFrame = app.frame
+            let dialogFrame = dialog.frame
+            let actionIdentifiers = [
+                "cardEditorActionLink",
+                "cardEditorBackgroundButton",
+                "cardEditorRemoveBackgroundButton",
+                "cardEditorActionShare",
+                "cardEditorActionSpark",
+                "cardEditorActionMerge",
+                "cardEditorActionRoot",
+                "cardEditorActionPin",
+                "cardEditorActionRemove",
+            ]
+            let actionFrames = actionIdentifiers.compactMap { identifier -> CGRect? in
+                let action = app.buttons[identifier].firstMatch
+                return action.exists ? action.frame : nil
+            }
+            let leftInset = dialogFrame.minX - appFrame.minX
+            let rightInset = appFrame.maxX - dialogFrame.maxX
+            let topInset = dialogFrame.minY - appFrame.minY
+            let bottomInset = appFrame.maxY - dialogFrame.maxY
+            var dismissCandidates: [CGPoint] = []
+            if leftInset > 2 {
+                dismissCandidates.append(
+                    CGPoint(
+                        x: appFrame.minX + max(1, leftInset / 2),
+                        y: appFrame.midY
+                    )
+                )
+            }
+            if rightInset > 2 {
+                dismissCandidates.append(
+                    CGPoint(
+                        x: dialogFrame.maxX + max(1, rightInset / 2),
+                        y: appFrame.midY
+                    )
+                )
+            }
+            if topInset > 2 {
+                dismissCandidates.append(
+                    CGPoint(
+                        x: appFrame.midX,
+                        y: appFrame.minY + max(1, topInset / 2)
+                    )
+                )
+            }
+            if bottomInset > 2 {
+                dismissCandidates.append(
+                    CGPoint(
+                        x: appFrame.midX,
+                        y: dialogFrame.maxY + max(1, bottomInset / 2)
+                    )
+                )
+            }
+            let dismissPoint = dismissCandidates.first(where: { candidate in
+                !dialogFrame.contains(candidate)
+                    && !actionFrames.contains(where: { $0.contains(candidate) })
+            })
+            if let dismissPoint {
+                XCTAssertFalse(
+                    dialogFrame.contains(dismissPoint),
+                    "Card Actions fallback dismissal point overlaps the dialog",
+                    file: file,
+                    line: line
+                )
+                for identifier in actionIdentifiers {
+                    let action = app.buttons[identifier].firstMatch
+                    if action.exists {
+                        XCTAssertFalse(
+                            action.frame.contains(dismissPoint),
+                            "Card Actions fallback point overlaps \(identifier)",
+                            file: file,
+                            line: line
+                        )
+                    }
+                }
+                app.coordinate(
+                    withNormalizedOffset: CGVector(
+                        dx: (dismissPoint.x - appFrame.minX) / appFrame.width,
+                        dy: (dismissPoint.y - appFrame.minY) / appFrame.height
+                    )
+                ).tap()
+            }
+        }
+
+        let backgroundTapDeadline = Date().addingTimeInterval(1)
+        while Date() < backgroundTapDeadline && dialogSentinel.exists {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        }
+        if dialogSentinel.exists {
+            XCTAssertTrue(
+                dialog.waitForExistence(timeout: 2),
+                "Card Actions dialog disappeared before gesture dismissal",
+                file: file,
+                line: line
+            )
+            for _ in 0..<3 where dialogSentinel.exists {
+                dialog.swipeDown()
+                RunLoop.current.run(until: Date().addingTimeInterval(0.5))
+            }
+        }
+        waitForElementToDisappear(
+            dialogSentinel,
             timeout: 10,
             file: file,
             line: line
@@ -5566,8 +5830,9 @@ final class ArcNoteUITests: XCTestCase {
         line: UInt = #line
     ) -> XCUIElement {
         openEditorCardActions(file: file, line: line)
-        return waitForButton(
+        return waitForEditorCardAction(
             "cardEditorBackgroundButton",
+            requireHittable: true,
             file: file,
             line: line
         )
@@ -6783,6 +7048,20 @@ final class ArcNoteUITests: XCTestCase {
         search: String,
         token: String
     ) throws -> [SmokeCardListResponse.SmokeCardListItem] {
+        try fetchSmokeCardPage(
+            page: 1,
+            perPage: 100,
+            search: search,
+            token: token
+        )
+    }
+
+    private func fetchSmokeCardPage(
+        page: Int,
+        perPage: Int,
+        search: String? = nil,
+        token: String
+    ) throws -> [SmokeCardListResponse.SmokeCardListItem] {
         let baseURL = ProcessInfo.processInfo.environment[
             "CHORAI_API_BASE_URL"
         ] ?? "http://127.0.0.1:8080"
@@ -6794,10 +7073,14 @@ final class ArcNoteUITests: XCTestCase {
             )
         }
         components.queryItems = [
-            URLQueryItem(name: "page", value: "1"),
-            URLQueryItem(name: "per_page", value: "100"),
-            URLQueryItem(name: "search", value: search),
+            URLQueryItem(name: "page", value: String(page)),
+            URLQueryItem(name: "per_page", value: String(perPage)),
         ]
+        if let search, !search.isEmpty {
+            components.queryItems?.append(
+                URLQueryItem(name: "search", value: search)
+            )
+        }
         guard let url = components.url else {
             throw NSError(
                 domain: "ArcNoteUITests",
@@ -6814,8 +7097,38 @@ final class ArcNoteUITests: XCTestCase {
         ).data
     }
 
-    private func assertNoSmokeCardsCreated(
-        search: String,
+    private func fetchAllSmokeCardIDs(token: String) throws -> Set<String> {
+        let pageSize = 100
+        var page = 1
+        var cardIDs: Set<String> = []
+
+        while true {
+            let cards = try fetchSmokeCardPage(
+                page: page,
+                perPage: pageSize,
+                token: token
+            )
+            let countBeforePage = cardIDs.count
+            cardIDs.formUnion(cards.map(\.id))
+            if cards.count < pageSize {
+                return cardIDs
+            }
+            guard cardIDs.count > countBeforePage else {
+                throw NSError(
+                    domain: "ArcNoteUITests",
+                    code: 18,
+                    userInfo: [
+                        NSLocalizedDescriptionKey:
+                            "Card pagination repeated page \(page)",
+                    ]
+                )
+            }
+            page += 1
+        }
+    }
+
+    private func assertNoNewSmokeCardIDs(
+        baseline: Set<String>,
         token: String,
         duration: TimeInterval,
         file: StaticString = #filePath,
@@ -6823,13 +7136,11 @@ final class ArcNoteUITests: XCTestCase {
     ) throws {
         let deadline = Date().addingTimeInterval(duration)
         repeat {
-            let matchingCards = try fetchSmokeCards(
-                search: search,
-                token: token
-            ).filter { $0.content.contains(search) }
-            guard matchingCards.isEmpty else {
+            let currentCardIDs = try fetchAllSmokeCardIDs(token: token)
+            let createdCardIDs = currentCardIDs.subtracting(baseline)
+            guard createdCardIDs.isEmpty else {
                 XCTFail(
-                    "Opening Card Actions created server card(s): \(matchingCards.map(\.id))",
+                    "Opening Card Actions created server card(s): \(createdCardIDs.sorted())",
                     file: file,
                     line: line
                 )

@@ -240,6 +240,7 @@ private enum CardEditorShellFixtureMode: String {
     case blocked
     case keyboard
     case longTag = "long-tag"
+    case legacyHTML = "legacy-html"
     case bridgeFailure = "bridge-failure"
 }
 
@@ -316,7 +317,7 @@ struct CardEditorShellFixtureScreen: View {
                     tags.removeAll { $0 == tag }
                 },
                 onTogglePrivacy: { isPublic.toggle() },
-                onOpenCardActions: { didRequestCardActions = true },
+                onOpenCardActions: fixtureCardActionsHandler,
                 onSave: {}
             )
 
@@ -345,6 +346,11 @@ struct CardEditorShellFixtureScreen: View {
         }
     }
 
+    private var fixtureCardActionsHandler: (() -> Void)? {
+        guard mode != .blocked else { return nil }
+        return { didRequestCardActions = true }
+    }
+
     private static func document(
         for mode: CardEditorShellFixtureMode
     ) -> BlockNoteInitialDocument {
@@ -352,6 +358,14 @@ struct CardEditorShellFixtureScreen: View {
             return BlockNoteInitialDocument(
                 contentJSON: #"[{"type":"futureWebBlock","props":{"payload":"preserve"},"content":[],"children":[]}]"#,
                 fallbackMarkdown: "A note from a newer editor"
+            )
+        }
+
+        if mode == .legacyHTML {
+            return BlockNoteInitialDocument(
+                contentJSON: nil,
+                fallbackMarkdown:
+                    "<p>Legacy <strong>rich</strong> text</p>"
             )
         }
 
@@ -434,7 +448,7 @@ private extension CardEditorShellFixtureMode {
             return ["archive"]
         case .longTag:
             return ["this-is-an-intentionally-long-tag-that-must-compress"]
-        case .empty, .bridgeFailure:
+        case .empty, .legacyHTML, .bridgeFailure:
             return []
         }
     }
