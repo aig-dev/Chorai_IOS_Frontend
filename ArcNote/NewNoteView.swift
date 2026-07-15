@@ -228,6 +228,7 @@ private struct CardEditorSessionView: View {
     @State private var saveMessage: String?
     @State private var retryAction: CardEditorRetryAction?
     @State private var isSaving = false
+    @State private var isPreparingCardAction = false
     @State private var isCardActionInFlight = false
     @State private var didNotifyCreation: Bool
     @State private var isPinned: Bool
@@ -280,8 +281,6 @@ private struct CardEditorSessionView: View {
             onAddTag: presentTagEditor,
             onRemoveTag: removeTag,
             onTogglePrivacy: togglePrivacy,
-            onChooseBackground: { showBackgroundPicker = true },
-            onRemoveBackground: removeBackground,
             onOpenCardActions: cardActionsHandler,
             onSave: retryHandler
         )
@@ -291,28 +290,54 @@ private struct CardEditorSessionView: View {
             isPresented: $showCardActions,
             titleVisibility: .visible
         ) {
+            Button("Link") {
+                addOntologyLink()
+            }
+            .disabled(!bodyModel.canMutate || isBusy)
+            .accessibilityIdentifier("cardEditorActionLink")
+
+            Button(
+                editorBackground == .none
+                    ? "Add Background"
+                    : "Replace Background"
+            ) {
+                DispatchQueue.main.async {
+                    showBackgroundPicker = true
+                }
+            }
+            .disabled(!bodyModel.canMutate || isBusy)
+            .accessibilityIdentifier("cardEditorBackgroundButton")
+
+            if editorBackground != .none {
+                Button("Remove Background", role: .destructive) {
+                    removeBackground()
+                }
+                .disabled(!bodyModel.canMutate || isBusy)
+                .accessibilityIdentifier("cardEditorRemoveBackgroundButton")
+            }
+
             Button("Share") {
-                postCardAction("ShowCardShare")
+                performPersistedCardAction(.notification("ShowCardShare"))
             }
             .accessibilityIdentifier("cardEditorActionShare")
 
             Button("Spark") {
-                postCardAction("NavigateToSpark")
+                performPersistedCardAction(.notification("NavigateToSpark"))
             }
             .accessibilityIdentifier("cardEditorActionSpark")
 
             Button("Merge") {
-                postCardAction("NavigateToMerge")
+                performPersistedCardAction(.notification("NavigateToMerge"))
             }
             .accessibilityIdentifier("cardEditorActionMerge")
 
             Button("Root") {
-                postCardAction("NavigateToRoot")
+                performPersistedCardAction(.notification("NavigateToRoot"))
             }
             .accessibilityIdentifier("cardEditorActionRoot")
 
             Button(isPinned ? "Unpin" : "Pin") {
-                togglePinnedCard()
+                performPersistedCardAction(.togglePin)
             }
             .accessibilityIdentifier("cardEditorActionPin")
 
@@ -329,7 +354,11 @@ private struct CardEditorSessionView: View {
             Button("Cancel", role: .cancel) {}
             Button("Remove", role: .destructive, action: removeCanonicalCard)
         } message: {
-            Text("The note will be moved to Trash.")
+            Text(
+                editingStore.cardID == nil
+                    ? "The unsaved draft will be discarded."
+                    : "The note will be moved to Trash."
+            )
         }
         .alert(
             "Close without saving?",
@@ -393,7 +422,9 @@ private struct CardEditorSessionView: View {
     }
 
     private var isBusy: Bool {
-        if isSaving || isCardActionInFlight { return true }
+        if isSaving || isPreparingCardAction || isCardActionInFlight {
+            return true
+        }
         switch editingStore.phase {
         case .saving, .linking, .updatingBackground:
             return true
@@ -533,8 +564,8 @@ private struct CardEditorSessionView: View {
         case .addLink:
             addOntologyLink()
 
-        case .openCardActions:
-            openCardActions()
+        case let .persistedAction(action):
+            performPersistedCardAction(action)
 
         case .store:
             isSaving = true
@@ -703,6 +734,7 @@ private struct CardEditorSessionView: View {
     }
 
     private func removeBackground() {
+        guard bodyModel.canMutate, !isBusy else { return }
         Task {
             let didRemove = await editingStore.removeBackground()
             if !didRemove {
@@ -771,30 +803,50 @@ private struct CardEditorSessionView: View {
     }
 
     private func openCardActions() {
-        guard !isBusy else { return }
+        guard bodyModel.canSave, !isBusy else { return }
+        showCardActions = true
+    }
+
+    private func performPersistedCardAction(
+        _ action: CardEditorPersistedAction
+    ) {
+        guard bodyModel.canSave, !isBusy else { return }
+        isPreparingCardAction = true
         saveMessage = nil
         retryAction = nil
         Task {
+            defer { isPreparingCardAction = false }
             do {
                 _ = try await applyCurrentSnapshot()
                 guard await recoverFailedDraftOperationIfNeeded() else {
-                    notifyCreationIfNeeded()
-                    saveMessage = "Save this note before opening card actions."
-                    retryAction = .openCardActions
+                    saveMessage = "Save this note before using that action."
+                    retryAction = .persistedAction(action)
                     return
                 }
                 guard await editingStore.ensurePersisted() != nil else {
-                    notifyCreationIfNeeded()
-                    saveMessage = "Save this note before opening card actions."
-                    retryAction = .openCardActions
+                    saveMessage = "Save this note before using that action."
+                    retryAction = .persistedAction(action)
                     return
                 }
                 notifyCreationIfNeeded()
-                showCardActions = true
+                saveMessage = nil
+                retryAction = nil
+                executePersistedCardAction(action)
             } catch {
-                saveMessage = "Couldn't take a safe snapshot for card actions."
-                retryAction = .openCardActions
+                saveMessage = "Couldn't take a safe snapshot for that action."
+                retryAction = .persistedAction(action)
             }
+        }
+    }
+
+    private func executePersistedCardAction(
+        _ action: CardEditorPersistedAction
+    ) {
+        switch action {
+        case let .notification(name):
+            postCardAction(name)
+        case .togglePin:
+            togglePinnedCard()
         }
     }
 
@@ -834,13 +886,17 @@ private struct CardEditorSessionView: View {
                     isCardActionInFlight = false
                     if case .failure = completion {
                         saveMessage = "Couldn't update pin status."
+                        retryAction = .persistedAction(.togglePin)
                     }
                 },
                 receiveValue: { response in
                     if response.success {
                         isPinned.toggle()
+                        saveMessage = nil
+                        retryAction = nil
                     } else {
                         saveMessage = "Couldn't update pin status."
+                        retryAction = .persistedAction(.togglePin)
                     }
                 }
             )
@@ -848,8 +904,11 @@ private struct CardEditorSessionView: View {
     }
 
     private func removeCanonicalCard() {
-        guard let cardID = editingStore.cardID,
-              !isCardActionInFlight else { return }
+        guard !isCardActionInFlight else { return }
+        guard let cardID = editingStore.cardID else {
+            dismiss()
+            return
+        }
         isCardActionInFlight = true
         saveMessage = nil
         retryAction = nil
@@ -879,10 +938,15 @@ private enum CardEditorSessionError: Error {
     case imageUnavailable
 }
 
+private enum CardEditorPersistedAction {
+    case notification(String)
+    case togglePin
+}
+
 private enum CardEditorRetryAction {
     case save(thenDismiss: Bool)
     case addLink
-    case openCardActions
+    case persistedAction(CardEditorPersistedAction)
     case store
 }
 

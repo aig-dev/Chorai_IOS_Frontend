@@ -99,13 +99,12 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         XCTAssertLessThan(body.lowerBound, tags.lowerBound)
         XCTAssertLessThan(tags.lowerBound, links.lowerBound)
         XCTAssertTrue(shell.contains("cardEditorFloatingBack"))
+        XCTAssertTrue(shell.contains("cardEditorPrivacyButton"))
         XCTAssertTrue(shell.contains("cardEditorMoreButton"))
         XCTAssertTrue(
             shell.contains("onOpenCardActions: (() -> Void)? = nil")
         )
-        XCTAssertTrue(shell.contains("if let onOpenCardActions"))
-        XCTAssertTrue(shell.contains("Label(\"Card Actions\""))
-        XCTAssertTrue(shell.contains("cardEditorCardActionsButton"))
+        XCTAssertFalse(shell.contains("cardEditorCardActionsButton"))
     }
 
     func testBodyAdapterKeepsNativeAndNetworkStateOutsideBridge() throws {
@@ -238,6 +237,14 @@ final class CardEditorShellSourceContractTests: XCTestCase {
             )
         )
         XCTAssertTrue(metadata.contains("CardMetadataRelatedRow("))
+        XCTAssertTrue(
+            metadata.contains(".accessibilityElement(children: .combine)")
+        )
+        XCTAssertTrue(
+            metadata.contains(
+                "\"cardEditorLink.\\(accessibilityComponent(link.id))\""
+            )
+        )
         XCTAssertTrue(metadata.contains("cardEditorLinksDisclosure"))
         XCTAssertTrue(
             metadata.contains(
@@ -425,12 +432,43 @@ final class CardEditorShellSourceContractTests: XCTestCase {
 
         XCTAssertGreaterThanOrEqual(
             controls.components(separatedBy: ".font(.system(size: 17, weight: .semibold))").count - 1,
-            2
+            3
         )
         XCTAssertGreaterThanOrEqual(
             controls.components(separatedBy: ".clipShape(Circle())").count - 1,
-            2
+            3
         )
+        XCTAssertGreaterThanOrEqual(
+            controls.components(separatedBy: ".frame(width: 44, height: 44)").count - 1,
+            3
+        )
+        XCTAssertTrue(controls.contains("HStack(spacing: 8)"))
+        XCTAssertTrue(
+            controls.contains("Image(systemName: isPublic ? \"globe\" : \"lock\")")
+        )
+        XCTAssertTrue(
+            controls.contains(
+                ".accessibilityLabel(isPublic ? \"Make Private\" : \"Make Public\")"
+            )
+        )
+        XCTAssertTrue(
+            controls.contains(
+                ".accessibilityValue(isPublic ? \"Public\" : \"Private\")"
+            )
+        )
+        XCTAssertTrue(controls.contains("onOpenCardActions?()"))
+        XCTAssertFalse(controls.contains("Menu {"))
+        for removedBackgroundSurface in [
+            "hasBackground",
+            "onChooseBackground",
+            "onRemoveBackground",
+            "cardEditorBackgroundButton",
+        ] {
+            XCTAssertFalse(
+                controls.contains(removedBackgroundSurface),
+                "Background belongs in Card Actions: \(removedBackgroundSurface)"
+            )
+        }
         XCTAssertFalse(controls.contains(".font(.body"))
     }
 
@@ -508,7 +546,6 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         XCTAssertTrue(app.contains("--ui-test-card-editor-shell"))
         XCTAssertTrue(app.contains("CardEditorShellFixtureScreen"))
         XCTAssertTrue(fixture.contains("CHORAI_CARD_EDITOR_FIXTURE_MODE"))
-        XCTAssertTrue(fixture.contains("cardEditorBackgroundButton"))
         XCTAssertTrue(fixture.contains("cardEditorCardActionsRequested"))
         XCTAssertTrue(
             fixture.contains(

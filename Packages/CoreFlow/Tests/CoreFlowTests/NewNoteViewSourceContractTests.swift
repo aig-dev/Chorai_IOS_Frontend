@@ -176,7 +176,10 @@ final class NewNoteViewSourceContractTests: XCTestCase {
         XCTAssertTrue(selection.contains("guard didCreate else"))
         XCTAssertFalse(source.contains("adoptAlreadyCreatedLink"))
         XCTAssertFalse(selection.contains("replaceLinks("))
-        XCTAssertTrue(source.contains("canRemove: link.sourceCardID == cardID"))
+        XCTAssertFalse(
+            source.contains("canRemove:"),
+            "Editor links are display-only"
+        )
     }
 
     func testCardLinkBridgeRequestRoutesToExistingOntologyLinkFlow() throws {
@@ -204,6 +207,17 @@ final class NewNoteViewSourceContractTests: XCTestCase {
 
     func testBackgroundStagesWithoutSavingAndInlineImageInsertsOnlyAfterUpload() throws {
         let source = try Self.newNoteSource()
+        let privacy = try XCTUnwrap(
+            Self.functionBody(in: source, signature: "func togglePrivacy()")
+        )
+        XCTAssertTrue(
+            privacy.contains(
+                "updateMetadata(isPublic: !editingStore.draft.isPublic)"
+            )
+        )
+        XCTAssertFalse(privacy.contains("editingStore.save()"))
+        XCTAssertFalse(privacy.contains("editingStore.ensurePersisted()"))
+
         let background = try XCTUnwrap(
             Self.functionBody(
                 in: source,
@@ -308,7 +322,10 @@ final class NewNoteViewSourceContractTests: XCTestCase {
             try XCTUnwrap(save.range(of: "editingStore.save()")).lowerBound
         )
 
-        for signature in ["func addOntologyLink()", "func openCardActions()"] {
+        for signature in [
+            "func addOntologyLink()",
+            "func performPersistedCardAction(",
+        ] {
             let action = try XCTUnwrap(
                 Self.functionBody(in: source, signature: signature)
             )
@@ -333,7 +350,7 @@ final class NewNoteViewSourceContractTests: XCTestCase {
         XCTAssertTrue(backgroundRemoval.contains("retryAction = .store"))
     }
 
-    func testNativeCardActionsPersistExactSnapshotWithoutLegacyMutationBypasses() throws {
+    func testCardActionsOpenWithoutPersistenceAndContainLocalEditorActions() throws {
         let source = try Self.newNoteSource()
         XCTAssertTrue(source.contains("saveActionTitle: \"Retry\""))
         XCTAssertTrue(source.contains("onOpenCardActions: cardActionsHandler"))
@@ -344,36 +361,106 @@ final class NewNoteViewSourceContractTests: XCTestCase {
         let actions = try XCTUnwrap(
             Self.functionBody(in: source, signature: "func openCardActions()")
         )
-        let snapshot = try XCTUnwrap(
-            actions.range(of: "applyCurrentSnapshot()")
+        XCTAssertTrue(actions.contains("guard bodyModel.canSave, !isBusy else { return }"))
+        XCTAssertTrue(actions.contains("showCardActions = true"))
+        for forbidden in [
+            "Task {",
+            "applyCurrentSnapshot()",
+            "recoverFailedDraftOperationIfNeeded()",
+            "editingStore.ensurePersisted()",
+            "editingStore.save()",
+            "notifyCreationIfNeeded()",
+        ] {
+            XCTAssertFalse(
+                actions.contains(forbidden),
+                "Opening Card Actions must be presentation-only: \(forbidden)"
+            )
+        }
+
+        XCTAssertTrue(source.contains("Button(\"Link\")"))
+        XCTAssertTrue(source.contains("addOntologyLink()"))
+        XCTAssertTrue(source.contains("cardEditorActionLink"))
+        XCTAssertTrue(source.contains("editorBackground == .none"))
+        XCTAssertTrue(source.contains("? \"Add Background\""))
+        XCTAssertTrue(source.contains(": \"Replace Background\""))
+        XCTAssertTrue(source.contains("cardEditorBackgroundButton"))
+        XCTAssertTrue(source.contains("DispatchQueue.main.async"))
+        XCTAssertTrue(source.contains("showBackgroundPicker = true"))
+        XCTAssertTrue(source.contains("if editorBackground != .none"))
+        XCTAssertTrue(source.contains("Button(\"Remove Background\", role: .destructive)"))
+        XCTAssertTrue(source.contains("cardEditorRemoveBackgroundButton"))
+    }
+
+    func testIDScopedCardActionsPersistLazilyAndRetryTheirExactIntent() throws {
+        let source = try Self.newNoteSource()
+        XCTAssertTrue(source.contains("enum CardEditorPersistedAction"))
+        XCTAssertTrue(source.contains("case notification(String)"))
+        XCTAssertTrue(source.contains("case togglePin"))
+        XCTAssertTrue(source.contains("case persistedAction(CardEditorPersistedAction)"))
+        XCTAssertFalse(source.contains("case openCardActions"))
+
+        let action = try XCTUnwrap(
+            Self.functionBody(
+                in: source,
+                signature: "func performPersistedCardAction("
+            )
+        )
+        let snapshot = try XCTUnwrap(action.range(of: "applyCurrentSnapshot()"))
+        let recovery = try XCTUnwrap(
+            action.range(of: "recoverFailedDraftOperationIfNeeded()")
         )
         let persist = try XCTUnwrap(
-            actions.range(of: "editingStore.ensurePersisted()")
+            action.range(of: "editingStore.ensurePersisted()")
         )
-        let notify = try XCTUnwrap(
-            actions[persist.upperBound...].range(of: "notifyCreationIfNeeded()")
+        let notify = try XCTUnwrap(action.range(of: "notifyCreationIfNeeded()"))
+        let execute = try XCTUnwrap(
+            action.range(of: "executePersistedCardAction(action)")
         )
-        let present = try XCTUnwrap(
-            actions.range(of: "showCardActions = true")
-        )
-        XCTAssertLessThan(snapshot.lowerBound, persist.lowerBound)
+        XCTAssertLessThan(snapshot.lowerBound, recovery.lowerBound)
+        XCTAssertLessThan(recovery.lowerBound, persist.lowerBound)
         XCTAssertLessThan(persist.lowerBound, notify.lowerBound)
-        XCTAssertLessThan(notify.lowerBound, present.lowerBound)
+        XCTAssertLessThan(notify.lowerBound, execute.lowerBound)
+        XCTAssertTrue(action.contains("retryAction = .persistedAction(action)"))
 
-        XCTAssertTrue(source.contains("func togglePinnedCard()"))
-        XCTAssertTrue(source.contains("NetworkManager.shared.pinCard(cardId: cardID)"))
-        XCTAssertTrue(source.contains("NetworkManager.shared.unpinCard(cardId: cardID)"))
-        XCTAssertTrue(source.contains("func removeCanonicalCard()"))
-        XCTAssertTrue(source.contains("NetworkManager.shared.deleteCard(id: cardID)"))
+        let retry = try XCTUnwrap(
+            Self.functionBody(in: source, signature: "func retryCurrentFailure()")
+        )
+        XCTAssertTrue(retry.contains("case let .persistedAction(action)"))
+        XCTAssertTrue(retry.contains("performPersistedCardAction(action)"))
+
         for notification in [
             "ShowCardShare",
             "NavigateToSpark",
             "NavigateToMerge",
             "NavigateToRoot",
         ] {
-            XCTAssertTrue(source.contains(#"postCardAction("\#(notification)")"#))
+            XCTAssertTrue(
+                source.contains(
+                    "performPersistedCardAction(.notification(\"\(notification)\"))"
+                )
+            )
         }
+        XCTAssertTrue(source.contains("performPersistedCardAction(.togglePin)"))
+
+        XCTAssertTrue(source.contains("func togglePinnedCard()"))
+        XCTAssertTrue(source.contains("NetworkManager.shared.pinCard(cardId: cardID)"))
+        XCTAssertTrue(source.contains("NetworkManager.shared.unpinCard(cardId: cardID)"))
+        XCTAssertTrue(source.contains("func removeCanonicalCard()"))
+        XCTAssertTrue(source.contains("NetworkManager.shared.deleteCard(id: cardID)"))
         XCTAssertTrue(source.contains(#"userInfo: ["cardId": cardID]"#))
+
+        let removal = try XCTUnwrap(
+            Self.functionBody(in: source, signature: "func removeCanonicalCard()")
+        )
+        let localDismiss = try XCTUnwrap(
+            removal.range(of: "guard let cardID = editingStore.cardID else")
+        )
+        let delete = try XCTUnwrap(
+            removal.range(of: "NetworkManager.shared.deleteCard(id: cardID)")
+        )
+        XCTAssertLessThan(localDismiss.lowerBound, delete.lowerBound)
+        XCTAssertTrue(removal.contains("dismiss()"))
+        XCTAssertFalse(removal.contains("ensurePersisted()"))
     }
 
     func testAppProjectRetiresLegacyMarkupEditorDependency() throws {

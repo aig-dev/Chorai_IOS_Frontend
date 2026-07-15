@@ -17,8 +17,6 @@ struct CardEditorShell: View {
     let onAddTag: () -> Void
     let onRemoveTag: (String) -> Void
     let onTogglePrivacy: () -> Void
-    let onChooseBackground: () -> Void
-    let onRemoveBackground: () -> Void
     let onOpenCardActions: (() -> Void)?
     let onSave: (() -> Void)?
 
@@ -36,8 +34,6 @@ struct CardEditorShell: View {
         onAddTag: @escaping () -> Void,
         onRemoveTag: @escaping (String) -> Void,
         onTogglePrivacy: @escaping () -> Void,
-        onChooseBackground: @escaping () -> Void,
-        onRemoveBackground: @escaping () -> Void,
         onOpenCardActions: (() -> Void)? = nil,
         onSave: (() -> Void)? = nil
     ) {
@@ -54,8 +50,6 @@ struct CardEditorShell: View {
         self.onAddTag = onAddTag
         self.onRemoveTag = onRemoveTag
         self.onTogglePrivacy = onTogglePrivacy
-        self.onChooseBackground = onChooseBackground
-        self.onRemoveBackground = onRemoveBackground
         self.onOpenCardActions = onOpenCardActions
         self.onSave = onSave
     }
@@ -111,12 +105,9 @@ struct CardEditorShell: View {
 
             CardEditorFloatingControls(
                 isPublic: isPublic,
-                hasBackground: background != .none,
                 isMetadataEditable: isMetadataEditable,
                 onBack: onBack,
                 onTogglePrivacy: onTogglePrivacy,
-                onChooseBackground: onChooseBackground,
-                onRemoveBackground: onRemoveBackground,
                 onOpenCardActions: onOpenCardActions
             )
         }
@@ -167,12 +158,9 @@ struct CardEditorShell: View {
 
 private struct CardEditorFloatingControls: View {
     let isPublic: Bool
-    let hasBackground: Bool
     let isMetadataEditable: Bool
     let onBack: () -> Void
     let onTogglePrivacy: () -> Void
-    let onChooseBackground: () -> Void
-    let onRemoveBackground: () -> Void
     let onOpenCardActions: (() -> Void)?
 
     var body: some View {
@@ -190,54 +178,43 @@ private struct CardEditorFloatingControls: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityLabel("Close note")
             .accessibilityIdentifier("cardEditorFloatingBack")
+            .accessibilitySortPriority(3)
 
-            Menu {
-                if let onOpenCardActions {
-                    Button(action: onOpenCardActions) {
-                        Label("Card Actions", systemImage: "square.grid.2x2")
-                    }
-                    .accessibilityIdentifier("cardEditorCardActionsButton")
-
-                    Divider()
-                }
-
+            HStack(spacing: 8) {
                 Button(action: onTogglePrivacy) {
-                    Label(
-                        isPublic ? "Make Private" : "Make Public",
-                        systemImage: isPublic ? "lock" : "globe"
-                    )
+                    Image(systemName: isPublic ? "globe" : "lock")
+                        .font(.system(size: 17, weight: .semibold))
+                        .frame(width: 44, height: 44)
+                        .background(controlBackground)
+                        .clipShape(Circle())
+                        .contentShape(Circle())
                 }
+                .buttonStyle(.plain)
+                .foregroundStyle(.white)
                 .disabled(!isMetadataEditable)
+                .accessibilityLabel(isPublic ? "Make Private" : "Make Public")
+                .accessibilityValue(isPublic ? "Public" : "Private")
                 .accessibilityIdentifier("cardEditorPrivacyButton")
+                .accessibilitySortPriority(2)
 
-                Button(action: onChooseBackground) {
-                    Label(
-                        hasBackground ? "Replace Background" : "Add Background",
-                        systemImage: "photo"
-                    )
+                Button {
+                    onOpenCardActions?()
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 17, weight: .semibold))
+                        .frame(width: 44, height: 44)
+                        .background(controlBackground)
+                        .clipShape(Circle())
+                        .contentShape(Circle())
                 }
-                .disabled(!isMetadataEditable)
-                .accessibilityIdentifier("cardEditorBackgroundButton")
-
-                if hasBackground {
-                    Button(role: .destructive, action: onRemoveBackground) {
-                        Label("Remove Background", systemImage: "photo.badge.minus")
-                    }
-                    .disabled(!isMetadataEditable)
-                }
-            } label: {
-                Image(systemName: "ellipsis")
-                    .font(.system(size: 17, weight: .semibold))
-                    .frame(width: 44, height: 44)
-                    .background(controlBackground)
-                    .clipShape(Circle())
-                    .contentShape(Circle())
+                .buttonStyle(.plain)
+                .foregroundStyle(.white)
+                .disabled(onOpenCardActions == nil)
+                .accessibilityLabel("More note actions")
+                .accessibilityIdentifier("cardEditorMoreButton")
+                .accessibilitySortPriority(1)
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(.white)
             .frame(maxWidth: .infinity, alignment: .trailing)
-            .accessibilityLabel("More note actions")
-            .accessibilityIdentifier("cardEditorMoreButton")
         }
         .padding(.horizontal, 16)
         .padding(.top, 6)
@@ -339,10 +316,6 @@ struct CardEditorShellFixtureScreen: View {
                     tags.removeAll { $0 == tag }
                 },
                 onTogglePrivacy: { isPublic.toggle() },
-                onChooseBackground: {
-                    background = .local(Self.fixtureBackgroundData)
-                },
-                onRemoveBackground: { background = .none },
                 onOpenCardActions: { didRequestCardActions = true },
                 onSave: {}
             )

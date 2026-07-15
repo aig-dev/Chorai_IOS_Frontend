@@ -119,6 +119,10 @@ struct CardEditorLinkRow: View {
                                 title: link.title,
                                 previewHTML: link.previewHTML
                             )
+                            .accessibilityElement(children: .combine)
+                            .accessibilityIdentifier(
+                                "cardEditorLink.\(accessibilityComponent(link.id))"
+                            )
 
                             if index < links.count - 1 {
                                 Rectangle()
