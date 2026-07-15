@@ -129,6 +129,30 @@ struct NetworkCoreCardEditingService: CoreCardEditingServing, @unchecked Sendabl
         }
     }
 
+    func fetchLinks(cardID: String) async throws -> [CardEditingLink] {
+        do {
+            let response = try await firstValue(
+                network.getCardLinks(cardId: cardID)
+            )
+            guard response.success else {
+                throw CardEditingError.transport(
+                    code: "card_links_fetch_rejected"
+                )
+            }
+            return (
+                response.data.outgoingLinks + response.data.incomingLinks
+            ).map { item in
+                CardEditingLink(
+                    sourceCardID: item.sourceAssetId,
+                    targetCardID: item.targetAssetId,
+                    title: item.title ?? "Related note"
+                )
+            }
+        } catch {
+            throw Self.mapError(error)
+        }
+    }
+
     func uploadInlineImage(
         _ image: CardEditingImage
     ) async throws -> CardEditingInlineImageUpload {

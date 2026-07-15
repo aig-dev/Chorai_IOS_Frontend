@@ -1212,7 +1212,7 @@ final class CardEditingStoreTests: XCTestCase {
         XCTAssertEqual(service.createLinkRequests, [link, link])
     }
 
-    func testDiscardFailedCreateLinkIntentPreservesCanonicalLinks() async {
+    func testReconcileFailedCreateLinkReadsCommittedCanonicalLinkAfterLostResponse() async {
         let existing = CardEditingLink(
             sourceCardID: "ast_1",
             targetCardID: "ast_existing",
@@ -1224,7 +1224,10 @@ final class CardEditingStoreTests: XCTestCase {
             title: "Missing"
         )
         let service = MockCardEditingService()
-        service.createLinkResults = [.failure(.transport(code: "not_found"))]
+        service.createLinkResults = [
+            .failure(.transport(code: "card_editing_timeout"))
+        ]
+        service.fetchLinksResults = [.success([existing, failed])]
         let store = CardEditingStore(
             cardID: "ast_1",
             draft: .init(title: nil, content: "Body", tags: [], isPublic: false),
@@ -1234,25 +1237,29 @@ final class CardEditingStoreTests: XCTestCase {
         )
         _ = await store.createLink(failed)
 
-        let discarded = store.discardFailedRelationshipMutation()
+        let reconciled = await store.reconcileFailedRelationshipMutation()
 
-        XCTAssertTrue(discarded)
+        XCTAssertTrue(reconciled)
         XCTAssertNil(store.failureStage)
         XCTAssertEqual(store.phase, .ready)
-        XCTAssertEqual(store.links, [existing])
+        XCTAssertEqual(store.links, [existing, failed])
+        XCTAssertEqual(service.fetchLinksRequests, ["ast_1"])
         let retried = await store.retry()
         XCTAssertFalse(retried)
         XCTAssertEqual(service.createLinkRequests, [failed])
     }
 
-    func testDiscardFailedDeleteLinkIntentRetainsCanonicalLink() async {
+    func testReconcileFailedDeleteLinkReadsCommittedCanonicalAbsenceAfterLostResponse() async {
         let link = CardEditingLink(
             sourceCardID: "ast_1",
             targetCardID: "ast_2",
             title: "Companion"
         )
         let service = MockCardEditingService()
-        service.deleteLinkResults = [.failure(.transport(code: "offline"))]
+        service.deleteLinkResults = [
+            .failure(.transport(code: "card_editing_timeout"))
+        ]
+        service.fetchLinksResults = [.success([])]
         let store = CardEditingStore(
             cardID: "ast_1",
             draft: .init(title: nil, content: "Body", tags: [], isPublic: false),
@@ -1262,18 +1269,97 @@ final class CardEditingStoreTests: XCTestCase {
         )
         _ = await store.deleteLink(link)
 
-        let discarded = store.discardFailedRelationshipMutation()
+        let reconciled = await store.reconcileFailedRelationshipMutation()
 
-        XCTAssertTrue(discarded)
+        XCTAssertTrue(reconciled)
         XCTAssertNil(store.failureStage)
         XCTAssertEqual(store.phase, .ready)
-        XCTAssertEqual(store.links, [link])
+        XCTAssertTrue(store.links.isEmpty)
+        XCTAssertEqual(service.fetchLinksRequests, ["ast_1"])
         let retried = await store.retry()
         XCTAssertFalse(retried)
         XCTAssertEqual(service.deleteLinkRequests, [link])
     }
 
-    func testDiscardFailedRelationshipMutationRefusesDraftFailure() async {
+    func testReconcileFailedRelationshipFetchFailureKeepsRetryContext() async {
+        let link = CardEditingLink(
+            sourceCardID: "ast_1",
+            targetCardID: "ast_2",
+            title: "Companion"
+        )
+        let service = MockCardEditingService()
+        service.createLinkResults = [
+            .failure(.transport(code: "card_editing_timeout")),
+            .success(())
+        ]
+        service.fetchLinksResults = [
+            .failure(.transport(code: "card_editing_offline"))
+        ]
+        let store = CardEditingStore(
+            cardID: "ast_1",
+            draft: .init(title: nil, content: "Body", tags: [], isPublic: false),
+            backgroundMediaRef: nil,
+            links: [],
+            service: service
+        )
+        _ = await store.createLink(link)
+
+        let reconciled = await store.reconcileFailedRelationshipMutation()
+
+        XCTAssertFalse(reconciled)
+        XCTAssertEqual(store.failureStage, .creatingLink)
+        XCTAssertEqual(
+            store.phase,
+            .failed(.transport(code: "card_editing_offline"))
+        )
+        XCTAssertTrue(store.links.isEmpty)
+        XCTAssertEqual(service.fetchLinksRequests, ["ast_1"])
+
+        let retried = await store.retry()
+
+        XCTAssertTrue(retried)
+        XCTAssertEqual(service.createLinkRequests, [link, link])
+        XCTAssertEqual(store.links, [link])
+    }
+
+    func testReconcileExplicitCreateLinkNotFoundClearsIntentAfterCanonicalAbsence() async {
+        let existing = CardEditingLink(
+            sourceCardID: "ast_1",
+            targetCardID: "ast_existing",
+            title: "Existing"
+        )
+        let missing = CardEditingLink(
+            sourceCardID: "ast_1",
+            targetCardID: "ast_missing",
+            title: "Missing"
+        )
+        let service = MockCardEditingService()
+        service.createLinkResults = [
+            .failure(.transport(code: "card_editing_not_found"))
+        ]
+        service.fetchLinksResults = [.success([existing])]
+        let store = CardEditingStore(
+            cardID: "ast_1",
+            draft: .init(title: nil, content: "Body", tags: [], isPublic: false),
+            backgroundMediaRef: nil,
+            links: [existing],
+            service: service
+        )
+        _ = await store.createLink(missing)
+
+        let reconciled = await store.reconcileFailedRelationshipMutation()
+
+        XCTAssertTrue(reconciled)
+        XCTAssertNil(store.failureStage)
+        XCTAssertEqual(store.phase, .ready)
+        XCTAssertEqual(store.links, [existing])
+        XCTAssertEqual(service.fetchLinksRequests, ["ast_1"])
+        let retried = await store.retry()
+        XCTAssertFalse(retried)
+        XCTAssertEqual(service.createLinkRequests, [missing])
+    }
+
+    func testReconcileFailedRelationshipMutationRefusesDraftFailure() async {
         let draftService = MockCardEditingService()
         draftService.updateResults = [.failure(.transport(code: "offline"))]
         let draftStore = CardEditingStore(
@@ -1289,12 +1375,14 @@ final class CardEditingStoreTests: XCTestCase {
         )
         _ = await draftStore.save()
 
-        XCTAssertFalse(draftStore.discardFailedRelationshipMutation())
+        let reconciled = await draftStore.reconcileFailedRelationshipMutation()
+        XCTAssertFalse(reconciled)
         XCTAssertEqual(draftStore.failureStage, .updatingCard)
         XCTAssertEqual(draftStore.phase, .failed(.transport(code: "offline")))
+        XCTAssertTrue(draftService.fetchLinksRequests.isEmpty)
     }
 
-    func testDiscardFailedRelationshipMutationRefusesBackgroundFailure() async {
+    func testReconcileFailedRelationshipMutationRefusesBackgroundFailure() async {
         let backgroundService = MockCardEditingService()
         backgroundService.replaceBackgroundResults = [
             .failure(.transport(code: "upload_failed"))
@@ -1309,12 +1397,15 @@ final class CardEditingStoreTests: XCTestCase {
         _ = backgroundStore.stageBackground(validImage)
         _ = await backgroundStore.save()
 
-        XCTAssertFalse(backgroundStore.discardFailedRelationshipMutation())
+        let reconciled = await backgroundStore
+            .reconcileFailedRelationshipMutation()
+        XCTAssertFalse(reconciled)
         XCTAssertEqual(backgroundStore.failureStage, .replacingBackground)
         XCTAssertEqual(
             backgroundStore.phase,
             .failed(.transport(code: "upload_failed"))
         )
+        XCTAssertTrue(backgroundService.fetchLinksRequests.isEmpty)
     }
 
     func testInvalidLinkReplacesOlderRetryContextAtomically() async {
@@ -1619,6 +1710,7 @@ private final class MockCardEditingService: CoreCardEditingServing, @unchecked S
     var updateResults: [Result<CardEditingSnapshot, CardEditingError>] = []
     var createLinkResults: [Result<Void, CardEditingError>] = []
     var deleteLinkResults: [Result<Void, CardEditingError>] = []
+    var fetchLinksResults: [Result<[CardEditingLink], CardEditingError>] = []
     var replaceBackgroundResults: [Result<String, CardEditingError>] = []
     var removeBackgroundResults: [Result<Void, CardEditingError>] = []
     var inlineImageUploadResults: [Result<CardEditingInlineImageUpload, CardEditingError>] = []
@@ -1633,6 +1725,7 @@ private final class MockCardEditingService: CoreCardEditingServing, @unchecked S
     private(set) var updateRequests: [SaveRequest] = []
     private(set) var createLinkRequests: [CardEditingLink] = []
     private(set) var deleteLinkRequests: [CardEditingLink] = []
+    private(set) var fetchLinksRequests: [String] = []
     private(set) var replaceBackgroundRequests: [CardEditingImage] = []
     private(set) var removeBackgroundRequests: [String] = []
     private(set) var inlineImageUploadRequests: [CardEditingImage] = []
@@ -1684,6 +1777,11 @@ private final class MockCardEditingService: CoreCardEditingServing, @unchecked S
             )
         )
         try deleteLinkResults.removeFirst().get()
+    }
+
+    func fetchLinks(cardID: String) async throws -> [CardEditingLink] {
+        fetchLinksRequests.append(cardID)
+        return try fetchLinksResults.removeFirst().get()
     }
 
     func replaceBackground(

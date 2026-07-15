@@ -257,15 +257,34 @@ public final class CardEditingStore: ObservableObject {
     }
 
     @discardableResult
-    public func discardFailedRelationshipMutation() -> Bool {
-        guard !isBusy, let failureContext else { return false }
-        switch failureContext.stage {
+    public func reconcileFailedRelationshipMutation() async -> Bool {
+        guard !isBusy,
+              let retainedFailure = failureContext,
+              let cardID else {
+            return false
+        }
+        switch retainedFailure.stage {
         case .creatingLink, .deletingLink:
+            break
+        case .creatingCard, .updatingCard, .replacingBackground,
+             .removingBackground, .none:
+            return false
+        }
+        guard let operationID = beginOperation() else { return false }
+        defer { endOperation(operationID) }
+
+        phase = .linking
+        do {
+            links = try await service.fetchLinks(cardID: cardID)
             clearFailure()
             phase = .ready
             return true
-        case .creatingCard, .updatingCard, .replacingBackground,
-             .removingBackground, .none:
+        } catch {
+            fail(
+                with: Self.mapError(error),
+                stage: retainedFailure.stage,
+                retryOperation: retainedFailure.retryOperation
+            )
             return false
         }
     }

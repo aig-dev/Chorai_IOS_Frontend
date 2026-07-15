@@ -65,6 +65,23 @@ final class CardEditingNetworkSourceContractTests: XCTestCase {
         XCTAssertTrue(modelsSource.contains(#"case publicURL = "public_url""#))
     }
 
+    func testCanonicalLinkFetchUsesHydratedGoResponseForBothDirections() throws {
+        let serviceSource = try source(
+            "ArcNote/CoreFlow/NetworkCoreCardEditingService.swift"
+        )
+        let body = try XCTUnwrap(
+            functionBody(in: serviceSource, signature: "func fetchLinks(")
+        )
+
+        XCTAssertTrue(body.contains("network.getCardLinks(cardId: cardID)"))
+        XCTAssertTrue(body.contains("guard response.success"))
+        XCTAssertTrue(body.contains("response.data.outgoingLinks"))
+        XCTAssertTrue(body.contains("response.data.incomingLinks"))
+        XCTAssertTrue(body.contains("sourceCardID: item.sourceAssetId"))
+        XCTAssertTrue(body.contains("targetCardID: item.targetAssetId"))
+        XCTAssertTrue(body.contains("title: item.title ?? \"Related note\""))
+    }
+
     private static var repositoryRoot: URL {
         var url = URL(fileURLWithPath: #filePath)
         for _ in 0..<5 {

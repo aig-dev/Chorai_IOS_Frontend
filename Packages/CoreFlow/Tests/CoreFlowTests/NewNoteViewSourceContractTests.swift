@@ -239,8 +239,17 @@ final class NewNoteViewSourceContractTests: XCTestCase {
                 signature: "func recoverFailedDraftOperationIfNeeded()"
             )
         )
-        let discardRelationshipFailure = try XCTUnwrap(
-            recovery.range(of: "editingStore.discardFailedRelationshipMutation()")
+        let reconcileRelationshipFailure = try XCTUnwrap(
+            recovery.range(
+                of: "editingStore.reconcileFailedRelationshipMutation()"
+            )
+        )
+        XCTAssertFalse(source.contains("discardFailedRelationshipMutation"))
+        XCTAssertTrue(recovery.contains("case .creatingLink, .deletingLink"))
+        XCTAssertTrue(
+            recovery.contains(
+                "return await editingStore.reconcileFailedRelationshipMutation()"
+            )
         )
         XCTAssertTrue(recovery.contains("editingStore.failureStage != nil"))
         XCTAssertFalse(
@@ -254,9 +263,9 @@ final class NewNoteViewSourceContractTests: XCTestCase {
             recovery.range(of: "editingStore.save()")
         )
         XCTAssertLessThan(
-            discardRelationshipFailure.lowerBound,
+            reconcileRelationshipFailure.lowerBound,
             exactRetry.lowerBound,
-            "Back and prerequisite actions must abandon only the failed relationship intent before retrying required draft or background writes"
+            "Back and prerequisite actions must canonicalize failed relationships before retrying required draft or background writes"
         )
         XCTAssertLessThan(exactRetry.lowerBound, latestSave.lowerBound)
         XCTAssertTrue(recovery.contains("editingStore.failureStage == nil"))

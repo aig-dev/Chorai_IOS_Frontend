@@ -13,6 +13,7 @@ public protocol CoreCardEditingServing: Sendable {
 
     func createLink(_ link: CardEditingLink) async throws
     func deleteLink(_ link: CardEditingLink) async throws
+    func fetchLinks(cardID: String) async throws -> [CardEditingLink]
 
     func uploadInlineImage(
         _ image: CardEditingImage
