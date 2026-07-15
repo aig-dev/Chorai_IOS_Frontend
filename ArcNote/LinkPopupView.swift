@@ -23,6 +23,11 @@ struct LinkItem: Identifiable {
     }
 }
 
+enum LinkPopupPresentationMode {
+    case createLink
+    case selectionOnly
+}
+
 // MARK: - Link弹窗管理器
 class LinkPopupManager: ObservableObject {
     @Published var isShowing = false
@@ -41,6 +46,7 @@ class LinkPopupManager: ObservableObject {
     private var searchType: String = "own+favorite" // 默认搜索类型
     private var isInitiatingCardOwned = true
     private var navigateAfterLink = true
+    private var presentationMode: LinkPopupPresentationMode = .createLink
     
     static let shared = LinkPopupManager()
     
@@ -57,7 +63,8 @@ class LinkPopupManager: ObservableObject {
     func show(
         cardId: String? = nil,
         isInitiatingCardOwned: Bool = true,
-        navigateAfterLink: Bool = true
+        navigateAfterLink: Bool = true,
+        mode: LinkPopupPresentationMode = .createLink
     ) {
         showErrorAlert = false
         errorMessage = ""
@@ -65,6 +72,7 @@ class LinkPopupManager: ObservableObject {
         currentCardId = cardId
         self.isInitiatingCardOwned = isInitiatingCardOwned
         self.navigateAfterLink = navigateAfterLink
+        self.presentationMode = mode
         self.searchType = isInitiatingCardOwned ? "own+favorite" : "own"
         // 打开时获取初始数据（不带关键词）
         searchCards(keyword: "")
@@ -83,6 +91,12 @@ class LinkPopupManager: ObservableObject {
     
     // MARK: - Link 卡片
     func linkCard(linkItem: LinkItem) {
+        if presentationMode == .selectionOnly {
+            hide()
+            onCardSelected?(linkItem)
+            return
+        }
+
         if let cardId = currentCardId {
             // 如果有cardId，调用API关联卡片
             guard let currentActorId = AuthManager.shared.currentUser?.id else {
