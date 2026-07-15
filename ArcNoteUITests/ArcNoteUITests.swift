@@ -179,7 +179,7 @@ final class ArcNoteUITests: XCTestCase {
         waitForElementToDisappear(app.keyboards.firstMatch)
     }
 
-    func testCardEditorFormattingBarFollowsInteractiveScrollDismissal() {
+    func testCardEditorFormattingBarDismissesOnBodyScroll() {
         launchCardEditorFixture(mode: "keyboard")
 
         waitFor("cardEditorBodyWebView")
@@ -188,14 +188,18 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertTrue(visibleParagraph.isHittable)
         visibleParagraph.tap()
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 10))
-        waitFor("cardEditorFormattingBar")
+        let formattingBar = waitFor("cardEditorFormattingBar")
 
         let scroll = app.scrollViews.firstMatch
-        let start = scroll.coordinate(
-            withNormalizedOffset: CGVector(dx: 0.55, dy: 0.72)
+        let screenOrigin = app.coordinate(
+            withNormalizedOffset: CGVector(dx: 0, dy: 0)
         )
-        let end = scroll.coordinate(
-            withNormalizedOffset: CGVector(dx: 0.55, dy: 0.28)
+        let startY = formattingBar.frame.minY - 32
+        let start = screenOrigin.withOffset(
+            CGVector(dx: scroll.frame.midX, dy: startY)
+        )
+        let end = screenOrigin.withOffset(
+            CGVector(dx: scroll.frame.midX, dy: startY - 96)
         )
         start.press(forDuration: 0.05, thenDragTo: end)
         waitForMissing("cardEditorFormattingBar")
