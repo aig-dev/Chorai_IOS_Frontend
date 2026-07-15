@@ -3378,6 +3378,8 @@ final class ArcNoteUITests: XCTestCase {
         waitForButton("note.create", timeout: 20).tap()
         waitFor("cardEditorContent", timeout: 20)
         typeInCardEditorBody(bodyText)
+        tapButton("cardEditorKeyboardDismiss")
+        waitForElementToDisappear(app.keyboards.firstMatch)
 
         waitForEnabledButton("cardEditorAddLink", timeout: 20).tap()
         waitFor("linkPopup", timeout: 30)
@@ -3560,7 +3562,9 @@ final class ArcNoteUITests: XCTestCase {
         canonicalID = cardsAfterLostResponse.first?.id
 
         let latestSuffix = " recovered latest \(suffix)"
-        typeInCardEditorBody(latestSuffix)
+        replaceCardEditorBody(with: bodyText + latestSuffix)
+        tapButton("cardEditorKeyboardDismiss")
+        waitForElementToDisappear(app.keyboards.firstMatch)
         waitForButton("cardEditorSave").tap()
         waitForMissing("cardEditorContent", timeout: 30)
         let callbackID = waitFor("note.created-card-id", timeout: 30)
@@ -5234,6 +5238,31 @@ final class ArcNoteUITests: XCTestCase {
             file: file,
             line: line
         )
+        app.typeText(text)
+    }
+
+    private func replaceCardEditorBody(
+        with text: String,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let body = waitFor(
+            "cardEditorBodyWebView",
+            timeout: 20,
+            file: file,
+            line: line
+        )
+        body.coordinate(
+            withNormalizedOffset: CGVector(dx: 0.22, dy: 0.10)
+        ).tap()
+        XCTAssertTrue(
+            app.keyboards.firstMatch.waitForExistence(timeout: 10),
+            "The body editor never accepted focus",
+            file: file,
+            line: line
+        )
+        app.typeKey("a", modifierFlags: .command)
+        app.typeKey(.delete, modifierFlags: [])
         app.typeText(text)
     }
 
