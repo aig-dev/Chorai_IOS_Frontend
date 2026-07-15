@@ -59,36 +59,11 @@ struct CardEditorBackground<Content: View>: View {
                 Color.black
                     .opacity(veilOpacity)
                     .accessibilityHidden(true)
-                    .accessibilityIdentifier("cardEditorBodyBackgroundVeil")
                     .allowsHitTesting(false)
-
-                backgroundMarker(
-                    identifier: "cardEditorBodyBackground"
-                )
-
-                switch background {
-                case .local:
-                    backgroundMarker(
-                        identifier: "cardEditorPendingBackgroundImage"
-                    )
-                case .remote:
-                    backgroundMarker(
-                        identifier: "cardEditorBackgroundImage"
-                    )
-                case .none:
-                    EmptyView()
-                }
             }
         }
         .clipped()
-    }
-
-    private func backgroundMarker(identifier: String) -> some View {
-        Color.clear
-            .contentShape(Rectangle())
-            .accessibilityHidden(true)
-            .accessibilityIdentifier(identifier)
-            .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 
     @ViewBuilder

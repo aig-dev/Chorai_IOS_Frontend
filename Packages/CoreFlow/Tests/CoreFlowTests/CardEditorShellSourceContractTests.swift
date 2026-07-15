@@ -230,10 +230,12 @@ final class CardEditorShellSourceContractTests: XCTestCase {
 
         XCTAssertTrue(background.contains("case local(Data)"))
         XCTAssertTrue(background.contains("case remote(URL)"))
-        XCTAssertTrue(background.contains("cardEditorBodyBackground"))
-        XCTAssertTrue(background.contains("cardEditorBodyBackgroundVeil"))
-        XCTAssertTrue(background.contains("cardEditorPendingBackgroundImage"))
-        XCTAssertTrue(background.contains("cardEditorBackgroundImage"))
+        XCTAssertTrue(background.contains("backgroundImage"))
+        XCTAssertTrue(background.contains("Color.black"))
+        XCTAssertFalse(background.contains("cardEditorBodyBackground"))
+        XCTAssertFalse(background.contains("cardEditorBodyBackgroundVeil"))
+        XCTAssertFalse(background.contains("cardEditorPendingBackgroundImage"))
+        XCTAssertFalse(background.contains("cardEditorBackgroundImage"))
         XCTAssertTrue(
             background.contains(".background {"),
             "The image must decorate the body instead of determining its ideal size"

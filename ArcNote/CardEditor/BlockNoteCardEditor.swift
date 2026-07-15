@@ -367,10 +367,18 @@ struct BlockNoteCardEditor: View {
                     .accessibilityElement(children: .combine)
                     .accessibilityIdentifier("cardEditorBridgeFailureNotice")
 
-                Button("Retry editor", action: model.retryAfterBridgeFailure)
-                    .font(.body.weight(.semibold))
-                    .frame(minHeight: 44)
-                    .accessibilityIdentifier("cardEditorBridgeRetry")
+                Button(action: model.retryAfterBridgeFailure) {
+                    Text("Retry editor")
+                        .font(.body.weight(.semibold))
+                        .frame(
+                            maxWidth: .infinity,
+                            minHeight: 44,
+                            alignment: .leading
+                        )
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("cardEditorBridgeRetry")
             }
             .foregroundStyle(.white)
             .padding(.horizontal, 14)
