@@ -1,10 +1,10 @@
 {
-  "protocolVersion": 2,
+  "protocolVersion": 3,
   "schemaVersion": 1,
   "blockNoteVersion": "0.46.2",
   "hashes": {
     "editor.css": "395f0155ae26c5f2db708fa2d862c7d36aa153c765cf285377af5fc51539cfcb",
-    "editor.js": "3066074640aa2659a07f5fe887278886ab10ee76d0697cc073eff4be28cb2364",
+    "editor.js": "58101b86cad2e3850317c4725a27367dafb7afa9c7589cb813e2d09949789861",
     "index.html": "2ccd92ebd73ae97846cecd750b68bb69f2c74bca5a02018bbd4cd6a9783396a4"
   }
 }

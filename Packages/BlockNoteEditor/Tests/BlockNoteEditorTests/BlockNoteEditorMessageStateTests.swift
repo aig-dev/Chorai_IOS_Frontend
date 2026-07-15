@@ -138,6 +138,17 @@ final class BlockNoteEditorMessageStateTests: XCTestCase {
         }
     }
 
+    func testRequestCardLinkEncodesPayloadFreeEnvelope() throws {
+        let encoded = try JSONEncoder().encode(
+            BlockNoteEditorMessage.requestCardLink
+        )
+
+        XCTAssertEqual(
+            String(decoding: encoded, as: UTF8.self),
+            #"{"type":"requestCardLink"}"#
+        )
+    }
+
     func testRequestCardLinkBeforeReadyReturnsANonfatalBridgeError() {
         var state = BlockNoteEditorState(editable: true)
 
