@@ -315,6 +315,205 @@ final class CardEditingStoreTests: XCTestCase {
         XCTAssertTrue(store.isDirty)
     }
 
+    func testApplyBodyRevisionRejectsStaleBodyWithoutMutatingDraft() {
+        let service = MockCardEditingService()
+        let initial = CardEditingDraft(
+            title: "Hidden legacy title",
+            content: "Current body",
+            contentJSON: #"[{"type":"paragraph","content":"Current body"}]"#,
+            editorAtmosphere: "paper",
+            tags: ["idea", "work"],
+            isPublic: true
+        )
+        let store = CardEditingStore(
+            cardID: "ast_1",
+            draft: initial,
+            bodyRevision: 4,
+            backgroundMediaRef: nil,
+            links: [],
+            service: service
+        )
+
+        let applied = store.applyBodyRevision(
+            content: "Stale body",
+            contentJSON: #"[{"type":"paragraph","content":"Stale body"}]"#,
+            revision: 3
+        )
+
+        XCTAssertFalse(applied)
+        XCTAssertEqual(store.draft, initial)
+        XCTAssertEqual(store.bodyRevision, 4)
+    }
+
+    func testApplyBodyRevisionAtomicallyPreservesNilTitleAndMetadata() {
+        let service = MockCardEditingService()
+        let store = CardEditingStore(
+            cardID: "ast_1",
+            draft: .init(
+                title: nil,
+                content: "Before",
+                contentJSON: #"[{"type":"paragraph","content":"Before"}]"#,
+                editorAtmosphere: "linen",
+                tags: ["idea", "work"],
+                isPublic: true
+            ),
+            bodyRevision: 1,
+            backgroundMediaRef: nil,
+            links: [],
+            service: service
+        )
+
+        let applied = store.applyBodyRevision(
+            content: "After",
+            contentJSON: #"[{"type":"heading","content":"After"}]"#,
+            revision: 2
+        )
+
+        XCTAssertTrue(applied)
+        XCTAssertNil(store.draft.title)
+        XCTAssertEqual(store.draft.content, "After")
+        XCTAssertEqual(
+            store.draft.contentJSON,
+            #"[{"type":"heading","content":"After"}]"#
+        )
+        XCTAssertEqual(store.draft.editorAtmosphere, "linen")
+        XCTAssertEqual(store.draft.tags, ["idea", "work"])
+        XCTAssertTrue(store.draft.isPublic)
+        XCTAssertEqual(store.bodyRevision, 2)
+    }
+
+    func testApplyBodyRevisionPreservesHiddenLegacyTitleAtExactRevision() {
+        let service = MockCardEditingService()
+        let store = CardEditingStore(
+            cardID: "ast_1",
+            draft: .init(
+                title: "  Hidden legacy title  ",
+                content: "Bridge event body",
+                contentJSON: #"[{"type":"paragraph","content":"Bridge event body"}]"#,
+                tags: [],
+                isPublic: false
+            ),
+            bodyRevision: 7,
+            backgroundMediaRef: nil,
+            links: [],
+            service: service
+        )
+
+        let applied = store.applyBodyRevision(
+            content: "Snapshot body",
+            contentJSON: #"[{"type":"paragraph","content":"Snapshot body"}]"#,
+            revision: 7
+        )
+
+        XCTAssertTrue(applied)
+        XCTAssertEqual(store.draft.title, "  Hidden legacy title  ")
+        XCTAssertEqual(store.draft.content, "Snapshot body")
+        XCTAssertEqual(store.bodyRevision, 7)
+    }
+
+    func testApplyBodyRevisionDuringSaveKeepsNewerBodyDirty() async {
+        let service = MockCardEditingService()
+        let gate = AsyncGate()
+        service.updateGate = gate
+        service.updateResults = [
+            .success(
+                snapshot(
+                    title: "Hidden legacy title",
+                    content: "Revision one",
+                    contentJSON: #"[{"type":"paragraph","content":"Revision one"}]"#,
+                    editorAtmosphere: "paper",
+                    tags: ["idea"],
+                    isPublic: true
+                )
+            )
+        ]
+        let store = CardEditingStore(
+            cardID: "ast_1",
+            draft: .init(
+                title: "Hidden legacy title",
+                content: "Initial",
+                editorAtmosphere: "paper",
+                tags: ["idea"],
+                isPublic: true
+            ),
+            backgroundMediaRef: nil,
+            links: [],
+            service: service
+        )
+        XCTAssertTrue(
+            store.applyBodyRevision(
+                content: "Revision one",
+                contentJSON: #"[{"type":"paragraph","content":"Revision one"}]"#,
+                revision: 1
+            )
+        )
+
+        let saveTask = Task { await store.save() }
+        await waitForStore { service.updateRequests.count == 1 }
+        XCTAssertTrue(
+            store.applyBodyRevision(
+                content: "Revision two",
+                contentJSON: #"[{"type":"paragraph","content":"Revision two"}]"#,
+                revision: 2
+            )
+        )
+        await gate.open()
+
+        let saveSucceeded = await saveTask.value
+        XCTAssertFalse(saveSucceeded)
+        XCTAssertEqual(store.draft.title, "Hidden legacy title")
+        XCTAssertEqual(store.draft.content, "Revision two")
+        XCTAssertEqual(store.draft.editorAtmosphere, "paper")
+        XCTAssertEqual(store.draft.tags, ["idea"])
+        XCTAssertTrue(store.draft.isPublic)
+        XCTAssertEqual(store.bodyRevision, 2)
+        XCTAssertEqual(store.lastCommittedBodyRevision, 1)
+        XCTAssertTrue(store.isDirty)
+    }
+
+    func testInlineImageUploadReturnsInsertableReferenceWithoutMutatingBody() async throws {
+        let service = MockCardEditingService()
+        let expected = CardEditingInlineImageUpload(
+            mediaRef: "med_inline_1",
+            url: try XCTUnwrap(URL(string: "https://cdn.example.com/inline.png"))
+        )
+        service.inlineImageUploadResults = [.success(expected)]
+        let store = makeNewStore(service: service)
+        let originalDraft = store.draft
+        let originalRevision = store.bodyRevision
+
+        let uploaded = try await store.uploadInlineImage(validImage)
+
+        XCTAssertEqual(uploaded, expected)
+        XCTAssertEqual(service.inlineImageUploadRequests, [validImage])
+        XCTAssertEqual(store.draft, originalDraft)
+        XCTAssertEqual(store.bodyRevision, originalRevision)
+    }
+
+    func testInlineImageUploadFailureDoesNotMutateBody() async {
+        let service = MockCardEditingService()
+        service.inlineImageUploadResults = [
+            .failure(.transport(code: "card_inline_image_url_missing"))
+        ]
+        let store = makeNewStore(service: service)
+        let originalDraft = store.draft
+        let originalRevision = store.bodyRevision
+
+        do {
+            _ = try await store.uploadInlineImage(validImage)
+            XCTFail("Expected inline image upload to fail")
+        } catch {
+            XCTAssertEqual(
+                error as? CardEditingError,
+                .transport(code: "card_inline_image_url_missing")
+            )
+        }
+
+        XCTAssertEqual(service.inlineImageUploadRequests, [validImage])
+        XCTAssertEqual(store.draft, originalDraft)
+        XCTAssertEqual(store.bodyRevision, originalRevision)
+    }
+
     func testHydrateDuringCreateRetainsCanonicalIDAndNextSaveUpdates() async throws {
         let service = MockCardEditingService()
         let gate = AsyncGate()
@@ -1317,6 +1516,7 @@ private final class MockCardEditingService: CoreCardEditingServing, @unchecked S
     var deleteLinkResults: [Result<Void, CardEditingError>] = []
     var replaceBackgroundResults: [Result<String, CardEditingError>] = []
     var removeBackgroundResults: [Result<Void, CardEditingError>] = []
+    var inlineImageUploadResults: [Result<CardEditingInlineImageUpload, CardEditingError>] = []
 
     var createGate: AsyncGate?
     var updateGate: AsyncGate?
@@ -1330,6 +1530,7 @@ private final class MockCardEditingService: CoreCardEditingServing, @unchecked S
     private(set) var deleteLinkRequests: [CardEditingLink] = []
     private(set) var replaceBackgroundRequests: [CardEditingImage] = []
     private(set) var removeBackgroundRequests: [String] = []
+    private(set) var inlineImageUploadRequests: [CardEditingImage] = []
 
     func create(
         draft: CardEditingDraft,
@@ -1396,6 +1597,13 @@ private final class MockCardEditingService: CoreCardEditingServing, @unchecked S
         removeBackgroundRequests.append(cardID)
         events.append(.removeBackground(cardID: cardID))
         try removeBackgroundResults.removeFirst().get()
+    }
+
+    func uploadInlineImage(
+        _ image: CardEditingImage
+    ) async throws -> CardEditingInlineImageUpload {
+        inlineImageUploadRequests.append(image)
+        return try inlineImageUploadResults.removeFirst().get()
     }
 }
 

@@ -147,6 +147,31 @@ public final class CardEditingStore: ObservableObject {
     }
 
     @discardableResult
+    public func applyBodyRevision(
+        content: String,
+        contentJSON: String?,
+        revision: Int
+    ) -> Bool {
+        guard revision >= bodyRevision else { return false }
+        draft = CardEditingDraft(
+            title: draft.title,
+            content: content,
+            contentJSON: contentJSON,
+            editorAtmosphere: draft.editorAtmosphere,
+            tags: draft.tags,
+            isPublic: draft.isPublic
+        )
+        bodyRevision = revision
+        return true
+    }
+
+    public func uploadInlineImage(
+        _ image: CardEditingImage
+    ) async throws -> CardEditingInlineImageUpload {
+        try await service.uploadInlineImage(image)
+    }
+
+    @discardableResult
     public func stageBackground(_ image: CardEditingImage) -> Bool {
         guard image.isValidBackground else {
             if !isBusy {

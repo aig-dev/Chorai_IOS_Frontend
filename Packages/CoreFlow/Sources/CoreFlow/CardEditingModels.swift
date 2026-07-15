@@ -163,6 +163,16 @@ public struct CardEditingImage: Equatable, Sendable {
     }
 }
 
+public struct CardEditingInlineImageUpload: Equatable, Sendable {
+    public let mediaRef: String
+    public let url: URL
+
+    public init(mediaRef: String, url: URL) {
+        self.mediaRef = mediaRef
+        self.url = url
+    }
+}
+
 public enum CardEditingError: Error, Equatable, Sendable {
     case invalidDraft(code: String)
     case transport(code: String)

@@ -94,6 +94,55 @@ struct NetworkCoreCardEditingService: CoreCardEditingServing, @unchecked Sendabl
         }
     }
 
+    func uploadInlineImage(
+        _ image: CardEditingImage
+    ) async throws -> CardEditingInlineImageUpload {
+        do {
+            let upload = try await firstValue(
+                network.uploadCardMedia(
+                    data: image.data,
+                    filename: image.filename,
+                    mimeType: image.mimeType
+                )
+            )
+            guard upload.success else {
+                throw CardEditingError.transport(
+                    code: "card_inline_image_upload_rejected"
+                )
+            }
+            guard let uploaded = upload.data else {
+                throw CardEditingError.transport(
+                    code: "card_inline_image_response_missing"
+                )
+            }
+            let mediaRef = uploaded.mediaRef.trimmingCharacters(
+                in: .whitespacesAndNewlines
+            )
+            guard !mediaRef.isEmpty else {
+                throw CardEditingError.transport(
+                    code: "card_inline_image_media_ref_missing"
+                )
+            }
+            let publicURL = uploaded.publicURL.trimmingCharacters(
+                in: .whitespacesAndNewlines
+            )
+            guard let url = URL(string: publicURL),
+                  let scheme = url.scheme?.lowercased(),
+                  ["http", "https"].contains(scheme),
+                  url.host != nil else {
+                throw CardEditingError.transport(
+                    code: "card_inline_image_url_missing"
+                )
+            }
+            return CardEditingInlineImageUpload(
+                mediaRef: mediaRef,
+                url: url
+            )
+        } catch {
+            throw Self.mapError(error)
+        }
+    }
+
     func replaceBackground(
         cardID: String,
         image: CardEditingImage

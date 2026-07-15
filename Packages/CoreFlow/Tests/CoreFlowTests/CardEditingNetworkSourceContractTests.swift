@@ -39,6 +39,26 @@ final class CardEditingNetworkSourceContractTests: XCTestCase {
         XCTAssertFalse(source.contains(#""title": title ?? """#))
     }
 
+    func testInlineImageUploadUsesCanonicalUploadDTOAndRejectsIncompleteResponse() throws {
+        let serviceSource = try source(
+            "ArcNote/CoreFlow/NetworkCoreCardEditingService.swift"
+        )
+        let body = try XCTUnwrap(
+            functionBody(in: serviceSource, signature: "func uploadInlineImage(")
+        )
+
+        XCTAssertTrue(body.contains("network.uploadCardMedia("))
+        XCTAssertTrue(body.contains("guard upload.success"))
+        XCTAssertTrue(body.contains("uploaded.mediaRef"))
+        XCTAssertTrue(body.contains("uploaded.publicURL"))
+        XCTAssertTrue(body.contains("CardEditingInlineImageUpload("))
+        XCTAssertTrue(body.contains("card_inline_image_url_missing"))
+
+        let modelsSource = try source("ArcNote/NetworkModels.swift")
+        XCTAssertTrue(modelsSource.contains("let publicURL: String"))
+        XCTAssertTrue(modelsSource.contains(#"case publicURL = "public_url""#))
+    }
+
     private static var repositoryRoot: URL {
         var url = URL(fileURLWithPath: #filePath)
         for _ in 0..<5 {
