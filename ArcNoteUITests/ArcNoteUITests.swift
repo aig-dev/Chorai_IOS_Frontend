@@ -81,6 +81,37 @@ final class ArcNoteUITests: XCTestCase {
         captureVisual("card-editor-background")
     }
 
+    func testCardEditorBridgeFailureFallbackRetriesIntoFreshWebView() {
+        app.launchArguments.append("--ui-test-card-editor-shell")
+        app.launchEnvironment["CHORAI_CARD_EDITOR_FIXTURE_MODE"] =
+            "bridge-failure"
+        app.launch()
+
+        waitFor("screen.card-editor-shell")
+        XCTAssertTrue(waitFor("cardEditorBridgeFailureFallback").isHittable)
+        XCTAssertTrue(waitFor("cardEditorBridgeFailureNotice").isHittable)
+        XCTAssertFalse(
+            app.descendants(matching: .any)["cardEditorBodyWebView"].exists
+        )
+        let save = waitForButton("cardEditorSave")
+        XCTAssertFalse(save.isEnabled)
+        let retry = waitForButton("cardEditorBridgeRetry")
+        assertPrimaryControl(retry, identifier: "cardEditorBridgeRetry")
+        captureVisual("card-editor-bridge-failure")
+
+        retry.tap()
+        XCTAssertTrue(
+            waitFor("cardEditorBodyWebView", timeout: 20).isHittable,
+            "Retry must mount a fresh body WebView"
+        )
+        waitForEnabled(save, timeout: 20)
+        XCTAssertFalse(
+            app.descendants(matching: .any)["cardEditorBridgeFailureNotice"]
+                .exists
+        )
+        captureVisual("card-editor-bridge-recovered")
+    }
+
     func testCardEditorShellCompatibilityBlockIsReadOnlyAndCannotSave() {
         launchCardEditorFixture(mode: "blocked")
 
@@ -260,6 +291,15 @@ final class ArcNoteUITests: XCTestCase {
     }
 
     func testCardEditorShellSupportsAccessibilityTextSize() {
+        let bodyText =
+            "A lightweight note begins with its body, without a title row."
+        launchCardEditorFixture(mode: "populated")
+        let normalBody = app.staticTexts[bodyText]
+        XCTAssertTrue(normalBody.waitForExistence(timeout: 10))
+        let normalBodyHeight = normalBody.frame.height
+
+        app.terminate()
+        app = XCUIApplication()
         app.launchArguments += [
             "--ui-test-card-editor-shell",
             "-UIPreferredContentSizeCategoryName",
@@ -269,9 +309,40 @@ final class ArcNoteUITests: XCTestCase {
         app.launch()
 
         waitFor("screen.card-editor-shell")
+        let accessibilityBody = app.staticTexts[bodyText]
+        XCTAssertTrue(accessibilityBody.waitForExistence(timeout: 10))
+        XCTAssertGreaterThan(
+            accessibilityBody.frame.height,
+            normalBodyHeight * 1.2,
+            "The Web-backed body must visibly scale with Dynamic Type"
+        )
+
+        for identifier in ["cardEditorFloatingBack", "cardEditorMoreButton"] {
+            let control = waitFor(identifier)
+            XCTAssertEqual(control.frame.width, 44, accuracy: 1.5)
+            XCTAssertEqual(control.frame.height, 44, accuracy: 1.5)
+        }
         let addTag = waitFor("cardEditorAddTag")
-        XCTAssertGreaterThanOrEqual(addTag.frame.height, 44)
+        let addLink = waitFor("cardEditorAddLink")
+        for (identifier, control) in [
+            ("cardEditorAddTag", addTag),
+            ("cardEditorAddLink", addLink),
+        ] {
+            XCTAssertGreaterThanOrEqual(
+                control.frame.width,
+                44,
+                "\(identifier) must remain at least 44 points wide"
+            )
+            XCTAssertGreaterThanOrEqual(
+                control.frame.height,
+                44,
+                "\(identifier) must remain at least 44 points tall"
+            )
+        }
         XCTAssertFalse(app.descendants(matching: .any)["cardEditorHeader"].exists)
+        XCTAssertFalse(
+            app.descendants(matching: .any)["cardEditorTitleField"].exists
+        )
         captureVisual("card-editor-accessibility-text")
     }
 
@@ -3343,6 +3414,94 @@ final class ArcNoteUITests: XCTestCase {
             1,
             "The create-before-picker path must keep one canonical card and one relation"
         )
+    }
+
+    func testNewCardStagesBackgroundAndPrivacyBeforeFirstSave() throws {
+        let session = try requireSmokeSession()
+        seedAppSession(session)
+        let bodyText = "New staged editor \(UUID().uuidString.lowercased())"
+        var canonicalID: String?
+        defer {
+            if let canonicalID {
+                permanentlyCleanUpSmokeCard(
+                    id: canonicalID,
+                    token: session.token
+                )
+            }
+            if let matching = try? fetchSmokeCards(
+                search: bodyText,
+                token: session.token
+            ) {
+                for card in matching
+                where card.content.contains(bodyText) && card.id != canonicalID {
+                    permanentlyCleanUpSmokeCard(
+                        id: card.id,
+                        token: session.token
+                    )
+                }
+            }
+        }
+
+        launchAuthenticatedApp()
+        tap("tab.library")
+        waitForButton("note.create", timeout: 20).tap()
+        waitFor("cardEditorContent", timeout: 20)
+        typeInCardEditorBody(bodyText)
+        tapButton("cardEditorKeyboardDismiss")
+        waitForElementToDisappear(app.keyboards.firstMatch)
+
+        waitForButton("cardEditorMoreButton").tap()
+        let makePublic = app.buttons["Make Public"].firstMatch
+        XCTAssertTrue(makePublic.waitForExistence(timeout: 10))
+        makePublic.tap()
+
+        revealEditorBackgroundButton().tap()
+        try selectFirstPhotoFromImagePicker()
+
+        waitForButton("cardEditorMoreButton", timeout: 20).tap()
+        XCTAssertTrue(
+            app.buttons["Make Private"].firstMatch.waitForExistence(timeout: 10),
+            "Privacy must remain staged in the unsaved draft"
+        )
+        XCTAssertTrue(
+            app.buttons["Replace Background"].firstMatch
+                .waitForExistence(timeout: 10),
+            "The selected photo must remain staged before first save"
+        )
+        let cardsBeforeSave = try fetchSmokeCards(
+            search: bodyText,
+            token: session.token
+        ).filter { $0.content.contains(bodyText) }
+        XCTAssertTrue(
+            cardsBeforeSave.isEmpty,
+            "Staging privacy and a background must not create a server card"
+        )
+        captureVisual("card-editor-new-background-privacy-staged")
+
+        app.coordinate(
+            withNormalizedOffset: CGVector(dx: 0.5, dy: 0.75)
+        ).tap()
+        closeNewNoteEditor()
+
+        let callbackID = waitFor("note.created-card-id", timeout: 30)
+            .label
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        XCTAssertFalse(callbackID.isEmpty)
+        canonicalID = callbackID
+
+        let matchingCards = waitForSmokeCards(
+            search: bodyText,
+            token: session.token
+        ) { cards in
+            cards.filter { $0.content.contains(bodyText) }.count == 1
+        }.filter { $0.content.contains(bodyText) }
+        XCTAssertEqual(matchingCards.map(\.id), [callbackID])
+        waitForSmokeCardState(id: callbackID, token: session.token) { card in
+            card.isPublic && !(card.backgroundMediaRef ?? "").isEmpty
+        }
+        let persisted = try fetchSmokeCard(id: callbackID, token: session.token)
+        XCTAssertTrue(persisted.isPublic)
+        XCTAssertFalse((persisted.backgroundMediaRef ?? "").isEmpty)
     }
 
     func testNewCardCreateResponseLossRetryReusesCanonicalCard() throws {
