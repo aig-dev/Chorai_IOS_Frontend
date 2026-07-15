@@ -1,0 +1,906 @@
+{
+  "builtTestProducts" : [
+    {
+      "binaryPath" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditorPackageTests.xctest/Contents/MacOS/BlockNoteEditorPackageTests",
+      "packagePath" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor",
+      "productName" : "BlockNoteEditorPackageTests"
+    }
+  ],
+  "copyCommands" : {
+    "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditor_BlockNoteEditor.bundle/editor.css" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/Sources/BlockNoteEditor/Resources/editor.css"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditor_BlockNoteEditor.bundle/editor.css"
+        }
+      ]
+    },
+    "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditor_BlockNoteEditor.bundle/editor.js" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/Sources/BlockNoteEditor/Resources/editor.js"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditor_BlockNoteEditor.bundle/editor.js"
+        }
+      ]
+    },
+    "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditor_BlockNoteEditor.bundle/index.html" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/Sources/BlockNoteEditor/Resources/index.html"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditor_BlockNoteEditor.bundle/index.html"
+        }
+      ]
+    },
+    "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditor_BlockNoteEditor.bundle/manifest.json" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/Sources/BlockNoteEditor/Resources/manifest.json"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditor_BlockNoteEditor.bundle/manifest.json"
+        }
+      ]
+    }
+  },
+  "explicitTargetDependencyImportCheckingMode" : {
+    "none" : {
+
+    }
+  },
+  "generatedSourceTargetSet" : [
+
+  ],
+  "pluginDescriptions" : [
+
+  ],
+  "swiftCommands" : {
+    "C.BlockNoteEditor-arm64-apple-macosx26.0-debug.module" : {
+      "executable" : "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc",
+      "fileList" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditor.build/sources",
+      "importPath" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/Modules",
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/Sources/BlockNoteEditor/BlockNoteEditorCommand.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/Sources/BlockNoteEditor/BlockNoteEditorCoordinator.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/Sources/BlockNoteEditor/BlockNoteEditorMessage.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/Sources/BlockNoteEditor/BlockNoteEditorResources.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/Sources/BlockNoteEditor/BlockNoteEditorState.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/Sources/BlockNoteEditor/BlockNoteEditorView.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditor.build/DerivedSources/resource_bundle_accessor.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/swift-version--58304C5D6DBC2206.txt"
+        },
+        {
+          "kind" : "virtual",
+          "name" : "<BlockNoteEditor-arm64-apple-macosx26.0-debug.module-resources>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditor.build/sources"
+        }
+      ],
+      "isLibrary" : true,
+      "moduleName" : "BlockNoteEditor",
+      "moduleOutputPath" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/Modules/BlockNoteEditor.swiftmodule",
+      "objects" : [
+        "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditor.build/BlockNoteEditorCommand.swift.o",
+        "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditor.build/BlockNoteEditorCoordinator.swift.o",
+        "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditor.build/BlockNoteEditorMessage.swift.o",
+        "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditor.build/BlockNoteEditorResources.swift.o",
+        "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditor.build/BlockNoteEditorState.swift.o",
+        "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditor.build/BlockNoteEditorView.swift.o",
+        "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditor.build/resource_bundle_accessor.swift.o"
+      ],
+      "otherArguments" : [
+        "-target",
+        "arm64-apple-macosx13.0",
+        "-incremental",
+        "-enable-batch-mode",
+        "-serialize-diagnostics",
+        "-index-store-path",
+        "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/index/store",
+        "-Onone",
+        "-enable-testing",
+        "-j10",
+        "-DSWIFT_PACKAGE",
+        "-DDEBUG",
+        "-DSWIFT_MODULE_RESOURCE_BUNDLE_AVAILABLE",
+        "-module-cache-path",
+        "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/ModuleCache",
+        "-parseable-output",
+        "-parse-as-library",
+        "-emit-objc-header",
+        "-emit-objc-header-path",
+        "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditor.build/include/BlockNoteEditor-Swift.h",
+        "-swift-version",
+        "5",
+        "-plugin-path",
+        "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing",
+        "-sdk",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk",
+        "-F",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+        "-F",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks",
+        "-I",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+        "-L",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+        "-g",
+        "-Xcc",
+        "-isysroot",
+        "-Xcc",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk",
+        "-Xcc",
+        "-F",
+        "-Xcc",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+        "-Xcc",
+        "-F",
+        "-Xcc",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks",
+        "-Xcc",
+        "-fPIC",
+        "-Xcc",
+        "-g",
+        "-package-name",
+        "blocknoteeditor"
+      ],
+      "outputFileMapPath" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditor.build/output-file-map.json",
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditor.build/BlockNoteEditorCommand.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditor.build/BlockNoteEditorCoordinator.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditor.build/BlockNoteEditorMessage.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditor.build/BlockNoteEditorResources.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditor.build/BlockNoteEditorState.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditor.build/BlockNoteEditorView.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditor.build/resource_bundle_accessor.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/Modules/BlockNoteEditor.swiftmodule"
+        }
+      ],
+      "prepareForIndexing" : false,
+      "sources" : [
+        "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/Sources/BlockNoteEditor/BlockNoteEditorCommand.swift",
+        "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/Sources/BlockNoteEditor/BlockNoteEditorCoordinator.swift",
+        "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/Sources/BlockNoteEditor/BlockNoteEditorMessage.swift",
+        "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/Sources/BlockNoteEditor/BlockNoteEditorResources.swift",
+        "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/Sources/BlockNoteEditor/BlockNoteEditorState.swift",
+        "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/Sources/BlockNoteEditor/BlockNoteEditorView.swift",
+        "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditor.build/DerivedSources/resource_bundle_accessor.swift"
+      ],
+      "tempsPath" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditor.build",
+      "wholeModuleOptimization" : false
+    },
+    "C.BlockNoteEditorPackageTests-arm64-apple-macosx26.0-debug.module" : {
+      "executable" : "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc",
+      "fileList" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditorPackageTests.build/sources",
+      "importPath" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/Modules",
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditorPackageTests.derived/runner.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/swift-version--58304C5D6DBC2206.txt"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/Modules/BlockNoteEditorTests.swiftmodule"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditorPackageTests.build/sources"
+        }
+      ],
+      "isLibrary" : true,
+      "moduleName" : "BlockNoteEditorPackageTests",
+      "moduleOutputPath" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/Modules/BlockNoteEditorPackageTests.swiftmodule",
+      "objects" : [
+        "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditorPackageTests.build/runner.swift.o"
+      ],
+      "otherArguments" : [
+        "-target",
+        "arm64-apple-macosx13.0",
+        "-incremental",
+        "-enable-batch-mode",
+        "-serialize-diagnostics",
+        "-index-store-path",
+        "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/index/store",
+        "-Onone",
+        "-enable-testing",
+        "-Xfrontend",
+        "-enable-cross-import-overlays",
+        "-j10",
+        "-DSWIFT_PACKAGE",
+        "-DDEBUG",
+        "-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE",
+        "-module-cache-path",
+        "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/ModuleCache",
+        "-parseable-output",
+        "-parse-as-library",
+        "-emit-objc-header",
+        "-emit-objc-header-path",
+        "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditorPackageTests.build/include/BlockNoteEditorPackageTests-Swift.h",
+        "-plugin-path",
+        "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing",
+        "-sdk",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk",
+        "-F",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+        "-F",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks",
+        "-I",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+        "-L",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+        "-g",
+        "-Xcc",
+        "-isysroot",
+        "-Xcc",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk",
+        "-Xcc",
+        "-F",
+        "-Xcc",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+        "-Xcc",
+        "-F",
+        "-Xcc",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks",
+        "-Xcc",
+        "-fPIC",
+        "-Xcc",
+        "-g",
+        "-package-name",
+        "blocknoteeditor"
+      ],
+      "outputFileMapPath" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditorPackageTests.build/output-file-map.json",
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditorPackageTests.build/runner.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/Modules/BlockNoteEditorPackageTests.swiftmodule"
+        }
+      ],
+      "prepareForIndexing" : false,
+      "sources" : [
+        "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditorPackageTests.derived/runner.swift"
+      ],
+      "tempsPath" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditorPackageTests.build",
+      "wholeModuleOptimization" : false
+    },
+    "C.BlockNoteEditorTests-arm64-apple-macosx26.0-debug.module" : {
+      "executable" : "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc",
+      "fileList" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditorTests.build/sources",
+      "importPath" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/Modules",
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/Tests/BlockNoteEditorTests/BlockNoteBridgeSessionTests.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/Tests/BlockNoteEditorTests/BlockNoteEditorCommandTests.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/Tests/BlockNoteEditorTests/BlockNoteEditorControllerTests.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/Tests/BlockNoteEditorTests/BlockNoteEditorMessageStateTests.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/Tests/BlockNoteEditorTests/BlockNoteEditorResourceTests.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/Tests/BlockNoteEditorTests/BlockNoteNavigationPolicyTests.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/swift-version--58304C5D6DBC2206.txt"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/Modules/BlockNoteEditor.swiftmodule"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditorTests.build/sources"
+        }
+      ],
+      "isLibrary" : true,
+      "moduleName" : "BlockNoteEditorTests",
+      "moduleOutputPath" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/Modules/BlockNoteEditorTests.swiftmodule",
+      "objects" : [
+        "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditorTests.build/BlockNoteBridgeSessionTests.swift.o",
+        "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditorTests.build/BlockNoteEditorCommandTests.swift.o",
+        "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditorTests.build/BlockNoteEditorControllerTests.swift.o",
+        "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditorTests.build/BlockNoteEditorMessageStateTests.swift.o",
+        "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditorTests.build/BlockNoteEditorResourceTests.swift.o",
+        "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditorTests.build/BlockNoteNavigationPolicyTests.swift.o"
+      ],
+      "otherArguments" : [
+        "-target",
+        "arm64-apple-macosx14.0",
+        "-incremental",
+        "-enable-batch-mode",
+        "-serialize-diagnostics",
+        "-index-store-path",
+        "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/index/store",
+        "-Onone",
+        "-enable-testing",
+        "-Xfrontend",
+        "-enable-cross-import-overlays",
+        "-j10",
+        "-DSWIFT_PACKAGE",
+        "-DDEBUG",
+        "-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE",
+        "-module-cache-path",
+        "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/ModuleCache",
+        "-parseable-output",
+        "-parse-as-library",
+        "-swift-version",
+        "5",
+        "-plugin-path",
+        "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing",
+        "-sdk",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk",
+        "-F",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+        "-F",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks",
+        "-I",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+        "-L",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+        "-g",
+        "-Xcc",
+        "-isysroot",
+        "-Xcc",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk",
+        "-Xcc",
+        "-F",
+        "-Xcc",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+        "-Xcc",
+        "-F",
+        "-Xcc",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks",
+        "-Xcc",
+        "-fPIC",
+        "-Xcc",
+        "-g",
+        "-package-name",
+        "blocknoteeditor"
+      ],
+      "outputFileMapPath" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditorTests.build/output-file-map.json",
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditorTests.build/BlockNoteBridgeSessionTests.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditorTests.build/BlockNoteEditorCommandTests.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditorTests.build/BlockNoteEditorControllerTests.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditorTests.build/BlockNoteEditorMessageStateTests.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditorTests.build/BlockNoteEditorResourceTests.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditorTests.build/BlockNoteNavigationPolicyTests.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/Modules/BlockNoteEditorTests.swiftmodule"
+        }
+      ],
+      "prepareForIndexing" : false,
+      "sources" : [
+        "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/Tests/BlockNoteEditorTests/BlockNoteBridgeSessionTests.swift",
+        "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/Tests/BlockNoteEditorTests/BlockNoteEditorCommandTests.swift",
+        "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/Tests/BlockNoteEditorTests/BlockNoteEditorControllerTests.swift",
+        "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/Tests/BlockNoteEditorTests/BlockNoteEditorMessageStateTests.swift",
+        "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/Tests/BlockNoteEditorTests/BlockNoteEditorResourceTests.swift",
+        "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/Tests/BlockNoteEditorTests/BlockNoteNavigationPolicyTests.swift"
+      ],
+      "tempsPath" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditorTests.build",
+      "wholeModuleOptimization" : false
+    }
+  },
+  "swiftFrontendCommands" : {
+
+  },
+  "swiftTargetScanArgs" : {
+    "BlockNoteEditor" : [
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc",
+      "-module-name",
+      "BlockNoteEditor",
+      "-package-name",
+      "blocknoteeditor",
+      "-c",
+      "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/Sources/BlockNoteEditor/BlockNoteEditorCommand.swift",
+      "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/Sources/BlockNoteEditor/BlockNoteEditorCoordinator.swift",
+      "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/Sources/BlockNoteEditor/BlockNoteEditorMessage.swift",
+      "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/Sources/BlockNoteEditor/BlockNoteEditorResources.swift",
+      "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/Sources/BlockNoteEditor/BlockNoteEditorState.swift",
+      "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/Sources/BlockNoteEditor/BlockNoteEditorView.swift",
+      "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditor.build/DerivedSources/resource_bundle_accessor.swift",
+      "-I",
+      "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/Modules",
+      "-target",
+      "arm64-apple-macosx13.0",
+      "-incremental",
+      "-enable-batch-mode",
+      "-serialize-diagnostics",
+      "-index-store-path",
+      "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/index/store",
+      "-Onone",
+      "-enable-testing",
+      "-j10",
+      "-DSWIFT_PACKAGE",
+      "-DDEBUG",
+      "-DSWIFT_MODULE_RESOURCE_BUNDLE_AVAILABLE",
+      "-module-cache-path",
+      "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/ModuleCache",
+      "-parseable-output",
+      "-parse-as-library",
+      "-emit-objc-header",
+      "-emit-objc-header-path",
+      "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditor.build/include/BlockNoteEditor-Swift.h",
+      "-swift-version",
+      "5",
+      "-plugin-path",
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing",
+      "-sdk",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk",
+      "-F",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+      "-F",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks",
+      "-I",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+      "-L",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+      "-g",
+      "-Xcc",
+      "-isysroot",
+      "-Xcc",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk",
+      "-Xcc",
+      "-F",
+      "-Xcc",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+      "-Xcc",
+      "-F",
+      "-Xcc",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks",
+      "-Xcc",
+      "-fPIC",
+      "-Xcc",
+      "-g",
+      "-package-name",
+      "blocknoteeditor",
+      "-driver-use-frontend-path",
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc"
+    ],
+    "BlockNoteEditorPackageTests" : [
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc",
+      "-module-name",
+      "BlockNoteEditorPackageTests",
+      "-package-name",
+      "blocknoteeditor",
+      "-c",
+      "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditorPackageTests.derived/runner.swift",
+      "-I",
+      "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/Modules",
+      "-target",
+      "arm64-apple-macosx13.0",
+      "-incremental",
+      "-enable-batch-mode",
+      "-serialize-diagnostics",
+      "-index-store-path",
+      "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/index/store",
+      "-Onone",
+      "-enable-testing",
+      "-Xfrontend",
+      "-enable-cross-import-overlays",
+      "-j10",
+      "-DSWIFT_PACKAGE",
+      "-DDEBUG",
+      "-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE",
+      "-module-cache-path",
+      "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/ModuleCache",
+      "-parseable-output",
+      "-parse-as-library",
+      "-emit-objc-header",
+      "-emit-objc-header-path",
+      "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditorPackageTests.build/include/BlockNoteEditorPackageTests-Swift.h",
+      "-plugin-path",
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing",
+      "-sdk",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk",
+      "-F",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+      "-F",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks",
+      "-I",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+      "-L",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+      "-g",
+      "-Xcc",
+      "-isysroot",
+      "-Xcc",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk",
+      "-Xcc",
+      "-F",
+      "-Xcc",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+      "-Xcc",
+      "-F",
+      "-Xcc",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks",
+      "-Xcc",
+      "-fPIC",
+      "-Xcc",
+      "-g",
+      "-package-name",
+      "blocknoteeditor",
+      "-driver-use-frontend-path",
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc"
+    ],
+    "BlockNoteEditorTests" : [
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc",
+      "-module-name",
+      "BlockNoteEditorTests",
+      "-package-name",
+      "blocknoteeditor",
+      "-c",
+      "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/Tests/BlockNoteEditorTests/BlockNoteBridgeSessionTests.swift",
+      "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/Tests/BlockNoteEditorTests/BlockNoteEditorCommandTests.swift",
+      "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/Tests/BlockNoteEditorTests/BlockNoteEditorControllerTests.swift",
+      "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/Tests/BlockNoteEditorTests/BlockNoteEditorMessageStateTests.swift",
+      "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/Tests/BlockNoteEditorTests/BlockNoteEditorResourceTests.swift",
+      "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/Tests/BlockNoteEditorTests/BlockNoteNavigationPolicyTests.swift",
+      "-I",
+      "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/Modules",
+      "-target",
+      "arm64-apple-macosx14.0",
+      "-incremental",
+      "-enable-batch-mode",
+      "-serialize-diagnostics",
+      "-index-store-path",
+      "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/index/store",
+      "-Onone",
+      "-enable-testing",
+      "-Xfrontend",
+      "-enable-cross-import-overlays",
+      "-j10",
+      "-DSWIFT_PACKAGE",
+      "-DDEBUG",
+      "-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE",
+      "-module-cache-path",
+      "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/ModuleCache",
+      "-parseable-output",
+      "-parse-as-library",
+      "-swift-version",
+      "5",
+      "-plugin-path",
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing",
+      "-sdk",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk",
+      "-F",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+      "-F",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks",
+      "-I",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+      "-L",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+      "-g",
+      "-Xcc",
+      "-isysroot",
+      "-Xcc",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk",
+      "-Xcc",
+      "-F",
+      "-Xcc",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+      "-Xcc",
+      "-F",
+      "-Xcc",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks",
+      "-Xcc",
+      "-fPIC",
+      "-Xcc",
+      "-g",
+      "-package-name",
+      "blocknoteeditor",
+      "-driver-use-frontend-path",
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc"
+    ]
+  },
+  "targetDependencyMap" : {
+    "BlockNoteEditor" : [
+
+    ],
+    "BlockNoteEditorPackageTests" : [
+      "BlockNoteEditorTests",
+      "BlockNoteEditor"
+    ],
+    "BlockNoteEditorTests" : [
+      "BlockNoteEditor"
+    ]
+  },
+  "testDiscoveryCommands" : {
+
+  },
+  "testEntryPointCommands" : {
+    "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditorPackageTests.derived/runner.swift" : {
+      "inputs" : [
+
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditorPackageTests.derived/runner.swift"
+        }
+      ]
+    }
+  },
+  "traitConfiguration" : {
+    "default" : {
+
+    }
+  },
+  "writeCommands" : {
+    "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditor.build/sources" : {
+      "alwaysOutOfDate" : false,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<sources-file-list>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/Sources/BlockNoteEditor/BlockNoteEditorCommand.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/Sources/BlockNoteEditor/BlockNoteEditorCoordinator.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/Sources/BlockNoteEditor/BlockNoteEditorMessage.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/Sources/BlockNoteEditor/BlockNoteEditorResources.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/Sources/BlockNoteEditor/BlockNoteEditorState.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/Sources/BlockNoteEditor/BlockNoteEditorView.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditor.build/DerivedSources/resource_bundle_accessor.swift"
+        }
+      ],
+      "outputFilePath" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditor.build/sources"
+    },
+    "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditorPackageTests.build/sources" : {
+      "alwaysOutOfDate" : false,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<sources-file-list>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditorPackageTests.derived/runner.swift"
+        }
+      ],
+      "outputFilePath" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditorPackageTests.build/sources"
+    },
+    "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditorPackageTests.product/Objects.LinkFileList" : {
+      "alwaysOutOfDate" : false,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<link-file-list>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditor.build/BlockNoteEditorCommand.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditor.build/BlockNoteEditorCoordinator.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditor.build/BlockNoteEditorMessage.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditor.build/BlockNoteEditorResources.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditor.build/BlockNoteEditorState.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditor.build/BlockNoteEditorView.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditor.build/resource_bundle_accessor.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditorPackageTests.build/runner.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditorTests.build/BlockNoteBridgeSessionTests.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditorTests.build/BlockNoteEditorCommandTests.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditorTests.build/BlockNoteEditorControllerTests.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditorTests.build/BlockNoteEditorMessageStateTests.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditorTests.build/BlockNoteEditorResourceTests.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditorTests.build/BlockNoteNavigationPolicyTests.swift.o"
+        }
+      ],
+      "outputFilePath" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditorPackageTests.product/Objects.LinkFileList"
+    },
+    "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditorTests.build/sources" : {
+      "alwaysOutOfDate" : false,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<sources-file-list>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/Tests/BlockNoteEditorTests/BlockNoteBridgeSessionTests.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/Tests/BlockNoteEditorTests/BlockNoteEditorCommandTests.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/Tests/BlockNoteEditorTests/BlockNoteEditorControllerTests.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/Tests/BlockNoteEditorTests/BlockNoteEditorMessageStateTests.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/Tests/BlockNoteEditorTests/BlockNoteEditorResourceTests.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/Tests/BlockNoteEditorTests/BlockNoteNavigationPolicyTests.swift"
+        }
+      ],
+      "outputFilePath" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditorTests.build/sources"
+    },
+    "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/swift-version--58304C5D6DBC2206.txt" : {
+      "alwaysOutOfDate" : true,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<swift-get-version>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc"
+        }
+      ],
+      "outputFilePath" : "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/swift-version--58304C5D6DBC2206.txt"
+    }
+  }
+}
