@@ -549,12 +549,28 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         XCTAssertTrue(fixture.contains("cardEditorCardActionsRequested"))
         XCTAssertTrue(
             fixture.contains(
-                "onOpenCardActions: { didRequestCardActions = true }"
+                "onOpenCardActions: fixtureCardActionsHandler"
             )
+        )
+        XCTAssertTrue(
+            fixture.contains(
+                "private var fixtureCardActionsHandler: (() -> Void)?"
+            )
+        )
+        XCTAssertTrue(
+            fixture.contains("guard mode != .blocked else { return nil }")
+        )
+        XCTAssertTrue(
+            fixture.contains("return { didRequestCardActions = true }")
         )
         XCTAssertTrue(fixture.contains("isMetadataEditable: bodyModel.canMutate"))
         XCTAssertTrue(fixture.contains("case longTag = \"long-tag\""))
+        XCTAssertTrue(fixture.contains("case legacyHTML = \"legacy-html\""))
         XCTAssertTrue(fixture.contains("case bridgeFailure = \"bridge-failure\""))
+        XCTAssertTrue(fixture.contains("contentJSON: nil"))
+        XCTAssertTrue(
+            fixture.contains("<p>Legacy <strong>rich</strong> text</p>")
+        )
         XCTAssertTrue(fixture.contains("fixtureModel.receive("))
         XCTAssertTrue(
             fixture.contains(
