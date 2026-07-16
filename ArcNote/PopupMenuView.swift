@@ -34,6 +34,7 @@ struct PopupMenuModifier: ViewModifier {
     
     func body(content: Content) -> some View {
         content
+            .accessibilityHidden(isPresented)
             .overlay(
                 Group {
                     if isPresented {
@@ -50,77 +51,15 @@ struct PopupMenuOverlay: View {
     let layout: PopupMenuLayout
     let cardData: UserCard?
     let isOwnCard: Bool
-    @State private var animateContent = false
-    @State private var canDismissFromBackdrop = false
     
     var body: some View {
-        GeometryReader { geometry in
-            ZStack {
-                // 半透明背景遮罩 - 带渐变动画
-                Color.black
-                    .opacity(animateContent ? 0.5 : 0)
-                    .ignoresSafeArea()
-                    .onTapGesture {
-                        guard canDismissFromBackdrop else { return }
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                            animateContent = false
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                                isPresented = false
-                            }
-                        }
-                    }
-                
-                // 菜单内容 - 居中显示，带渐变动画
-                ZStack {
-                    // 关闭按钮 - 绝对定位在右上角
-                    VStack {
-                        HStack {
-                            Spacer()
-                            Button(action: {
-                                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                                    animateContent = false
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                                        isPresented = false
-                                    }
-                                }
-                            }) {
-                                Image(systemName: "xmark")
-                                    .font(.title2)
-                                    .foregroundColor(.white)
-                                    .frame(width: 30, height: 30)
-                            }
-                        }
-                        .padding(.horizontal, 20)
-                        .padding(.top, 16)
-                        
-                        Spacer()
-                    }
-                    
-                    // 菜单选项网格 - 根据布局类型显示不同内容
-                    menuContent
-                        .padding(.horizontal, 0)
-                }
-                .background(menuBackground)
-                .cornerRadius(20)
-                .frame(width: geometry.size.width * 0.9, height: geometry.size.width * 0.9)
-                .clipped()
-                .position(x: geometry.size.width / 2, y: geometry.size.height / 2.2)
-                .opacity(animateContent ? 1 : 0)
-                .scaleEffect(animateContent ? 1 : 0.8)
-            }
-        }
-        .onAppear {
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                animateContent = true
-            }
-        }
-        .task {
-            try? await Task.sleep(nanoseconds: 450_000_000)
-            guard !Task.isCancelled else { return }
-            canDismissFromBackdrop = true
-        }
-        .onDisappear {
-            canDismissFromBackdrop = false
+        ActionBoxOverlay(
+            isPresented: $isPresented,
+            accessibilityLabel: "Card Actions",
+            accessibilityIdentifier: "popup-menu.overlay",
+            closeAccessibilityIdentifier: "popup-menu.close"
+        ) {
+            menuContent
         }
     }
     
@@ -394,82 +333,6 @@ struct PopupMenuOverlay: View {
         }
     }
     
-    // MARK: - 菜单背景
-    private var menuBackground: some View {
-        RoundedRectangle(cornerRadius: 20)
-            .fill(.ultraThinMaterial.opacity(1))
-            .overlay(menuTopLeftHighlight)
-            .overlay(menuBottomRightHighlight)
-            .overlay(menuTopEdgeHighlight)
-            .overlay(menuBottomEdgeHighlight)
-    }
-    
-    // MARK: - 高光效果
-    private var menuTopLeftHighlight: some View {
-        RoundedRectangle(cornerRadius: 20)
-            .stroke(Color.white, lineWidth: 1)
-            .offset(x: 0, y: -1)
-            .mask(
-                RoundedRectangle(cornerRadius: 20)
-                    .fill(
-                        RadialGradient(
-                            colors: [Color.white, Color.clear],
-                            center: .topLeading,
-                            startRadius: 10,
-                            endRadius: 35
-                        )
-                    )
-            )
-    }
-    
-    private var menuBottomRightHighlight: some View {
-        RoundedRectangle(cornerRadius: 20)
-            .stroke(Color.white, lineWidth: 1)
-            .offset(x: 0, y: 0)
-            .mask(
-                RoundedRectangle(cornerRadius: 20)
-                    .fill(
-                        RadialGradient(
-                            colors: [Color.white, Color.clear],
-                            center: .bottomTrailing,
-                            startRadius: 10,
-                            endRadius: 35
-                        )
-                    )
-            )
-    }
-    
-    private var menuTopEdgeHighlight: some View {
-        RoundedRectangle(cornerRadius: 20)
-            .stroke(Color.white, lineWidth: 1)
-            .offset(x: 0, y: -1)
-            .mask(
-                RoundedRectangle(cornerRadius: 20)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.white, Color.clear],
-                            startPoint: .top,
-                            endPoint: UnitPoint(x: 0, y: 0.05)
-                        )
-                    )
-            )
-    }
-    
-    private var menuBottomEdgeHighlight: some View {
-        RoundedRectangle(cornerRadius: 20)
-            .stroke(Color.white, lineWidth: 1)
-            .offset(x: 0, y: 1)
-            .mask(
-                RoundedRectangle(cornerRadius: 20)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.white, Color.clear],
-                            startPoint: .bottom,
-                            endPoint: UnitPoint(x: 1, y: 0.05)
-                        )
-                    )
-            )
-    }
 }
 
 // MARK: - Menu Button
@@ -487,33 +350,13 @@ struct MenuButton: View {
     }
     
     var body: some View {
-        VStack(spacing: 6) {
-            Image(icon)
-                .resizable()
-                .aspectRatio(contentMode: .fit)
-                .frame(width: 38, height: 33)
-                .foregroundColor(color)
-            
-            Text(text)
-                .font(.system(size: 14, weight: .medium))
-                .foregroundColor(.white)
-        }
-        .frame(width: 90, height: 90)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color(red: 177/255, green: 177/255, blue: 177/255, opacity: 10/100))
+        ActionBoxTile(
+            icon: .asset(icon),
+            text: text,
+            color: color,
+            accessibilityIdentifier: "popup-menu.item.\(text.lowercased().replacingOccurrences(of: " ", with: "-"))",
+            action: onTap ?? {}
         )
-        .onTapGesture {
-            if let onTap = onTap {
-                onTap()
-            } else {
-                // 默认处理按钮点击事件
-                print("\(text) button tapped")
-            }
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(text)
-        .accessibilityIdentifier("popup-menu.item.\(text.lowercased().replacingOccurrences(of: " ", with: "-"))")
     }
 }
 

@@ -11,6 +11,29 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         "CardEditorBackground.swift",
     ]
 
+    func testSharedActionBoxOwnsMainstreamSurfaceAndSemanticTiles() throws {
+        let project = try source(at: "ArcNote.xcodeproj/project.pbxproj")
+        let actionBox = try source(at: "ArcNote/ActionBoxView.swift")
+        let popup = try source(at: "ArcNote/PopupMenuView.swift")
+
+        XCTAssertTrue(project.contains("/* ActionBoxView.swift in Sources */"))
+        XCTAssertTrue(actionBox.contains("struct ActionBoxOverlay<Content: View>: View"))
+        XCTAssertTrue(actionBox.contains("geometry.size.width * 0.9"))
+        XCTAssertTrue(actionBox.contains("RoundedRectangle(cornerRadius: 20)"))
+        XCTAssertTrue(actionBox.contains(".fill(.ultraThinMaterial.opacity(1))"))
+        XCTAssertTrue(actionBox.contains(".spring(response: 0.3, dampingFraction: 0.8)"))
+        XCTAssertTrue(actionBox.contains("struct ActionBoxTile: View"))
+        XCTAssertTrue(actionBox.contains("Button(role: role, action: action)"))
+        XCTAssertTrue(actionBox.contains(".frame(width: 90, height: 90)"))
+        XCTAssertTrue(actionBox.contains(".frame(width: 38, height: 33)"))
+        XCTAssertTrue(actionBox.contains(".font(.system(size: min(scaledLabelSize, 18), weight: .medium))"))
+        XCTAssertTrue(actionBox.contains("RoundedRectangle(cornerRadius: 12)"))
+        XCTAssertTrue(actionBox.contains("@Environment(\\.accessibilityReduceMotion)"))
+        XCTAssertTrue(popup.contains("ActionBoxOverlay("))
+        XCTAssertTrue(popup.contains("ActionBoxTile("))
+        XCTAssertFalse(popup.contains(".onTapGesture"))
+    }
+
     func testAppTargetOwnsTheSixFocusedCardEditorFiles() throws {
         let project = try source(at: "ArcNote.xcodeproj/project.pbxproj")
 
