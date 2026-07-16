@@ -52,7 +52,7 @@ No actionable P0, P1, or P2 visual or interaction mismatch remains.
 - Responsive fixtures:
   - `/tmp/ChoraiActionBoxCompact375.xcresult` — compact 375-point portrait passed;
   - `/tmp/ChoraiActionBoxShortViewport5.xcresult` — short-height safe-area fixture passed;
-  - `/tmp/ChoraiActionBoxReviewFixGeometryAndReopen.xcresult` — standard geometry and editor Close -> reopen passed.
+  - `/tmp/ChoraiActionBoxDeterministicFinal0ba0c9a.xcresult` — three current deterministic tests passed: standard geometry with editor Close -> reopen, compact 375-point portrait, and short-height safe-area containment.
 - Focused source contracts: 31 tests passed, 0 failed.
 - Covered journeys:
   - default eight-button grid, exact real grid descendants, order, single Background, and no Remove Background;
