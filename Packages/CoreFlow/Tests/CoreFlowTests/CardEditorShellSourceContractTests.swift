@@ -18,30 +18,55 @@ final class CardEditorShellSourceContractTests: XCTestCase {
 
         XCTAssertTrue(project.contains("/* ActionBoxView.swift in Sources */"))
         XCTAssertTrue(actionBox.contains("struct ActionBoxOverlay<Content: View>: View"))
-        XCTAssertTrue(actionBox.contains("geometry.size.width * 0.9"))
+        XCTAssertTrue(actionBox.contains("static let surfaceScale: CGFloat = 0.9"))
+        XCTAssertTrue(actionBox.contains("let availableHeight = max("))
+        XCTAssertTrue(actionBox.contains("let surfaceSide = min("))
+        XCTAssertTrue(actionBox.contains("geometry.safeAreaInsets.top"))
+        XCTAssertTrue(actionBox.contains("geometry.safeAreaInsets.bottom"))
         XCTAssertTrue(actionBox.contains("RoundedRectangle(cornerRadius: 20)"))
         XCTAssertTrue(actionBox.contains(".fill(.ultraThinMaterial.opacity(1))"))
         XCTAssertTrue(actionBox.contains(".spring(response: 0.3, dampingFraction: 0.8)"))
+        XCTAssertTrue(actionBox.contains("let rowCount: Int"))
         XCTAssertTrue(
-            actionBox.contains("content\n                        .padding(.top, 44)"),
-            "The shared surface must reserve one Close hit-target row"
+            actionBox.contains("static let standardTileSize: CGFloat = 90")
+        )
+        XCTAssertTrue(
+            actionBox.contains("static let headerHeight: CGFloat = 60")
+        )
+        XCTAssertTrue(actionBox.contains("static func tileSize("))
+        XCTAssertTrue(
+            actionBox.contains(".environment(\\.actionBoxTileSize, tileSize)")
+        )
+        XCTAssertTrue(
+            actionBox.contains(
+                ".accessibilityIdentifier(\"\\(accessibilityIdentifier).surface\")"
+            )
         )
         XCTAssertTrue(actionBox.contains("struct ActionBoxTile: View"))
         XCTAssertTrue(actionBox.contains("Button(role: role, action: action)"))
         XCTAssertEqual(
             actionBox.components(
-                separatedBy: ".frame(width: 84, height: 84)"
+                separatedBy: ".frame(width: tileSize, height: tileSize)"
             ).count - 1,
             2,
-            "Action and empty tiles must share the compact 84-point grid size"
+            "Action and empty tiles must share the adaptive standard size"
         )
-        XCTAssertFalse(actionBox.contains(".frame(width: 90, height: 90)"))
         XCTAssertTrue(actionBox.contains(".frame(width: 38, height: 33)"))
         XCTAssertTrue(actionBox.contains(".font(.system(size: min(scaledLabelSize, 18), weight: .medium))"))
+        XCTAssertTrue(actionBox.contains(".minimumScaleFactor(0.65)"))
+        XCTAssertTrue(actionBox.contains(".allowsTightening(true)"))
         XCTAssertTrue(actionBox.contains("RoundedRectangle(cornerRadius: 12)"))
         XCTAssertTrue(actionBox.contains("@Environment(\\.accessibilityReduceMotion)"))
+        XCTAssertTrue(actionBox.contains(".accessibilityAddTraits(.isModal)"))
+        XCTAssertTrue(
+            actionBox.contains(
+                "UIAccessibility.post(notification: .screenChanged, argument: nil)"
+            )
+        )
         XCTAssertTrue(popup.contains("ActionBoxOverlay("))
+        XCTAssertTrue(popup.contains("rowCount: layout.rowCount"))
         XCTAssertTrue(popup.contains("ActionBoxTile("))
+        XCTAssertFalse(popup.contains(".accessibilityHidden(isPresented)"))
         XCTAssertFalse(popup.contains(".onTapGesture"))
     }
 
@@ -581,6 +606,12 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         XCTAssertTrue(app.contains("CardEditorShellFixtureScreen"))
         XCTAssertTrue(fixture.contains("CHORAI_CARD_EDITOR_FIXTURE_MODE"))
         XCTAssertTrue(
+            fixture.contains("CHORAI_CARD_EDITOR_FIXTURE_VIEWPORT_HEIGHT")
+        )
+        XCTAssertTrue(
+            fixture.contains(".frame(height: fixtureViewportHeight, alignment: .top)")
+        )
+        XCTAssertTrue(
             fixture.contains("@State private var showCardActions = false")
         )
         XCTAssertTrue(fixture.contains("@State private var isPinned = false"))
@@ -589,10 +620,7 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         XCTAssertTrue(fixture.contains("isPresented: $showCardActions"))
         XCTAssertTrue(fixture.contains("isEnabled: bodyModel.canMutate"))
         XCTAssertTrue(fixture.contains("isPinned: isPinned"))
-        XCTAssertFalse(
-            fixture.contains(".accessibilityHidden(showCardActions)"),
-            "The fixture must preserve interaction after Action Box dismissal"
-        )
+        XCTAssertFalse(fixture.contains(".accessibilityHidden(showCardActions)"))
         XCTAssertTrue(
             fixture.contains(
                 "onBackground: { background = .local(Self.fixtureBackgroundData) }"

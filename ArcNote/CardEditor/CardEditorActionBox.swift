@@ -18,7 +18,8 @@ struct CardEditorActionBox: View {
             isPresented: $isPresented,
             accessibilityLabel: "Card Actions",
             accessibilityIdentifier: "cardEditorActionsOverlay",
-            closeAccessibilityIdentifier: "cardEditorActionsClose"
+            closeAccessibilityIdentifier: "cardEditorActionsClose",
+            rowCount: 3
         ) {
             VStack(spacing: 15) {
                 HStack(spacing: 15) {

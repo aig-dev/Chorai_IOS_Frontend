@@ -345,7 +345,8 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertEqual(privacy.value as? String, "Public")
 
         more.tap()
-        let overlay = waitFor("cardEditorActionsOverlay")
+        _ = waitFor("cardEditorActionsOverlay")
+        let surface = waitFor("cardEditorActionsOverlay.surface")
         _ = waitFor("cardEditorActionGrid")
         let close = waitForButton("cardEditorActionsClose")
         let actions = editorActionButtons()
@@ -353,12 +354,16 @@ final class ArcNoteUITests: XCTestCase {
         for action in actions {
             XCTAssertEqual(action.elementType, .button)
         }
-        assertEditorActionGridLayout(actions, inside: overlay)
+        assertEditorActionGridLayout(actions, inside: surface)
         assertEditorActionCloseLayout(
             close,
             relativeTo: actions,
-            inside: overlay
+            inside: surface
         )
+        XCTAssertEqual(actions[0].frame.width, 90, accuracy: 1)
+        XCTAssertFalse(app.buttons["cardEditorFloatingBack"].isHittable)
+        XCTAssertFalse(app.buttons["cardEditorPrivacyButton"].isHittable)
+        XCTAssertFalse(app.buttons["cardEditorMoreButton"].isHittable)
         XCTAssertFalse(
             app.descendants(matching: .any)["cardEditorCardActionsButton"]
                 .exists,
@@ -368,9 +373,64 @@ final class ArcNoteUITests: XCTestCase {
         close.tap()
         waitForMissing("cardEditorActionsOverlay")
 
+        XCTAssertTrue(more.waitForExistence(timeout: 10))
+        XCTAssertTrue(more.isHittable)
         more.tap()
         _ = waitFor("cardEditorActionsOverlay")
+        _ = waitFor("cardEditorActionsOverlay.surface")
+        XCTAssertFalse(app.buttons["cardEditorFloatingBack"].isHittable)
+        XCTAssertFalse(app.buttons["cardEditorPrivacyButton"].isHittable)
+        XCTAssertFalse(app.buttons["cardEditorMoreButton"].isHittable)
         waitForButton("cardEditorActionsClose").tap()
+        waitForMissing("cardEditorActionsOverlay")
+    }
+
+    func testCardEditorActionBoxFitsAdaptivePortraitViewport() {
+        launchCardEditorFixture(mode: "empty")
+
+        waitForButton("cardEditorMoreButton").tap()
+        let surface = waitFor("cardEditorActionsOverlay.surface")
+        let close = waitForButton("cardEditorActionsClose")
+        let actions = editorActionButtons()
+
+        XCTAssertTrue(app.frame.insetBy(dx: -1, dy: -1).contains(surface.frame))
+        assertEditorActionGridLayout(actions, inside: surface)
+        assertEditorActionCloseLayout(
+            close,
+            relativeTo: actions,
+            inside: surface
+        )
+        for action in actions {
+            XCTAssertGreaterThanOrEqual(action.frame.width, 44)
+            XCTAssertLessThanOrEqual(action.frame.width, 90)
+        }
+        captureVisual("card-editor-action-box-adaptive-portrait")
+        close.tap()
+        waitForMissing("cardEditorActionsOverlay")
+    }
+
+    func testCardEditorActionBoxFitsShortSafeAreaViewport() {
+        app.launchEnvironment[
+            "CHORAI_CARD_EDITOR_FIXTURE_VIEWPORT_HEIGHT"
+        ] = "350"
+        launchCardEditorFixture(mode: "empty")
+
+        waitForButton("cardEditorMoreButton").tap()
+        let surface = waitFor("cardEditorActionsOverlay.surface")
+        let close = waitForButton("cardEditorActionsClose")
+        let actions = editorActionButtons()
+
+        XCTAssertTrue(app.frame.insetBy(dx: -1, dy: -1).contains(surface.frame))
+        assertEditorActionGridLayout(actions, inside: surface)
+        assertEditorActionCloseLayout(
+            close,
+            relativeTo: actions,
+            inside: surface
+        )
+        XCTAssertEqual(surface.frame.width, surface.frame.height, accuracy: 3)
+        XCTAssertLessThanOrEqual(surface.frame.height, 350)
+        captureVisual("card-editor-action-box-short-viewport")
+        close.tap()
         waitForMissing("cardEditorActionsOverlay")
     }
 
@@ -3320,7 +3380,17 @@ final class ArcNoteUITests: XCTestCase {
         tap("tab.library")
         waitFor("card.home.\(cardID)", timeout: 30)
 
-        tap("home.card.menu.\(cardID)")
+        let cardMenu = waitFor("home.card.menu.\(cardID)")
+        cardMenu.tap()
+        _ = waitFor("popup-menu.overlay")
+        _ = waitFor("popup-menu.overlay.surface")
+        XCTAssertFalse(cardMenu.isHittable)
+        waitForButton("popup-menu.close").tap()
+        waitForMissing("popup-menu.overlay")
+        XCTAssertTrue(cardMenu.waitForExistence(timeout: 10))
+        XCTAssertTrue(cardMenu.isHittable)
+
+        cardMenu.tap()
         waitFor("popup-menu.item.root")
         tap("popup-menu.item.public")
         waitForSmokeCardState(id: cardID, token: session.token) {
@@ -3804,7 +3874,8 @@ final class ArcNoteUITests: XCTestCase {
         _ = waitForEnabledButton("cardEditorAddTag", timeout: 20)
         openEditorCardActions()
 
-        let overlay = waitFor("cardEditorActionsOverlay")
+        _ = waitFor("cardEditorActionsOverlay")
+        let surface = waitFor("cardEditorActionsOverlay.surface")
         let close = waitForButton("cardEditorActionsClose")
         let actions = editorActionButtons()
         XCTAssertEqual(actions.count, 8)
@@ -3816,15 +3887,19 @@ final class ArcNoteUITests: XCTestCase {
             ]
         )
         XCTAssertFalse(app.buttons["cardEditorRemoveBackgroundButton"].exists)
-        assertEditorActionGridLayout(actions, inside: overlay)
+        assertEditorActionGridLayout(actions, inside: surface)
         assertEditorActionCloseLayout(
             close,
             relativeTo: actions,
-            inside: overlay
+            inside: surface
         )
         captureVisual("card-editor-action-box-grid")
         close.tap()
         waitForMissing("cardEditorActionsOverlay")
+
+        openEditorCardActions()
+        _ = waitFor("cardEditorActionsOverlay.surface")
+        dismissEditorCardActions()
         closeNewNoteEditor()
     }
 
@@ -3850,15 +3925,16 @@ final class ArcNoteUITests: XCTestCase {
         waitFor("cardEditorContent", timeout: 20)
         openEditorCardActions()
 
-        let overlay = waitFor("cardEditorActionsOverlay")
+        _ = waitFor("cardEditorActionsOverlay")
+        let surface = waitFor("cardEditorActionsOverlay.surface")
         let close = waitForButton("cardEditorActionsClose")
         let actions = editorActionButtons()
         XCTAssertEqual(actions.count, 8)
-        assertEditorActionGridLayout(actions, inside: overlay)
+        assertEditorActionGridLayout(actions, inside: surface)
         assertEditorActionCloseLayout(
             close,
             relativeTo: actions,
-            inside: overlay
+            inside: surface
         )
         XCTAssertTrue(close.isHittable)
         for action in actions {
@@ -3913,6 +3989,10 @@ final class ArcNoteUITests: XCTestCase {
         waitForSmokeCardState(id: cardID, token: session.token) {
             !($0.backgroundMediaRef ?? "").isEmpty
         }
+        let firstBackgroundRef = try XCTUnwrap(
+            fetchSmokeCard(id: cardID, token: session.token)
+                .backgroundMediaRef
+        )
         waitFor("card.home.\(cardID)", timeout: 30).tap()
         waitFor("cardEditorContent", timeout: 20)
         _ = waitForEnabledButton("cardEditorAddTag", timeout: 20)
@@ -3923,8 +4003,30 @@ final class ArcNoteUITests: XCTestCase {
         )
         XCTAssertFalse(app.buttons["cardEditorRemoveBackgroundButton"].exists)
         captureVisual("card-editor-background-uploaded")
+
+        waitForEditorCardAction(
+            "cardEditorBackgroundButton",
+            requireHittable: true
+        ).tap()
+        try selectFirstPhotoFromImagePicker()
+        XCTAssertEqual(
+            try fetchSmokeCard(id: cardID, token: session.token)
+                .backgroundMediaRef,
+            firstBackgroundRef,
+            "Replacing a background must remain staged until the editor saves"
+        )
+        openEditorCardActions()
+        XCTAssertEqual(
+            waitForEditorCardAction("cardEditorBackgroundButton").label,
+            "Background"
+        )
+        XCTAssertFalse(app.buttons["cardEditorRemoveBackgroundButton"].exists)
+        captureVisual("card-editor-background-replacement-staged")
         dismissEditorCardActions()
         closeNewNoteEditor()
+        waitForSmokeCardState(id: cardID, token: session.token) {
+            !($0.backgroundMediaRef ?? "").isEmpty
+        }
     }
 
     func testLibrarySoftDeleteFailureKeepsRetryableConfirmation() throws {
@@ -5683,6 +5785,33 @@ final class ArcNoteUITests: XCTestCase {
             "cardEditorActionRemove",
             "cardEditorActionPin",
         ]
+        let grid = waitFor(
+            "cardEditorActionGrid",
+            timeout: 20,
+            file: file,
+            line: line
+        )
+        let deadline = Date().addingTimeInterval(20)
+        var actualButtons = grid.buttons.allElementsBoundByIndex
+        while Date() < deadline && actualButtons.count != identifiers.count {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+            actualButtons = grid.buttons.allElementsBoundByIndex
+        }
+        XCTAssertEqual(
+            actualButtons.count,
+            identifiers.count,
+            "The Action Box grid must contain exactly eight buttons",
+            file: file,
+            line: line
+        )
+        XCTAssertEqual(
+            Set(actualButtons.map(\.identifier)),
+            Set(identifiers),
+            "The Action Box grid contains an unexpected semantic button",
+            file: file,
+            line: line
+        )
+
         let actions = identifiers.map { identifier in
             waitForEditorCardAction(
                 identifier,
@@ -5692,13 +5821,6 @@ final class ArcNoteUITests: XCTestCase {
                 line: line
             )
         }
-        XCTAssertEqual(
-            Set(actions.map(\.identifier)),
-            Set(identifiers),
-            "The Action Box must expose exactly the eight accepted semantic buttons",
-            file: file,
-            line: line
-        )
         return actions
     }
 

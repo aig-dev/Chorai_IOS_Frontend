@@ -1,4 +1,37 @@
 import SwiftUI
+import UIKit
+
+private struct ActionBoxTileSizeKey: EnvironmentKey {
+    static let defaultValue: CGFloat = ActionBoxLayoutMetrics.standardTileSize
+}
+
+private extension EnvironmentValues {
+    var actionBoxTileSize: CGFloat {
+        get { self[ActionBoxTileSizeKey.self] }
+        set { self[ActionBoxTileSizeKey.self] = newValue }
+    }
+}
+
+private enum ActionBoxLayoutMetrics {
+    static let standardTileSize: CGFloat = 90
+    static let minimumTileSize: CGFloat = 44
+    static let tileSpacing: CGFloat = 15
+    static let headerHeight: CGFloat = 60
+    static let surfaceScale: CGFloat = 0.9
+
+    static func tileSize(
+        surfaceSide: CGFloat,
+        rowCount: Int
+    ) -> CGFloat {
+        let safeRowCount = max(rowCount, 1)
+        let totalSpacing = CGFloat(safeRowCount - 1) * tileSpacing
+        let availableHeight = surfaceSide - headerHeight - totalSpacing
+        return max(
+            minimumTileSize,
+            min(standardTileSize, availableHeight / CGFloat(safeRowCount))
+        )
+    }
+}
 
 enum ActionBoxIcon {
     case asset(String)
@@ -10,6 +43,7 @@ struct ActionBoxOverlay<Content: View>: View {
     let accessibilityLabel: String
     let accessibilityIdentifier: String
     let closeAccessibilityIdentifier: String
+    let rowCount: Int
     private let content: Content
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -21,17 +55,43 @@ struct ActionBoxOverlay<Content: View>: View {
         accessibilityLabel: String,
         accessibilityIdentifier: String,
         closeAccessibilityIdentifier: String,
+        rowCount: Int,
         @ViewBuilder content: () -> Content
     ) {
         _isPresented = isPresented
         self.accessibilityLabel = accessibilityLabel
         self.accessibilityIdentifier = accessibilityIdentifier
         self.closeAccessibilityIdentifier = closeAccessibilityIdentifier
+        self.rowCount = rowCount
         self.content = content()
     }
 
     var body: some View {
         GeometryReader { geometry in
+            let availableHeight = max(
+                0,
+                geometry.size.height
+                    - geometry.safeAreaInsets.top
+                    - geometry.safeAreaInsets.bottom
+            )
+            let surfaceSide = min(
+                geometry.size.width * ActionBoxLayoutMetrics.surfaceScale,
+                availableHeight * ActionBoxLayoutMetrics.surfaceScale
+            )
+            let preferredSurfaceY = geometry.size.height / 2.2
+            let minimumSurfaceY = geometry.safeAreaInsets.top + surfaceSide / 2
+            let maximumSurfaceY = geometry.size.height
+                - geometry.safeAreaInsets.bottom
+                - surfaceSide / 2
+            let surfaceY = min(
+                max(preferredSurfaceY, minimumSurfaceY),
+                maximumSurfaceY
+            )
+            let tileSize = ActionBoxLayoutMetrics.tileSize(
+                surfaceSide: surfaceSide,
+                rowCount: rowCount
+            )
+
             ZStack {
                 Color.black
                     .opacity(animateContent ? 0.5 : 0)
@@ -43,51 +103,57 @@ struct ActionBoxOverlay<Content: View>: View {
                     }
                     .accessibilityHidden(true)
 
-                ZStack {
-                    VStack {
-                        HStack {
-                            Spacer()
-                            Button(action: dismiss) {
-                                Image(systemName: "xmark")
-                                    .font(.title2)
-                                    .foregroundColor(.white)
-                                    .frame(width: 30, height: 30)
-                                    .frame(width: 44, height: 44)
-                                    .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel("Close")
-                            .accessibilityIdentifier(closeAccessibilityIdentifier)
-                        }
-                        .padding(.horizontal, 20)
-                        .padding(.top, 16)
-
+                VStack(spacing: 0) {
+                    HStack {
                         Spacer()
+                        Button(action: dismiss) {
+                            Image(systemName: "xmark")
+                                .font(.title2)
+                                .foregroundColor(.white)
+                                .frame(width: 30, height: 30)
+                                .frame(width: 44, height: 44)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Close")
+                        .accessibilityIdentifier(closeAccessibilityIdentifier)
                     }
+                    .frame(height: 44)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 16)
+
+                    Spacer(minLength: 0)
 
                     content
-                        .padding(.top, 44)
-                        .padding(.horizontal, 0)
+                        .environment(\.actionBoxTileSize, tileSize)
+
+                    Spacer(minLength: 0)
                 }
+                .frame(
+                    width: surfaceSide,
+                    height: surfaceSide
+                )
                 .background(actionBoxBackground)
                 .cornerRadius(20)
-                .frame(
-                    width: geometry.size.width * 0.9,
-                    height: geometry.size.width * 0.9
-                )
                 .clipped()
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("\(accessibilityIdentifier).surface")
                 .position(
                     x: geometry.size.width / 2,
-                    y: geometry.size.height / 2.2
+                    y: surfaceY
                 )
                 .opacity(animateContent ? 1 : 0)
                 .scaleEffect(animateContent ? 1 : 0.8)
             }
         }
         .accessibilityElement(children: .contain)
+        .accessibilityAddTraits(.isModal)
         .accessibilityLabel(accessibilityLabel)
         .accessibilityIdentifier(accessibilityIdentifier)
         .onAppear {
+            DispatchQueue.main.async {
+                UIAccessibility.post(notification: .screenChanged, argument: nil)
+            }
             if reduceMotion {
                 animateContent = true
             } else {
@@ -103,6 +169,9 @@ struct ActionBoxOverlay<Content: View>: View {
         }
         .onDisappear {
             canDismissFromBackdrop = false
+            DispatchQueue.main.async {
+                UIAccessibility.post(notification: .screenChanged, argument: nil)
+            }
         }
     }
 
@@ -208,6 +277,7 @@ struct ActionBoxTile: View {
     let accessibilityIdentifier: String
     let action: () -> Void
 
+    @Environment(\.actionBoxTileSize) private var tileSize
     @ScaledMetric(relativeTo: .caption) private var scaledLabelSize: CGFloat = 14
 
     init(
@@ -240,8 +310,10 @@ struct ActionBoxTile: View {
                     .foregroundColor(.white)
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
+                    .minimumScaleFactor(0.65)
+                    .allowsTightening(true)
             }
-            .frame(width: 84, height: 84)
+            .frame(width: tileSize, height: tileSize)
             .background(
                 RoundedRectangle(cornerRadius: 12)
                     .fill(
@@ -277,9 +349,11 @@ struct ActionBoxTile: View {
 }
 
 struct ActionBoxEmptyTile: View {
+    @Environment(\.actionBoxTileSize) private var tileSize
+
     var body: some View {
         Color.clear
-            .frame(width: 84, height: 84)
+            .frame(width: tileSize, height: tileSize)
             .accessibilityHidden(true)
     }
 }

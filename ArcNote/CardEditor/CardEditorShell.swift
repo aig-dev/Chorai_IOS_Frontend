@@ -346,11 +346,19 @@ struct CardEditorShellFixtureScreen: View {
                 )
             }
         }
+        .frame(height: fixtureViewportHeight, alignment: .top)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .sheet(isPresented: $isAddingTag) {
             CardEditorNativeTagInputFixture {
                 isAddingTag = false
             }
         }
+    }
+
+    private var fixtureViewportHeight: CGFloat? {
+        ProcessInfo.processInfo.environment[
+            "CHORAI_CARD_EDITOR_FIXTURE_VIEWPORT_HEIGHT"
+        ].flatMap(Double.init).map { CGFloat($0) }
     }
 
     private var fixtureCardActionsHandler: (() -> Void)? {

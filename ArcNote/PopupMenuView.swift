@@ -23,6 +23,15 @@ enum PopupMenuLayout {
     case grid2x2    // 当前布局：Spark, Share, Link, View
     case grid3x3    // 新布局：Edit, Spark, Merge, Private, Share, Link, Root, Remove, Pin
     case grid3x2    // 新布局：View, Spark, Share, Link, Root, Pin
+
+    var rowCount: Int {
+        switch self {
+        case .grid2x2:
+            return 2
+        case .grid3x3, .grid3x2:
+            return 3
+        }
+    }
 }
 
 // MARK: - PopupMenu Modifier
@@ -34,7 +43,6 @@ struct PopupMenuModifier: ViewModifier {
     
     func body(content: Content) -> some View {
         content
-            .accessibilityHidden(isPresented)
             .overlay(
                 Group {
                     if isPresented {
@@ -57,7 +65,8 @@ struct PopupMenuOverlay: View {
             isPresented: $isPresented,
             accessibilityLabel: "Card Actions",
             accessibilityIdentifier: "popup-menu.overlay",
-            closeAccessibilityIdentifier: "popup-menu.close"
+            closeAccessibilityIdentifier: "popup-menu.close",
+            rowCount: layout.rowCount
         ) {
             menuContent
         }
