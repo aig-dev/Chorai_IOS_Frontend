@@ -531,18 +531,38 @@ final class NewNoteViewSourceContractTests: XCTestCase {
         )
         XCTAssertEqual(actionGridBlocks.count, 1)
         let actionGrid = try XCTUnwrap(actionGridBlocks.first)
+        let actionGridContainment =
+            ".accessibilityElement(children: .contain)"
         let actionGridIdentifier =
             ".accessibilityIdentifier(\"cardEditorActionGrid\")"
-        let actionGridIdentifierRange = try XCTUnwrap(
+        XCTAssertEqual(
+            Self.occurrenceCount(actionGridContainment, in: grid),
+            1
+        )
+        let actionGridContainmentRange = try XCTUnwrap(
             grid.range(
-                of: actionGridIdentifier,
+                of: actionGridContainment,
                 range: actionGrid.endIndex..<grid.endIndex
             )
         )
         XCTAssertTrue(
-            grid[actionGrid.endIndex..<actionGridIdentifierRange.lowerBound]
+            grid[actionGrid.endIndex..<actionGridContainmentRange.lowerBound]
                 .allSatisfy { $0.isWhitespace },
-            "cardEditorActionGrid must be attached directly to the action-grid VStack"
+            "The action-grid VStack must directly contain its accessibility children"
+        )
+        let actionGridIdentifierRange = try XCTUnwrap(
+            grid.range(
+                of: actionGridIdentifier,
+                range: actionGridContainmentRange.upperBound..<grid.endIndex
+            )
+        )
+        let containmentEnd = actionGridContainmentRange.upperBound
+        let identifierStart = actionGridIdentifierRange.lowerBound
+        let containmentToIdentifier = containmentEnd..<identifierStart
+        XCTAssertTrue(
+            grid[containmentToIdentifier]
+                .allSatisfy { $0.isWhitespace },
+            "cardEditorActionGrid must follow the VStack containment modifier"
         )
         XCTAssertEqual(
             Self.occurrenceCount("ActionBoxTile(", in: String(actionGrid)),

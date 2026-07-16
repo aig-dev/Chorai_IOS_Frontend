@@ -104,6 +104,7 @@ struct CardEditorActionBox: View {
                     }
                 }
             }
+            .accessibilityElement(children: .contain)
             .accessibilityIdentifier("cardEditorActionGrid")
         }
     }
