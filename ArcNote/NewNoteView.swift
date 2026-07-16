@@ -285,70 +285,23 @@ private struct CardEditorSessionView: View {
             onSave: retryHandler
         )
         .linkPopup()
-        .confirmationDialog(
-            "Card Actions",
-            isPresented: $showCardActions,
-            titleVisibility: .visible
-        ) {
-            Button("Link") {
-                addOntologyLink()
+        .accessibilityHidden(showCardActions)
+        .overlay {
+            if showCardActions {
+                CardEditorActionBox(
+                    isPresented: $showCardActions,
+                    isEnabled: bodyModel.canMutate && !isBusy,
+                    isPinned: isPinned,
+                    onBackground: { showBackgroundPicker = true },
+                    onSpark: { performPersistedCardAction(.notification("NavigateToSpark")) },
+                    onMerge: { performPersistedCardAction(.notification("NavigateToMerge")) },
+                    onShare: { performPersistedCardAction(.notification("ShowCardShare")) },
+                    onLink: addOntologyLink,
+                    onRoot: { performPersistedCardAction(.notification("NavigateToRoot")) },
+                    onRemove: { showRemoveCardConfirmation = true },
+                    onTogglePin: { performPersistedCardAction(.togglePin) }
+                )
             }
-            .disabled(!bodyModel.canMutate || isBusy)
-            .accessibilityIdentifier("cardEditorActionLink")
-
-            Button(
-                editorBackground == .none
-                    ? "Add Background"
-                    : "Replace Background"
-            ) {
-                DispatchQueue.main.async {
-                    showBackgroundPicker = true
-                }
-            }
-            .disabled(!bodyModel.canMutate || isBusy)
-            .accessibilityIdentifier("cardEditorBackgroundButton")
-
-            if editorBackground != .none {
-                Button("Remove Background", role: .destructive) {
-                    removeBackground()
-                }
-                .disabled(!bodyModel.canMutate || isBusy)
-                .accessibilityIdentifier("cardEditorRemoveBackgroundButton")
-            }
-
-            Button("Share") {
-                performPersistedCardAction(.notification("ShowCardShare"))
-            }
-            .accessibilityIdentifier("cardEditorActionShare")
-
-            Button("Spark") {
-                performPersistedCardAction(.notification("NavigateToSpark"))
-            }
-            .accessibilityIdentifier("cardEditorActionSpark")
-
-            Button("Merge") {
-                performPersistedCardAction(.notification("NavigateToMerge"))
-            }
-            .accessibilityIdentifier("cardEditorActionMerge")
-
-            Button("Root") {
-                performPersistedCardAction(.notification("NavigateToRoot"))
-            }
-            .accessibilityIdentifier("cardEditorActionRoot")
-
-            Button(isPinned ? "Unpin" : "Pin") {
-                performPersistedCardAction(.togglePin)
-            }
-            .accessibilityIdentifier("cardEditorActionPin")
-
-            Button("Remove", role: .destructive) {
-                DispatchQueue.main.async {
-                    showRemoveCardConfirmation = true
-                }
-            }
-            .accessibilityIdentifier("cardEditorActionRemove")
-
-            Button("Cancel", role: .cancel) {}
         }
         .alert("Remove this note?", isPresented: $showRemoveCardConfirmation) {
             Button("Cancel", role: .cancel) {}
@@ -728,20 +681,6 @@ private struct CardEditorSessionView: View {
                 retryAction = nil
             } catch {
                 saveMessage = "Couldn't read that background image."
-                retryAction = nil
-            }
-        }
-    }
-
-    private func removeBackground() {
-        guard bodyModel.canMutate, !isBusy else { return }
-        Task {
-            let didRemove = await editingStore.removeBackground()
-            if !didRemove {
-                saveMessage = "Couldn't remove the background. Retry."
-                retryAction = .store
-            } else {
-                saveMessage = nil
                 retryAction = nil
             }
         }

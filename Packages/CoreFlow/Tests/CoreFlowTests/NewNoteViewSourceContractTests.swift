@@ -343,20 +343,43 @@ final class NewNoteViewSourceContractTests: XCTestCase {
             Self.functionBody(in: source, signature: "func handleSelectedLink(")
         )
         XCTAssertTrue(selection.contains("retryAction = .store"))
-
-        let backgroundRemoval = try XCTUnwrap(
-            Self.functionBody(in: source, signature: "func removeBackground()")
-        )
-        XCTAssertTrue(backgroundRemoval.contains("retryAction = .store"))
     }
 
-    func testCardActionsOpenWithoutPersistenceAndContainLocalEditorActions() throws {
+    func testCardActionsUseSharedFixedGridWithoutPersistenceOrBackgroundRemoval() throws {
         let source = try Self.newNoteSource()
+        let grid = (try? String(
+            contentsOf: Self.repositoryRoot.appendingPathComponent(
+                "ArcNote/CardEditor/CardEditorActionBox.swift"
+            ),
+            encoding: .utf8
+        )) ?? ""
+
         XCTAssertTrue(source.contains("saveActionTitle: \"Retry\""))
         XCTAssertTrue(source.contains("onOpenCardActions: cardActionsHandler"))
-        XCTAssertTrue(source.contains(".confirmationDialog("))
+        XCTAssertTrue(source.contains("CardEditorActionBox("))
+        XCTAssertTrue(source.contains(".accessibilityHidden(showCardActions)"))
+        XCTAssertFalse(
+            source.contains(".confirmationDialog(\n            \"Card Actions\"")
+        )
         XCTAssertFalse(source.contains(".popupMenu("))
         XCTAssertFalse(source.contains("layout: .grid3x3"))
+        XCTAssertFalse(source.contains("Remove Background"))
+        XCTAssertFalse(source.contains("cardEditorRemoveBackgroundButton"))
+
+        for wiring in [
+            "onBackground: { showBackgroundPicker = true }",
+            "onSpark: { performPersistedCardAction(.notification(\"NavigateToSpark\")) }",
+            "onMerge: { performPersistedCardAction(.notification(\"NavigateToMerge\")) }",
+            "onShare: { performPersistedCardAction(.notification(\"ShowCardShare\")) }",
+            "onLink: addOntologyLink",
+            "onRoot: { performPersistedCardAction(.notification(\"NavigateToRoot\")) }",
+            "onTogglePin: { performPersistedCardAction(.togglePin) }",
+        ] {
+            XCTAssertTrue(
+                source.contains(wiring),
+                "Card Actions must preserve its lazy-persist route: \(wiring)"
+            )
+        }
 
         let actions = try XCTUnwrap(
             Self.functionBody(in: source, signature: "func openCardActions()")
@@ -377,18 +400,51 @@ final class NewNoteViewSourceContractTests: XCTestCase {
             )
         }
 
-        XCTAssertTrue(source.contains("Button(\"Link\")"))
-        XCTAssertTrue(source.contains("addOntologyLink()"))
-        XCTAssertTrue(source.contains("cardEditorActionLink"))
-        XCTAssertTrue(source.contains("editorBackground == .none"))
-        XCTAssertTrue(source.contains("? \"Add Background\""))
-        XCTAssertTrue(source.contains(": \"Replace Background\""))
-        XCTAssertTrue(source.contains("cardEditorBackgroundButton"))
-        XCTAssertTrue(source.contains("DispatchQueue.main.async"))
-        XCTAssertTrue(source.contains("showBackgroundPicker = true"))
-        XCTAssertTrue(source.contains("if editorBackground != .none"))
-        XCTAssertTrue(source.contains("Button(\"Remove Background\", role: .destructive)"))
-        XCTAssertTrue(source.contains("cardEditorRemoveBackgroundButton"))
+        XCTAssertTrue(grid.contains("ActionBoxOverlay("))
+        XCTAssertTrue(
+            grid.contains(
+                "accessibilityIdentifier: \"cardEditorActionsOverlay\""
+            )
+        )
+        XCTAssertTrue(
+            grid.contains(
+                "closeAccessibilityIdentifier: \"cardEditorActionsClose\""
+            )
+        )
+        XCTAssertTrue(grid.contains("ActionBoxEmptyTile()"))
+        XCTAssertTrue(grid.contains("text: \"Background\""))
+        XCTAssertTrue(grid.contains("role: .destructive"))
+        XCTAssertTrue(grid.contains("isPresented = false"))
+        XCTAssertTrue(grid.contains("DispatchQueue.main.async"))
+        XCTAssertFalse(grid.contains("Remove Background"))
+        XCTAssertFalse(grid.contains("cardEditorRemoveBackgroundButton"))
+        XCTAssertEqual(
+            grid.components(separatedBy: "HStack(spacing: 15)").count - 1,
+            3
+        )
+
+        let acceptedOrder = [
+            "\"cardEditorBackgroundButton\"",
+            "\"cardEditorActionSpark\"",
+            "\"cardEditorActionMerge\"",
+            "ActionBoxEmptyTile()",
+            "\"cardEditorActionShare\"",
+            "\"cardEditorActionLink\"",
+            "\"cardEditorActionRoot\"",
+            "\"cardEditorActionRemove\"",
+            "\"cardEditorActionPin\"",
+        ]
+        var lowerBound = grid.startIndex
+        for marker in acceptedOrder {
+            guard let range = grid.range(
+                of: marker,
+                range: lowerBound..<grid.endIndex
+            ) else {
+                XCTFail("Missing or out-of-order editor action: \(marker)")
+                continue
+            }
+            lowerBound = range.upperBound
+        }
     }
 
     func testIDScopedCardActionsPersistLazilyAndRetryTheirExactIntent() throws {
