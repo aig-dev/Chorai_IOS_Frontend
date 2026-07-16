@@ -742,6 +742,7 @@ private struct CardEditorSessionView: View {
 
     private func openCardActions() {
         guard bodyModel.canSave, !isBusy else { return }
+        bodyModel.dismissKeyboard()
         showCardActions = true
     }
 

@@ -42,6 +42,8 @@ No actionable P0, P1, or P2 visual or interaction mismatch remains.
 - Link behavior: related links remain display-only in editor metadata. New links are initiated by Card Actions or the existing `@` shortcut, which continue into the same link flow.
 - Standard geometry: the 402-point View Card and editor captures both retain the mainstream 90 x 90 point tile metric.
 - Compact geometry: tile size adapts only when the available width or safe-area height cannot contain the 60-point header, three rows, and two 15-point gaps. The 375-point portrait fixture and a 350-point short-height fixture keep all actions and Close inside the surface without overlap; label scaling keeps `Background` complete instead of truncated.
+- Keyboard geometry: opening editor Card Actions dismisses the body keyboard first, while the shared overlay ignores the transient keyboard safe area and resigns first responder as a fallback. The physical viewport therefore remains available to the three-row grid throughout presentation.
+- Shared two-row geometry: 2 x 2 menus do not reserve the three-row 60-point header. Their four-tile bounds remain vertically centered in the square, with Close independently positioned above the grid, preserving the pre-refactor mainstream placement.
 - Accessibility: the shared overlay declares `.isModal`, posts `.screenChanged` when entering and leaving, and keeps the underlying controls non-hittable while visible without dynamically destroying their accessibility subtree. Editor and mainstream Close -> reopen journeys both pass.
 - Accessibility XXXL: all eight actions and Close remain enabled, hittable, separated, and inside the surface without turning into a vertical sheet or requiring scrolling.
 - Rendering and metadata: literal `<p>` markup stays out of the editor, and tag/link presentation continues to reuse the View Card components.
@@ -53,11 +55,18 @@ No actionable P0, P1, or P2 visual or interaction mismatch remains.
   - `/tmp/ChoraiActionBoxCompact375.xcresult` — compact 375-point portrait passed;
   - `/tmp/ChoraiActionBoxShortViewport5.xcresult` — short-height safe-area fixture passed;
   - `/tmp/ChoraiActionBoxDeterministicFinal0ba0c9a.xcresult` — three current deterministic tests passed: standard geometry with editor Close -> reopen, compact 375-point portrait, and short-height safe-area containment.
+- Review-fix fixtures:
+  - `/tmp/ChoraiActionBoxReviewFixesFocusedUI.xcresult` — keyboard-open editor presentation and frozen 2 x 2 centering passed, 2 tests with 0 failures;
+  - `/tmp/ChoraiActionBoxBackgroundReplacementStrict.xcresult` — Go-backed Background add then replace passed with the persisted replacement ref required to differ from the first ref;
+  - `/tmp/ChoraiActionBoxLegacyHTMLStrict.xcresult` — legacy paragraph and strong markup hydrate without exposing literal tags;
+  - `/tmp/ChoraiActionBoxKeyboardStandard90.xcresult` — keyboard-open presentation restores the standard 90 x 90 point tiles before interaction;
+  - `/tmp/ChoraiActionBoxFinalLiveRegression.xcresult` — new-draft Card Actions remains lazy and mainstream public/private plus Pin/Unpin behavior remains intact, 2 tests with 0 failures.
 - Focused source contracts: 31 tests passed, 0 failed.
+- BlockNote bridge/resources: 40 tests passed, 0 failed, including the bundled `@` trigger-to-native-link wiring.
 - Covered journeys:
   - default eight-button grid, exact real grid descendants, order, single Background, and no Remove Background;
   - Accessibility XXXL geometry and hit targets;
-  - Background upload, staged state, save, reload, replacement route, and Go persistence;
+  - Background upload, staged state, save, reload, replacement route, and a distinct persisted Go replacement ref;
   - opening Card Actions on a new draft without creating a server card;
   - staging Background plus public state before the first save;
   - mainstream Close -> reopen, public/private, and Pin/Unpin mutations.
@@ -76,6 +85,10 @@ No actionable P0, P1, or P2 visual or interaction mismatch remains.
    - Fix: restore 90-point standard tiles, reserve a 60-point header, and adapt only below the available width/height threshold.
 6. Stateful accessibility hiding could leave controls unavailable after Close.
    - Fix: put modal semantics on the stable shared overlay and refresh accessibility focus with `.screenChanged`.
+7. The shared three-row header could shift legacy 2 x 2 menus down by 30 points.
+   - Fix: reserve the header only for three-row layouts and keep 2 x 2 content centered beneath an independent Close layer.
+8. A visible keyboard could temporarily reduce three-row layout height below its 44-point hit-target floor.
+   - Fix: dismiss the editor keyboard before presentation and make shared overlay geometry independent of the keyboard safe area.
 
 ## Implementation checklist
 
@@ -89,5 +102,7 @@ No actionable P0, P1, or P2 visual or interaction mismatch remains.
 - [x] Verify 375-point width and short safe-area height without overlap or truncation.
 - [x] Verify editor and mainstream Close -> reopen accessibility/touch recovery.
 - [x] Verify Background add/replace routing and new-draft lazy-save behavior against Go.
+- [x] Preserve centered 2 x 2 mainstream menus while reserving Close space for three-row layouts.
+- [x] Verify keyboard-open Card Actions restores full-height geometry before interaction.
 
 final result: passed

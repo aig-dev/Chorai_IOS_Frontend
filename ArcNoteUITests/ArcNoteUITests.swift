@@ -147,7 +147,7 @@ final class ArcNoteUITests: XCTestCase {
                 "Missing hydrated legacy text fragment: \(fragment)"
             )
         }
-        for literalTag in ["<p>", "</p>"] {
+        for literalTag in ["<p>", "</p>", "<strong>", "</strong>"] {
             XCTAssertFalse(
                 app.descendants(matching: .any).matching(
                     NSPredicate(format: "label CONTAINS %@", literalTag)
@@ -292,6 +292,42 @@ final class ArcNoteUITests: XCTestCase {
         waitFor("cardEditorFormattingBar")
     }
 
+    func testCardEditorActionBoxDismissesKeyboardBeforePresentation() {
+        launchCardEditorFixture(mode: "keyboard")
+
+        let body = waitFor("cardEditorBodyWebView")
+        body.coordinate(
+            withNormalizedOffset: CGVector(dx: 0.25, dy: 0.04)
+        ).tap()
+        let keyboard = app.keyboards.firstMatch
+        XCTAssertTrue(keyboard.waitForExistence(timeout: 10))
+        waitFor("cardEditorFormattingBar")
+
+        waitForButton("cardEditorMoreButton").tap()
+        let surface = waitFor("cardEditorActionsOverlay.surface")
+        let close = waitForButton("cardEditorActionsClose")
+        let actions = editorActionButtons()
+
+        waitForElementToDisappear(keyboard)
+        waitForMissing("cardEditorFormattingBar")
+        XCTAssertTrue(app.frame.insetBy(dx: -1, dy: -1).contains(surface.frame))
+        assertEditorActionGridLayout(actions, inside: surface)
+        assertEditorActionCloseLayout(
+            close,
+            relativeTo: actions,
+            inside: surface
+        )
+        for action in actions {
+            XCTAssertGreaterThanOrEqual(action.frame.width, 44)
+            XCTAssertGreaterThanOrEqual(action.frame.height, 44)
+            XCTAssertEqual(action.frame.width, 90, accuracy: 1)
+            XCTAssertEqual(action.frame.height, 90, accuracy: 1)
+        }
+        captureVisual("card-editor-action-box-keyboard-dismissed")
+        close.tap()
+        waitForMissing("cardEditorActionsOverlay")
+    }
+
     func testNativeTagInputDoesNotShowBodyFormattingBar() {
         launchCardEditorFixture(mode: "empty")
 
@@ -432,6 +468,51 @@ final class ArcNoteUITests: XCTestCase {
         captureVisual("card-editor-action-box-short-viewport")
         close.tap()
         waitForMissing("cardEditorActionsOverlay")
+    }
+
+    func testSharedTwoRowActionBoxPreservesCenteredGrid() {
+        app.launchEnvironment[
+            "CHORAI_CARD_EDITOR_FIXTURE_ACTION_BOX_LAYOUT"
+        ] = "grid2x2"
+        launchCardEditorFixture(mode: "empty")
+
+        waitForButton("cardEditorMoreButton").tap()
+        let surface = waitFor("popup-menu.overlay.surface")
+        let close = waitForButton("popup-menu.close")
+        let identifiers = [
+            "popup-menu.item.spark",
+            "popup-menu.item.share",
+            "popup-menu.item.link",
+            "popup-menu.item.edit",
+        ]
+        let actions = identifiers.map { waitForButton($0) }
+        let actualActions = app.buttons.matching(
+            NSPredicate(format: "identifier BEGINSWITH %@", "popup-menu.item.")
+        ).allElementsBoundByIndex
+
+        XCTAssertEqual(Set(actualActions.map(\.identifier)), Set(identifiers))
+        XCTAssertEqual(actions[0].frame.midY, actions[1].frame.midY, accuracy: 3)
+        XCTAssertEqual(actions[2].frame.midY, actions[3].frame.midY, accuracy: 3)
+        XCTAssertEqual(actions[0].frame.midX, actions[2].frame.midX, accuracy: 3)
+        XCTAssertEqual(actions[1].frame.midX, actions[3].frame.midX, accuracy: 3)
+        XCTAssertLessThan(actions[0].frame.midY, actions[2].frame.midY)
+        XCTAssertLessThan(actions[0].frame.midX, actions[1].frame.midX)
+
+        let actionBounds = actions.dropFirst().reduce(actions[0].frame) {
+            $0.union($1.frame)
+        }
+        XCTAssertEqual(actionBounds.midY, surface.frame.midY, accuracy: 3)
+        XCTAssertLessThanOrEqual(close.frame.maxY, actionBounds.minY)
+        XCTAssertTrue(
+            surface.frame.insetBy(dx: -1, dy: -1).contains(close.frame)
+        )
+        XCTAssertTrue(
+            surface.frame.insetBy(dx: -1, dy: -1).contains(actionBounds)
+        )
+        XCTAssertEqual(actions[0].frame.width, 90, accuracy: 1)
+        captureVisual("shared-action-box-grid2x2-centered")
+        close.tap()
+        waitForMissing("popup-menu.overlay")
     }
 
     func testCardEditorLongTagStaysInsideReadableWidth() {
@@ -4025,8 +4106,18 @@ final class ArcNoteUITests: XCTestCase {
         dismissEditorCardActions()
         closeNewNoteEditor()
         waitForSmokeCardState(id: cardID, token: session.token) {
-            !($0.backgroundMediaRef ?? "").isEmpty
+            guard let replacementRef = $0.backgroundMediaRef else {
+                return false
+            }
+            return !replacementRef.isEmpty
+                && replacementRef != firstBackgroundRef
         }
+        XCTAssertNotEqual(
+            try fetchSmokeCard(id: cardID, token: session.token)
+                .backgroundMediaRef,
+            firstBackgroundRef,
+            "Saving the staged replacement must persist a new background ref"
+        )
     }
 
     func testLibrarySoftDeleteFailureKeepsRetryableConfirmation() throws {

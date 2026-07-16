@@ -331,19 +331,28 @@ struct CardEditorShellFixtureScreen: View {
                 .allowsHitTesting(false)
 
             if showCardActions {
-                CardEditorActionBox(
-                    isPresented: $showCardActions,
-                    isEnabled: bodyModel.canMutate,
-                    isPinned: isPinned,
-                    onBackground: { background = .local(Self.fixtureBackgroundData) },
-                    onSpark: {},
-                    onMerge: {},
-                    onShare: {},
-                    onLink: {},
-                    onRoot: {},
-                    onRemove: {},
-                    onTogglePin: { isPinned.toggle() }
-                )
+                if usesTwoRowActionBoxFixture {
+                    PopupMenuOverlay(
+                        isPresented: $showCardActions,
+                        layout: .grid2x2,
+                        cardData: nil,
+                        isOwnCard: true
+                    )
+                } else {
+                    CardEditorActionBox(
+                        isPresented: $showCardActions,
+                        isEnabled: bodyModel.canMutate,
+                        isPinned: isPinned,
+                        onBackground: { background = .local(Self.fixtureBackgroundData) },
+                        onSpark: {},
+                        onMerge: {},
+                        onShare: {},
+                        onLink: {},
+                        onRoot: {},
+                        onRemove: {},
+                        onTogglePin: { isPinned.toggle() }
+                    )
+                }
             }
         }
         .frame(height: fixtureViewportHeight, alignment: .top)
@@ -361,9 +370,18 @@ struct CardEditorShellFixtureScreen: View {
         ].flatMap(Double.init).map { CGFloat($0) }
     }
 
+    private var usesTwoRowActionBoxFixture: Bool {
+        ProcessInfo.processInfo.environment[
+            "CHORAI_CARD_EDITOR_FIXTURE_ACTION_BOX_LAYOUT"
+        ] == "grid2x2"
+    }
+
     private var fixtureCardActionsHandler: (() -> Void)? {
         guard mode != .blocked else { return nil }
-        return { showCardActions = true }
+        return {
+            bodyModel.dismissKeyboard()
+            showCardActions = true
+        }
     }
 
     private static func document(

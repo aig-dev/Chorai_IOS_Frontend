@@ -25,7 +25,10 @@ private enum ActionBoxLayoutMetrics {
     ) -> CGFloat {
         let safeRowCount = max(rowCount, 1)
         let totalSpacing = CGFloat(safeRowCount - 1) * tileSpacing
-        let availableHeight = surfaceSide - headerHeight - totalSpacing
+        let reservedHeaderHeight = rowCount >= 3 ? headerHeight : 0
+        let availableHeight = surfaceSide
+            - reservedHeaderHeight
+            - totalSpacing
         return max(
             minimumTileSize,
             min(standardTileSize, availableHeight / CGFloat(safeRowCount))
@@ -91,6 +94,7 @@ struct ActionBoxOverlay<Content: View>: View {
                 surfaceSide: surfaceSide,
                 rowCount: rowCount
             )
+            let reservesCloseHeader = rowCount >= 3
 
             ZStack {
                 Color.black
@@ -103,31 +107,42 @@ struct ActionBoxOverlay<Content: View>: View {
                     }
                     .accessibilityHidden(true)
 
-                VStack(spacing: 0) {
-                    HStack {
-                        Spacer()
-                        Button(action: dismiss) {
-                            Image(systemName: "xmark")
-                                .font(.title2)
-                                .foregroundColor(.white)
-                                .frame(width: 30, height: 30)
-                                .frame(width: 44, height: 44)
-                                .contentShape(Rectangle())
+                Group {
+                    if reservesCloseHeader {
+                        VStack(spacing: 0) {
+                            HStack {
+                                Spacer()
+                                closeButton
+                            }
+                            .frame(height: 44)
+                            .padding(.horizontal, 20)
+                            .padding(.top, 16)
+
+                            Spacer(minLength: 0)
+
+                            content
+                                .environment(\.actionBoxTileSize, tileSize)
+
+                            Spacer(minLength: 0)
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Close")
-                        .accessibilityIdentifier(closeAccessibilityIdentifier)
+                    } else {
+                        ZStack {
+                            content
+                                .environment(\.actionBoxTileSize, tileSize)
+
+                            VStack(spacing: 0) {
+                                HStack {
+                                    Spacer()
+                                    closeButton
+                                }
+                                .padding(.top, 16)
+                                .padding(.trailing, 20)
+
+                                Spacer(minLength: 0)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
-                    .frame(height: 44)
-                    .padding(.horizontal, 20)
-                    .padding(.top, 16)
-
-                    Spacer(minLength: 0)
-
-                    content
-                        .environment(\.actionBoxTileSize, tileSize)
-
-                    Spacer(minLength: 0)
                 }
                 .frame(
                     width: surfaceSide,
@@ -150,7 +165,14 @@ struct ActionBoxOverlay<Content: View>: View {
         .accessibilityAddTraits(.isModal)
         .accessibilityLabel(accessibilityLabel)
         .accessibilityIdentifier(accessibilityIdentifier)
+        .ignoresSafeArea(.keyboard, edges: .bottom)
         .onAppear {
+            UIApplication.shared.sendAction(
+                #selector(UIResponder.resignFirstResponder),
+                to: nil,
+                from: nil,
+                for: nil
+            )
             DispatchQueue.main.async {
                 UIAccessibility.post(notification: .screenChanged, argument: nil)
             }
@@ -190,6 +212,20 @@ struct ActionBoxOverlay<Content: View>: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
             isPresented = false
         }
+    }
+
+    private var closeButton: some View {
+        Button(action: dismiss) {
+            Image(systemName: "xmark")
+                .font(.title2)
+                .foregroundColor(.white)
+                .frame(width: 30, height: 30)
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Close")
+        .accessibilityIdentifier(closeAccessibilityIdentifier)
     }
 
     private var actionBoxBackground: some View {

@@ -384,7 +384,17 @@ final class NewNoteViewSourceContractTests: XCTestCase {
             Self.functionBody(in: source, signature: "func openCardActions()")
         )
         XCTAssertTrue(actions.contains("guard bodyModel.canSave, !isBusy else { return }"))
-        XCTAssertTrue(actions.contains("showCardActions = true"))
+        let dismissKeyboard = try XCTUnwrap(
+            actions.range(of: "bodyModel.dismissKeyboard()")
+        )
+        let presentActions = try XCTUnwrap(
+            actions.range(of: "showCardActions = true")
+        )
+        XCTAssertLessThan(
+            dismissKeyboard.lowerBound,
+            presentActions.lowerBound,
+            "The editor must restore full viewport height before presenting Card Actions"
+        )
         for forbidden in [
             "Task {",
             "applyCurrentSnapshot()",

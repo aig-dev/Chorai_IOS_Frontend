@@ -33,6 +33,14 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         XCTAssertTrue(
             actionBox.contains("static let headerHeight: CGFloat = 60")
         )
+        XCTAssertTrue(
+            actionBox.contains(
+                "let reservedHeaderHeight = rowCount >= 3 ? headerHeight : 0"
+            )
+        )
+        XCTAssertTrue(
+            actionBox.contains("let reservesCloseHeader = rowCount >= 3")
+        )
         XCTAssertTrue(actionBox.contains("static func tileSize("))
         XCTAssertTrue(
             actionBox.contains(".environment(\\.actionBoxTileSize, tileSize)")
@@ -58,6 +66,12 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         XCTAssertTrue(actionBox.contains("RoundedRectangle(cornerRadius: 12)"))
         XCTAssertTrue(actionBox.contains("@Environment(\\.accessibilityReduceMotion)"))
         XCTAssertTrue(actionBox.contains(".accessibilityAddTraits(.isModal)"))
+        XCTAssertTrue(
+            actionBox.contains(".ignoresSafeArea(.keyboard, edges: .bottom)")
+        )
+        XCTAssertTrue(
+            actionBox.contains("#selector(UIResponder.resignFirstResponder)")
+        )
         XCTAssertTrue(
             actionBox.contains(
                 "UIAccessibility.post(notification: .screenChanged, argument: nil)"
@@ -609,6 +623,11 @@ final class CardEditorShellSourceContractTests: XCTestCase {
             fixture.contains("CHORAI_CARD_EDITOR_FIXTURE_VIEWPORT_HEIGHT")
         )
         XCTAssertTrue(
+            fixture.contains(
+                "CHORAI_CARD_EDITOR_FIXTURE_ACTION_BOX_LAYOUT"
+            )
+        )
+        XCTAssertTrue(
             fixture.contains(".frame(height: fixtureViewportHeight, alignment: .top)")
         )
         XCTAssertTrue(
@@ -617,6 +636,8 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         XCTAssertTrue(fixture.contains("@State private var isPinned = false"))
         XCTAssertTrue(fixture.contains("if showCardActions {"))
         XCTAssertTrue(fixture.contains("CardEditorActionBox("))
+        XCTAssertTrue(fixture.contains("PopupMenuOverlay("))
+        XCTAssertTrue(fixture.contains("layout: .grid2x2"))
         XCTAssertTrue(fixture.contains("isPresented: $showCardActions"))
         XCTAssertTrue(fixture.contains("isEnabled: bodyModel.canMutate"))
         XCTAssertTrue(fixture.contains("isPinned: isPinned"))
@@ -654,9 +675,22 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         XCTAssertTrue(
             fixture.contains("guard mode != .blocked else { return nil }")
         )
-        XCTAssertTrue(
-            fixture.contains("return { showCardActions = true }")
+        let actionHandlerStart = try XCTUnwrap(
+            fixture.range(
+                of: "private var fixtureCardActionsHandler: (() -> Void)?"
+            )
         )
+        let actionHandlerEnd = try XCTUnwrap(
+            fixture.range(
+                of: "private static func document(",
+                range: actionHandlerStart.upperBound..<fixture.endIndex
+            )
+        )
+        let actionHandler = fixture[
+            actionHandlerStart.lowerBound..<actionHandlerEnd.lowerBound
+        ]
+        XCTAssertTrue(actionHandler.contains("bodyModel.dismissKeyboard()"))
+        XCTAssertTrue(actionHandler.contains("showCardActions = true"))
         XCTAssertTrue(fixture.contains("isMetadataEditable: bodyModel.canMutate"))
         XCTAssertTrue(fixture.contains("case longTag = \"long-tag\""))
         XCTAssertTrue(fixture.contains("case legacyHTML = \"legacy-html\""))

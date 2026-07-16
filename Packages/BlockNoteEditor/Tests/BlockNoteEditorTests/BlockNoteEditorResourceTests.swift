@@ -42,6 +42,23 @@ final class BlockNoteEditorResourceTests: XCTestCase {
         XCTAssertTrue(indexHTML.contains("connect-src 'none'"))
     }
 
+    func testBundledAtShortcutRequestsTheNativeCardLinkFlow() throws {
+        let editorJSURL = try BlockNoteEditorResources.resourceDirectory()
+            .appendingPathComponent("editor.js", isDirectory: false)
+        let editorJS = try String(contentsOf: editorJSURL, encoding: .utf8)
+
+        XCTAssertTrue(
+            editorJS.contains(
+                #"l=w.useCallback(async d=>I2(vSe(o.requestCardLink),d),[o])"#
+            )
+        )
+        XCTAssertTrue(
+            editorJS.contains(
+                #"C.jsx(a3,{triggerCharacter:"@",getItems:l})"#
+            )
+        )
+    }
+
     func testValidationRejectsUnsupportedProtocolVersionBeforeLoadingEditor() throws {
         let manifest = BlockNoteEditorResourceManifest(
             protocolVersion: BlockNoteEditorProtocol.version + 1,
