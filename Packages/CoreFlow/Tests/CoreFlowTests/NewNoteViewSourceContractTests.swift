@@ -422,10 +422,67 @@ final class NewNoteViewSourceContractTests: XCTestCase {
             1
         )
         XCTAssertTrue(grid.contains("role: .destructive"))
-        XCTAssertTrue(grid.contains("isPresented = false"))
-        XCTAssertTrue(grid.contains("DispatchQueue.main.async"))
         XCTAssertFalse(grid.contains("Remove Background"))
         XCTAssertFalse(grid.contains("cardEditorRemoveBackgroundButton"))
+
+        XCTAssertEqual(
+            Self.occurrenceCount(
+                "private func dismissThenPerform(",
+                in: grid
+            ),
+            1
+        )
+        let dismissHelper = try XCTUnwrap(
+            Self.functionBody(
+                in: grid,
+                signature: "private func dismissThenPerform("
+            )
+        )
+        let dismissHelperSource = String(dismissHelper)
+        XCTAssertEqual(
+            Self.occurrenceCount(
+                "isPresented = false",
+                in: dismissHelperSource
+            ),
+            1
+        )
+        XCTAssertEqual(
+            Self.occurrenceCount(
+                "DispatchQueue.main.async",
+                in: dismissHelperSource
+            ),
+            1
+        )
+        XCTAssertEqual(
+            Self.occurrenceCount("action()", in: dismissHelperSource),
+            1
+        )
+        let dismissPresentation = try XCTUnwrap(
+            dismissHelperSource.range(of: "isPresented = false")
+        )
+        let asyncDispatch = try XCTUnwrap(
+            dismissHelperSource.range(of: "DispatchQueue.main.async")
+        )
+        XCTAssertLessThan(
+            dismissPresentation.lowerBound,
+            asyncDispatch.lowerBound,
+            "The overlay must dismiss before scheduling its action"
+        )
+        let asyncClosures = Self.bracedBlocks(
+            in: dismissHelperSource,
+            signature: "DispatchQueue.main.async"
+        )
+        XCTAssertEqual(asyncClosures.count, 1)
+        let asyncClosure = try XCTUnwrap(asyncClosures.first)
+        XCTAssertEqual(
+            Self.occurrenceCount("action()", in: String(asyncClosure)),
+            1,
+            "The injected action must execute inside the async closure"
+        )
+        XCTAssertFalse(
+            asyncClosure.contains("isPresented = false"),
+            "Dismissal must not be deferred into the async closure"
+        )
 
         let expectedRows: [[(identifier: String, action: String)]] = [
             [
@@ -474,12 +531,28 @@ final class NewNoteViewSourceContractTests: XCTestCase {
         )
         XCTAssertEqual(actionGridBlocks.count, 1)
         let actionGrid = try XCTUnwrap(actionGridBlocks.first)
+        let actionGridIdentifier =
+            ".accessibilityIdentifier(\"cardEditorActionGrid\")"
+        let actionGridIdentifierRange = try XCTUnwrap(
+            grid.range(
+                of: actionGridIdentifier,
+                range: actionGrid.endIndex..<grid.endIndex
+            )
+        )
+        XCTAssertTrue(
+            grid[actionGrid.endIndex..<actionGridIdentifierRange.lowerBound]
+                .allSatisfy { $0.isWhitespace },
+            "cardEditorActionGrid must be attached directly to the action-grid VStack"
+        )
         XCTAssertEqual(
             Self.occurrenceCount("ActionBoxTile(", in: String(actionGrid)),
             8
         )
         XCTAssertEqual(
-            Self.occurrenceCount("ActionBoxEmptyTile()", in: String(actionGrid)),
+            Self.occurrenceCount(
+                "ActionBoxEmptyTile()",
+                in: String(actionGrid)
+            ),
             1
         )
         let rows = Self.bracedBlocks(
