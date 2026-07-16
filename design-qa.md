@@ -3,63 +3,77 @@
 ## Comparison target
 
 - Source visual truth:
-  - View Card metadata: `/var/folders/68/tx0676vs5rzgc9tfrkp_5ccc0000gn/T/codex-clipboard-39c2fe64-c184-436a-a5a6-3547b7c6ae3f.png`
-  - Previous Card Actions structure: `/var/folders/68/tx0676vs5rzgc9tfrkp_5ccc0000gn/T/codex-clipboard-6213b855-130b-44d5-a810-c0c9e28d1836.png`
+  - Requested mainstream Action Box alignment: `/var/folders/68/tx0676vs5rzgc9tfrkp_5ccc0000gn/T/codex-clipboard-2702f55f-cc5d-4122-8ad8-d00ecbe57b45.png`
+  - View Card metadata styling: `/var/folders/68/tx0676vs5rzgc9tfrkp_5ccc0000gn/T/codex-clipboard-39c2fe64-c184-436a-a5a6-3547b7c6ae3f.png`
   - Previous literal-HTML failure: `/var/folders/68/tx0676vs5rzgc9tfrkp_5ccc0000gn/T/codex-clipboard-5ceed2ac-45e2-45b1-86de-fd5c75f0daef.png`
-- Rendered implementation:
-  - Collapsed metadata: `/tmp/ChoraiEditorUI-Task6-fix-deterministic-green-attachments-20260716/4B2CDCB0-68DE-42AA-9134-645908DF36D2.png`
-  - Expanded related cards: `/tmp/ChoraiEditorUI-Task6-fix-deterministic-green-attachments-20260716/D06DDBAA-AC17-49B5-9F67-11E244B3100D.png`
-  - Legacy HTML: `/tmp/ChoraiEditorUI-Task6-fix-deterministic-green-attachments-20260716/B53FE8B7-58B2-4917-A592-9E493EB9BB9A.png`
-  - Default Card Actions: `/tmp/ChoraiEditorUI-Task6-live-card-actions-default-attachments-20260716/5435B5BD-3FB1-4C0D-BD6F-3C3F61EF6F1A.png`
-  - Accessibility XXXL Card Actions, first and scrolled states: `/tmp/ChoraiEditorUI-Task6-live-card-actions-xxxl-final-attachments-20260716/C8C10399-91E8-41CF-9C29-CB69C40398D0.png`, `/tmp/ChoraiEditorUI-Task6-live-card-actions-xxxl-final-attachments-20260716/3B05C3F5-D01E-4B23-A075-6382ACDA5E40.png`
+- Final live implementation:
+  - Mainstream View Card Action Box: `/tmp/ChoraiActionBoxLiveFinalReady3Attachments/022917F1-BD42-4A4F-8A50-BF0395AC7302.png`
+  - Editor Action Box, default text: `/tmp/ChoraiActionBoxLiveFinalReady3Attachments/CBFC9C3C-2631-4459-B5AC-685CD0FB19F5.png`
+  - Editor Action Box, Accessibility XXXL: `/tmp/ChoraiActionBoxLiveFinalReady3Attachments/ADDB2D14-5E1C-4D82-9020-26C79890D222.png`
+  - Background staged before save: `/tmp/ChoraiActionBoxLiveFinalReady3Attachments/16CA2A66-F1F9-4165-9904-252923C25B95.png`
 - Viewport: iPhone 17, 402 x 874 points, 1206 x 2622 pixels, iOS 26.2 Simulator.
-- State: dark theme; populated editor with metadata collapsed/expanded; native Card Actions at default and Accessibility XXXL text sizes; legacy HTML fallback.
+- State: dark theme; real Go-backed cards; default and Accessibility XXXL text sizes.
 
-The source View Card and editor fixture intentionally contain different dynamic text. The comparison therefore evaluates the shared tag capsules, disclosure affordance, visual tokens, and density. Editor-only Add Tag and Save controls are intentional editing affordances.
+## Combined comparison evidence
 
-## Comparison evidence
+`docs/qa/card-editor-action-box-comparison.png` places the reference and implementation in one visual input, in this order:
 
-- Full-view evidence: the rendered screenshots above show the complete editor, direct privacy and More controls, metadata states, and actual native Card Actions.
-- Focused metadata comparison: `/tmp/view-editor-metadata-final-comparison.png` places the View Card reference and final editor capture in one normalized side-by-side image.
-- Focused action comparison: `/tmp/card-actions-final-comparison.png` places the previous action sheet and final native Card Actions in one comparison image. It confirms Make Public moved out, Add Background remained in Card Actions, and Link plus ID-scoped actions are present.
-- Primary interactions tested: direct privacy action; direct More action; display-only related-card expand/collapse; Card Actions open/dismiss; Link and Background reachability; scrolling to Remove at Accessibility XXXL; read-only disabling; `@` and Card Actions routing to the same native link flow.
+1. top left: the reported native vertical Card Actions mismatch;
+2. top right: the product's mainstream View Card 3 x 3 Action Box;
+3. bottom left: the final editor Action Box at default text size;
+4. bottom right: the final editor Action Box at Accessibility XXXL.
+
+The two live default captures use the same device, viewport, shared Action Box surface, tile geometry, symbols, color treatment, corner radius, and close control. The editor intentionally substitutes `Background` for `Edit`, keeps the middle-left slot empty, and keeps privacy as a direct control beside More.
 
 ## Findings
 
-No actionable P0, P1, or P2 visual or interaction mismatches remain.
+No actionable P0, P1, or P2 visual or interaction mismatch remains.
 
-- Fonts and typography: shared View metadata components use the same system typography and capsule text treatment. Legacy `<strong>` content renders with visible emphasis while literal HTML tags are absent. Default and Accessibility XXXL states preserve readable labels without overlap.
-- Spacing and layout rhythm: tags retain compact View-style spacing; the disclosure chevron occupies the same trailing position; privacy and More are adjacent 44-point controls. Card Actions scrolls at XXXL, and its final destructive action is demonstrably reachable.
-- Colors and visual tokens: the editor reuses the View Card metadata components and existing dark purple capsule/fill tokens. Disabled and destructive states remain native and legible.
-- Image quality and asset fidelity: this flow introduces no raster illustration or replacement artwork. Existing SF Symbols and native controls remain sharp at the captured 3x device scale.
-- Copy and content: Link is a display-only metadata row in the editor; creation remains available through Card Actions and `@`. Add Background is in Card Actions, while the direct top control communicates privacy state.
-- Accessibility and responsiveness: default and Accessibility XXXL captures show no control collision. Related-card disclosure remains readable in compatibility-blocked mode; privacy, More, and Save are disabled when the editor cannot safely persist.
+- Action Box structure: the editor now uses the shared square/glass 3 x 3 Action Box instead of a native vertical confirmation dialog.
+- Fixed editor placement:
+  - row 1: `Background`, `Spark`, `Merge`;
+  - row 2: empty, `Share`, `Link`;
+  - row 3: `Root`, `Remove`, `Pin` or `Unpin`.
+- Background copy and behavior: exactly one `Background` action is shown for both add and replace. There is no `Remove Background` action.
+- Privacy placement: `Make Public` / `Make Private` remains a direct 44-point control immediately beside More and is not duplicated in Card Actions.
+- Link behavior: related links remain display-only in editor metadata. New links are initiated by Card Actions or the existing `@` shortcut, which continue into the same link flow.
+- Responsive geometry: default and Accessibility XXXL captures keep all eight semantic actions and Close inside the surface with no hit-target overlap. At XXXL, `Background` wraps to two lines while every action remains enabled and hittable; the fixed grid does not become a vertical sheet or require scrolling.
+- Rendering and metadata: the earlier legacy-HTML, tag-capsule, and related-link alignment fixes remain unchanged. Literal `<p>` markup stays out of the editor, and tag/link presentation continues to reuse the View Card components.
+
+## Interaction and persistence evidence
+
+- Final live result bundle: `/tmp/ChoraiActionBoxLiveFinalReady3.xcresult` — 6 tests passed, 0 failed.
+- Covered journeys:
+  - default eight-button grid, exact order, single Background, and no Remove Background;
+  - Accessibility XXXL geometry and hit targets;
+  - Background image upload, staged state, save, reload, and Go persistence;
+  - opening Card Actions on a new draft without creating a server card;
+  - staging Background plus public state before the first save;
+  - mainstream public/private and Pin/Unpin mutations.
+- Deterministic close regression: opening, closing, and immediately reopening the Action Box succeeds. Closing the Action Box also restores Back and save interactions.
 
 ## Comparison history
 
 1. Earlier P1: raw `<p>` and `</p>` markup appeared in editor content.
-   - Fix: recognize raw or once-escaped legacy HTML only when canonical `content_json` is absent, then hydrate it through the BlockNote HTML parser.
-   - Post-fix evidence: the legacy capture renders `Legacy rich text`, including bold `rich`, with no literal tags.
+   - Fix: recognize legacy HTML when canonical JSON is absent and hydrate it through the BlockNote parser.
 2. Earlier P1: Make Public and Add Background both lived inside Card Actions.
-   - Fix: move privacy to the direct control beside More; retain Background in Card Actions and add the shared Link entry.
-   - Post-fix evidence: default Card Actions and focused action comparison paths above.
-3. Earlier P2: editor tags and related links did not visually align with View Card.
-   - Fix: share the View Card capsule and related-row components, including colors, density, chevron, and reduced-motion behavior.
-   - Post-fix evidence: focused metadata comparison plus collapsed/expanded editor captures.
-4. Earlier P2 test-evidence gap: the first QA pass did not prove native Card Actions at default/XXXL sizes or prove the final action remained reachable.
-   - Fix: capture the real dialog, scroll it at Accessibility XXXL, require Remove to become hittable, and verify safe dismissal.
-   - Post-fix evidence: both final XXXL screenshots and passing UI result bundle `/tmp/ChoraiEditorUI-Task6-live-card-actions-xxxl-final-20260716.xcresult`.
-
-## Open questions
-
-None blocking. The exact Card Actions container geometry is owned by iOS and changes with Dynamic Type; the implementation deliberately uses the native scroll behavior instead of overriding it with a custom visual surface.
+   - Fix: keep privacy beside More and move Background into Card Actions.
+3. Earlier P2: editor tags and related links did not align with View Card.
+   - Fix: reuse the View Card capsule and related-row components.
+4. Current P1: editor Card Actions used a tall native list instead of the product's mainstream Action Box.
+   - Fix: share the Action Box surface and render the accepted fixed editor grid with one Background action.
+5. Current interaction regression found during QA: after Close, editor buttons could remain unresponsive.
+   - Fix: remove the stateful accessibility hiding modifier from the underlying editor and rely on the full-screen Action Box backdrop to block touches while presented.
 
 ## Implementation checklist
 
 - [x] Remove literal legacy HTML markup while preserving rich-text semantics.
-- [x] Place privacy directly beside More and keep Background in Card Actions.
-- [x] Keep editor links display-only and route creation from Card Actions or `@`.
+- [x] Place privacy directly beside More.
+- [x] Keep editor links display-only and initiate creation from Card Actions or `@`.
 - [x] Reuse View Card tag/link presentation.
-- [x] Verify default, read-only, empty, populated, collapsed, expanded, and Accessibility XXXL states.
+- [x] Match the mainstream 3 x 3 Action Box surface and geometry.
+- [x] Show one stable `Background` action with no removal action.
+- [x] Verify default and Accessibility XXXL states against the mainstream reference in one combined comparison.
+- [x] Verify Background persistence and new-draft lazy-save behavior against Go.
 
 final result: passed
