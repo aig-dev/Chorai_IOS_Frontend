@@ -347,20 +347,18 @@ final class NewNoteViewSourceContractTests: XCTestCase {
 
     func testCardActionsUseSharedFixedGridWithoutPersistenceOrBackgroundRemoval() throws {
         let source = try Self.newNoteSource()
-        let grid = (try? String(
+        let grid = try String(
             contentsOf: Self.repositoryRoot.appendingPathComponent(
                 "ArcNote/CardEditor/CardEditorActionBox.swift"
             ),
             encoding: .utf8
-        )) ?? ""
+        )
 
         XCTAssertTrue(source.contains("saveActionTitle: \"Retry\""))
         XCTAssertTrue(source.contains("onOpenCardActions: cardActionsHandler"))
         XCTAssertTrue(source.contains("CardEditorActionBox("))
         XCTAssertTrue(source.contains(".accessibilityHidden(showCardActions)"))
-        XCTAssertFalse(
-            source.contains(".confirmationDialog(\n            \"Card Actions\"")
-        )
+        XCTAssertFalse(source.contains(".confirmationDialog("))
         XCTAssertFalse(source.contains(".popupMenu("))
         XCTAssertFalse(source.contains("layout: .grid3x3"))
         XCTAssertFalse(source.contains("Remove Background"))
@@ -373,6 +371,7 @@ final class NewNoteViewSourceContractTests: XCTestCase {
             "onShare: { performPersistedCardAction(.notification(\"ShowCardShare\")) }",
             "onLink: addOntologyLink",
             "onRoot: { performPersistedCardAction(.notification(\"NavigateToRoot\")) }",
+            "onRemove: { showRemoveCardConfirmation = true }",
             "onTogglePin: { performPersistedCardAction(.togglePin) }",
         ] {
             XCTAssertTrue(
@@ -411,40 +410,159 @@ final class NewNoteViewSourceContractTests: XCTestCase {
                 "closeAccessibilityIdentifier: \"cardEditorActionsClose\""
             )
         )
-        XCTAssertTrue(grid.contains("ActionBoxEmptyTile()"))
-        XCTAssertTrue(grid.contains("text: \"Background\""))
+        XCTAssertEqual(
+            Self.occurrenceCount(
+                ".accessibilityIdentifier(\"cardEditorActionGrid\")",
+                in: grid
+            ),
+            1
+        )
+        XCTAssertEqual(
+            Self.occurrenceCount("text: \"Background\"", in: grid),
+            1
+        )
         XCTAssertTrue(grid.contains("role: .destructive"))
         XCTAssertTrue(grid.contains("isPresented = false"))
         XCTAssertTrue(grid.contains("DispatchQueue.main.async"))
         XCTAssertFalse(grid.contains("Remove Background"))
         XCTAssertFalse(grid.contains("cardEditorRemoveBackgroundButton"))
+
+        let expectedRows: [[(identifier: String, action: String)]] = [
+            [
+                (
+                    identifier: "\"cardEditorBackgroundButton\"",
+                    action: "dismissThenPerform(onBackground)"
+                ),
+                (
+                    identifier: "\"cardEditorActionSpark\"",
+                    action: "dismissThenPerform(onSpark)"
+                ),
+                (
+                    identifier: "\"cardEditorActionMerge\"",
+                    action: "dismissThenPerform(onMerge)"
+                ),
+            ],
+            [
+                (
+                    identifier: "\"cardEditorActionShare\"",
+                    action: "dismissThenPerform(onShare)"
+                ),
+                (
+                    identifier: "\"cardEditorActionLink\"",
+                    action: "dismissThenPerform(onLink)"
+                ),
+            ],
+            [
+                (
+                    identifier: "\"cardEditorActionRoot\"",
+                    action: "dismissThenPerform(onRoot)"
+                ),
+                (
+                    identifier: "\"cardEditorActionRemove\"",
+                    action: "dismissThenPerform(onRemove)"
+                ),
+                (
+                    identifier: "\"cardEditorActionPin\"",
+                    action: "dismissThenPerform(onTogglePin)"
+                ),
+            ],
+        ]
+        let expectedEmptyTileCounts = [0, 1, 0]
+        let actionGridBlocks = Self.bracedBlocks(
+            in: grid,
+            signature: "VStack(spacing: 15)"
+        )
+        XCTAssertEqual(actionGridBlocks.count, 1)
+        let actionGrid = try XCTUnwrap(actionGridBlocks.first)
         XCTAssertEqual(
-            grid.components(separatedBy: "HStack(spacing: 15)").count - 1,
-            3
+            Self.occurrenceCount("ActionBoxTile(", in: String(actionGrid)),
+            8
+        )
+        XCTAssertEqual(
+            Self.occurrenceCount("ActionBoxEmptyTile()", in: String(actionGrid)),
+            1
+        )
+        let rows = Self.bracedBlocks(
+            in: String(actionGrid),
+            signature: "HStack(spacing: 15)"
         )
 
-        let acceptedOrder = [
-            "\"cardEditorBackgroundButton\"",
-            "\"cardEditorActionSpark\"",
-            "\"cardEditorActionMerge\"",
-            "ActionBoxEmptyTile()",
-            "\"cardEditorActionShare\"",
-            "\"cardEditorActionLink\"",
-            "\"cardEditorActionRoot\"",
-            "\"cardEditorActionRemove\"",
-            "\"cardEditorActionPin\"",
-        ]
-        var lowerBound = grid.startIndex
-        for marker in acceptedOrder {
-            guard let range = grid.range(
-                of: marker,
-                range: lowerBound..<grid.endIndex
-            ) else {
-                XCTFail("Missing or out-of-order editor action: \(marker)")
-                continue
+        XCTAssertEqual(rows.count, 3)
+        guard rows.count == 3 else { return }
+
+        for rowIndex in rows.indices {
+            let row = String(rows[rowIndex])
+            let expectedTiles = expectedRows[rowIndex]
+            let tileBlocks = Self.bracedCallBlocks(
+                in: row,
+                signature: "ActionBoxTile("
+            )
+            XCTAssertEqual(
+                tileBlocks.count,
+                expectedTiles.count,
+                "Unexpected tile count in editor action row \(rowIndex + 1)"
+            )
+            XCTAssertEqual(
+                Self.occurrenceCount("ActionBoxEmptyTile()", in: row),
+                expectedEmptyTileCounts[rowIndex],
+                "Unexpected empty-tile count in editor action row \(rowIndex + 1)"
+            )
+
+            var expectedMarkers = expectedTiles.flatMap {
+                [$0.identifier, $0.action]
             }
-            lowerBound = range.upperBound
+            if rowIndex == 1 {
+                expectedMarkers.insert("ActionBoxEmptyTile()", at: 0)
+            }
+            XCTAssertTrue(
+                Self.containsInOrder(expectedMarkers, in: row),
+                "Unexpected tile or action order in editor action row \(rowIndex + 1)"
+            )
+
+            guard tileBlocks.count == expectedTiles.count else { continue }
+            for tileIndex in tileBlocks.indices {
+                let tile = String(tileBlocks[tileIndex])
+                let expectedTile = expectedTiles[tileIndex]
+                XCTAssertEqual(
+                    Self.occurrenceCount(expectedTile.identifier, in: tile),
+                    1,
+                    "Unexpected action identifier in row \(rowIndex + 1), tile \(tileIndex + 1)"
+                )
+                XCTAssertEqual(
+                    Self.occurrenceCount("dismissThenPerform(", in: tile),
+                    1,
+                    "Each action closure must call dismissThenPerform exactly once"
+                )
+                XCTAssertEqual(
+                    Self.occurrenceCount("text: \"Background\"", in: tile),
+                    rowIndex == 0 && tileIndex == 0 ? 1 : 0,
+                    "Background must belong only to the first action tile"
+                )
+                XCTAssertTrue(
+                    Self.containsInOrder(
+                        [expectedTile.identifier, expectedTile.action],
+                        in: tile
+                    ),
+                    "Unexpected action closure in row \(rowIndex + 1), tile \(tileIndex + 1)"
+                )
+            }
         }
+
+        let tileIdentifiers = expectedRows.flatMap { row in
+            row.map { $0.identifier }
+        }
+        for identifier in tileIdentifiers {
+            XCTAssertEqual(
+                Self.occurrenceCount(identifier, in: grid),
+                1,
+                "Editor action identifiers must be globally unique: \(identifier)"
+            )
+        }
+        XCTAssertEqual(
+            Self.occurrenceCount("dismissThenPerform(on", in: grid),
+            8,
+            "Every editor action tile must dismiss before dispatching its injected action"
+        )
     }
 
     func testIDScopedCardActionsPersistLazilyAndRetryTheirExactIntent() throws {
@@ -574,6 +692,119 @@ final class NewNoteViewSourceContractTests: XCTestCase {
             index = source.index(after: index)
         }
         return nil
+    }
+
+    private static func bracedBlocks(
+        in source: String,
+        signature: String
+    ) -> [Substring] {
+        var blocks: [Substring] = []
+        var lowerBound = source.startIndex
+
+        while lowerBound < source.endIndex,
+              let signatureRange = source.range(
+                  of: signature,
+                  range: lowerBound..<source.endIndex
+              ),
+              let openingBrace = source[signatureRange.upperBound...]
+                  .firstIndex(of: "{") {
+            guard let block = bracedBlock(
+                in: source,
+                openingBrace: openingBrace
+            ) else {
+                break
+            }
+            blocks.append(block)
+            lowerBound = block.endIndex
+        }
+
+        return blocks
+    }
+
+    private static func bracedCallBlocks(
+        in source: String,
+        signature: String
+    ) -> [Substring] {
+        var blocks: [Substring] = []
+        var lowerBound = source.startIndex
+
+        while lowerBound < source.endIndex,
+              let signatureRange = source.range(
+                  of: signature,
+                  range: lowerBound..<source.endIndex
+              ),
+              let openingBrace = source[signatureRange.upperBound...]
+                  .firstIndex(of: "{") {
+            guard let closure = bracedBlock(
+                in: source,
+                openingBrace: openingBrace
+            ) else {
+                break
+            }
+            blocks.append(source[signatureRange.lowerBound..<closure.endIndex])
+            lowerBound = closure.endIndex
+        }
+
+        return blocks
+    }
+
+    private static func bracedBlock(
+        in source: String,
+        openingBrace: String.Index
+    ) -> Substring? {
+        var depth = 0
+        var index = openingBrace
+        var isInString = false
+        var isEscaped = false
+
+        while index < source.endIndex {
+            let character = source[index]
+            if isInString {
+                if isEscaped {
+                    isEscaped = false
+                } else if character == "\\" {
+                    isEscaped = true
+                } else if character == "\"" {
+                    isInString = false
+                }
+            } else if character == "\"" {
+                isInString = true
+            } else if character == "{" {
+                depth += 1
+            } else if character == "}" {
+                depth -= 1
+                if depth == 0 {
+                    return source[openingBrace...index]
+                }
+            }
+            index = source.index(after: index)
+        }
+
+        return nil
+    }
+
+    private static func occurrenceCount(
+        _ needle: String,
+        in source: String
+    ) -> Int {
+        source.components(separatedBy: needle).count - 1
+    }
+
+    private static func containsInOrder(
+        _ markers: [String],
+        in source: String
+    ) -> Bool {
+        var lowerBound = source.startIndex
+        for marker in markers {
+            guard let range = source.range(
+                of: marker,
+                range: lowerBound..<source.endIndex
+            ) else {
+                return false
+            }
+            lowerBound = range.upperBound
+        }
+        return true
     }
 
     private static var repositoryRoot: URL {
