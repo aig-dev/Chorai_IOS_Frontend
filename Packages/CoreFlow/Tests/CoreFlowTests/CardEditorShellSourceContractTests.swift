@@ -31,16 +31,12 @@ final class CardEditorShellSourceContractTests: XCTestCase {
             actionBox.contains("static let standardTileSize: CGFloat = 90")
         )
         XCTAssertTrue(
-            actionBox.contains("static let headerHeight: CGFloat = 60")
-        )
-        XCTAssertTrue(
             actionBox.contains(
-                "let reservedHeaderHeight = rowCount >= 3 ? headerHeight : 0"
+                "static let contentBottomPadding: CGFloat = 16"
             )
         )
-        XCTAssertTrue(
-            actionBox.contains("let reservesCloseHeader = rowCount >= 3")
-        )
+        XCTAssertFalse(actionBox.contains("headerHeight"))
+        XCTAssertFalse(actionBox.contains("reservesCloseHeader"))
         XCTAssertTrue(actionBox.contains("static func tileSize("))
         XCTAssertTrue(
             actionBox.contains(".environment(\\.actionBoxTileSize, tileSize)")
@@ -56,9 +52,10 @@ final class CardEditorShellSourceContractTests: XCTestCase {
             actionBox.components(
                 separatedBy: ".frame(width: tileSize, height: tileSize)"
             ).count - 1,
-            2,
-            "Action and empty tiles must share the adaptive standard size"
+            1,
+            "Only semantic action tiles should consume grid positions"
         )
+        XCTAssertFalse(actionBox.contains("struct ActionBoxEmptyTile"))
         XCTAssertTrue(actionBox.contains(".frame(width: 38, height: 33)"))
         XCTAssertTrue(actionBox.contains(".font(.system(size: min(scaledLabelSize, 18), weight: .medium))"))
         XCTAssertTrue(actionBox.contains(".minimumScaleFactor(0.65)"))
@@ -66,6 +63,9 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         XCTAssertTrue(actionBox.contains("RoundedRectangle(cornerRadius: 12)"))
         XCTAssertTrue(actionBox.contains("@Environment(\\.accessibilityReduceMotion)"))
         XCTAssertTrue(actionBox.contains(".accessibilityAddTraits(.isModal)"))
+        XCTAssertTrue(actionBox.contains(".accessibilityAction(.escape)"))
+        XCTAssertFalse(actionBox.contains("closeAccessibilityIdentifier"))
+        XCTAssertFalse(actionBox.contains("private var closeButton"))
         XCTAssertTrue(
             actionBox.contains(".ignoresSafeArea(.keyboard, edges: .bottom)")
         )
@@ -82,6 +82,19 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         XCTAssertTrue(popup.contains("ActionBoxTile("))
         XCTAssertFalse(popup.contains(".accessibilityHidden(isPresented)"))
         XCTAssertFalse(popup.contains(".onTapGesture"))
+    }
+
+    func testEditorActionBoxFillsRowsFromTheLeadingEdge() throws {
+        let editorActionBox = try source(
+            at: "ArcNote/CardEditor/CardEditorActionBox.swift"
+        )
+
+        XCTAssertTrue(
+            editorActionBox.contains(
+                "VStack(alignment: .leading, spacing: 15)"
+            )
+        )
+        XCTAssertFalse(editorActionBox.contains("ActionBoxEmptyTile"))
     }
 
     func testAppTargetOwnsTheSixFocusedCardEditorFiles() throws {

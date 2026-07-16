@@ -415,11 +415,8 @@ final class NewNoteViewSourceContractTests: XCTestCase {
                 "accessibilityIdentifier: \"cardEditorActionsOverlay\""
             )
         )
-        XCTAssertTrue(
-            grid.contains(
-                "closeAccessibilityIdentifier: \"cardEditorActionsClose\""
-            )
-        )
+        XCTAssertFalse(grid.contains("closeAccessibilityIdentifier"))
+        XCTAssertFalse(grid.contains("cardEditorActionsClose"))
         XCTAssertEqual(
             Self.occurrenceCount(
                 ".accessibilityIdentifier(\"cardEditorActionGrid\")",
@@ -518,12 +515,12 @@ final class NewNoteViewSourceContractTests: XCTestCase {
                     identifier: "\"cardEditorActionLink\"",
                     action: "dismissThenPerform(onLink)"
                 ),
-            ],
-            [
                 (
                     identifier: "\"cardEditorActionRoot\"",
                     action: "dismissThenPerform(onRoot)"
                 ),
+            ],
+            [
                 (
                     identifier: "\"cardEditorActionRemove\"",
                     action: "dismissThenPerform(onRemove)"
@@ -534,10 +531,10 @@ final class NewNoteViewSourceContractTests: XCTestCase {
                 ),
             ],
         ]
-        let expectedEmptyTileCounts = [0, 1, 0]
+        let expectedEmptyTileCounts = [0, 0, 0]
         let actionGridBlocks = Self.bracedBlocks(
             in: grid,
-            signature: "VStack(spacing: 15)"
+            signature: "VStack(alignment: .leading, spacing: 15)"
         )
         XCTAssertEqual(actionGridBlocks.count, 1)
         let actionGrid = try XCTUnwrap(actionGridBlocks.first)
@@ -583,7 +580,7 @@ final class NewNoteViewSourceContractTests: XCTestCase {
                 "ActionBoxEmptyTile()",
                 in: String(actionGrid)
             ),
-            1
+            0
         )
         let rows = Self.bracedBlocks(
             in: String(actionGrid),
@@ -611,11 +608,8 @@ final class NewNoteViewSourceContractTests: XCTestCase {
                 "Unexpected empty-tile count in editor action row \(rowIndex + 1)"
             )
 
-            var expectedMarkers = expectedTiles.flatMap {
+            let expectedMarkers = expectedTiles.flatMap {
                 [$0.identifier, $0.action]
-            }
-            if rowIndex == 1 {
-                expectedMarkers.insert("ActionBoxEmptyTile()", at: 0)
             }
             XCTAssertTrue(
                 Self.containsInOrder(expectedMarkers, in: row),

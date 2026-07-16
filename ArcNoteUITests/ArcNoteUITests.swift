@@ -305,18 +305,13 @@ final class ArcNoteUITests: XCTestCase {
 
         waitForButton("cardEditorMoreButton").tap()
         let surface = waitFor("cardEditorActionsOverlay.surface")
-        let close = waitForButton("cardEditorActionsClose")
         let actions = editorActionButtons()
 
         waitForElementToDisappear(keyboard)
         waitForMissing("cardEditorFormattingBar")
         XCTAssertTrue(app.frame.insetBy(dx: -1, dy: -1).contains(surface.frame))
         assertEditorActionGridLayout(actions, inside: surface)
-        assertEditorActionCloseLayout(
-            close,
-            relativeTo: actions,
-            inside: surface
-        )
+        XCTAssertFalse(app.buttons["cardEditorActionsClose"].exists)
         for action in actions {
             XCTAssertGreaterThanOrEqual(action.frame.width, 44)
             XCTAssertGreaterThanOrEqual(action.frame.height, 44)
@@ -324,8 +319,7 @@ final class ArcNoteUITests: XCTestCase {
             XCTAssertEqual(action.frame.height, 90, accuracy: 1)
         }
         captureVisual("card-editor-action-box-keyboard-dismissed")
-        close.tap()
-        waitForMissing("cardEditorActionsOverlay")
+        dismissEditorCardActions()
     }
 
     func testNativeTagInputDoesNotShowBodyFormattingBar() {
@@ -383,19 +377,13 @@ final class ArcNoteUITests: XCTestCase {
         more.tap()
         _ = waitFor("cardEditorActionsOverlay")
         let surface = waitFor("cardEditorActionsOverlay.surface")
-        _ = waitFor("cardEditorActionGrid")
-        let close = waitForButton("cardEditorActionsClose")
         let actions = editorActionButtons()
         XCTAssertEqual(actions.count, 8)
         for action in actions {
             XCTAssertEqual(action.elementType, .button)
         }
         assertEditorActionGridLayout(actions, inside: surface)
-        assertEditorActionCloseLayout(
-            close,
-            relativeTo: actions,
-            inside: surface
-        )
+        XCTAssertFalse(app.buttons["cardEditorActionsClose"].exists)
         XCTAssertEqual(actions[0].frame.width, 90, accuracy: 1)
         XCTAssertFalse(app.buttons["cardEditorFloatingBack"].isHittable)
         XCTAssertFalse(app.buttons["cardEditorPrivacyButton"].isHittable)
@@ -406,8 +394,7 @@ final class ArcNoteUITests: XCTestCase {
             "More must invoke Card Actions without an intermediate menu"
         )
         captureVisual("card-editor-action-box-grid-fixture")
-        close.tap()
-        waitForMissing("cardEditorActionsOverlay")
+        dismissEditorCardActions()
 
         XCTAssertTrue(more.waitForExistence(timeout: 10))
         XCTAssertTrue(more.isHittable)
@@ -417,8 +404,32 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertFalse(app.buttons["cardEditorFloatingBack"].isHittable)
         XCTAssertFalse(app.buttons["cardEditorPrivacyButton"].isHittable)
         XCTAssertFalse(app.buttons["cardEditorMoreButton"].isHittable)
-        waitForButton("cardEditorActionsClose").tap()
-        waitForMissing("cardEditorActionsOverlay")
+        dismissEditorCardActions()
+    }
+
+    func testCardEditorActionBoxHasNoCloseIconAndDismissesFromBackdrop() {
+        launchCardEditorFixture(mode: "empty")
+
+        waitForButton("cardEditorMoreButton").tap()
+        let surface = waitFor("cardEditorActionsOverlay.surface")
+        XCTAssertFalse(
+            app.buttons["cardEditorActionsClose"].exists,
+            "Action Box should close from its backdrop, not an X icon"
+        )
+
+        RunLoop.current.run(until: Date().addingTimeInterval(0.6))
+        surface.coordinate(
+            withNormalizedOffset: CGVector(dx: 0.82, dy: 0.82)
+        ).tap()
+        XCTAssertTrue(
+            app.descendants(matching: .any)["cardEditorActionsOverlay"].exists,
+            "Tapping empty space inside the Action Box must keep it open"
+        )
+
+        dismissActionBoxFromBackdrop(
+            surfaceIdentifier: "cardEditorActionsOverlay.surface",
+            overlayIdentifier: "cardEditorActionsOverlay"
+        )
     }
 
     func testCardEditorActionBoxFitsAdaptivePortraitViewport() {
@@ -426,23 +437,17 @@ final class ArcNoteUITests: XCTestCase {
 
         waitForButton("cardEditorMoreButton").tap()
         let surface = waitFor("cardEditorActionsOverlay.surface")
-        let close = waitForButton("cardEditorActionsClose")
         let actions = editorActionButtons()
 
         XCTAssertTrue(app.frame.insetBy(dx: -1, dy: -1).contains(surface.frame))
         assertEditorActionGridLayout(actions, inside: surface)
-        assertEditorActionCloseLayout(
-            close,
-            relativeTo: actions,
-            inside: surface
-        )
+        XCTAssertFalse(app.buttons["cardEditorActionsClose"].exists)
         for action in actions {
             XCTAssertGreaterThanOrEqual(action.frame.width, 44)
             XCTAssertLessThanOrEqual(action.frame.width, 90)
         }
         captureVisual("card-editor-action-box-adaptive-portrait")
-        close.tap()
-        waitForMissing("cardEditorActionsOverlay")
+        dismissEditorCardActions()
     }
 
     func testCardEditorActionBoxFitsShortSafeAreaViewport() {
@@ -453,21 +458,15 @@ final class ArcNoteUITests: XCTestCase {
 
         waitForButton("cardEditorMoreButton").tap()
         let surface = waitFor("cardEditorActionsOverlay.surface")
-        let close = waitForButton("cardEditorActionsClose")
         let actions = editorActionButtons()
 
         XCTAssertTrue(app.frame.insetBy(dx: -1, dy: -1).contains(surface.frame))
         assertEditorActionGridLayout(actions, inside: surface)
-        assertEditorActionCloseLayout(
-            close,
-            relativeTo: actions,
-            inside: surface
-        )
+        XCTAssertFalse(app.buttons["cardEditorActionsClose"].exists)
         XCTAssertEqual(surface.frame.width, surface.frame.height, accuracy: 3)
         XCTAssertLessThanOrEqual(surface.frame.height, 350)
         captureVisual("card-editor-action-box-short-viewport")
-        close.tap()
-        waitForMissing("cardEditorActionsOverlay")
+        dismissEditorCardActions()
     }
 
     func testSharedTwoRowActionBoxPreservesCenteredGrid() {
@@ -478,7 +477,6 @@ final class ArcNoteUITests: XCTestCase {
 
         waitForButton("cardEditorMoreButton").tap()
         let surface = waitFor("popup-menu.overlay.surface")
-        let close = waitForButton("popup-menu.close")
         let identifiers = [
             "popup-menu.item.spark",
             "popup-menu.item.share",
@@ -502,17 +500,16 @@ final class ArcNoteUITests: XCTestCase {
             $0.union($1.frame)
         }
         XCTAssertEqual(actionBounds.midY, surface.frame.midY, accuracy: 3)
-        XCTAssertLessThanOrEqual(close.frame.maxY, actionBounds.minY)
-        XCTAssertTrue(
-            surface.frame.insetBy(dx: -1, dy: -1).contains(close.frame)
-        )
+        XCTAssertFalse(app.buttons["popup-menu.close"].exists)
         XCTAssertTrue(
             surface.frame.insetBy(dx: -1, dy: -1).contains(actionBounds)
         )
         XCTAssertEqual(actions[0].frame.width, 90, accuracy: 1)
         captureVisual("shared-action-box-grid2x2-centered")
-        close.tap()
-        waitForMissing("popup-menu.overlay")
+        dismissActionBoxFromBackdrop(
+            surfaceIdentifier: "popup-menu.overlay.surface",
+            overlayIdentifier: "popup-menu.overlay"
+        )
     }
 
     func testCardEditorLongTagStaysInsideReadableWidth() {
@@ -3464,10 +3461,26 @@ final class ArcNoteUITests: XCTestCase {
         let cardMenu = waitFor("home.card.menu.\(cardID)")
         cardMenu.tap()
         _ = waitFor("popup-menu.overlay")
-        _ = waitFor("popup-menu.overlay.surface")
+        let surface = waitFor("popup-menu.overlay.surface")
+        let mainstreamActions = [
+            "edit", "spark", "merge", "public", "share",
+            "link", "root", "remove", "pin",
+        ].map { waitForButton("popup-menu.item.\($0)") }
+        XCTAssertEqual(surface.buttons.allElementsBoundByIndex.count, 9)
+        let finalRowMaxY = mainstreamActions.suffix(3)
+            .map(\.frame.maxY)
+            .max() ?? surface.frame.maxY
+        XCTAssertGreaterThanOrEqual(
+            surface.frame.maxY - finalRowMaxY,
+            15,
+            "The mainstream 3 x 3 Action Box needs visible bottom padding"
+        )
         XCTAssertFalse(cardMenu.isHittable)
-        waitForButton("popup-menu.close").tap()
-        waitForMissing("popup-menu.overlay")
+        XCTAssertFalse(app.buttons["popup-menu.close"].exists)
+        dismissActionBoxFromBackdrop(
+            surfaceIdentifier: "popup-menu.overlay.surface",
+            overlayIdentifier: "popup-menu.overlay"
+        )
         XCTAssertTrue(cardMenu.waitForExistence(timeout: 10))
         XCTAssertTrue(cardMenu.isHittable)
 
@@ -3957,7 +3970,6 @@ final class ArcNoteUITests: XCTestCase {
 
         _ = waitFor("cardEditorActionsOverlay")
         let surface = waitFor("cardEditorActionsOverlay.surface")
-        let close = waitForButton("cardEditorActionsClose")
         let actions = editorActionButtons()
         XCTAssertEqual(actions.count, 8)
         XCTAssertEqual(
@@ -3969,14 +3981,9 @@ final class ArcNoteUITests: XCTestCase {
         )
         XCTAssertFalse(app.buttons["cardEditorRemoveBackgroundButton"].exists)
         assertEditorActionGridLayout(actions, inside: surface)
-        assertEditorActionCloseLayout(
-            close,
-            relativeTo: actions,
-            inside: surface
-        )
+        XCTAssertFalse(app.buttons["cardEditorActionsClose"].exists)
         captureVisual("card-editor-action-box-grid")
-        close.tap()
-        waitForMissing("cardEditorActionsOverlay")
+        dismissEditorCardActions()
 
         openEditorCardActions()
         _ = waitFor("cardEditorActionsOverlay.surface")
@@ -4008,23 +4015,16 @@ final class ArcNoteUITests: XCTestCase {
 
         _ = waitFor("cardEditorActionsOverlay")
         let surface = waitFor("cardEditorActionsOverlay.surface")
-        let close = waitForButton("cardEditorActionsClose")
         let actions = editorActionButtons()
         XCTAssertEqual(actions.count, 8)
         assertEditorActionGridLayout(actions, inside: surface)
-        assertEditorActionCloseLayout(
-            close,
-            relativeTo: actions,
-            inside: surface
-        )
-        XCTAssertTrue(close.isHittable)
+        XCTAssertFalse(app.buttons["cardEditorActionsClose"].exists)
         for action in actions {
             XCTAssertTrue(action.isEnabled)
             XCTAssertTrue(action.isHittable)
         }
         captureVisual("card-editor-action-box-grid-accessibility-xxxl")
-        close.tap()
-        waitForMissing("cardEditorActionsOverlay")
+        dismissEditorCardActions()
         closeNewNoteEditor()
     }
 
@@ -5876,17 +5876,17 @@ final class ArcNoteUITests: XCTestCase {
             "cardEditorActionRemove",
             "cardEditorActionPin",
         ]
-        let grid = waitFor(
-            "cardEditorActionGrid",
+        let surface = waitFor(
+            "cardEditorActionsOverlay.surface",
             timeout: 20,
             file: file,
             line: line
         )
         let deadline = Date().addingTimeInterval(20)
-        var actualButtons = grid.buttons.allElementsBoundByIndex
+        var actualButtons = surface.buttons.allElementsBoundByIndex
         while Date() < deadline && actualButtons.count != identifiers.count {
             RunLoop.current.run(until: Date().addingTimeInterval(0.1))
-            actualButtons = grid.buttons.allElementsBoundByIndex
+            actualButtons = surface.buttons.allElementsBoundByIndex
         }
         XCTAssertEqual(
             actualButtons.count,
@@ -5967,14 +5967,14 @@ final class ArcNoteUITests: XCTestCase {
         )
         XCTAssertEqual(
             share.frame.midX,
-            spark.frame.midX,
+            background.frame.midX,
             accuracy: 3,
             file: file,
             line: line
         )
         XCTAssertEqual(
             link.frame.midX,
-            merge.frame.midX,
+            spark.frame.midX,
             accuracy: 3,
             file: file,
             line: line
@@ -5987,8 +5987,8 @@ final class ArcNoteUITests: XCTestCase {
             line: line
         )
         XCTAssertEqual(
+            link.frame.midY,
             root.frame.midY,
-            remove.frame.midY,
             accuracy: 3,
             file: file,
             line: line
@@ -6002,21 +6002,21 @@ final class ArcNoteUITests: XCTestCase {
         )
         XCTAssertEqual(
             root.frame.midX,
-            background.frame.midX,
+            merge.frame.midX,
             accuracy: 3,
             file: file,
             line: line
         )
         XCTAssertEqual(
             remove.frame.midX,
-            spark.frame.midX,
+            background.frame.midX,
             accuracy: 3,
             file: file,
             line: line
         )
         XCTAssertEqual(
             pin.frame.midX,
-            merge.frame.midX,
+            spark.frame.midX,
             accuracy: 3,
             file: file,
             line: line
@@ -6030,6 +6030,16 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertLessThan(
             share.frame.midY,
             remove.frame.midY,
+            file: file,
+            line: line
+        )
+
+        let bottomClearance = overlay.frame.maxY
+            - max(remove.frame.maxY, pin.frame.maxY)
+        XCTAssertGreaterThanOrEqual(
+            bottomClearance,
+            15,
+            "The final Action Box row needs a visible 16-point bottom inset",
             file: file,
             line: line
         )
@@ -6050,29 +6060,6 @@ final class ArcNoteUITests: XCTestCase {
                     line: line
                 )
             }
-        }
-    }
-
-    private func assertEditorActionCloseLayout(
-        _ close: XCUIElement,
-        relativeTo actions: [XCUIElement],
-        inside overlay: XCUIElement,
-        file: StaticString = #filePath,
-        line: UInt = #line
-    ) {
-        XCTAssertTrue(
-            overlay.frame.insetBy(dx: -1, dy: -1).contains(close.frame),
-            "Close must remain inside the Action Box overlay",
-            file: file,
-            line: line
-        )
-        for action in actions {
-            XCTAssertFalse(
-                close.frame.intersects(action.frame),
-                "Close overlaps \(action.identifier)",
-                file: file,
-                line: line
-            )
         }
     }
 
@@ -6098,7 +6085,7 @@ final class ArcNoteUITests: XCTestCase {
             line: line
         )
         _ = waitFor(
-            "cardEditorActionGrid",
+            "cardEditorActionsOverlay.surface",
             timeout: 10,
             file: file,
             line: line
@@ -6109,14 +6096,40 @@ final class ArcNoteUITests: XCTestCase {
         file: StaticString = #filePath,
         line: UInt = #line
     ) {
-        waitForButton(
-            "cardEditorActionsClose",
+        dismissActionBoxFromBackdrop(
+            surfaceIdentifier: "cardEditorActionsOverlay.surface",
+            overlayIdentifier: "cardEditorActionsOverlay",
+            file: file,
+            line: line
+        )
+    }
+
+    private func dismissActionBoxFromBackdrop(
+        surfaceIdentifier: String,
+        overlayIdentifier: String,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let surface = waitFor(
+            surfaceIdentifier,
             timeout: 10,
             file: file,
             line: line
-        ).tap()
+        )
+        let appFrame = app.frame
+        let pointAbove = surface.frame.minY - 20
+        let outsideY = pointAbove > appFrame.minY + 1
+            ? pointAbove
+            : min(appFrame.maxY - 1, surface.frame.maxY + 20)
+        let normalizedPoint = CGVector(
+            dx: (surface.frame.midX - appFrame.minX) / appFrame.width,
+            dy: (outsideY - appFrame.minY) / appFrame.height
+        )
+
+        RunLoop.current.run(until: Date().addingTimeInterval(0.6))
+        app.coordinate(withNormalizedOffset: normalizedPoint).tap()
         waitForMissing(
-            "cardEditorActionsOverlay",
+            overlayIdentifier,
             timeout: 10,
             file: file,
             line: line

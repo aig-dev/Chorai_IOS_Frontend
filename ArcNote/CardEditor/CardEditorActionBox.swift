@@ -18,10 +18,9 @@ struct CardEditorActionBox: View {
             isPresented: $isPresented,
             accessibilityLabel: "Card Actions",
             accessibilityIdentifier: "cardEditorActionsOverlay",
-            closeAccessibilityIdentifier: "cardEditorActionsClose",
             rowCount: 3
         ) {
-            VStack(spacing: 15) {
+            VStack(alignment: .leading, spacing: 15) {
                 HStack(spacing: 15) {
                     ActionBoxTile(
                         icon: .system("photo"),
@@ -53,7 +52,6 @@ struct CardEditorActionBox: View {
                 }
 
                 HStack(spacing: 15) {
-                    ActionBoxEmptyTile()
                     ActionBoxTile(
                         icon: .asset("menu_share"),
                         text: "Share",
@@ -72,9 +70,6 @@ struct CardEditorActionBox: View {
                     ) {
                         dismissThenPerform(onLink)
                     }
-                }
-
-                HStack(spacing: 15) {
                     ActionBoxTile(
                         icon: .asset("menu_root"),
                         text: "Root",
@@ -84,6 +79,9 @@ struct CardEditorActionBox: View {
                     ) {
                         dismissThenPerform(onRoot)
                     }
+                }
+
+                HStack(spacing: 15) {
                     ActionBoxTile(
                         icon: .asset("menu_remove"),
                         text: "Remove",

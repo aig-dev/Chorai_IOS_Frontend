@@ -65,7 +65,6 @@ struct PopupMenuOverlay: View {
             isPresented: $isPresented,
             accessibilityLabel: "Card Actions",
             accessibilityIdentifier: "popup-menu.overlay",
-            closeAccessibilityIdentifier: "popup-menu.close",
             rowCount: layout.rowCount
         ) {
             menuContent

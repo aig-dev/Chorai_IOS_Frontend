@@ -16,7 +16,8 @@ private enum ActionBoxLayoutMetrics {
     static let standardTileSize: CGFloat = 90
     static let minimumTileSize: CGFloat = 44
     static let tileSpacing: CGFloat = 15
-    static let headerHeight: CGFloat = 60
+    static let contentTopPadding: CGFloat = 16
+    static let contentBottomPadding: CGFloat = 16
     static let surfaceScale: CGFloat = 0.9
 
     static func tileSize(
@@ -25,9 +26,9 @@ private enum ActionBoxLayoutMetrics {
     ) -> CGFloat {
         let safeRowCount = max(rowCount, 1)
         let totalSpacing = CGFloat(safeRowCount - 1) * tileSpacing
-        let reservedHeaderHeight = rowCount >= 3 ? headerHeight : 0
         let availableHeight = surfaceSide
-            - reservedHeaderHeight
+            - contentTopPadding
+            - contentBottomPadding
             - totalSpacing
         return max(
             minimumTileSize,
@@ -45,7 +46,6 @@ struct ActionBoxOverlay<Content: View>: View {
     @Binding var isPresented: Bool
     let accessibilityLabel: String
     let accessibilityIdentifier: String
-    let closeAccessibilityIdentifier: String
     let rowCount: Int
     private let content: Content
 
@@ -57,14 +57,12 @@ struct ActionBoxOverlay<Content: View>: View {
         isPresented: Binding<Bool>,
         accessibilityLabel: String,
         accessibilityIdentifier: String,
-        closeAccessibilityIdentifier: String,
         rowCount: Int,
         @ViewBuilder content: () -> Content
     ) {
         _isPresented = isPresented
         self.accessibilityLabel = accessibilityLabel
         self.accessibilityIdentifier = accessibilityIdentifier
-        self.closeAccessibilityIdentifier = closeAccessibilityIdentifier
         self.rowCount = rowCount
         self.content = content()
     }
@@ -94,7 +92,6 @@ struct ActionBoxOverlay<Content: View>: View {
                 surfaceSide: surfaceSide,
                 rowCount: rowCount
             )
-            let reservesCloseHeader = rowCount >= 3
 
             ZStack {
                 Color.black
@@ -107,48 +104,24 @@ struct ActionBoxOverlay<Content: View>: View {
                     }
                     .accessibilityHidden(true)
 
-                Group {
-                    if reservesCloseHeader {
-                        VStack(spacing: 0) {
-                            HStack {
-                                Spacer()
-                                closeButton
-                            }
-                            .frame(height: 44)
-                            .padding(.horizontal, 20)
-                            .padding(.top, 16)
+                VStack(spacing: 0) {
+                    Spacer(
+                        minLength: ActionBoxLayoutMetrics.contentTopPadding
+                    )
 
-                            Spacer(minLength: 0)
+                    content
+                        .environment(\.actionBoxTileSize, tileSize)
 
-                            content
-                                .environment(\.actionBoxTileSize, tileSize)
-
-                            Spacer(minLength: 0)
-                        }
-                    } else {
-                        ZStack {
-                            content
-                                .environment(\.actionBoxTileSize, tileSize)
-
-                            VStack(spacing: 0) {
-                                HStack {
-                                    Spacer()
-                                    closeButton
-                                }
-                                .padding(.top, 16)
-                                .padding(.trailing, 20)
-
-                                Spacer(minLength: 0)
-                            }
-                        }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    }
+                    Spacer(
+                        minLength: ActionBoxLayoutMetrics.contentBottomPadding
+                    )
                 }
                 .frame(
                     width: surfaceSide,
                     height: surfaceSide
                 )
                 .background(actionBoxBackground)
+                .contentShape(RoundedRectangle(cornerRadius: 20))
                 .cornerRadius(20)
                 .clipped()
                 .accessibilityElement(children: .contain)
@@ -163,6 +136,9 @@ struct ActionBoxOverlay<Content: View>: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityAddTraits(.isModal)
+        .accessibilityAction(.escape) {
+            dismiss()
+        }
         .accessibilityLabel(accessibilityLabel)
         .accessibilityIdentifier(accessibilityIdentifier)
         .ignoresSafeArea(.keyboard, edges: .bottom)
@@ -212,20 +188,6 @@ struct ActionBoxOverlay<Content: View>: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
             isPresented = false
         }
-    }
-
-    private var closeButton: some View {
-        Button(action: dismiss) {
-            Image(systemName: "xmark")
-                .font(.title2)
-                .foregroundColor(.white)
-                .frame(width: 30, height: 30)
-                .frame(width: 44, height: 44)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Close")
-        .accessibilityIdentifier(closeAccessibilityIdentifier)
     }
 
     private var actionBoxBackground: some View {
@@ -381,15 +343,5 @@ struct ActionBoxTile: View {
                 .resizable()
                 .aspectRatio(contentMode: .fit)
         }
-    }
-}
-
-struct ActionBoxEmptyTile: View {
-    @Environment(\.actionBoxTileSize) private var tileSize
-
-    var body: some View {
-        Color.clear
-            .frame(width: tileSize, height: tileSize)
-            .accessibilityHidden(true)
     }
 }
