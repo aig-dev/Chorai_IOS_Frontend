@@ -66,6 +66,7 @@ struct ActionBoxOverlay<Content: View>: View {
                     }
 
                     content
+                        .padding(.top, 44)
                         .padding(.horizontal, 0)
                 }
                 .background(actionBoxBackground)
@@ -240,7 +241,7 @@ struct ActionBoxTile: View {
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
             }
-            .frame(width: 90, height: 90)
+            .frame(width: 84, height: 84)
             .background(
                 RoundedRectangle(cornerRadius: 12)
                     .fill(
@@ -278,7 +279,7 @@ struct ActionBoxTile: View {
 struct ActionBoxEmptyTile: View {
     var body: some View {
         Color.clear
-            .frame(width: 90, height: 90)
+            .frame(width: 84, height: 84)
             .accessibilityHidden(true)
     }
 }

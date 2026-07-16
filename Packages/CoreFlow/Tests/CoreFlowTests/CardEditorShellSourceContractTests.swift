@@ -22,9 +22,20 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         XCTAssertTrue(actionBox.contains("RoundedRectangle(cornerRadius: 20)"))
         XCTAssertTrue(actionBox.contains(".fill(.ultraThinMaterial.opacity(1))"))
         XCTAssertTrue(actionBox.contains(".spring(response: 0.3, dampingFraction: 0.8)"))
+        XCTAssertTrue(
+            actionBox.contains("content\n                        .padding(.top, 44)"),
+            "The shared surface must reserve one Close hit-target row"
+        )
         XCTAssertTrue(actionBox.contains("struct ActionBoxTile: View"))
         XCTAssertTrue(actionBox.contains("Button(role: role, action: action)"))
-        XCTAssertTrue(actionBox.contains(".frame(width: 90, height: 90)"))
+        XCTAssertEqual(
+            actionBox.components(
+                separatedBy: ".frame(width: 84, height: 84)"
+            ).count - 1,
+            2,
+            "Action and empty tiles must share the compact 84-point grid size"
+        )
+        XCTAssertFalse(actionBox.contains(".frame(width: 90, height: 90)"))
         XCTAssertTrue(actionBox.contains(".frame(width: 38, height: 33)"))
         XCTAssertTrue(actionBox.contains(".font(.system(size: min(scaledLabelSize, 18), weight: .medium))"))
         XCTAssertTrue(actionBox.contains("RoundedRectangle(cornerRadius: 12)"))
@@ -569,7 +580,39 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         XCTAssertTrue(app.contains("--ui-test-card-editor-shell"))
         XCTAssertTrue(app.contains("CardEditorShellFixtureScreen"))
         XCTAssertTrue(fixture.contains("CHORAI_CARD_EDITOR_FIXTURE_MODE"))
-        XCTAssertTrue(fixture.contains("cardEditorCardActionsRequested"))
+        XCTAssertTrue(
+            fixture.contains("@State private var showCardActions = false")
+        )
+        XCTAssertTrue(fixture.contains("@State private var isPinned = false"))
+        XCTAssertTrue(fixture.contains("if showCardActions {"))
+        XCTAssertTrue(fixture.contains("CardEditorActionBox("))
+        XCTAssertTrue(fixture.contains("isPresented: $showCardActions"))
+        XCTAssertTrue(fixture.contains("isEnabled: bodyModel.canMutate"))
+        XCTAssertTrue(fixture.contains("isPinned: isPinned"))
+        XCTAssertFalse(
+            fixture.contains(".accessibilityHidden(showCardActions)"),
+            "The fixture must preserve interaction after Action Box dismissal"
+        )
+        XCTAssertTrue(
+            fixture.contains(
+                "onBackground: { background = .local(Self.fixtureBackgroundData) }"
+            )
+        )
+        for callback in [
+            "onSpark: {}",
+            "onMerge: {}",
+            "onShare: {}",
+            "onLink: {}",
+            "onRoot: {}",
+            "onRemove: {}",
+            "onTogglePin: { isPinned.toggle() }",
+        ] {
+            XCTAssertTrue(
+                fixture.contains(callback),
+                "The deterministic fixture must inject \(callback)"
+            )
+        }
+        XCTAssertFalse(fixture.contains("cardEditorCardActionsRequested"))
         XCTAssertTrue(
             fixture.contains(
                 "onOpenCardActions: fixtureCardActionsHandler"
@@ -584,7 +627,7 @@ final class CardEditorShellSourceContractTests: XCTestCase {
             fixture.contains("guard mode != .blocked else { return nil }")
         )
         XCTAssertTrue(
-            fixture.contains("return { didRequestCardActions = true }")
+            fixture.contains("return { showCardActions = true }")
         )
         XCTAssertTrue(fixture.contains("isMetadataEditable: bodyModel.canMutate"))
         XCTAssertTrue(fixture.contains("case longTag = \"long-tag\""))

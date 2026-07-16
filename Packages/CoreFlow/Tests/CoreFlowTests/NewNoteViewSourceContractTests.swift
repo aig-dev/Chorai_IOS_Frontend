@@ -357,7 +357,10 @@ final class NewNoteViewSourceContractTests: XCTestCase {
         XCTAssertTrue(source.contains("saveActionTitle: \"Retry\""))
         XCTAssertTrue(source.contains("onOpenCardActions: cardActionsHandler"))
         XCTAssertTrue(source.contains("CardEditorActionBox("))
-        XCTAssertTrue(source.contains(".accessibilityHidden(showCardActions)"))
+        XCTAssertFalse(
+            source.contains(".accessibilityHidden(showCardActions)"),
+            "Toggling accessibilityHidden on the editor shell breaks activation after Close"
+        )
         XCTAssertFalse(source.contains(".confirmationDialog("))
         XCTAssertFalse(source.contains(".popupMenu("))
         XCTAssertFalse(source.contains("layout: .grid3x3"))

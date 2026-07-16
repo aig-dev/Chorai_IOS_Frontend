@@ -253,7 +253,8 @@ struct CardEditorShellFixtureScreen: View {
     @State private var background: CardEditorBackgroundSource
     @State private var isPublic = false
     @State private var isAddingTag = false
-    @State private var didRequestCardActions = false
+    @State private var showCardActions = false
+    @State private var isPinned = false
 
     init() {
         let mode = CardEditorShellFixtureMode(
@@ -329,14 +330,20 @@ struct CardEditorShellFixtureScreen: View {
                 .accessibilityIdentifier("screen.card-editor-shell")
                 .allowsHitTesting(false)
 
-            if didRequestCardActions {
-                Color.white
-                    .opacity(0.001)
-                    .frame(width: 1, height: 1)
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("Card actions requested")
-                    .accessibilityIdentifier("cardEditorCardActionsRequested")
-                    .allowsHitTesting(false)
+            if showCardActions {
+                CardEditorActionBox(
+                    isPresented: $showCardActions,
+                    isEnabled: bodyModel.canMutate,
+                    isPinned: isPinned,
+                    onBackground: { background = .local(Self.fixtureBackgroundData) },
+                    onSpark: {},
+                    onMerge: {},
+                    onShare: {},
+                    onLink: {},
+                    onRoot: {},
+                    onRemove: {},
+                    onTogglePin: { isPinned.toggle() }
+                )
             }
         }
         .sheet(isPresented: $isAddingTag) {
@@ -348,7 +355,7 @@ struct CardEditorShellFixtureScreen: View {
 
     private var fixtureCardActionsHandler: (() -> Void)? {
         guard mode != .blocked else { return nil }
-        return { didRequestCardActions = true }
+        return { showCardActions = true }
     }
 
     private static func document(

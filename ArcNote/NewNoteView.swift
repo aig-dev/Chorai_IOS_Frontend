@@ -285,7 +285,6 @@ private struct CardEditorSessionView: View {
             onSave: retryHandler
         )
         .linkPopup()
-        .accessibilityHidden(showCardActions)
         .overlay {
             if showCardActions {
                 CardEditorActionBox(

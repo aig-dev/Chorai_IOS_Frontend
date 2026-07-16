@@ -224,8 +224,7 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertFalse(more.isEnabled)
         assertReadingOrder(privacy, before: more)
         XCTAssertFalse(
-            app.descendants(matching: .any)["cardEditorCardActionsRequested"]
-                .exists
+            app.descendants(matching: .any)["cardEditorActionsOverlay"].exists
         )
         captureVisual("card-editor-compatibility-blocked")
     }
@@ -346,12 +345,33 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertEqual(privacy.value as? String, "Public")
 
         more.tap()
-        waitFor("cardEditorCardActionsRequested")
+        let overlay = waitFor("cardEditorActionsOverlay")
+        _ = waitFor("cardEditorActionGrid")
+        let close = waitForButton("cardEditorActionsClose")
+        let actions = editorActionButtons()
+        XCTAssertEqual(actions.count, 8)
+        for action in actions {
+            XCTAssertEqual(action.elementType, .button)
+        }
+        assertEditorActionGridLayout(actions, inside: overlay)
+        assertEditorActionCloseLayout(
+            close,
+            relativeTo: actions,
+            inside: overlay
+        )
         XCTAssertFalse(
             app.descendants(matching: .any)["cardEditorCardActionsButton"]
                 .exists,
             "More must invoke Card Actions without an intermediate menu"
         )
+        captureVisual("card-editor-action-box-grid-fixture")
+        close.tap()
+        waitForMissing("cardEditorActionsOverlay")
+
+        more.tap()
+        _ = waitFor("cardEditorActionsOverlay")
+        waitForButton("cardEditorActionsClose").tap()
+        waitForMissing("cardEditorActionsOverlay")
     }
 
     func testCardEditorLongTagStaysInsideReadableWidth() {
@@ -3596,13 +3616,9 @@ final class ArcNoteUITests: XCTestCase {
         try selectFirstPhotoFromImagePicker()
 
         openEditorCardActions()
-        XCTAssertTrue(
-            waitForButton("cardEditorPrivacyButton").label == "Make Private",
-            "Privacy must remain staged in the unsaved draft"
-        )
         XCTAssertEqual(
             waitForEditorCardAction("cardEditorBackgroundButton").label,
-            "Replace Background",
+            "Background",
             "The selected photo must remain staged in Card Actions before first save"
         )
         let cardsBeforeSave = try fetchSmokeCards(
@@ -3616,6 +3632,11 @@ final class ArcNoteUITests: XCTestCase {
         captureVisual("card-editor-new-background-privacy-staged")
 
         dismissEditorCardActions()
+        XCTAssertEqual(
+            waitForButton("cardEditorPrivacyButton").label,
+            "Make Private",
+            "Privacy must remain staged in the unsaved draft"
+        )
         closeNewNoteEditor()
 
         let callbackID = waitFor("note.created-card-id", timeout: 30)
@@ -3670,8 +3691,9 @@ final class ArcNoteUITests: XCTestCase {
         )
         XCTAssertEqual(
             waitForEditorCardAction("cardEditorBackgroundButton").label,
-            "Add Background"
+            "Background"
         )
+        XCTAssertFalse(app.buttons["cardEditorRemoveBackgroundButton"].exists)
         captureVisual("card-editor-card-actions-unsaved")
         try assertNoNewSmokeCardIDs(
             baseline: baselineCardIDs,
@@ -3782,24 +3804,27 @@ final class ArcNoteUITests: XCTestCase {
         _ = waitForEnabledButton("cardEditorAddTag", timeout: 20)
         openEditorCardActions()
 
-        let expectedActions = [
-            ("cardEditorActionLink", "Link"),
-            ("cardEditorBackgroundButton", "Add Background"),
-            ("cardEditorActionShare", "Share"),
-            ("cardEditorActionSpark", "Spark"),
-            ("cardEditorActionMerge", "Merge"),
-            ("cardEditorActionRoot", "Root"),
-            ("cardEditorActionPin", "Pin"),
-            ("cardEditorActionRemove", "Remove"),
-        ]
-        for (identifier, label) in expectedActions {
-            XCTAssertTrue(
-                waitForEditorCardAction(identifier, timeout: 20).exists,
-                "Missing native card action: \(label)"
-            )
-        }
-        captureVisual("card-editor-card-actions")
-        dismissEditorCardActions()
+        let overlay = waitFor("cardEditorActionsOverlay")
+        let close = waitForButton("cardEditorActionsClose")
+        let actions = editorActionButtons()
+        XCTAssertEqual(actions.count, 8)
+        XCTAssertEqual(
+            actions.map(\.label),
+            [
+                "Background", "Spark", "Merge", "Share",
+                "Link", "Root", "Remove", "Pin",
+            ]
+        )
+        XCTAssertFalse(app.buttons["cardEditorRemoveBackgroundButton"].exists)
+        assertEditorActionGridLayout(actions, inside: overlay)
+        assertEditorActionCloseLayout(
+            close,
+            relativeTo: actions,
+            inside: overlay
+        )
+        captureVisual("card-editor-action-box-grid")
+        close.tap()
+        waitForMissing("cardEditorActionsOverlay")
         closeNewNoteEditor()
     }
 
@@ -3825,52 +3850,28 @@ final class ArcNoteUITests: XCTestCase {
         waitFor("cardEditorContent", timeout: 20)
         openEditorCardActions()
 
-        let link = waitForEditorCardAction(
-            "cardEditorActionLink",
-            timeout: 20,
-            requireHittable: true
+        let overlay = waitFor("cardEditorActionsOverlay")
+        let close = waitForButton("cardEditorActionsClose")
+        let actions = editorActionButtons()
+        XCTAssertEqual(actions.count, 8)
+        assertEditorActionGridLayout(actions, inside: overlay)
+        assertEditorActionCloseLayout(
+            close,
+            relativeTo: actions,
+            inside: overlay
         )
-        let background = waitForEditorCardAction(
-            "cardEditorBackgroundButton",
-            timeout: 20,
-            requireHittable: true
-        )
-        XCTAssertFalse(
-            link.frame.intersects(background.frame),
-            "Link and Background actions must remain separately reachable at XXXL"
-        )
-        for identifier in [
-            "cardEditorActionShare",
-            "cardEditorActionSpark",
-            "cardEditorActionMerge",
-            "cardEditorActionRoot",
-            "cardEditorActionPin",
-            "cardEditorActionRemove",
-        ] {
-            XCTAssertTrue(
-                waitForEditorCardAction(identifier, timeout: 20).isEnabled,
-                "Missing enabled Card Actions entry at XXXL: \(identifier)"
-            )
+        XCTAssertTrue(close.isHittable)
+        for action in actions {
+            XCTAssertTrue(action.isEnabled)
+            XCTAssertTrue(action.isHittable)
         }
-        captureVisual("card-editor-card-actions-accessibility-text")
-
-        let dialog = app.sheets["Card Actions"].firstMatch
-        XCTAssertTrue(
-            dialog.waitForExistence(timeout: 5),
-            "Card Actions dialog must remain available for scrolling at XXXL"
-        )
-        dialog.swipeUp()
-        _ = waitForEditorCardAction(
-            "cardEditorActionRemove",
-            timeout: 10,
-            requireHittable: true
-        )
-        captureVisual("card-editor-card-actions-accessibility-text-scrolled")
-        dismissEditorCardActions()
+        captureVisual("card-editor-action-box-grid-accessibility-xxxl")
+        close.tap()
+        waitForMissing("cardEditorActionsOverlay")
         closeNewNoteEditor()
     }
 
-    func testCardEditorBackgroundUploadAndRemovalPersistToGo() throws {
+    func testCardEditorBackgroundUploadPersistsToGo() throws {
         let session = try requireSmokeSession()
         seedAppSession(session)
         let suffix = "editor-background-\(Int(Date().timeIntervalSince1970))"
@@ -3887,15 +3888,19 @@ final class ArcNoteUITests: XCTestCase {
         tap("tab.library")
         waitFor("card.home.\(cardID)", timeout: 30).tap()
         waitFor("cardEditorContent", timeout: 20)
-        revealEditorBackgroundButton().tap()
+        let initialBackground = revealEditorBackgroundButton()
+        XCTAssertEqual(initialBackground.label, "Background")
+        XCTAssertFalse(app.buttons["cardEditorRemoveBackgroundButton"].exists)
+        initialBackground.tap()
         try selectFirstPhotoFromImagePicker()
 
         openEditorCardActions()
         XCTAssertEqual(
             waitForEditorCardAction("cardEditorBackgroundButton").label,
-            "Replace Background",
-            "A selected photo must become the staged background action state"
+            "Background",
+            "The background action label must remain stable while staged"
         )
+        XCTAssertFalse(app.buttons["cardEditorRemoveBackgroundButton"].exists)
         XCTAssertNil(
             try fetchSmokeCard(id: cardID, token: session.token)
                 .backgroundMediaRef,
@@ -3914,19 +3919,12 @@ final class ArcNoteUITests: XCTestCase {
         openEditorCardActions()
         XCTAssertEqual(
             waitForEditorCardAction("cardEditorBackgroundButton").label,
-            "Replace Background"
+            "Background"
         )
+        XCTAssertFalse(app.buttons["cardEditorRemoveBackgroundButton"].exists)
         captureVisual("card-editor-background-uploaded")
-
-        let remove = waitForEditorCardAction(
-            "cardEditorRemoveBackgroundButton",
-            requireHittable: true
-        )
-        remove.tap()
-
-        waitForSmokeCardState(id: cardID, token: session.token) {
-            $0.backgroundMediaRef == nil
-        }
+        dismissEditorCardActions()
+        closeNewNoteEditor()
     }
 
     func testLibrarySoftDeleteFailureKeepsRetryableConfirmation() throws {
@@ -5671,6 +5669,200 @@ final class ArcNoteUITests: XCTestCase {
         return action
     }
 
+    private func editorActionButtons(
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) -> [XCUIElement] {
+        let identifiers = [
+            "cardEditorBackgroundButton",
+            "cardEditorActionSpark",
+            "cardEditorActionMerge",
+            "cardEditorActionShare",
+            "cardEditorActionLink",
+            "cardEditorActionRoot",
+            "cardEditorActionRemove",
+            "cardEditorActionPin",
+        ]
+        let actions = identifiers.map { identifier in
+            waitForEditorCardAction(
+                identifier,
+                timeout: 20,
+                requireHittable: true,
+                file: file,
+                line: line
+            )
+        }
+        XCTAssertEqual(
+            Set(actions.map(\.identifier)),
+            Set(identifiers),
+            "The Action Box must expose exactly the eight accepted semantic buttons",
+            file: file,
+            line: line
+        )
+        return actions
+    }
+
+    private func assertEditorActionGridLayout(
+        _ actions: [XCUIElement],
+        inside overlay: XCUIElement,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        guard actions.count == 8 else {
+            XCTFail(
+                "Expected eight editor actions, found \(actions.count)",
+                file: file,
+                line: line
+            )
+            return
+        }
+
+        let background = actions[0]
+        let spark = actions[1]
+        let merge = actions[2]
+        let share = actions[3]
+        let link = actions[4]
+        let root = actions[5]
+        let remove = actions[6]
+        let pin = actions[7]
+
+        XCTAssertEqual(
+            background.frame.midY,
+            spark.frame.midY,
+            accuracy: 3,
+            file: file,
+            line: line
+        )
+        XCTAssertEqual(
+            spark.frame.midY,
+            merge.frame.midY,
+            accuracy: 3,
+            file: file,
+            line: line
+        )
+        XCTAssertLessThan(
+            background.frame.midX,
+            spark.frame.midX,
+            file: file,
+            line: line
+        )
+        XCTAssertLessThan(
+            spark.frame.midX,
+            merge.frame.midX,
+            file: file,
+            line: line
+        )
+        XCTAssertEqual(
+            share.frame.midX,
+            spark.frame.midX,
+            accuracy: 3,
+            file: file,
+            line: line
+        )
+        XCTAssertEqual(
+            link.frame.midX,
+            merge.frame.midX,
+            accuracy: 3,
+            file: file,
+            line: line
+        )
+        XCTAssertEqual(
+            share.frame.midY,
+            link.frame.midY,
+            accuracy: 3,
+            file: file,
+            line: line
+        )
+        XCTAssertEqual(
+            root.frame.midY,
+            remove.frame.midY,
+            accuracy: 3,
+            file: file,
+            line: line
+        )
+        XCTAssertEqual(
+            remove.frame.midY,
+            pin.frame.midY,
+            accuracy: 3,
+            file: file,
+            line: line
+        )
+        XCTAssertEqual(
+            root.frame.midX,
+            background.frame.midX,
+            accuracy: 3,
+            file: file,
+            line: line
+        )
+        XCTAssertEqual(
+            remove.frame.midX,
+            spark.frame.midX,
+            accuracy: 3,
+            file: file,
+            line: line
+        )
+        XCTAssertEqual(
+            pin.frame.midX,
+            merge.frame.midX,
+            accuracy: 3,
+            file: file,
+            line: line
+        )
+        XCTAssertLessThan(
+            spark.frame.midY,
+            share.frame.midY,
+            file: file,
+            line: line
+        )
+        XCTAssertLessThan(
+            share.frame.midY,
+            remove.frame.midY,
+            file: file,
+            line: line
+        )
+
+        let overlayBounds = overlay.frame.insetBy(dx: -1, dy: -1)
+        for (index, action) in actions.enumerated() {
+            XCTAssertTrue(
+                overlayBounds.contains(action.frame),
+                "\(action.identifier) must remain inside the Action Box overlay",
+                file: file,
+                line: line
+            )
+            for laterAction in actions.dropFirst(index + 1) {
+                XCTAssertFalse(
+                    action.frame.intersects(laterAction.frame),
+                    "\(action.identifier) overlaps \(laterAction.identifier)",
+                    file: file,
+                    line: line
+                )
+            }
+        }
+    }
+
+    private func assertEditorActionCloseLayout(
+        _ close: XCUIElement,
+        relativeTo actions: [XCUIElement],
+        inside overlay: XCUIElement,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        XCTAssertTrue(
+            overlay.frame.insetBy(dx: -1, dy: -1).contains(close.frame),
+            "Close must remain inside the Action Box overlay",
+            file: file,
+            line: line
+        )
+        for action in actions {
+            XCTAssertFalse(
+                close.frame.intersects(action.frame),
+                "Close overlaps \(action.identifier)",
+                file: file,
+                line: line
+            )
+        }
+    }
+
     private func openEditorCardActions(
         file: StaticString = #filePath,
         line: UInt = #line
@@ -5686,14 +5878,14 @@ final class ArcNoteUITests: XCTestCase {
             file: file,
             line: line
         ).tap()
-        _ = waitForEditorCardAction(
-            "cardEditorActionLink",
+        _ = waitFor(
+            "cardEditorActionsOverlay",
             timeout: 10,
             file: file,
             line: line
         )
-        _ = waitForEditorCardAction(
-            "cardEditorBackgroundButton",
+        _ = waitFor(
+            "cardEditorActionGrid",
             timeout: 10,
             file: file,
             line: line
@@ -5704,121 +5896,14 @@ final class ArcNoteUITests: XCTestCase {
         file: StaticString = #filePath,
         line: UInt = #line
     ) {
-        let dialogSentinel = app.buttons["cardEditorActionLink"].firstMatch
-        let cancel = app.buttons["Cancel"].firstMatch
-        let dialog = app.sheets["Card Actions"].firstMatch
-        if cancel.waitForExistence(timeout: 1), cancel.isHittable {
-            cancel.tap()
-        } else {
-            XCTAssertTrue(
-                dialog.waitForExistence(timeout: 5),
-                "Card Actions dialog did not appear",
-                file: file,
-                line: line
-            )
-            let appFrame = app.frame
-            let dialogFrame = dialog.frame
-            let actionIdentifiers = [
-                "cardEditorActionLink",
-                "cardEditorBackgroundButton",
-                "cardEditorRemoveBackgroundButton",
-                "cardEditorActionShare",
-                "cardEditorActionSpark",
-                "cardEditorActionMerge",
-                "cardEditorActionRoot",
-                "cardEditorActionPin",
-                "cardEditorActionRemove",
-            ]
-            let actionFrames = actionIdentifiers.compactMap { identifier -> CGRect? in
-                let action = app.buttons[identifier].firstMatch
-                return action.exists ? action.frame : nil
-            }
-            let leftInset = dialogFrame.minX - appFrame.minX
-            let rightInset = appFrame.maxX - dialogFrame.maxX
-            let topInset = dialogFrame.minY - appFrame.minY
-            let bottomInset = appFrame.maxY - dialogFrame.maxY
-            var dismissCandidates: [CGPoint] = []
-            if leftInset > 2 {
-                dismissCandidates.append(
-                    CGPoint(
-                        x: appFrame.minX + max(1, leftInset / 2),
-                        y: appFrame.midY
-                    )
-                )
-            }
-            if rightInset > 2 {
-                dismissCandidates.append(
-                    CGPoint(
-                        x: dialogFrame.maxX + max(1, rightInset / 2),
-                        y: appFrame.midY
-                    )
-                )
-            }
-            if topInset > 2 {
-                dismissCandidates.append(
-                    CGPoint(
-                        x: appFrame.midX,
-                        y: appFrame.minY + max(1, topInset / 2)
-                    )
-                )
-            }
-            if bottomInset > 2 {
-                dismissCandidates.append(
-                    CGPoint(
-                        x: appFrame.midX,
-                        y: dialogFrame.maxY + max(1, bottomInset / 2)
-                    )
-                )
-            }
-            let dismissPoint = dismissCandidates.first(where: { candidate in
-                !dialogFrame.contains(candidate)
-                    && !actionFrames.contains(where: { $0.contains(candidate) })
-            })
-            if let dismissPoint {
-                XCTAssertFalse(
-                    dialogFrame.contains(dismissPoint),
-                    "Card Actions fallback dismissal point overlaps the dialog",
-                    file: file,
-                    line: line
-                )
-                for identifier in actionIdentifiers {
-                    let action = app.buttons[identifier].firstMatch
-                    if action.exists {
-                        XCTAssertFalse(
-                            action.frame.contains(dismissPoint),
-                            "Card Actions fallback point overlaps \(identifier)",
-                            file: file,
-                            line: line
-                        )
-                    }
-                }
-                app.coordinate(
-                    withNormalizedOffset: CGVector(
-                        dx: (dismissPoint.x - appFrame.minX) / appFrame.width,
-                        dy: (dismissPoint.y - appFrame.minY) / appFrame.height
-                    )
-                ).tap()
-            }
-        }
-
-        let backgroundTapDeadline = Date().addingTimeInterval(1)
-        while Date() < backgroundTapDeadline && dialogSentinel.exists {
-            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
-        }
-        if dialogSentinel.exists {
-            XCTAssertTrue(
-                dialog.waitForExistence(timeout: 2),
-                "Card Actions dialog disappeared before gesture dismissal",
-                file: file,
-                line: line
-            )
-            for _ in 0..<3 where dialogSentinel.exists {
-                dialog.swipeDown()
-                RunLoop.current.run(until: Date().addingTimeInterval(0.5))
-            }
-        }
-        waitForElementToDisappear(
-            dialogSentinel,
+        waitForButton(
+            "cardEditorActionsClose",
+            timeout: 10,
+            file: file,
+            line: line
+        ).tap()
+        waitForMissing(
+            "cardEditorActionsOverlay",
             timeout: 10,
             file: file,
             line: line
