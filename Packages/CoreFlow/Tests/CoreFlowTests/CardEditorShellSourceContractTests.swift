@@ -786,8 +786,8 @@ final class CardEditorShellSourceContractTests: XCTestCase {
             ambient.components(separatedBy: "RadialGradient(").count - 1,
             2
         )
-        XCTAssertTrue(ambient.contains("center: .topTrailing"))
-        XCTAssertTrue(ambient.contains("center: .bottomLeading"))
+        XCTAssertTrue(ambient.contains("center: upperLightCenter"))
+        XCTAssertTrue(ambient.contains("center: lowerLightCenter"))
         XCTAssertTrue(ambient.contains("if !reduceTransparency"))
         XCTAssertTrue(ambient.contains(".allowsHitTesting(false)"))
         XCTAssertTrue(ambient.contains(".accessibilityHidden(true)"))
@@ -827,6 +827,28 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         XCTAssertLessThan(image.lowerBound, veil.lowerBound)
         XCTAssertLessThan(veil.lowerBound, glass.lowerBound)
         XCTAssertTrue(layer.contains("style: .writingPlane"))
+    }
+
+    func testAmbientLightUsesViewportRelativeCentersInsideTheScene() throws {
+        let ambient = try source(
+            at: "ArcNote/CardEditor/CardEditorAmbientBackdrop.swift"
+        )
+
+        XCTAssertTrue(ambient.contains("GeometryReader { proxy in"))
+        XCTAssertTrue(
+            ambient.contains("UnitPoint(x: 0.82, y: 0.18)"),
+            "The upper light should originate inside the upper-trailing scene"
+        )
+        XCTAssertTrue(
+            ambient.contains("UnitPoint(x: 0.16, y: 0.70)"),
+            "The lower light should cross the writing plane on compact screens"
+        )
+        XCTAssertTrue(
+            ambient.contains("max(proxy.size.width, proxy.size.height)"),
+            "Ambient light radius should scale with the viewport"
+        )
+        XCTAssertFalse(ambient.contains("center: .bottomLeading"))
+        XCTAssertFalse(ambient.contains(".offset(x: -88, y: 120)"))
     }
 
     func testDebugAppRouteExposesDeterministicCardEditorFixture() throws {
