@@ -47,16 +47,17 @@ final class BlockNoteEditorResourceTests: XCTestCase {
             .appendingPathComponent("editor.js", isDirectory: false)
         let editorJS = try String(contentsOf: editorJSURL, encoding: .utf8)
 
-        XCTAssertTrue(
-            editorJS.contains(
-                #"l=w.useCallback(async d=>I2(vSe(o.requestCardLink),d),[o])"#
+        for stableMarker in [
+            #"title:"Link a card""#,
+            #"subtext:"Connect this note to another card""#,
+            #"triggerCharacter:"@""#,
+            "requestCardLink",
+        ] {
+            XCTAssertTrue(
+                editorJS.contains(stableMarker),
+                "Bundled card-link shortcut is missing \(stableMarker)"
             )
-        )
-        XCTAssertTrue(
-            editorJS.contains(
-                #"C.jsx(a3,{triggerCharacter:"@",getItems:l})"#
-            )
-        )
+        }
     }
 
     func testValidationRejectsUnsupportedProtocolVersionBeforeLoadingEditor() throws {
