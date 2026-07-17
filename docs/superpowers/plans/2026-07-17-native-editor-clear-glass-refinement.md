@@ -19,6 +19,7 @@
 - Dynamic Type, VoiceOver order, selection, focus, scrolling, keyboard formatting, slash behavior, tags, links, and inline-image source selection remain unchanged.
 - No blur, tint, highlight, shadow, or ambient decoration may intercept input or enter the accessibility tree.
 - The supplied flat-gray screenshot and a fresh screenshot from simulator `86CD9628-7C27-4799-B237-3EEC82E7E9B5` are the visual before/after authority.
+- The ArcNote target currently forces `INFOPLIST_KEY_UIUserInterfaceStyle = Light` in both build configurations. A capture taken after switching the simulator to system Dark therefore intentionally keeps the same app palette; it is a system-setting stability check, not independent dark-palette coverage. True dark-palette validation requires removing that product constraint in separate work.
 
 ---
 
@@ -106,15 +107,50 @@ func testEditorSurfacesUseAccessibilityAwareLiquidGlassFamily() throws {
     XCTAssertTrue(glass.contains("enum CardEditorGlassStyle: Equatable"))
     XCTAssertTrue(glass.contains("case writingPlane"))
     XCTAssertTrue(glass.contains("case chrome"))
+    let materialStart = try XCTUnwrap(
+        glass.range(of: "private var material: some View")
+    )
+    let material = String(glass[materialStart.lowerBound..<glass.endIndex])
+    let writingPlaneMaterialStart = try XCTUnwrap(
+        material.range(of: "case .writingPlane:")
+    )
+    let chromeMaterialStart = try XCTUnwrap(
+        material.range(
+            of: "case .chrome:",
+            range: writingPlaneMaterialStart.upperBound..<material.endIndex
+        )
+    )
+    let writingPlaneMaterial = String(
+        material[
+            writingPlaneMaterialStart.lowerBound..<chromeMaterialStart.lowerBound
+        ]
+    )
+    let chromeMaterial = String(
+        material[chromeMaterialStart.lowerBound..<material.endIndex]
+    )
+
     XCTAssertTrue(glass.contains("if #available(iOS 26.0, *)"))
     XCTAssertTrue(
-        glass.contains(".glassEffect(.clear.interactive(), in: shape)")
+        writingPlaneMaterial.contains(
+            ".glassEffect(.clear.interactive(), in: shape)"
+        )
+    )
+    XCTAssertFalse(
+        writingPlaneMaterial.contains(
+            ".glassEffect(.regular.interactive(), in: shape)"
+        )
     )
     XCTAssertTrue(
-        glass.contains(".glassEffect(.regular.interactive(), in: shape)")
+        chromeMaterial.contains(
+            ".glassEffect(.regular.interactive(), in: shape)"
+        )
+    )
+    XCTAssertFalse(
+        chromeMaterial.contains(
+            ".glassEffect(.clear.interactive(), in: shape)"
+        )
     )
     XCTAssertTrue(glass.contains("shape.fill(.ultraThinMaterial)"))
-    XCTAssertTrue(glass.contains("LinearGradient("))
     XCTAssertTrue(
         glass.contains("@Environment(\\.accessibilityReduceTransparency)")
     )
@@ -190,19 +226,25 @@ struct CardEditorGlassSurface<SurfaceShape: Shape>: View {
         switch style {
         case .writingPlane:
             shape.stroke(
+                contrast == .increased
+                    ? Color.white.opacity(0.42)
+                    : Color.white.opacity(0.25),
+                lineWidth: contrast == .increased ? 1.2 : 0.8
+            )
+            .mask(
                 LinearGradient(
                     colors: [
+                        Color.white,
                         Color.white.opacity(
-                            contrast == .increased ? 0.40 : 0.24
+                            contrast == .increased ? 0.56 : 0.34
                         ),
                         Color.white.opacity(
-                            contrast == .increased ? 0.12 : 0.03
+                            contrast == .increased ? 0.14 : 0.02
                         ),
                     ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                ),
-                lineWidth: contrast == .increased ? 1.2 : 0.8
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
             )
 
         case .chrome:
@@ -327,8 +369,8 @@ func testWritingPlaneUsesContinuousAmbientSceneAndVeilBelowGlass() throws {
         ambient.components(separatedBy: "RadialGradient(").count - 1,
         2
     )
-    XCTAssertTrue(ambient.contains("center: .topTrailing"))
-    XCTAssertTrue(ambient.contains("center: .bottomLeading"))
+    XCTAssertTrue(ambient.contains("center: upperLightCenter"))
+    XCTAssertTrue(ambient.contains("center: lowerLightCenter"))
     XCTAssertTrue(ambient.contains("if !reduceTransparency"))
     XCTAssertTrue(ambient.contains(".allowsHitTesting(false)"))
     XCTAssertTrue(ambient.contains(".accessibilityHidden(true)"))
@@ -371,6 +413,12 @@ func testWritingPlaneUsesContinuousAmbientSceneAndVeilBelowGlass() throws {
 }
 ```
 
+Also add `testAmbientLightUsesViewportRelativeCentersInsideTheScene` to lock
+the final compact-screen geometry: `UnitPoint(x: 0.82, y: 0.18)`,
+`UnitPoint(x: 0.16, y: 0.70)`, radii derived from
+`max(proxy.size.width, proxy.size.height)` with multipliers `0.58` and `0.54`,
+and no `.offset(` modifier anywhere in the ambient source.
+
 In `testEditorRespectsMotionTransparencyAndContrastPreferences`, replace the old combined-opacity assertion with:
 
 ```swift
@@ -407,34 +455,41 @@ struct CardEditorAmbientBackdrop: View {
     @Environment(\.accessibilityReduceTransparency)
     private var reduceTransparency
 
+    private let upperLightCenter = UnitPoint(x: 0.82, y: 0.18)
+    private let lowerLightCenter = UnitPoint(x: 0.16, y: 0.70)
+
     var body: some View {
         ZStack {
             ZenVisualTokens.background
 
             if !reduceTransparency {
-                RadialGradient(
-                    colors: [
-                        Color(red: 0.44, green: 0.25, blue: 0.88)
-                            .opacity(0.34),
-                        Color.clear,
-                    ],
-                    center: .topTrailing,
-                    startRadius: 0,
-                    endRadius: 320
-                )
-                .offset(x: 72, y: -88)
+                GeometryReader { proxy in
+                    let sceneExtent = max(proxy.size.width, proxy.size.height)
 
-                RadialGradient(
-                    colors: [
-                        Color(red: 0.14, green: 0.30, blue: 0.70)
-                            .opacity(0.24),
-                        Color.clear,
-                    ],
-                    center: .bottomLeading,
-                    startRadius: 0,
-                    endRadius: 360
-                )
-                .offset(x: -88, y: 120)
+                    ZStack {
+                        RadialGradient(
+                            colors: [
+                                Color(red: 0.44, green: 0.25, blue: 0.88)
+                                    .opacity(0.34),
+                                Color.clear,
+                            ],
+                            center: upperLightCenter,
+                            startRadius: 0,
+                            endRadius: sceneExtent * 0.58
+                        )
+
+                        RadialGradient(
+                            colors: [
+                                Color(red: 0.14, green: 0.30, blue: 0.70)
+                                    .opacity(0.28),
+                                Color.clear,
+                            ],
+                            center: lowerLightCenter,
+                            startRadius: 0,
+                            endRadius: sceneExtent * 0.54
+                        )
+                    }
+                }
             }
         }
         .ignoresSafeArea()
@@ -611,6 +666,16 @@ git diff --cached --check
 git commit -m "feat(editor): reveal ambient light through glass"
 ```
 
+### Task 2A: Simulator-led visual refinements
+
+The native screenshot gate produced three focused follow-ups after the initial
+Task 2 commit: lower the standard image veil to its final `0.22`, move both
+ambient origins inside the viewport with adaptive radii and lock that geometry
+in source contracts, then fade the writing-plane edge from top to bottom. Keep
+these as separate fix/test commits so the visual evidence and regression
+protection remain auditable rather than rewriting the original implementation
+commits.
+
 ### Task 3: Native Visual Gate and Interaction Regression
 
 **Files:**
@@ -622,7 +687,7 @@ git commit -m "feat(editor): reveal ambient light through glass"
 **Interfaces:**
 
 - Consumes: the compiled `ArcNote.app`, existing `populated`/`background`/`keyboard` fixtures, simulator `86CD9628-7C27-4799-B237-3EEC82E7E9B5`, supported simulator UI settings, and bundle identifier `com.michen.arcnote`.
-- Produces: fresh no-background, image-background, dark, Increase Contrast, and Reduce Transparency screenshots; a passing editor interaction regression; and a simulator left open on the standard native editor.
+- Produces: fresh no-background, image-background, system-Dark-setting stability, Increase Contrast, and Reduce Transparency screenshots; a passing editor interaction regression; and a simulator left open on the standard native editor.
 
 - [ ] **Step 1: Run every affected source/resource contract**
 
@@ -680,6 +745,12 @@ xcrun simctl io 86CD9628-7C27-4799-B237-3EEC82E7E9B5 screenshot /tmp/chorai-clea
 xcrun simctl ui 86CD9628-7C27-4799-B237-3EEC82E7E9B5 increase_contrast disabled
 ```
 
+Because ArcNote forces Light via `UIUserInterfaceStyle`,
+`populated-dark.png` is expected to retain the same application palette. Its
+purpose is to prove that changing the surrounding system appearance does not
+destabilize readability or composition; it does not establish independent dark
+theme coverage.
+
 For Reduce Transparency, Xcode 26.2 has no supported `simctl ui` switch. Launch Settings with:
 
 ```bash
@@ -705,12 +776,12 @@ Use the image-viewing tool on the supplied reference and every `/tmp/chorai-clea
 
 - `populated-light.png` visibly transmits non-uniform violet/indigo ambient color and no longer reads as a uniform gray card.
 - Ambient fields continue outside the pane; they are not painted only inside its rounded rectangle.
-- The top/leading pane edge is brighter than the bottom edge, without a uniform white box.
+- The top pane edge is brighter than the bottom edge through the final top-to-bottom mask, without a uniform white box.
 - `background-light.png` keeps image color visible through the writing plane while body text remains readable.
 - Compact top controls remain visually stronger than the writing plane.
 - `populated-increased-contrast.png` has a stronger edge without geometry changes.
 - `populated-reduce-transparency.png` is deliberately opaque and readable.
-- Light and dark captures preserve readable editor text/caret colors.
+- The Light capture is readable, and the system-Dark-setting stability capture preserves the same forced-Light text/caret palette without regressions.
 
 The visual gate is failed if the writing plane is still a flat gray slab, even when every automated test passes.
 
@@ -729,7 +800,7 @@ Expected: the simulator remains booted on the standard native populated editor, 
 ```bash
 git diff --check
 git status --short
-git log -5 --oneline
+git log --oneline --reverse ca69574..HEAD
 ```
 
-Expected: no uncommitted implementation files, no whitespace errors, and two focused implementation commits after the approved design and plan commits.
+Expected: no uncommitted implementation files or whitespace errors. The focused history should show the approved design/plan, semantic material and veil work, ambient scene plus adaptive-geometry hardening, top-to-bottom edge refinement, and final QA/test-documentation closure in that order.

@@ -404,26 +404,81 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         XCTAssertTrue(glass.contains("enum CardEditorGlassStyle: Equatable"))
         XCTAssertTrue(glass.contains("case writingPlane"))
         XCTAssertTrue(glass.contains("case chrome"))
+
+        let edgeStart = try XCTUnwrap(
+            glass.range(of: "private var edge: some View")
+        )
+        let materialStart = try XCTUnwrap(
+            glass.range(
+                of: "private var material: some View",
+                range: edgeStart.upperBound..<glass.endIndex
+            )
+        )
+        let edge = String(
+            glass[edgeStart.lowerBound..<materialStart.lowerBound]
+        )
         let writingPlaneEdgeStart = try XCTUnwrap(
-            glass.range(of: "case .writingPlane:")
+            edge.range(of: "case .writingPlane:")
         )
         let chromeEdgeStart = try XCTUnwrap(
-            glass.range(
+            edge.range(
                 of: "case .chrome:",
-                range: writingPlaneEdgeStart.upperBound..<glass.endIndex
+                range: writingPlaneEdgeStart.upperBound..<edge.endIndex
             )
         )
         let writingPlaneEdge = String(
-            glass[
+            edge[
                 writingPlaneEdgeStart.lowerBound..<chromeEdgeStart.lowerBound
             ]
         )
+
+        let material = String(glass[materialStart.lowerBound..<glass.endIndex])
+        let writingPlaneMaterialStart = try XCTUnwrap(
+            material.range(of: "case .writingPlane:")
+        )
+        let chromeMaterialStart = try XCTUnwrap(
+            material.range(
+                of: "case .chrome:",
+                range: writingPlaneMaterialStart.upperBound..<material.endIndex
+            )
+        )
+        let writingPlaneMaterial = String(
+            material[
+                writingPlaneMaterialStart.lowerBound..<chromeMaterialStart.lowerBound
+            ]
+        )
+        let chromeMaterial = String(
+            material[chromeMaterialStart.lowerBound..<material.endIndex]
+        )
+
         XCTAssertTrue(glass.contains("if #available(iOS 26.0, *)"))
         XCTAssertTrue(
-            glass.contains(".glassEffect(.clear.interactive(), in: shape)")
+            writingPlaneMaterial.contains(
+                ".glassEffect(.clear.interactive(), in: shape)"
+            )
+        )
+        XCTAssertEqual(
+            writingPlaneMaterial.components(separatedBy: ".glassEffect(").count - 1,
+            1
+        )
+        XCTAssertFalse(
+            writingPlaneMaterial.contains(
+                ".glassEffect(.regular.interactive(), in: shape)"
+            )
         )
         XCTAssertTrue(
-            glass.contains(".glassEffect(.regular.interactive(), in: shape)")
+            chromeMaterial.contains(
+                ".glassEffect(.regular.interactive(), in: shape)"
+            )
+        )
+        XCTAssertEqual(
+            chromeMaterial.components(separatedBy: ".glassEffect(").count - 1,
+            1
+        )
+        XCTAssertFalse(
+            chromeMaterial.contains(
+                ".glassEffect(.clear.interactive(), in: shape)"
+            )
         )
         XCTAssertTrue(glass.contains("shape.fill(.ultraThinMaterial)"))
         XCTAssertTrue(writingPlaneEdge.contains("LinearGradient("))
