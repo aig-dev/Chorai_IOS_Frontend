@@ -17,6 +17,7 @@
 		C0DEF3002F80000100000016 /* CardMetadataPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF3002F80000100000026 /* CardMetadataPresentation.swift */; };
 		C0DEF3002F80000100000017 /* ActionBoxView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF3002F80000100000027 /* ActionBoxView.swift */; };
 		C0DEF3002F80000100000018 /* CardEditorActionBox.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF3002F80000100000028 /* CardEditorActionBox.swift */; };
+		C0DEF3002F80000100000019 /* CardEditorInlineImageSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF3002F80000100000029 /* CardEditorInlineImageSource.swift */; };
 		C0DEF1012F60000100000003 /* NetworkCoreFlowService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1012F60000100000002 /* NetworkCoreFlowService.swift */; };
 		C0DEF1022F60000100000003 /* NetworkCoreSparkService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1022F60000100000002 /* NetworkCoreSparkService.swift */; };
 		C0DEF1022F60000100000005 /* SparkContinuationViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1022F60000100000004 /* SparkContinuationViews.swift */; };
@@ -215,6 +216,7 @@
 		1B7248B32E34AAE000035D3D /* PopupMenuView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = PopupMenuView.swift; sourceTree = "<group>"; };
 		C0DEF3002F80000100000027 /* ActionBoxView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionBoxView.swift; sourceTree = "<group>"; };
 		C0DEF3002F80000100000028 /* CardEditorActionBox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardEditorActionBox.swift; sourceTree = "<group>"; };
+		C0DEF3002F80000100000029 /* CardEditorInlineImageSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardEditorInlineImageSource.swift; sourceTree = "<group>"; };
 		1B7248B72E34BA4B00035D3D /* ExploreView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ExploreView.swift; sourceTree = "<group>"; };
 		1B7248B82E34BA4B00035D3D /* ChatView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
 		1B7248B92E34BA4B00035D3D /* HomeView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
@@ -284,6 +286,7 @@
 				C0DEF3002F80000100000024 /* CardEditorFormattingBar.swift */,
 				C0DEF3002F80000100000025 /* CardEditorBackground.swift */,
 				C0DEF3002F80000100000028 /* CardEditorActionBox.swift */,
+				C0DEF3002F80000100000029 /* CardEditorInlineImageSource.swift */,
 			);
 			path = CardEditor;
 			sourceTree = "<group>";
@@ -583,6 +586,7 @@
 				C0DEF3002F80000100000015 /* CardEditorBackground.swift in Sources */,
 				C0DEF3002F80000100000017 /* ActionBoxView.swift in Sources */,
 				C0DEF3002F80000100000018 /* CardEditorActionBox.swift in Sources */,
+				C0DEF3002F80000100000019 /* CardEditorInlineImageSource.swift in Sources */,
 				C0DEF1012F60000100000003 /* NetworkCoreFlowService.swift in Sources */,
 				C0DEF1022F60000100000003 /* NetworkCoreSparkService.swift in Sources */,
 				C0DEF1022F60000100000005 /* SparkContinuationViews.swift in Sources */,

@@ -11,6 +11,7 @@ struct CardEditorShell: View {
     let isPublic: Bool
     let isMetadataEditable: Bool
     let isSaving: Bool
+    let isInlineImageProcessing: Bool
     let saveActionTitle: String
     let saveMessage: String?
     let onBack: () -> Void
@@ -28,6 +29,7 @@ struct CardEditorShell: View {
         isPublic: Bool,
         isMetadataEditable: Bool,
         isSaving: Bool = false,
+        isInlineImageProcessing: Bool = false,
         saveActionTitle: String = "Save",
         saveMessage: String? = nil,
         onBack: @escaping () -> Void,
@@ -44,6 +46,7 @@ struct CardEditorShell: View {
         self.isPublic = isPublic
         self.isMetadataEditable = isMetadataEditable
         self.isSaving = isSaving
+        self.isInlineImageProcessing = isInlineImageProcessing
         self.saveActionTitle = saveActionTitle
         self.saveMessage = saveMessage
         self.onBack = onBack
@@ -80,6 +83,10 @@ struct CardEditorShell: View {
                         CardEditorLinkRow(links: links)
                             .accessibilityElement(children: .contain)
                             .accessibilityIdentifier("cardEditorLinksRow")
+                    }
+
+                    if isInlineImageProcessing || saveMessage != nil {
+                        editorStatus
                     }
 
                     if let onSave {
@@ -123,36 +130,51 @@ struct CardEditorShell: View {
         )
     }
 
-    private func inlineSaveAction(_ action: @escaping () -> Void) -> some View {
+    private var editorStatus: some View {
         VStack(alignment: .leading, spacing: 6) {
+            if isInlineImageProcessing {
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .controlSize(.small)
+                        .tint(.white)
+                    Text("Adding image…")
+                        .font(.footnote.weight(.medium))
+                }
+                .foregroundStyle(.white.opacity(0.76))
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("cardEditorInlineImageProgress")
+            }
+
             if let saveMessage {
                 Text(saveMessage)
                     .font(.footnote)
                     .foregroundStyle(.white.opacity(0.68))
                     .accessibilityIdentifier("cardEditorSaveMessage")
             }
-
-            Button(action: action) {
-                HStack(spacing: 8) {
-                    if isSaving {
-                        ProgressView()
-                            .tint(.white)
-                    }
-                    Text(isSaving ? "Saving" : saveActionTitle)
-                        .font(.body.weight(.semibold))
-                }
-                .padding(.horizontal, 16)
-                .frame(minWidth: 88, minHeight: 44)
-                .background(
-                    Capsule(style: .continuous)
-                        .fill(ZenVisualTokens.accent.opacity(0.28))
-                )
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(.white)
-            .disabled(!bodyModel.canSave || isSaving)
-            .accessibilityIdentifier("cardEditorSave")
         }
+    }
+
+    private func inlineSaveAction(_ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                if isSaving {
+                    ProgressView()
+                        .tint(.white)
+                }
+                Text(isSaving ? "Saving" : saveActionTitle)
+                    .font(.body.weight(.semibold))
+            }
+            .padding(.horizontal, 16)
+            .frame(minWidth: 88, minHeight: 44)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(ZenVisualTokens.accent.opacity(0.28))
+            )
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.white)
+        .disabled(!bodyModel.canSave || isSaving)
+        .accessibilityIdentifier("cardEditorSave")
     }
 }
 

@@ -205,7 +205,7 @@ final class NewNoteViewSourceContractTests: XCTestCase {
         XCTAssertTrue(configuration.contains("addOntologyLink()"))
     }
 
-    func testBackgroundStagesWithoutSavingAndInlineImageInsertsOnlyAfterUpload() throws {
+    func testBackgroundStagesWithoutSaving() throws {
         let source = try Self.newNoteSource()
         let privacy = try XCTUnwrap(
             Self.functionBody(in: source, signature: "func togglePrivacy()")
@@ -227,12 +227,43 @@ final class NewNoteViewSourceContractTests: XCTestCase {
         XCTAssertTrue(background.contains("editingStore.stageBackground("))
         XCTAssertFalse(background.contains("editingStore.save()"))
         XCTAssertFalse(background.contains("insertImage("))
+    }
+
+    func testInlineImagePhotoAndCameraShareOneGuardedUploadThenInsertPipeline() throws {
+        let source = try Self.newNoteSource()
+
+        let photo = try XCTUnwrap(
+            Self.functionBody(
+                in: source,
+                signature: "func handleSelectedInlineImagePhoto("
+            )
+        )
+        XCTAssertTrue(photo.contains("beginInlineImageProcessing"))
+        XCTAssertTrue(photo.contains("cardEditingImage("))
+
+        let camera = try XCTUnwrap(
+            Self.functionBody(
+                in: source,
+                signature: "func handleCapturedInlineImage("
+            )
+        )
+        XCTAssertTrue(camera.contains("beginInlineImageProcessing"))
+        XCTAssertTrue(camera.contains("capturedCardEditingImage("))
 
         let inlineImage = try XCTUnwrap(
             Self.functionBody(
                 in: source,
-                signature: "func handleSelectedInlineImage("
+                signature: "func beginInlineImageProcessing("
             )
+        )
+        XCTAssertTrue(
+            inlineImage.contains(
+                "guard !isProcessingInlineImage else { return }"
+            )
+        )
+        XCTAssertTrue(inlineImage.contains("isProcessingInlineImage = true"))
+        XCTAssertTrue(
+            inlineImage.contains("defer { isProcessingInlineImage = false }")
         )
         let upload = try XCTUnwrap(
             inlineImage.range(of: "editingStore.uploadInlineImage(")
@@ -242,9 +273,24 @@ final class NewNoteViewSourceContractTests: XCTestCase {
         )
         XCTAssertLessThan(upload.lowerBound, insert.lowerBound)
         XCTAssertFalse(inlineImage[..<upload.lowerBound].contains("insertImage("))
+        XCTAssertTrue(
+            inlineImage.contains(
+                "Couldn't insert that image. Your draft is unchanged."
+            )
+        )
+
+        let cameraImage = try XCTUnwrap(
+            Self.functionBody(
+                in: source,
+                signature: "func capturedCardEditingImage("
+            )
+        )
+        XCTAssertTrue(cameraImage.contains("jpegData(compressionQuality: 0.9)"))
+        XCTAssertTrue(cameraImage.contains("filename: \"inline-camera.jpg\""))
+        XCTAssertTrue(cameraImage.contains("mimeType: \"image/jpeg\""))
     }
 
-    func testNativeInlineLinkAndSeparatePhotoPickersStayOutsideBridge() throws {
+    func testNativeInlineLinkAndSeparateImageSourceRoutesStayOutsideBridge() throws {
         let source = try Self.newNoteSource()
 
         XCTAssertTrue(source.contains("CardEditorInlineLinkSheet {"))
@@ -252,8 +298,75 @@ final class NewNoteViewSourceContractTests: XCTestCase {
         XCTAssertTrue(source.contains("selectedBackgroundPhoto"))
         XCTAssertTrue(source.contains("selectedInlineImagePhoto"))
         XCTAssertTrue(source.contains("showBackgroundPicker"))
-        XCTAssertTrue(source.contains("showInlineImagePicker"))
+        XCTAssertTrue(source.contains("showInlineImageSourceDialog"))
+        XCTAssertTrue(source.contains("showInlineImagePhotoPicker"))
+        XCTAssertTrue(source.contains("showInlineImageCamera"))
+        XCTAssertTrue(source.contains("showCameraSettingsAlert"))
+        XCTAssertTrue(source.contains("isProcessingInlineImage"))
+        XCTAssertTrue(source.contains(".cardEditorInlineImageSourceDialog("))
+        XCTAssertTrue(
+            source.contains(
+                ".fullScreenCover(isPresented: $showInlineImageCamera)"
+            )
+        )
+        XCTAssertFalse(source.contains("@State private var showInlineImagePicker"))
         XCTAssertFalse(source.contains("backgroundMediaRef:" + " bodyModel"))
+    }
+
+    func testInlineImageCameraUsesNativePermissionFlowAndDeclaresPrivacyReasons() throws {
+        let source = try Self.newNoteSource()
+        XCTAssertTrue(source.contains("import AVFoundation"))
+        XCTAssertTrue(source.contains("import UIKit"))
+        XCTAssertTrue(
+            source.contains(
+                "UIImagePickerController.isSourceTypeAvailable(.camera)"
+            )
+        )
+
+        let request = try XCTUnwrap(
+            Self.functionBody(
+                in: source,
+                signature: "func requestInlineImageCamera()"
+            )
+        )
+        XCTAssertTrue(
+            request.contains(
+                "AVCaptureDevice.authorizationStatus(for: .video)"
+            )
+        )
+        XCTAssertTrue(request.contains("AVCaptureDevice.requestAccess(for: .video)"))
+        XCTAssertTrue(request.contains("case .authorized"))
+        XCTAssertTrue(request.contains("case .notDetermined"))
+        XCTAssertTrue(request.contains("case .denied, .restricted"))
+
+        let settings = try XCTUnwrap(
+            Self.functionBody(
+                in: source,
+                signature: "func openCameraSettings()"
+            )
+        )
+        XCTAssertTrue(settings.contains("UIApplication.openSettingsURLString"))
+        XCTAssertTrue(settings.contains("UIApplication.shared.open("))
+
+        let infoData = try Data(
+            contentsOf: Self.repositoryRoot
+                .appendingPathComponent("ArcNote/Info.plist")
+        )
+        let info = try XCTUnwrap(
+            PropertyListSerialization.propertyList(
+                from: infoData,
+                options: [],
+                format: nil
+            ) as? [String: Any]
+        )
+        XCTAssertEqual(
+            info["NSCameraUsageDescription"] as? String,
+            "Chorai uses your camera when you choose to take a photo for a note."
+        )
+        XCTAssertEqual(
+            info["NSPhotoLibraryUsageDescription"] as? String,
+            "Chorai uses your photo library when you choose profile and note images."
+        )
     }
 
     func testRetryDispatchKeepsSaveAndCanonicalMutationFailuresDistinct() throws {

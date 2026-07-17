@@ -1,9 +1,11 @@
+import AVFoundation
 import BlockNoteEditor
 import Combine
 import CoreFlow
 import Foundation
 import PhotosUI
 import SwiftUI
+import UIKit
 import UniformTypeIdentifiers
 
 private struct CardEditorSeed: Identifiable {
@@ -218,7 +220,10 @@ private struct CardEditorSessionView: View {
     @State private var tagInput = ""
     @State private var showBackgroundPicker = false
     @State private var selectedBackgroundPhoto: PhotosPickerItem?
-    @State private var showInlineImagePicker = false
+    @State private var showInlineImageSourceDialog = false
+    @State private var showInlineImagePhotoPicker = false
+    @State private var showInlineImageCamera = false
+    @State private var showCameraSettingsAlert = false
     @State private var selectedInlineImagePhoto: PhotosPickerItem?
     @State private var showInlineLinkSheet = false
     @State private var showCardActions = false
@@ -228,6 +233,7 @@ private struct CardEditorSessionView: View {
     @State private var saveMessage: String?
     @State private var retryAction: CardEditorRetryAction?
     @State private var isSaving = false
+    @State private var isProcessingInlineImage = false
     @State private var isPreparingCardAction = false
     @State private var isCardActionInFlight = false
     @State private var didNotifyCreation: Bool
@@ -275,6 +281,7 @@ private struct CardEditorSessionView: View {
             isPublic: editingStore.draft.isPublic,
             isMetadataEditable: bodyModel.canMutate && !isBusy,
             isSaving: isSaving,
+            isInlineImageProcessing: isProcessingInlineImage,
             saveActionTitle: "Retry",
             saveMessage: saveMessage,
             onBack: handleBack,
@@ -331,17 +338,37 @@ private struct CardEditorSessionView: View {
             matching: .images
         )
         .photosPicker(
-            isPresented: $showInlineImagePicker,
+            isPresented: $showInlineImagePhotoPicker,
             selection: $selectedInlineImagePhoto,
             matching: .images
         )
+        .cardEditorInlineImageSourceDialog(
+            isPresented: $showInlineImageSourceDialog,
+            isCameraAvailable: isInlineImageCameraAvailable,
+            onSelect: handleInlineImageSourceSelection
+        )
+        .fullScreenCover(isPresented: $showInlineImageCamera) {
+            CardEditorCameraPicker(
+                onCapture: handleCapturedInlineImage,
+                onCancel: { showInlineImageCamera = false }
+            )
+            .ignoresSafeArea()
+        }
+        .alert("Camera Access Needed", isPresented: $showCameraSettingsAlert) {
+            Button("Cancel", role: .cancel) {}
+            Button("Open Settings", action: openCameraSettings)
+        } message: {
+            Text(
+                "Allow camera access in Settings to take a photo for this note."
+            )
+        }
         .onChange(
             of: selectedBackgroundPhoto,
             perform: handleSelectedBackgroundPhoto
         )
         .onChange(
             of: selectedInlineImagePhoto,
-            perform: handleSelectedInlineImage
+            perform: handleSelectedInlineImagePhoto
         )
         .onChange(
             of: linkPopupManager.isShowing,
@@ -374,7 +401,8 @@ private struct CardEditorSessionView: View {
     }
 
     private var isBusy: Bool {
-        if isSaving || isPreparingCardAction || isCardActionInFlight {
+        if isSaving || isProcessingInlineImage || isPreparingCardAction
+            || isCardActionInFlight {
             return true
         }
         switch editingStore.phase {
@@ -383,6 +411,10 @@ private struct CardEditorSessionView: View {
         case .idle, .ready, .failed:
             return false
         }
+    }
+
+    private var isInlineImageCameraAvailable: Bool {
+        UIImagePickerController.isSourceTypeAvailable(.camera)
     }
 
     private var retryHandler: (() -> Void)? {
@@ -442,7 +474,7 @@ private struct CardEditorSessionView: View {
             showInlineLinkSheet = true
         }
         nativeActionRouter.onRequestInlineImage = {
-            showInlineImagePicker = true
+            presentInlineImageSourceOptions()
         }
         nativeActionRouter.onSelectedLink = handleSelectedLink
         LinkPopupManager.shared.onCardSelected = { [weak nativeActionRouter] item in
@@ -662,6 +694,52 @@ private struct CardEditorSessionView: View {
         }
     }
 
+    private func presentInlineImageSourceOptions() {
+        guard !isBusy else { return }
+        bodyModel.dismissKeyboard()
+        showInlineImageSourceDialog = true
+    }
+
+    private func handleInlineImageSourceSelection(
+        _ source: CardEditorInlineImageSource
+    ) {
+        switch source {
+        case .photoLibrary:
+            showInlineImagePhotoPicker = true
+        case .camera:
+            requestInlineImageCamera()
+        }
+    }
+
+    private func requestInlineImageCamera() {
+        guard isInlineImageCameraAvailable else { return }
+
+        switch AVCaptureDevice.authorizationStatus(for: .video) {
+        case .authorized:
+            showInlineImageCamera = true
+        case .notDetermined:
+            Task {
+                let isGranted = await AVCaptureDevice.requestAccess(for: .video)
+                if isGranted {
+                    showInlineImageCamera = true
+                } else {
+                    showCameraSettingsAlert = true
+                }
+            }
+        case .denied, .restricted:
+            showCameraSettingsAlert = true
+        @unknown default:
+            showCameraSettingsAlert = true
+        }
+    }
+
+    private func openCameraSettings() {
+        guard let url = URL(string: UIApplication.openSettingsURLString) else {
+            return
+        }
+        UIApplication.shared.open(url)
+    }
+
     private func handleSelectedBackgroundPhoto(_ item: PhotosPickerItem?) {
         guard let item else { return }
         Task {
@@ -685,15 +763,36 @@ private struct CardEditorSessionView: View {
         }
     }
 
-    private func handleSelectedInlineImage(_ item: PhotosPickerItem?) {
+    private func handleSelectedInlineImagePhoto(_ item: PhotosPickerItem?) {
         guard let item else { return }
+        selectedInlineImagePhoto = nil
+        beginInlineImageProcessing {
+            try await cardEditingImage(
+                from: item,
+                stem: "inline-image"
+            )
+        }
+    }
+
+    private func handleCapturedInlineImage(_ image: UIImage) {
+        showInlineImageCamera = false
+        beginInlineImageProcessing {
+            try capturedCardEditingImage(image)
+        }
+    }
+
+    private func beginInlineImageProcessing(
+        _ makeImage: @escaping () async throws -> CardEditingImage
+    ) {
+        guard !isProcessingInlineImage else { return }
+        isProcessingInlineImage = true
+        saveMessage = nil
+        retryAction = nil
+
         Task {
-            defer { selectedInlineImagePhoto = nil }
+            defer { isProcessingInlineImage = false }
             do {
-                let image = try await cardEditingImage(
-                    from: item,
-                    stem: "inline-image"
-                )
+                let image = try await makeImage()
                 let uploaded = try await editingStore.uploadInlineImage(image)
                 bodyModel.insertImage(
                     url: uploaded.url.absoluteString,
@@ -702,10 +801,23 @@ private struct CardEditorSessionView: View {
                 saveMessage = nil
                 retryAction = nil
             } catch {
-                saveMessage = "Couldn't upload that inline image."
+                saveMessage = "Couldn't insert that image. Your draft is unchanged."
                 retryAction = nil
             }
         }
+    }
+
+    private func capturedCardEditingImage(
+        _ image: UIImage
+    ) throws -> CardEditingImage {
+        guard let data = image.jpegData(compressionQuality: 0.9) else {
+            throw CardEditorSessionError.imageUnavailable
+        }
+        return CardEditingImage(
+            data: data,
+            filename: "inline-camera.jpg",
+            mimeType: "image/jpeg"
+        )
     }
 
     private func cardEditingImage(

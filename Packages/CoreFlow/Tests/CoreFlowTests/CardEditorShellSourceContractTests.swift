@@ -9,6 +9,7 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         "CardMetadataPresentation.swift",
         "CardEditorFormattingBar.swift",
         "CardEditorBackground.swift",
+        "CardEditorInlineImageSource.swift",
     ]
 
     func testSharedActionBoxOwnsMainstreamSurfaceAndSemanticTiles() throws {
@@ -473,6 +474,38 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         )
     }
 
+    func testInlineImageProgressAndRecoverableMessagesDoNotRequireRetryAction() throws {
+        let shell = try source(
+            at: "ArcNote/CardEditor/CardEditorShell.swift"
+        )
+        XCTAssertTrue(shell.contains("let isInlineImageProcessing: Bool"))
+        XCTAssertTrue(
+            shell.contains("isInlineImageProcessing: Bool = false")
+        )
+        XCTAssertTrue(
+            shell.contains(
+                "if isInlineImageProcessing || saveMessage != nil"
+            )
+        )
+        XCTAssertTrue(
+            shell.contains(
+                ".accessibilityIdentifier(\"cardEditorInlineImageProgress\")"
+            )
+        )
+        XCTAssertTrue(
+            shell.contains(
+                ".accessibilityIdentifier(\"cardEditorSaveMessage\")"
+            )
+        )
+
+        let newNote = try source(at: "ArcNote/NewNoteView.swift")
+        XCTAssertTrue(
+            newNote.contains(
+                "isInlineImageProcessing: isProcessingInlineImage"
+            )
+        )
+    }
+
     func testFatalBridgeFailureUnmountsTheEditorAndRetriesWithANewSession() throws {
         let adapter = try source(
             at: "ArcNote/CardEditor/BlockNoteCardEditor.swift"
@@ -587,6 +620,35 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         XCTAssertFalse(background.contains("#if DEBUG"))
         XCTAssertFalse(background.contains(".accessibilityElement("))
         XCTAssertFalse(background.contains(".accessibilityLabel("))
+    }
+
+    func testInlineImageSourceUIIsNativeAndCameraSafe() throws {
+        let relativePath = "ArcNote/CardEditor/CardEditorInlineImageSource.swift"
+        let fileURL = Self.repositoryRoot.appendingPathComponent(relativePath)
+        guard FileManager.default.fileExists(atPath: fileURL.path) else {
+            XCTFail("Missing CardEditorInlineImageSource.swift")
+            return
+        }
+
+        let source = try String(contentsOf: fileURL, encoding: .utf8)
+        let project = try self.source(at: "ArcNote.xcodeproj/project.pbxproj")
+        XCTAssertTrue(source.contains("enum CardEditorInlineImageSource"))
+        XCTAssertTrue(source.contains("case photoLibrary"))
+        XCTAssertTrue(source.contains("case camera"))
+        XCTAssertTrue(source.contains("confirmationDialog("))
+        XCTAssertTrue(
+            source.contains("Take Photo — Unavailable on this device")
+        )
+        XCTAssertTrue(source.contains(".disabled(!isCameraAvailable)"))
+        XCTAssertTrue(
+            source.contains("UIImagePickerController.SourceType.camera")
+        )
+        XCTAssertTrue(source.contains("imagePickerControllerDidCancel"))
+        XCTAssertTrue(
+            project.contains(
+                "/* CardEditorInlineImageSource.swift in Sources */"
+            )
+        )
     }
 
     func testEditorRespectsMotionTransparencyAndContrastPreferences() throws {
