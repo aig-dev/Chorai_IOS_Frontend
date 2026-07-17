@@ -3,9 +3,25 @@ import SwiftUI
 struct CardMetadataTagCapsule: View {
     let tag: String
     let showsRemoveIndicator: Bool
+    let leadingSystemImage: String?
+
+    init(
+        tag: String,
+        showsRemoveIndicator: Bool,
+        leadingSystemImage: String? = nil
+    ) {
+        self.tag = tag
+        self.showsRemoveIndicator = showsRemoveIndicator
+        self.leadingSystemImage = leadingSystemImage
+    }
 
     var body: some View {
         HStack(spacing: 5) {
+            if let leadingSystemImage {
+                Image(systemName: leadingSystemImage)
+                    .font(.system(size: 10, weight: .semibold))
+            }
+
             Text(tag)
                 .font(.system(size: 12, weight: .medium))
                 .lineLimit(1)

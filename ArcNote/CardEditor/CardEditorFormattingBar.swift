@@ -107,11 +107,11 @@ struct CardEditorFormattingBar: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 4)
-        .background(ZenVisualTokens.background.opacity(0.97))
-        .overlay(alignment: .top) {
-            Rectangle()
-                .fill(Color.white.opacity(0.12))
-                .frame(height: 1)
+        .background {
+            CardEditorGlassSurface(
+                shape: Rectangle(),
+                isInteractive: true
+            )
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("cardEditorFormattingBar")

@@ -23,7 +23,7 @@ struct CardEditorBackground<Content: View>: View {
     }
 
     private var veilOpacity: Double {
-        reduceTransparency || contrast == .increased ? 0.55 : 0.50
+        reduceTransparency || contrast == .increased ? 0.58 : 0.42
     }
 
     var body: some View {
@@ -38,24 +38,26 @@ struct CardEditorBackground<Content: View>: View {
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
             )
             .clipped()
-            .overlay {
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .stroke(ZenVisualTokens.cardBorder, lineWidth: 1)
-                    .allowsHitTesting(false)
-            }
     }
 
     private var backgroundLayer: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(ZenVisualTokens.cardFill)
-
             if background != .none {
                 backgroundImage
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .clipped()
                     .accessibilityHidden(true)
+            }
 
+            CardEditorGlassSurface(
+                shape: RoundedRectangle(
+                    cornerRadius: 24,
+                    style: .continuous
+                ),
+                isInteractive: true
+            )
+
+            if background != .none {
                 Color.black
                     .opacity(veilOpacity)
                     .accessibilityHidden(true)

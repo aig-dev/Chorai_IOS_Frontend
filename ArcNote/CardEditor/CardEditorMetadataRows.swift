@@ -50,26 +50,19 @@ struct CardEditorTagRow: View {
                 }
 
                 Button(action: onAdd) {
-                    Label("Tag", systemImage: "plus")
-                        .font(.body.weight(.medium))
-                        .padding(.horizontal, 12)
-                        .frame(minWidth: 44, minHeight: 44)
-                        .background(
-                            Capsule(style: .continuous)
-                                .fill(ZenVisualTokens.accent.opacity(0.16))
-                        )
-                        .overlay {
-                            Capsule(style: .continuous)
-                                .stroke(
-                                    ZenVisualTokens.accent.opacity(0.42),
-                                    lineWidth: 1
-                                )
-                        }
+                    CardMetadataTagCapsule(
+                        tag: "Tag",
+                        showsRemoveIndicator: false,
+                        leadingSystemImage: "plus"
+                    )
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.white)
+                .frame(minWidth: 44, minHeight: 44)
+                .contentShape(Rectangle())
                 .disabled(!isEditable)
                 .accessibilityLabel("Add Tag")
+                .accessibilityHint("Adds a tag to this note")
                 .accessibilityIdentifier("cardEditorAddTag")
             }
             .padding(.horizontal, 1)

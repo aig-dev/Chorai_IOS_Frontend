@@ -10,6 +10,7 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         "CardEditorFormattingBar.swift",
         "CardEditorBackground.swift",
         "CardEditorInlineImageSource.swift",
+        "CardEditorGlassSurface.swift",
     ]
 
     func testSharedActionBoxOwnsMainstreamSurfaceAndSemanticTiles() throws {
@@ -98,7 +99,7 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         XCTAssertFalse(editorActionBox.contains("ActionBoxEmptyTile"))
     }
 
-    func testAppTargetOwnsTheSixFocusedCardEditorFiles() throws {
+    func testAppTargetOwnsFocusedCardEditorFiles() throws {
         let project = try source(at: "ArcNote.xcodeproj/project.pbxproj")
 
         for filename in cardEditorFiles {
@@ -126,6 +127,8 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         )
         XCTAssertTrue(presentation.contains("struct CardMetadataTagCapsule: View"))
         XCTAssertTrue(presentation.contains("let showsRemoveIndicator: Bool"))
+        XCTAssertTrue(presentation.contains("let leadingSystemImage: String?"))
+        XCTAssertTrue(presentation.contains("if let leadingSystemImage"))
         XCTAssertTrue(presentation.contains(".font(.system(size: 12, weight: .medium))"))
         XCTAssertTrue(presentation.contains(".foregroundStyle(.white)"))
         XCTAssertTrue(presentation.contains(".padding(.horizontal, 12)"))
@@ -305,6 +308,10 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         let addTag = try XCTUnwrap(metadata.range(of: "cardEditorAddTag"))
         XCTAssertLessThan(tagCapsule.lowerBound, addTag.lowerBound)
         XCTAssertTrue(metadata.contains("showsRemoveIndicator: true"))
+        XCTAssertTrue(metadata.contains("leadingSystemImage: \"plus\""))
+        XCTAssertFalse(
+            metadata.contains("ZenVisualTokens.accent.opacity(0.16)")
+        )
         XCTAssertFalse(metadata.contains("Text(\"#"))
         XCTAssertGreaterThanOrEqual(
             metadata.components(separatedBy: ".frame(minWidth: 44, minHeight: 44)").count - 1,
@@ -371,6 +378,54 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         )
         XCTAssertLessThan(nonEmptyLinks.lowerBound, linkRow.lowerBound)
         XCTAssertLessThan(linkRow.lowerBound, linkAccessibility.lowerBound)
+    }
+
+    func testEditorSurfacesUseAccessibilityAwareLiquidGlassFamily() throws {
+        let glassURL = Self.repositoryRoot.appendingPathComponent(
+            "ArcNote/CardEditor/CardEditorGlassSurface.swift"
+        )
+        guard FileManager.default.fileExists(atPath: glassURL.path) else {
+            XCTFail("Missing CardEditorGlassSurface.swift")
+            return
+        }
+
+        let glass = try source(
+            at: "ArcNote/CardEditor/CardEditorGlassSurface.swift"
+        )
+        let background = try source(
+            at: "ArcNote/CardEditor/CardEditorBackground.swift"
+        )
+        let formatting = try source(
+            at: "ArcNote/CardEditor/CardEditorFormattingBar.swift"
+        )
+        let shell = try source(at: "ArcNote/CardEditor/CardEditorShell.swift")
+
+        XCTAssertTrue(glass.contains("if #available(iOS 26.0, *)"))
+        XCTAssertTrue(
+            glass.contains(
+                ".glassEffect(.regular.interactive(isInteractive), in: shape)"
+            )
+        )
+        XCTAssertTrue(glass.contains("shape.fill(.ultraThinMaterial)"))
+        XCTAssertTrue(
+            glass.contains("@Environment(\\.accessibilityReduceTransparency)")
+        )
+        XCTAssertTrue(
+            glass.contains("@Environment(\\.colorSchemeContrast)")
+        )
+        XCTAssertTrue(glass.contains("if reduceTransparency"))
+        XCTAssertTrue(background.contains("CardEditorGlassSurface("))
+        XCTAssertTrue(background.contains("? 0.58 : 0.42"))
+        XCTAssertFalse(background.contains("fill(ZenVisualTokens.cardFill)"))
+        XCTAssertTrue(formatting.contains("CardEditorGlassSurface("))
+        XCTAssertFalse(
+            formatting.contains(
+                ".background(ZenVisualTokens.background.opacity(0.97))"
+            )
+        )
+        XCTAssertTrue(
+            shell.contains("CardEditorGlassSurface(shape: Circle()")
+        )
     }
 
     func testDetailViewConsumesSharedMetadataPresentation() throws {

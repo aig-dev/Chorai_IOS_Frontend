@@ -243,12 +243,7 @@ private struct CardEditorFloatingControls: View {
     }
 
     private var controlBackground: some View {
-        Circle()
-            .fill(ZenVisualTokens.background.opacity(0.82))
-            .overlay {
-                Circle()
-                    .stroke(ZenVisualTokens.cardBorder, lineWidth: 1)
-            }
+        CardEditorGlassSurface(shape: Circle(), isInteractive: true)
     }
 }
 
