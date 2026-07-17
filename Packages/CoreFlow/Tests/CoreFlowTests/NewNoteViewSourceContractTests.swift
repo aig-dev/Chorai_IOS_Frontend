@@ -338,6 +338,9 @@ final class NewNoteViewSourceContractTests: XCTestCase {
         XCTAssertTrue(request.contains("case .authorized"))
         XCTAssertTrue(request.contains("case .notDetermined"))
         XCTAssertTrue(request.contains("case .denied, .restricted"))
+        XCTAssertTrue(
+            request.contains("Camera isn't available on this device.")
+        )
 
         let settings = try XCTUnwrap(
             Self.functionBody(

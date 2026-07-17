@@ -250,6 +250,15 @@ private struct CardEditorFloatingControls: View {
 #if DEBUG
 import UIKit
 
+@MainActor
+private final class CardEditorShellFixtureActionRouter: ObservableObject {
+    var onRequestInlineImage: () -> Void = {}
+
+    func requestInlineImage() {
+        onRequestInlineImage()
+    }
+}
+
 private enum CardEditorShellFixtureMode: String {
     case empty
     case populated
@@ -265,12 +274,14 @@ private enum CardEditorShellFixtureMode: String {
 struct CardEditorShellFixtureScreen: View {
     private let mode: CardEditorShellFixtureMode
     @StateObject private var bodyModel: BlockNoteCardEditorModel
+    @StateObject private var actionRouter: CardEditorShellFixtureActionRouter
     @State private var tags: [String]
     @State private var links: [CardEditorLinkItem]
     @State private var background: CardEditorBackgroundSource
     @State private var isPublic = false
     @State private var isAddingTag = false
     @State private var showCardActions = false
+    @State private var showInlineImageSourceDialog = false
     @State private var isPinned = false
 
     init() {
@@ -293,12 +304,15 @@ struct CardEditorShellFixtureScreen: View {
                 )
             )
             : nil
+        let actionRouter = CardEditorShellFixtureActionRouter()
+        _actionRouter = StateObject(wrappedValue: actionRouter)
         let fixtureModel = BlockNoteCardEditorModel(
             document: Self.document(for: mode),
             initialContentHeight: mode == .keyboard ? 640 : 248,
             initialSelection: initialSelection,
             initiallyFocused: false,
-            initialCompatibilityBlock: blockedCode
+            initialCompatibilityBlock: blockedCode,
+            onRequestInlineImage: actionRouter.requestInlineImage
         )
         if mode == .bridgeFailure {
             fixtureModel.receive(
@@ -377,6 +391,17 @@ struct CardEditorShellFixtureScreen: View {
         .sheet(isPresented: $isAddingTag) {
             CardEditorNativeTagInputFixture {
                 isAddingTag = false
+            }
+        }
+        .cardEditorInlineImageSourceDialog(
+            isPresented: $showInlineImageSourceDialog,
+            isCameraAvailable: false,
+            onSelect: { _ in }
+        )
+        .onAppear {
+            actionRouter.onRequestInlineImage = {
+                bodyModel.dismissKeyboard()
+                showInlineImageSourceDialog = true
             }
         }
     }

@@ -1,5 +1,7 @@
 import SwiftUI
 
+private let maximumReadableTagWidth: CGFloat = 280
+
 struct CardMetadataTagCapsule: View {
     let tag: String
     let showsRemoveIndicator: Bool
@@ -25,6 +27,7 @@ struct CardMetadataTagCapsule: View {
             Text(tag)
                 .font(.system(size: 12, weight: .medium))
                 .lineLimit(1)
+                .truncationMode(.tail)
 
             if showsRemoveIndicator {
                 Image(systemName: "xmark")
@@ -34,6 +37,7 @@ struct CardMetadataTagCapsule: View {
         .foregroundStyle(.white)
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
+        .frame(maxWidth: maximumReadableTagWidth)
         .background(
             Capsule(style: .continuous)
                 .fill(Color(red: 0.2, green: 0.1, blue: 0.3))

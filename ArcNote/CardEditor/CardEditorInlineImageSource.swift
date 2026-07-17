@@ -35,7 +35,12 @@ private struct CardEditorInlineImageSourceDialog: ViewModifier {
                     systemImage: "camera"
                 )
             }
-            .disabled(!isCameraAvailable)
+            .accessibilityValue(isCameraAvailable ? "Available" : "Unavailable")
+            .accessibilityHint(
+                isCameraAvailable
+                    ? "Opens the camera"
+                    : "Camera isn't available on this device"
+            )
             .accessibilityIdentifier("cardEditorInlineImageCamera")
 
             Button("Cancel", role: .cancel) {}

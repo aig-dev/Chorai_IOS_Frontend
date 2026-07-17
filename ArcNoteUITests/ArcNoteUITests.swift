@@ -260,6 +260,58 @@ final class ArcNoteUITests: XCTestCase {
         waitForElementToDisappear(app.keyboards.firstMatch)
     }
 
+    func testCardEditorInlineImageChooserDismissesKeyboardAndShowsSources() {
+        launchCardEditorFixture(mode: "keyboard")
+
+        let body = waitFor("cardEditorBodyWebView")
+        body.coordinate(
+            withNormalizedOffset: CGVector(dx: 0.25, dy: 0.04)
+        ).tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 10))
+        waitForButton("cardEditorFormatInlineImage").tap()
+
+        waitForElementToDisappear(app.keyboards.firstMatch)
+        waitForMissing("cardEditorFormattingBar")
+        let photoLibrary = app.buttons.matching(
+            identifier: "cardEditorInlineImagePhotoLibrary"
+        ).firstMatch
+        XCTAssertTrue(photoLibrary.waitForExistence(timeout: 10))
+        XCTAssertEqual(photoLibrary.label, "Photo Library")
+        let camera = app.buttons.matching(
+            identifier: "cardEditorInlineImageCamera"
+        ).firstMatch
+        XCTAssertTrue(camera.waitForExistence(timeout: 10))
+        XCTAssertEqual(
+            camera.label,
+            "Take Photo — Unavailable on this device"
+        )
+        XCTAssertTrue(camera.isEnabled)
+        XCTAssertTrue(camera.isHittable)
+        captureVisual("card-editor-inline-image-sources")
+
+        camera.tap()
+        XCTAssertTrue(waitFor("cardEditorBodyWebView").exists)
+    }
+
+    func testCardEditorSlashTypesWithoutOpeningCommandMenu() {
+        launchCardEditorFixture(mode: "empty")
+
+        _ = waitFor("cardEditorBodyWebView")
+        let textView = app.textViews.firstMatch
+        XCTAssertTrue(textView.waitForExistence(timeout: 10))
+        textView.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 10))
+        app.typeText("/")
+
+        XCTAssertFalse(
+            app.staticTexts["Paragraph"].waitForExistence(timeout: 1)
+        )
+        XCTAssertFalse(
+            app.staticTexts["Enter text or type '/' for commands"].exists
+        )
+        XCTAssertTrue(waitFor("cardEditorBodyWebView").exists)
+    }
+
     func testCardEditorFormattingBarDismissesOnBodyScroll() {
         launchCardEditorFixture(mode: "keyboard")
 

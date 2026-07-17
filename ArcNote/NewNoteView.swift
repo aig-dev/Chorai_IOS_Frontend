@@ -712,7 +712,11 @@ private struct CardEditorSessionView: View {
     }
 
     private func requestInlineImageCamera() {
-        guard isInlineImageCameraAvailable else { return }
+        guard isInlineImageCameraAvailable else {
+            saveMessage = "Camera isn't available on this device."
+            retryAction = nil
+            return
+        }
 
         switch AVCaptureDevice.authorizationStatus(for: .video) {
         case .authorized:

@@ -133,6 +133,11 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         XCTAssertTrue(presentation.contains(".foregroundStyle(.white)"))
         XCTAssertTrue(presentation.contains(".padding(.horizontal, 12)"))
         XCTAssertTrue(presentation.contains(".padding(.vertical, 6)"))
+        XCTAssertTrue(presentation.contains("maximumReadableTagWidth: CGFloat = 280"))
+        XCTAssertTrue(presentation.contains(".truncationMode(.tail)"))
+        XCTAssertTrue(
+            presentation.contains(".frame(maxWidth: maximumReadableTagWidth)")
+        )
         XCTAssertTrue(
             presentation.contains(
                 "Color(red: 0.2, green: 0.1, blue: 0.3)"
@@ -694,7 +699,15 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         XCTAssertTrue(
             source.contains("Take Photo — Unavailable on this device")
         )
-        XCTAssertTrue(source.contains(".disabled(!isCameraAvailable)"))
+        XCTAssertFalse(
+            source.contains(".disabled(!isCameraAvailable)"),
+            "iOS 26 removes disabled confirmation actions instead of showing them"
+        )
+        XCTAssertTrue(
+            source.contains(
+                ".accessibilityValue(isCameraAvailable ? \"Available\" : \"Unavailable\")"
+            )
+        )
         XCTAssertTrue(
             source.contains("UIImagePickerController.SourceType.camera")
         )
@@ -822,6 +835,21 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         XCTAssertTrue(actionHandler.contains("bodyModel.dismissKeyboard()"))
         XCTAssertTrue(actionHandler.contains("showCardActions = true"))
         XCTAssertTrue(fixture.contains("isMetadataEditable: bodyModel.canMutate"))
+        XCTAssertTrue(
+            fixture.contains("CardEditorShellFixtureActionRouter")
+        )
+        XCTAssertTrue(
+            fixture.contains(
+                "onRequestInlineImage: actionRouter.requestInlineImage"
+            )
+        )
+        XCTAssertTrue(
+            fixture.contains(".cardEditorInlineImageSourceDialog(")
+        )
+        XCTAssertTrue(fixture.contains("isCameraAvailable: false"))
+        XCTAssertTrue(
+            fixture.contains("showInlineImageSourceDialog = true")
+        )
         XCTAssertTrue(fixture.contains("case longTag = \"long-tag\""))
         XCTAssertTrue(fixture.contains("case legacyHTML = \"legacy-html\""))
         XCTAssertTrue(fixture.contains("case bridgeFailure = \"bridge-failure\""))
