@@ -23,7 +23,7 @@ struct CardEditorBackground<Content: View>: View {
     }
 
     private var veilOpacity: Double {
-        reduceTransparency || contrast == .increased ? 0.58 : 0.42
+        reduceTransparency || contrast == .increased ? 0.58 : 0.22
     }
 
     var body: some View {

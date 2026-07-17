@@ -422,6 +422,8 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         XCTAssertFalse(glass.contains("isInteractive"))
 
         XCTAssertTrue(background.contains("style: .writingPlane"))
+        XCTAssertTrue(background.contains("? 0.58 : 0.22"))
+        XCTAssertFalse(background.contains("0.42"))
         XCTAssertTrue(formatting.contains("style: .chrome"))
         XCTAssertFalse(
             formatting.contains(".background(ZenVisualTokens.background.opacity(0.97))")
