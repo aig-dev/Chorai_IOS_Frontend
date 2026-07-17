@@ -75,6 +75,41 @@ struct CardEditorGlassSurface<SurfaceShape: Shape>: View {
                 shape
                     .fill(Color.clear)
                     .glassEffect(.clear.interactive(), in: shape)
+                    .mask {
+                        ZStack {
+                            shape.fill(Color.white).padding(1.4)
+
+                            shape.stroke(
+                                LinearGradient(
+                                    stops: [
+                                        .init(
+                                            color: Color.white.opacity(1.0),
+                                            location: 0.0
+                                        ),
+                                        .init(
+                                            color: Color.white.opacity(0.72),
+                                            location: 0.46
+                                        ),
+                                        .init(
+                                            color: Color.white.opacity(
+                                                contrast == .increased ? 0.28 : 0.08
+                                            ),
+                                            location: 0.86
+                                        ),
+                                        .init(
+                                            color: Color.white.opacity(
+                                                contrast == .increased ? 0.18 : 0.02
+                                            ),
+                                            location: 1.0
+                                        ),
+                                    ],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                ),
+                                lineWidth: 2.8
+                            )
+                        }
+                    }
 
             case .chrome:
                 shape

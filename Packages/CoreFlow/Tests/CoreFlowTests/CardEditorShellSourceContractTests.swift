@@ -466,6 +466,51 @@ final class CardEditorShellSourceContractTests: XCTestCase {
                 ".glassEffect(.regular.interactive(), in: shape)"
             )
         )
+        XCTAssertEqual(
+            writingPlaneMaterial.components(separatedBy: ".mask {").count - 1,
+            1
+        )
+        let preservedInterior = try XCTUnwrap(
+            writingPlaneMaterial.range(of: "shape.fill(Color.white)")
+        )
+        let directionalPerimeter = try XCTUnwrap(
+            writingPlaneMaterial.range(of: "lineWidth: 2.8")
+        )
+        XCTAssertLessThan(
+            preservedInterior.lowerBound,
+            directionalPerimeter.lowerBound
+        )
+        XCTAssertTrue(writingPlaneMaterial.contains(".padding(1.4)"))
+        XCTAssertEqual(
+            writingPlaneMaterial.components(separatedBy: ".init(").count - 1,
+            4
+        )
+        XCTAssertTrue(
+            writingPlaneMaterial.contains(
+                "color: Color.white.opacity(1.0)"
+            )
+        )
+        XCTAssertTrue(writingPlaneMaterial.contains("location: 0.0"))
+        XCTAssertTrue(
+            writingPlaneMaterial.contains(
+                "color: Color.white.opacity(0.72)"
+            )
+        )
+        XCTAssertTrue(writingPlaneMaterial.contains("location: 0.46"))
+        XCTAssertTrue(
+            writingPlaneMaterial.contains(
+                "contrast == .increased ? 0.28 : 0.08"
+            )
+        )
+        XCTAssertTrue(writingPlaneMaterial.contains("location: 0.86"))
+        XCTAssertTrue(
+            writingPlaneMaterial.contains(
+                "contrast == .increased ? 0.18 : 0.02"
+            )
+        )
+        XCTAssertTrue(writingPlaneMaterial.contains("location: 1.0"))
+        XCTAssertTrue(writingPlaneMaterial.contains("startPoint: .top,"))
+        XCTAssertTrue(writingPlaneMaterial.contains("endPoint: .bottom"))
         XCTAssertTrue(
             chromeMaterial.contains(
                 ".glassEffect(.regular.interactive(), in: shape)"
@@ -480,6 +525,9 @@ final class CardEditorShellSourceContractTests: XCTestCase {
                 ".glassEffect(.clear.interactive(), in: shape)"
             )
         )
+        XCTAssertFalse(chromeMaterial.contains(".mask {"))
+        XCTAssertFalse(chromeMaterial.contains(".padding(1.4)"))
+        XCTAssertFalse(chromeMaterial.contains("lineWidth: 2.8"))
         XCTAssertTrue(glass.contains("shape.fill(.ultraThinMaterial)"))
         XCTAssertTrue(writingPlaneEdge.contains("LinearGradient("))
         XCTAssertTrue(writingPlaneEdge.contains(".mask("))
