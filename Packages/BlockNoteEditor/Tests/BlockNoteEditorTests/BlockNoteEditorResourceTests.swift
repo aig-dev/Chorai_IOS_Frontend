@@ -51,6 +51,7 @@ final class BlockNoteEditorResourceTests: XCTestCase {
             #"title:"Link a card""#,
             #"subtext:"Connect this note to another card""#,
             #"triggerCharacter:"@""#,
+            #"default:"What's on my mind?""#,
             "requestCardLink",
         ] {
             XCTAssertTrue(
