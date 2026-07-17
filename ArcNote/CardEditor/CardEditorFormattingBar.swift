@@ -110,7 +110,7 @@ struct CardEditorFormattingBar: View {
         .background {
             CardEditorGlassSurface(
                 shape: Rectangle(),
-                isInteractive: true
+                style: .chrome
             )
         }
         .accessibilityElement(children: .contain)

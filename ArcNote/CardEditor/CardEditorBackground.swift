@@ -54,7 +54,7 @@ struct CardEditorBackground<Content: View>: View {
                     cornerRadius: 24,
                     style: .continuous
                 ),
-                isInteractive: true
+                style: .writingPlane
             )
 
             if background != .none {

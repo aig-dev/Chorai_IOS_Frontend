@@ -61,6 +61,24 @@ final class BlockNoteEditorResourceTests: XCTestCase {
         }
     }
 
+    func testBundledEditorCanvasIsTransparentForNativeComposition() throws {
+        let editorCSSURL = try BlockNoteEditorResources.resourceDirectory()
+            .appendingPathComponent("editor.css", isDirectory: false)
+        let editorCSS = try String(contentsOf: editorCSSURL, encoding: .utf8)
+
+        for marker in [
+            ":root{color-scheme:dark",
+            "html,body,#root",
+            "background:transparent!important",
+            ".ios-editor-root,.ios-blocknote-view",
+        ] {
+            XCTAssertTrue(
+                editorCSS.contains(marker),
+                "The native editor canvas lost transparent marker: \(marker)"
+            )
+        }
+    }
+
     func testValidationRejectsUnsupportedProtocolVersionBeforeLoadingEditor() throws {
         let manifest = BlockNoteEditorResourceManifest(
             protocolVersion: BlockNoteEditorProtocol.version + 1,

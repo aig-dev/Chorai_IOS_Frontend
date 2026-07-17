@@ -386,14 +386,6 @@ final class CardEditorShellSourceContractTests: XCTestCase {
     }
 
     func testEditorSurfacesUseAccessibilityAwareLiquidGlassFamily() throws {
-        let glassURL = Self.repositoryRoot.appendingPathComponent(
-            "ArcNote/CardEditor/CardEditorGlassSurface.swift"
-        )
-        guard FileManager.default.fileExists(atPath: glassURL.path) else {
-            XCTFail("Missing CardEditorGlassSurface.swift")
-            return
-        }
-
         let glass = try source(
             at: "ArcNote/CardEditor/CardEditorGlassSurface.swift"
         )
@@ -404,14 +396,22 @@ final class CardEditorShellSourceContractTests: XCTestCase {
             at: "ArcNote/CardEditor/CardEditorFormattingBar.swift"
         )
         let shell = try source(at: "ArcNote/CardEditor/CardEditorShell.swift")
+        let coordinator = try source(
+            at: "Packages/BlockNoteEditor/Sources/BlockNoteEditor/BlockNoteEditorCoordinator.swift"
+        )
 
+        XCTAssertTrue(glass.contains("enum CardEditorGlassStyle: Equatable"))
+        XCTAssertTrue(glass.contains("case writingPlane"))
+        XCTAssertTrue(glass.contains("case chrome"))
         XCTAssertTrue(glass.contains("if #available(iOS 26.0, *)"))
         XCTAssertTrue(
-            glass.contains(
-                ".glassEffect(.regular.interactive(isInteractive), in: shape)"
-            )
+            glass.contains(".glassEffect(.clear.interactive(), in: shape)")
+        )
+        XCTAssertTrue(
+            glass.contains(".glassEffect(.regular.interactive(), in: shape)")
         )
         XCTAssertTrue(glass.contains("shape.fill(.ultraThinMaterial)"))
+        XCTAssertTrue(glass.contains("LinearGradient("))
         XCTAssertTrue(
             glass.contains("@Environment(\\.accessibilityReduceTransparency)")
         )
@@ -419,17 +419,19 @@ final class CardEditorShellSourceContractTests: XCTestCase {
             glass.contains("@Environment(\\.colorSchemeContrast)")
         )
         XCTAssertTrue(glass.contains("if reduceTransparency"))
-        XCTAssertTrue(background.contains("CardEditorGlassSurface("))
-        XCTAssertTrue(background.contains("? 0.58 : 0.42"))
-        XCTAssertFalse(background.contains("fill(ZenVisualTokens.cardFill)"))
-        XCTAssertTrue(formatting.contains("CardEditorGlassSurface("))
+        XCTAssertFalse(glass.contains("isInteractive"))
+
+        XCTAssertTrue(background.contains("style: .writingPlane"))
+        XCTAssertTrue(formatting.contains("style: .chrome"))
         XCTAssertFalse(
-            formatting.contains(
-                ".background(ZenVisualTokens.background.opacity(0.97))"
-            )
+            formatting.contains(".background(ZenVisualTokens.background.opacity(0.97))")
         )
+        XCTAssertTrue(shell.contains("style: .chrome"))
+
+        XCTAssertTrue(coordinator.contains("webView.isOpaque = false"))
+        XCTAssertTrue(coordinator.contains("webView.backgroundColor = .clear"))
         XCTAssertTrue(
-            shell.contains("CardEditorGlassSurface(shape: Circle()")
+            coordinator.contains("webView.scrollView.backgroundColor = .clear")
         )
     }
 

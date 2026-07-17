@@ -243,7 +243,7 @@ private struct CardEditorFloatingControls: View {
     }
 
     private var controlBackground: some View {
-        CardEditorGlassSurface(shape: Circle(), isInteractive: true)
+        CardEditorGlassSurface(shape: Circle(), style: .chrome)
     }
 }
 
