@@ -267,6 +267,45 @@ struct CardEditorGlassSurface<SurfaceShape: Shape>: View {
                 shape
                     .fill(Color.clear)
                     .glassEffect(.clear.interactive(), in: shape)
+                    .mask {
+                        ZStack {
+                            shape.fill(Color.white).padding(1.4)
+
+                            shape.stroke(
+                                LinearGradient(
+                                    stops: [
+                                        .init(
+                                            color: Color.white.opacity(1.0),
+                                            location: 0.0
+                                        ),
+                                        .init(
+                                            color: Color.white.opacity(0.72),
+                                            location: 0.46
+                                        ),
+                                        .init(
+                                            color: Color.white.opacity(
+                                                contrast == .increased
+                                                    ? 0.28
+                                                    : 0.08
+                                            ),
+                                            location: 0.86
+                                        ),
+                                        .init(
+                                            color: Color.white.opacity(
+                                                contrast == .increased
+                                                    ? 0.18
+                                                    : 0.02
+                                            ),
+                                            location: 1.0
+                                        ),
+                                    ],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                ),
+                                lineWidth: 2.8
+                            )
+                        }
+                    }
 
             case .chrome:
                 shape
@@ -668,13 +707,28 @@ git commit -m "feat(editor): reveal ambient light through glass"
 
 ### Task 2A: Simulator-led visual refinements
 
-The native screenshot gate produced three focused follow-ups after the initial
-Task 2 commit: lower the standard image veil to its final `0.22`, move both
-ambient origins inside the viewport with adaptive radii and lock that geometry
-in source contracts, then fade the writing-plane edge from top to bottom. Keep
-these as separate fix/test commits so the visual evidence and regression
-protection remain auditable rather than rewriting the original implementation
-commits.
+The native screenshot gate produced focused follow-ups after the initial Task 2
+commit: lower the standard image veil to its final `0.22`, move both ambient
+origins inside the viewport with adaptive radii and lock that geometry in source
+contracts, then fade the writing-plane edge from top to bottom. The final native
+rim correction is commit `0286dce` (`fix(editor): mask native glass lower rim`):
+after clear glass, a white interior inset by `1.4pt` preserves the pane body while
+a separate `2.8pt` perimeter mask fades from top to bottom. Its lower stops use
+`0.08` and `0.02` normally, strengthened to `0.28` and `0.18` with Increase
+Contrast. Keep these as separate fix/test commits so the visual evidence and
+regression protection remain auditable rather than rewriting the original
+implementation commits.
+
+The scoped material contract must assert exactly one writing-plane mask,
+interior-before-perimeter source order, the `1.4pt` inset, the four directional
+stops and `2.8pt` perimeter, including both contrast branches. It must also prove
+that chrome retains regular glass with none of this writing-plane mask geometry.
+Verify the completed refinement with:
+
+```bash
+swift test --package-path Packages/CoreFlow --filter CardEditorShellSourceContractTests
+git show --check 0286dce
+```
 
 ### Task 3: Native Visual Gate and Interaction Regression
 
@@ -803,4 +857,4 @@ git status --short
 git log --oneline --reverse ca69574..HEAD
 ```
 
-Expected: no uncommitted implementation files or whitespace errors. The focused history should show the approved design/plan, semantic material and veil work, ambient scene plus adaptive-geometry hardening, top-to-bottom edge refinement, and final QA/test-documentation closure in that order.
+Expected: no uncommitted implementation files or whitespace errors. The focused history should show the approved design/plan, semantic material and veil work, ambient scene plus adaptive-geometry hardening, top-to-bottom edge refinement, scoped material-contract hardening, and `0286dce fix(editor): mask native glass lower rim` in that order. The tests attached to `0286dce` must lock the preserved interior, four-stop `2.8pt` perimeter fade, standard/increased bottom opacity pairs, and absence of that mask from chrome.
