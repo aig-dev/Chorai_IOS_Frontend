@@ -22,8 +22,22 @@ struct CardEditorBackground<Content: View>: View {
         self.content = content
     }
 
+    private var paneShape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: 24, style: .continuous)
+    }
+
     private var veilOpacity: Double {
-        reduceTransparency || contrast == .increased ? 0.58 : 0.22
+        if reduceTransparency {
+            return 0.58
+        }
+        if contrast == .increased {
+            return 0.34
+        }
+        return 0.22
+    }
+
+    private var paneShadowOpacity: Double {
+        contrast == .increased ? 0.30 : 0.20
     }
 
     var body: some View {
@@ -31,13 +45,17 @@ struct CardEditorBackground<Content: View>: View {
             .padding(.horizontal, 8)
             .padding(.vertical, 10)
             .frame(maxWidth: .infinity, alignment: .topLeading)
+            .clipShape(paneShape)
             .background {
                 backgroundLayer
+                    .clipShape(paneShape)
+                    .shadow(
+                        color: Color.black.opacity(paneShadowOpacity),
+                        radius: 18,
+                        x: 0,
+                        y: 10
+                    )
             }
-            .clipShape(
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-            )
-            .clipped()
     }
 
     private var backgroundLayer: some View {
@@ -47,22 +65,17 @@ struct CardEditorBackground<Content: View>: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .clipped()
                     .accessibilityHidden(true)
-            }
 
-            CardEditorGlassSurface(
-                shape: RoundedRectangle(
-                    cornerRadius: 24,
-                    style: .continuous
-                ),
-                style: .writingPlane
-            )
-
-            if background != .none {
                 Color.black
                     .opacity(veilOpacity)
                     .accessibilityHidden(true)
                     .allowsHitTesting(false)
             }
+
+            CardEditorGlassSurface(
+                shape: paneShape,
+                style: .writingPlane
+            )
         }
         .clipped()
         .accessibilityHidden(true)

@@ -11,6 +11,7 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         "CardEditorBackground.swift",
         "CardEditorInlineImageSource.swift",
         "CardEditorGlassSurface.swift",
+        "CardEditorAmbientBackdrop.swift",
     ]
 
     func testSharedActionBoxOwnsMainstreamSurfaceAndSemanticTiles() throws {
@@ -422,7 +423,9 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         XCTAssertFalse(glass.contains("isInteractive"))
 
         XCTAssertTrue(background.contains("style: .writingPlane"))
-        XCTAssertTrue(background.contains("? 0.58 : 0.22"))
+        XCTAssertTrue(background.contains("return 0.58"))
+        XCTAssertTrue(background.contains("return 0.34"))
+        XCTAssertTrue(background.contains("return 0.22"))
         XCTAssertFalse(background.contains("0.42"))
         XCTAssertTrue(formatting.contains("style: .chrome"))
         XCTAssertFalse(
@@ -730,6 +733,9 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         let background = try source(
             at: "ArcNote/CardEditor/CardEditorBackground.swift"
         )
+        let ambient = try source(
+            at: "ArcNote/CardEditor/CardEditorAmbientBackdrop.swift"
+        )
 
         XCTAssertTrue(
             shell.contains(
@@ -752,11 +758,75 @@ final class CardEditorShellSourceContractTests: XCTestCase {
                 "@Environment(\\.colorSchemeContrast) private var contrast"
             )
         )
+        XCTAssertTrue(background.contains("if reduceTransparency"))
+        XCTAssertTrue(background.contains("if contrast == .increased"))
         XCTAssertTrue(
-            background.contains(
-                "reduceTransparency || contrast == .increased"
+            ambient.contains("@Environment(\\.accessibilityReduceTransparency)")
+        )
+        XCTAssertTrue(ambient.contains("if !reduceTransparency"))
+    }
+
+    func testWritingPlaneUsesContinuousAmbientSceneAndVeilBelowGlass() throws {
+        let ambientPath = "ArcNote/CardEditor/CardEditorAmbientBackdrop.swift"
+        let ambientURL = Self.repositoryRoot.appendingPathComponent(ambientPath)
+        guard FileManager.default.fileExists(atPath: ambientURL.path) else {
+            XCTFail("Missing CardEditorAmbientBackdrop.swift")
+            return
+        }
+
+        let ambient = try source(at: ambientPath)
+        let background = try source(
+            at: "ArcNote/CardEditor/CardEditorBackground.swift"
+        )
+        let shell = try source(at: "ArcNote/CardEditor/CardEditorShell.swift")
+        let project = try source(at: "ArcNote.xcodeproj/project.pbxproj")
+
+        XCTAssertTrue(shell.contains("CardEditorAmbientBackdrop()"))
+        XCTAssertEqual(
+            ambient.components(separatedBy: "RadialGradient(").count - 1,
+            2
+        )
+        XCTAssertTrue(ambient.contains("center: .topTrailing"))
+        XCTAssertTrue(ambient.contains("center: .bottomLeading"))
+        XCTAssertTrue(ambient.contains("if !reduceTransparency"))
+        XCTAssertTrue(ambient.contains(".allowsHitTesting(false)"))
+        XCTAssertTrue(ambient.contains(".accessibilityHidden(true)"))
+        XCTAssertTrue(
+            project.contains("/* CardEditorAmbientBackdrop.swift in Sources */")
+        )
+
+        XCTAssertTrue(background.contains("return 0.22"))
+        XCTAssertTrue(background.contains("return 0.34"))
+        XCTAssertTrue(background.contains("return 0.58"))
+        XCTAssertFalse(background.contains("0.42"))
+
+        let bodyStart = try XCTUnwrap(
+            background.range(of: "var body: some View")
+        )
+
+        let layerStart = try XCTUnwrap(
+            background.range(of: "private var backgroundLayer: some View")
+        )
+        let body = background[bodyStart.lowerBound..<layerStart.lowerBound]
+        let contentClip = try XCTUnwrap(body.range(of: ".clipShape(paneShape)"))
+        let backgroundModifier = try XCTUnwrap(body.range(of: ".background {"))
+        let shadow = try XCTUnwrap(body.range(of: ".shadow("))
+        XCTAssertLessThan(contentClip.lowerBound, backgroundModifier.lowerBound)
+        XCTAssertLessThan(backgroundModifier.lowerBound, shadow.lowerBound)
+
+        let layerEnd = try XCTUnwrap(
+            background.range(
+                of: "private var backgroundImage: some View",
+                range: layerStart.upperBound..<background.endIndex
             )
         )
+        let layer = background[layerStart.lowerBound..<layerEnd.lowerBound]
+        let image = try XCTUnwrap(layer.range(of: "backgroundImage"))
+        let veil = try XCTUnwrap(layer.range(of: "Color.black"))
+        let glass = try XCTUnwrap(layer.range(of: "CardEditorGlassSurface("))
+        XCTAssertLessThan(image.lowerBound, veil.lowerBound)
+        XCTAssertLessThan(veil.lowerBound, glass.lowerBound)
+        XCTAssertTrue(layer.contains("style: .writingPlane"))
     }
 
     func testDebugAppRouteExposesDeterministicCardEditorFixture() throws {

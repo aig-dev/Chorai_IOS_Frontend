@@ -59,8 +59,7 @@ struct CardEditorShell: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            ZenVisualTokens.background
-                .ignoresSafeArea()
+            CardEditorAmbientBackdrop()
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
