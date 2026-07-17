@@ -847,8 +847,13 @@ final class CardEditorShellSourceContractTests: XCTestCase {
             ambient.contains("max(proxy.size.width, proxy.size.height)"),
             "Ambient light radius should scale with the viewport"
         )
+        XCTAssertTrue(ambient.contains("endRadius: sceneExtent * 0.58"))
+        XCTAssertTrue(ambient.contains("endRadius: sceneExtent * 0.54"))
         XCTAssertFalse(ambient.contains("center: .bottomLeading"))
-        XCTAssertFalse(ambient.contains(".offset(x: -88, y: 120)"))
+        XCTAssertFalse(
+            ambient.contains(".offset("),
+            "Ambient light centers should remain inside the adaptive scene"
+        )
     }
 
     func testDebugAppRouteExposesDeterministicCardEditorFixture() throws {
