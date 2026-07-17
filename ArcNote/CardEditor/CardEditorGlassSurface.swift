@@ -36,19 +36,23 @@ struct CardEditorGlassSurface<SurfaceShape: Shape>: View {
         switch style {
         case .writingPlane:
             shape.stroke(
+                contrast == .increased
+                    ? Color.white.opacity(0.42)
+                    : Color.white.opacity(0.25),
+                lineWidth: contrast == .increased ? 1.2 : 0.8
+            )
+            .mask(
                 LinearGradient(
                     colors: [
+                        Color.white,
                         Color.white.opacity(
-                            contrast == .increased ? 0.40 : 0.24
+                            contrast == .increased ? 0.56 : 0.34
                         ),
-                        Color.white.opacity(
-                            contrast == .increased ? 0.12 : 0.03
-                        ),
+                        Color.white.opacity(contrast == .increased ? 0.14 : 0.02),
                     ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                ),
-                lineWidth: contrast == .increased ? 1.2 : 0.8
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
             )
 
         case .chrome:

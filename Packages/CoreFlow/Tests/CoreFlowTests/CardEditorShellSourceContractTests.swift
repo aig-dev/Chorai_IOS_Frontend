@@ -404,6 +404,20 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         XCTAssertTrue(glass.contains("enum CardEditorGlassStyle: Equatable"))
         XCTAssertTrue(glass.contains("case writingPlane"))
         XCTAssertTrue(glass.contains("case chrome"))
+        let writingPlaneEdgeStart = try XCTUnwrap(
+            glass.range(of: "case .writingPlane:")
+        )
+        let chromeEdgeStart = try XCTUnwrap(
+            glass.range(
+                of: "case .chrome:",
+                range: writingPlaneEdgeStart.upperBound..<glass.endIndex
+            )
+        )
+        let writingPlaneEdge = String(
+            glass[
+                writingPlaneEdgeStart.lowerBound..<chromeEdgeStart.lowerBound
+            ]
+        )
         XCTAssertTrue(glass.contains("if #available(iOS 26.0, *)"))
         XCTAssertTrue(
             glass.contains(".glassEffect(.clear.interactive(), in: shape)")
@@ -412,7 +426,17 @@ final class CardEditorShellSourceContractTests: XCTestCase {
             glass.contains(".glassEffect(.regular.interactive(), in: shape)")
         )
         XCTAssertTrue(glass.contains("shape.fill(.ultraThinMaterial)"))
-        XCTAssertTrue(glass.contains("LinearGradient("))
+        XCTAssertTrue(writingPlaneEdge.contains("LinearGradient("))
+        XCTAssertTrue(writingPlaneEdge.contains(".mask("))
+        XCTAssertTrue(writingPlaneEdge.contains("startPoint: .top,"))
+        XCTAssertTrue(writingPlaneEdge.contains("endPoint: .bottom"))
+        XCTAssertTrue(
+            writingPlaneEdge.contains(
+                "contrast == .increased ? 0.14 : 0.02"
+            )
+        )
+        XCTAssertFalse(writingPlaneEdge.contains("startPoint: .topLeading"))
+        XCTAssertFalse(writingPlaneEdge.contains("endPoint: .bottomTrailing"))
         XCTAssertTrue(
             glass.contains("@Environment(\\.accessibilityReduceTransparency)")
         )
