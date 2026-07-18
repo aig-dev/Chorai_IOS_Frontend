@@ -20,6 +20,7 @@
 		C0DEF3002F80000100000019 /* CardEditorInlineImageSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF3002F80000100000029 /* CardEditorInlineImageSource.swift */; };
 		C0DEF3002F8000010000001A /* CardEditorGlassSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF3002F8000010000002A /* CardEditorGlassSurface.swift */; };
 		C0DEF3002F8000010000001B /* CardEditorAmbientBackdrop.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF3002F8000010000002B /* CardEditorAmbientBackdrop.swift */; };
+		C0DEF3002F8000010000001C /* CardEditorBackgroundActions.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF3002F8000010000002C /* CardEditorBackgroundActions.swift */; };
 		C0DEF1012F60000100000003 /* NetworkCoreFlowService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1012F60000100000002 /* NetworkCoreFlowService.swift */; };
 		C0DEF1022F60000100000003 /* NetworkCoreSparkService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1022F60000100000002 /* NetworkCoreSparkService.swift */; };
 		C0DEF1022F60000100000005 /* SparkContinuationViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1022F60000100000004 /* SparkContinuationViews.swift */; };
@@ -221,6 +222,7 @@
 		C0DEF3002F80000100000029 /* CardEditorInlineImageSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardEditorInlineImageSource.swift; sourceTree = "<group>"; };
 		C0DEF3002F8000010000002A /* CardEditorGlassSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardEditorGlassSurface.swift; sourceTree = "<group>"; };
 		C0DEF3002F8000010000002B /* CardEditorAmbientBackdrop.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardEditorAmbientBackdrop.swift; sourceTree = "<group>"; };
+		C0DEF3002F8000010000002C /* CardEditorBackgroundActions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardEditorBackgroundActions.swift; sourceTree = "<group>"; };
 		1B7248B72E34BA4B00035D3D /* ExploreView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ExploreView.swift; sourceTree = "<group>"; };
 		1B7248B82E34BA4B00035D3D /* ChatView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
 		1B7248B92E34BA4B00035D3D /* HomeView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
@@ -289,6 +291,7 @@
 				C0DEF3002F80000100000026 /* CardMetadataPresentation.swift */,
 				C0DEF3002F80000100000024 /* CardEditorFormattingBar.swift */,
 				C0DEF3002F80000100000025 /* CardEditorBackground.swift */,
+				C0DEF3002F8000010000002C /* CardEditorBackgroundActions.swift */,
 				C0DEF3002F80000100000028 /* CardEditorActionBox.swift */,
 				C0DEF3002F80000100000029 /* CardEditorInlineImageSource.swift */,
 				C0DEF3002F8000010000002A /* CardEditorGlassSurface.swift */,
@@ -595,6 +598,7 @@
 				C0DEF3002F80000100000019 /* CardEditorInlineImageSource.swift in Sources */,
 				C0DEF3002F8000010000001A /* CardEditorGlassSurface.swift in Sources */,
 				C0DEF3002F8000010000001B /* CardEditorAmbientBackdrop.swift in Sources */,
+				C0DEF3002F8000010000001C /* CardEditorBackgroundActions.swift in Sources */,
 				C0DEF1012F60000100000003 /* NetworkCoreFlowService.swift in Sources */,
 				C0DEF1022F60000100000003 /* NetworkCoreSparkService.swift in Sources */,
 				C0DEF1022F60000100000005 /* SparkContinuationViews.swift in Sources */,

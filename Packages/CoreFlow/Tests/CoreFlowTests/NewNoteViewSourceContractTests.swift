@@ -690,7 +690,7 @@ final class NewNoteViewSourceContractTests: XCTestCase {
         XCTAssertLessThan(task.lowerBound, finish.lowerBound)
     }
 
-    func testCardActionsUseSharedFixedGridWithoutPersistenceOrBackgroundRemoval() throws {
+    func testCardActionsKeepFixedBackgroundTileAndStageContextualMutations() throws {
         let source = try Self.newNoteSource()
         let grid = try String(
             contentsOf: Self.repositoryRoot.appendingPathComponent(
@@ -703,14 +703,15 @@ final class NewNoteViewSourceContractTests: XCTestCase {
         XCTAssertTrue(source.contains("onOpenCardActions: cardActionsHandler"))
         XCTAssertTrue(source.contains("CardEditorActionBox("))
         XCTAssertFalse(source.contains(".accessibilityHidden(showCardActions)"))
-        XCTAssertFalse(source.contains(".confirmationDialog("))
         XCTAssertFalse(source.contains(".popupMenu("))
         XCTAssertFalse(source.contains("layout: .grid3x3"))
-        XCTAssertFalse(source.contains("Remove Background"))
-        XCTAssertFalse(source.contains("cardEditorRemoveBackgroundButton"))
+        XCTAssertTrue(source.contains(".cardEditorBackgroundActionDialog("))
+        XCTAssertTrue(source.contains("editingStore.stageBackgroundRemoval()"))
+        XCTAssertTrue(source.contains("editingStore.restoreBackground()"))
+        XCTAssertFalse(source.contains("editingStore.removeBackground()"))
 
         for wiring in [
-            "onBackground: { showBackgroundPicker = true }",
+            "onBackground: presentBackgroundActions",
             "onSpark: { performPersistedCardAction(.notification(\"NavigateToSpark\")) }",
             "onMerge: { performPersistedCardAction(.notification(\"NavigateToMerge\")) }",
             "onShare: { performPersistedCardAction(.notification(\"ShowCardShare\")) }",
@@ -724,6 +725,27 @@ final class NewNoteViewSourceContractTests: XCTestCase {
                 "Card Actions must preserve its lazy-persist route: \(wiring)"
             )
         }
+
+        let presentation = try XCTUnwrap(
+            Self.functionBody(
+                in: source,
+                signature: "func presentBackgroundActions()"
+            )
+        )
+        XCTAssertTrue(presentation.contains("completeTagEntry()"))
+        XCTAssertTrue(presentation.contains("backgroundIntent == .unchanged"))
+        XCTAssertTrue(presentation.contains("backgroundMediaRef == nil"))
+        XCTAssertTrue(presentation.contains("showBackgroundPicker = true"))
+        XCTAssertTrue(presentation.contains("showBackgroundActions = true"))
+        XCTAssertFalse(presentation.contains("editingStore.save()"))
+        XCTAssertFalse(presentation.contains("editingStore.ensurePersisted()"))
+
+        let preview = try XCTUnwrap(
+            Self.functionBody(in: source, signature: "var editorBackground:")
+        )
+        XCTAssertTrue(preview.contains("case let .replace(image)"))
+        XCTAssertTrue(preview.contains("case .remove"))
+        XCTAssertTrue(preview.contains("case .unchanged"))
 
         let actions = try XCTUnwrap(
             Self.functionBody(in: source, signature: "func openCardActions()")

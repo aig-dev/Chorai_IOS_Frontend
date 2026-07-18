@@ -219,6 +219,7 @@ private struct CardEditorSessionView: View {
     @State private var isAddingTag = false
     @State private var tagInput = ""
     @State private var showBackgroundPicker = false
+    @State private var showBackgroundActions = false
     @State private var selectedBackgroundPhoto: PhotosPickerItem?
     @State private var showInlineImageSourceDialog = false
     @State private var showInlineImagePhotoPicker = false
@@ -301,7 +302,7 @@ private struct CardEditorSessionView: View {
                     isPresented: $showCardActions,
                     isEnabled: bodyModel.canMutate && !isBusy,
                     isPinned: isPinned,
-                    onBackground: { showBackgroundPicker = true },
+                    onBackground: presentBackgroundActions,
                     onSpark: { performPersistedCardAction(.notification("NavigateToSpark")) },
                     onMerge: { performPersistedCardAction(.notification("NavigateToMerge")) },
                     onShare: { performPersistedCardAction(.notification("ShowCardShare")) },
@@ -349,6 +350,11 @@ private struct CardEditorSessionView: View {
             isPresented: $showInlineImageSourceDialog,
             isCameraAvailable: isInlineImageCameraAvailable,
             onSelect: handleInlineImageSourceSelection
+        )
+        .cardEditorBackgroundActionDialog(
+            isPresented: $showBackgroundActions,
+            context: backgroundActionContext,
+            onSelect: handleBackgroundAction
         )
         .fullScreenCover(isPresented: $showInlineImageCamera) {
             CardEditorCameraPicker(
@@ -473,16 +479,33 @@ private struct CardEditorSessionView: View {
     }
 
     private var editorBackground: CardEditorBackgroundSource {
-        if let pending = editingStore.pendingBackground {
-            return .local(pending.data)
-        }
-        guard let mediaRef = editingStore.backgroundMediaRef,
-              let url = URL(
-                  string: APIConfiguration.resourceURLString(mediaRef)
-              ) else {
+        switch editingStore.backgroundIntent {
+        case let .replace(image):
+            return .local(image.data)
+        case .remove:
             return .none
+        case .unchanged:
+            guard let mediaRef = editingStore.backgroundMediaRef,
+                  let url = URL(
+                      string: APIConfiguration.resourceURLString(mediaRef)
+                  ) else {
+                return .none
+            }
+            return .remote(url)
         }
-        return .remote(url)
+    }
+
+    private var backgroundActionContext: CardEditorBackgroundActionContext {
+        switch editingStore.backgroundIntent {
+        case .unchanged:
+            return .visible(canRestoreOriginal: false)
+        case .replace:
+            return .visible(
+                canRestoreOriginal: editingStore.backgroundMediaRef != nil
+            )
+        case .remove:
+            return .removed
+        }
     }
 
     private var editorLinkItems: [CardEditorLinkItem] {
@@ -783,6 +806,37 @@ private struct CardEditorSessionView: View {
 
     private func togglePrivacy() {
         updateMetadata(isPublic: !editingStore.draft.isPublic)
+    }
+
+    private func presentBackgroundActions() {
+        guard !isBusy else { return }
+        completeTagEntry()
+        bodyModel.dismissKeyboard()
+        saveMessage = nil
+        hideSaveFailure()
+        if editingStore.backgroundIntent == .unchanged,
+           editingStore.backgroundMediaRef == nil {
+            showBackgroundPicker = true
+        } else {
+            showBackgroundActions = true
+        }
+    }
+
+    private func handleBackgroundAction(_ action: CardEditorBackgroundAction) {
+        switch action {
+        case .choosePhoto:
+            saveMessage = nil
+            hideSaveFailure()
+            showBackgroundPicker = true
+        case .remove:
+            editingStore.stageBackgroundRemoval()
+            saveMessage = nil
+            hideSaveFailure()
+        case .restore:
+            editingStore.restoreBackground()
+            saveMessage = nil
+            hideSaveFailure()
+        }
     }
 
     private func addOntologyLink() {

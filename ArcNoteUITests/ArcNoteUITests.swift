@@ -149,6 +149,49 @@ final class ArcNoteUITests: XCTestCase {
         captureVisual("card-editor-background")
     }
 
+    func testCardEditorBackgroundDialogRemovesAndRestoresLocally() {
+        launchCardEditorFixture(mode: "background")
+        waitForButton("cardEditorMoreButton").tap()
+        waitForEditorCardAction(
+            "cardEditorBackgroundButton",
+            requireHittable: true
+        ).tap()
+
+        let remove = waitForButton("cardEditorRemoveBackgroundButton")
+        XCTAssertTrue(
+            waitForButton("cardEditorReplaceBackgroundButton").exists
+        )
+        remove.tap()
+        waitForLabel("cardEditorLeadingAction", expected: "Save note")
+
+        waitForButton("cardEditorMoreButton").tap()
+        waitForEditorCardAction(
+            "cardEditorBackgroundButton",
+            requireHittable: true
+        ).tap()
+        XCTAssertTrue(
+            waitForButton("cardEditorRestoreBackgroundButton").exists
+        )
+        waitForButton("cardEditorRestoreBackgroundButton").tap()
+        waitForLabel("cardEditorLeadingAction", expected: "Close note")
+
+        waitForButton("cardEditorMoreButton").tap()
+        waitForEditorCardAction(
+            "cardEditorBackgroundButton",
+            requireHittable: true
+        ).tap()
+        _ = waitForButton("cardEditorRemoveBackgroundButton")
+        let cancel = app.buttons["Cancel"]
+        if cancel.waitForExistence(timeout: 2) {
+            cancel.tap()
+        } else {
+            app.coordinate(
+                withNormalizedOffset: CGVector(dx: 0.02, dy: 0.02)
+            ).tap()
+        }
+        waitForLabel("cardEditorLeadingAction", expected: "Close note")
+    }
+
     func testCardEditorLegacyHTMLRendersWithoutLiteralMarkup() {
         launchCardEditorFixture(mode: "legacy-html")
 
@@ -5255,7 +5298,7 @@ final class ArcNoteUITests: XCTestCase {
         file: StaticString = #filePath,
         line: UInt = #line
     ) -> XCUIElement {
-        let button = app.buttons[identifier]
+        let button = app.buttons.matching(identifier: identifier).firstMatch
         XCTAssertTrue(
             button.waitForExistence(timeout: timeout),
             "Missing button accessibility identifier: \(identifier)",

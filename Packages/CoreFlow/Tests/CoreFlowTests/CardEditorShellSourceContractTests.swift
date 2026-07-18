@@ -9,6 +9,7 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         "CardMetadataPresentation.swift",
         "CardEditorFormattingBar.swift",
         "CardEditorBackground.swift",
+        "CardEditorBackgroundActions.swift",
         "CardEditorInlineImageSource.swift",
         "CardEditorGlassSurface.swift",
         "CardEditorAmbientBackdrop.swift",
@@ -98,6 +99,27 @@ final class CardEditorShellSourceContractTests: XCTestCase {
             )
         )
         XCTAssertFalse(editorActionBox.contains("ActionBoxEmptyTile"))
+    }
+
+    func testBackgroundActionsUseNativeContextualDialog() throws {
+        let actions = try source(
+            at: "ArcNote/CardEditor/CardEditorBackgroundActions.swift"
+        )
+        let project = try source(at: "ArcNote.xcodeproj/project.pbxproj")
+
+        XCTAssertTrue(actions.contains("enum CardEditorBackgroundActionContext"))
+        XCTAssertTrue(actions.contains("case visible(canRestoreOriginal: Bool)"))
+        XCTAssertTrue(actions.contains("case removed"))
+        XCTAssertTrue(actions.contains("case choosePhoto"))
+        XCTAssertTrue(actions.contains("case remove"))
+        XCTAssertTrue(actions.contains("case restore"))
+        XCTAssertTrue(actions.contains(".confirmationDialog("))
+        XCTAssertTrue(actions.contains("cardEditorReplaceBackgroundButton"))
+        XCTAssertTrue(actions.contains("cardEditorRemoveBackgroundButton"))
+        XCTAssertTrue(actions.contains("cardEditorRestoreBackgroundButton"))
+        XCTAssertTrue(
+            project.contains("/* CardEditorBackgroundActions.swift in Sources */")
+        )
     }
 
     func testAppTargetOwnsFocusedCardEditorFiles() throws {

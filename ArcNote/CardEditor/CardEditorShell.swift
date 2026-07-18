@@ -320,6 +320,8 @@ struct CardEditorShellFixtureScreen: View {
     @State private var isAddingTag = false
     @State private var tagInput = ""
     @State private var showCardActions = false
+    @State private var showBackgroundActions = false
+    @State private var isFixtureBackgroundRemoved = false
     @State private var showInlineImageSourceDialog = false
     @State private var isPinned = false
     @State private var isDismissed = false
@@ -433,10 +435,7 @@ struct CardEditorShellFixtureScreen: View {
                         isPresented: $showCardActions,
                         isEnabled: bodyModel.canMutate,
                         isPinned: isPinned,
-                        onBackground: {
-                            background = .local(Self.fixtureBackgroundData)
-                            actionRouter.markDirty()
-                        },
+                        onBackground: presentFixtureBackgroundActions,
                         onSpark: {},
                         onMerge: {},
                         onShare: {},
@@ -454,6 +453,11 @@ struct CardEditorShellFixtureScreen: View {
             isPresented: $showInlineImageSourceDialog,
             isCameraAvailable: false,
             onSelect: { _ in }
+        )
+        .cardEditorBackgroundActionDialog(
+            isPresented: $showBackgroundActions,
+            context: fixtureBackgroundActionContext,
+            onSelect: handleFixtureBackgroundAction
         )
         .onAppear {
             actionRouter.onRequestInlineImage = {
@@ -485,6 +489,43 @@ struct CardEditorShellFixtureScreen: View {
         return {
             bodyModel.dismissKeyboard()
             showCardActions = true
+        }
+    }
+
+    private var fixtureBackgroundActionContext:
+        CardEditorBackgroundActionContext {
+        isFixtureBackgroundRemoved
+            ? .removed
+            : .visible(canRestoreOriginal: false)
+    }
+
+    private func presentFixtureBackgroundActions() {
+        completeTagEntry()
+        bodyModel.dismissKeyboard()
+        if background == .none, mode != .background {
+            background = .local(Self.fixtureBackgroundData)
+            actionRouter.markDirty()
+        } else {
+            showBackgroundActions = true
+        }
+    }
+
+    private func handleFixtureBackgroundAction(
+        _ action: CardEditorBackgroundAction
+    ) {
+        switch action {
+        case .choosePhoto:
+            background = .local(Self.fixtureBackgroundData)
+            isFixtureBackgroundRemoved = false
+            actionRouter.markDirty()
+        case .remove:
+            background = .none
+            isFixtureBackgroundRemoved = true
+            actionRouter.markDirty()
+        case .restore:
+            background = .local(Self.fixtureBackgroundData)
+            isFixtureBackgroundRemoved = false
+            actionRouter.markSaved()
         }
     }
 
