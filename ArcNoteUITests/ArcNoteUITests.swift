@@ -79,6 +79,9 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertFalse(
             app.descendants(matching: .any)["cardEditorSave"].exists
         )
+
+        waitForButton("cardEditorLeadingAction").tap()
+        waitForMissing("cardEditorContent", timeout: 30)
     }
 
     func testCardEditorShellPopulatedLinksAreCollapsedThenExpanded() {

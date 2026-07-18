@@ -322,6 +322,7 @@ struct CardEditorShellFixtureScreen: View {
     @State private var showCardActions = false
     @State private var showInlineImageSourceDialog = false
     @State private var isPinned = false
+    @State private var isDismissed = false
 
     init() {
         let mode = CardEditorShellFixtureMode(
@@ -373,6 +374,16 @@ struct CardEditorShellFixtureScreen: View {
     }
 
     var body: some View {
+        Group {
+            if isDismissed {
+                Color.clear
+            } else {
+                fixtureContent
+            }
+        }
+    }
+
+    private var fixtureContent: some View {
         ZStack(alignment: .topLeading) {
             CardEditorShell(
                 bodyModel: bodyModel,
@@ -492,7 +503,9 @@ struct CardEditorShellFixtureScreen: View {
         switch fixtureLeadingControlState {
         case .save, .retry:
             actionRouter.markSaved()
-        case .back, .saving, .readOnly, .bridgeFailed:
+        case .back:
+            isDismissed = true
+        case .saving, .readOnly, .bridgeFailed:
             break
         }
     }

@@ -417,6 +417,168 @@ final class NewNoteViewSourceContractTests: XCTestCase {
         }
     }
 
+    func testSaveBindsSnapshotBaselineBeforeFrozenRecoveryAndPersistence() throws {
+        let source = try Self.newNoteSource()
+        let save = try XCTUnwrap(
+            Self.functionBody(in: source, signature: "func saveCurrentSnapshot()")
+        )
+        let snapshot = try XCTUnwrap(save.range(of: "applyCurrentSnapshot()"))
+        let baseline = try XCTUnwrap(
+            save.range(of: "let baseline = try commitBaseline(matching: snapshot)")
+        )
+        let recovery = try XCTUnwrap(
+            save.range(of: "recoverFrozenFailedOperationIfNeeded()")
+        )
+        let exactCheck = try XCTUnwrap(
+            save.range(of: "!commitBaselineMatchesCurrent(baseline)")
+        )
+        let persist = try XCTUnwrap(save.range(of: "editingStore.save()"))
+
+        XCTAssertLessThan(snapshot.lowerBound, baseline.lowerBound)
+        XCTAssertLessThan(baseline.lowerBound, recovery.lowerBound)
+        XCTAssertLessThan(recovery.lowerBound, exactCheck.lowerBound)
+        XCTAssertLessThan(exactCheck.lowerBound, persist.lowerBound)
+        XCTAssertEqual(
+            Self.occurrenceCount(
+                "await ",
+                in: String(save[exactCheck.lowerBound..<persist.lowerBound])
+            ),
+            1,
+            "Only the bound save call may suspend after the final exact check"
+        )
+        XCTAssertTrue(source.contains("struct CardEditorCommitBaseline"))
+        XCTAssertTrue(source.contains("let draft: CardEditingDraft"))
+        XCTAssertTrue(source.contains("let bodyRevision: Int"))
+        XCTAssertTrue(source.contains("let editorRevision: Int"))
+        XCTAssertTrue(
+            source.contains("let backgroundIntent: CardEditingBackgroundIntent")
+        )
+    }
+
+    func testFrozenRecoveryNeverAutoSavesTheCurrentDraft() throws {
+        let source = try Self.newNoteSource()
+        let recovery = try XCTUnwrap(
+            Self.functionBody(
+                in: source,
+                signature: "func recoverFrozenFailedOperationIfNeeded()"
+            )
+        )
+
+        XCTAssertTrue(
+            recovery.contains("editingStore.reconcileFailedRelationshipMutation()")
+        )
+        XCTAssertTrue(recovery.contains("editingStore.retry()"))
+        XCTAssertFalse(recovery.contains("editingStore.save()"))
+        XCTAssertFalse(source.contains("recoverFailedDraftOperationIfNeeded"))
+    }
+
+    func testNewerChangesOutrankFailureAndStaleSnapshotsStayPending() throws {
+        let source = try Self.newNoteSource()
+        let classify = try XCTUnwrap(
+            Self.functionBody(in: source, signature: "func classifyCommit(")
+        )
+        let exactSuccess = try XCTUnwrap(
+            classify.range(of: "if didSave, exactRevision, !editingStore.isDirty")
+        )
+        let newer = try XCTUnwrap(
+            classify.range(of: "!commitBaselineMatchesCurrent(baseline)")
+        )
+        let failure = try XCTUnwrap(classify.range(of: "editingStore.failureStage"))
+        XCTAssertLessThan(exactSuccess.lowerBound, newer.lowerBound)
+        XCTAssertLessThan(newer.lowerBound, failure.lowerBound)
+
+        let leading = try XCTUnwrap(
+            Self.functionBody(
+                in: source,
+                signature: "var leadingControlState: CardEditorLeadingControlState"
+            )
+        )
+        XCTAssertTrue(leading.contains("hasCorrelatedSaveFailure"))
+
+        let correlation = try XCTUnwrap(
+            Self.functionBody(
+                in: source,
+                signature: "var hasCorrelatedSaveFailure: Bool"
+            )
+        )
+        XCTAssertTrue(correlation.contains("failedCommitBaseline"))
+        XCTAssertTrue(correlation.contains("currentCommitBaseline"))
+
+        let pending = try XCTUnwrap(
+            Self.functionBody(in: source, signature: "var hasPendingCommit: Bool")
+        )
+        XCTAssertTrue(pending.contains("hasUncommittedEditorRevision"))
+
+        for signature in [
+            "func saveCurrentSnapshot()",
+            "func verifyCurrentSnapshotAndDismiss()",
+        ] {
+            let action = try XCTUnwrap(
+                Self.functionBody(in: source, signature: signature)
+            )
+            XCTAssertTrue(action.contains("catch CardEditorSessionError.staleSnapshot"))
+        }
+    }
+
+    func testFailedFrozenBaselineRemainsCorrelatedWhenNewerBaselineCannotRun() throws {
+        let source = try Self.newNoteSource()
+        let save = try XCTUnwrap(
+            Self.functionBody(in: source, signature: "func saveCurrentSnapshot()")
+        )
+        let priorFailure = try XCTUnwrap(
+            save.range(of: "let priorFailedBaseline = failedCommitBaseline")
+        )
+        let recovery = try XCTUnwrap(
+            save.range(of: "recoverFrozenFailedOperationIfNeeded()")
+        )
+        let recoveryFailure = try XCTUnwrap(save.range(of: "if !didRecover"))
+        let preserveFailure = try XCTUnwrap(
+            save.range(of: "failureBaseline = priorFailedBaseline")
+        )
+        let persist = try XCTUnwrap(save.range(of: "editingStore.save()"))
+
+        XCTAssertLessThan(priorFailure.lowerBound, recovery.lowerBound)
+        XCTAssertLessThan(recovery.lowerBound, recoveryFailure.lowerBound)
+        XCTAssertLessThan(recoveryFailure.lowerBound, preserveFailure.lowerBound)
+        XCTAssertLessThan(preserveFailure.lowerBound, persist.lowerBound)
+        XCTAssertFalse(
+            save[..<recovery.lowerBound].contains("clearSaveFailure()"),
+            "Starting B must not erase the failed A baseline before retrying A"
+        )
+        XCTAssertTrue(save.contains("priorFailedBaseline == baseline"))
+        XCTAssertTrue(save.contains("outcome = .pendingNewerChanges"))
+        XCTAssertTrue(save.contains("if let failureBaseline"))
+        XCTAssertTrue(save.contains("failureBaseline = baseline"))
+        XCTAssertTrue(source.contains("var editingStoreHasFailure: Bool"))
+    }
+
+    func testDelayedBackgroundLoadingParticipatesInBusyState() throws {
+        let source = try Self.newNoteSource()
+        XCTAssertTrue(
+            source.contains("@State private var isLoadingBackgroundPhoto = false")
+        )
+        let busy = try XCTUnwrap(
+            Self.functionBody(in: source, signature: "var isBusy: Bool")
+        )
+        XCTAssertTrue(busy.contains("isLoadingBackgroundPhoto"))
+
+        let handler = try XCTUnwrap(
+            Self.functionBody(
+                in: source,
+                signature: "func handleSelectedBackgroundPhoto("
+            )
+        )
+        let start = try XCTUnwrap(
+            handler.range(of: "isLoadingBackgroundPhoto = true")
+        )
+        let task = try XCTUnwrap(handler.range(of: "Task {"))
+        let finish = try XCTUnwrap(
+            handler.range(of: "isLoadingBackgroundPhoto = false")
+        )
+        XCTAssertLessThan(start.lowerBound, task.lowerBound)
+        XCTAssertLessThan(task.lowerBound, finish.lowerBound)
+    }
+
     func testCardActionsUseSharedFixedGridWithoutPersistenceOrBackgroundRemoval() throws {
         let source = try Self.newNoteSource()
         let grid = try String(
@@ -750,7 +912,7 @@ final class NewNoteViewSourceContractTests: XCTestCase {
         )
         let snapshot = try XCTUnwrap(action.range(of: "applyCurrentSnapshot()"))
         let recovery = try XCTUnwrap(
-            action.range(of: "recoverFailedDraftOperationIfNeeded()")
+            action.range(of: "recoverFrozenFailedOperationIfNeeded()")
         )
         let persist = try XCTUnwrap(
             action.range(of: "editingStore.ensurePersisted()")
