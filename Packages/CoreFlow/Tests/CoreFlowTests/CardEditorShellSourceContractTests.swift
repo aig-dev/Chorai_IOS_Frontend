@@ -314,7 +314,11 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         let addTag = try XCTUnwrap(metadata.range(of: "cardEditorAddTag"))
         XCTAssertLessThan(tagCapsule.lowerBound, addTag.lowerBound)
         XCTAssertTrue(metadata.contains("showsRemoveIndicator: true"))
-        XCTAssertTrue(metadata.contains("leadingSystemImage: \"plus\""))
+        let addTagBranch = try XCTUnwrap(metadata.range(of: "} else {"))
+        let addTagImplementation = metadata[addTagBranch.lowerBound...]
+        XCTAssertTrue(
+            addTagImplementation.contains("leadingSystemImage: \"plus\"")
+        )
         XCTAssertFalse(
             metadata.contains("ZenVisualTokens.accent.opacity(0.16)")
         )
@@ -384,6 +388,30 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         )
         XCTAssertLessThan(nonEmptyLinks.lowerBound, linkRow.lowerBound)
         XCTAssertLessThan(linkRow.lowerBound, linkAccessibility.lowerBound)
+    }
+
+    func testTagRowReplacesAddCapsuleWithFocusedInlineField() throws {
+        let metadata = try source(
+            at: "ArcNote/CardEditor/CardEditorMetadataRows.swift"
+        )
+        let shell = try source(at: "ArcNote/CardEditor/CardEditorShell.swift")
+
+        XCTAssertTrue(metadata.contains("let isAddingTag: Bool"))
+        XCTAssertTrue(metadata.contains("@Binding var tagInput: String"))
+        XCTAssertTrue(metadata.contains("@FocusState private var isTagInputFocused"))
+        XCTAssertTrue(metadata.contains("if isAddingTag"))
+        XCTAssertTrue(metadata.contains("TextField(\"Tag\", text: $tagInput)"))
+        XCTAssertTrue(metadata.contains(".submitLabel(.done)"))
+        XCTAssertTrue(metadata.contains(".onSubmit(onCompleteTag)"))
+        XCTAssertTrue(metadata.contains("guard !isFocused, isAddingTag else { return }"))
+        XCTAssertTrue(metadata.contains(".accessibilityIdentifier(\"cardEditorTagInput\")"))
+        XCTAssertTrue(metadata.contains(".accessibilityIdentifier(\"cardEditorAddTag\")"))
+        XCTAssertTrue(metadata.contains("cardMetadataTagCapsuleStyle"))
+        XCTAssertTrue(shell.contains("TapGesture().onEnded"))
+        XCTAssertTrue(shell.contains("guard isAddingTag else { return }"))
+        XCTAssertTrue(shell.contains("onCompleteTag()"))
+        XCTAssertFalse(shell.contains("CardEditorNativeTagInputFixture"))
+        XCTAssertFalse(shell.contains("cardEditorNativeTagInput"))
     }
 
     func testEditorSurfacesUseAccessibilityAwareLiquidGlassFamily() throws {

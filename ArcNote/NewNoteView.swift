@@ -216,7 +216,7 @@ private struct CardEditorSessionView: View {
     @StateObject private var bodyModel: BlockNoteCardEditorModel
     @StateObject private var nativeActionRouter: CardEditorNativeActionRouter
 
-    @State private var showTagEditor = false
+    @State private var isAddingTag = false
     @State private var tagInput = ""
     @State private var showBackgroundPicker = false
     @State private var selectedBackgroundPhoto: PhotosPickerItem?
@@ -284,8 +284,11 @@ private struct CardEditorSessionView: View {
             isInlineImageProcessing: isProcessingInlineImage,
             saveActionTitle: "Retry",
             saveMessage: saveMessage,
+            isAddingTag: isAddingTag,
+            tagInput: $tagInput,
             onBack: handleBack,
-            onAddTag: presentTagEditor,
+            onBeginTag: beginTagEntry,
+            onCompleteTag: completeTagEntry,
             onRemoveTag: removeTag,
             onTogglePrivacy: togglePrivacy,
             onOpenCardActions: cardActionsHandler,
@@ -374,20 +377,6 @@ private struct CardEditorSessionView: View {
             of: linkPopupManager.isShowing,
             perform: handleLinkPopupVisibilityChange
         )
-        .alert("Add Tag", isPresented: $showTagEditor) {
-            TextField("Tag", text: $tagInput)
-                .textInputAutocapitalization(.never)
-                .accessibilityIdentifier("cardEditorTagInput")
-            Button("Cancel", role: .cancel) {
-                tagInput = ""
-            }
-            Button("Add") {
-                addTag(tagInput)
-                tagInput = ""
-            }
-        } message: {
-            Text("Tags are saved with this note.")
-        }
         .sheet(isPresented: $showInlineLinkSheet) {
             CardEditorInlineLinkSheet { url, text in
                 bodyModel.insertLink(url: url, text: text)
@@ -618,13 +607,25 @@ private struct CardEditorSessionView: View {
         retryAction = nil
     }
 
-    private func presentTagEditor() {
+    private func beginTagEntry() {
+        guard bodyModel.canMutate, !isBusy else { return }
+        bodyModel.dismissKeyboard()
         tagInput = ""
-        showTagEditor = true
+        isAddingTag = true
     }
 
-    private func addTag(_ tag: String) {
-        updateMetadata(tags: editingStore.draft.tags + [tag])
+    private func completeTagEntry() {
+        guard isAddingTag else { return }
+        let candidate = tagInput
+        isAddingTag = false
+        tagInput = ""
+        guard let tags = CardEditingTag.appending(
+            candidate,
+            to: editingStore.draft.tags
+        ) else {
+            return
+        }
+        updateMetadata(tags: tags)
     }
 
     private func removeTag(_ tag: String) {

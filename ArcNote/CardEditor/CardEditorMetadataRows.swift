@@ -1,3 +1,4 @@
+import CoreFlow
 import SwiftUI
 
 struct CardEditorLinkItem: Identifiable, Equatable {
@@ -22,8 +23,13 @@ struct CardEditorLinkItem: Identifiable, Equatable {
 struct CardEditorTagRow: View {
     let tags: [String]
     let isEditable: Bool
-    let onAdd: () -> Void
+    let isAddingTag: Bool
+    @Binding var tagInput: String
+    let onBeginTag: () -> Void
+    let onCompleteTag: () -> Void
     let onRemove: (String) -> Void
+
+    @FocusState private var isTagInputFocused: Bool
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -49,21 +55,47 @@ struct CardEditorTagRow: View {
                     )
                 }
 
-                Button(action: onAdd) {
-                    CardMetadataTagCapsule(
-                        tag: "Tag",
-                        showsRemoveIndicator: false,
-                        leadingSystemImage: "plus"
+                if isAddingTag {
+                    TextField("Tag", text: $tagInput)
+                        .font(.system(size: 12, weight: .medium))
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .submitLabel(.done)
+                        .focused($isTagInputFocused)
+                        .onSubmit(onCompleteTag)
+                        .onChange(of: isTagInputFocused) { isFocused in
+                            guard !isFocused, isAddingTag else { return }
+                            onCompleteTag()
+                        }
+                        .frame(width: 96)
+                        .cardMetadataTagCapsuleStyle(maximumWidth: 120)
+                        .frame(minWidth: 44, minHeight: 44)
+                        .accessibilityLabel("Tag")
+                        .accessibilityIdentifier("cardEditorTagInput")
+                        .onAppear {
+                            DispatchQueue.main.async {
+                                isTagInputFocused = true
+                            }
+                        }
+                } else {
+                    Button(action: onBeginTag) {
+                        CardMetadataTagCapsule(
+                            tag: "Tag",
+                            showsRemoveIndicator: false,
+                            leadingSystemImage: "plus"
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.white)
+                    .frame(minWidth: 44, minHeight: 44)
+                    .contentShape(Rectangle())
+                    .disabled(
+                        !isEditable || tags.count >= CardEditingTag.maximumCount
                     )
+                    .accessibilityLabel("Add Tag")
+                    .accessibilityHint("Adds a tag to this note")
+                    .accessibilityIdentifier("cardEditorAddTag")
                 }
-                .buttonStyle(.plain)
-                .foregroundStyle(.white)
-                .frame(minWidth: 44, minHeight: 44)
-                .contentShape(Rectangle())
-                .disabled(!isEditable)
-                .accessibilityLabel("Add Tag")
-                .accessibilityHint("Adds a tag to this note")
-                .accessibilityIdentifier("cardEditorAddTag")
             }
             .padding(.horizontal, 1)
         }

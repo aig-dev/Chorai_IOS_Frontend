@@ -1,6 +1,30 @@
 import SwiftUI
 
-private let maximumReadableTagWidth: CGFloat = 280
+let cardMetadataMaximumReadableTagWidth: CGFloat = 280
+
+struct CardMetadataTagCapsuleStyle: ViewModifier {
+    let maximumWidth: CGFloat
+
+    func body(content: Content) -> some View {
+        content
+            .foregroundStyle(.white)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .frame(maxWidth: maximumWidth)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(Color(red: 0.2, green: 0.1, blue: 0.3))
+            )
+    }
+}
+
+extension View {
+    func cardMetadataTagCapsuleStyle(
+        maximumWidth: CGFloat = cardMetadataMaximumReadableTagWidth
+    ) -> some View {
+        modifier(CardMetadataTagCapsuleStyle(maximumWidth: maximumWidth))
+    }
+}
 
 struct CardMetadataTagCapsule: View {
     let tag: String
@@ -34,14 +58,7 @@ struct CardMetadataTagCapsule: View {
                     .font(.system(size: 9, weight: .semibold))
             }
         }
-        .foregroundStyle(.white)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .frame(maxWidth: maximumReadableTagWidth)
-        .background(
-            Capsule(style: .continuous)
-                .fill(Color(red: 0.2, green: 0.1, blue: 0.3))
-        )
+        .cardMetadataTagCapsuleStyle()
     }
 }
 

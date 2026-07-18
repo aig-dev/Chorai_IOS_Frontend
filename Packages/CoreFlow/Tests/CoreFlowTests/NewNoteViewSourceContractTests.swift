@@ -149,6 +149,20 @@ final class NewNoteViewSourceContractTests: XCTestCase {
         XCTAssertFalse(source.contains("replacingOccurrences(of: \"#"))
     }
 
+    func testTagEntryIsSessionOwnedAndNeverUsesAnAlert() throws {
+        let source = try Self.newNoteSource()
+
+        XCTAssertTrue(source.contains("@State private var isAddingTag = false"))
+        XCTAssertTrue(source.contains("@State private var tagInput = \"\""))
+        XCTAssertTrue(source.contains("isAddingTag: isAddingTag"))
+        XCTAssertTrue(source.contains("tagInput: $tagInput"))
+        XCTAssertTrue(source.contains("onBeginTag: beginTagEntry"))
+        XCTAssertTrue(source.contains("onCompleteTag: completeTagEntry"))
+        XCTAssertTrue(source.contains("CardEditingTag.appending("))
+        XCTAssertFalse(source.contains(".alert(\"Add Tag\""))
+        XCTAssertFalse(source.contains("showTagEditor"))
+    }
+
     func testOntologyLinkPersistsSnapshotBeforeSelectionAndMutatesOnlyAfterReturn() throws {
         let source = try Self.newNoteSource()
         let add = try XCTUnwrap(

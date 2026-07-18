@@ -1,4 +1,5 @@
 import BlockNoteEditor
+import CoreFlow
 import SwiftUI
 
 struct CardEditorShell: View {
@@ -14,8 +15,11 @@ struct CardEditorShell: View {
     let isInlineImageProcessing: Bool
     let saveActionTitle: String
     let saveMessage: String?
+    let isAddingTag: Bool
+    @Binding var tagInput: String
     let onBack: () -> Void
-    let onAddTag: () -> Void
+    let onBeginTag: () -> Void
+    let onCompleteTag: () -> Void
     let onRemoveTag: (String) -> Void
     let onTogglePrivacy: () -> Void
     let onOpenCardActions: (() -> Void)?
@@ -32,8 +36,11 @@ struct CardEditorShell: View {
         isInlineImageProcessing: Bool = false,
         saveActionTitle: String = "Save",
         saveMessage: String? = nil,
+        isAddingTag: Bool,
+        tagInput: Binding<String>,
         onBack: @escaping () -> Void,
-        onAddTag: @escaping () -> Void,
+        onBeginTag: @escaping () -> Void,
+        onCompleteTag: @escaping () -> Void,
         onRemoveTag: @escaping (String) -> Void,
         onTogglePrivacy: @escaping () -> Void,
         onOpenCardActions: (() -> Void)? = nil,
@@ -49,8 +56,11 @@ struct CardEditorShell: View {
         self.isInlineImageProcessing = isInlineImageProcessing
         self.saveActionTitle = saveActionTitle
         self.saveMessage = saveMessage
+        self.isAddingTag = isAddingTag
+        _tagInput = tagInput
         self.onBack = onBack
-        self.onAddTag = onAddTag
+        self.onBeginTag = onBeginTag
+        self.onCompleteTag = onCompleteTag
         self.onRemoveTag = onRemoveTag
         self.onTogglePrivacy = onTogglePrivacy
         self.onOpenCardActions = onOpenCardActions
@@ -66,13 +76,22 @@ struct CardEditorShell: View {
                     CardEditorBackground(background: background) {
                         BlockNoteCardEditor(model: bodyModel)
                     }
+                    .simultaneousGesture(
+                        TapGesture().onEnded {
+                            guard isAddingTag else { return }
+                            onCompleteTag()
+                        }
+                    )
                     .accessibilityElement(children: .contain)
                     .accessibilityIdentifier("cardEditorContent")
 
                     CardEditorTagRow(
                         tags: tags,
                         isEditable: isMetadataEditable,
-                        onAdd: onAddTag,
+                        isAddingTag: isAddingTag,
+                        tagInput: $tagInput,
+                        onBeginTag: onBeginTag,
+                        onCompleteTag: onCompleteTag,
                         onRemove: onRemoveTag
                     )
                     .accessibilityElement(children: .contain)
@@ -279,6 +298,7 @@ struct CardEditorShellFixtureScreen: View {
     @State private var background: CardEditorBackgroundSource
     @State private var isPublic = false
     @State private var isAddingTag = false
+    @State private var tagInput = ""
     @State private var showCardActions = false
     @State private var showInlineImageSourceDialog = false
     @State private var isPinned = false
@@ -340,10 +360,11 @@ struct CardEditorShellFixtureScreen: View {
                 saveMessage: mode == .blocked
                     ? "Read-only compatibility mode"
                     : nil,
+                isAddingTag: isAddingTag,
+                tagInput: $tagInput,
                 onBack: {},
-                onAddTag: {
-                    isAddingTag = true
-                },
+                onBeginTag: beginTagEntry,
+                onCompleteTag: completeTagEntry,
                 onRemoveTag: { tag in
                     tags.removeAll { $0 == tag }
                 },
@@ -387,11 +408,6 @@ struct CardEditorShellFixtureScreen: View {
         }
         .frame(height: fixtureViewportHeight, alignment: .top)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .sheet(isPresented: $isAddingTag) {
-            CardEditorNativeTagInputFixture {
-                isAddingTag = false
-            }
-        }
         .cardEditorInlineImageSourceDialog(
             isPresented: $showInlineImageSourceDialog,
             isCameraAvailable: false,
@@ -423,6 +439,27 @@ struct CardEditorShellFixtureScreen: View {
             bodyModel.dismissKeyboard()
             showCardActions = true
         }
+    }
+
+    private func beginTagEntry() {
+        guard bodyModel.canMutate else { return }
+        bodyModel.dismissKeyboard()
+        tagInput = ""
+        isAddingTag = true
+    }
+
+    private func completeTagEntry() {
+        guard isAddingTag else { return }
+        let candidate = tagInput
+        isAddingTag = false
+        tagInput = ""
+        guard let updatedTags = CardEditingTag.appending(
+            candidate,
+            to: tags
+        ) else {
+            return
+        }
+        tags = updatedTags
     }
 
     private static func document(
@@ -479,38 +516,6 @@ struct CardEditorShellFixtureScreen: View {
             )
         }.jpegData(compressionQuality: 0.88) ?? Data()
     }()
-}
-
-private struct CardEditorNativeTagInputFixture: View {
-    let onDone: () -> Void
-
-    @State private var value = ""
-    @FocusState private var isFocused: Bool
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                TextField(
-                    "Tag",
-                    text: $value
-                )
-                .focused($isFocused)
-                .accessibilityIdentifier("cardEditorNativeTagInput")
-            }
-            .navigationTitle("Add Tag")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done", action: onDone)
-                }
-            }
-        }
-        .onAppear {
-            DispatchQueue.main.async {
-                isFocused = true
-            }
-        }
-    }
 }
 
 private extension CardEditorShellFixtureMode {

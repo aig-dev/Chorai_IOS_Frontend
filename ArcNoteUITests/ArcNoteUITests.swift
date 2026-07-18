@@ -374,18 +374,44 @@ final class ArcNoteUITests: XCTestCase {
         dismissEditorCardActions()
     }
 
-    func testNativeTagInputDoesNotShowBodyFormattingBar() {
+    func testInlineTagEntryCommitsOnReturnWithoutBodyFormattingBar() {
         launchCardEditorFixture(mode: "empty")
 
         waitForButton("cardEditorAddTag").tap()
-        let tagInput = waitFor("cardEditorNativeTagInput")
+        let input = waitFor("cardEditorTagInput")
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 10))
-        XCTAssertFalse(
-            app.descendants(matching: .any)["cardEditorFormattingBar"].exists
+        XCTAssertFalse(app.descendants(matching: .any)["cardEditorFormattingBar"].exists)
+        XCTAssertFalse(app.buttons["cardEditorAddTag"].exists)
+
+        input.typeText("## native-tag\n")
+
+        waitForMissing("cardEditorTagInput")
+        XCTAssertTrue(waitFor("cardEditorTag.native-tag").exists)
+        XCTAssertTrue(waitForButton("cardEditorAddTag").exists)
+    }
+
+    func testInlineTagEntryCommitsOnFocusLossAndRejectsBlankInput() {
+        launchCardEditorFixture(mode: "empty")
+
+        waitForButton("cardEditorAddTag").tap()
+        waitFor("cardEditorTagInput").typeText("focus-tag")
+        let body = waitFor("cardEditorBodyWebView")
+        body.coordinate(
+            withNormalizedOffset: CGVector(dx: 0.25, dy: 0.08)
+        ).tap()
+        XCTAssertTrue(waitFor("cardEditorTag.focus-tag").exists)
+
+        let tags = app.descendants(matching: .any).matching(
+            NSPredicate(format: "identifier BEGINSWITH %@", "cardEditorTag.")
         )
-        tagInput.typeText("native tag")
-        app.buttons["Done"].tap()
-        waitForMissing("cardEditorNativeTagInput")
+        let countBeforeBlank = tags.count
+        waitForButton("cardEditorAddTag").tap()
+        waitFor("cardEditorTagInput").typeText("### ")
+        body.coordinate(
+            withNormalizedOffset: CGVector(dx: 0.25, dy: 0.08)
+        ).tap()
+        XCTAssertEqual(tags.count, countBeforeBlank)
+        XCTAssertTrue(waitForButton("cardEditorAddTag").exists)
     }
 
     func testCardEditorRelatedNotesAreDisplayOnly() {
