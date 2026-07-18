@@ -740,12 +740,69 @@ final class NewNoteViewSourceContractTests: XCTestCase {
         XCTAssertFalse(presentation.contains("editingStore.save()"))
         XCTAssertFalse(presentation.contains("editingStore.ensurePersisted()"))
 
+        let handler = try XCTUnwrap(
+            Self.functionBody(
+                in: source,
+                signature: "func handleBackgroundAction("
+            )
+        )
+        for expected in [
+            "showBackgroundPicker = true",
+            "editingStore.stageBackgroundRemoval()",
+            "editingStore.restoreBackground()",
+        ] {
+            XCTAssertTrue(handler.contains(expected))
+        }
+        XCTAssertEqual(
+            Self.occurrenceCount("hideSaveFailure()", in: String(handler)),
+            3
+        )
+        for forbidden in [
+            "editingStore.save()",
+            "editingStore.ensurePersisted()",
+            "editingStore.stageBackground(",
+            "editingStore.removeBackground()",
+            "resolveSaveFailure()",
+            "Task {",
+            "NetworkManager",
+            "URLSession",
+            "service.",
+        ] {
+            XCTAssertFalse(
+                handler.contains(forbidden),
+                "Background actions must remain local-only: \(forbidden)"
+            )
+        }
+
         let preview = try XCTUnwrap(
             Self.functionBody(in: source, signature: "var editorBackground:")
         )
-        XCTAssertTrue(preview.contains("case let .replace(image)"))
-        XCTAssertTrue(preview.contains("case .remove"))
-        XCTAssertTrue(preview.contains("case .unchanged"))
+        XCTAssertTrue(
+            preview.contains(
+                """
+                case let .replace(image):
+                            return .local(image.data)
+                        case .remove:
+                            return .none
+                        case .unchanged:
+                """
+            )
+        )
+        XCTAssertTrue(
+            preview.contains(
+                """
+                case .unchanged:
+                            guard let mediaRef = editingStore.backgroundMediaRef,
+                                  let url = URL(
+                                      string: APIConfiguration.resourceURLString(mediaRef)
+                                  ) else {
+                                return .none
+                            }
+                            return .remote(url)
+                """
+            )
+        )
+        XCTAssertFalse(preview.contains("pendingBackground"))
 
         let actions = try XCTUnwrap(
             Self.functionBody(in: source, signature: "func openCardActions()")

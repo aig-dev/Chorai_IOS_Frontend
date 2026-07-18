@@ -157,9 +157,13 @@ final class ArcNoteUITests: XCTestCase {
             requireHittable: true
         ).tap()
 
-        let remove = waitForButton("cardEditorRemoveBackgroundButton")
+        let remove = waitForBackgroundDialogButton(
+            "cardEditorRemoveBackgroundButton"
+        )
         XCTAssertTrue(
-            waitForButton("cardEditorReplaceBackgroundButton").exists
+            waitForBackgroundDialogButton(
+                "cardEditorReplaceBackgroundButton"
+            ).exists
         )
         remove.tap()
         waitForLabel("cardEditorLeadingAction", expected: "Save note")
@@ -170,9 +174,13 @@ final class ArcNoteUITests: XCTestCase {
             requireHittable: true
         ).tap()
         XCTAssertTrue(
-            waitForButton("cardEditorRestoreBackgroundButton").exists
+            waitForBackgroundDialogButton(
+                "cardEditorRestoreBackgroundButton"
+            ).exists
         )
-        waitForButton("cardEditorRestoreBackgroundButton").tap()
+        waitForBackgroundDialogButton(
+            "cardEditorRestoreBackgroundButton"
+        ).tap()
         waitForLabel("cardEditorLeadingAction", expected: "Close note")
 
         waitForButton("cardEditorMoreButton").tap()
@@ -180,15 +188,7 @@ final class ArcNoteUITests: XCTestCase {
             "cardEditorBackgroundButton",
             requireHittable: true
         ).tap()
-        _ = waitForButton("cardEditorRemoveBackgroundButton")
-        let cancel = app.buttons["Cancel"]
-        if cancel.waitForExistence(timeout: 2) {
-            cancel.tap()
-        } else {
-            app.coordinate(
-                withNormalizedOffset: CGVector(dx: 0.02, dy: 0.02)
-            ).tap()
-        }
+        dismissBackgroundActionDialog()
         waitForLabel("cardEditorLeadingAction", expected: "Close note")
     }
 
@@ -5298,7 +5298,7 @@ final class ArcNoteUITests: XCTestCase {
         file: StaticString = #filePath,
         line: UInt = #line
     ) -> XCUIElement {
-        let button = app.buttons.matching(identifier: identifier).firstMatch
+        let button = app.buttons[identifier]
         XCTAssertTrue(
             button.waitForExistence(timeout: timeout),
             "Missing button accessibility identifier: \(identifier)",
@@ -5306,6 +5306,80 @@ final class ArcNoteUITests: XCTestCase {
             line: line
         )
         return button
+    }
+
+    @discardableResult
+    private func waitForBackgroundDialogButton(
+        _ identifier: String,
+        timeout: TimeInterval = 10,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) -> XCUIElement {
+        let backgroundDialogIdentifiers = [
+            "cardEditorReplaceBackgroundButton",
+            "cardEditorRemoveBackgroundButton",
+            "cardEditorRestoreBackgroundButton",
+        ]
+        XCTAssertTrue(
+            backgroundDialogIdentifiers.contains(identifier),
+            "Unexpected background dialog identifier: \(identifier)",
+            file: file,
+            line: line
+        )
+        let button = app.buttons.matching(identifier: identifier).firstMatch
+        XCTAssertTrue(
+            button.waitForExistence(timeout: timeout),
+            "Missing background dialog button: \(identifier)",
+            file: file,
+            line: line
+        )
+        return button
+    }
+
+    private func dismissBackgroundActionDialog(
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let visibleAction = waitForBackgroundDialogButton(
+            "cardEditorRemoveBackgroundButton",
+            file: file,
+            line: line
+        )
+        let cancel = app.buttons["Cancel"]
+        if cancel.waitForExistence(timeout: 2) {
+            cancel.tap()
+        } else {
+            let dialog = app.sheets["Background"]
+            XCTAssertTrue(
+                dialog.waitForExistence(timeout: 2),
+                "Missing native Background dialog container",
+                file: file,
+                line: line
+            )
+            let appFrame = app.frame
+            let pointAbove = dialog.frame.minY - 20
+            let outsideY = pointAbove > appFrame.minY + 1
+                ? pointAbove
+                : min(appFrame.maxY - 1, dialog.frame.maxY + 20)
+            let normalizedPoint = CGVector(
+                dx: (dialog.frame.midX - appFrame.minX) / appFrame.width,
+                dy: (outsideY - appFrame.minY) / appFrame.height
+            )
+            RunLoop.current.run(until: Date().addingTimeInterval(0.6))
+            app.coordinate(withNormalizedOffset: normalizedPoint).tap()
+        }
+        waitForElementToDisappear(
+            visibleAction,
+            file: file,
+            line: line
+        )
+        XCTAssertTrue(
+            waitForButton("cardEditorMoreButton", file: file, line: line)
+                .isHittable,
+            "More must be hittable after dismissing Background actions",
+            file: file,
+            line: line
+        )
     }
 
     private func waitForEnabledButton(
