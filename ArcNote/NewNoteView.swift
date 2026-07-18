@@ -231,7 +231,7 @@ private struct CardEditorSessionView: View {
     @State private var showCloseWithoutSavingConfirmation = false
     @State private var pendingOntologyLinkSourceID: String?
     @State private var saveMessage: String?
-    @State private var retryAction: CardEditorRetryAction?
+    @State private var hasSaveFailure = false
     @State private var isSaving = false
     @State private var isProcessingInlineImage = false
     @State private var isPreparingCardAction = false
@@ -284,10 +284,8 @@ private struct CardEditorSessionView: View {
             saveMessage: saveMessage,
             isAddingTag: isAddingTag,
             tagInput: $tagInput,
-            leadingControlState: isSaving
-                ? .saving
-                : (retryHandler == nil ? .back : .retry),
-            onLeadingControl: retryHandler ?? handleBack,
+            leadingControlState: leadingControlState,
+            onLeadingControl: handleLeadingControl,
             onBeginTag: beginTagEntry,
             onCompleteTag: completeTagEntry,
             onRemoveTag: removeTag,
@@ -406,9 +404,38 @@ private struct CardEditorSessionView: View {
         UIImagePickerController.isSourceTypeAvailable(.camera)
     }
 
-    private var retryHandler: (() -> Void)? {
-        guard retryAction != nil else { return nil }
-        return { retryCurrentFailure() }
+    private var hasPendingInlineTagCandidate: Bool {
+        isAddingTag
+            && CardEditingTag.appending(
+                tagInput,
+                to: editingStore.draft.tags
+            ) != nil
+    }
+
+    private var isUntouchedNewDraft: Bool {
+        editingStore.cardID == nil
+            && seed.isNew
+            && editingStore.bodyRevision == seed.revision
+            && editingStore.draft.content
+                .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && editingStore.draft.tags.isEmpty
+            && editingStore.draft.isPublic == seed.initialIsPublic
+            && editingStore.backgroundIntent == .unchanged
+            && editingStore.backgroundMediaRef == nil
+    }
+
+    private var hasPendingCommit: Bool {
+        if hasPendingInlineTagCandidate { return true }
+        if editingStore.cardID != nil { return editingStore.isDirty }
+        return !isUntouchedNewDraft
+    }
+
+    private var leadingControlState: CardEditorLeadingControlState {
+        if isSaving { return .saving }
+        if bodyModel.compatibilityNotice != nil { return .readOnly }
+        if bodyModel.bridgeFailureNotice != nil { return .bridgeFailed }
+        if hasSaveFailure { return .retry }
+        return hasPendingCommit ? .save : .back
     }
 
     private var cardActionsHandler: (() -> Void)? {
@@ -445,12 +472,14 @@ private struct CardEditorSessionView: View {
     }
 
     private func isUntouchedNewSnapshot(_ snapshot: BlockNoteSnapshot) -> Bool {
-        seed.isNew
+        editingStore.cardID == nil
+            && seed.isNew
             && snapshot.revision == seed.revision
             && snapshot.fallbackMarkdown
                 .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && editingStore.draft.tags.isEmpty
             && editingStore.draft.isPublic == seed.initialIsPublic
+            && editingStore.backgroundIntent == .unchanged
             && editingStore.pendingBackground == nil
             && editingStore.backgroundMediaRef == nil
     }
@@ -459,9 +488,7 @@ private struct CardEditorSessionView: View {
         nativeActionRouter.onRequestCardLink = {
             addOntologyLink()
         }
-        nativeActionRouter.onRequestInlineLink = {
-            showInlineLinkSheet = true
-        }
+        nativeActionRouter.onRequestInlineLink = presentInlineLinkSheet
         nativeActionRouter.onRequestInlineImage = {
             presentInlineImageSourceOptions()
         }
@@ -471,89 +498,112 @@ private struct CardEditorSessionView: View {
         }
     }
 
-    private func handleBack() {
+    private func handleLeadingControl() {
         guard !isBusy else { return }
-        bodyModel.dismissKeyboard()
-
-        if bodyModel.compatibilityNotice != nil {
+        switch leadingControlState {
+        case .save, .retry:
+            saveCurrentSnapshot()
+        case .back:
+            verifyCurrentSnapshotAndDismiss()
+        case .readOnly:
             dismiss()
-            return
-        }
-        if bodyModel.bridgeFailureNotice != nil {
+        case .bridgeFailed:
             showCloseWithoutSavingConfirmation = true
-            return
+        case .saving:
+            break
         }
-        saveCurrentSnapshot(thenDismiss: true)
     }
 
-    private func saveCurrentSnapshot(thenDismiss: Bool) {
+    private func saveCurrentSnapshot() {
         guard !isSaving else { return }
+        completeTagEntry()
         isSaving = true
+        hasSaveFailure = false
         saveMessage = nil
-        retryAction = nil
 
         Task {
             defer { isSaving = false }
             do {
                 let snapshot = try await applyCurrentSnapshot()
-                if thenDismiss, isUntouchedNewSnapshot(snapshot) {
-                    dismiss()
-                    return
-                }
                 let didRecover = await recoverFailedDraftOperationIfNeeded()
-                let didSave = didRecover
-                    ? await editingStore.save()
-                    : false
+                let didSave = didRecover ? await editingStore.save() : false
                 notifyCreationIfNeeded()
-                guard didSave,
-                      editingStore.lastCommittedBodyRevision == snapshot.revision,
-                      editingStore.bodyRevision == snapshot.revision,
-                      bodyModel.revision == snapshot.revision,
-                      !editingStore.isDirty else {
+
+                switch classifyCommit(snapshot: snapshot, didSave: didSave) {
+                case .clean:
+                    saveMessage = nil
+                    hasSaveFailure = false
+                case .pendingNewerChanges:
+                    saveMessage = nil
+                    hasSaveFailure = false
+                case .failed:
                     saveMessage = "Couldn't save this note. Retry when ready."
-                    retryAction = .save(thenDismiss: thenDismiss)
-                    return
-                }
-                saveMessage = nil
-                retryAction = nil
-                if thenDismiss {
-                    dismiss()
+                    hasSaveFailure = true
                 }
             } catch CardEditorBodyError.compatibilityBlocked {
-                dismiss()
+                dismiss.callAsFunction()
             } catch {
                 saveMessage = "Couldn't take a safe editor snapshot. Retry."
-                retryAction = .save(thenDismiss: thenDismiss)
+                hasSaveFailure = true
             }
         }
     }
 
-    private func retryCurrentFailure() {
-        guard let retryAction, !isBusy else { return }
-        switch retryAction {
-        case let .save(thenDismiss):
-            saveCurrentSnapshot(thenDismiss: thenDismiss)
+    private func classifyCommit(
+        snapshot: BlockNoteSnapshot,
+        didSave: Bool
+    ) -> CardEditorCommitOutcome {
+        let exactRevision = editingStore.lastCommittedBodyRevision == snapshot.revision
+            && editingStore.bodyRevision == snapshot.revision
+            && bodyModel.revision == snapshot.revision
+        if didSave, exactRevision, !editingStore.isDirty {
+            return .clean
+        }
+        if editingStore.failureStage == nil,
+           editingStore.phase == .ready,
+           (editingStore.isDirty || !exactRevision) {
+            return .pendingNewerChanges
+        }
+        return .failed
+    }
 
-        case .addLink:
-            addOntologyLink()
+    private func verifyCurrentSnapshotAndDismiss() {
+        guard !isSaving else { return }
+        completeTagEntry()
+        isSaving = true
 
-        case let .persistedAction(action):
-            performPersistedCardAction(action)
-
-        case .store:
-            isSaving = true
-            Task {
-                defer { isSaving = false }
-                let didRetry = await editingStore.retry()
-                if didRetry {
-                    saveMessage = nil
-                    self.retryAction = nil
+        Task {
+            defer { isSaving = false }
+            do {
+                let snapshot = try await applyCurrentSnapshot()
+                if isUntouchedNewSnapshot(snapshot)
+                    || snapshotMatchesCommittedBaseline(snapshot) {
+                    dismiss()
                 } else {
-                    saveMessage = "That change still couldn't be saved. Retry."
-                    self.retryAction = .store
+                    hasSaveFailure = false
+                    saveMessage = nil
                 }
+            } catch CardEditorBodyError.compatibilityBlocked {
+                dismiss()
+            } catch {
+                showCloseWithoutSavingConfirmation = true
             }
         }
+    }
+
+    private func snapshotMatchesCommittedBaseline(
+        _ snapshot: BlockNoteSnapshot
+    ) -> Bool {
+        guard editingStore.cardID != nil,
+              let committedDraft = editingStore.lastCommittedDraft,
+              let committedRevision = editingStore.lastCommittedBodyRevision else {
+            return false
+        }
+        return !editingStore.isDirty
+            && editingStore.draft == committedDraft
+            && committedRevision == snapshot.revision
+            && editingStore.bodyRevision == snapshot.revision
+            && bodyModel.revision == snapshot.revision
     }
 
     private func applyCurrentSnapshot() async throws -> BlockNoteSnapshot {
@@ -604,7 +654,7 @@ private struct CardEditorSessionView: View {
             )
         )
         saveMessage = nil
-        retryAction = nil
+        hasSaveFailure = false
     }
 
     private func beginTagEntry() {
@@ -639,20 +689,18 @@ private struct CardEditorSessionView: View {
     private func addOntologyLink() {
         guard !isBusy else { return }
         saveMessage = nil
-        retryAction = nil
+        hasSaveFailure = false
         Task {
             do {
                 _ = try await applyCurrentSnapshot()
                 guard await recoverFailedDraftOperationIfNeeded() else {
                     notifyCreationIfNeeded()
                     saveMessage = "Save this note before adding a link."
-                    retryAction = .addLink
                     return
                 }
                 guard let sourceID = await editingStore.ensurePersisted() else {
                     notifyCreationIfNeeded()
                     saveMessage = "Save this note before adding a link."
-                    retryAction = .addLink
                     return
                 }
                 notifyCreationIfNeeded()
@@ -664,7 +712,6 @@ private struct CardEditorSessionView: View {
                 )
             } catch {
                 saveMessage = "Couldn't take a safe snapshot for linking."
-                retryAction = .addLink
             }
         }
     }
@@ -687,18 +734,24 @@ private struct CardEditorSessionView: View {
             let didCreate = await editingStore.createLink(link)
             guard didCreate else {
                 saveMessage = "Couldn't add that link. Retry."
-                retryAction = .store
                 return
             }
             saveMessage = nil
-            retryAction = nil
+            hasSaveFailure = false
         }
     }
 
     private func presentInlineImageSourceOptions() {
         guard !isBusy else { return }
+        completeTagEntry()
         bodyModel.dismissKeyboard()
         showInlineImageSourceDialog = true
+    }
+
+    private func presentInlineLinkSheet() {
+        completeTagEntry()
+        bodyModel.dismissKeyboard()
+        showInlineLinkSheet = true
     }
 
     private func handleInlineImageSourceSelection(
@@ -715,7 +768,7 @@ private struct CardEditorSessionView: View {
     private func requestInlineImageCamera() {
         guard isInlineImageCameraAvailable else {
             saveMessage = "Camera isn't available on this device."
-            retryAction = nil
+            hasSaveFailure = false
             return
         }
 
@@ -756,14 +809,14 @@ private struct CardEditorSessionView: View {
                 )
                 guard editingStore.stageBackground(image) else {
                     saveMessage = "That background image can't be used."
-                    retryAction = nil
+                    hasSaveFailure = false
                     return
                 }
                 saveMessage = nil
-                retryAction = nil
+                hasSaveFailure = false
             } catch {
                 saveMessage = "Couldn't read that background image."
-                retryAction = nil
+                hasSaveFailure = false
             }
         }
     }
@@ -792,7 +845,7 @@ private struct CardEditorSessionView: View {
         guard !isProcessingInlineImage else { return }
         isProcessingInlineImage = true
         saveMessage = nil
-        retryAction = nil
+        hasSaveFailure = false
 
         Task {
             defer { isProcessingInlineImage = false }
@@ -804,10 +857,10 @@ private struct CardEditorSessionView: View {
                     alt: "Inline image"
                 )
                 saveMessage = nil
-                retryAction = nil
+                hasSaveFailure = false
             } catch {
                 saveMessage = "Couldn't insert that image. Your draft is unchanged."
-                retryAction = nil
+                hasSaveFailure = false
             }
         }
     }
@@ -859,6 +912,7 @@ private struct CardEditorSessionView: View {
 
     private func openCardActions() {
         guard bodyModel.canSave, !isBusy else { return }
+        completeTagEntry()
         bodyModel.dismissKeyboard()
         showCardActions = true
     }
@@ -869,28 +923,25 @@ private struct CardEditorSessionView: View {
         guard bodyModel.canSave, !isBusy else { return }
         isPreparingCardAction = true
         saveMessage = nil
-        retryAction = nil
+        hasSaveFailure = false
         Task {
             defer { isPreparingCardAction = false }
             do {
                 _ = try await applyCurrentSnapshot()
                 guard await recoverFailedDraftOperationIfNeeded() else {
                     saveMessage = "Save this note before using that action."
-                    retryAction = .persistedAction(action)
                     return
                 }
                 guard await editingStore.ensurePersisted() != nil else {
                     saveMessage = "Save this note before using that action."
-                    retryAction = .persistedAction(action)
                     return
                 }
                 notifyCreationIfNeeded()
                 saveMessage = nil
-                retryAction = nil
+                hasSaveFailure = false
                 executePersistedCardAction(action)
             } catch {
                 saveMessage = "Couldn't take a safe snapshot for that action."
-                retryAction = .persistedAction(action)
             }
         }
     }
@@ -931,7 +982,7 @@ private struct CardEditorSessionView: View {
               !isCardActionInFlight else { return }
         isCardActionInFlight = true
         saveMessage = nil
-        retryAction = nil
+        hasSaveFailure = false
         let request: AnyPublisher<PinResponse, NetworkError> = isPinned
             ? NetworkManager.shared.unpinCard(cardId: cardID)
             : NetworkManager.shared.pinCard(cardId: cardID)
@@ -942,17 +993,15 @@ private struct CardEditorSessionView: View {
                     isCardActionInFlight = false
                     if case .failure = completion {
                         saveMessage = "Couldn't update pin status."
-                        retryAction = .persistedAction(.togglePin)
                     }
                 },
                 receiveValue: { response in
                     if response.success {
                         isPinned.toggle()
                         saveMessage = nil
-                        retryAction = nil
+                        hasSaveFailure = false
                     } else {
                         saveMessage = "Couldn't update pin status."
-                        retryAction = .persistedAction(.togglePin)
                     }
                 }
             )
@@ -967,7 +1016,7 @@ private struct CardEditorSessionView: View {
         }
         isCardActionInFlight = true
         saveMessage = nil
-        retryAction = nil
+        hasSaveFailure = false
         NetworkManager.shared.deleteCard(id: cardID)
             .receive(on: DispatchQueue.main)
             .sink(
@@ -999,11 +1048,10 @@ private enum CardEditorPersistedAction {
     case togglePin
 }
 
-private enum CardEditorRetryAction {
-    case save(thenDismiss: Bool)
-    case addLink
-    case persistedAction(CardEditorPersistedAction)
-    case store
+private enum CardEditorCommitOutcome {
+    case clean
+    case pendingNewerChanges
+    case failed
 }
 
 private struct CardEditorInlineLinkSheet: View {

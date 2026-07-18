@@ -72,9 +72,10 @@ final class ArcNoteUITests: XCTestCase {
         waitForButton("cardEditorPrivacyButton").tap()
         waitForLabel("cardEditorLeadingAction", expected: "Save note")
 
-        leading.tap()
+        saveCardEditor()
 
         waitForLabel("cardEditorLeadingAction", expected: "Close note")
+        XCTAssertTrue(exists("cardEditorContent", timeout: 2))
         XCTAssertFalse(
             app.descendants(matching: .any)["cardEditorSave"].exists
         )
@@ -3664,25 +3665,17 @@ final class ArcNoteUITests: XCTestCase {
         waitFor("cardEditorContent", timeout: 20)
 
         waitForEnabledButton("cardEditorAddTag", timeout: 20).tap()
-        let addTagAlert = app.alerts["Add Tag"]
-        XCTAssertTrue(addTagAlert.waitForExistence(timeout: 10))
-        let tagInput = addTagAlert.textFields.firstMatch
-        XCTAssertTrue(tagInput.waitForExistence(timeout: 10))
-        tagInput.tap()
-        tagInput.typeText("## editortag ")
-        let add = addTagAlert.buttons["Add"].firstMatch
-        XCTAssertTrue(add.waitForExistence(timeout: 10))
-        add.tap()
+        waitFor("cardEditorTagInput").typeText("## editortag \n")
+        waitForMissing("cardEditorTagInput")
+        waitFor("cardEditorTag.editortag")
 
         waitForEnabledButton("cardEditorAddTag", timeout: 20).tap()
-        XCTAssertTrue(addTagAlert.waitForExistence(timeout: 10))
-        let duplicateInput = addTagAlert.textFields.firstMatch
-        XCTAssertTrue(duplicateInput.waitForExistence(timeout: 10))
-        duplicateInput.tap()
-        duplicateInput.typeText("#editortag")
-        XCTAssertTrue(add.waitForExistence(timeout: 10))
-        add.tap()
+        waitFor("cardEditorTagInput").typeText("#editortag\n")
+        waitForMissing("cardEditorTagInput")
 
+        saveCardEditor()
+        XCTAssertTrue(exists("cardEditorContent", timeout: 2))
+        waitForLabel("cardEditorLeadingAction", expected: "Close note")
         closeNewNoteEditor()
 
         waitForSmokeCardState(id: cardID, token: session.token) { card in
@@ -3738,7 +3731,7 @@ final class ArcNoteUITests: XCTestCase {
         )
         XCTAssertEqual(
             waitForButton("cardEditorLeadingAction").label,
-            "Retry saving note"
+            "Close note"
         )
         XCTAssertTrue(exists("cardEditorContent", timeout: 2))
         XCTAssertFalse(exists("cardEditorLinksDisclosure", timeout: 2))
@@ -4030,11 +4023,18 @@ final class ArcNoteUITests: XCTestCase {
         tapButton("cardEditorKeyboardDismiss")
         waitForElementToDisappear(app.keyboards.firstMatch)
         waitForButton("cardEditorLeadingAction").tap()
-        waitForMissing("cardEditorContent", timeout: 30)
+        waitForLabel(
+            "cardEditorLeadingAction",
+            expected: "Close note",
+            timeout: 30
+        )
+        XCTAssertTrue(exists("cardEditorContent", timeout: 2))
         let callbackID = waitFor("note.created-card-id", timeout: 30)
             .label
             .trimmingCharacters(in: .whitespacesAndNewlines)
         XCTAssertEqual(callbackID, canonicalID)
+        waitForButton("cardEditorLeadingAction").tap()
+        waitForMissing("cardEditorContent", timeout: 30)
 
         let cardsAfterRetry = waitForSmokeCards(
             search: bodyText,
@@ -5808,11 +5808,48 @@ final class ArcNoteUITests: XCTestCase {
         app.typeText(text)
     }
 
+    private func saveCardEditor(
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let leading = waitForButton(
+            "cardEditorLeadingAction",
+            file: file,
+            line: line
+        )
+        XCTAssertTrue(
+            ["Save note", "Retry saving note"].contains(leading.label),
+            "Expected a commit action, got \(leading.label)",
+            file: file,
+            line: line
+        )
+        leading.tap()
+        waitForLabel(
+            "cardEditorLeadingAction",
+            expected: "Close note",
+            timeout: 30,
+            file: file,
+            line: line
+        )
+    }
+
     private func closeNewNoteEditor(
         file: StaticString = #filePath,
         line: UInt = #line
     ) {
-        tapButton("cardEditorLeadingAction", file: file, line: line)
+        let leading = waitForButton(
+            "cardEditorLeadingAction",
+            file: file,
+            line: line
+        )
+        if leading.label != "Close note" {
+            saveCardEditor(file: file, line: line)
+        }
+        waitForButton(
+            "cardEditorLeadingAction",
+            file: file,
+            line: line
+        ).tap()
         waitForMissing("cardEditorContent", timeout: 30, file: file, line: line)
     }
 

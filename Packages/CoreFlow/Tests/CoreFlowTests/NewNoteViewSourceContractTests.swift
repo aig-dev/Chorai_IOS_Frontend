@@ -60,74 +60,62 @@ final class NewNoteViewSourceContractTests: XCTestCase {
         XCTAssertTrue(hydration.contains("initialFocus: false"))
     }
 
-    func testBackSavesOneExactSnapshotAndDismissesOnlyExactCleanCommit() throws {
+    func testLeadingSaveCommitsWithoutDismissAndBackOnlyVerifiesCleanSnapshot() throws {
         let source = try Self.newNoteSource()
-        let back = try XCTUnwrap(
-            Self.functionBody(in: source, signature: "func handleBack()")
+        let leading = try XCTUnwrap(
+            Self.functionBody(in: source, signature: "func handleLeadingControl()")
         )
-        XCTAssertTrue(back.contains("bodyModel.compatibilityNotice != nil"))
-        XCTAssertFalse(
-            back.contains("!editingStore.isDirty"),
-            "A possibly delayed bridge event must not bypass the exact snapshot"
-        )
-        XCTAssertTrue(back.contains("saveCurrentSnapshot(thenDismiss: true)"))
+        XCTAssertTrue(leading.contains("case .save, .retry:"))
+        XCTAssertTrue(leading.contains("saveCurrentSnapshot()"))
+        XCTAssertTrue(leading.contains("case .back:"))
+        XCTAssertTrue(leading.contains("verifyCurrentSnapshotAndDismiss()"))
 
         let save = try XCTUnwrap(
+            Self.functionBody(in: source, signature: "func saveCurrentSnapshot()")
+        )
+        XCTAssertTrue(save.contains("completeTagEntry()"))
+        XCTAssertTrue(save.contains("applyCurrentSnapshot()"))
+        XCTAssertTrue(save.contains("editingStore.save()"))
+        XCTAssertTrue(save.contains("classifyCommit("))
+        XCTAssertFalse(save.contains("dismiss()"))
+        XCTAssertFalse(save.contains("thenDismiss"))
+
+        let close = try XCTUnwrap(
             Self.functionBody(
                 in: source,
-                signature: "func saveCurrentSnapshot(thenDismiss: Bool)"
+                signature: "func verifyCurrentSnapshotAndDismiss()"
             )
         )
-        let snapshot = try XCTUnwrap(save.range(of: "applyCurrentSnapshot()"))
-        let untouched = try XCTUnwrap(
-            save.range(of: "isUntouchedNewSnapshot(snapshot)")
-        )
-        let persist = try XCTUnwrap(save.range(of: "editingStore.save()"))
-        XCTAssertLessThan(snapshot.lowerBound, untouched.lowerBound)
-        XCTAssertLessThan(untouched.lowerBound, persist.lowerBound)
-        XCTAssertLessThan(snapshot.lowerBound, persist.lowerBound)
-        XCTAssertTrue(
-            save.contains("editingStore.lastCommittedBodyRevision == snapshot.revision")
-        )
-        XCTAssertTrue(save.contains("editingStore.bodyRevision == snapshot.revision"))
-        XCTAssertTrue(save.contains("bodyModel.revision == snapshot.revision"))
-        XCTAssertTrue(save.contains("!editingStore.isDirty"))
-        XCTAssertFalse(save.contains("updateDraft("))
+        XCTAssertTrue(close.contains("completeTagEntry()"))
+        XCTAssertTrue(close.contains("applyCurrentSnapshot()"))
+        XCTAssertTrue(close.contains("isUntouchedNewSnapshot(snapshot)"))
+        XCTAssertTrue(close.contains("snapshotMatchesCommittedBaseline(snapshot)"))
+        XCTAssertTrue(close.contains("dismiss()"))
+        XCTAssertFalse(close.contains("editingStore.save()"))
+    }
 
-        let untouchedCheck = try XCTUnwrap(
-            Self.functionBody(
-                in: source,
-                signature: "func isUntouchedNewSnapshot(_ snapshot: BlockNoteSnapshot)"
-            )
-        )
-        XCTAssertTrue(
-            untouchedCheck.contains("snapshot.revision == seed.revision"),
-            "Image-only documents can have empty fallback Markdown; only the initial revision is untouched"
-        )
-
-        let apply = try XCTUnwrap(
-            Self.functionBody(in: source, signature: "func applyCurrentSnapshot()")
-        )
-        let blur = try XCTUnwrap(apply.range(of: "bodyModel.dismissKeyboard()"))
-        let request = try XCTUnwrap(
-            apply.range(of: "bodyModel.requestSnapshot()")
-        )
-        let storeApply = try XCTUnwrap(
-            apply.range(of: "editingStore.applyBodyRevision(")
-        )
-        XCTAssertLessThan(blur.lowerBound, request.lowerBound)
-        XCTAssertLessThan(request.lowerBound, storeApply.lowerBound)
-        XCTAssertFalse(apply.contains("updateDraft("))
+    func testLeadingStateUsesMeaningfulDraftAndPendingInlineTag() throws {
+        let source = try Self.newNoteSource()
+        XCTAssertTrue(source.contains("var hasPendingInlineTagCandidate: Bool"))
+        XCTAssertTrue(source.contains("CardEditingTag.appending("))
+        XCTAssertTrue(source.contains("var hasPendingCommit: Bool"))
+        XCTAssertTrue(source.contains("editingStore.cardID != nil"))
+        XCTAssertTrue(source.contains("editingStore.isDirty"))
+        XCTAssertTrue(source.contains("isUntouchedNewDraft"))
+        XCTAssertTrue(source.contains("backgroundIntent == .unchanged"))
+        XCTAssertFalse(source.contains("@State private var hasUnsavedChanges"))
     }
 
     func testFatalBridgeFailureRequiresExplicitDiscardConfirmationToClose() throws {
         let source = try Self.newNoteSource()
-        let back = try XCTUnwrap(
-            Self.functionBody(in: source, signature: "func handleBack()")
+        let leading = try XCTUnwrap(
+            Self.functionBody(in: source, signature: "func handleLeadingControl()")
         )
 
-        XCTAssertTrue(back.contains("bodyModel.bridgeFailureNotice != nil"))
-        XCTAssertTrue(back.contains("showCloseWithoutSavingConfirmation = true"))
+        XCTAssertTrue(leading.contains("case .bridgeFailed:"))
+        XCTAssertTrue(
+            leading.contains("showCloseWithoutSavingConfirmation = true")
+        )
         XCTAssertTrue(source.contains(#""Close without saving?""#))
         XCTAssertTrue(source.contains(#"Button("Keep Editing", role: .cancel)"#))
         XCTAssertTrue(source.contains(#"Button("Close", role: .destructive"#))
@@ -386,93 +374,47 @@ final class NewNoteViewSourceContractTests: XCTestCase {
         )
     }
 
-    func testRetryDispatchKeepsSaveAndCanonicalMutationFailuresDistinct() throws {
+    func testOnlyCommitFailureOwnsTheLeadingRetryState() throws {
         let source = try Self.newNoteSource()
-        XCTAssertTrue(source.contains("enum CardEditorRetryAction"))
-        XCTAssertTrue(source.contains("onSave: retryHandler"))
-        XCTAssertTrue(source.contains("guard retryAction != nil else { return nil }"))
-
-        let retry = try XCTUnwrap(
-            Self.functionBody(in: source, signature: "func retryCurrentFailure()")
-        )
-        XCTAssertTrue(retry.contains("case let .save(thenDismiss)"))
-        XCTAssertTrue(retry.contains("saveCurrentSnapshot(thenDismiss: thenDismiss)"))
-        XCTAssertTrue(retry.contains("case .store"))
-        XCTAssertTrue(retry.contains("editingStore.retry()"))
-
-        let recovery = try XCTUnwrap(
-            Self.functionBody(
-                in: source,
-                signature: "func recoverFailedDraftOperationIfNeeded()"
-            )
-        )
-        let reconcileRelationshipFailure = try XCTUnwrap(
-            recovery.range(
-                of: "editingStore.reconcileFailedRelationshipMutation()"
-            )
-        )
-        XCTAssertFalse(source.contains("discardFailedRelationshipMutation"))
-        XCTAssertTrue(recovery.contains("case .creatingLink, .deletingLink"))
-        XCTAssertTrue(
-            recovery.contains(
-                "return await editingStore.reconcileFailedRelationshipMutation()"
-            )
-        )
-        XCTAssertTrue(recovery.contains("editingStore.failureStage != nil"))
-        XCTAssertFalse(
-            recovery.contains("case .creatingCard, .updatingCard"),
-            "Background and link failures also need their frozen retry operation"
-        )
-        let exactRetry = try XCTUnwrap(
-            recovery.range(of: "editingStore.retry()")
-        )
-        let latestSave = try XCTUnwrap(
-            recovery.range(of: "editingStore.save()")
-        )
-        XCTAssertLessThan(
-            reconcileRelationshipFailure.lowerBound,
-            exactRetry.lowerBound,
-            "Back and prerequisite actions must canonicalize failed relationships before retrying required draft or background writes"
-        )
-        XCTAssertLessThan(exactRetry.lowerBound, latestSave.lowerBound)
-        XCTAssertTrue(recovery.contains("editingStore.failureStage == nil"))
-        XCTAssertTrue(recovery.contains("editingStore.cardID != nil"))
-        XCTAssertTrue(recovery.contains("editingStore.isDirty"))
-
         let save = try XCTUnwrap(
-            Self.functionBody(
-                in: source,
-                signature: "func saveCurrentSnapshot(thenDismiss: Bool)"
-            )
+            Self.functionBody(in: source, signature: "func saveCurrentSnapshot()")
         )
-        XCTAssertLessThan(
-            try XCTUnwrap(
-                save.range(of: "recoverFailedDraftOperationIfNeeded()")
-            ).lowerBound,
-            try XCTUnwrap(save.range(of: "editingStore.save()")).lowerBound
-        )
+
+        XCTAssertTrue(source.contains("@State private var hasSaveFailure = false"))
+        XCTAssertTrue(save.contains("hasSaveFailure = true"))
+        XCTAssertFalse(source.contains("CardEditorRetryAction"))
+        XCTAssertFalse(source.contains("retryCurrentFailure"))
 
         for signature in [
             "func addOntologyLink()",
+            "func handleSelectedLink(",
             "func performPersistedCardAction(",
         ] {
             let action = try XCTUnwrap(
                 Self.functionBody(in: source, signature: signature)
             )
-            XCTAssertLessThan(
-                try XCTUnwrap(
-                    action.range(of: "recoverFailedDraftOperationIfNeeded()")
-                ).lowerBound,
-                try XCTUnwrap(
-                    action.range(of: "editingStore.ensurePersisted()")
-                ).lowerBound
+            XCTAssertFalse(
+                action.contains("hasSaveFailure = true"),
+                "Contextual action failures must be retried from their origin: \(signature)"
             )
         }
+    }
 
-        let selection = try XCTUnwrap(
-            Self.functionBody(in: source, signature: "func handleSelectedLink(")
-        )
-        XCTAssertTrue(selection.contains("retryAction = .store"))
+    func testModalEditorActionsFinishInlineTagEntryFirst() throws {
+        let source = try Self.newNoteSource()
+        for signature in [
+            "func openCardActions()",
+            "func presentInlineImageSourceOptions()",
+            "func presentInlineLinkSheet()",
+        ] {
+            let action = try XCTUnwrap(
+                Self.functionBody(in: source, signature: signature)
+            )
+            XCTAssertTrue(
+                action.contains("completeTagEntry()"),
+                "Modal action must finish inline tag entry: \(signature)"
+            )
+        }
     }
 
     func testCardActionsUseSharedFixedGridWithoutPersistenceOrBackgroundRemoval() throws {
@@ -484,7 +426,7 @@ final class NewNoteViewSourceContractTests: XCTestCase {
             encoding: .utf8
         )
 
-        XCTAssertTrue(source.contains("saveActionTitle: \"Retry\""))
+        XCTAssertFalse(source.contains("saveActionTitle:"))
         XCTAssertTrue(source.contains("onOpenCardActions: cardActionsHandler"))
         XCTAssertTrue(source.contains("CardEditorActionBox("))
         XCTAssertFalse(source.contains(".accessibilityHidden(showCardActions)"))
@@ -792,12 +734,12 @@ final class NewNoteViewSourceContractTests: XCTestCase {
         )
     }
 
-    func testIDScopedCardActionsPersistLazilyAndRetryTheirExactIntent() throws {
+    func testIDScopedCardActionsPersistLazilyAndRecoverTheirExactStoreIntent() throws {
         let source = try Self.newNoteSource()
         XCTAssertTrue(source.contains("enum CardEditorPersistedAction"))
         XCTAssertTrue(source.contains("case notification(String)"))
         XCTAssertTrue(source.contains("case togglePin"))
-        XCTAssertTrue(source.contains("case persistedAction(CardEditorPersistedAction)"))
+        XCTAssertFalse(source.contains("case persistedAction(CardEditorPersistedAction)"))
         XCTAssertFalse(source.contains("case openCardActions"))
 
         let action = try XCTUnwrap(
@@ -821,13 +763,8 @@ final class NewNoteViewSourceContractTests: XCTestCase {
         XCTAssertLessThan(recovery.lowerBound, persist.lowerBound)
         XCTAssertLessThan(persist.lowerBound, notify.lowerBound)
         XCTAssertLessThan(notify.lowerBound, execute.lowerBound)
-        XCTAssertTrue(action.contains("retryAction = .persistedAction(action)"))
-
-        let retry = try XCTUnwrap(
-            Self.functionBody(in: source, signature: "func retryCurrentFailure()")
-        )
-        XCTAssertTrue(retry.contains("case let .persistedAction(action)"))
-        XCTAssertTrue(retry.contains("performPersistedCardAction(action)"))
+        XCTAssertFalse(action.contains("hasSaveFailure = true"))
+        XCTAssertFalse(source.contains("retryCurrentFailure"))
 
         for notification in [
             "ShowCardShare",
