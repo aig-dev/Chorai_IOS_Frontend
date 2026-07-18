@@ -11,8 +11,14 @@ public final class CardEditingStore: ObservableObject {
     @Published public private(set) var lastCommittedDraft: CardEditingDraft?
     @Published public private(set) var lastCommittedBodyRevision: Int?
     @Published public private(set) var backgroundMediaRef: String?
-    @Published public private(set) var pendingBackground: CardEditingImage?
+    @Published public private(set) var backgroundIntent:
+        CardEditingBackgroundIntent = .unchanged
     @Published public private(set) var links: [CardEditingLink]
+
+    public var pendingBackground: CardEditingImage? {
+        guard case let .replace(image) = backgroundIntent else { return nil }
+        return image
+    }
 
     private enum RetryOperation: Equatable, Sendable {
         case create(
@@ -74,7 +80,7 @@ public final class CardEditingStore: ObservableObject {
     }
 
     public var isDirty: Bool {
-        isDraftDirty || pendingBackground != nil
+        isDraftDirty || backgroundIntent != .unchanged
     }
 
     public func hydrate(
@@ -100,8 +106,9 @@ public final class CardEditingStore: ObservableObject {
 
         guard !operationIsActive else { return }
         if let failureContext,
-           failureContext.stage == .replacingBackground,
-           pendingBackground != nil {
+           backgroundIntent != .unchanged,
+           (failureContext.stage == .replacingBackground
+               || failureContext.stage == .removingBackground) {
             phase = .failed(failureContext.error)
         } else {
             clearFailure()
@@ -179,12 +186,34 @@ public final class CardEditingStore: ObservableObject {
             }
             return false
         }
-        pendingBackground = image
+        backgroundIntent = .replace(image)
         if !isBusy, failureContext?.retryOperation == nil {
             clearFailure()
             phase = .ready
         }
         return true
+    }
+
+    public func stageBackgroundRemoval() {
+        guard backgroundMediaRef != nil else {
+            restoreBackground()
+            return
+        }
+        backgroundIntent = .remove
+        if !isBusy, failureContext?.retryOperation == nil {
+            clearFailure()
+            phase = .ready
+        }
+    }
+
+    public func restoreBackground() {
+        backgroundIntent = .unchanged
+        if failureStage == .replacingBackground || failureStage == .removingBackground {
+            clearFailure()
+        }
+        if !isBusy, failureContext == nil {
+            phase = .ready
+        }
     }
 
     @discardableResult
@@ -197,8 +226,8 @@ public final class CardEditingStore: ObservableObject {
         if isDraftDirty {
             guard await persistDraft() else { return false }
         }
-        if pendingBackground != nil {
-            guard await persistPendingBackground() else { return false }
+        if backgroundIntent != .unchanged {
+            guard await persistBackgroundIntent() else { return false }
         }
 
         phase = .ready
@@ -344,23 +373,6 @@ public final class CardEditingStore: ObservableObject {
         }
     }
 
-    @discardableResult
-    public func removeBackground() async -> Bool {
-        guard let operationID = beginOperation() else { return false }
-        defer { endOperation(operationID) }
-        pendingBackground = nil
-        clearFailure()
-        guard let cardID else {
-            phase = .ready
-            return true
-        }
-        guard backgroundMediaRef != nil else {
-            phase = .ready
-            return true
-        }
-        return await performBackgroundRemoval(cardID: cardID)
-    }
-
     private var isDraftDirty: Bool {
         guard cardID != nil,
               let lastCommittedDraft,
@@ -406,8 +418,8 @@ public final class CardEditingStore: ObservableObject {
         defer { endOperation(operationID) }
         clearFailure()
         guard await persistDraft(retryOperation) else { return false }
-        if pendingBackground != nil {
-            guard await persistPendingBackground() else { return false }
+        if backgroundIntent != .unchanged {
+            guard await persistBackgroundIntent() else { return false }
         }
         phase = .ready
         return !isDirty
@@ -417,7 +429,11 @@ public final class CardEditingStore: ObservableObject {
         guard let operationID = beginOperation() else { return false }
         defer { endOperation(operationID) }
         clearFailure()
-        guard await persistBackground(cardID: cardID, image: image) else {
+        guard await persistBackground(
+            cardID: cardID,
+            image: image,
+            capturedIntent: .replace(image)
+        ) else {
             return false
         }
         phase = .ready
@@ -428,7 +444,14 @@ public final class CardEditingStore: ObservableObject {
         guard let operationID = beginOperation() else { return false }
         defer { endOperation(operationID) }
         clearFailure()
-        return await performBackgroundRemoval(cardID: cardID)
+        guard await persistBackgroundRemoval(
+            cardID: cardID,
+            capturedIntent: .remove
+        ) else {
+            return false
+        }
+        phase = .ready
+        return !isDirty
     }
 
     private func persistDraft(_ requestedOperation: RetryOperation? = nil) async -> Bool {
@@ -531,18 +554,33 @@ public final class CardEditingStore: ObservableObject {
         }
     }
 
-    private func persistPendingBackground() async -> Bool {
-        guard let image = pendingBackground else { return true }
+    private func persistBackgroundIntent() async -> Bool {
+        let intent = backgroundIntent
         guard let cardID else {
             fail(with: .transport(code: "card_id_missing"))
             return false
         }
-        return await persistBackground(cardID: cardID, image: image)
+        switch intent {
+        case .unchanged:
+            return true
+        case let .replace(image):
+            return await persistBackground(
+                cardID: cardID,
+                image: image,
+                capturedIntent: intent
+            )
+        case .remove:
+            return await persistBackgroundRemoval(
+                cardID: cardID,
+                capturedIntent: intent
+            )
+        }
     }
 
     private func persistBackground(
         cardID: String,
-        image: CardEditingImage
+        image: CardEditingImage,
+        capturedIntent: CardEditingBackgroundIntent
     ) async -> Bool {
         phase = .updatingBackground
         do {
@@ -551,8 +589,8 @@ public final class CardEditingStore: ObservableObject {
                 image: image
             )
             backgroundMediaRef = mediaRef
-            if pendingBackground == image {
-                pendingBackground = nil
+            if backgroundIntent == capturedIntent {
+                backgroundIntent = .unchanged
             }
             clearFailure()
             phase = .ready
@@ -567,11 +605,17 @@ public final class CardEditingStore: ObservableObject {
         }
     }
 
-    private func performBackgroundRemoval(cardID: String) async -> Bool {
+    private func persistBackgroundRemoval(
+        cardID: String,
+        capturedIntent: CardEditingBackgroundIntent
+    ) async -> Bool {
         phase = .updatingBackground
         do {
             try await service.removeBackground(cardID: cardID)
             backgroundMediaRef = nil
+            if backgroundIntent == capturedIntent {
+                backgroundIntent = .unchanged
+            }
             clearFailure()
             phase = .ready
             return true

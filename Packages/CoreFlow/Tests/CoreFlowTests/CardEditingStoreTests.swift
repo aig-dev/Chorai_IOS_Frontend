@@ -65,7 +65,7 @@ final class CardEditingStoreTests: XCTestCase {
 
         store.stageBackground(validImage)
 
-        XCTAssertEqual(store.pendingBackground, validImage)
+        XCTAssertEqual(store.backgroundIntent, .replace(validImage))
         XCTAssertNil(store.cardID)
         XCTAssertTrue(service.events.isEmpty)
         XCTAssertTrue(store.isDirty)
@@ -88,7 +88,7 @@ final class CardEditingStoreTests: XCTestCase {
         XCTAssertEqual(store.cardID, "ast_1")
         XCTAssertEqual(service.createRequests.count, 1)
         XCTAssertEqual(service.replaceBackgroundRequests.count, 1)
-        XCTAssertEqual(store.pendingBackground, validImage)
+        XCTAssertEqual(store.backgroundIntent, .replace(validImage))
         XCTAssertEqual(store.failureStage, .replacingBackground)
 
         let retrySucceeded = await store.retry()
@@ -97,7 +97,7 @@ final class CardEditingStoreTests: XCTestCase {
         XCTAssertEqual(service.updateRequests.count, 0)
         XCTAssertEqual(service.replaceBackgroundRequests.count, 2)
         XCTAssertEqual(store.backgroundMediaRef, "med_1")
-        XCTAssertNil(store.pendingBackground)
+        XCTAssertEqual(store.backgroundIntent, .unchanged)
         XCTAssertFalse(store.isDirty)
     }
 
@@ -268,7 +268,7 @@ final class CardEditingStoreTests: XCTestCase {
         XCTAssertEqual(persistedID, "ast_1")
         XCTAssertEqual(store.failureStage, .replacingBackground)
         XCTAssertEqual(store.phase, .failed(.transport(code: "upload_failed")))
-        XCTAssertEqual(store.pendingBackground, validImage)
+        XCTAssertEqual(store.backgroundIntent, .replace(validImage))
     }
 
     func testLaterBodyRevisionRemainsDirtyAfterEarlierSaveCompletes() async {
@@ -666,7 +666,7 @@ final class CardEditingStoreTests: XCTestCase {
         XCTAssertTrue(saveSucceeded)
         XCTAssertEqual(store.phase, .ready)
         XCTAssertEqual(store.backgroundMediaRef, "med_uploaded")
-        XCTAssertNil(store.pendingBackground)
+        XCTAssertEqual(store.backgroundIntent, .unchanged)
         XCTAssertFalse(store.isDirty)
     }
 
@@ -704,7 +704,7 @@ final class CardEditingStoreTests: XCTestCase {
 
         let firstSave = await saveTask.value
         XCTAssertFalse(firstSave)
-        XCTAssertEqual(store.pendingBackground, validImage)
+        XCTAssertEqual(store.backgroundIntent, .replace(validImage))
         XCTAssertEqual(store.failureStage, .replacingBackground)
         XCTAssertEqual(store.phase, .failed(.transport(code: "upload_failed")))
 
@@ -712,7 +712,7 @@ final class CardEditingStoreTests: XCTestCase {
         XCTAssertTrue(retried)
         XCTAssertEqual(service.replaceBackgroundRequests, [validImage, validImage])
         XCTAssertEqual(store.backgroundMediaRef, "med_uploaded")
-        XCTAssertNil(store.pendingBackground)
+        XCTAssertEqual(store.backgroundIntent, .unchanged)
     }
 
     func testBackgroundRetryUsesCapturedImageAfterNewImageIsStaged() async {
@@ -742,22 +742,172 @@ final class CardEditingStoreTests: XCTestCase {
         XCTAssertFalse(retried)
         XCTAssertEqual(service.replaceBackgroundRequests, [validImage, validImage])
         XCTAssertEqual(store.backgroundMediaRef, "med_original")
-        XCTAssertEqual(store.pendingBackground, replacement)
+        XCTAssertEqual(store.backgroundIntent, .replace(replacement))
         XCTAssertTrue(store.isDirty)
     }
 
-    func testRemoveBackgroundFromUnsavedCardClearsOnlyStagedPreview() async {
+    func testStageBackgroundRemovalDefersDeleteUntilSave() async {
         let service = MockCardEditingService()
-        let store = makeNewStore(service: service)
-        store.stageBackground(validImage)
+        service.removeBackgroundResults = [.success(())]
+        let store = CardEditingStore(
+            cardID: "ast_1",
+            draft: .init(title: nil, content: "Body", tags: [], isPublic: false),
+            backgroundMediaRef: "med_existing",
+            links: [],
+            service: service
+        )
 
-        let removed = await store.removeBackground()
-        XCTAssertTrue(removed)
+        store.stageBackgroundRemoval()
 
-        XCTAssertNil(store.pendingBackground)
-        XCTAssertNil(store.backgroundMediaRef)
+        XCTAssertEqual(store.backgroundIntent, .remove)
+        XCTAssertTrue(store.isDirty)
         XCTAssertTrue(service.removeBackgroundRequests.isEmpty)
+
+        let saved = await store.save()
+        XCTAssertTrue(saved)
+        XCTAssertEqual(service.removeBackgroundRequests, ["ast_1"])
+        XCTAssertNil(store.backgroundMediaRef)
+        XCTAssertEqual(store.backgroundIntent, .unchanged)
+        XCTAssertFalse(store.isDirty)
+    }
+
+    func testRemovalWithoutCommittedBackgroundCancelsLocalReplacement() {
+        let service = MockCardEditingService()
+        let store = CardEditingStore(
+            cardID: "ast_1",
+            draft: .init(title: nil, content: "Body", tags: [], isPublic: false),
+            backgroundMediaRef: nil,
+            links: [],
+            service: service
+        )
+        XCTAssertTrue(store.stageBackground(validImage))
+
+        store.stageBackgroundRemoval()
+
+        XCTAssertEqual(store.backgroundIntent, .unchanged)
+        XCTAssertFalse(store.isDirty)
         XCTAssertTrue(service.events.isEmpty)
+    }
+
+    func testRestoreClearsStagedMutationAndKeepsCommittedReference() {
+        let service = MockCardEditingService()
+        let store = CardEditingStore(
+            cardID: "ast_1",
+            draft: .init(title: nil, content: "Body", tags: [], isPublic: false),
+            backgroundMediaRef: "med_existing",
+            links: [],
+            service: service
+        )
+        store.stageBackgroundRemoval()
+
+        store.restoreBackground()
+
+        XCTAssertEqual(store.backgroundIntent, .unchanged)
+        XCTAssertEqual(store.backgroundMediaRef, "med_existing")
+        XCTAssertFalse(store.isDirty)
+        XCTAssertTrue(service.events.isEmpty)
+    }
+
+    func testReplacementSupersedesStagedRemoval() {
+        let service = MockCardEditingService()
+        let store = CardEditingStore(
+            cardID: "ast_1",
+            draft: .init(title: nil, content: "Body", tags: [], isPublic: false),
+            backgroundMediaRef: "med_existing",
+            links: [],
+            service: service
+        )
+        store.stageBackgroundRemoval()
+
+        XCTAssertTrue(store.stageBackground(validImage))
+
+        XCTAssertEqual(store.backgroundIntent, .replace(validImage))
+        XCTAssertEqual(store.backgroundMediaRef, "med_existing")
+        XCTAssertTrue(service.events.isEmpty)
+    }
+
+    func testRemovalFailureKeepsCommittedReferenceAndRemovalIntent() async {
+        let service = MockCardEditingService()
+        service.removeBackgroundResults = [
+            .failure(.transport(code: "remove_failed")),
+            .success(()),
+        ]
+        let store = CardEditingStore(
+            cardID: "ast_1",
+            draft: .init(title: nil, content: "Body", tags: [], isPublic: false),
+            backgroundMediaRef: "med_existing",
+            links: [],
+            service: service
+        )
+        store.stageBackgroundRemoval()
+
+        let firstSave = await store.save()
+        XCTAssertFalse(firstSave)
+        XCTAssertEqual(store.backgroundMediaRef, "med_existing")
+        XCTAssertEqual(store.backgroundIntent, .remove)
+        XCTAssertEqual(store.failureStage, .removingBackground)
+
+        let retried = await store.retry()
+        XCTAssertTrue(retried)
+        XCTAssertNil(store.backgroundMediaRef)
+        XCTAssertEqual(store.backgroundIntent, .unchanged)
+    }
+
+    func testRestoreAfterFailedRemovalAbandonsOnlyBackgroundRetry() async {
+        let service = MockCardEditingService()
+        service.removeBackgroundResults = [
+            .failure(.transport(code: "remove_failed")),
+        ]
+        let store = CardEditingStore(
+            cardID: "ast_1",
+            draft: .init(title: nil, content: "Body", tags: [], isPublic: false),
+            backgroundMediaRef: "med_existing",
+            links: [],
+            service: service
+        )
+        store.stageBackgroundRemoval()
+        let saved = await store.save()
+        XCTAssertFalse(saved)
+
+        store.restoreBackground()
+
+        XCTAssertEqual(store.backgroundIntent, .unchanged)
+        XCTAssertEqual(store.backgroundMediaRef, "med_existing")
+        XCTAssertNil(store.failureStage)
+        XCTAssertEqual(store.phase, .ready)
+        XCTAssertFalse(store.isDirty)
+        XCTAssertEqual(service.removeBackgroundRequests, ["ast_1"])
+    }
+
+    func testRemovalRetryPreservesNewerReplacementIntent() async {
+        let replacement = CardEditingImage(
+            data: Data("replacement".utf8),
+            filename: "replacement.png",
+            mimeType: "image/png"
+        )
+        let service = MockCardEditingService()
+        service.removeBackgroundResults = [
+            .failure(.transport(code: "remove_failed")),
+            .success(()),
+        ]
+        let store = CardEditingStore(
+            cardID: "ast_1",
+            draft: .init(title: nil, content: "Body", tags: [], isPublic: false),
+            backgroundMediaRef: "med_existing",
+            links: [],
+            service: service
+        )
+        store.stageBackgroundRemoval()
+        let saved = await store.save()
+        XCTAssertFalse(saved)
+        XCTAssertTrue(store.stageBackground(replacement))
+
+        let retried = await store.retry()
+        XCTAssertFalse(retried)
+
+        XCTAssertNil(store.backgroundMediaRef)
+        XCTAssertEqual(store.backgroundIntent, .replace(replacement))
+        XCTAssertTrue(store.isDirty)
     }
 
     func testHydrateReplacesCanonicalEditorStateWithoutCallingService() {
@@ -957,7 +1107,7 @@ final class CardEditingStoreTests: XCTestCase {
         XCTAssertEqual(store.links, [link])
         XCTAssertEqual(store.draft, revised)
         XCTAssertEqual(store.lastCommittedDraft, initial)
-        XCTAssertEqual(store.pendingBackground, validImage)
+        XCTAssertEqual(store.backgroundIntent, .replace(validImage))
         XCTAssertEqual(store.backgroundMediaRef, "med_old")
         XCTAssertTrue(store.isDirty)
         XCTAssertTrue(service.events.isEmpty)
@@ -1474,7 +1624,7 @@ final class CardEditingStoreTests: XCTestCase {
         XCTAssertFalse(staged)
         XCTAssertEqual(store.phase, .saving)
         XCTAssertNil(store.failureStage)
-        XCTAssertNil(store.pendingBackground)
+        XCTAssertEqual(store.backgroundIntent, .unchanged)
         await gate.open()
         let saveSucceeded = await saveTask.value
         XCTAssertTrue(saveSucceeded)
@@ -1601,28 +1751,6 @@ final class CardEditingStoreTests: XCTestCase {
         )
         XCTAssertEqual(store.backgroundMediaRef, "med_existing")
         XCTAssertTrue(service.replaceBackgroundRequests.isEmpty)
-    }
-
-    func testRemoveBackgroundFailureKeepsCommittedRefUntilRetrySucceeds() async {
-        let service = MockCardEditingService()
-        service.removeBackgroundResults = [
-            .failure(.transport(code: "remove_failed")),
-            .success(())
-        ]
-        let store = CardEditingStore(
-            cardID: "ast_1",
-            draft: .init(title: nil, content: "Body", tags: [], isPublic: false),
-            backgroundMediaRef: "med_existing",
-            links: [],
-            service: service
-        )
-
-        _ = await store.removeBackground()
-        XCTAssertEqual(store.backgroundMediaRef, "med_existing")
-
-        _ = await store.retry()
-        XCTAssertNil(store.backgroundMediaRef)
-        XCTAssertEqual(service.removeBackgroundRequests, ["ast_1", "ast_1"])
     }
 
     private var validImage: CardEditingImage {

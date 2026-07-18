@@ -200,6 +200,12 @@ public struct CardEditingImage: Equatable, Sendable {
     }
 }
 
+public enum CardEditingBackgroundIntent: Equatable, Sendable {
+    case unchanged
+    case replace(CardEditingImage)
+    case remove
+}
+
 public struct CardEditingInlineImageUpload: Equatable, Sendable {
     public let mediaRef: String
     public let url: URL
