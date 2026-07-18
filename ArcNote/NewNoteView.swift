@@ -583,14 +583,14 @@ private struct CardEditorSessionView: View {
                 switch outcome {
                 case .clean:
                     saveMessage = nil
-                    clearSaveFailure()
+                    resolveSaveFailure()
                 case .pendingNewerChanges:
                     saveMessage = nil
                     if let failureBaseline {
                         failedCommitBaseline = failureBaseline
-                        hasSaveFailure = true
+                        hideSaveFailure()
                     } else {
-                        clearSaveFailure()
+                        resolveSaveFailure()
                     }
                 case .failed:
                     saveMessage = "Couldn't save this note. Retry when ready."
@@ -599,12 +599,19 @@ private struct CardEditorSessionView: View {
                 }
             } catch CardEditorSessionError.staleSnapshot {
                 saveMessage = nil
+                failedCommitBaseline = priorFailedBaseline
+                hasSaveFailure = priorFailedBaseline == currentCommitBaseline
             } catch CardEditorBodyError.compatibilityBlocked {
                 dismiss.callAsFunction()
             } catch {
                 saveMessage = "Couldn't take a safe editor snapshot. Retry."
-                failedCommitBaseline = currentCommitBaseline
-                hasSaveFailure = true
+                if let priorFailedBaseline {
+                    failedCommitBaseline = priorFailedBaseline
+                    hasSaveFailure = priorFailedBaseline == currentCommitBaseline
+                } else {
+                    failedCommitBaseline = currentCommitBaseline
+                    hasSaveFailure = true
+                }
             }
         }
     }
@@ -642,15 +649,17 @@ private struct CardEditorSessionView: View {
                 let snapshot = try await applyCurrentSnapshot()
                 if isUntouchedNewSnapshot(snapshot)
                     || snapshotMatchesCommittedBaseline(snapshot) {
+                    resolveSaveFailure()
                     dismiss()
                 } else {
-                    clearSaveFailure()
+                    hideSaveFailure()
                     saveMessage = nil
                 }
             } catch CardEditorSessionError.staleSnapshot {
                 saveMessage = nil
-                clearSaveFailure()
+                hideSaveFailure()
             } catch CardEditorBodyError.compatibilityBlocked {
+                resolveSaveFailure()
                 dismiss()
             } catch {
                 showCloseWithoutSavingConfirmation = true
@@ -703,8 +712,12 @@ private struct CardEditorSessionView: View {
         baseline == currentCommitBaseline
     }
 
-    private func clearSaveFailure() {
+    private func hideSaveFailure() {
         hasSaveFailure = false
+    }
+
+    private func resolveSaveFailure() {
+        hideSaveFailure()
         failedCommitBaseline = nil
     }
 
@@ -740,7 +753,7 @@ private struct CardEditorSessionView: View {
             )
         )
         saveMessage = nil
-        clearSaveFailure()
+        hideSaveFailure()
     }
 
     private func beginTagEntry() {
@@ -775,7 +788,7 @@ private struct CardEditorSessionView: View {
     private func addOntologyLink() {
         guard !isBusy else { return }
         saveMessage = nil
-        clearSaveFailure()
+        hideSaveFailure()
         Task {
             do {
                 _ = try await applyCurrentSnapshot()
@@ -790,6 +803,7 @@ private struct CardEditorSessionView: View {
                     return
                 }
                 notifyCreationIfNeeded()
+                resolveSaveFailure()
                 pendingOntologyLinkSourceID = sourceID
                 LinkPopupManager.shared.show(
                     cardId: sourceID,
@@ -823,7 +837,7 @@ private struct CardEditorSessionView: View {
                 return
             }
             saveMessage = nil
-            clearSaveFailure()
+            hideSaveFailure()
         }
     }
 
@@ -831,12 +845,16 @@ private struct CardEditorSessionView: View {
         guard !isBusy else { return }
         completeTagEntry()
         bodyModel.dismissKeyboard()
+        saveMessage = nil
+        hideSaveFailure()
         showInlineImageSourceDialog = true
     }
 
     private func presentInlineLinkSheet() {
         completeTagEntry()
         bodyModel.dismissKeyboard()
+        saveMessage = nil
+        hideSaveFailure()
         showInlineLinkSheet = true
     }
 
@@ -854,7 +872,7 @@ private struct CardEditorSessionView: View {
     private func requestInlineImageCamera() {
         guard isInlineImageCameraAvailable else {
             saveMessage = "Camera isn't available on this device."
-            clearSaveFailure()
+            hideSaveFailure()
             return
         }
 
@@ -886,6 +904,8 @@ private struct CardEditorSessionView: View {
 
     private func handleSelectedBackgroundPhoto(_ item: PhotosPickerItem?) {
         guard let item else { return }
+        saveMessage = nil
+        hideSaveFailure()
         isLoadingBackgroundPhoto = true
         Task {
             defer {
@@ -899,14 +919,14 @@ private struct CardEditorSessionView: View {
                 )
                 guard editingStore.stageBackground(image) else {
                     saveMessage = "That background image can't be used."
-                    clearSaveFailure()
+                    hideSaveFailure()
                     return
                 }
                 saveMessage = nil
-                clearSaveFailure()
+                hideSaveFailure()
             } catch {
                 saveMessage = "Couldn't read that background image."
-                clearSaveFailure()
+                hideSaveFailure()
             }
         }
     }
@@ -935,7 +955,7 @@ private struct CardEditorSessionView: View {
         guard !isProcessingInlineImage else { return }
         isProcessingInlineImage = true
         saveMessage = nil
-        clearSaveFailure()
+        hideSaveFailure()
 
         Task {
             defer { isProcessingInlineImage = false }
@@ -947,10 +967,10 @@ private struct CardEditorSessionView: View {
                     alt: "Inline image"
                 )
                 saveMessage = nil
-                clearSaveFailure()
+                hideSaveFailure()
             } catch {
                 saveMessage = "Couldn't insert that image. Your draft is unchanged."
-                clearSaveFailure()
+                hideSaveFailure()
             }
         }
     }
@@ -1004,6 +1024,8 @@ private struct CardEditorSessionView: View {
         guard bodyModel.canSave, !isBusy else { return }
         completeTagEntry()
         bodyModel.dismissKeyboard()
+        saveMessage = nil
+        hideSaveFailure()
         showCardActions = true
     }
 
@@ -1013,7 +1035,7 @@ private struct CardEditorSessionView: View {
         guard bodyModel.canSave, !isBusy else { return }
         isPreparingCardAction = true
         saveMessage = nil
-        clearSaveFailure()
+        hideSaveFailure()
         Task {
             defer { isPreparingCardAction = false }
             do {
@@ -1028,7 +1050,7 @@ private struct CardEditorSessionView: View {
                 }
                 notifyCreationIfNeeded()
                 saveMessage = nil
-                clearSaveFailure()
+                resolveSaveFailure()
                 executePersistedCardAction(action)
             } catch {
                 saveMessage = "Couldn't take a safe snapshot for that action."
@@ -1072,7 +1094,7 @@ private struct CardEditorSessionView: View {
               !isCardActionInFlight else { return }
         isCardActionInFlight = true
         saveMessage = nil
-        clearSaveFailure()
+        hideSaveFailure()
         let request: AnyPublisher<PinResponse, NetworkError> = isPinned
             ? NetworkManager.shared.unpinCard(cardId: cardID)
             : NetworkManager.shared.pinCard(cardId: cardID)
@@ -1089,7 +1111,7 @@ private struct CardEditorSessionView: View {
                     if response.success {
                         isPinned.toggle()
                         saveMessage = nil
-                        clearSaveFailure()
+                        hideSaveFailure()
                     } else {
                         saveMessage = "Couldn't update pin status."
                     }
@@ -1101,12 +1123,13 @@ private struct CardEditorSessionView: View {
     private func removeCanonicalCard() {
         guard !isCardActionInFlight else { return }
         guard let cardID = editingStore.cardID else {
+            resolveSaveFailure()
             dismiss()
             return
         }
         isCardActionInFlight = true
         saveMessage = nil
-        clearSaveFailure()
+        hideSaveFailure()
         NetworkManager.shared.deleteCard(id: cardID)
             .receive(on: DispatchQueue.main)
             .sink(
@@ -1118,6 +1141,7 @@ private struct CardEditorSessionView: View {
                 },
                 receiveValue: { response in
                     if response.success {
+                        resolveSaveFailure()
                         dismiss()
                     } else {
                         saveMessage = "Couldn't move this note to Trash."

@@ -552,6 +552,117 @@ final class NewNoteViewSourceContractTests: XCTestCase {
         XCTAssertTrue(source.contains("var editingStoreHasFailure: Bool"))
     }
 
+    func testMetadataHidesCommitFailureWithoutForgettingFrozenBaseline() throws {
+        let source = try Self.newNoteSource()
+        let hide = try XCTUnwrap(
+            Self.functionBody(in: source, signature: "func hideSaveFailure()")
+        )
+        let resolve = try XCTUnwrap(
+            Self.functionBody(in: source, signature: "func resolveSaveFailure()")
+        )
+        let metadata = try XCTUnwrap(
+            Self.functionBody(in: source, signature: "func updateMetadata(")
+        )
+        let save = try XCTUnwrap(
+            Self.functionBody(in: source, signature: "func saveCurrentSnapshot()")
+        )
+
+        XCTAssertTrue(hide.contains("hasSaveFailure = false"))
+        XCTAssertFalse(hide.contains("failedCommitBaseline = nil"))
+        XCTAssertTrue(resolve.contains("hideSaveFailure()"))
+        XCTAssertTrue(resolve.contains("failedCommitBaseline = nil"))
+        XCTAssertTrue(metadata.contains("hideSaveFailure()"))
+        XCTAssertFalse(metadata.contains("resolveSaveFailure()"))
+        XCTAssertTrue(save.contains("let priorFailedBaseline = failedCommitBaseline"))
+        XCTAssertTrue(save.contains("failedCommitBaseline = failureBaseline"))
+        XCTAssertTrue(save.contains("hideSaveFailure()"))
+    }
+
+    func testStagedBackgroundHidesCommitFailureAcrossEveryLoadOutcome() throws {
+        let source = try Self.newNoteSource()
+        let handler = try XCTUnwrap(
+            Self.functionBody(
+                in: source,
+                signature: "func handleSelectedBackgroundPhoto("
+            )
+        )
+        let hide = try XCTUnwrap(handler.range(of: "hideSaveFailure()"))
+        let task = try XCTUnwrap(handler.range(of: "Task {"))
+        let stage = try XCTUnwrap(handler.range(of: "editingStore.stageBackground(image)"))
+
+        XCTAssertLessThan(hide.lowerBound, task.lowerBound)
+        XCTAssertLessThan(task.lowerBound, stage.lowerBound)
+        XCTAssertGreaterThanOrEqual(
+            Self.occurrenceCount("hideSaveFailure()", in: String(handler)),
+            4,
+            "Selection, invalid image, staged B, and load failure must retain A"
+        )
+        XCTAssertFalse(handler.contains("resolveSaveFailure()"))
+    }
+
+    func testBodyImageHidesCommitFailureAcrossProcessingOutcomes() throws {
+        let source = try Self.newNoteSource()
+        let processing = try XCTUnwrap(
+            Self.functionBody(
+                in: source,
+                signature: "func beginInlineImageProcessing("
+            )
+        )
+        let hide = try XCTUnwrap(processing.range(of: "hideSaveFailure()"))
+        let task = try XCTUnwrap(processing.range(of: "Task {"))
+        let insert = try XCTUnwrap(processing.range(of: "bodyModel.insertImage("))
+
+        XCTAssertLessThan(hide.lowerBound, task.lowerBound)
+        XCTAssertLessThan(task.lowerBound, insert.lowerBound)
+        XCTAssertGreaterThanOrEqual(
+            Self.occurrenceCount("hideSaveFailure()", in: String(processing)),
+            3,
+            "Processing start, inserted B, and upload failure must retain A"
+        )
+        XCTAssertFalse(processing.contains("resolveSaveFailure()"))
+    }
+
+    func testContextualLaunchesHideFailureUntilFrozenRecoveryIsResolved() throws {
+        let source = try Self.newNoteSource()
+        for signature in [
+            "func addOntologyLink()",
+            "func performPersistedCardAction(",
+        ] {
+            let action = try XCTUnwrap(
+                Self.functionBody(in: source, signature: signature)
+            )
+            let hide = try XCTUnwrap(action.range(of: "hideSaveFailure()"))
+            let recover = try XCTUnwrap(
+                action.range(of: "recoverFrozenFailedOperationIfNeeded()")
+            )
+            let persist = try XCTUnwrap(
+                action.range(of: "editingStore.ensurePersisted()")
+            )
+            let resolve = try XCTUnwrap(
+                action.range(of: "resolveSaveFailure()")
+            )
+            XCTAssertLessThan(hide.lowerBound, recover.lowerBound)
+            XCTAssertLessThan(recover.lowerBound, persist.lowerBound)
+            XCTAssertLessThan(persist.lowerBound, resolve.lowerBound)
+        }
+
+        for signature in [
+            "func presentInlineImageSourceOptions()",
+            "func presentInlineLinkSheet()",
+            "func openCardActions()",
+            "func togglePinnedCard()",
+            "func removeCanonicalCard()",
+        ] {
+            let action = try XCTUnwrap(
+                Self.functionBody(in: source, signature: signature)
+            )
+            XCTAssertTrue(
+                action.contains("hideSaveFailure()"),
+                "Context launch must hide but retain frozen A: \(signature)"
+            )
+        }
+    }
+
     func testDelayedBackgroundLoadingParticipatesInBusyState() throws {
         let source = try Self.newNoteSource()
         XCTAssertTrue(
