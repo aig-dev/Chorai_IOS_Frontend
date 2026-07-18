@@ -10,6 +10,48 @@ public enum CardEditingTitle {
     }
 }
 
+public enum CardEditingTag {
+    public static let maximumCount = 10
+
+    public static func normalized(_ value: String) -> String? {
+        let tag = value
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(
+                of: #"^#+\s*"#,
+                with: "",
+                options: .regularExpression
+            )
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return tag.isEmpty ? nil : tag
+    }
+
+    public static func normalize(_ values: [String]) -> [String] {
+        var seen = Set<String>()
+        var result: [String] = []
+        for value in values {
+            guard let tag = normalized(value), seen.insert(tag).inserted else {
+                continue
+            }
+            result.append(tag)
+            if result.count == maximumCount { break }
+        }
+        return result
+    }
+
+    public static func appending(
+        _ candidate: String,
+        to values: [String]
+    ) -> [String]? {
+        let current = normalize(values)
+        guard current.count < maximumCount,
+              let tag = normalized(candidate),
+              !current.contains(tag) else {
+            return nil
+        }
+        return current + [tag]
+    }
+}
+
 public struct CardEditingDraft: Equatable, Sendable {
     public let title: String?
     public let content: String
@@ -30,7 +72,7 @@ public struct CardEditingDraft: Equatable, Sendable {
         self.content = content
         self.contentJSON = Self.nonEmpty(contentJSON)
         self.editorAtmosphere = editorAtmosphere
-        self.tags = Self.normalize(tags)
+        self.tags = CardEditingTag.normalize(tags)
         self.isPublic = isPublic
     }
 
@@ -80,24 +122,6 @@ public struct CardEditingDraft: Equatable, Sendable {
         return root is [Any] || root is [String: Any]
     }
 
-    private static func normalize(_ values: [String]) -> [String] {
-        var seen = Set<String>()
-        var normalized: [String] = []
-        for value in values {
-            let tag = value
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-                .replacingOccurrences(
-                    of: #"^#+\s*"#,
-                    with: "",
-                    options: .regularExpression
-                )
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !tag.isEmpty, seen.insert(tag).inserted else { continue }
-            normalized.append(tag)
-            if normalized.count == 10 { break }
-        }
-        return normalized
-    }
 }
 
 public struct CardEditingSnapshot: Equatable, Sendable {
