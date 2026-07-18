@@ -134,10 +134,14 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         XCTAssertTrue(presentation.contains(".foregroundStyle(.white)"))
         XCTAssertTrue(presentation.contains(".padding(.horizontal, 12)"))
         XCTAssertTrue(presentation.contains(".padding(.vertical, 6)"))
-        XCTAssertTrue(presentation.contains("maximumReadableTagWidth: CGFloat = 280"))
+        XCTAssertTrue(
+            presentation.contains(
+                "cardMetadataMaximumReadableTagWidth: CGFloat = 280"
+            )
+        )
         XCTAssertTrue(presentation.contains(".truncationMode(.tail)"))
         XCTAssertTrue(
-            presentation.contains(".frame(maxWidth: maximumReadableTagWidth)")
+            presentation.contains(".frame(maxWidth: maximumWidth)")
         )
         XCTAssertTrue(
             presentation.contains(
@@ -194,13 +198,53 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         let links = try XCTUnwrap(shell.range(of: "CardEditorLinkRow("))
         XCTAssertLessThan(body.lowerBound, tags.lowerBound)
         XCTAssertLessThan(tags.lowerBound, links.lowerBound)
-        XCTAssertTrue(shell.contains("cardEditorFloatingBack"))
+        XCTAssertTrue(shell.contains("cardEditorLeadingAction"))
         XCTAssertTrue(shell.contains("cardEditorPrivacyButton"))
         XCTAssertTrue(shell.contains("cardEditorMoreButton"))
         XCTAssertTrue(
             shell.contains("onOpenCardActions: (() -> Void)? = nil")
         )
         XCTAssertFalse(shell.contains("cardEditorCardActionsButton"))
+    }
+
+    func testShellUsesOneSemanticLeadingControlWithoutInlineSave() throws {
+        let shell = try source(at: "ArcNote/CardEditor/CardEditorShell.swift")
+
+        for state in [
+            "case back",
+            "case save",
+            "case saving",
+            "case retry",
+            "case readOnly",
+            "case bridgeFailed",
+        ] {
+            XCTAssertTrue(shell.contains(state), "Missing leading state: \(state)")
+        }
+        XCTAssertTrue(
+            shell.contains(
+                "let leadingControlState: CardEditorLeadingControlState"
+            )
+        )
+        XCTAssertTrue(shell.contains("let onLeadingControl: () -> Void"))
+        XCTAssertTrue(shell.contains("? \"checkmark\""))
+        XCTAssertTrue(shell.contains("ProgressView()"))
+        XCTAssertTrue(shell.contains("\"Close note\""))
+        XCTAssertTrue(shell.contains("\"Save note\""))
+        XCTAssertTrue(shell.contains("\"Retry saving note\""))
+        XCTAssertTrue(
+            shell.contains(
+                ".accessibilityIdentifier(\"cardEditorLeadingAction\")"
+            )
+        )
+        XCTAssertFalse(shell.contains("inlineSaveAction"))
+        XCTAssertFalse(
+            shell.contains(
+                ".accessibilityIdentifier(\"cardEditorSave\")"
+            )
+        )
+        XCTAssertFalse(shell.contains("cardEditorFloatingBack"))
+        XCTAssertFalse(shell.contains("saveActionTitle"))
+        XCTAssertFalse(shell.contains("let onSave:"))
     }
 
     func testBodyAdapterKeepsNativeAndNetworkStateOutsideBridge() throws {
@@ -690,10 +734,6 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         XCTAssertTrue(shell.contains("vertical >= 24"))
         XCTAssertTrue(shell.contains("vertical > horizontal"))
         XCTAssertTrue(shell.contains("bodyModel.dismissKeyboard()"))
-        XCTAssertTrue(shell.contains("saveActionTitle: String = \"Save\""))
-        XCTAssertTrue(
-            shell.contains("Text(isSaving ? \"Saving\" : saveActionTitle)")
-        )
     }
 
     func testInlineImageProgressAndRecoverableMessagesDoNotRequireRetryAction() throws {
@@ -1043,9 +1083,10 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         XCTAssertFalse(fixture.contains(".accessibilityHidden(showCardActions)"))
         XCTAssertTrue(
             fixture.contains(
-                "onBackground: { background = .local(Self.fixtureBackgroundData) }"
+                "background = .local(Self.fixtureBackgroundData)"
             )
         )
+        XCTAssertTrue(fixture.contains("actionRouter.markDirty()"))
         for callback in [
             "onSpark: {}",
             "onMerge: {}",

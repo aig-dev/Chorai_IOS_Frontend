@@ -44,12 +44,12 @@ final class ArcNoteUITests: XCTestCase {
             .map(\.identifier)
         XCTAssertEqual(accessibilityOrder, structuralIdentifiers)
 
-        let back = waitForButton("cardEditorFloatingBack")
+        let back = waitForButton("cardEditorLeadingAction")
         let privacy = waitForButton("cardEditorPrivacyButton")
         let more = waitForButton("cardEditorMoreButton")
         let addTag = waitForButton("cardEditorAddTag")
         for (identifier, control) in [
-            ("cardEditorFloatingBack", back),
+            ("cardEditorLeadingAction", back),
             ("cardEditorPrivacyButton", privacy),
             ("cardEditorMoreButton", more),
             ("cardEditorAddTag", addTag),
@@ -62,6 +62,22 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertEqual(privacy.value as? String, "Private")
         captureVisual("card-editor-empty")
         captureVisual("card-editor-top-controls")
+    }
+
+    func testCardEditorLeadingControlChangesFromBackToSaveAndBack() {
+        launchCardEditorFixture(mode: "empty")
+
+        let leading = waitForButton("cardEditorLeadingAction")
+        XCTAssertEqual(leading.label, "Close note")
+        waitForButton("cardEditorPrivacyButton").tap()
+        waitForLabel("cardEditorLeadingAction", expected: "Save note")
+
+        leading.tap()
+
+        waitForLabel("cardEditorLeadingAction", expected: "Close note")
+        XCTAssertFalse(
+            app.descendants(matching: .any)["cardEditorSave"].exists
+        )
     }
 
     func testCardEditorShellPopulatedLinksAreCollapsedThenExpanded() {
@@ -170,8 +186,9 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertFalse(
             app.descendants(matching: .any)["cardEditorBodyWebView"].exists
         )
-        let save = waitForButton("cardEditorSave")
-        XCTAssertFalse(save.isEnabled)
+        let leading = waitForButton("cardEditorLeadingAction")
+        XCTAssertEqual(leading.label, "Close note")
+        XCTAssertTrue(leading.isEnabled)
         let retry = waitForButton("cardEditorBridgeRetry")
         assertPrimaryControl(retry, identifier: "cardEditorBridgeRetry")
         captureVisual("card-editor-bridge-failure")
@@ -181,7 +198,7 @@ final class ArcNoteUITests: XCTestCase {
             waitFor("cardEditorBodyWebView", timeout: 20).isHittable,
             "Retry must mount a fresh body WebView"
         )
-        waitForEnabled(save, timeout: 20)
+        waitForEnabled(leading, timeout: 20)
         XCTAssertFalse(
             app.descendants(matching: .any)["cardEditorBridgeFailureNotice"]
                 .exists
@@ -200,13 +217,14 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertFalse(
             app.descendants(matching: .any)["cardEditorBodyWebView"].exists
         )
-        let save = waitForButton("cardEditorSave")
-        XCTAssertFalse(save.isEnabled)
+        let leading = waitForButton("cardEditorLeadingAction")
+        XCTAssertEqual(leading.label, "Close note")
+        XCTAssertTrue(leading.isEnabled)
         XCTAssertFalse(waitForButton("cardEditorAddTag").isEnabled)
         XCTAssertFalse(waitForButton("cardEditorTag.archive").isEnabled)
         XCTAssertFalse(app.descendants(matching: .any)["cardEditorAddLink"].exists)
         XCTAssertFalse(app.buttons["cardEditorFormatBold"].exists)
-        XCTAssertTrue(waitForButton("cardEditorFloatingBack").isEnabled)
+        XCTAssertTrue(leading.isEnabled)
 
         let disclosure = waitForButton("cardEditorLinksDisclosure")
         XCTAssertEqual(disclosure.value as? String, "Collapsed")
@@ -463,7 +481,7 @@ final class ArcNoteUITests: XCTestCase {
         assertEditorActionGridLayout(actions, inside: surface)
         XCTAssertFalse(app.buttons["cardEditorActionsClose"].exists)
         XCTAssertEqual(actions[0].frame.width, 90, accuracy: 1)
-        XCTAssertFalse(app.buttons["cardEditorFloatingBack"].isHittable)
+        XCTAssertFalse(app.buttons["cardEditorLeadingAction"].isHittable)
         XCTAssertFalse(app.buttons["cardEditorPrivacyButton"].isHittable)
         XCTAssertFalse(app.buttons["cardEditorMoreButton"].isHittable)
         XCTAssertFalse(
@@ -479,7 +497,7 @@ final class ArcNoteUITests: XCTestCase {
         more.tap()
         _ = waitFor("cardEditorActionsOverlay")
         _ = waitFor("cardEditorActionsOverlay.surface")
-        XCTAssertFalse(app.buttons["cardEditorFloatingBack"].isHittable)
+        XCTAssertFalse(app.buttons["cardEditorLeadingAction"].isHittable)
         XCTAssertFalse(app.buttons["cardEditorPrivacyButton"].isHittable)
         XCTAssertFalse(app.buttons["cardEditorMoreButton"].isHittable)
         dismissEditorCardActions()
@@ -613,7 +631,7 @@ final class ArcNoteUITests: XCTestCase {
         launchCardEditorFixture(mode: "empty")
 
         let body = waitFor("cardEditorBodyWebView")
-        XCTAssertTrue(waitForButton("cardEditorSave").isEnabled)
+        XCTAssertTrue(waitForButton("cardEditorLeadingAction").isEnabled)
         body.coordinate(
             withNormalizedOffset: CGVector(dx: 0.25, dy: 0.04)
         ).tap()
@@ -648,11 +666,11 @@ final class ArcNoteUITests: XCTestCase {
             "The Web-backed body must visibly scale with Dynamic Type"
         )
 
-        let back = waitForButton("cardEditorFloatingBack")
+        let back = waitForButton("cardEditorLeadingAction")
         let privacy = waitForButton("cardEditorPrivacyButton")
         let more = waitForButton("cardEditorMoreButton")
         for (identifier, control) in [
-            ("cardEditorFloatingBack", back),
+            ("cardEditorLeadingAction", back),
             ("cardEditorPrivacyButton", privacy),
             ("cardEditorMoreButton", more),
         ] {
@@ -3718,7 +3736,10 @@ final class ArcNoteUITests: XCTestCase {
             waitFor("cardEditorSaveMessage", timeout: 20).label,
             "Couldn't add that link. Retry."
         )
-        XCTAssertEqual(waitForButton("cardEditorSave").label, "Retry")
+        XCTAssertEqual(
+            waitForButton("cardEditorLeadingAction").label,
+            "Retry saving note"
+        )
         XCTAssertTrue(exists("cardEditorContent", timeout: 2))
         XCTAssertFalse(exists("cardEditorLinksDisclosure", timeout: 2))
         captureVisual("card-editor-link-failure-retained")
@@ -3981,12 +4002,15 @@ final class ArcNoteUITests: XCTestCase {
         waitFor("cardEditorContent", timeout: 20)
         typeInCardEditorBody(bodyText)
 
-        tapButton("cardEditorFloatingBack")
+        tapButton("cardEditorLeadingAction")
         XCTAssertEqual(
             waitFor("cardEditorSaveMessage", timeout: 30).label,
             "Couldn't save this note. Retry when ready."
         )
-        XCTAssertEqual(waitForButton("cardEditorSave").label, "Retry")
+        XCTAssertEqual(
+            waitForButton("cardEditorLeadingAction").label,
+            "Retry saving note"
+        )
         XCTAssertTrue(
             exists("cardEditorContent", timeout: 2),
             "A lost create response must keep the editor on screen"
@@ -4005,7 +4029,7 @@ final class ArcNoteUITests: XCTestCase {
         replaceCardEditorBody(with: bodyText + latestSuffix)
         tapButton("cardEditorKeyboardDismiss")
         waitForElementToDisappear(app.keyboards.firstMatch)
-        waitForButton("cardEditorSave").tap()
+        waitForButton("cardEditorLeadingAction").tap()
         waitForMissing("cardEditorContent", timeout: 30)
         let callbackID = waitFor("note.created-card-id", timeout: 30)
             .label
@@ -5114,7 +5138,7 @@ final class ArcNoteUITests: XCTestCase {
         app.launch()
         waitFor("screen.card-editor-shell")
         if mode != "blocked" {
-            waitForEnabled(waitForButton("cardEditorSave"))
+            waitForEnabled(waitForButton("cardEditorLeadingAction"))
         }
     }
 
@@ -5788,7 +5812,7 @@ final class ArcNoteUITests: XCTestCase {
         file: StaticString = #filePath,
         line: UInt = #line
     ) {
-        tapButton("cardEditorFloatingBack", file: file, line: line)
+        tapButton("cardEditorLeadingAction", file: file, line: line)
         waitForMissing("cardEditorContent", timeout: 30, file: file, line: line)
     }
 

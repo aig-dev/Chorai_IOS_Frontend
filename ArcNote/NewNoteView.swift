@@ -280,19 +280,19 @@ private struct CardEditorSessionView: View {
             background: editorBackground,
             isPublic: editingStore.draft.isPublic,
             isMetadataEditable: bodyModel.canMutate && !isBusy,
-            isSaving: isSaving,
             isInlineImageProcessing: isProcessingInlineImage,
-            saveActionTitle: "Retry",
             saveMessage: saveMessage,
             isAddingTag: isAddingTag,
             tagInput: $tagInput,
-            onBack: handleBack,
+            leadingControlState: isSaving
+                ? .saving
+                : (retryHandler == nil ? .back : .retry),
+            onLeadingControl: retryHandler ?? handleBack,
             onBeginTag: beginTagEntry,
             onCompleteTag: completeTagEntry,
             onRemoveTag: removeTag,
             onTogglePrivacy: togglePrivacy,
-            onOpenCardActions: cardActionsHandler,
-            onSave: retryHandler
+            onOpenCardActions: cardActionsHandler
         )
         .linkPopup()
         .overlay {
@@ -1106,7 +1106,7 @@ private struct CardEditorLoadingView: View {
             .padding(.leading, 16)
             .padding(.top, 6)
             .accessibilityLabel("Close note")
-            .accessibilityIdentifier("cardEditorFloatingBack")
+            .accessibilityIdentifier("cardEditorLeadingAction")
         }
     }
 }

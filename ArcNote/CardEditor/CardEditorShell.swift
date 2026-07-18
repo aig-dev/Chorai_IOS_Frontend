@@ -2,6 +2,28 @@ import BlockNoteEditor
 import CoreFlow
 import SwiftUI
 
+enum CardEditorLeadingControlState: Equatable {
+    case back
+    case save
+    case saving
+    case retry
+    case readOnly
+    case bridgeFailed
+
+    var accessibilityLabel: String {
+        switch self {
+        case .back, .readOnly, .bridgeFailed:
+            return "Close note"
+        case .save:
+            return "Save note"
+        case .saving:
+            return "Saving note"
+        case .retry:
+            return "Retry saving note"
+        }
+    }
+}
+
 struct CardEditorShell: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject var bodyModel: BlockNoteCardEditorModel
@@ -11,19 +33,17 @@ struct CardEditorShell: View {
     let background: CardEditorBackgroundSource
     let isPublic: Bool
     let isMetadataEditable: Bool
-    let isSaving: Bool
     let isInlineImageProcessing: Bool
-    let saveActionTitle: String
     let saveMessage: String?
     let isAddingTag: Bool
     @Binding var tagInput: String
-    let onBack: () -> Void
+    let leadingControlState: CardEditorLeadingControlState
+    let onLeadingControl: () -> Void
     let onBeginTag: () -> Void
     let onCompleteTag: () -> Void
     let onRemoveTag: (String) -> Void
     let onTogglePrivacy: () -> Void
     let onOpenCardActions: (() -> Void)?
-    let onSave: (() -> Void)?
 
     init(
         bodyModel: BlockNoteCardEditorModel,
@@ -32,19 +52,17 @@ struct CardEditorShell: View {
         background: CardEditorBackgroundSource,
         isPublic: Bool,
         isMetadataEditable: Bool,
-        isSaving: Bool = false,
         isInlineImageProcessing: Bool = false,
-        saveActionTitle: String = "Save",
         saveMessage: String? = nil,
         isAddingTag: Bool,
         tagInput: Binding<String>,
-        onBack: @escaping () -> Void,
+        leadingControlState: CardEditorLeadingControlState,
+        onLeadingControl: @escaping () -> Void,
         onBeginTag: @escaping () -> Void,
         onCompleteTag: @escaping () -> Void,
         onRemoveTag: @escaping (String) -> Void,
         onTogglePrivacy: @escaping () -> Void,
-        onOpenCardActions: (() -> Void)? = nil,
-        onSave: (() -> Void)? = nil
+        onOpenCardActions: (() -> Void)? = nil
     ) {
         self.bodyModel = bodyModel
         self.tags = tags
@@ -52,19 +70,17 @@ struct CardEditorShell: View {
         self.background = background
         self.isPublic = isPublic
         self.isMetadataEditable = isMetadataEditable
-        self.isSaving = isSaving
         self.isInlineImageProcessing = isInlineImageProcessing
-        self.saveActionTitle = saveActionTitle
         self.saveMessage = saveMessage
         self.isAddingTag = isAddingTag
         _tagInput = tagInput
-        self.onBack = onBack
+        self.leadingControlState = leadingControlState
+        self.onLeadingControl = onLeadingControl
         self.onBeginTag = onBeginTag
         self.onCompleteTag = onCompleteTag
         self.onRemoveTag = onRemoveTag
         self.onTogglePrivacy = onTogglePrivacy
         self.onOpenCardActions = onOpenCardActions
-        self.onSave = onSave
     }
 
     var body: some View {
@@ -107,9 +123,6 @@ struct CardEditorShell: View {
                         editorStatus
                     }
 
-                    if let onSave {
-                        inlineSaveAction(onSave)
-                    }
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 56)
@@ -131,7 +144,8 @@ struct CardEditorShell: View {
             CardEditorFloatingControls(
                 isPublic: isPublic,
                 isMetadataEditable: isMetadataEditable,
-                onBack: onBack,
+                leadingControlState: leadingControlState,
+                onLeadingControl: onLeadingControl,
                 onTogglePrivacy: onTogglePrivacy,
                 onOpenCardActions: onOpenCardActions
             )
@@ -171,53 +185,45 @@ struct CardEditorShell: View {
             }
         }
     }
-
-    private func inlineSaveAction(_ action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 8) {
-                if isSaving {
-                    ProgressView()
-                        .tint(.white)
-                }
-                Text(isSaving ? "Saving" : saveActionTitle)
-                    .font(.body.weight(.semibold))
-            }
-            .padding(.horizontal, 16)
-            .frame(minWidth: 88, minHeight: 44)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(ZenVisualTokens.accent.opacity(0.28))
-            )
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(.white)
-        .disabled(!bodyModel.canSave || isSaving)
-        .accessibilityIdentifier("cardEditorSave")
-    }
 }
 
 private struct CardEditorFloatingControls: View {
     let isPublic: Bool
     let isMetadataEditable: Bool
-    let onBack: () -> Void
+    let leadingControlState: CardEditorLeadingControlState
+    let onLeadingControl: () -> Void
     let onTogglePrivacy: () -> Void
     let onOpenCardActions: (() -> Void)?
 
     var body: some View {
         ZStack {
-            Button(action: onBack) {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 17, weight: .semibold))
-                    .frame(width: 44, height: 44)
-                    .background(controlBackground)
-                    .clipShape(Circle())
-                    .contentShape(Circle())
+            Button(action: onLeadingControl) {
+                Group {
+                    if leadingControlState == .saving {
+                        ProgressView()
+                            .controlSize(.small)
+                            .tint(.white)
+                    } else {
+                        Image(
+                            systemName: leadingControlState == .save
+                                || leadingControlState == .retry
+                                ? "checkmark"
+                                : "chevron.left"
+                        )
+                        .font(.system(size: 17, weight: .semibold))
+                    }
+                }
+                .frame(width: 44, height: 44)
+                .background(controlBackground)
+                .clipShape(Circle())
+                .contentShape(Circle())
             }
             .buttonStyle(.plain)
             .foregroundStyle(.white)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .accessibilityLabel("Close note")
-            .accessibilityIdentifier("cardEditorFloatingBack")
+            .disabled(leadingControlState == .saving)
+            .accessibilityLabel(leadingControlState.accessibilityLabel)
+            .accessibilityIdentifier("cardEditorLeadingAction")
             .accessibilitySortPriority(3)
 
             HStack(spacing: 8) {
@@ -270,10 +276,24 @@ import UIKit
 
 @MainActor
 private final class CardEditorShellFixtureActionRouter: ObservableObject {
+    @Published var hasPendingChanges = false
+    private(set) var hasBodyInteraction = false
     var onRequestInlineImage: () -> Void = {}
 
     func requestInlineImage() {
         onRequestInlineImage()
+    }
+
+    func beginBodyInteraction() {
+        hasBodyInteraction = true
+    }
+
+    func markDirty() {
+        hasPendingChanges = true
+    }
+
+    func markSaved() {
+        hasPendingChanges = false
     }
 }
 
@@ -331,6 +351,10 @@ struct CardEditorShellFixtureScreen: View {
             initialSelection: initialSelection,
             initiallyFocused: false,
             initialCompatibilityBlock: blockedCode,
+            onDocumentChanged: { _ in
+                guard actionRouter.hasBodyInteraction else { return }
+                actionRouter.markDirty()
+            },
             onRequestInlineImage: actionRouter.requestInlineImage
         )
         if mode == .bridgeFailure {
@@ -362,15 +386,19 @@ struct CardEditorShellFixtureScreen: View {
                     : nil,
                 isAddingTag: isAddingTag,
                 tagInput: $tagInput,
-                onBack: {},
+                leadingControlState: fixtureLeadingControlState,
+                onLeadingControl: handleFixtureLeadingControl,
                 onBeginTag: beginTagEntry,
                 onCompleteTag: completeTagEntry,
                 onRemoveTag: { tag in
                     tags.removeAll { $0 == tag }
+                    actionRouter.markDirty()
                 },
-                onTogglePrivacy: { isPublic.toggle() },
-                onOpenCardActions: fixtureCardActionsHandler,
-                onSave: {}
+                onTogglePrivacy: {
+                    isPublic.toggle()
+                    actionRouter.markDirty()
+                },
+                onOpenCardActions: fixtureCardActionsHandler
             )
 
             Color.white
@@ -394,7 +422,10 @@ struct CardEditorShellFixtureScreen: View {
                         isPresented: $showCardActions,
                         isEnabled: bodyModel.canMutate,
                         isPinned: isPinned,
-                        onBackground: { background = .local(Self.fixtureBackgroundData) },
+                        onBackground: {
+                            background = .local(Self.fixtureBackgroundData)
+                            actionRouter.markDirty()
+                        },
                         onSpark: {},
                         onMerge: {},
                         onShare: {},
@@ -419,6 +450,11 @@ struct CardEditorShellFixtureScreen: View {
                 showInlineImageSourceDialog = true
             }
         }
+        .onChange(of: bodyModel.isBodyFocused) { isFocused in
+            if isFocused {
+                actionRouter.beginBodyInteraction()
+            }
+        }
     }
 
     private var fixtureViewportHeight: CGFloat? {
@@ -441,6 +477,26 @@ struct CardEditorShellFixtureScreen: View {
         }
     }
 
+    private var fixtureLeadingControlState: CardEditorLeadingControlState {
+        if mode == .blocked {
+            return .readOnly
+        }
+        if mode == .bridgeFailure,
+           bodyModel.bridgeFailureNotice != nil {
+            return .bridgeFailed
+        }
+        return actionRouter.hasPendingChanges ? .save : .back
+    }
+
+    private func handleFixtureLeadingControl() {
+        switch fixtureLeadingControlState {
+        case .save, .retry:
+            actionRouter.markSaved()
+        case .back, .saving, .readOnly, .bridgeFailed:
+            break
+        }
+    }
+
     private func beginTagEntry() {
         guard bodyModel.canMutate else { return }
         bodyModel.dismissKeyboard()
@@ -460,6 +516,7 @@ struct CardEditorShellFixtureScreen: View {
             return
         }
         tags = updatedTags
+        actionRouter.markDirty()
     }
 
     private static func document(
