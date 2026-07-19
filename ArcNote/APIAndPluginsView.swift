@@ -45,7 +45,7 @@ struct APIAndPluginsView: View {
                         .font(.system(size: 20, weight: .medium))
                         .foregroundColor(.clear)
                 }
-                .padding(.horizontal, 20)
+                .adaptiveContentGutter()
                 .padding(.top, 60)
                 .padding(.bottom, 30)
                 
@@ -445,7 +445,7 @@ struct APIAndPluginsView: View {
                             )
                         }
                     }
-                    .padding(.horizontal, 20)
+                    .adaptiveContentGutter()
                     .padding(.bottom, 50)
                 }
             }

@@ -254,7 +254,7 @@ private struct MergeLifecycleView: View {
                             "product_merge_preview"
                         ]
                     )
-                    .padding(.horizontal, ZenVisualTokens.pageInset)
+                    .adaptiveContentGutter()
                     .padding(.bottom, 10)
                 }
                 phaseContent
@@ -368,7 +368,7 @@ private struct MergeLifecycleView: View {
             Spacer()
             Color.clear.frame(width: 44, height: 44)
         }
-        .padding(.horizontal, 8)
+        .adaptiveContentGutter()
         .padding(.top, 4)
     }
 
@@ -421,7 +421,7 @@ private struct MergeLifecycleView: View {
             Rectangle()
                 .fill(Color.white.opacity(0.18))
                 .frame(height: 1)
-                .padding(.horizontal, 20)
+                .adaptiveContentGutter()
                 .padding(.vertical, 16)
 
             searchBar
@@ -487,7 +487,7 @@ private struct MergeLifecycleView: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
         .background(MergeSearchSurface())
-        .padding(.horizontal, 20)
+        .adaptiveContentGutter()
     }
 
     private var selectionAction: some View {
@@ -511,7 +511,7 @@ private struct MergeLifecycleView: View {
         .disabled(!store.canCreate)
         .accessibilityLabel("Merge \(store.selectedSources.count) cards")
         .accessibilityIdentifier("merge.action")
-        .padding(.horizontal, 20)
+        .adaptiveContentGutter()
         .padding(.bottom, 18)
     }
 
@@ -575,7 +575,7 @@ private struct MergeLifecycleView: View {
                                     )
                             )
                     )
-                    .padding(.horizontal, 20)
+                    .adaptiveContentGutter()
                     .padding(.top, 18)
                     .padding(.bottom, 110)
                     .overlay(alignment: .topLeading) {
@@ -607,7 +607,7 @@ private struct MergeLifecycleView: View {
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(.white.opacity(0.58))
         }
-        .padding(.horizontal, 20)
+        .adaptiveContentGutter()
         .padding(.vertical, 10)
     }
 
@@ -633,7 +633,7 @@ private struct MergeLifecycleView: View {
                 store.commit()
             }
         }
-        .padding(.horizontal, 24)
+        .adaptiveContentGutter()
         .padding(.bottom, 18)
     }
 
@@ -696,7 +696,7 @@ private struct MergeLifecycleView: View {
                     store.retry()
                 }
             }
-            .padding(.horizontal, 24)
+            .adaptiveContentGutter()
             .padding(.bottom, 18)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -988,7 +988,7 @@ private struct MergeEntryLoadingView: View {
                 }
                 Spacer()
             }
-            .padding(.horizontal, 8)
+            .adaptiveContentGutter()
         }
         .foregroundStyle(.white)
         .navigationBarHidden(true)
@@ -1016,7 +1016,7 @@ private struct MergeEntryFailureView: View {
                     accessibilityIdentifier: "merge.entry.retry",
                     action: onRetry
                 )
-                .padding(.horizontal, 24)
+                .adaptiveContentGutter()
                 Spacer()
             }
             VStack {
@@ -1031,7 +1031,7 @@ private struct MergeEntryFailureView: View {
                 }
                 Spacer()
             }
-            .padding(.horizontal, 8)
+            .adaptiveContentGutter()
         }
         .foregroundStyle(.white)
         .navigationBarHidden(true)

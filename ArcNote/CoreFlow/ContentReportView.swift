@@ -30,7 +30,7 @@ struct ContentReportView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .padding(.horizontal, 24)
+            .adaptiveContentGutter()
             .padding(.top, 72)
             .padding(.bottom, 28)
         }

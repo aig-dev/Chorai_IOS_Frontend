@@ -150,7 +150,7 @@ struct NotificationView: View {
             Spacer()
             Color.clear.frame(width: 30, height: 30)
         }
-        .padding(.horizontal, 20)
+        .adaptiveContentGutter()
         .padding(.top, 60)
         .padding(.bottom, 20)
     }
@@ -164,7 +164,7 @@ struct NotificationView: View {
                     filterTag(.activity, title: "Activity")
                     filterTag(.system, title: "System")
                 }
-                .padding(.horizontal, 20)
+                .adaptiveContentGutter()
             }
 
             Button {

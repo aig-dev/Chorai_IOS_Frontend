@@ -75,7 +75,7 @@ struct SparkView: View {
                                 .resizable().frame(width: 25, height: 25)
                     }
                 }
-                .padding(.horizontal, 20)
+                .adaptiveContentGutter()
                 .padding(.top, 60)
                 
                 // 主要内容
@@ -89,7 +89,7 @@ struct SparkView: View {
                             
                             SourceNoteCard(cardDetail: cardDetailManager.cardDetail)
                         }
-                        .padding(.horizontal, 20)
+                        .adaptiveContentGutter()
                         .padding(.top, 20)
                         
                         // Inspired Notes 部分
@@ -194,7 +194,7 @@ struct SparkView: View {
                                 )
                             }
                         }
-                        .padding(.horizontal, 20)
+                        .adaptiveContentGutter()
                         .padding(.bottom, 100)
                     }
                 }

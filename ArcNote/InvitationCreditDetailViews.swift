@@ -58,7 +58,7 @@ struct InvitationHistoryView: View {
                     }
                     pagination
                 }
-                .padding(.horizontal, 20)
+                .adaptiveContentGutter()
                 .padding(.bottom, 40)
             }
         }
@@ -178,7 +178,7 @@ struct InvitationRewardsView: View {
                     }
                     pagination
                 }
-                .padding(.horizontal, 20)
+                .adaptiveContentGutter()
                 .padding(.bottom, 40)
             }
         }
@@ -322,7 +322,7 @@ struct CreditLedgerView: View {
                     }
                     pagination
                 }
-                .padding(.horizontal, 20)
+                .adaptiveContentGutter()
                 .padding(.bottom, 40)
             }
         }
@@ -520,7 +520,7 @@ private struct InvitationCreditDetailFailure: View {
                 .accessibilityLabel("Retry")
                 .accessibilityIdentifier("\(identifier).retry")
         }
-        .padding(.horizontal, 24)
+        .adaptiveContentGutter()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }

@@ -136,7 +136,7 @@ struct SettingsView: View {
                         .foregroundColor(.clear)
                         .accessibilityHidden(true)
                 }
-                .padding(.horizontal, 20)
+                .adaptiveContentGutter()
                 .padding(.top, 60)
                 .padding(.bottom, 30)
                 
@@ -177,7 +177,7 @@ struct SettingsView: View {
                             }
                         }
                         
-                        .padding(.horizontal, 20)
+                        .adaptiveContentGutter()
                         
                         // 登出按钮
                         VStack(spacing: 8) {

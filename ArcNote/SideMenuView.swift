@@ -3,6 +3,7 @@ import SwiftUI
 
 struct SideMenuView: View {
     @Binding var isPresented: Bool
+    @Environment(\.adaptiveLayoutMetrics) private var adaptiveLayout
     @State private var navigateToNotification = false
     @State private var navigateToTrash = false
     @State private var navigateToSettings = false
@@ -37,7 +38,7 @@ struct SideMenuView: View {
                     Image("side_bg")
                         .resizable()
                         .aspectRatio(contentMode: .fit)
-                        .frame(width: UIScreen.main.bounds.width * 0.75)
+                        .frame(width: adaptiveLayout.drawerWidth)
                         .clipped()
                     
                     // 内容层
@@ -207,9 +208,10 @@ struct SideMenuView: View {
                         }
                     }
                 }
-                .frame(width: UIScreen.main.bounds.width * 0.75)
+                .frame(width: adaptiveLayout.drawerWidth)
                 .ignoresSafeArea()
-                .offset(x: isPresented ? 0 : -UIScreen.main.bounds.width * 0.75)
+                .offset(x: isPresented ? 0 : -adaptiveLayout.drawerWidth)
+                .accessibilityIdentifier("adaptive-layout.drawer")
                 
                 Spacer()
             }

@@ -106,7 +106,7 @@ struct ChoraProfileView: View {
                             now: now
                         )
                     }
-                    .padding(.horizontal, 20)
+                    .adaptiveContentGutter()
                     .padding(.bottom, 36)
                     .opacity(hasAppeared ? 1 : 0)
                     .offset(y: hasAppeared ? 0 : 8)

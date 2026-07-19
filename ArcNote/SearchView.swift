@@ -143,7 +143,7 @@ struct SearchView: View {
                     .padding(.vertical, 13)
                     .background(searchInputBackground)
                 }
-                .padding(.horizontal, 20)
+                .adaptiveContentGutter()
                 
                 
                 ScrollView {
@@ -154,7 +154,7 @@ struct SearchView: View {
                             searchResultsSection
                         }
                     }
-                    .padding(.horizontal, 20)
+                    .adaptiveContentGutter()
                     .padding(.top, 30)
                     .padding(.bottom, 120)
                 }
@@ -590,6 +590,7 @@ struct SearchFilterTag: View {
 
 // MARK: - FlowLayout 组件
 struct FlowLayout: View {
+    @Environment(\.adaptiveLayoutMetrics) private var adaptiveLayout
     let spacing: CGFloat
     let items: [String]
     let isSelected: (String) -> Bool
@@ -621,7 +622,7 @@ struct FlowLayout: View {
         var result: [[String]] = [[]]
         var currentRow = 0
         var currentWidth: CGFloat = 0
-        let maxWidth: CGFloat = UIScreen.main.bounds.width - 40 // 减去左右边距
+        let maxWidth = max(0, adaptiveLayout.contentWidth)
         
         for item in items {
             let itemWidth = estimateWidth(for: item)

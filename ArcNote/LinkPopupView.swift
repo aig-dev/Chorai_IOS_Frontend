@@ -254,6 +254,7 @@ class LinkPopupManager: ObservableObject {
 // MARK: - Link弹窗视图
 struct LinkPopupView: View {
     @ObservedObject private var manager = LinkPopupManager.shared
+    @Environment(\.adaptiveLayoutMetrics) private var adaptiveLayout
     @FocusState private var isTextFieldFocused: Bool
     
     var body: some View {
@@ -269,6 +270,12 @@ struct LinkPopupView: View {
                 
                 // 弹窗内容
                 GeometryReader { geometry in
+                    let popupWidth = max(
+                        0,
+                        geometry.size.width
+                            - (adaptiveLayout.horizontalGutter * 2)
+                    )
+
                     VStack(spacing: 0) {
                         // 弹窗头部
 //                        HStack {
@@ -317,7 +324,7 @@ struct LinkPopupView: View {
                             .foregroundColor(.white)
                             .padding(.leading, 12)
                         }
-                        .padding(.horizontal, 20)
+                        .adaptiveContentGutter()
                         .padding(.vertical, 16)
 
                         if manager.showErrorAlert {
@@ -325,7 +332,7 @@ struct LinkPopupView: View {
                                 .font(.system(size: 12, weight: .medium))
                                 .foregroundColor(.red.opacity(0.85))
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.horizontal, 20)
+                                .adaptiveContentGutter()
                                 .padding(.bottom, 8)
                                 .accessibilityIdentifier("linkPopupError")
                         }
@@ -373,7 +380,7 @@ struct LinkPopupView: View {
                                                 Rectangle()
                                                     .fill(Color.white.opacity(0.2))
                                                     .frame(height: 1)
-                                                    .padding(.horizontal, 20)
+                                                    .adaptiveContentGutter()
                                             }
                                         }
                                     }
@@ -383,7 +390,10 @@ struct LinkPopupView: View {
                         }
                         .frame(maxHeight: .infinity)
                     }
-                    .frame(maxWidth: geometry.size.width * 0.9, maxHeight: UIScreen.main.bounds.height * 0.55)
+                    .frame(
+                        maxWidth: popupWidth,
+                        maxHeight: geometry.size.height * 0.55
+                    )
                     .background(
                         RoundedRectangle(cornerRadius: 20)
                             .background(.ultraThinMaterial.opacity(0.8))

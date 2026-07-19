@@ -42,7 +42,7 @@ struct TrashView: View {
                         .font(.title2)
                         .foregroundColor(.clear)
                 }
-                .padding(.horizontal, 20)
+                .adaptiveContentGutter()
                 .padding(.top, 60)
                 .padding(.bottom, 20)
                 
@@ -65,7 +65,7 @@ struct TrashView: View {
                     RoundedRectangle(cornerRadius: 20)
                         .background(.ultraThinMaterial).cornerRadius(20)
                 )
-                .padding(.horizontal, 20)
+                .adaptiveContentGutter()
                 .padding(.bottom, 20)
                 
                 // 删除的笔记列表

@@ -44,7 +44,7 @@ struct SignInView: View {
                     
                     Spacer()
                 }
-                .padding(.horizontal, 24)
+                .adaptiveContentGutter()
                 .padding(.top, 20)
                 
                 // 标题
@@ -55,7 +55,7 @@ struct SignInView: View {
                         .foregroundColor(.white)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 24)
+                .adaptiveContentGutter()
                 .padding(.top, 40)
                 
                 // 输入字段
@@ -66,7 +66,7 @@ struct SignInView: View {
                     // Password
                     InputField(icon: "lock", placeholder: "Password", text: $password, accessibilityIdentifier: "signin.password")
                 }
-                .padding(.horizontal, 24)
+                .adaptiveContentGutter()
                 .padding(.top, 50)
                 
                 Spacer()
@@ -160,7 +160,7 @@ struct SignInView: View {
                 }
                 .disabled(isSigningIn)
                 .accessibilityIdentifier("signin.submit")
-                .padding(.horizontal, 24)
+                .adaptiveContentGutter()
                 .padding(.top, 32)
                 
                 Spacer()
@@ -180,7 +180,7 @@ struct SignInView: View {
                         .frame(height: 1)
                         .foregroundColor(.gray.opacity(0.3))
                 }
-                .padding(.horizontal, 24)
+                .adaptiveContentGutter()
                 .padding(.top, 32)
                 
                 // 社交登录图标

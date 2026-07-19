@@ -29,7 +29,7 @@ struct ShareCardView: View {
                 action
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .padding(.horizontal, 20)
+            .adaptiveContentGutter()
             .padding(.top, 72)
             .padding(.bottom, 24)
         }

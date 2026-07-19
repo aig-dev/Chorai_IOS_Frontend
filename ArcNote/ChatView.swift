@@ -194,7 +194,7 @@ struct ChatView: View {
                     }
                 }
             }
-            .padding(.horizontal, 20)
+            .adaptiveContentGutter()
             .padding(.top, 60)
             .padding(.bottom, 18)
             
@@ -276,7 +276,7 @@ struct ChatView: View {
                     }
                 }
                 .padding(.top, 8)
-                .padding(.horizontal, 20)
+                .adaptiveContentGutter()
                 .padding(.bottom, 20)
             }
             .refreshable {

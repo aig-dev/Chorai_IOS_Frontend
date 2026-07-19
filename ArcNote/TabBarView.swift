@@ -506,6 +506,7 @@ struct TabBarView: View {
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             CoreTabBar(selectedTab: $coordinator.selectedTab)
+            .adaptiveContentGutter()
             .padding(.bottom, 6)
         }
         .overlay(alignment: .top) {

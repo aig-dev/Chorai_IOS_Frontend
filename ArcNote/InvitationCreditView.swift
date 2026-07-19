@@ -78,7 +78,7 @@ struct InvitationCreditView: View {
                         redemptionSection
                         historySection
                     }
-                    .padding(.horizontal, 20)
+                    .adaptiveContentGutter()
                     .padding(.bottom, 40)
                 }
                 .scrollDismissesKeyboard(.interactively)

@@ -50,6 +50,8 @@ struct ArcNoteApp: App {
         .contains("--ui-test-notification-inbox")
     private let isCardEditorShellUITestRoute = ProcessInfo.processInfo.arguments
         .contains("--ui-test-card-editor-shell")
+    private let isAdaptiveLayoutUITestRoute = ProcessInfo.processInfo.arguments
+        .contains("--ui-test-adaptive-layout")
     private let profileUITestActorID: String? = {
         guard ProcessInfo.processInfo.arguments
             .contains("--ui-test-open-profile") else {
@@ -93,86 +95,90 @@ struct ArcNoteApp: App {
 
     var body: some Scene {
         WindowGroup {
-            Group {
-            #if DEBUG
-            if isAPIMigrationSmoke {
-                Color.clear
-            } else if isCardEditorShellUITestRoute {
-                CardEditorShellFixtureScreen()
-            } else if isSignInUITestRoute {
-                NavigationStack {
-                    SignInView()
+            AdaptiveLayoutReader { _ in
+                Group {
+                #if DEBUG
+                if isAPIMigrationSmoke {
+                    Color.clear
+                } else if isAdaptiveLayoutUITestRoute {
+                    AdaptiveLayoutFixtureScreen()
+                } else if isCardEditorShellUITestRoute {
+                    CardEditorShellFixtureScreen()
+                } else if isSignInUITestRoute {
+                    NavigationStack {
+                        SignInView()
+                    }
+                } else if isChoraProfileUITestRoute {
+                    NavigationStack {
+                        ChoraProfileFixtureScreen()
+                    }
+                } else if isSettingsUITestRoute {
+                    NavigationStack {
+                        SettingsView(
+                            loadsProfileOnAppear: false,
+                            choraProfileDestination: {
+                                AnyView(ChoraProfileFixtureScreen())
+                            },
+                            invitationCreditDestination: {
+                                AnyView(InvitationCreditFixtureScreen())
+                            }
+                        )
+                    }
+                } else if isLibraryUITestRoute {
+                    NavigationStack {
+                        LibraryFixtureScreen()
+                    }
+                } else if isChatVisibilityUITestRoute {
+                    ChatVisibilityFixtureScreen()
+                } else if isChoraContractUITestRoute {
+                    ChoraProfileContractFixtureView()
+                } else if isInvitationCreditContractUITestRoute {
+                    InvitationCreditContractFixtureView()
+                } else if isDiscoveryPathContractUITestRoute {
+                    DiscoveryPathContractFixtureView()
+                } else if isDiscoveryPathUITestRoute {
+                    NavigationStack {
+                        DiscoveryPathFixtureScreen()
+                    }
+                } else if isInvitationCreditUITestRoute {
+                    NavigationStack {
+                        InvitationCreditFixtureScreen()
+                    }
+                } else if isSignupInvitationUITestRoute {
+                    SignupInvitationFixtureScreen()
+                } else if isNotificationContractUITestRoute {
+                    NotificationContractFixtureView()
+                } else if isNotificationInboxUITestRoute {
+                    NavigationStack {
+                        NotificationView(
+                            service: NotificationInboxFixtureService(),
+                            actorID: "act_fixture",
+                            usesFixtureDestinations: true
+                        )
+                    }
+                } else if isInterestUITestRoute {
+                    NavigationStack {
+                        ChooseInterestsView()
+                    }
+                } else if let profileUITestActorID,
+                          !profileUITestActorID.isEmpty {
+                    NavigationStack {
+                        UserProfileView(actorId: profileUITestActorID)
+                    }
+                } else if let discoveryPathLiveCardID,
+                          !discoveryPathLiveCardID.isEmpty {
+                    NavigationStack {
+                        RootView(cardId: discoveryPathLiveCardID)
+                    }
+                } else {
+                    ContentView()
                 }
-            } else if isChoraProfileUITestRoute {
-                NavigationStack {
-                    ChoraProfileFixtureScreen()
-                }
-            } else if isSettingsUITestRoute {
-                NavigationStack {
-                    SettingsView(
-                        loadsProfileOnAppear: false,
-                        choraProfileDestination: {
-                            AnyView(ChoraProfileFixtureScreen())
-                        },
-                        invitationCreditDestination: {
-                            AnyView(InvitationCreditFixtureScreen())
-                        }
-                    )
-                }
-            } else if isLibraryUITestRoute {
-                NavigationStack {
-                    LibraryFixtureScreen()
-                }
-            } else if isChatVisibilityUITestRoute {
-                ChatVisibilityFixtureScreen()
-            } else if isChoraContractUITestRoute {
-                ChoraProfileContractFixtureView()
-            } else if isInvitationCreditContractUITestRoute {
-                InvitationCreditContractFixtureView()
-            } else if isDiscoveryPathContractUITestRoute {
-                DiscoveryPathContractFixtureView()
-            } else if isDiscoveryPathUITestRoute {
-                NavigationStack {
-                    DiscoveryPathFixtureScreen()
-                }
-            } else if isInvitationCreditUITestRoute {
-                NavigationStack {
-                    InvitationCreditFixtureScreen()
-                }
-            } else if isSignupInvitationUITestRoute {
-                SignupInvitationFixtureScreen()
-            } else if isNotificationContractUITestRoute {
-                NotificationContractFixtureView()
-            } else if isNotificationInboxUITestRoute {
-                NavigationStack {
-                    NotificationView(
-                        service: NotificationInboxFixtureService(),
-                        actorID: "act_fixture",
-                        usesFixtureDestinations: true
-                    )
-                }
-            } else if isInterestUITestRoute {
-                NavigationStack {
-                    ChooseInterestsView()
-                }
-            } else if let profileUITestActorID,
-                      !profileUITestActorID.isEmpty {
-                NavigationStack {
-                    UserProfileView(actorId: profileUITestActorID)
-                }
-            } else if let discoveryPathLiveCardID,
-                      !discoveryPathLiveCardID.isEmpty {
-                NavigationStack {
-                    RootView(cardId: discoveryPathLiveCardID)
-                }
-            } else {
+                #else
                 ContentView()
+                #endif
+                }
+                .environmentObject(chatHistoryDependency)
             }
-            #else
-            ContentView()
-            #endif
-            }
-            .environmentObject(chatHistoryDependency)
         }
     }
 }

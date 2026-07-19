@@ -69,7 +69,7 @@ struct ChooseInterestsView: View {
                             .disabled(store.isSaving)
                             .accessibilityIdentifier("interests.skip")
                         }
-                        .padding(.horizontal, 20)
+                        .adaptiveContentGutter()
                         .padding(.top, 60)
                 
                 // 标题区域
@@ -123,7 +123,7 @@ struct ChooseInterestsView: View {
                         .accessibilityIdentifier("interests.retry")
                         .font(.system(size: 16, weight: .medium))
                         .foregroundColor(.white)
-                        .padding(.horizontal, 20)
+                        .adaptiveContentGutter()
                         .padding(.vertical, 10)
                         .background(
                             RoundedRectangle(cornerRadius: 20)
@@ -239,7 +239,7 @@ struct ChooseInterestsView: View {
                     Text("Trending Topics")
                         .font(.system(size: 18, weight: .semibold))
                         .foregroundColor(.white)
-                        .padding(.horizontal, 20)
+                        .adaptiveContentGutter()
                     
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 12) {
@@ -263,7 +263,7 @@ struct ChooseInterestsView: View {
                                 }
                             }
                         }
-                        .padding(.horizontal, 20)
+                        .adaptiveContentGutter()
                     }
                 }
                 .padding(.top, 20)

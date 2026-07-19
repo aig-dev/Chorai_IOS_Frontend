@@ -85,7 +85,7 @@ struct RootView: View {
                 .foregroundColor(.clear)
                 .accessibilityHidden(true)
         }
-        .padding(.horizontal, 20)
+        .adaptiveContentGutter()
         .padding(.top, 60)
         .padding(.bottom, 24)
     }
@@ -142,7 +142,7 @@ struct RootView: View {
                     .accessibilityIdentifier("discovery-path.empty")
                 }
             }
-            .padding(.horizontal, 20)
+            .adaptiveContentGutter()
             .padding(.bottom, 40)
         }
     }

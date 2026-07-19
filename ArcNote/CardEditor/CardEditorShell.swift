@@ -125,7 +125,7 @@ struct CardEditorShell: View {
                     }
 
                 }
-                .padding(.horizontal, 20)
+                .adaptiveContentGutter()
                 .padding(.top, 56)
                 .padding(.bottom, 96)
             }
@@ -276,7 +276,7 @@ private struct CardEditorFloatingControls: View {
             }
             .frame(maxWidth: .infinity, alignment: .trailing)
         }
-        .padding(.horizontal, 16)
+        .adaptiveContentGutter()
         .padding(.top, 6)
     }
 

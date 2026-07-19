@@ -91,6 +91,7 @@ struct ChatDetailView: View {
     @EnvironmentObject private var chatHistoryDependency:
         ChatHistoryVisibilityDependency
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.adaptiveLayoutMetrics) private var adaptiveLayout
     @State private var messageText = ""
     @State private var contactName: String
     @State private var contactStatus: String
@@ -164,7 +165,7 @@ struct ChatDetailView: View {
                     .font(.title2)
                     .foregroundColor(.clear)
             }
-            .padding(.horizontal, 20)
+            .adaptiveContentGutter()
             .padding(.bottom, 20)
             
             // 聊天内容
@@ -215,7 +216,7 @@ struct ChatDetailView: View {
                             }
                         }
                     }
-                    .padding(.horizontal, 20)
+                    .adaptiveContentGutter()
                     .padding(.bottom, selectCardManager.selectedNotes.isEmpty ? 100 : 200) // 为底部输入框和选中notes留出空间
                 }
                 .onAppear {
@@ -282,7 +283,10 @@ struct ChatDetailView: View {
                         RoundedRectangle(cornerRadius: 12)
                             .stroke(Color.white.opacity(0.3), lineWidth: 1)
                     )
-                    .frame(maxWidth: UIScreen.main.bounds.width * 0.8, alignment: .leading)
+                    .frame(
+                        maxWidth: adaptiveLayout.size.width * 0.8,
+                        alignment: .leading
+                    )
                     
                     Spacer()
                 }
@@ -349,7 +353,7 @@ struct ChatDetailView: View {
                 )
                 .cornerRadius(30)
             }
-            .padding(.horizontal, 20)
+            .adaptiveContentGutter()
             .padding(.bottom, 10)
         }
         .navigationBarHidden(true)
@@ -512,7 +516,10 @@ struct SelectCardPopupView: View {
                         }
                         .frame(maxHeight: .infinity)
                     }
-                    .frame(maxWidth: geometry.size.width, maxHeight: UIScreen.main.bounds.height * 0.4)
+                    .frame(
+                        maxWidth: geometry.size.width,
+                        maxHeight: geometry.size.height * 0.4
+                    )
                     .background(
                         RoundedRectangle(cornerRadius: 16)
                             .background(.ultraThinMaterial)
@@ -526,7 +533,10 @@ struct SelectCardPopupView: View {
                     .clipShape(
                         RoundedCorner(radius: 20, corners: [.topLeft, .topRight])
                     )
-                    .position(x: geometry.size.width / 2, y: geometry.size.height - (UIScreen.main.bounds.height * 0.4) / 2)
+                    .position(
+                        x: geometry.size.width / 2,
+                        y: geometry.size.height - (geometry.size.height * 0.4) / 2
+                    )
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
                 
@@ -588,7 +598,12 @@ struct NoteCardView: View {
 
 // MARK: - 聊天消息视图
 struct ChatMessageView: View {
+    @Environment(\.adaptiveLayoutMetrics) private var adaptiveLayout
     let message: ChatMessage
+
+    private var messageBubbleWidth: CGFloat {
+        max(0, adaptiveLayout.contentWidth - 122)
+    }
     
     var body: some View {
         VStack(spacing: 8) {
@@ -622,10 +637,13 @@ struct ChatMessageView: View {
                             
                             // 附件笔记
                             if let attachedNotes = message.attachedNotes {
-                                AttachedNotesBubbleView(notes: attachedNotes, maxWidth: UIScreen.main.bounds.width - 194)
+                                AttachedNotesBubbleView(
+                                    notes: attachedNotes,
+                                    maxWidth: max(0, messageBubbleWidth - 32)
+                                )
                             }
                         }
-                        .frame(maxWidth: UIScreen.main.bounds.width - 162, alignment: .trailing)
+                        .frame(maxWidth: messageBubbleWidth, alignment: .trailing)
 //                        50 * 2 + 20 * 2 + 16 * 2
                         // 头像
                         Image(message.avatar)
@@ -657,10 +675,13 @@ struct ChatMessageView: View {
                             
                             // 附件笔记
                             if let attachedNotes = message.attachedNotes {
-                                AttachedNotesBubbleView(notes: attachedNotes, maxWidth: UIScreen.main.bounds.width - 172)
+                                AttachedNotesBubbleView(
+                                    notes: attachedNotes,
+                                    maxWidth: max(0, messageBubbleWidth - 10)
+                                )
                             }
                         }
-                        .frame(maxWidth: UIScreen.main.bounds.width - 162, alignment: .leading)
+                        .frame(maxWidth: messageBubbleWidth, alignment: .leading)
                         
                         Spacer()
                     }

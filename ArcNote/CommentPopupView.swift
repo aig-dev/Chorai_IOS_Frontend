@@ -117,7 +117,7 @@ class CommentPopupManager: ObservableObject {
             // 从主评论列表中移除
             if let index = self.comments.firstIndex(where: { $0.id == commentId }) {
                 self.comments.remove(at: index)
-                
+
                 // 更新评论数量
                 if let cardId = self.currentCardId {
                     let newCount = self.comments.count
@@ -161,7 +161,7 @@ struct CommentPopupView: View {
     @ObservedObject private var manager = CommentPopupManager.shared
     @State private var commentText = ""
     @State private var keyboardHeight: CGFloat = 0
-    @State private var slideOffset: CGFloat = UIScreen.main.bounds.height
+    @State private var slideOffset: CGFloat = 0
     @FocusState private var isTextFieldFocused: Bool
     
     var body: some View {
@@ -179,6 +179,9 @@ struct CommentPopupView: View {
                 
                 // 弹窗内容
                 GeometryReader { geometry in
+                    let sheetHeight = geometry.size.height * 0.6
+                    let hiddenOffset = sheetHeight + geometry.safeAreaInsets.bottom
+
                     VStack(spacing: 0) {
                         #if DEBUG
                         Text("Comment popup")
@@ -205,7 +208,7 @@ struct CommentPopupView: View {
                                     .foregroundColor(.white)
                             }
                         }
-                        .padding(.horizontal, 20)
+                        .adaptiveContentGutter()
                         .padding(.top, 20)
                         .padding(.bottom, 16)
                         .frame(height: 60) // 固定头部高度
@@ -251,7 +254,7 @@ struct CommentPopupView: View {
                                         }
                                     }
                                 }
-                                .padding(.horizontal, 20)
+                                .adaptiveContentGutter()
                                 .padding(.top, 10)
                                 .padding(.bottom, 20)
                             }
@@ -317,12 +320,12 @@ struct CommentPopupView: View {
                             .cornerRadius(30)
                         }
                         .padding(.top, 10)
-                        .padding(.horizontal, 20)
+                        .adaptiveContentGutter()
                         .padding(.bottom, 40)
                         .frame(height: 80) // 固定输入框区域高度
 //                        .background(Color.white.opacity(0.1))
                     }
-                    .frame(maxWidth: geometry.size.width, maxHeight: UIScreen.main.bounds.height * 0.6)
+                    .frame(maxWidth: geometry.size.width, maxHeight: sheetHeight)
                     .background(
                         RoundedRectangle(cornerRadius: 16)
                             .background(.ultraThinMaterial)
@@ -336,7 +339,12 @@ struct CommentPopupView: View {
                     .clipShape(
                         RoundedCorner(radius: 20, corners: [.topLeft, .topRight])
                     )
-                    .position(x: geometry.size.width / 2, y: geometry.size.height - (UIScreen.main.bounds.height * 0.6) / 2 - keyboardHeight + geometry.safeAreaInsets.bottom)
+                    .accessibilityIdentifier("adaptive-layout.comment-surface")
+                    .position(
+                        x: geometry.size.width / 2,
+                        y: geometry.size.height - sheetHeight / 2 - keyboardHeight
+                            + geometry.safeAreaInsets.bottom
+                    )
                     .offset(y: slideOffset)
                     .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { notification in
                         if let keyboardFrame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect {
@@ -346,29 +354,33 @@ struct CommentPopupView: View {
                     .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
                         keyboardHeight = 0
                     }
-                }
-                
-                .animation(.easeInOut(duration: 0.4), value: slideOffset)
-                .animation(.easeInOut(duration: 0.3), value: keyboardHeight)
-                .onChange(of: manager.isShowing) { isShowing in
-                    if isShowing {
-                        // 显示时，先设置到底部，然后动画到顶部
-                        slideOffset = UIScreen.main.bounds.height
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) {
+                    .animation(.easeInOut(duration: 0.4), value: slideOffset)
+                    .animation(.easeInOut(duration: 0.3), value: keyboardHeight)
+                    .onChange(of: manager.isShowing) { isShowing in
+                        if isShowing {
+                            slideOffset = hiddenOffset
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) {
+                                guard manager.isShowing else { return }
+                                withAnimation(.easeInOut(duration: 0.4)) {
+                                    slideOffset = 0
+                                }
+                            }
+                        } else {
                             withAnimation(.easeInOut(duration: 0.4)) {
-                                slideOffset = 0
+                                slideOffset = hiddenOffset
                             }
                         }
-                    } else {
-                        // 隐藏时，动画到底部
-                        withAnimation(.easeInOut(duration: 0.4)) {
-                            slideOffset = UIScreen.main.bounds.height
+                    }
+                    .onChange(of: geometry.size) { _ in
+                        if !manager.isShowing {
+                            slideOffset = hiddenOffset
                         }
                     }
+                    .onAppear {
+                        slideOffset = manager.isShowing ? 0 : hiddenOffset
+                    }
                 }
-                .onAppear {
-                    slideOffset = manager.isShowing ? 0 : UIScreen.main.bounds.height
-                }
+
                 .onChange(of: manager.isShowing) { isShowing in
                     if !isShowing {
                         isTextFieldFocused = false

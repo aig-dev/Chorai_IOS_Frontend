@@ -122,7 +122,7 @@ struct DetailView: View {
                     }
                     .accessibilityIdentifier("detail.menu.open")
                 }
-                .padding(.horizontal, 20)
+                .adaptiveContentGutter()
                 .padding(.bottom, 20)
                 .padding(.top, 60)
                 

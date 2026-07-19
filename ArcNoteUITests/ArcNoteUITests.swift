@@ -16,6 +16,33 @@ final class ArcNoteUITests: XCTestCase {
         sparkSessionScope = "\(name).\(UUID().uuidString)"
     }
 
+    func testAdaptiveLayoutFixtureKeepsSurfaceInsideWindowGutters() {
+        app.launchArguments.append("--ui-test-adaptive-layout")
+        app.launch()
+
+        let window = app.windows.firstMatch
+        XCTAssertTrue(window.waitForExistence(timeout: 10))
+        let surface = waitFor("adaptive-layout.surface")
+
+        XCTAssertGreaterThanOrEqual(surface.frame.minX, window.frame.minX + 15)
+        XCTAssertLessThanOrEqual(surface.frame.maxX, window.frame.maxX - 15)
+        XCTAssertLessThan(surface.frame.width, window.frame.width)
+        captureVisual("adaptive-layout-fixture")
+    }
+
+    func testProfilePrimarySurfaceKeepsResponsiveWindowGutter() {
+        launchProfileTestRoute(actorID: "act_45ea902d-5bc3-49")
+
+        let window = app.windows.firstMatch
+        XCTAssertTrue(window.waitForExistence(timeout: 10))
+        let surface = waitFor("profile.primary-surface")
+
+        XCTAssertGreaterThanOrEqual(surface.frame.minX, window.frame.minX + 15)
+        XCTAssertLessThanOrEqual(surface.frame.maxX, window.frame.maxX - 15)
+        XCTAssertLessThan(surface.frame.width, window.frame.width)
+        captureVisual("profile-responsive-gutter")
+    }
+
     func testCardEditorShellEmptyHierarchyIsHeaderlessAndAccessible() {
         launchCardEditorFixture(mode: "empty")
 

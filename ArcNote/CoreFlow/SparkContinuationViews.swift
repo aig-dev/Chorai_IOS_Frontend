@@ -65,7 +65,7 @@ struct SparkContinuationView: View {
                     .id(screenStateIdentifier)
             }
             .id(presentationRevision)
-            .padding(.horizontal, ZenVisualTokens.pageInset)
+            .adaptiveContentGutter()
             .padding(.top, 8)
             .padding(.bottom, 18)
 

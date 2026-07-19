@@ -68,7 +68,7 @@ struct EditProfileView: View {
                             saveUserProfile()
                         }
                 }
-                .padding(.horizontal, 20)
+                .adaptiveContentGutter()
                 .padding(.bottom, 20)
                 .padding(.top, 10)
                 
@@ -265,7 +265,7 @@ struct EditProfileView: View {
                         .padding(.trailing, 20)
                     }
                 }
-                .padding(.horizontal, 20)
+                .adaptiveContentGutter()
                 .padding(.top, 30)
             }
         }

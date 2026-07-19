@@ -233,7 +233,7 @@ struct NewInsightView: View {
                 }
                 .clipShape(RoundedRectangle(cornerRadius: 20))
             )
-            .padding(.horizontal, 40)
+            .adaptiveContentGutter()
         }
         .transition(.opacity.combined(with: .scale))
         .onAppear {

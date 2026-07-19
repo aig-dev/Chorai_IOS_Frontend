@@ -144,7 +144,7 @@ struct FollowListView: View {
                         .padding(.vertical, 18)
                 }
             }
-            .padding(.horizontal, 20)
+            .adaptiveContentGutter()
         }
     }
 

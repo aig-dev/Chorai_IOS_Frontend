@@ -26,7 +26,7 @@ struct NotificationDetailView: View {
                     Spacer()
                     Color.clear.frame(width: 24, height: 24)
                 }
-                .padding(.horizontal, 20)
+                .adaptiveContentGutter()
                 .padding(.top, 60)
                 .padding(.bottom, 20)
 
@@ -57,7 +57,7 @@ struct NotificationDetailView: View {
                             .foregroundColor(.white.opacity(0.9))
                             .lineSpacing(4)
                     }
-                    .padding(.horizontal, 20)
+                    .adaptiveContentGutter()
                     .padding(.bottom, 100)
                 }
             }

@@ -68,7 +68,7 @@ struct AccountPrivacyView: View {
                             }
                         }
                     }
-                    .padding(.horizontal, 20)
+                    .adaptiveContentGutter()
                     .padding(.bottom, 40)
                 }
             }
@@ -292,7 +292,7 @@ struct BlockedActorsView: View {
                         .font(.system(size: 20, weight: .medium))
                         .foregroundColor(.clear)
                 }
-                .padding(.horizontal, 20)
+                .adaptiveContentGutter()
                 .padding(.top, 60)
                 .padding(.bottom, 24)
 

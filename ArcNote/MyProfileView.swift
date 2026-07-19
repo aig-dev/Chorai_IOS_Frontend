@@ -3,6 +3,7 @@ import CoreFlow
 
 struct MyProfileView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.adaptiveLayoutMetrics) private var adaptiveLayout
     @State private var showPopupMenu = false
     @StateObject private var cardsManager = HomeCardsManager()
     @StateObject private var userProfileManager = UserProfileManager.shared
@@ -43,7 +44,7 @@ struct MyProfileView: View {
                     .font(.title2)
                     .foregroundColor(.clear)
             }
-            .padding(.horizontal, 20)
+            .padding(.horizontal, adaptiveLayout.horizontalGutter)
             .padding(.bottom, 20)
             
             // 主要内容
@@ -195,14 +196,27 @@ struct MyProfileView: View {
                             .padding(.bottom, 20)
                         }
                         .background(
-                            RoundedRectangle(cornerRadius: 16)
+                            RoundedRectangle(
+                                cornerRadius: AdaptiveLayoutMetrics.surfaceCornerRadius,
+                                style: .continuous
+                            )
                                 .background(.ultraThinMaterial)
                                 .overlay(
-                                    RoundedRectangle(cornerRadius: 16)
+                                    RoundedRectangle(
+                                        cornerRadius: AdaptiveLayoutMetrics.surfaceCornerRadius,
+                                        style: .continuous
+                                    )
                                         .stroke(Color.white.opacity(0.1), lineWidth: 1)
                                 )
-                                .cornerRadius(16)
+                                .clipShape(
+                                    RoundedRectangle(
+                                        cornerRadius: AdaptiveLayoutMetrics.surfaceCornerRadius,
+                                        style: .continuous
+                                    )
+                                )
                         )
+                        .accessibilityElement(children: .contain)
+                        .accessibilityIdentifier("profile.primary-surface")
                         
                         // 头像 骑在边框线上
                         HStack {
@@ -240,6 +254,7 @@ struct MyProfileView: View {
                     }
                     .padding(.top, 30)
                 }
+                .adaptiveContentGutter()
             }
         }
         .background(

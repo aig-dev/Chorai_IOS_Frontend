@@ -379,14 +379,14 @@ struct ExploreView: View {
                     }
                 }
             }
-            .padding(.horizontal, 20)
+            .adaptiveContentGutter()
             .padding(.top, 60)
 
             if let onboardingStore,
                onboardingStore.guideScene != nil,
                !isSearchMode {
                 OnboardingGuideLine(store: onboardingStore)
-                    .padding(.horizontal, 20)
+                    .adaptiveContentGutter()
                     .padding(.top, 8)
             }
 
@@ -411,7 +411,7 @@ struct ExploreView: View {
                         }
                         .frame(width: 95)
                     }
-                    .padding(.horizontal, 20)
+                    .adaptiveContentGutter()
                 }
                 .padding(.top, 10)
             }

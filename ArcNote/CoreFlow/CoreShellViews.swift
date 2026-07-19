@@ -15,7 +15,6 @@ struct CoreTabBar: View {
         }
         .frame(height: ZenVisualTokens.tabHeight)
         .background(tabBackground)
-        .padding(.horizontal, ZenVisualTokens.pageInset)
         .padding(.top, 8)
         .background(
             LinearGradient(

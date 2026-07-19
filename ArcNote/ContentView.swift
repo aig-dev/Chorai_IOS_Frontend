@@ -104,7 +104,7 @@ struct ContentView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 24)
+                .adaptiveContentGutter()
                         .padding(.top, max(100, geometry.safeAreaInsets.top + 60))
                 
                         Spacer(minLength: 40)
@@ -210,7 +210,7 @@ struct ContentView: View {
                             )
                     }
                 }
-                .padding(.horizontal, 24)
+                .adaptiveContentGutter()
                 
                 // 分隔线
                 HStack {
@@ -227,7 +227,7 @@ struct ContentView: View {
                         .frame(height: 1)
                         .foregroundColor(.gray.opacity(0.3))
         }
-                .padding(.horizontal, 24)
+                .adaptiveContentGutter()
                 .padding(.top, 32)
                 
                 // 社交登录图标

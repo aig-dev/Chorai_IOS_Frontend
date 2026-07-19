@@ -233,7 +233,7 @@ struct HomeView: View {
                         .fill(Color.black.opacity(0.3))
                 )
             }
-            .padding(.horizontal, 20)
+            .adaptiveContentGutter()
             .padding(.top, 60)
 
             if let onboardingStore {
@@ -246,7 +246,7 @@ struct HomeView: View {
                         "build_ignite"
                     ]
                 )
-                .padding(.horizontal, 20)
+                .adaptiveContentGutter()
                 .padding(.top, 10)
             }
             
@@ -275,7 +275,7 @@ struct HomeView: View {
                         }
                         .frame(width: 140)
                     }
-                    .padding(.horizontal, 20)
+                    .adaptiveContentGutter()
                 }
                 .padding(.top, 10)
             }

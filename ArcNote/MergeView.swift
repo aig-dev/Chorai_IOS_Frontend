@@ -120,7 +120,7 @@ private struct LegacyMergeView: View {
                     
                     Spacer()
                 }
-                .padding(.horizontal, 20)
+                .adaptiveContentGutter()
 //                .padding(.top, 60)
                 
                                 // 主要内容
@@ -161,7 +161,7 @@ private struct LegacyMergeView: View {
                     Rectangle()
                         .frame(height: 1)
                         .foregroundColor(.white.opacity(0.2))
-                        .padding(.horizontal, 20)
+                        .adaptiveContentGutter()
                         .padding(.vertical, 20)
                     
                     // 搜索栏
@@ -195,7 +195,7 @@ private struct LegacyMergeView: View {
                             .overlay(searchBarTopEdgeHighlight)
                             .overlay(searchBarBottomEdgeHighlight)
                     )
-                    .padding(.horizontal, 20)
+                    .adaptiveContentGutter()
                     .padding(.bottom, 30)
                     
                     // 可选择的卡片列表
@@ -288,7 +288,7 @@ private struct LegacyMergeView: View {
                 }
                 .disabled(selectedCards.isEmpty)
                 .accessibilityIdentifier("merge.action")
-                .padding(.horizontal, 20)
+                .adaptiveContentGutter()
                 .padding(.bottom, 30)
             }
             
@@ -334,7 +334,7 @@ private struct LegacyMergeView: View {
                         .padding(.vertical, 10)
                         .background(Color.black.opacity(0.55))
                         .clipShape(RoundedRectangle(cornerRadius: 12))
-                        .padding(.horizontal, 24)
+                        .adaptiveContentGutter()
                         .padding(.bottom, 92)
                         .accessibilityIdentifier("merge.error")
                     Spacer().frame(height: 0)
@@ -362,7 +362,7 @@ private struct LegacyMergeView: View {
                             .font(.title2)
                             .foregroundColor(.white)
                     }
-                    .padding(.horizontal, 20)
+                    .adaptiveContentGutter()
 //                    .padding(.top, 60)
                     
                     Spacer()
@@ -898,7 +898,7 @@ struct MergeCardView: View {
                 )
         )
         .contentShape(Rectangle())
-        .padding(.horizontal, 20)
+        .adaptiveContentGutter()
         .onTapGesture {
             onToggleSelection()
         }
@@ -1157,7 +1157,7 @@ struct FixedMergeCardView: View {
                 .stroke(Color.white.opacity(0.2), lineWidth: 1)
         )
         .contentShape(Rectangle())
-        .padding(.horizontal, 20)
+        .adaptiveContentGutter()
         .onTapGesture {
             // 固定卡片
         }

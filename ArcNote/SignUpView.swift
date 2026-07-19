@@ -117,7 +117,7 @@ struct SignUpView: View {
                                 
                                 Spacer()
                             }
-                            .padding(.horizontal, 24)
+                            .adaptiveContentGutter()
                             .padding(.top, 20)
                             
                             // 标题
@@ -128,7 +128,7 @@ struct SignUpView: View {
                                     .foregroundColor(.white)
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, 24)
+                            .adaptiveContentGutter()
                             .padding(.top, 24)
                             
                             
@@ -207,11 +207,11 @@ struct SignUpView: View {
                                     accessibilityIdentifier: "signup.invitation-code"
                                 )
                             }
-                            .padding(.horizontal, 24)
+                            .adaptiveContentGutter()
                             .padding(.top, 24)
 
                             registrationFeedback
-                                .padding(.horizontal, 24)
+                                .adaptiveContentGutter()
                                 .padding(.top, 16)
                             
                             // 创建账户按钮
@@ -311,7 +311,7 @@ struct SignUpView: View {
                                     registrationStore.completedAccount != nil
                             )
                             .accessibilityIdentifier("signup.create-account")
-                            .padding(.horizontal, 24)
+                            .adaptiveContentGutter()
                             .padding(.top, 24)
                             
                             // 用户协议提示
@@ -334,7 +334,7 @@ struct SignUpView: View {
                             }
                             .font(.caption)
                             .multilineTextAlignment(.center)
-                            .padding(.horizontal, 24)
+                            .adaptiveContentGutter()
                             .padding(.top, 12)
                             .fixedSize(horizontal: false, vertical: true)
                             .tint(.white)
@@ -384,7 +384,7 @@ struct SignUpView: View {
                                     .frame(height: 1)
                                     .foregroundColor(.gray.opacity(0.3))
                             }
-                            .padding(.horizontal, 24)
+                            .adaptiveContentGutter()
                             .padding(.top, 20)
                             
                             // 社交登录图标
