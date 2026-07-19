@@ -24,12 +24,11 @@ struct CardEditorTagRow: View {
     let tags: [String]
     let isEditable: Bool
     let isAddingTag: Bool
+    let prefersKeyboardTagAction: Bool
     @Binding var tagInput: String
     let onBeginTag: () -> Void
     let onCompleteTag: () -> Void
     let onRemove: (String) -> Void
-
-    @FocusState private var isTagInputFocused: Bool
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -56,27 +55,10 @@ struct CardEditorTagRow: View {
                 }
 
                 if isAddingTag {
-                    TextField("Tag", text: $tagInput)
-                        .font(.system(size: 12, weight: .medium))
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .submitLabel(.done)
-                        .focused($isTagInputFocused)
-                        .onSubmit(onCompleteTag)
-                        .onChange(of: isTagInputFocused) { isFocused in
-                            guard !isFocused, isAddingTag else { return }
-                            onCompleteTag()
-                        }
-                        .frame(width: 96)
-                        .cardMetadataTagCapsuleStyle(maximumWidth: 120)
-                        .frame(minWidth: 44, minHeight: 44)
-                        .accessibilityLabel("Tag")
-                        .accessibilityIdentifier("cardEditorTagInput")
-                        .onAppear {
-                            DispatchQueue.main.async {
-                                isTagInputFocused = true
-                            }
-                        }
+                    CardEditorTagInput(
+                        tagInput: $tagInput,
+                        onComplete: onCompleteTag
+                    )
                 } else {
                     Button(action: onBeginTag) {
                         CardMetadataTagCapsule(
@@ -95,10 +77,48 @@ struct CardEditorTagRow: View {
                     .accessibilityLabel("Add Tag")
                     .accessibilityHint("Adds a tag to this note")
                     .accessibilityIdentifier("cardEditorAddTag")
+                    .accessibilityHidden(prefersKeyboardTagAction)
+                    .allowsHitTesting(!prefersKeyboardTagAction)
                 }
             }
             .padding(.horizontal, 1)
         }
+    }
+}
+
+private struct CardEditorTagInput: View {
+    @Binding var tagInput: String
+    let onComplete: () -> Void
+
+    @FocusState private var isTagInputFocused: Bool
+    @State private var didAcquireFocus = false
+
+    var body: some View {
+        TextField("Tag", text: $tagInput)
+            .font(.system(size: 12, weight: .medium))
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+            .submitLabel(.done)
+            .focused($isTagInputFocused)
+            .onSubmit(onComplete)
+            .onChange(of: isTagInputFocused) { isFocused in
+                if isFocused {
+                    didAcquireFocus = true
+                    return
+                }
+                guard didAcquireFocus else { return }
+                didAcquireFocus = false
+                onComplete()
+            }
+            .frame(width: 96)
+            .cardMetadataTagCapsuleStyle(maximumWidth: 120)
+            .frame(minWidth: 44, minHeight: 44)
+            .accessibilityLabel("Tag")
+            .accessibilityIdentifier("cardEditorTagInput")
+            .task {
+                await Task.yield()
+                isTagInputFocused = true
+            }
     }
 }
 

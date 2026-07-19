@@ -323,6 +323,10 @@ final class ArcNoteUITests: XCTestCase {
         dismiss.tap()
         waitForMissing("cardEditorFormattingBar")
         waitForElementToDisappear(app.keyboards.firstMatch)
+        let rowTagActions = app.buttons.matching(
+            identifier: "cardEditorAddTag"
+        )
+        XCTAssertEqual(rowTagActions.count, 1)
     }
 
     func testCardEditorInlineImageChooserDismissesKeyboardAndShowsSources() {
@@ -470,8 +474,19 @@ final class ArcNoteUITests: XCTestCase {
             NSPredicate(format: "identifier BEGINSWITH %@", "cardEditorTag.")
         )
         let countBeforeBlank = tags.count
-        waitForButton("cardEditorAddTag").tap()
-        waitFor("cardEditorTagInput").typeText("### ")
+        _ = waitFor("cardEditorFormattingBar")
+        let focusedTagActions = app.buttons.matching(
+            identifier: "cardEditorAddTag"
+        )
+        XCTAssertEqual(focusedTagActions.count, 1)
+        let focusedTagAction = focusedTagActions.firstMatch
+        XCTAssertTrue(focusedTagAction.isHittable)
+        focusedTagAction.tap()
+        waitForMissing("cardEditorFormattingBar")
+        let blankInput = waitFor("cardEditorTagInput")
+        XCTAssertTrue(blankInput.isHittable)
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 10))
+        blankInput.typeText("### ")
         body.coordinate(
             withNormalizedOffset: CGVector(dx: 0.25, dy: 0.08)
         ).tap()
@@ -3711,18 +3726,27 @@ final class ArcNoteUITests: XCTestCase {
         waitFor("cardEditorContent", timeout: 20)
 
         waitForEnabledButton("cardEditorAddTag", timeout: 20).tap()
-        waitFor("cardEditorTagInput").typeText("## editortag \n")
-        waitForMissing("cardEditorTagInput")
-        waitFor("cardEditorTag.editortag")
+        let tagInput = waitFor("cardEditorTagInput")
+        tagInput.typeText("## editortag ")
+        waitForLabel("cardEditorLeadingAction", expected: "Save note")
+        saveCardEditor()
+        XCTAssertTrue(waitFor("cardEditorTag.editortag").exists)
+        XCTAssertTrue(exists("cardEditorContent", timeout: 2))
 
         waitForEnabledButton("cardEditorAddTag", timeout: 20).tap()
         waitFor("cardEditorTagInput").typeText("#editortag\n")
-        waitForMissing("cardEditorTagInput")
+        XCTAssertEqual(
+            app.descendants(matching: .any)
+                .matching(identifier: "cardEditorTag.editortag").count,
+            1
+        )
 
-        saveCardEditor()
-        XCTAssertTrue(exists("cardEditorContent", timeout: 2))
-        waitForLabel("cardEditorLeadingAction", expected: "Close note")
-        closeNewNoteEditor()
+        XCTAssertEqual(
+            waitForButton("cardEditorLeadingAction").label,
+            "Close note"
+        )
+        waitForButton("cardEditorLeadingAction").tap()
+        waitForMissing("cardEditorContent", timeout: 30)
 
         waitForSmokeCardState(id: cardID, token: session.token) { card in
             !card.content.contains("#editortag")
@@ -4075,12 +4099,12 @@ final class ArcNoteUITests: XCTestCase {
             timeout: 30
         )
         XCTAssertTrue(exists("cardEditorContent", timeout: 2))
+        waitForButton("cardEditorLeadingAction").tap()
+        waitForMissing("cardEditorContent", timeout: 30)
         let callbackID = waitFor("note.created-card-id", timeout: 30)
             .label
             .trimmingCharacters(in: .whitespacesAndNewlines)
         XCTAssertEqual(callbackID, canonicalID)
-        waitForButton("cardEditorLeadingAction").tap()
-        waitForMissing("cardEditorContent", timeout: 30)
 
         let cardsAfterRetry = waitForSmokeCards(
             search: bodyText,
@@ -4194,78 +4218,100 @@ final class ArcNoteUITests: XCTestCase {
         waitFor("card.home.\(cardID)", timeout: 30).tap()
         waitFor("cardEditorContent", timeout: 20)
         let initialBackground = revealEditorBackgroundButton()
-        XCTAssertEqual(initialBackground.label, "Background")
-        XCTAssertFalse(app.buttons["cardEditorRemoveBackgroundButton"].exists)
+        XCTAssertEqual(editorActionButtons().count, 8)
         initialBackground.tap()
         try selectFirstPhotoFromImagePicker()
-
-        openEditorCardActions()
-        XCTAssertEqual(
-            waitForEditorCardAction("cardEditorBackgroundButton").label,
-            "Background",
-            "The background action label must remain stable while staged"
-        )
-        XCTAssertFalse(app.buttons["cardEditorRemoveBackgroundButton"].exists)
+        waitForLabel("cardEditorLeadingAction", expected: "Save note")
         XCTAssertNil(
-            try fetchSmokeCard(id: cardID, token: session.token)
-                .backgroundMediaRef,
-            "Selecting a photo must stage locally until the exact body snapshot saves"
+            try fetchSmokeCard(id: cardID, token: session.token).backgroundMediaRef,
+            "A selected background must remain local before Save"
         )
-        captureVisual("card-editor-background-staged")
-        dismissEditorCardActions()
-        closeNewNoteEditor()
-
+        saveCardEditor()
         waitForSmokeCardState(id: cardID, token: session.token) {
             !($0.backgroundMediaRef ?? "").isEmpty
         }
         let firstBackgroundRef = try XCTUnwrap(
-            fetchSmokeCard(id: cardID, token: session.token)
-                .backgroundMediaRef
+            fetchSmokeCard(id: cardID, token: session.token).backgroundMediaRef
         )
+        waitForButton("cardEditorLeadingAction").tap()
+        waitForMissing("cardEditorContent", timeout: 30)
         waitFor("card.home.\(cardID)", timeout: 30).tap()
         waitFor("cardEditorContent", timeout: 20)
-        _ = waitForEnabledButton("cardEditorAddTag", timeout: 20)
-        openEditorCardActions()
-        XCTAssertEqual(
-            waitForEditorCardAction("cardEditorBackgroundButton").label,
-            "Background"
-        )
-        XCTAssertFalse(app.buttons["cardEditorRemoveBackgroundButton"].exists)
-        captureVisual("card-editor-background-uploaded")
 
-        waitForEditorCardAction(
-            "cardEditorBackgroundButton",
-            requireHittable: true
+        let replaceBackground = revealEditorBackgroundButton()
+        XCTAssertEqual(editorActionButtons().count, 8)
+        replaceBackground.tap()
+        XCTAssertTrue(
+            waitForBackgroundDialogButton(
+                "cardEditorReplaceBackgroundButton"
+            ).exists
+        )
+        XCTAssertTrue(
+            waitForBackgroundDialogButton(
+                "cardEditorRemoveBackgroundButton"
+            ).exists
+        )
+        waitForBackgroundDialogButton(
+            "cardEditorReplaceBackgroundButton"
         ).tap()
         try selectFirstPhotoFromImagePicker()
+        waitForLabel("cardEditorLeadingAction", expected: "Save note")
         XCTAssertEqual(
-            try fetchSmokeCard(id: cardID, token: session.token)
-                .backgroundMediaRef,
+            try fetchSmokeCard(id: cardID, token: session.token).backgroundMediaRef,
             firstBackgroundRef,
-            "Replacing a background must remain staged until the editor saves"
+            "Replacement must remain local before Save"
         )
-        openEditorCardActions()
-        XCTAssertEqual(
-            waitForEditorCardAction("cardEditorBackgroundButton").label,
-            "Background"
-        )
-        XCTAssertFalse(app.buttons["cardEditorRemoveBackgroundButton"].exists)
-        captureVisual("card-editor-background-replacement-staged")
-        dismissEditorCardActions()
-        closeNewNoteEditor()
+        saveCardEditor()
         waitForSmokeCardState(id: cardID, token: session.token) {
-            guard let replacementRef = $0.backgroundMediaRef else {
-                return false
-            }
-            return !replacementRef.isEmpty
-                && replacementRef != firstBackgroundRef
+            guard let ref = $0.backgroundMediaRef else { return false }
+            return !ref.isEmpty && ref != firstBackgroundRef
         }
-        XCTAssertNotEqual(
-            try fetchSmokeCard(id: cardID, token: session.token)
-                .backgroundMediaRef,
-            firstBackgroundRef,
-            "Saving the staged replacement must persist a new background ref"
+        let replacementRef = try XCTUnwrap(
+            fetchSmokeCard(id: cardID, token: session.token).backgroundMediaRef
         )
+        waitForButton("cardEditorLeadingAction").tap()
+        waitForMissing("cardEditorContent", timeout: 30)
+        waitFor("card.home.\(cardID)", timeout: 30).tap()
+        waitFor("cardEditorContent", timeout: 20)
+
+        let removeBackground = revealEditorBackgroundButton()
+        XCTAssertEqual(editorActionButtons().count, 8)
+        removeBackground.tap()
+        waitForBackgroundDialogButton(
+            "cardEditorRemoveBackgroundButton"
+        ).tap()
+        waitForLabel("cardEditorLeadingAction", expected: "Save note")
+        XCTAssertEqual(
+            try fetchSmokeCard(id: cardID, token: session.token).backgroundMediaRef,
+            replacementRef,
+            "Removal must remain local before Save"
+        )
+        let stagedRemovalBackground = revealEditorBackgroundButton()
+        XCTAssertEqual(editorActionButtons().count, 8)
+        stagedRemovalBackground.tap()
+        XCTAssertTrue(
+            waitForBackgroundDialogButton(
+                "cardEditorRestoreBackgroundButton"
+            ).exists
+        )
+        waitForBackgroundDialogButton(
+            "cardEditorRestoreBackgroundButton"
+        ).tap()
+        waitForLabel("cardEditorLeadingAction", expected: "Close note")
+
+        let finalRemovalBackground = revealEditorBackgroundButton()
+        XCTAssertEqual(editorActionButtons().count, 8)
+        finalRemovalBackground.tap()
+        waitForBackgroundDialogButton(
+            "cardEditorRemoveBackgroundButton"
+        ).tap()
+        waitForLabel("cardEditorLeadingAction", expected: "Save note")
+        saveCardEditor()
+        waitForSmokeCardState(id: cardID, token: session.token) {
+            $0.backgroundMediaRef == nil
+        }
+        waitForButton("cardEditorLeadingAction").tap()
+        waitForMissing("cardEditorContent", timeout: 30)
     }
 
     func testLibrarySoftDeleteFailureKeepsRetryableConfirmation() throws {

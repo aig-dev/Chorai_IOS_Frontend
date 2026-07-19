@@ -105,6 +105,7 @@ struct CardEditorShell: View {
                         tags: tags,
                         isEditable: isMetadataEditable,
                         isAddingTag: isAddingTag,
+                        prefersKeyboardTagAction: bodyModel.isBodyFocused,
                         tagInput: $tagInput,
                         onBeginTag: onBeginTag,
                         onCompleteTag: onCompleteTag,
@@ -152,12 +153,25 @@ struct CardEditorShell: View {
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if bodyModel.isBodyFocused {
-                CardEditorFormattingBar(model: bodyModel)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                CardEditorFormattingBar(
+                    model: bodyModel,
+                    isTagEntryEnabled: isMetadataEditable
+                        && tags.count < CardEditingTag.maximumCount,
+                    onBeginTag: onBeginTag
+                )
+                    .transition(
+                        .asymmetric(
+                            insertion: .move(edge: .bottom)
+                                .combined(with: .opacity),
+                            removal: .identity
+                        )
+                    )
             }
         }
         .animation(
-            reduceMotion ? nil : .easeOut(duration: 0.18),
+            reduceMotion || !bodyModel.isBodyFocused
+                ? nil
+                : .easeOut(duration: 0.18),
             value: bodyModel.isBodyFocused
         )
     }
@@ -495,7 +509,7 @@ struct CardEditorShellFixtureScreen: View {
     private var fixtureBackgroundActionContext:
         CardEditorBackgroundActionContext {
         isFixtureBackgroundRemoved
-            ? .removed
+            ? .removed(canRestoreBackground: true)
             : .visible(canRestoreOriginal: false)
     }
 

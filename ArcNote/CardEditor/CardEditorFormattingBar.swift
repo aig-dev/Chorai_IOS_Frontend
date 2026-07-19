@@ -79,6 +79,8 @@ enum CardEditorFormattingCommand: String, CaseIterable, Identifiable {
 
 struct CardEditorFormattingBar: View {
     @ObservedObject var model: BlockNoteCardEditorModel
+    let isTagEntryEnabled: Bool
+    let onBeginTag: () -> Void
 
     var body: some View {
         HStack(spacing: 8) {
@@ -92,6 +94,19 @@ struct CardEditorFormattingBar: View {
             .foregroundStyle(.white)
             .accessibilityLabel("Dismiss keyboard")
             .accessibilityIdentifier("cardEditorKeyboardDismiss")
+
+            Button(action: onBeginTag) {
+                Image(systemName: "tag")
+                    .font(.body.weight(.semibold))
+                    .frame(minWidth: 45, minHeight: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.white)
+            .disabled(!isTagEntryEnabled)
+            .accessibilityLabel("Add Tag")
+            .accessibilityHint("Adds a tag to this note")
+            .accessibilityIdentifier("cardEditorAddTag")
 
             Divider()
                 .overlay(Color.white.opacity(0.18))

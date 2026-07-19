@@ -59,6 +59,385 @@ final class CardEditingStoreTests: XCTestCase {
         XCTAssertFalse(store.isDirty)
     }
 
+    func testServerJSONReformatDoesNotMakeSavedEditorSnapshotDirty() async {
+        let editorJSON = editorBlocksJSON
+        let serverJSON = serverEnvelopeJSON
+        let service = MockCardEditingService()
+        service.updateResults = [
+            .success(
+                snapshot(
+                    title: nil,
+                    content: "Server fallback projects Body twice",
+                    contentJSON: serverJSON,
+                    tags: []
+                )
+            )
+        ]
+        let store = CardEditingStore(
+            cardID: "ast_1",
+            draft: .init(
+                title: nil,
+                content: "Before",
+                tags: [],
+                isPublic: false
+            ),
+            backgroundMediaRef: nil,
+            links: [],
+            service: service
+        )
+        XCTAssertTrue(
+            store.applyBodyRevision(
+                content: "Body",
+                contentJSON: editorJSON,
+                revision: 1
+            )
+        )
+
+        let didSave = await store.save()
+        XCTAssertTrue(didSave)
+        XCTAssertTrue(
+            store.applyBodyRevision(
+                content: "Body",
+                contentJSON: editorJSON,
+                revision: 1
+            )
+        )
+
+        XCTAssertFalse(store.isDirty)
+        XCTAssertEqual(store.lastCommittedDraft?.contentJSON, serverJSON)
+        XCTAssertNotEqual(store.draft, store.lastCommittedDraft)
+    }
+
+    func testHydratedServerJSONReformatDoesNotMakeEditorSnapshotDirty() async {
+        let editorJSON = editorBlocksJSON
+        let serverJSON = serverEnvelopeJSON
+        let service = MockCardEditingService()
+        service.updateResults = [
+            .success(
+                snapshot(
+                    title: nil,
+                    content: "Server fallback projects Body twice",
+                    contentJSON: serverJSON,
+                    tags: []
+                )
+            )
+        ]
+        let store = CardEditingStore(
+            cardID: "ast_1",
+            draft: .init(
+                title: nil,
+                content: "Before",
+                tags: [],
+                isPublic: false
+            ),
+            bodyRevision: 4,
+            backgroundMediaRef: nil,
+            links: [],
+            service: service
+        )
+        store.hydrate(
+            draft: .init(
+                title: nil,
+                content: "Server fallback projects Body twice",
+                contentJSON: serverJSON,
+                tags: [],
+                isPublic: false
+            ),
+            bodyRevision: 5,
+            backgroundMediaRef: nil,
+            links: []
+        )
+
+        XCTAssertTrue(
+            store.applyBodyRevision(
+                content: "Body",
+                contentJSON: editorJSON,
+                revision: 6
+            )
+        )
+
+        XCTAssertFalse(store.isDirty)
+        XCTAssertNotEqual(store.draft, store.lastCommittedDraft)
+        XCTAssertEqual(store.lastCommittedBodyRevision, 6)
+        let didSave = await store.save()
+        XCTAssertTrue(didSave)
+        XCTAssertTrue(service.updateRequests.isEmpty)
+    }
+
+    func testChangedBootstrapRevisionDoesNotRebaseCommittedRevision() {
+        let service = MockCardEditingService()
+        let store = CardEditingStore(
+            cardID: "ast_1",
+            draft: structuredDraft(
+                content: "Server fallback projects Body twice",
+                contentJSON: serverEnvelopeJSON
+            ),
+            bodyRevision: 5,
+            backgroundMediaRef: nil,
+            links: [],
+            service: service
+        )
+
+        XCTAssertTrue(
+            store.applyBodyRevision(
+                content: "Changed",
+                contentJSON: changedEditorBlocksJSON,
+                revision: 6
+            )
+        )
+
+        XCTAssertEqual(store.lastCommittedBodyRevision, 5)
+        XCTAssertTrue(store.isDirty)
+    }
+
+    func testEquivalentRevisionDoesNotRebaseDuringActiveBackgroundWrite() async {
+        let service = MockCardEditingService()
+        let gate = AsyncGate()
+        service.replaceBackgroundGate = gate
+        service.replaceBackgroundResults = [.success("med_new")]
+        let store = CardEditingStore(
+            cardID: "ast_1",
+            draft: structuredDraft(
+                content: "Server fallback projects Body twice",
+                contentJSON: serverEnvelopeJSON
+            ),
+            bodyRevision: 5,
+            backgroundMediaRef: nil,
+            links: [],
+            service: service
+        )
+        XCTAssertTrue(store.stageBackground(validImage))
+        let saveTask = Task { await store.save() }
+        await waitForStore { service.replaceBackgroundRequests.count == 1 }
+
+        XCTAssertTrue(
+            store.applyBodyRevision(
+                content: "Body",
+                contentJSON: editorBlocksJSON,
+                revision: 6
+            )
+        )
+
+        XCTAssertEqual(store.lastCommittedBodyRevision, 5)
+        XCTAssertTrue(store.isDirty)
+        await gate.open()
+        let didSave = await saveTask.value
+        XCTAssertFalse(didSave)
+        XCTAssertEqual(store.lastCommittedBodyRevision, 5)
+    }
+
+    func testEquivalentRevisionDoesNotRebaseAfterUncertainUpdateFailure() async {
+        let service = MockCardEditingService()
+        service.updateResults = [
+            .failure(.transport(code: "response_timeout"))
+        ]
+        let store = CardEditingStore(
+            cardID: "ast_1",
+            draft: structuredDraft(
+                content: "Server fallback projects Body twice",
+                contentJSON: serverEnvelopeJSON
+            ),
+            bodyRevision: 5,
+            backgroundMediaRef: nil,
+            links: [],
+            service: service
+        )
+        XCTAssertTrue(
+            store.applyBodyRevision(
+                content: "Changed",
+                contentJSON: changedEditorBlocksJSON,
+                revision: 6
+            )
+        )
+        let didSave = await store.save()
+        XCTAssertFalse(didSave)
+        XCTAssertEqual(store.failureStage, .updatingCard)
+
+        XCTAssertTrue(
+            store.applyBodyRevision(
+                content: "Body",
+                contentJSON: editorBlocksJSON,
+                revision: 7
+            )
+        )
+
+        XCTAssertEqual(store.lastCommittedBodyRevision, 5)
+        XCTAssertTrue(store.isDirty)
+        XCTAssertEqual(store.failureStage, .updatingCard)
+    }
+
+    func testCommitEquivalentMatchesEditorArrayToServerEnvelope() {
+        let editor = CardEditingDraft(
+            title: nil,
+            content: "Body",
+            contentJSON: editorBlocksJSON,
+            tags: [],
+            isPublic: false
+        )
+        let server = CardEditingDraft(
+            title: nil,
+            content: "Server fallback projects Body twice",
+            contentJSON: serverEnvelopeJSON,
+            tags: [],
+            isPublic: false
+        )
+
+        XCTAssertNotEqual(editor, server)
+        XCTAssertTrue(editor.isCommitEquivalent(to: server))
+    }
+
+    func testCommitEquivalentRejectsBlockOrderContentAndScalarTypeChanges() {
+        let original = structuredDraft(contentJSON: twoEditorBlocksJSON)
+        let reversed = structuredDraft(contentJSON: reversedEditorBlocksJSON)
+        let changedText = structuredDraft(contentJSON: changedEditorBlocksJSON)
+        let boolean = structuredDraft(
+            contentJSON: #"[{"id":"task","type":"checkListItem","props":{"checked":true},"content":[],"children":[]}]"#
+        )
+        let number = structuredDraft(
+            contentJSON: #"[{"id":"task","type":"checkListItem","props":{"checked":1},"content":[],"children":[]}]"#
+        )
+
+        XCTAssertFalse(original.isCommitEquivalent(to: reversed))
+        XCTAssertFalse(original.isCommitEquivalent(to: changedText))
+        XCTAssertFalse(boolean.isCommitEquivalent(to: number))
+    }
+
+    func testCommitEquivalentRejectsNilEmptyAndDifferentMalformedJSON() {
+        let legacy = structuredDraft(contentJSON: nil)
+        let emptyBlocks = structuredDraft(contentJSON: "[]")
+        let malformedFirst = structuredDraft(contentJSON: #"{"blocks":[}"#)
+        let malformedSecond = structuredDraft(contentJSON: #"{"blocks":]}"#)
+
+        XCTAssertFalse(legacy.isCommitEquivalent(to: emptyBlocks))
+        XCTAssertFalse(
+            malformedFirst.isCommitEquivalent(to: malformedSecond)
+        )
+        XCTAssertNotEqual(malformedFirst, malformedSecond)
+    }
+
+    func testCommitEquivalentHandlesLegacyAndBlocklessObjectBodies() {
+        let legacy = structuredDraft(content: "Legacy", contentJSON: nil)
+        let sameLegacy = structuredDraft(content: "Legacy", contentJSON: nil)
+        let changedLegacy = structuredDraft(content: "Changed", contentJSON: nil)
+        let object = structuredDraft(
+            content: "Fallback",
+            contentJSON: #"{"schema_version":1,"payload":{"enabled":true}}"#
+        )
+        let reorderedObject = structuredDraft(
+            content: "Fallback",
+            contentJSON: #"{"payload":{"enabled":true},"schema_version":1}"#
+        )
+        let changedFallback = structuredDraft(
+            content: "Changed",
+            contentJSON: #"{"payload":{"enabled":true},"schema_version":1}"#
+        )
+        let changedMetadata = CardEditingDraft(
+            title: nil,
+            content: "Fallback",
+            contentJSON: #"{"payload":{"enabled":true},"schema_version":1}"#,
+            tags: ["different"],
+            isPublic: false
+        )
+
+        XCTAssertTrue(legacy.isCommitEquivalent(to: sameLegacy))
+        XCTAssertFalse(legacy.isCommitEquivalent(to: changedLegacy))
+        XCTAssertTrue(object.isCommitEquivalent(to: reorderedObject))
+        XCTAssertFalse(object.isCommitEquivalent(to: changedFallback))
+        XCTAssertFalse(object.isCommitEquivalent(to: changedMetadata))
+    }
+
+    func testCreateRetryReusesExactRawJSONForCommitEquivalentDraft() async {
+        let frozen = structuredDraft(contentJSON: editorBlocksJSON)
+        let reordered = structuredDraft(contentJSON: reorderedEditorBlocksJSON)
+        let service = MockCardEditingService()
+        service.createResults = [
+            .failure(.transport(code: "response_timeout")),
+            .success(
+                snapshot(
+                    id: "ast_created",
+                    title: nil,
+                    content: "Server fallback projects Body twice",
+                    contentJSON: serverEnvelopeJSON,
+                    tags: []
+                )
+            ),
+        ]
+        let store = makeNewStore(draft: frozen, service: service)
+
+        let firstSave = await store.save()
+        XCTAssertFalse(firstSave)
+        XCTAssertTrue(
+            store.applyBodyRevision(
+                content: reordered.content,
+                contentJSON: reordered.contentJSON,
+                revision: 0
+            )
+        )
+
+        let didRetry = await store.retry()
+
+        XCTAssertTrue(didRetry)
+        XCTAssertEqual(
+            service.createRequests.map(\.draft.contentJSON),
+            [editorBlocksJSON, editorBlocksJSON]
+        )
+        XCTAssertEqual(store.draft.contentJSON, reorderedEditorBlocksJSON)
+        XCTAssertEqual(
+            store.lastCommittedDraft?.contentJSON,
+            serverEnvelopeJSON
+        )
+        XCTAssertFalse(store.isDirty)
+    }
+
+    func testUpdateRetryReusesExactRawJSONForCommitEquivalentCurrentDraft() async {
+        let frozen = structuredDraft(contentJSON: editorBlocksJSON)
+        let reordered = structuredDraft(contentJSON: reorderedEditorBlocksJSON)
+        let service = MockCardEditingService()
+        service.updateResults = [
+            .failure(.transport(code: "response_timeout")),
+            .success(
+                snapshot(
+                    title: nil,
+                    content: "Server fallback projects Body twice",
+                    contentJSON: serverEnvelopeJSON,
+                    tags: []
+                )
+            ),
+        ]
+        let store = CardEditingStore(
+            cardID: "ast_1",
+            draft: structuredDraft(content: "Before", contentJSON: nil),
+            backgroundMediaRef: nil,
+            links: [],
+            service: service
+        )
+        store.updateDraft(frozen, bodyRevision: 1)
+
+        let firstSave = await store.save()
+        XCTAssertFalse(firstSave)
+        XCTAssertTrue(
+            store.applyBodyRevision(
+                content: reordered.content,
+                contentJSON: reordered.contentJSON,
+                revision: 1
+            )
+        )
+
+        let didRetry = await store.retry()
+
+        XCTAssertTrue(didRetry)
+        XCTAssertEqual(
+            service.updateRequests.map(\.draft.contentJSON),
+            [editorBlocksJSON, editorBlocksJSON]
+        )
+        XCTAssertEqual(store.draft.contentJSON, reorderedEditorBlocksJSON)
+        XCTAssertEqual(
+            store.lastCommittedDraft?.contentJSON,
+            serverEnvelopeJSON
+        )
+        XCTAssertFalse(store.isDirty)
+    }
+
     func testStageBackgroundBeforeCardIDOnlyChangesLocalPreview() {
         let service = MockCardEditingService()
         let store = makeNewStore(service: service)
@@ -800,12 +1179,48 @@ final class CardEditingStoreTests: XCTestCase {
         )
         store.stageBackgroundRemoval()
 
-        store.restoreBackground()
+        XCTAssertTrue(store.restoreBackground())
 
         XCTAssertEqual(store.backgroundIntent, .unchanged)
         XCTAssertEqual(store.backgroundMediaRef, "med_existing")
         XCTAssertFalse(store.isDirty)
         XCTAssertTrue(service.events.isEmpty)
+    }
+
+    func testRestoreAfterFailedReplacementPreservesUncertainWriteAndExactRetry() async {
+        let service = MockCardEditingService()
+        service.replaceBackgroundResults = [
+            .failure(.transport(code: "response_timeout")),
+            .success("med_retried"),
+        ]
+        let store = CardEditingStore(
+            cardID: "ast_1",
+            draft: .init(title: nil, content: "Body", tags: [], isPublic: false),
+            backgroundMediaRef: "med_existing",
+            links: [],
+            service: service
+        )
+        XCTAssertTrue(store.stageBackground(validImage))
+        let saved = await store.save()
+        XCTAssertFalse(saved)
+
+        XCTAssertFalse(store.restoreBackground())
+
+        XCTAssertEqual(store.backgroundIntent, .replace(validImage))
+        XCTAssertEqual(store.backgroundMediaRef, "med_existing")
+        XCTAssertEqual(store.failureStage, .replacingBackground)
+        XCTAssertEqual(store.phase, .failed(.transport(code: "response_timeout")))
+        XCTAssertTrue(store.isDirty)
+
+        let retried = await store.retry()
+
+        XCTAssertTrue(retried)
+        XCTAssertEqual(service.replaceBackgroundRequests, [validImage, validImage])
+        XCTAssertEqual(store.backgroundMediaRef, "med_retried")
+        XCTAssertEqual(store.backgroundIntent, .unchanged)
+        XCTAssertNil(store.failureStage)
+        XCTAssertEqual(store.phase, .ready)
+        XCTAssertFalse(store.isDirty)
     }
 
     func testReplacementSupersedesStagedRemoval() {
@@ -853,10 +1268,11 @@ final class CardEditingStoreTests: XCTestCase {
         XCTAssertEqual(store.backgroundIntent, .unchanged)
     }
 
-    func testRestoreAfterFailedRemovalAbandonsOnlyBackgroundRetry() async {
+    func testRestoreAfterFailedRemovalPreservesUncertainWriteAndExactRetry() async {
         let service = MockCardEditingService()
         service.removeBackgroundResults = [
-            .failure(.transport(code: "remove_failed")),
+            .failure(.transport(code: "response_timeout")),
+            .success(()),
         ]
         let store = CardEditingStore(
             cardID: "ast_1",
@@ -869,14 +1285,65 @@ final class CardEditingStoreTests: XCTestCase {
         let saved = await store.save()
         XCTAssertFalse(saved)
 
-        store.restoreBackground()
+        XCTAssertFalse(store.restoreBackground())
 
-        XCTAssertEqual(store.backgroundIntent, .unchanged)
+        XCTAssertEqual(store.backgroundIntent, .remove)
         XCTAssertEqual(store.backgroundMediaRef, "med_existing")
+        XCTAssertEqual(store.failureStage, .removingBackground)
+        XCTAssertEqual(store.phase, .failed(.transport(code: "response_timeout")))
+        XCTAssertTrue(store.isDirty)
+
+        let retried = await store.retry()
+
+        XCTAssertTrue(retried)
+        XCTAssertEqual(service.removeBackgroundRequests, ["ast_1", "ast_1"])
+        XCTAssertNil(store.backgroundMediaRef)
+        XCTAssertEqual(store.backgroundIntent, .unchanged)
         XCTAssertNil(store.failureStage)
         XCTAssertEqual(store.phase, .ready)
         XCTAssertFalse(store.isDirty)
+    }
+
+    func testRemoveAfterUncertainReplacementWithoutOriginalStagesCompensation() async {
+        let service = MockCardEditingService()
+        service.replaceBackgroundResults = [
+            .failure(.transport(code: "response_timeout")),
+            .success("med_retried"),
+        ]
+        service.removeBackgroundResults = [.success(())]
+        let store = CardEditingStore(
+            cardID: "ast_1",
+            draft: .init(title: nil, content: "Body", tags: [], isPublic: false),
+            backgroundMediaRef: nil,
+            links: [],
+            service: service
+        )
+        XCTAssertTrue(store.stageBackground(validImage))
+        let initialSave = await store.save()
+        XCTAssertFalse(initialSave)
+
+        store.stageBackgroundRemoval()
+
+        XCTAssertEqual(store.backgroundIntent, .remove)
+        XCTAssertEqual(store.failureStage, .replacingBackground)
+        XCTAssertTrue(store.isDirty)
+
+        let recoveredFrozenWrite = await store.retry()
+        XCTAssertFalse(recoveredFrozenWrite)
+        XCTAssertEqual(
+            service.replaceBackgroundRequests,
+            [validImage, validImage]
+        )
+        XCTAssertEqual(store.backgroundIntent, .remove)
+        XCTAssertNil(store.failureStage)
+        XCTAssertTrue(store.isDirty)
+
+        let compensated = await store.save()
+        XCTAssertTrue(compensated)
         XCTAssertEqual(service.removeBackgroundRequests, ["ast_1"])
+        XCTAssertNil(store.backgroundMediaRef)
+        XCTAssertEqual(store.backgroundIntent, .unchanged)
+        XCTAssertFalse(store.isDirty)
     }
 
     func testRemovalRetryPreservesNewerReplacementIntent() async {
@@ -1751,6 +2218,43 @@ final class CardEditingStoreTests: XCTestCase {
         )
         XCTAssertEqual(store.backgroundMediaRef, "med_existing")
         XCTAssertTrue(service.replaceBackgroundRequests.isEmpty)
+    }
+
+    private var editorBlocksJSON: String {
+        #"[{"id":"paragraph-probe","type":"paragraph","props":{"backgroundColor":"default","textColor":"default","textAlignment":"left"},"content":[{"type":"text","text":"Body","styles":{}}],"children":[]}]"#
+    }
+
+    private var reorderedEditorBlocksJSON: String {
+        #"[{"children":[],"content":[{"styles":{},"text":"Body","type":"text"}],"props":{"textAlignment":"left","backgroundColor":"default","textColor":"default"},"type":"paragraph","id":"paragraph-probe"}]"#
+    }
+
+    private var serverEnvelopeJSON: String {
+        #"{"tags":[],"title":"Body","blocks":[{"children":[],"content":[{"styles":{},"text":"Body","type":"text"}],"props":{"textAlignment":"left","backgroundColor":"default","textColor":"default"},"type":"paragraph","id":"paragraph-probe"}],"content":"Server fallback projects Body twice","editor_kind":"blocknote","schema_version":1}"#
+    }
+
+    private var twoEditorBlocksJSON: String {
+        #"[{"id":"first","type":"paragraph","content":[{"type":"text","text":"First","styles":{}}],"children":[]},{"id":"second","type":"paragraph","content":[{"type":"text","text":"Second","styles":{}}],"children":[]}]"#
+    }
+
+    private var reversedEditorBlocksJSON: String {
+        #"[{"id":"second","type":"paragraph","content":[{"type":"text","text":"Second","styles":{}}],"children":[]},{"id":"first","type":"paragraph","content":[{"type":"text","text":"First","styles":{}}],"children":[]}]"#
+    }
+
+    private var changedEditorBlocksJSON: String {
+        #"[{"id":"first","type":"paragraph","content":[{"type":"text","text":"Changed","styles":{}}],"children":[]},{"id":"second","type":"paragraph","content":[{"type":"text","text":"Second","styles":{}}],"children":[]}]"#
+    }
+
+    private func structuredDraft(
+        content: String = "Body",
+        contentJSON: String?
+    ) -> CardEditingDraft {
+        CardEditingDraft(
+            title: nil,
+            content: content,
+            contentJSON: contentJSON,
+            tags: [],
+            isPublic: false
+        )
     }
 
     private var validImage: CardEditingImage {

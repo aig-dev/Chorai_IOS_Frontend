@@ -79,6 +79,12 @@ public final class CardEditingStore: ObservableObject {
         failureContext?.stage
     }
 
+    public var canRestoreBackground: Bool {
+        guard backgroundIntent != .unchanged else { return false }
+        return failureStage != .replacingBackground
+            && failureStage != .removingBackground
+    }
+
     public var isDirty: Bool {
         isDraftDirty || backgroundIntent != .unchanged
     }
@@ -160,7 +166,7 @@ public final class CardEditingStore: ObservableObject {
         revision: Int
     ) -> Bool {
         guard revision >= bodyRevision else { return false }
-        draft = CardEditingDraft(
+        let nextDraft = CardEditingDraft(
             title: draft.title,
             content: content,
             contentJSON: contentJSON,
@@ -168,7 +174,19 @@ public final class CardEditingStore: ObservableObject {
             tags: draft.tags,
             isPublic: draft.isPublic
         )
+        let hasUncertainDraftWrite = failureContext?.stage == .creatingCard
+            || failureContext?.stage == .updatingCard
+        let rebasesCommittedRevision = cardID != nil
+            && activeOperationID == nil
+            && !hasUncertainDraftWrite
+            && lastCommittedDraft.map {
+                nextDraft.isCommitEquivalent(to: $0)
+            } == true
+        draft = nextDraft
         bodyRevision = revision
+        if rebasesCommittedRevision {
+            lastCommittedBodyRevision = revision
+        }
         return true
     }
 
@@ -195,8 +213,10 @@ public final class CardEditingStore: ObservableObject {
     }
 
     public func stageBackgroundRemoval() {
-        guard backgroundMediaRef != nil else {
-            restoreBackground()
+        let hasUncertainBackgroundWrite = failureStage == .replacingBackground
+            || failureStage == .removingBackground
+        guard backgroundMediaRef != nil || hasUncertainBackgroundWrite else {
+            _ = restoreBackground()
             return
         }
         backgroundIntent = .remove
@@ -206,14 +226,14 @@ public final class CardEditingStore: ObservableObject {
         }
     }
 
-    public func restoreBackground() {
+    @discardableResult
+    public func restoreBackground() -> Bool {
+        guard canRestoreBackground else { return false }
         backgroundIntent = .unchanged
-        if failureStage == .replacingBackground || failureStage == .removingBackground {
-            clearFailure()
-        }
         if !isBusy, failureContext == nil {
             phase = .ready
         }
+        return true
     }
 
     @discardableResult
@@ -379,8 +399,8 @@ public final class CardEditingStore: ObservableObject {
               let lastCommittedBodyRevision else {
             return true
         }
-        return draft != lastCommittedDraft
-            || bodyRevision != lastCommittedBodyRevision
+        if bodyRevision != lastCommittedBodyRevision { return true }
+        return !draft.isCommitEquivalent(to: lastCommittedDraft)
     }
 
     private var isBusy: Bool {

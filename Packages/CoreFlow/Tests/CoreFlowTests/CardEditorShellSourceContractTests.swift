@@ -109,7 +109,7 @@ final class CardEditorShellSourceContractTests: XCTestCase {
 
         XCTAssertTrue(actions.contains("enum CardEditorBackgroundActionContext"))
         XCTAssertTrue(actions.contains("case visible(canRestoreOriginal: Bool)"))
-        XCTAssertTrue(actions.contains("case removed"))
+        XCTAssertTrue(actions.contains("case removed(canRestoreBackground: Bool)"))
         XCTAssertTrue(actions.contains("case choosePhoto"))
         XCTAssertTrue(actions.contains("case remove"))
         XCTAssertTrue(actions.contains("case restore"))
@@ -117,6 +117,7 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         XCTAssertTrue(actions.contains("cardEditorReplaceBackgroundButton"))
         XCTAssertTrue(actions.contains("cardEditorRemoveBackgroundButton"))
         XCTAssertTrue(actions.contains("cardEditorRestoreBackgroundButton"))
+        XCTAssertTrue(actions.contains("if canRestoreBackground"))
         XCTAssertTrue(
             project.contains("/* CardEditorBackgroundActions.swift in Sources */")
         )
@@ -461,18 +462,61 @@ final class CardEditorShellSourceContractTests: XCTestCase {
             at: "ArcNote/CardEditor/CardEditorMetadataRows.swift"
         )
         let shell = try source(at: "ArcNote/CardEditor/CardEditorShell.swift")
+        let formatting = try source(
+            at: "ArcNote/CardEditor/CardEditorFormattingBar.swift"
+        )
 
         XCTAssertTrue(metadata.contains("let isAddingTag: Bool"))
+        XCTAssertTrue(metadata.contains("let prefersKeyboardTagAction: Bool"))
         XCTAssertTrue(metadata.contains("@Binding var tagInput: String"))
+        XCTAssertTrue(metadata.contains("private struct CardEditorTagInput: View"))
+        XCTAssertTrue(metadata.contains("CardEditorTagInput("))
         XCTAssertTrue(metadata.contains("@FocusState private var isTagInputFocused"))
+        XCTAssertTrue(metadata.contains("@State private var didAcquireFocus = false"))
         XCTAssertTrue(metadata.contains("if isAddingTag"))
         XCTAssertTrue(metadata.contains("TextField(\"Tag\", text: $tagInput)"))
         XCTAssertTrue(metadata.contains(".submitLabel(.done)"))
-        XCTAssertTrue(metadata.contains(".onSubmit(onCompleteTag)"))
-        XCTAssertTrue(metadata.contains("guard !isFocused, isAddingTag else { return }"))
+        XCTAssertTrue(metadata.contains(".onSubmit(onComplete)"))
+        XCTAssertTrue(metadata.contains("if isFocused {"))
+        XCTAssertTrue(metadata.contains("didAcquireFocus = true"))
+        XCTAssertTrue(metadata.contains("guard didAcquireFocus else { return }"))
+        XCTAssertTrue(metadata.contains(".task {"))
+        XCTAssertTrue(metadata.contains("await Task.yield()"))
+        XCTAssertTrue(metadata.contains("isTagInputFocused = true"))
         XCTAssertTrue(metadata.contains(".accessibilityIdentifier(\"cardEditorTagInput\")"))
         XCTAssertTrue(metadata.contains(".accessibilityIdentifier(\"cardEditorAddTag\")"))
+        XCTAssertTrue(metadata.contains(".accessibilityHidden(prefersKeyboardTagAction)"))
+        XCTAssertTrue(metadata.contains(".allowsHitTesting(!prefersKeyboardTagAction)"))
+        XCTAssertTrue(metadata.contains(".frame(minWidth: 44, minHeight: 44)"))
         XCTAssertTrue(metadata.contains("cardMetadataTagCapsuleStyle"))
+        XCTAssertTrue(
+            shell.contains(
+                "prefersKeyboardTagAction: bodyModel.isBodyFocused"
+            )
+        )
+        XCTAssertTrue(formatting.contains("let onBeginTag: () -> Void"))
+        XCTAssertTrue(formatting.contains("Button(action: onBeginTag)"))
+        XCTAssertGreaterThanOrEqual(
+            formatting.components(
+                separatedBy: ".frame(minWidth: 45, minHeight: 44)"
+            ).count - 1,
+            2
+        )
+        XCTAssertTrue(formatting.contains(".disabled(!isTagEntryEnabled)"))
+        XCTAssertTrue(shell.contains("isTagEntryEnabled: isMetadataEditable"))
+        XCTAssertTrue(
+            shell.contains("tags.count < CardEditingTag.maximumCount")
+        )
+        XCTAssertTrue(shell.contains(".asymmetric("))
+        XCTAssertTrue(shell.contains("removal: .identity"))
+        XCTAssertTrue(
+            shell.contains("reduceMotion || !bodyModel.isBodyFocused")
+        )
+        XCTAssertTrue(
+            formatting.contains(
+                ".accessibilityIdentifier(\"cardEditorAddTag\")"
+            )
+        )
         XCTAssertTrue(shell.contains("TapGesture().onEnded"))
         XCTAssertTrue(shell.contains("guard isAddingTag else { return }"))
         XCTAssertTrue(shell.contains("onCompleteTag()"))
@@ -961,10 +1005,11 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         )
         XCTAssertTrue(
             shell.contains(
-                "reduceMotion ? nil : .easeOut(duration: 0.18)"
+                "reduceMotion || !bodyModel.isBodyFocused"
             ),
-            "The formatting bar must not animate when Reduce Motion is enabled"
+            "The formatting bar must remove immediately and respect Reduce Motion"
         )
+        XCTAssertTrue(shell.contains(": .easeOut(duration: 0.18)"))
         XCTAssertTrue(
             background.contains(
                 "@Environment(\\.accessibilityReduceTransparency) private var reduceTransparency"

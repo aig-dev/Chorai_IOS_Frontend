@@ -59,6 +59,7 @@ public struct CardEditingDraft: Equatable, Sendable {
     public let editorAtmosphere: String
     public let tags: [String]
     public let isPublic: Bool
+    private let commitJSONProjection: CommitJSONProjection
 
     public init(
         title: String?,
@@ -68,12 +69,40 @@ public struct CardEditingDraft: Equatable, Sendable {
         tags: [String],
         isPublic: Bool
     ) {
+        let normalizedContentJSON = Self.nonEmpty(contentJSON)
         self.title = CardEditingTitle.normalized(title)
         self.content = content
-        self.contentJSON = Self.nonEmpty(contentJSON)
+        self.contentJSON = normalizedContentJSON
         self.editorAtmosphere = editorAtmosphere
         self.tags = CardEditingTag.normalize(tags)
         self.isPublic = isPublic
+        self.commitJSONProjection = Self.commitJSONProjection(
+            normalizedContentJSON
+        )
+    }
+
+    public func isCommitEquivalent(to other: Self) -> Bool {
+        if self == other { return true }
+
+        guard title == other.title,
+              editorAtmosphere == other.editorAtmosphere,
+              tags == other.tags,
+              isPublic == other.isPublic else {
+            return false
+        }
+
+        switch (commitJSONProjection, other.commitJSONProjection) {
+        case (.none, .none):
+            return content == other.content
+        case let (.blocks(lhsBlocks), .blocks(rhsBlocks)):
+            return lhsBlocks == rhsBlocks
+        case let (.root(lhsRoot), .root(rhsRoot)):
+            return content == other.content && lhsRoot == rhsRoot
+        case (.invalid, .invalid):
+            return content == other.content && contentJSON == other.contentJSON
+        default:
+            return false
+        }
     }
 
     public var validationError: CardEditingError? {
@@ -111,6 +140,48 @@ public struct CardEditingDraft: Equatable, Sendable {
         return value
     }
 
+    private enum CommitJSONProjection: Equatable, Sendable {
+        case none
+        case blocks(Data)
+        case root(Data)
+        case invalid
+    }
+
+    private static func commitJSONProjection(
+        _ value: String?
+    ) -> CommitJSONProjection {
+        guard let value else { return .none }
+        guard let data = value.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) else {
+            return .invalid
+        }
+
+        if let blocks = object as? [Any] {
+            return canonicalJSONData(blocks).map(CommitJSONProjection.blocks)
+                ?? .invalid
+        }
+        if let envelope = object as? [String: Any] {
+            if envelope.keys.contains("blocks") {
+                guard let blocks = envelope["blocks"] as? [Any] else {
+                    return .invalid
+                }
+                return canonicalJSONData(blocks)
+                    .map(CommitJSONProjection.blocks) ?? .invalid
+            }
+            return canonicalJSONData(envelope).map(CommitJSONProjection.root)
+                ?? .invalid
+        }
+        return .invalid
+    }
+
+    private static func canonicalJSONData(_ value: Any) -> Data? {
+        guard JSONSerialization.isValidJSONObject(value) else { return nil }
+        return try? JSONSerialization.data(
+            withJSONObject: value,
+            options: [.sortedKeys]
+        )
+    }
+
     private static func hasStructuredJSONRoot(_ value: String) -> Bool {
         guard let data = value.data(using: .utf8),
               let root = try? JSONSerialization.jsonObject(
@@ -119,7 +190,12 @@ public struct CardEditingDraft: Equatable, Sendable {
               ) else {
             return false
         }
-        return root is [Any] || root is [String: Any]
+        if root is [Any] { return true }
+        guard let object = root as? [String: Any] else { return false }
+        if object.keys.contains("blocks") {
+            return object["blocks"] is [Any]
+        }
+        return true
     }
 
 }

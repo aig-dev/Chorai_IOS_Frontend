@@ -455,6 +455,93 @@ final class NewNoteViewSourceContractTests: XCTestCase {
         )
     }
 
+    func testCommitEquivalenceIsScopedToCommittedStateAndBootstrapRebase() throws {
+        let source = try Self.newNoteSource()
+        let snapshotMatch = try XCTUnwrap(
+            Self.functionBody(
+                in: source,
+                signature: "func snapshotMatchesCommittedBaseline("
+            )
+        )
+        let baseline = try XCTUnwrap(
+            Self.functionBody(
+                in: source,
+                signature: "struct CardEditorCommitBaseline: Equatable"
+            )
+        )
+        let storeSource = try Self.cardEditingStoreSource()
+        let dirty = try XCTUnwrap(
+            Self.functionBody(
+                in: storeSource,
+                signature: "var isDraftDirty: Bool"
+            )
+        )
+        let applyBodyRevision = try XCTUnwrap(
+            Self.functionBody(
+                in: storeSource,
+                signature: "func applyBodyRevision("
+            )
+        )
+        let persist = try XCTUnwrap(
+            Self.functionBody(
+                in: storeSource,
+                signature: "func persistDraft("
+            )
+        )
+
+        XCTAssertTrue(
+            snapshotMatch.contains(
+                "editingStore.draft.isCommitEquivalent(to: committedDraft)"
+            )
+        )
+        XCTAssertFalse(baseline.contains("static func =="))
+        XCTAssertFalse(baseline.contains("isCommitEquivalent(to:"))
+        XCTAssertTrue(
+            dirty.contains("draft.isCommitEquivalent(to: lastCommittedDraft)")
+        )
+        XCTAssertTrue(
+            applyBodyRevision.contains("cardID != nil")
+        )
+        XCTAssertTrue(
+            applyBodyRevision.contains("activeOperationID == nil")
+        )
+        XCTAssertTrue(
+            applyBodyRevision.contains("&& !hasUncertainDraftWrite")
+        )
+        XCTAssertTrue(
+            applyBodyRevision.contains(
+                "failureContext?.stage == .creatingCard"
+            )
+        )
+        XCTAssertTrue(
+            applyBodyRevision.contains(
+                "failureContext?.stage == .updatingCard"
+            )
+        )
+        XCTAssertTrue(
+            applyBodyRevision.contains("nextDraft.isCommitEquivalent(to: $0)")
+        )
+        XCTAssertTrue(
+            applyBodyRevision.contains("lastCommittedBodyRevision = revision")
+        )
+        XCTAssertEqual(
+            source.components(separatedBy: "isCommitEquivalent(to:").count - 1,
+            1
+        )
+        XCTAssertEqual(
+            storeSource.components(
+                separatedBy: "isCommitEquivalent(to:"
+            ).count - 1,
+            2
+        )
+        XCTAssertTrue(
+            persist.contains(
+                "if draft == request, bodyRevision == requestRevision"
+            )
+        )
+        XCTAssertFalse(persist.contains("draft.isCommitEquivalent(to: request)"))
+    }
+
     func testFrozenRecoveryNeverAutoSavesTheCurrentDraft() throws {
         let source = try Self.newNoteSource()
         let recovery = try XCTUnwrap(
@@ -708,6 +795,7 @@ final class NewNoteViewSourceContractTests: XCTestCase {
         XCTAssertTrue(source.contains(".cardEditorBackgroundActionDialog("))
         XCTAssertTrue(source.contains("editingStore.stageBackgroundRemoval()"))
         XCTAssertTrue(source.contains("editingStore.restoreBackground()"))
+        XCTAssertTrue(source.contains("editingStore.canRestoreBackground"))
         XCTAssertFalse(source.contains("editingStore.removeBackground()"))
 
         for wiring in [
@@ -753,6 +841,12 @@ final class NewNoteViewSourceContractTests: XCTestCase {
         ] {
             XCTAssertTrue(handler.contains(expected))
         }
+        XCTAssertTrue(
+            handler.contains("guard editingStore.restoreBackground() else")
+        )
+        XCTAssertTrue(
+            handler.contains("Retry the pending background change before restoring.")
+        )
         XCTAssertEqual(
             Self.occurrenceCount("hideSaveFailure()", in: String(handler)),
             3
@@ -1167,6 +1261,15 @@ final class NewNoteViewSourceContractTests: XCTestCase {
         try String(
             contentsOf: repositoryRoot
                 .appendingPathComponent("ArcNote/NewNoteView.swift"),
+            encoding: .utf8
+        )
+    }
+
+    private static func cardEditingStoreSource() throws -> String {
+        try String(
+            contentsOf: repositoryRoot.appendingPathComponent(
+                "Packages/CoreFlow/Sources/CoreFlow/CardEditingStore.swift"
+            ),
             encoding: .utf8
         )
     }

@@ -502,9 +502,12 @@ private struct CardEditorSessionView: View {
         case .replace:
             return .visible(
                 canRestoreOriginal: editingStore.backgroundMediaRef != nil
+                    && editingStore.canRestoreBackground
             )
         case .remove:
-            return .removed
+            return .removed(
+                canRestoreBackground: editingStore.canRestoreBackground
+            )
         }
     }
 
@@ -699,7 +702,7 @@ private struct CardEditorSessionView: View {
             return false
         }
         return !editingStore.isDirty
-            && editingStore.draft == committedDraft
+            && editingStore.draft.isCommitEquivalent(to: committedDraft)
             && committedRevision == snapshot.revision
             && editingStore.bodyRevision == snapshot.revision
             && bodyModel.revision == snapshot.revision
@@ -833,7 +836,10 @@ private struct CardEditorSessionView: View {
             saveMessage = nil
             hideSaveFailure()
         case .restore:
-            editingStore.restoreBackground()
+            guard editingStore.restoreBackground() else {
+                saveMessage = "Retry the pending background change before restoring."
+                return
+            }
             saveMessage = nil
             hideSaveFailure()
         }
