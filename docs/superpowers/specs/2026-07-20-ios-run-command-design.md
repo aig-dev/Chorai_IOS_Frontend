@@ -2,7 +2,7 @@
 
 ## Status
 
-Conversational design approved on 2026-07-20; awaiting written-spec review.
+Reviewed and implemented on 2026-07-20, including final review fixes.
 
 ## Context
 

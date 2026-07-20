@@ -1,7 +1,5 @@
 #!/bin/zsh
 
-set -euo pipefail
-
 readonly DEFAULT_IOS_DEVICE="iPhone 17 Pro"
 readonly DEFAULT_IOS_DERIVED_DATA="/tmp/chorai-ios-local"
 readonly IOS_SCHEME_NAME="ArcNote"
@@ -19,52 +17,49 @@ choose_ios_device() {
     fi
 
     local booted_device_id
-    booted_device_id=$(
-        print -r -- "$device_list" \
-            | awk '
-                /^-- iOS / { in_ios = 1; next }
-                /^-- / { in_ios = 0 }
-                in_ios && /\(Booted\)/ && $0 !~ /^[[:space:]]*iPad/ {
-                    print
-                    exit
+    if ! booted_device_id=$(
+        /usr/bin/osascript -l JavaScript -e '
+            function run(argv) {
+                const root = JSON.parse(argv[0]);
+                const runtimes = root.devices || {};
+                const iphoneTypePrefix =
+                    "com.apple.CoreSimulator.SimDeviceType.iPhone-";
+
+                for (const runtimeIdentifier of Object.keys(runtimes)) {
+                    if (!runtimeIdentifier.includes(".SimRuntime.iOS-")) {
+                        continue;
+                    }
+                    const devices = runtimes[runtimeIdentifier];
+                    if (!Array.isArray(devices)) {
+                        continue;
+                    }
+                    for (const device of devices) {
+                        if (
+                            device.state === "Booted"
+                            && device.isAvailable !== false
+                            && typeof device.deviceTypeIdentifier === "string"
+                            && device.deviceTypeIdentifier.startsWith(
+                                iphoneTypePrefix
+                            )
+                            && typeof device.udid === "string"
+                        ) {
+                            return device.udid;
+                        }
+                    }
                 }
-            ' \
-            | sed -nE \
-                's/.*\(([0-9A-Fa-f-]{36})\) \(Booted\)[[:space:]]*$/\1/p'
-    )
+                return "";
+            }
+        ' "$device_list"
+    ); then
+        print -u2 -- "[ios-run] Unable to parse Simulator device list"
+        return 1
+    fi
 
     if [[ -n "$booted_device_id" ]]; then
         print -r -- "$booted_device_id"
     else
         print -r -- "$DEFAULT_IOS_DEVICE"
     fi
-}
-
-is_ios_device_booted() {
-    local device="$1"
-    local device_list="$2"
-
-    print -r -- "$device_list" | awk -v device="$device" '
-        /^-- iOS / { in_ios = 1; next }
-        /^-- / { in_ios = 0 }
-        !in_ios || !/\(Booted\)[[:space:]]*$/ { next }
-        {
-            line = $0
-            sub(/^[[:space:]]*/, "", line)
-            if (index(line, "(" device ") (Booted)") > 0) {
-                found = 1
-                exit
-            }
-
-            name = line
-            sub(/[[:space:]]+\([0-9A-Fa-f-]+\) \(Booted\)[[:space:]]*$/, "", name)
-            if (name == device) {
-                found = 1
-                exit
-            }
-        }
-        END { exit found ? 0 : 1 }
-    '
 }
 
 require_command() {
@@ -76,9 +71,12 @@ require_command() {
 }
 
 main() {
+    setopt localoptions errexit nounset pipefail
+
     require_command xcrun
     require_command xcodebuild
     require_command open
+    require_command /usr/bin/osascript
 
     local script_path="${(%):-%x}"
     local repository_root="${script_path:A:h:h}"
@@ -88,7 +86,7 @@ main() {
     local destination
     local app_path
 
-    device_list="$(xcrun simctl list devices available)"
+    device_list="$(xcrun simctl list devices available --json)"
     device="$(choose_ios_device "$device_list")"
     if [[ "$device" =~ '^[0-9A-Fa-f-]{36}$' ]]; then
         destination="platform=iOS Simulator,id=$device"
@@ -98,15 +96,27 @@ main() {
     app_path="$derived_data/Build/Products/Debug-iphonesimulator/$IOS_PRODUCT_NAME"
 
     print -r -- "[ios-run] Simulator: $device"
-    if is_ios_device_booted "$device" "$device_list"; then
-        print -r -- "[ios-run] Simulator is already booted: $device"
-    elif ! xcrun simctl boot "$device"; then
-        print -u2 -- "[ios-run] Unable to boot Simulator: $device"
-        return 1
+    local boot_output=""
+    local boot_status=0
+    if boot_output="$(xcrun simctl boot "$device" 2>&1)"; then
+        boot_status=0
+    else
+        boot_status=$?
     fi
-    if ! xcrun simctl bootstatus "$device" -b; then
+
+    if xcrun simctl bootstatus "$device" -b; then
+        :
+    else
+        local bootstatus_status=$?
+        if (( boot_status != 0 )); then
+            print -u2 -- \
+                "[ios-run] Simulator boot request failed (status $boot_status):"
+            if [[ -n "$boot_output" ]]; then
+                print -u2 -r -- "$boot_output"
+            fi
+        fi
         print -u2 -- "[ios-run] Unable to boot Simulator: $device"
-        return 1
+        return "$bootstatus_status"
     fi
     open -a Simulator
 

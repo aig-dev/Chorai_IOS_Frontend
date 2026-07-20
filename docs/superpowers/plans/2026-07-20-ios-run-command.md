@@ -453,3 +453,27 @@ git log -3 --oneline
 
 Expected: diff check exits 0, branch is `main`, status is empty, and the launcher
 commit is at HEAD.
+
+---
+
+## Final Implementation Results
+
+Implemented and final-review corrections applied on 2026-07-20. The historical
+RED/GREEN snippets and counts above document the original TDD sequence; their
+unsafe recursive Make export, text device parsing, immediate boot-failure
+return, and original test-count expectations are superseded by the tracked
+implementation and strengthened contracts.
+
+The current launcher freezes raw `IOS_DEVICE` and `IOS_DERIVED_DATA` values
+before export, selects implicit iPhones from `simctl` JSON using the authoritative
+`deviceTypeIdentifier`, leaves caller shell options unchanged when sourced, and
+lets `bootstatus` decide readiness after a failed boot request. The fake-tool
+contracts preserve argument boundaries and cover list, boot/bootstatus, open,
+build, missing product, install, and launch failures, including a DerivedData
+path containing spaces.
+
+The final focused `IOSRunCommandContractTests` expectation is 15 tests. The
+combined Local-run/guidance gate is 20 tests: those 15 plus four
+`LocalRunSchemeContractTests` and one `IOSProjectGuidanceContractTests`. These
+counts supersede the original 5-test and 10-test expectations above without
+removing the useful initial TDD record.
