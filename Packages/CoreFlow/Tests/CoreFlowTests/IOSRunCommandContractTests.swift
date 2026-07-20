@@ -829,6 +829,14 @@ final class IOSRunCommandContractTests: XCTestCase {
         XCTAssertTrue(
             design.lowercased().contains("reviewed and implemented")
         )
+        XCTAssertTrue(
+            design.contains(
+                "`setopt localoptions errexit nounset pipefail`"
+            )
+        )
+        XCTAssertFalse(
+            design.contains("The script uses `set -euo pipefail`")
+        )
         XCTAssertTrue(plan.contains("## Final Implementation Results"))
         XCTAssertTrue(plan.contains("superseded"))
         XCTAssertTrue(plan.contains("IOSRunCommandContractTests"))

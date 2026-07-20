@@ -86,9 +86,11 @@ variables and does not duplicate the orchestration commands.
 - terminating an older app process and launching the new build;
 - concise progress and failure messages.
 
-The script uses `set -euo pipefail`. It resolves its repository root from its own
-location so the make target works regardless of the caller's current shell path
-after `make -C` or ordinary repository-root use.
+The launcher applies `setopt localoptions errexit nounset pipefail` inside
+`main`, preserving strict execution without changing shell options when the
+device chooser is sourced by tests or tooling. It resolves its repository root
+from its own location so the make target works regardless of the caller's
+current shell path after `make -C` or ordinary repository-root use.
 
 ## Error Handling
 
