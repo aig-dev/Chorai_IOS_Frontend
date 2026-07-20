@@ -143,12 +143,17 @@ enum APIEnvironment: String, CaseIterable {
     static let overrideEnvironmentKey = "CHORAI_API_BASE_URL"
 
     var baseURL: URL {
+        let rawValue: String
         switch self {
         case .local:
-            return URL(string: "http://127.0.0.1:8180")!
+            rawValue = "http://127.0.0.1:8180"
         case .production:
-            return URL(string: "https://api.chorai.top")!
+            rawValue = "https://api.chorai.top"
         }
+        guard let url = URL(string: rawValue) else {
+            preconditionFailure("Invalid canonical API endpoint for \(self.rawValue)")
+        }
+        return url
     }
 
     static func normalizedBaseURL(from rawValue: String) -> URL? {
@@ -770,8 +775,8 @@ Create `AGENTS.md` with this complete content:
 
 This repository contains the native iPhone app. Work in `ArcNote/` for app code,
 `ArcNoteUITests/` for simulator flows, and `Packages/CoreFlow/` for testable domain
-and source contracts. Work on `main` unless the user explicitly requests another
-workflow. Preserve unrelated changes.
+and source contracts. Follow the user's requested git workflow; do not create or
+switch branches unless explicitly requested. Preserve unrelated changes.
 
 ## API Environments
 
