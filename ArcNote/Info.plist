@@ -23,6 +23,8 @@
 	</array>
 	<key>GIDClientID</key>
 	<string>248637920313-dtpep3r8u2a74bpn50svpmot9frnvjbe.apps.googleusercontent.com</string>
+	<key>ChoraiAPIEnvironment</key>
+	<string>$(CHORAI_API_ENVIRONMENT)</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>

@@ -51,13 +51,6 @@
             ReferencedContainer = "container:ArcNote.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
-      <EnvironmentVariables>
-         <EnvironmentVariable
-            key = "CHORAI_API_BASE_URL"
-            value = "http://127.0.0.1:8180"
-            isEnabled = "YES">
-         </EnvironmentVariable>
-      </EnvironmentVariables>
    </LaunchAction>
    <ProfileAction
       buildConfiguration = "Release"
