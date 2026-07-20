@@ -6,6 +6,7 @@
 //
 
 import CoreFlow
+import OSLog
 import SwiftUI
 
 #if DEBUG
@@ -13,6 +14,11 @@ import AuthenticationServices
 import Combine
 import Darwin
 #endif
+
+private let configurationLogger = Logger(
+    subsystem: Bundle.main.bundleIdentifier ?? "com.michen.arcnote",
+    category: "configuration"
+)
 
 @main
 struct ArcNoteApp: App {
@@ -74,6 +80,9 @@ struct ArcNoteApp: App {
 
     init() {
         #if DEBUG
+        configurationLogger.notice(
+            "API environment=\(APIConfiguration.environmentLabel, privacy: .public) base_url=\(APIConfiguration.baseURL, privacy: .public)"
+        )
         APIMigrationUITestSeed.applyIfPresent()
         APIMigrationSmokeRunner.startIfRequested()
         if ProcessInfo.processInfo.arguments.contains("--ui-test-settings") {
@@ -3208,7 +3217,10 @@ private final class APIMigrationSmokeRunner {
         }
 
         NetworkManager.shared.setAuthToken(token)
-        log("START base_url=\(APIConfiguration.baseURL)")
+        log(
+            "START environment=\(APIConfiguration.environmentLabel) "
+                + "base_url=\(APIConfiguration.baseURL)"
+        )
 
         var createdCardIds: [String] = []
 

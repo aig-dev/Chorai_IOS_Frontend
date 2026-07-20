@@ -2,17 +2,45 @@ import Foundation
 
 // MARK: API配置管理
 struct APIConfiguration {
+    static var configuredEnvironment: APIEnvironment {
+        guard let rawValue = Bundle.main.object(
+            forInfoDictionaryKey: APIEnvironment.infoDictionaryKey
+        ) as? String,
+        let environment = APIEnvironment(rawValue: rawValue)
+        else {
+            preconditionFailure(
+                "Missing or invalid \(APIEnvironment.infoDictionaryKey) build setting"
+            )
+        }
+        return environment
+    }
+
     static var baseURL: String {
-        if let override = ProcessInfo.processInfo.environment["CHORAI_API_BASE_URL"],
-           !override.isEmpty {
-            return override
+        if let rawOverride = ProcessInfo.processInfo.environment[
+            APIEnvironment.overrideEnvironmentKey
+        ],
+        !rawOverride.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            guard let override = APIEnvironment.normalizedBaseURL(
+                from: rawOverride
+            ) else {
+                preconditionFailure(
+                    "Invalid \(APIEnvironment.overrideEnvironmentKey) value"
+                )
+            }
+            return override.absoluteString
         }
 
-        #if DEBUG
-        return "http://127.0.0.1:8080"
-        #else
-        return "https://api.chorai.top"
-        #endif
+        return configuredEnvironment.baseURL.absoluteString
+    }
+
+    static var environmentLabel: String {
+        if let rawOverride = ProcessInfo.processInfo.environment[
+            APIEnvironment.overrideEnvironmentKey
+        ],
+        !rawOverride.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "override"
+        }
+        return configuredEnvironment.rawValue
     }
 
     static func resourceURLString(_ pathOrURL: String) -> String {
@@ -56,11 +84,7 @@ struct APIConfiguration {
     
     // MARK: 当前环境
     static var current: Environment {
-        #if DEBUG
-        return .development
-        #else
-        return .production
-        #endif
+        configuredEnvironment == .production ? .production : .development
     }
     
     // MARK: HTTP状态码

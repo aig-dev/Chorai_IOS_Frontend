@@ -1,5 +1,21 @@
 import XCTest
 
+private enum UITestAPIConfiguration {
+    static var baseURL: String {
+        let environment = ProcessInfo.processInfo.environment
+        if let override = environment[APIEnvironment.overrideEnvironmentKey],
+           !override.isEmpty {
+            return override
+        }
+        return APIEnvironment.local.baseURL.absoluteString
+    }
+
+    static func baseURL(in environment: [String: String]) -> String {
+        environment[APIEnvironment.overrideEnvironmentKey]
+            ?? APIEnvironment.local.baseURL.absoluteString
+    }
+}
+
 final class ArcNoteUITests: XCTestCase {
     private var app: XCUIApplication!
     private var sparkSessionScope: String!
@@ -3682,8 +3698,7 @@ final class ArcNoteUITests: XCTestCase {
         app.launchEnvironment["CHORAI_UI_TEST"] = "1"
         app.launchEnvironment["CHORAI_UI_TEST_DISCOVERY_PATH_CARD_ID"] = resultID
         app.launchEnvironment["CHORAI_API_BASE_URL"] =
-            ProcessInfo.processInfo.environment["CHORAI_API_BASE_URL"]
-                ?? "http://127.0.0.1:8080"
+            UITestAPIConfiguration.baseURL
         app.launchArguments.append("--ui-test-open-discovery-path")
         app.launch()
 
@@ -7848,9 +7863,7 @@ final class ArcNoteUITests: XCTestCase {
     }
 
     private func revokeSmokeSession(token: String) throws {
-        let baseURL = ProcessInfo.processInfo.environment[
-            "CHORAI_API_BASE_URL"
-        ] ?? "http://127.0.0.1:8080"
+        let baseURL = UITestAPIConfiguration.baseURL
         guard let url = URL(string: "\(baseURL)/api/auth/logout") else {
             throw NSError(
                 domain: "ArcNoteUITests",
@@ -7900,9 +7913,7 @@ final class ArcNoteUITests: XCTestCase {
         method: String = "GET",
         body: [String: Any]? = nil
     ) throws -> T {
-        let baseURL = ProcessInfo.processInfo.environment[
-            "CHORAI_API_BASE_URL"
-        ] ?? "http://127.0.0.1:8080"
+        let baseURL = UITestAPIConfiguration.baseURL
         guard let url = URL(string: "\(baseURL)\(path)") else {
             throw NSError(
                 domain: "ArcNoteUITests",
@@ -7924,9 +7935,7 @@ final class ArcNoteUITests: XCTestCase {
         token: String,
         flowVersion: Int
     ) throws -> SmokeOnboardingSession {
-        let baseURL = ProcessInfo.processInfo.environment[
-            "CHORAI_API_BASE_URL"
-        ] ?? "http://127.0.0.1:8080"
+        let baseURL = UITestAPIConfiguration.baseURL
         guard let url = URL(string: "\(baseURL)/api/v1/onboarding/sessions") else {
             throw NSError(
                 domain: "ArcNoteUITests",
@@ -7951,9 +7960,7 @@ final class ArcNoteUITests: XCTestCase {
     private func fetchCurrentSmokeOnboarding(
         token: String
     ) throws -> SmokeOnboardingSession {
-        let baseURL = ProcessInfo.processInfo.environment[
-            "CHORAI_API_BASE_URL"
-        ] ?? "http://127.0.0.1:8080"
+        let baseURL = UITestAPIConfiguration.baseURL
         guard let url = URL(
             string: "\(baseURL)/api/v1/onboarding/sessions/current"
         ) else {
@@ -8004,9 +8011,7 @@ final class ArcNoteUITests: XCTestCase {
     private func fetchSmokeOnboardingStatus(
         token: String
     ) throws -> SmokeOnboardingStatus {
-        let baseURL = ProcessInfo.processInfo.environment[
-            "CHORAI_API_BASE_URL"
-        ] ?? "http://127.0.0.1:8080"
+        let baseURL = UITestAPIConfiguration.baseURL
         guard let url = URL(string: "\(baseURL)/api/v1/onboarding/status") else {
             throw NSError(
                 domain: "ArcNoteUITests",
@@ -8027,9 +8032,7 @@ final class ArcNoteUITests: XCTestCase {
     private func verifySmokeToken(
         token: String
     ) throws -> SmokeVerifyTokenResponse.VerifyData {
-        let baseURL = ProcessInfo.processInfo.environment[
-            "CHORAI_API_BASE_URL"
-        ] ?? "http://127.0.0.1:8080"
+        let baseURL = UITestAPIConfiguration.baseURL
         guard let url = URL(string: "\(baseURL)/api/auth/verify-token") else {
             throw NSError(
                 domain: "ArcNoteUITests",
@@ -8050,9 +8053,7 @@ final class ArcNoteUITests: XCTestCase {
         file: StaticString = #filePath,
         line: UInt = #line
     ) throws {
-        let baseURL = ProcessInfo.processInfo.environment[
-            "CHORAI_API_BASE_URL"
-        ] ?? "http://127.0.0.1:8080"
+        let baseURL = UITestAPIConfiguration.baseURL
         guard let url = URL(string: "\(baseURL)/api/auth/verify-token") else {
             throw NSError(
                 domain: "ArcNoteUITests",
@@ -8079,7 +8080,7 @@ final class ArcNoteUITests: XCTestCase {
         searchToken: String,
         isPublic: Bool
     ) throws -> String {
-        let baseURL = ProcessInfo.processInfo.environment["CHORAI_API_BASE_URL"] ?? "http://127.0.0.1:8080"
+        let baseURL = UITestAPIConfiguration.baseURL
         guard let url = URL(string: "\(baseURL)/api/cards") else {
             throw NSError(domain: "ArcNoteUITests", code: 2, userInfo: [NSLocalizedDescriptionKey: "Invalid Go API base URL"])
         }
@@ -8100,7 +8101,7 @@ final class ArcNoteUITests: XCTestCase {
     }
 
     private func deleteSmokeCard(id: String, token: String) {
-        let baseURL = ProcessInfo.processInfo.environment["CHORAI_API_BASE_URL"] ?? "http://127.0.0.1:8080"
+        let baseURL = UITestAPIConfiguration.baseURL
         guard let url = URL(string: "\(baseURL)/api/cards/\(id)") else {
             return
         }
@@ -8113,7 +8114,7 @@ final class ArcNoteUITests: XCTestCase {
 
     private func permanentlyCleanUpSmokeCard(id: String, token: String) {
         deleteSmokeCard(id: id, token: token)
-        let baseURL = ProcessInfo.processInfo.environment["CHORAI_API_BASE_URL"] ?? "http://127.0.0.1:8080"
+        let baseURL = UITestAPIConfiguration.baseURL
         guard let url = URL(string: "\(baseURL)/api/cards/trash/\(id)/permanent") else {
             return
         }
@@ -8181,7 +8182,7 @@ final class ArcNoteUITests: XCTestCase {
     }
 
     private func fetchSmokeTrashCardIDsInOrder(token: String) throws -> [String] {
-        let baseURL = ProcessInfo.processInfo.environment["CHORAI_API_BASE_URL"] ?? "http://127.0.0.1:8080"
+        let baseURL = UITestAPIConfiguration.baseURL
         guard let url = URL(string: "\(baseURL)/api/cards/trash?page=1&per_page=100") else {
             throw URLError(.badURL)
         }
@@ -8195,7 +8196,7 @@ final class ArcNoteUITests: XCTestCase {
         id: String,
         token: String
     ) throws -> SmokeCardResponse.SmokeCardData {
-        let baseURL = ProcessInfo.processInfo.environment["CHORAI_API_BASE_URL"] ?? "http://127.0.0.1:8080"
+        let baseURL = UITestAPIConfiguration.baseURL
         guard let url = URL(string: "\(baseURL)/api/cards/\(id)") else {
             throw NSError(
                 domain: "ArcNoteUITests",
@@ -8227,9 +8228,7 @@ final class ArcNoteUITests: XCTestCase {
         search: String? = nil,
         token: String
     ) throws -> [SmokeCardListResponse.SmokeCardListItem] {
-        let baseURL = ProcessInfo.processInfo.environment[
-            "CHORAI_API_BASE_URL"
-        ] ?? "http://127.0.0.1:8080"
+        let baseURL = UITestAPIConfiguration.baseURL
         guard var components = URLComponents(string: "\(baseURL)/api/cards") else {
             throw NSError(
                 domain: "ArcNoteUITests",
@@ -8346,9 +8345,7 @@ final class ArcNoteUITests: XCTestCase {
         id: String,
         token: String
     ) throws -> [SmokeCardLinksResponse.SmokeCardLinkEdge] {
-        let baseURL = ProcessInfo.processInfo.environment[
-            "CHORAI_API_BASE_URL"
-        ] ?? "http://127.0.0.1:8080"
+        let baseURL = UITestAPIConfiguration.baseURL
         guard let url = URL(string: "\(baseURL)/api/cards/\(id)/links") else {
             throw NSError(
                 domain: "ArcNoteUITests",
@@ -8369,9 +8366,7 @@ final class ArcNoteUITests: XCTestCase {
         cardID: String,
         token: String
     ) throws -> SmokeSharePreview {
-        let baseURL = ProcessInfo.processInfo.environment[
-            "CHORAI_API_BASE_URL"
-        ] ?? "http://127.0.0.1:8080"
+        let baseURL = UITestAPIConfiguration.baseURL
         guard var components = URLComponents(
             string: "\(baseURL)/api/cards/\(cardID)/share-preview"
         ) else {
@@ -8391,9 +8386,7 @@ final class ArcNoteUITests: XCTestCase {
         id: String,
         token: String
     ) throws -> SmokeReport {
-        let baseURL = ProcessInfo.processInfo.environment[
-            "CHORAI_API_BASE_URL"
-        ] ?? "http://127.0.0.1:8080"
+        let baseURL = UITestAPIConfiguration.baseURL
         guard let url = URL(
             string: "\(baseURL)/api/content-reports/\(id)"
         ) else {
@@ -8411,8 +8404,7 @@ final class ArcNoteUITests: XCTestCase {
         jobID: String,
         token: String
     ) throws -> SmokeMergeJobResponse {
-        let baseURL = ProcessInfo.processInfo.environment["CHORAI_API_BASE_URL"]
-            ?? "http://127.0.0.1:8080"
+        let baseURL = UITestAPIConfiguration.baseURL
         guard let url = URL(
             string: "\(baseURL)/api/merge/jobs/\(jobID)"
         ) else {
@@ -8428,7 +8420,7 @@ final class ArcNoteUITests: XCTestCase {
     }
 
     private func clearFavoriteLikeState(id: String, token: String) {
-        let baseURL = ProcessInfo.processInfo.environment["CHORAI_API_BASE_URL"] ?? "http://127.0.0.1:8080"
+        let baseURL = UITestAPIConfiguration.baseURL
         for kind in ["favorites", "likes"] {
             guard let url = URL(string: "\(baseURL)/api/v1/actors/me/\(kind)/\(id)") else {
                 continue
@@ -8446,9 +8438,7 @@ final class ArcNoteUITests: XCTestCase {
         id: String,
         token: String
     ) throws {
-        let baseURL = ProcessInfo.processInfo.environment[
-            "CHORAI_API_BASE_URL"
-        ] ?? "http://127.0.0.1:8080"
+        let baseURL = UITestAPIConfiguration.baseURL
         let path = liked
             ? "/api/v1/actors/me/likes"
             : "/api/v1/actors/me/likes/\(id)"
@@ -8468,7 +8458,7 @@ final class ArcNoteUITests: XCTestCase {
     }
 
     private func fetchAssetStatus(kind: String, id: String, token: String) throws -> Bool {
-        let baseURL = ProcessInfo.processInfo.environment["CHORAI_API_BASE_URL"] ?? "http://127.0.0.1:8080"
+        let baseURL = UITestAPIConfiguration.baseURL
         guard let url = URL(string: "\(baseURL)/api/v1/actors/me/\(kind)/status") else {
             throw NSError(domain: "ArcNoteUITests", code: 5, userInfo: [NSLocalizedDescriptionKey: "Invalid Go asset status URL"])
         }
@@ -8511,7 +8501,7 @@ final class ArcNoteUITests: XCTestCase {
     }
 
     private func createSmokeConversation(targetActorId: String, token: String) throws -> String {
-        let baseURL = ProcessInfo.processInfo.environment["CHORAI_API_BASE_URL"] ?? "http://127.0.0.1:8080"
+        let baseURL = UITestAPIConfiguration.baseURL
         guard let url = URL(string: "\(baseURL)/api/chats/conversations") else {
             throw NSError(domain: "ArcNoteUITests", code: 6, userInfo: [NSLocalizedDescriptionKey: "Invalid Go chat conversation URL"])
         }
@@ -8529,7 +8519,7 @@ final class ArcNoteUITests: XCTestCase {
     }
 
     private func fetchChatMessages(conversationId: String, token: String) throws -> [String] {
-        let baseURL = ProcessInfo.processInfo.environment["CHORAI_API_BASE_URL"] ?? "http://127.0.0.1:8080"
+        let baseURL = UITestAPIConfiguration.baseURL
         guard var components = URLComponents(string: "\(baseURL)/api/chats/conversations/\(conversationId)/messages") else {
             throw NSError(domain: "ArcNoteUITests", code: 7, userInfo: [NSLocalizedDescriptionKey: "Invalid Go chat messages URL"])
         }
@@ -8550,7 +8540,7 @@ final class ArcNoteUITests: XCTestCase {
     }
 
     private func fetchCurrentSmokeProfile(token: String) throws -> SmokeProfile {
-        let baseURL = ProcessInfo.processInfo.environment["CHORAI_API_BASE_URL"] ?? "http://127.0.0.1:8080"
+        let baseURL = UITestAPIConfiguration.baseURL
         guard let url = URL(string: "\(baseURL)/api/v1/profile/me") else {
             throw NSError(domain: "ArcNoteUITests", code: 13, userInfo: [NSLocalizedDescriptionKey: "Invalid Go profile/me URL"])
         }
@@ -8566,9 +8556,7 @@ final class ArcNoteUITests: XCTestCase {
         actorID: String,
         token: String
     ) throws -> SmokePublicProfile {
-        let baseURL = ProcessInfo.processInfo.environment[
-            "CHORAI_API_BASE_URL"
-        ] ?? "http://127.0.0.1:8080"
+        let baseURL = UITestAPIConfiguration.baseURL
         guard let url = URL(
             string: "\(baseURL)/api/v1/profile/\(actorID)"
         ) else {
@@ -8626,9 +8614,7 @@ final class ArcNoteUITests: XCTestCase {
         token: String,
         following: Bool
     ) throws {
-        let baseURL = ProcessInfo.processInfo.environment[
-            "CHORAI_API_BASE_URL"
-        ] ?? "http://127.0.0.1:8080"
+        let baseURL = UITestAPIConfiguration.baseURL
         guard let url = URL(
             string: "\(baseURL)/api/follows/\(actorID)"
         ) else {
@@ -8658,9 +8644,7 @@ final class ArcNoteUITests: XCTestCase {
     }
 
     private func fetchSmokePrivacy(token: String) throws -> SmokePrivacy {
-        let baseURL = ProcessInfo.processInfo.environment[
-            "CHORAI_API_BASE_URL"
-        ] ?? "http://127.0.0.1:8080"
+        let baseURL = UITestAPIConfiguration.baseURL
         guard let url = URL(
             string: "\(baseURL)/api/v1/profile/me/privacy"
         ) else {
@@ -8678,9 +8662,7 @@ final class ArcNoteUITests: XCTestCase {
         token: String,
         showFollowLists: Bool
     ) throws {
-        let baseURL = ProcessInfo.processInfo.environment[
-            "CHORAI_API_BASE_URL"
-        ] ?? "http://127.0.0.1:8080"
+        let baseURL = UITestAPIConfiguration.baseURL
         guard let url = URL(
             string: "\(baseURL)/api/v1/profile/me/privacy"
         ) else {
@@ -8730,9 +8712,7 @@ final class ArcNoteUITests: XCTestCase {
         token: String,
         blocked: Bool
     ) throws {
-        let baseURL = ProcessInfo.processInfo.environment[
-            "CHORAI_API_BASE_URL"
-        ] ?? "http://127.0.0.1:8080"
+        let baseURL = UITestAPIConfiguration.baseURL
         guard let url = URL(
             string: "\(baseURL)/api/user-blocks/\(actorID)"
         ) else {
@@ -8747,9 +8727,7 @@ final class ArcNoteUITests: XCTestCase {
     private func fetchSmokeBlockedActors(
         token: String
     ) throws -> [SmokeBlockedActor] {
-        let baseURL = ProcessInfo.processInfo.environment[
-            "CHORAI_API_BASE_URL"
-        ] ?? "http://127.0.0.1:8080"
+        let baseURL = UITestAPIConfiguration.baseURL
         guard let url = URL(
             string: "\(baseURL)/api/user-blocks?limit=50"
         ) else {
@@ -8793,7 +8771,7 @@ final class ArcNoteUITests: XCTestCase {
     }
 
     private func updateCurrentSmokeProfile(token: String, username: String, avatarURL: String, bio: String, city: String, birthday: String) throws {
-        let baseURL = ProcessInfo.processInfo.environment["CHORAI_API_BASE_URL"] ?? "http://127.0.0.1:8080"
+        let baseURL = UITestAPIConfiguration.baseURL
         guard let url = URL(string: "\(baseURL)/api/v1/profile/me") else {
             throw NSError(domain: "ArcNoteUITests", code: 14, userInfo: [NSLocalizedDescriptionKey: "Invalid Go profile/me URL"])
         }
@@ -8900,7 +8878,7 @@ final class ArcNoteUITests: XCTestCase {
     private func fetchSmokeNotifications(
         token: String
     ) throws -> [SmokeNotificationsResponse.SmokeNotification] {
-        let baseURL = ProcessInfo.processInfo.environment["CHORAI_API_BASE_URL"] ?? "http://127.0.0.1:8080"
+        let baseURL = UITestAPIConfiguration.baseURL
         guard var components = URLComponents(string: "\(baseURL)/api/notifications") else {
             throw NSError(domain: "ArcNoteUITests", code: 10, userInfo: [NSLocalizedDescriptionKey: "Invalid Go notifications URL"])
         }
@@ -8978,9 +8956,7 @@ final class ArcNoteUITests: XCTestCase {
         body: String,
         token: String
     ) throws {
-        let baseURL = ProcessInfo.processInfo.environment[
-            "CHORAI_API_BASE_URL"
-        ] ?? "http://127.0.0.1:8080"
+        let baseURL = UITestAPIConfiguration.baseURL
         guard let url = URL(
             string: "\(baseURL)/api/cards/\(cardID)/comments"
         ) else {
@@ -9009,7 +8985,7 @@ final class ArcNoteUITests: XCTestCase {
         activityID: String,
         token: String
     ) throws -> SmokeSparkActivityResponse.SmokeSparkActivity {
-        let baseURL = ProcessInfo.processInfo.environment["CHORAI_API_BASE_URL"] ?? "http://127.0.0.1:8080"
+        let baseURL = UITestAPIConfiguration.baseURL
         guard let url = URL(
             string: "\(baseURL)/api/v1/spark/activities/\(activityID)/results"
         ) else {
@@ -9032,8 +9008,7 @@ final class ArcNoteUITests: XCTestCase {
         cardID: String,
         token: String
     ) throws -> Int {
-        let baseURL = ProcessInfo.processInfo.environment["CHORAI_API_BASE_URL"]
-            ?? "http://127.0.0.1:8080"
+        let baseURL = UITestAPIConfiguration.baseURL
         guard var components = URLComponents(
             string: "\(baseURL)/api/v1/assets/\(cardID)/spark/history"
         ) else {
@@ -9063,8 +9038,7 @@ final class ArcNoteUITests: XCTestCase {
     }
 
     private func deleteFavorite(id: String, token: String) {
-        let baseURL = ProcessInfo.processInfo.environment["CHORAI_API_BASE_URL"]
-            ?? "http://127.0.0.1:8080"
+        let baseURL = UITestAPIConfiguration.baseURL
         guard let url = URL(
             string: "\(baseURL)/api/v1/actors/me/favorites/\(id)"
         ) else { return }
@@ -9085,8 +9059,7 @@ final class ArcNoteUITests: XCTestCase {
         assetID: String,
         token: String
     ) throws -> SmokeDiscoveryPathResponse.SmokeDiscoveryPath {
-        let baseURL = ProcessInfo.processInfo.environment["CHORAI_API_BASE_URL"]
-            ?? "http://127.0.0.1:8080"
+        let baseURL = UITestAPIConfiguration.baseURL
         guard let url = URL(
             string: "\(baseURL)/api/v1/actors/me/favorites/\(assetID)/discovery-path"
         ) else {
@@ -9220,8 +9193,7 @@ final class ArcNoteUITests: XCTestCase {
     ) -> SmokeSession? {
         let environment = ProcessInfo.processInfo.environment
         let resolvedBaseURL = baseURL
-            ?? environment["CHORAI_API_BASE_URL"]
-            ?? "http://127.0.0.1:8080"
+            ?? UITestAPIConfiguration.baseURL(in: environment)
         guard let url = URL(string: "\(resolvedBaseURL)/api/auth/login") else {
             return nil
         }
@@ -9260,8 +9232,7 @@ final class ArcNoteUITests: XCTestCase {
         phone phoneOverride: String? = nil
     ) -> SmokeSession? {
         let environment = ProcessInfo.processInfo.environment
-        let baseURL = environment["CHORAI_API_BASE_URL"]
-            ?? "http://127.0.0.1:8080"
+        let baseURL = UITestAPIConfiguration.baseURL(in: environment)
         let phone = phoneOverride
             ?? environment["CHORAI_UI_TEST_PHONE"]
             ?? "+8613907111234"
