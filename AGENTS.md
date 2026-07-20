@@ -28,13 +28,16 @@ curl http://127.0.0.1:8180/health
 
 Switch Local and Production from Xcode's Scheme picker, then rebuild. The selected
 environment is compiled into the app and survives a Simulator-icon relaunch.
-`127.0.0.1` is a Simulator default; a physical iPhone needs an explicit reachable
-Mac address through `CHORAI_API_BASE_URL`.
+`127.0.0.1` is a Simulator default. For temporary physical-device diagnostics
+only, a physical iPhone may use an explicit reachable Mac address through
+`CHORAI_API_BASE_URL`; routine local development stays on the compiled Local
+selection in the Simulator.
 
 API routing has one runtime single source of truth: `ArcNote/APIEnvironment.swift`.
 Build configurations select only `local` or `production`. Do not hard-code API
 hosts or ports in views, services, schemes, tests, or additional config files.
 `CHORAI_API_BASE_URL` is reserved for tests and temporary diagnostics.
+Do not add a customer-facing environment switch.
 
 When data appears missing, first confirm the app's logged environment and URL,
 then check `/health` and backend access logs. Do not assume the database is empty.
