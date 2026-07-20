@@ -33,16 +33,26 @@ final class LocalRunSchemeContractTests: XCTestCase {
         return scheme[start.lowerBound..<end.upperBound]
     }
 
+    private func capture(
+        _ pattern: String,
+        in source: some StringProtocol
+    ) throws -> String? {
+        let source = String(source)
+        let expression = try NSRegularExpression(pattern: pattern)
+        let range = NSRange(source.startIndex..., in: source)
+        guard let match = expression.firstMatch(in: source, range: range),
+              let captureRange = Range(match.range(at: 1), in: source)
+        else {
+            return nil
+        }
+        return String(source[captureRange])
+    }
+
     private func firstCapture(
         _ pattern: String,
         in source: some StringProtocol
     ) throws -> String {
-        let source = String(source)
-        let expression = try NSRegularExpression(pattern: pattern)
-        let range = NSRange(source.startIndex..., in: source)
-        let match = try XCTUnwrap(expression.firstMatch(in: source, range: range))
-        let captureRange = try XCTUnwrap(Range(match.range(at: 1), in: source))
-        return String(source[captureRange])
+        try XCTUnwrap(try capture(pattern, in: source))
     }
 
     private func projectObject(
@@ -87,6 +97,38 @@ final class LocalRunSchemeContractTests: XCTestCase {
 
         XCTFail("Unterminated project object \(identifier)")
         throw CocoaError(.fileReadCorruptFile)
+    }
+
+    private func projectFileName(
+        identifier: String,
+        in project: String
+    ) throws -> String {
+        let fileReference = try projectObject(
+            identifier: identifier,
+            in: project
+        )
+        guard fileReference.body.contains("isa = PBXFileReference;") else {
+            XCTFail("Expected PBXFileReference object for \(identifier)")
+            throw CocoaError(.fileReadCorruptFile)
+        }
+        let rawValue = try XCTUnwrap(
+            try capture(
+                #"(?:^|[;{])\s*path = ([^;]+);"#,
+                in: fileReference.body
+            ) ?? capture(
+                #"(?:^|[;{])\s*name = ([^;]+);"#,
+                in: fileReference.body
+            )
+        )
+        let trimmed = rawValue.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        let unquoted = if trimmed.hasPrefix("\"") && trimmed.hasSuffix("\"") {
+            String(trimmed.dropFirst().dropLast())
+        } else {
+            trimmed
+        }
+        return URL(fileURLWithPath: unquoted).lastPathComponent
     }
 
     private func arcNoteConfigurationBindings(
@@ -149,9 +191,13 @@ final class LocalRunSchemeContractTests: XCTestCase {
                     #"(?m)^\s*name = ([^;]+);"#,
                     in: configuration.body
                 )
-                let file = try firstCapture(
-                    #"baseConfigurationReference = [A-F0-9]+ /\* ([^*]+\.xcconfig) \*/;"#,
+                let fileReferenceIdentifier = try firstCapture(
+                    #"baseConfigurationReference = ([A-F0-9]+) /\*"#,
                     in: configuration.body
+                )
+                let file = try projectFileName(
+                    identifier: fileReferenceIdentifier,
+                    in: project
                 )
                 return (name, file)
             }
@@ -161,6 +207,7 @@ final class LocalRunSchemeContractTests: XCTestCase {
     private func relevantRuntimeAndConfigFiles() throws -> [URL] {
         let fileManager = FileManager.default
         var files = [
+            repositoryRoot.appendingPathComponent("ArcNote/Info.plist"),
             repositoryRoot.appendingPathComponent(
                 "ArcNote.xcodeproj/project.pbxproj"
             ),
