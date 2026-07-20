@@ -47,4 +47,67 @@ final class APIEnvironmentTests: XCTestCase {
             APIEnvironment.normalizedBaseURL(from: "https://user:secret@api.chorai.top")
         )
     }
+
+    func testSharedResolverPrefersAValidOverride() throws {
+        let resolution = try APIBaseURLResolver.resolve(
+            processEnvironment: [
+                APIEnvironment.overrideEnvironmentKey: expectedProduction,
+            ],
+            compiledEnvironment: APIEnvironment.local.rawValue
+        )
+
+        XCTAssertEqual(resolution.baseURL.absoluteString, expectedProduction)
+        XCTAssertEqual(resolution.environmentLabel, "override")
+    }
+
+    func testUITestResolverTreatsWhitespaceOverrideAsAbsent() throws {
+        XCTAssertEqual(
+            try UITestAPIConfiguration.resolveBaseURL(
+                in: [APIEnvironment.overrideEnvironmentKey: "  \n  "]
+            ),
+            expectedLocal
+        )
+    }
+
+    func testUITestResolverNormalizesATrailingRootSlash() throws {
+        XCTAssertEqual(
+            try UITestAPIConfiguration.resolveBaseURL(
+                in: [
+                    APIEnvironment.overrideEnvironmentKey:
+                        "  \(expectedProduction)/  ",
+                ]
+            ),
+            expectedProduction
+        )
+    }
+
+    func testUITestResolverRejectsMalformedOverride() {
+        XCTAssertThrowsError(
+            try UITestAPIConfiguration.resolveBaseURL(
+                in: [
+                    APIEnvironment.overrideEnvironmentKey:
+                        expectedProduction + "/unexpected-path",
+                ]
+            )
+        ) { error in
+            XCTAssertEqual(
+                error as? APIBaseURLResolutionError,
+                .invalidOverride
+            )
+        }
+    }
+
+    func testSharedResolverRejectsInvalidCompiledEnvironment() {
+        XCTAssertThrowsError(
+            try APIBaseURLResolver.resolve(
+                processEnvironment: [:],
+                compiledEnvironment: "staging"
+            )
+        ) { error in
+            XCTAssertEqual(
+                error as? APIBaseURLResolutionError,
+                .invalidCompiledEnvironment
+            )
+        }
+    }
 }

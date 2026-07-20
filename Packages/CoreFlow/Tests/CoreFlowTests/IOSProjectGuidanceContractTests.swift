@@ -18,6 +18,7 @@ final class IOSProjectGuidanceContractTests: XCTestCase {
         )
 
         for requiredText in [
+            "iOS 16.0+, iPhone-only",
             "## API Environments",
             "ArcNote Production",
             "Archive / Release | production",
@@ -25,6 +26,8 @@ final class IOSProjectGuidanceContractTests: XCTestCase {
             "make env-show",
             "127.0.0.1:8180/health",
             "single source of truth",
+            "Complete runtime endpoint literals",
+            "Focused catalog contract/tests may assert or assemble expected endpoint components",
             "temporary physical-device diagnostics",
             "reserved for tests and temporary diagnostics",
             "Do not add a customer-facing environment switch.",

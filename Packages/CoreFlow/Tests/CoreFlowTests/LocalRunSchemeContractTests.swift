@@ -2,6 +2,10 @@ import Foundation
 import XCTest
 
 final class LocalRunSchemeContractTests: XCTestCase {
+    private struct ProjectObject {
+        let body: Substring
+    }
+
     private var repositoryRoot: URL {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
@@ -18,15 +22,175 @@ final class LocalRunSchemeContractTests: XCTestCase {
         )
     }
 
-    private func launchAction(in scheme: String) throws -> Substring {
-        let start = try XCTUnwrap(scheme.range(of: "<LaunchAction"))
+    private func action(named name: String, in scheme: String) throws -> Substring {
+        let start = try XCTUnwrap(scheme.range(of: "<\(name)"))
         let end = try XCTUnwrap(
             scheme.range(
-                of: "</LaunchAction>",
+                of: "</\(name)>",
                 range: start.upperBound..<scheme.endIndex
             )
         )
         return scheme[start.lowerBound..<end.upperBound]
+    }
+
+    private func firstCapture(
+        _ pattern: String,
+        in source: some StringProtocol
+    ) throws -> String {
+        let source = String(source)
+        let expression = try NSRegularExpression(pattern: pattern)
+        let range = NSRange(source.startIndex..., in: source)
+        let match = try XCTUnwrap(expression.firstMatch(in: source, range: range))
+        let captureRange = try XCTUnwrap(Range(match.range(at: 1), in: source))
+        return String(source[captureRange])
+    }
+
+    private func projectObject(
+        identifier: String,
+        in project: String
+    ) throws -> ProjectObject {
+        let escapedIdentifier = NSRegularExpression.escapedPattern(
+            for: identifier
+        )
+        let expression = try NSRegularExpression(
+            pattern: "(?m)^[\\t ]*\(escapedIdentifier) /\\*.*\\*/ = \\{"
+        )
+        let match = try XCTUnwrap(
+            expression.firstMatch(
+                in: project,
+                range: NSRange(project.startIndex..., in: project)
+            )
+        )
+        let matchRange = try XCTUnwrap(Range(match.range, in: project))
+        let openingBrace = try XCTUnwrap(
+            project[matchRange].firstIndex(of: "{")
+        )
+
+        var depth = 0
+        var cursor = openingBrace
+        while cursor < project.endIndex {
+            switch project[cursor] {
+            case "{":
+                depth += 1
+            case "}":
+                depth -= 1
+                if depth == 0 {
+                    return ProjectObject(
+                        body: project[openingBrace...cursor]
+                    )
+                }
+            default:
+                break
+            }
+            cursor = project.index(after: cursor)
+        }
+
+        XCTFail("Unterminated project object \(identifier)")
+        throw CocoaError(.fileReadCorruptFile)
+    }
+
+    private func arcNoteConfigurationBindings(
+        in project: String
+    ) throws -> [String: String] {
+        let nativeTargets = try XCTUnwrap(
+            project.range(
+                of: "/* Begin PBXNativeTarget section */"
+            ).flatMap { start in
+                project.range(
+                    of: "/* End PBXNativeTarget section */",
+                    range: start.upperBound..<project.endIndex
+                ).map { end in project[start.upperBound..<end.lowerBound] }
+            }
+        )
+        let targetIdentifier = try firstCapture(
+            #"(?m)^\s*([A-F0-9]+) /\* ArcNote \*/ = \{"#,
+            in: nativeTargets
+        )
+        let target = try projectObject(
+            identifier: targetIdentifier,
+            in: project
+        )
+        let configurationListIdentifier = try firstCapture(
+            #"buildConfigurationList = ([A-F0-9]+) /\*"#,
+            in: target.body
+        )
+        let configurationList = try projectObject(
+            identifier: configurationListIdentifier,
+            in: project
+        )
+        let configurationIdentifiers = try firstCapture(
+            #"buildConfigurations = \(([\s\S]*?)\);"#,
+            in: configurationList.body
+        )
+            .split(separator: "\n")
+            .compactMap { line -> String? in
+                let source = String(line)
+                let expression = try? NSRegularExpression(
+                    pattern: #"^\s*([A-F0-9]+) /\*"#
+                )
+                guard let match = expression?.firstMatch(
+                    in: source,
+                    range: NSRange(source.startIndex..., in: source)
+                ),
+                let range = Range(match.range(at: 1), in: source)
+                else {
+                    return nil
+                }
+                return String(source[range])
+            }
+
+        return try Dictionary(
+            uniqueKeysWithValues: configurationIdentifiers.map { identifier in
+                let configuration = try projectObject(
+                    identifier: identifier,
+                    in: project
+                )
+                let name = try firstCapture(
+                    #"(?m)^\s*name = ([^;]+);"#,
+                    in: configuration.body
+                )
+                let file = try firstCapture(
+                    #"baseConfigurationReference = [A-F0-9]+ /\* ([^*]+\.xcconfig) \*/;"#,
+                    in: configuration.body
+                )
+                return (name, file)
+            }
+        )
+    }
+
+    private func relevantRuntimeAndConfigFiles() throws -> [URL] {
+        let fileManager = FileManager.default
+        var files = [
+            repositoryRoot.appendingPathComponent(
+                "ArcNote.xcodeproj/project.pbxproj"
+            ),
+        ]
+        for (directory, pathExtension) in [
+            ("ArcNote", "swift"),
+            ("ArcNoteUITests", "swift"),
+            ("Config", "xcconfig"),
+            ("ArcNote.xcodeproj/xcshareddata/xcschemes", "xcscheme"),
+        ] {
+            let root = repositoryRoot.appendingPathComponent(directory)
+            let enumerator = try XCTUnwrap(
+                fileManager.enumerator(
+                    at: root,
+                    includingPropertiesForKeys: [.isRegularFileKey]
+                )
+            )
+            for case let file as URL in enumerator
+            where file.pathExtension == pathExtension {
+                files.append(file)
+            }
+        }
+        return files.sorted { $0.path < $1.path }
+    }
+
+    private func relativePath(of file: URL) -> String {
+        file.path.replacingOccurrences(
+            of: repositoryRoot.path + "/",
+            with: ""
+        )
     }
 
     func testSharedSchemesSelectCompiledLocalAndProductionConfigurations() throws {
@@ -37,11 +201,17 @@ final class LocalRunSchemeContractTests: XCTestCase {
             "ArcNote.xcodeproj/xcshareddata/xcschemes/ArcNote Production.xcscheme"
         )
 
-        XCTAssertTrue(try launchAction(in: localScheme).contains(
+        XCTAssertTrue(try action(named: "LaunchAction", in: localScheme).contains(
             "buildConfiguration = \"Debug\""
         ))
-        XCTAssertTrue(try launchAction(in: productionScheme).contains(
+        XCTAssertTrue(try action(named: "LaunchAction", in: productionScheme).contains(
             "buildConfiguration = \"Debug-Production\""
+        ))
+        XCTAssertTrue(try action(named: "ArchiveAction", in: localScheme).contains(
+            "buildConfiguration = \"Release\""
+        ))
+        XCTAssertTrue(try action(named: "ArchiveAction", in: productionScheme).contains(
+            "buildConfiguration = \"Release\""
         ))
 
         for scheme in [localScheme, productionScheme] {
@@ -67,33 +237,28 @@ final class LocalRunSchemeContractTests: XCTestCase {
         )
 
         let project = try read("ArcNote.xcodeproj/project.pbxproj")
-        XCTAssertTrue(project.contains("path = Local.xcconfig;"))
-        XCTAssertTrue(project.contains("path = Production.xcconfig;"))
-        XCTAssertTrue(project.contains("name = Debug-Production;"))
+        let bindings = try arcNoteConfigurationBindings(in: project)
+        XCTAssertEqual(Set(bindings.keys), ["Debug", "Debug-Production", "Release"])
+        XCTAssertEqual(bindings["Debug"], "Local.xcconfig")
+        XCTAssertEqual(bindings["Debug-Production"], "Production.xcconfig")
+        XCTAssertEqual(bindings["Release"], "Production.xcconfig")
     }
 
     func testApplicationResolvesOverrideBeforeCompiledEnvironment() throws {
         let source = try read("ArcNote/APIConfiguration.swift")
+        let catalog = try read("ArcNote/APIEnvironment.swift")
         let legacyLocalLiteral = ["127.0.0.1:", "8080"].joined()
-        let baseURLStart = try XCTUnwrap(source.range(of: "static var baseURL"))
-        let baseURLEnd = try XCTUnwrap(
-            source.range(
-                of: "static var environmentLabel",
-                range: baseURLStart.upperBound..<source.endIndex
-            )
-        )
-        let baseURLSource = source[
-            baseURLStart.lowerBound..<baseURLEnd.lowerBound
-        ]
         let overrideRange = try XCTUnwrap(
-            baseURLSource.range(of: "overrideEnvironmentKey")
+            catalog.range(of: "let rawOverride = processEnvironment")
         )
         let compiledRange = try XCTUnwrap(
-            baseURLSource.range(of: "return configuredEnvironment.baseURL")
+            catalog.range(of: "guard let rawCompiledEnvironment")
         )
 
         XCTAssertLessThan(overrideRange.lowerBound, compiledRange.lowerBound)
-        XCTAssertTrue(source.contains("APIEnvironment.normalizedBaseURL"))
+        XCTAssertTrue(source.contains("APIBaseURLResolver.resolve"))
+        XCTAssertTrue(source.contains("preconditionFailure"))
+        XCTAssertTrue(catalog.contains("APIEnvironment.normalizedBaseURL"))
         XCTAssertFalse(source.contains("#if DEBUG\n        return \"http://"))
         XCTAssertFalse(source.contains(legacyLocalLiteral))
     }
@@ -106,17 +271,13 @@ final class LocalRunSchemeContractTests: XCTestCase {
         XCTAssertTrue(catalog.contains(localLiteral))
         XCTAssertTrue(catalog.contains(productionLiteral))
 
-        for path in [
-            "ArcNote/APIConfiguration.swift",
-            "ArcNoteUITests/ArcNoteUITests.swift",
-            "Config/Local.xcconfig",
-            "Config/Production.xcconfig",
-            "ArcNote.xcodeproj/xcshareddata/xcschemes/ArcNote.xcscheme",
-            "ArcNote.xcodeproj/xcshareddata/xcschemes/ArcNote Production.xcscheme",
-        ] {
-            let source = try read(path)
-            XCTAssertFalse(source.contains(localLiteral), path)
-            XCTAssertFalse(source.contains(productionLiteral), path)
+        for file in try relevantRuntimeAndConfigFiles() {
+            let path = relativePath(of: file)
+            let source = try String(contentsOf: file, encoding: .utf8)
+            if path != "ArcNote/APIEnvironment.swift" {
+                XCTAssertFalse(source.contains(localLiteral), path)
+                XCTAssertFalse(source.contains(productionLiteral), path)
+            }
             XCTAssertFalse(source.contains(legacyLocalLiteral), path)
         }
     }

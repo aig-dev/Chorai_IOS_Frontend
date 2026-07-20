@@ -2,10 +2,11 @@
 
 ## Scope
 
-This repository contains the native iPhone app. Work in `ArcNote/` for app code,
-`ArcNoteUITests/` for simulator flows, and `Packages/CoreFlow/` for testable domain
-and source contracts. Follow the user's requested git workflow; do not create or
-switch branches unless explicitly requested. Preserve unrelated changes.
+This repository contains the native app: iOS 16.0+, iPhone-only. Work in
+`ArcNote/` for app code, `ArcNoteUITests/` for simulator flows, and
+`Packages/CoreFlow/` for testable domain and source contracts. Follow the user's
+requested git workflow; do not create or switch branches unless explicitly
+requested. Preserve unrelated changes.
 
 ## API Environments
 
@@ -35,7 +36,9 @@ selection in the Simulator.
 
 API routing has one runtime single source of truth: `ArcNote/APIEnvironment.swift`.
 Build configurations select only `local` or `production`. Do not hard-code API
-hosts or ports in views, services, schemes, tests, or additional config files.
+hosts or ports in views, services, schemes, or additional config files.
+Complete runtime endpoint literals are forbidden outside `APIEnvironment.swift`.
+Focused catalog contract/tests may assert or assemble expected endpoint components.
 `CHORAI_API_BASE_URL` is reserved for tests and temporary diagnostics.
 Do not add a customer-facing environment switch.
 

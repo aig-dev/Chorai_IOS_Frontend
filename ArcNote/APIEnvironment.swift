@@ -43,3 +43,56 @@ enum APIEnvironment: String, CaseIterable {
         return components.url
     }
 }
+
+enum APIBaseURLResolutionError: Error, Equatable, CustomStringConvertible {
+    case invalidOverride
+    case invalidCompiledEnvironment
+
+    var description: String {
+        switch self {
+        case .invalidOverride:
+            return "Invalid \(APIEnvironment.overrideEnvironmentKey) value"
+        case .invalidCompiledEnvironment:
+            return "Missing or invalid \(APIEnvironment.infoDictionaryKey) build setting"
+        }
+    }
+}
+
+struct APIBaseURLResolution: Equatable {
+    let baseURL: URL
+    let environmentLabel: String
+}
+
+enum APIBaseURLResolver {
+    static func resolve(
+        processEnvironment: [String: String],
+        compiledEnvironment rawCompiledEnvironment: String?
+    ) throws -> APIBaseURLResolution {
+        if let rawOverride = processEnvironment[
+            APIEnvironment.overrideEnvironmentKey
+        ],
+        !rawOverride.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            guard let override = APIEnvironment.normalizedBaseURL(
+                from: rawOverride
+            ) else {
+                throw APIBaseURLResolutionError.invalidOverride
+            }
+            return APIBaseURLResolution(
+                baseURL: override,
+                environmentLabel: "override"
+            )
+        }
+
+        guard let rawCompiledEnvironment,
+              let environment = APIEnvironment(
+                rawValue: rawCompiledEnvironment
+              )
+        else {
+            throw APIBaseURLResolutionError.invalidCompiledEnvironment
+        }
+        return APIBaseURLResolution(
+            baseURL: environment.baseURL,
+            environmentLabel: environment.rawValue
+        )
+    }
+}

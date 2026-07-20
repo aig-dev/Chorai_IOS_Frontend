@@ -2,10 +2,25 @@ import Foundation
 
 // MARK: API配置管理
 struct APIConfiguration {
-    static var configuredEnvironment: APIEnvironment {
-        guard let rawValue = Bundle.main.object(
+    private static var compiledEnvironmentName: String? {
+        Bundle.main.object(
             forInfoDictionaryKey: APIEnvironment.infoDictionaryKey
-        ) as? String,
+        ) as? String
+    }
+
+    private static var resolvedBaseURL: APIBaseURLResolution {
+        do {
+            return try APIBaseURLResolver.resolve(
+                processEnvironment: ProcessInfo.processInfo.environment,
+                compiledEnvironment: compiledEnvironmentName
+            )
+        } catch {
+            preconditionFailure(String(describing: error))
+        }
+    }
+
+    static var configuredEnvironment: APIEnvironment {
+        guard let rawValue = compiledEnvironmentName,
         let environment = APIEnvironment(rawValue: rawValue)
         else {
             preconditionFailure(
@@ -16,31 +31,11 @@ struct APIConfiguration {
     }
 
     static var baseURL: String {
-        if let rawOverride = ProcessInfo.processInfo.environment[
-            APIEnvironment.overrideEnvironmentKey
-        ],
-        !rawOverride.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            guard let override = APIEnvironment.normalizedBaseURL(
-                from: rawOverride
-            ) else {
-                preconditionFailure(
-                    "Invalid \(APIEnvironment.overrideEnvironmentKey) value"
-                )
-            }
-            return override.absoluteString
-        }
-
-        return configuredEnvironment.baseURL.absoluteString
+        resolvedBaseURL.baseURL.absoluteString
     }
 
     static var environmentLabel: String {
-        if let rawOverride = ProcessInfo.processInfo.environment[
-            APIEnvironment.overrideEnvironmentKey
-        ],
-        !rawOverride.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return "override"
-        }
-        return configuredEnvironment.rawValue
+        resolvedBaseURL.environmentLabel
     }
 
     static func resourceURLString(_ pathOrURL: String) -> String {

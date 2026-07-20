@@ -1,18 +1,31 @@
 import XCTest
 
-private enum UITestAPIConfiguration {
+enum UITestAPIConfiguration {
     static var baseURL: String {
-        let environment = ProcessInfo.processInfo.environment
-        if let override = environment[APIEnvironment.overrideEnvironmentKey],
-           !override.isEmpty {
-            return override
-        }
-        return APIEnvironment.local.baseURL.absoluteString
+        baseURLOrFail(in: ProcessInfo.processInfo.environment)
     }
 
     static func baseURL(in environment: [String: String]) -> String {
-        environment[APIEnvironment.overrideEnvironmentKey]
-            ?? APIEnvironment.local.baseURL.absoluteString
+        baseURLOrFail(in: environment)
+    }
+
+    static func resolveBaseURL(
+        in environment: [String: String]
+    ) throws -> String {
+        try APIBaseURLResolver.resolve(
+            processEnvironment: environment,
+            compiledEnvironment: APIEnvironment.local.rawValue
+        ).baseURL.absoluteString
+    }
+
+    private static func baseURLOrFail(
+        in environment: [String: String]
+    ) -> String {
+        do {
+            return try resolveBaseURL(in: environment)
+        } catch {
+            preconditionFailure("Invalid UI test API configuration: \(error)")
+        }
     }
 }
 
