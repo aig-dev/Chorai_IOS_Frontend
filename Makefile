@@ -1,8 +1,8 @@
 IOS_DEVICE ?=
 IOS_DERIVED_DATA ?= /tmp/chorai-ios-local
 
+export IOS_DEVICE IOS_DERIVED_DATA
+
 .PHONY: ios-run
 ios-run:
-	@IOS_DEVICE="$(IOS_DEVICE)" \
-		IOS_DERIVED_DATA="$(IOS_DERIVED_DATA)" \
-		./scripts/ios-run.sh
+	@./scripts/ios-run.sh

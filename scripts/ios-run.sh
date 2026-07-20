@@ -40,6 +40,33 @@ choose_ios_device() {
     fi
 }
 
+is_ios_device_booted() {
+    local device="$1"
+    local device_list="$2"
+
+    print -r -- "$device_list" | awk -v device="$device" '
+        /^-- iOS / { in_ios = 1; next }
+        /^-- / { in_ios = 0 }
+        !in_ios || !/\(Booted\)[[:space:]]*$/ { next }
+        {
+            line = $0
+            sub(/^[[:space:]]*/, "", line)
+            if (index(line, "(" device ") (Booted)") > 0) {
+                found = 1
+                exit
+            }
+
+            name = line
+            sub(/[[:space:]]+\([0-9A-Fa-f-]+\) \(Booted\)[[:space:]]*$/, "", name)
+            if (name == device) {
+                found = 1
+                exit
+            }
+        }
+        END { exit found ? 0 : 1 }
+    '
+}
+
 require_command() {
     local command_name="$1"
     if ! command -v "$command_name" >/dev/null 2>&1; then
@@ -53,7 +80,8 @@ main() {
     require_command xcodebuild
     require_command open
 
-    local repository_root="${0:A:h:h}"
+    local script_path="${(%):-%x}"
+    local repository_root="${script_path:A:h:h}"
     local derived_data="${IOS_DERIVED_DATA:-$DEFAULT_IOS_DERIVED_DATA}"
     local device_list
     local device
@@ -70,7 +98,12 @@ main() {
     app_path="$derived_data/Build/Products/Debug-iphonesimulator/$IOS_PRODUCT_NAME"
 
     print -r -- "[ios-run] Simulator: $device"
-    xcrun simctl boot "$device" >/dev/null 2>&1 || true
+    if is_ios_device_booted "$device" "$device_list"; then
+        print -r -- "[ios-run] Simulator is already booted: $device"
+    elif ! xcrun simctl boot "$device"; then
+        print -u2 -- "[ios-run] Unable to boot Simulator: $device"
+        return 1
+    fi
     if ! xcrun simctl bootstatus "$device" -b; then
         print -u2 -- "[ios-run] Unable to boot Simulator: $device"
         return 1
