@@ -62,6 +62,9 @@
 		C0DEF1012F60000100000005 /* FlowViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1012F60000100000004 /* FlowViews.swift */; };
 		C0DEF1012F60000100000007 /* CoreShellViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1012F60000100000006 /* CoreShellViews.swift */; };
 		A00000012F50000100000001 /* ArcNoteUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000012F50000100000002 /* ArcNoteUITests.swift */; };
+		A10000012F90000100000001 /* APIEnvironmentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000012F90000100000002 /* APIEnvironmentTests.swift */; };
+		A10000012F90000100000003 /* APIEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000012F90000100000004 /* APIEnvironment.swift */; };
+		A10000012F90000100000005 /* APIEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000012F90000100000004 /* APIEnvironment.swift */; };
 		1B055F4E2E4E08EF00896B01 /* ChatDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B055F4D2E4E08EE00896B01 /* ChatDetailView.swift */; };
 		1B055F502E4EFC9000896B01 /* NotificationDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B055F4F2E4EFC9000896B01 /* NotificationDetailView.swift */; };
 		1B055F552E4F178400896B01 /* LinkPopupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B055F542E4F178400896B01 /* LinkPopupView.swift */; };
@@ -186,6 +189,8 @@
 		C0DEF3002F80000100000025 /* CardEditorBackground.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardEditorBackground.swift; sourceTree = "<group>"; };
 		C0DEF3002F80000100000026 /* CardMetadataPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardMetadataPresentation.swift; sourceTree = "<group>"; };
 		A00000012F50000100000002 /* ArcNoteUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArcNoteUITests.swift; sourceTree = "<group>"; };
+		A10000012F90000100000002 /* APIEnvironmentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIEnvironmentTests.swift; sourceTree = "<group>"; };
+		A10000012F90000100000004 /* APIEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIEnvironment.swift; sourceTree = "<group>"; };
 		A00000012F50000100000003 /* ArcNoteUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ArcNoteUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		1B055F4D2E4E08EE00896B01 /* ChatDetailView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ChatDetailView.swift; sourceTree = "<group>"; };
 		1B055F4F2E4EFC9000896B01 /* NotificationDetailView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = NotificationDetailView.swift; sourceTree = "<group>"; };
@@ -357,6 +362,7 @@
 			isa = PBXGroup;
 			children = (
 				A00000012F50000100000002 /* ArcNoteUITests.swift */,
+				A10000012F90000100000002 /* APIEnvironmentTests.swift */,
 			);
 			path = ArcNoteUITests;
 			sourceTree = "<group>";
@@ -364,6 +370,7 @@
 		1B48AE332E30967F0090CF86 /* ArcNote */ = {
 			isa = PBXGroup;
 			children = (
+				A10000012F90000100000004 /* APIEnvironment.swift */,
 				C0DEF3002F80000100000001 /* CardEditor */,
 				C0DEF1012F60000100000001 /* CoreFlow */,
 				C0DEF1162F60000100000002 /* FollowListView.swift */,
@@ -583,6 +590,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				A00000012F50000100000001 /* ArcNoteUITests.swift in Sources */,
+				A10000012F90000100000001 /* APIEnvironmentTests.swift in Sources */,
+				A10000012F90000100000003 /* APIEnvironment.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -590,6 +599,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A10000012F90000100000005 /* APIEnvironment.swift in Sources */,
 				C0DEF3002F80000100000011 /* BlockNoteCardEditor.swift in Sources */,
 				C0DEF3002F80000100000012 /* CardEditorShell.swift in Sources */,
 				C0DEF3002F80000100000013 /* CardEditorMetadataRows.swift in Sources */,
