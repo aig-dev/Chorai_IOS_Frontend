@@ -33,6 +33,11 @@ private struct CardEditorSeed: Identifiable {
     }
 }
 
+private struct CardEditorLinkEdge: Hashable {
+    let sourceCardID: String
+    let targetCardID: String
+}
+
 struct NewNoteView: View {
     @Environment(\.dismiss) private var dismiss
 
@@ -231,6 +236,7 @@ private struct CardEditorSessionView: View {
     @State private var showRemoveCardConfirmation = false
     @State private var showCloseWithoutSavingConfirmation = false
     @State private var pendingOntologyLinkSourceID: String?
+    @State private var unlinkingLinkID: String?
     @State private var saveMessage: String?
     @State private var hasSaveFailure = false
     @State private var failedCommitBaseline: CardEditorCommitBaseline?
@@ -280,6 +286,10 @@ private struct CardEditorSessionView: View {
             bodyModel: bodyModel,
             tags: editingStore.draft.tags,
             links: editorLinkItems,
+            unlinkingLinkID: unlinkingLinkID,
+            isLinkRemovalEnabled: bodyModel.canMutate
+                && !isBusy
+                && unlinkingLinkID == nil,
             background: editorBackground,
             isPublic: editingStore.draft.isPublic,
             isMetadataEditable: bodyModel.canMutate && !isBusy,
@@ -292,6 +302,7 @@ private struct CardEditorSessionView: View {
             onBeginTag: beginTagEntry,
             onCompleteTag: completeTagEntry,
             onRemoveTag: removeTag,
+            onRemoveLink: removeOntologyLink,
             onTogglePrivacy: togglePrivacy,
             onOpenCardActions: cardActionsHandler
         )
@@ -513,16 +524,46 @@ private struct CardEditorSessionView: View {
 
     private var editorLinkItems: [CardEditorLinkItem] {
         guard let cardID = editingStore.cardID else { return [] }
-        return editingStore.links.map { link in
-            let linkedCardID = link.sourceCardID == cardID
-                ? link.targetCardID
-                : link.sourceCardID
+        var seenEdges = Set<CardEditorLinkEdge>()
+        return editingStore.links.compactMap { link in
+            let edge = CardEditorLinkEdge(
+                sourceCardID: link.sourceCardID,
+                targetCardID: link.targetCardID
+            )
+            guard seenEdges.insert(edge).inserted else { return nil }
             return CardEditorLinkItem(
-                id: linkedCardID,
+                sourceCardID: link.sourceCardID,
+                targetCardID: link.targetCardID,
                 title: link.authorName ?? link.title,
                 previewHTML: link.previewHTML,
-                avatarURL: link.authorAvatarURL
+                avatarURL: link.authorAvatarURL,
+                canRemove: link.sourceCardID == cardID
             )
+        }
+    }
+
+    private func removeOntologyLink(_ item: CardEditorLinkItem) {
+        completeTagEntry()
+        guard bodyModel.canMutate,
+              !isBusy,
+              item.canRemove,
+              unlinkingLinkID == nil,
+              let cardID = editingStore.cardID,
+              cardID == item.sourceCardID,
+              let link = editingStore.links.first(where: {
+                  $0.sourceCardID == item.sourceCardID
+                      && $0.targetCardID == item.targetCardID
+              }) else { return }
+        unlinkingLinkID = item.id
+        Task {
+            defer { unlinkingLinkID = nil }
+            let didDelete = await editingStore.deleteLink(link)
+            if didDelete {
+                saveMessage = nil
+                hideSaveFailure()
+            } else {
+                saveMessage = "Couldn't unlink. Try again."
+            }
         }
     }
 
@@ -804,10 +845,12 @@ private struct CardEditorSessionView: View {
     }
 
     private func removeTag(_ tag: String) {
+        completeTagEntry()
         updateMetadata(tags: editingStore.draft.tags.filter { $0 != tag })
     }
 
     private func togglePrivacy() {
+        completeTagEntry()
         updateMetadata(isPublic: !editingStore.draft.isPublic)
     }
 

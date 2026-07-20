@@ -153,7 +153,10 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         XCTAssertTrue(presentation.contains("let showsRemoveIndicator: Bool"))
         XCTAssertTrue(presentation.contains("let leadingSystemImage: String?"))
         XCTAssertTrue(presentation.contains("if let leadingSystemImage"))
-        XCTAssertTrue(presentation.contains(".font(.system(size: 12, weight: .medium))"))
+        XCTAssertTrue(presentation.contains(".font(.caption.weight(.medium))"))
+        XCTAssertFalse(
+            presentation.contains(".font(.system(size: 12, weight: .medium))")
+        )
         XCTAssertTrue(presentation.contains(".foregroundStyle(.white)"))
         XCTAssertTrue(presentation.contains(".padding(.horizontal, 12)"))
         XCTAssertTrue(presentation.contains(".padding(.vertical, 6)"))
@@ -178,8 +181,8 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         XCTAssertTrue(presentation.contains("let avatarURL: String?"))
         XCTAssertTrue(presentation.contains("let previewHTML: String?"))
         XCTAssertTrue(presentation.contains(".frame(width: 40, height: 40)"))
-        XCTAssertTrue(presentation.contains(".font(.system(size: 16, weight: .semibold))"))
-        XCTAssertTrue(presentation.contains("font: .system(size: 14, weight: .regular)"))
+        XCTAssertTrue(presentation.contains(".font(.callout.weight(.semibold))"))
+        XCTAssertTrue(presentation.contains("font: .footnote"))
         XCTAssertTrue(
             presentation.contains(
                 "foregroundColor: .white.opacity(0.7)"
@@ -202,6 +205,14 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         XCTAssertTrue(htmlRenderer.contains(".font(font)"))
         XCTAssertTrue(
             htmlRenderer.contains(".foregroundColor(foregroundColor)")
+        )
+
+        let metadataRows = try source(
+            at: "ArcNote/CardEditor/CardEditorMetadataRows.swift"
+        )
+        XCTAssertTrue(metadataRows.contains(".font(.caption.weight(.medium))"))
+        XCTAssertFalse(
+            metadataRows.contains(".font(.system(size: 12, weight: .medium))")
         )
     }
 
@@ -368,7 +379,7 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         XCTAssertTrue(keyboardHideImplementation.contains("controller.blur()"))
     }
 
-    func testMetadataRowsShareViewStylingAndKeepLinksStatic() throws {
+    func testMetadataRowsShareStylingAndKeepUnlinkInlineAndDirectional() throws {
         let metadata = try source(
             at: "ArcNote/CardEditor/CardEditorMetadataRows.swift"
         )
@@ -424,21 +435,23 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         )
         XCTAssertTrue(metadata.contains(".frame(width: 44, height: 44)"))
         XCTAssertTrue(metadata.contains("Color.white.opacity(0.1)"))
+        XCTAssertTrue(metadata.contains("if link.canRemove"))
+        XCTAssertTrue(metadata.contains("onRemove(link)"))
+        XCTAssertTrue(metadata.contains("cardEditorRemoveLink."))
+        XCTAssertTrue(metadata.contains(".disabled(!isRemovalEnabled)"))
         for staleContract in [
             "cardEditorAddLink",
             "cardEditorLinkOverflow",
             "CardEditorLinkManagementSheet",
-            "cardEditorRemoveLink.",
             "Button(action: onOpen)",
         ] {
             XCTAssertFalse(
                 metadata.contains(staleContract),
-                "Editor link metadata must be static: \(staleContract)"
+                "Editor link metadata must stay inline: \(staleContract)"
             )
         }
         for staleShellContract in [
             "onAddLink",
-            "onRemoveLink",
             "isManagingLinks",
             "CardEditorLinkManagementSheet",
         ] {
@@ -447,13 +460,17 @@ final class CardEditorShellSourceContractTests: XCTestCase {
                 "The shell must not own link management: \(staleShellContract)"
             )
         }
+        XCTAssertTrue(shell.contains("let onRemoveLink: (CardEditorLinkItem) -> Void"))
+        XCTAssertTrue(shell.contains("onRemove: onRemoveLink"))
 
         let nonEmptyLinks = try XCTUnwrap(shell.range(of: "if !links.isEmpty"))
-        let linkRow = try XCTUnwrap(shell.range(of: "CardEditorLinkRow(links: links)"))
+        let linkRow = try XCTUnwrap(shell.range(of: "CardEditorLinkRow("))
+        let directionalLinks = try XCTUnwrap(shell.range(of: "links: links"))
         let linkAccessibility = try XCTUnwrap(
             shell.range(of: "cardEditorLinksRow")
         )
         XCTAssertLessThan(nonEmptyLinks.lowerBound, linkRow.lowerBound)
+        XCTAssertLessThan(linkRow.lowerBound, directionalLinks.lowerBound)
         XCTAssertLessThan(linkRow.lowerBound, linkAccessibility.lowerBound)
     }
 
@@ -471,7 +488,14 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         XCTAssertTrue(metadata.contains("@Binding var tagInput: String"))
         XCTAssertTrue(metadata.contains("private struct CardEditorTagInput: View"))
         XCTAssertTrue(metadata.contains("CardEditorTagInput("))
-        XCTAssertTrue(metadata.contains("@FocusState private var isTagInputFocused"))
+        XCTAssertTrue(
+            shell.contains("@FocusState private var isTagInputFocused")
+        )
+        XCTAssertTrue(
+            metadata.contains(
+                "let isTagInputFocused: FocusState<Bool>.Binding"
+            )
+        )
         XCTAssertTrue(metadata.contains("@State private var didAcquireFocus = false"))
         XCTAssertTrue(metadata.contains("if isAddingTag"))
         XCTAssertTrue(metadata.contains("TextField(\"Tag\", text: $tagInput)"))
@@ -482,7 +506,12 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         XCTAssertTrue(metadata.contains("guard didAcquireFocus else { return }"))
         XCTAssertTrue(metadata.contains(".task {"))
         XCTAssertTrue(metadata.contains("await Task.yield()"))
-        XCTAssertTrue(metadata.contains("isTagInputFocused = true"))
+        XCTAssertTrue(
+            metadata.contains("isTagInputFocused.wrappedValue = true")
+        )
+        XCTAssertTrue(
+            shell.contains("isTagInputFocused: $isTagInputFocused")
+        )
         XCTAssertTrue(metadata.contains(".accessibilityIdentifier(\"cardEditorTagInput\")"))
         XCTAssertTrue(metadata.contains(".accessibilityIdentifier(\"cardEditorAddTag\")"))
         XCTAssertTrue(metadata.contains(".accessibilityHidden(prefersKeyboardTagAction)"))
@@ -778,18 +807,25 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         }
     }
 
-    func testFormattingDismissIsFixedAndTypedCommandsScrollHorizontally() throws {
+    func testPhotoAndTagAreFixedBeforeTypedCommandsScrollHorizontally() throws {
         let formatting = try source(
             at: "ArcNote/CardEditor/CardEditorFormattingBar.swift"
         )
 
-        let dismiss = try XCTUnwrap(
-            formatting.range(of: "cardEditorKeyboardDismiss")
+        let photo = try XCTUnwrap(
+            formatting.range(of: "commandButton(.inlineImage)")
+        )
+        let tag = try XCTUnwrap(
+            formatting.range(of: "cardEditorAddTag")
         )
         let commandScroll = try XCTUnwrap(
             formatting.range(of: "ScrollView(.horizontal")
         )
-        XCTAssertLessThan(dismiss.lowerBound, commandScroll.lowerBound)
+        XCTAssertLessThan(photo.lowerBound, tag.lowerBound)
+        XCTAssertLessThan(tag.lowerBound, commandScroll.lowerBound)
+        XCTAssertFalse(formatting.contains("cardEditorKeyboardDismiss"))
+        XCTAssertFalse(formatting.contains("keyboard.chevron.compact.down"))
+        XCTAssertTrue(formatting.contains("scrollableCommands"))
         XCTAssertTrue(formatting.contains("enum CardEditorFormattingCommand"))
         XCTAssertTrue(formatting.contains("isSelected"))
         XCTAssertTrue(formatting.contains("frame(minWidth: 45, minHeight: 44)"))

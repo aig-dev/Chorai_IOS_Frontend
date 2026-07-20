@@ -178,10 +178,19 @@ final class NewNoteViewSourceContractTests: XCTestCase {
         XCTAssertTrue(selection.contains("guard didCreate else"))
         XCTAssertFalse(source.contains("adoptAlreadyCreatedLink"))
         XCTAssertFalse(selection.contains("replaceLinks("))
-        XCTAssertFalse(
-            source.contains("canRemove:"),
-            "Editor links are display-only"
+        XCTAssertTrue(
+            source.contains("canRemove: link.sourceCardID == cardID"),
+            "Only outgoing editor links should expose inline unlink"
         )
+        let remove = try XCTUnwrap(
+            Self.functionBody(
+                in: source,
+                signature: "func removeOntologyLink(_ item: CardEditorLinkItem)"
+            )
+        )
+        XCTAssertTrue(remove.contains("cardID == item.sourceCardID"))
+        XCTAssertTrue(remove.contains("editingStore.deleteLink(link)"))
+        XCTAssertFalse(remove.contains("links.remove"))
     }
 
     func testCardLinkBridgeRequestRoutesToExistingOntologyLinkFlow() throws {

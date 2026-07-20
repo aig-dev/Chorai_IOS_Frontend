@@ -126,15 +126,18 @@ final class ArcNoteUITests: XCTestCase {
         )
         XCTAssertEqual(disclosure.label, "Related notes")
         XCTAssertEqual(disclosure.value as? String, "Collapsed")
-        for id in [
-            "ast_fixture_a",
-            "ast_fixture_b",
-            "ast_fixture_c",
-            "ast_fixture_d",
-            "ast_fixture_e",
+        for identifier in [
+            cardEditorFixtureLinkIdentifier("ast_fixture_a"),
+            cardEditorFixtureLinkIdentifier("ast_fixture_b"),
+            cardEditorFixtureLinkIdentifier(
+                "ast_fixture_source",
+                sourceID: "ast_fixture_c"
+            ),
+            cardEditorFixtureLinkIdentifier("ast_fixture_d"),
+            cardEditorFixtureLinkIdentifier("ast_fixture_e"),
         ] {
             XCTAssertFalse(
-                app.descendants(matching: .any)["cardEditorLink.\(id)"].exists,
+                app.descendants(matching: .any)[identifier].exists,
                 "Related rows must stay hidden while collapsed"
             )
         }
@@ -143,17 +146,24 @@ final class ArcNoteUITests: XCTestCase {
         captureVisual("card-editor-populated-collapsed")
 
         disclosure.tap()
-        let firstLink = waitFor("cardEditorLink.ast_fixture_a")
-        let secondLink = waitFor("cardEditorLink.ast_fixture_b")
-        let thirdLink = waitFor("cardEditorLink.ast_fixture_c")
-        let fourthLink = waitFor("cardEditorLink.ast_fixture_d")
-        let fifthLink = waitFor("cardEditorLink.ast_fixture_e")
+        let firstLink = waitFor(cardEditorFixtureLinkIdentifier("ast_fixture_a"))
+        let secondLink = waitFor(cardEditorFixtureLinkIdentifier("ast_fixture_b"))
+        let thirdLink = waitFor(
+            cardEditorFixtureLinkIdentifier(
+                "ast_fixture_source",
+                sourceID: "ast_fixture_c"
+            )
+        )
+        let fourthLink = waitFor(cardEditorFixtureLinkIdentifier("ast_fixture_d"))
+        let fifthLink = waitFor(cardEditorFixtureLinkIdentifier("ast_fixture_e"))
         assertReadingOrder(firstLink, before: secondLink)
         assertReadingOrder(secondLink, before: thirdLink)
         assertReadingOrder(thirdLink, before: fourthLink)
         assertReadingOrder(fourthLink, before: fifthLink)
         XCTAssertEqual(disclosure.value as? String, "Expanded")
-        XCTAssertFalse(app.buttons["cardEditorLink.ast_fixture_a"].exists)
+        XCTAssertFalse(
+            app.buttons[cardEditorFixtureLinkIdentifier("ast_fixture_a")].exists
+        )
         captureVisual("card-editor-populated-expanded")
     }
 
@@ -303,9 +313,13 @@ final class ArcNoteUITests: XCTestCase {
         let disclosure = waitForButton("cardEditorLinksDisclosure")
         XCTAssertEqual(disclosure.value as? String, "Collapsed")
         disclosure.tap()
-        XCTAssertTrue(waitFor("cardEditorLink.ast_blocked").exists)
+        XCTAssertTrue(
+            waitFor("cardEditorLink.ast_blocked--ast_blocked_target").exists
+        )
         XCTAssertEqual(disclosure.value as? String, "Expanded")
-        XCTAssertFalse(app.buttons["cardEditorLink.ast_blocked"].exists)
+        XCTAssertFalse(
+            app.buttons["cardEditorLink.ast_blocked--ast_blocked_target"].exists
+        )
         XCTAssertFalse(
             app.descendants(matching: .any)["cardEditorLinksSheet"].exists
         )
@@ -321,7 +335,7 @@ final class ArcNoteUITests: XCTestCase {
         captureVisual("card-editor-compatibility-blocked")
     }
 
-    func testCardEditorFormattingBarKeepsDismissFixedAndReflectsSelection() {
+    func testCardEditorFormattingBarPinsPhotoAndTagAndReflectsSelection() throws {
         launchCardEditorFixture(mode: "keyboard")
 
         let body = waitFor("cardEditorBodyWebView")
@@ -329,27 +343,88 @@ final class ArcNoteUITests: XCTestCase {
             withNormalizedOffset: CGVector(dx: 0.25, dy: 0.04)
         ).tap()
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 10))
-        waitFor("cardEditorFormattingBar")
-        let dismiss = waitForButton("cardEditorKeyboardDismiss")
+        let formattingBar = waitFor("cardEditorFormattingBar")
+        let photo = waitForButton("cardEditorFormatInlineImage")
+        let tag = waitForButton("cardEditorAddTag")
         let paragraph = waitForButton("cardEditorFormatParagraph")
         let heading2 = waitForButton("cardEditorFormatHeading2")
         let bold = waitForButton("cardEditorFormatBold")
-        XCTAssertLessThan(dismiss.frame.maxX, paragraph.frame.minX)
+        XCTAssertLessThan(photo.frame.maxX, tag.frame.minX)
+        XCTAssertLessThan(tag.frame.maxX, paragraph.frame.minX)
+        XCTAssertFalse(
+            app.descendants(matching: .any)["cardEditorKeyboardDismiss"].exists,
+            "Keyboard dismissal must use native gestures, not a redundant toolbar action"
+        )
+        XCTAssertEqual(
+            app.buttons.matching(identifier: "cardEditorFormatInlineImage").count,
+            1,
+            "Photo must be exposed exactly once while the body is focused"
+        )
         XCTAssertEqual(heading2.value as? String, "selected")
         XCTAssertEqual(bold.value as? String, "selected")
         for (identifier, element) in [
-            ("cardEditorKeyboardDismiss", dismiss),
+            ("cardEditorFormatInlineImage", photo),
+            ("cardEditorAddTag", tag),
             ("cardEditorFormatParagraph", paragraph),
             ("cardEditorFormatHeading2", heading2),
             ("cardEditorFormatBold", bold),
         ] {
             assertPrimaryControl(element, identifier: identifier)
         }
+
+        let fixedPhotoFrame = photo.frame
+        let fixedTagFrame = tag.frame
+        let formattingStrip = formattingBar.scrollViews.firstMatch
+        XCTAssertTrue(
+            formattingStrip.waitForExistence(timeout: 2),
+            "The formatting bar must expose its horizontal command strip"
+        )
+        XCTAssertGreaterThanOrEqual(
+            formattingStrip.frame.minX,
+            tag.frame.maxX,
+            "The formatting strip must begin after the fixed Photo and Tag controls"
+        )
+        XCTAssertTrue(
+            formattingBar.frame.insetBy(dx: -1, dy: -1)
+                .contains(formattingStrip.frame),
+            "The formatting gesture must be scoped to the strip inside the formatting bar"
+        )
+
+        let checklist = app.buttons["cardEditorFormatChecklist"]
+        XCTAssertFalse(
+            checklist.isHittable,
+            "The later command must begin outside the visible strip"
+        )
+        for _ in 0..<4 where !checklist.isHittable {
+            formattingStrip.swipeLeft()
+        }
+
+        XCTAssertTrue(
+            checklist.isHittable,
+            "Horizontally scrolling the formatting strip must reveal later commands"
+        )
+        for (identifier, element, fixedFrame) in [
+            ("cardEditorFormatInlineImage", photo, fixedPhotoFrame),
+            ("cardEditorAddTag", tag, fixedTagFrame),
+        ] {
+            assertPrimaryControl(element, identifier: identifier)
+            XCTAssertEqual(
+                element.frame.minX,
+                fixedFrame.minX,
+                accuracy: 1,
+                "\(identifier) must not move with the formatting strip"
+            )
+            XCTAssertEqual(
+                element.frame.midY,
+                fixedFrame.midY,
+                accuracy: 1,
+                "\(identifier) must remain on the fixed-control row"
+            )
+        }
         captureVisual("card-editor-formatting")
 
-        dismiss.tap()
+        dismissCardEditorKeyboardWithVerticalDrag()
         waitForMissing("cardEditorFormattingBar")
-        waitForElementToDisappear(app.keyboards.firstMatch)
         let rowTagActions = app.buttons.matching(
             identifier: "cardEditorAddTag"
         )
@@ -486,66 +561,259 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertTrue(waitForButton("cardEditorAddTag").exists)
     }
 
-    func testInlineTagEntryCommitsOnFocusLossAndRejectsBlankInput() {
+    func testInlineTagEntryStaysOpenWhenItsFieldIsTapped() {
+        launchCardEditorFixture(mode: "empty")
+
+        waitForButton("cardEditorAddTag").tap()
+        let input = waitFor("cardEditorTagInput")
+        input.typeText("still-editing")
+        input.tap()
+
+        XCTAssertTrue(input.exists)
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 2))
+        XCTAssertFalse(app.buttons["cardEditorAddTag"].exists)
+        XCTAssertFalse(app.descendants(matching: .any)["cardEditorTag.still-editing"].exists)
+        captureVisual("card-editor-tag-entry-active")
+    }
+
+    func testInlineTagEntryCompletesIntoBodyEditingInOneTap() {
+        launchCardEditorFixture(mode: "empty")
+
+        waitForButton("cardEditorAddTag").tap()
+        waitFor("cardEditorTagInput").typeText("body-tag")
+        let body = waitFor("cardEditorBodyWebView")
+        body.coordinate(
+            withNormalizedOffset: CGVector(dx: 0.5, dy: 0.35)
+        ).tap()
+
+        XCTAssertTrue(waitFor("cardEditorTag.body-tag").exists)
+        waitForMissing("cardEditorTagInput")
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 2))
+        XCTAssertTrue(
+            waitFor("cardEditorFormattingBar", timeout: 5).exists,
+            "The body tap must keep editing in the WKWebView after completing the tag"
+        )
+    }
+
+    func testInlineTagEntryCommitsFromViewportBlankSpace() {
+        launchCardEditorFixture(mode: "empty")
+
+        waitForButton("cardEditorAddTag").tap()
+        waitFor("cardEditorTagInput").typeText("blank-space-tag")
+        let content = waitFor("cardEditorContent")
+        let tags = waitFor("cardEditorTagsRow")
+        let keyboard = app.keyboards.firstMatch
+        XCTAssertTrue(keyboard.waitForExistence(timeout: 10))
+
+        let spaceBelowTags = keyboard.frame.minY - tags.frame.maxY
+        let blankPoint: CGPoint
+        if spaceBelowTags >= 80 {
+            blankPoint = CGPoint(
+                x: app.frame.midX,
+                y: (tags.frame.maxY + keyboard.frame.minY) / 2
+            )
+            XCTAssertGreaterThan(
+                blankPoint.y,
+                tags.frame.maxY,
+                "The test tap must land in blank viewport below the metadata"
+            )
+        } else {
+            blankPoint = CGPoint(
+                x: app.frame.minX + 8,
+                y: (content.frame.maxY + tags.frame.minY) / 2
+            )
+            XCTAssertLessThan(
+                blankPoint.x,
+                content.frame.minX,
+                "Compact layouts must use the visible shell gutter"
+            )
+        }
+        XCTAssertLessThan(
+            blankPoint.y,
+            keyboard.frame.minY,
+            "The test tap must remain above the software keyboard"
+        )
+        XCTAssertFalse(content.frame.contains(blankPoint))
+        XCTAssertFalse(tags.frame.contains(blankPoint))
+
+        let origin = app.coordinate(
+            withNormalizedOffset: CGVector(dx: 0, dy: 0)
+        )
+        origin.withOffset(
+            CGVector(dx: blankPoint.x, dy: blankPoint.y)
+        ).tap()
+
+        XCTAssertTrue(waitFor("cardEditorTag.blank-space-tag").exists)
+        waitForMissing("cardEditorTagInput")
+        waitForElementToDisappear(keyboard)
+        captureVisual("card-editor-tag-entry-completed")
+    }
+
+    func testInlineTagEntryCommitsFromGutterAfterLongContentScroll() {
+        app.launchEnvironment["CHORAI_CARD_EDITOR_FIXTURE_VIEWPORT_HEIGHT"] =
+            "520"
+        launchCardEditorFixture(mode: "keyboard")
+
+        let addTag = waitForButton("cardEditorAddTag")
+        let initialMetadataMaxY = addTag.frame.maxY
+        let screenOrigin = app.coordinate(
+            withNormalizedOffset: CGVector(dx: 0, dy: 0)
+        )
+        let dragStart = screenOrigin.withOffset(
+            CGVector(dx: app.frame.minX + 8, dy: 480)
+        )
+        let dragEnd = screenOrigin.withOffset(
+            CGVector(dx: app.frame.minX + 8, dy: app.frame.midY - 100)
+        )
+        for _ in 0..<6 where !addTag.isHittable
+            || addTag.frame.maxY > app.frame.maxY - 220 {
+            dragStart.press(forDuration: 0.05, thenDragTo: dragEnd)
+        }
+        XCTAssertLessThan(
+            addTag.frame.maxY,
+            initialMetadataMaxY,
+            "The long fixture must move before Tag entry"
+        )
+        XCTAssertTrue(addTag.isHittable)
+        addTag.tap()
+        waitFor("cardEditorTagInput").typeText("scrolled-gutter-tag")
+        let keyboard = app.keyboards.firstMatch
+        XCTAssertTrue(keyboard.waitForExistence(timeout: 10))
+        let content = waitFor("cardEditorContent")
+        let tags = waitFor("cardEditorTagsRow")
+        XCTAssertLessThan(
+            (content.frame.maxY + tags.frame.minY) / 2,
+            keyboard.frame.minY,
+            "The test gutter must remain inside the editor viewport"
+        )
+        tapCardEditorNonEditorGutter()
+
+        XCTAssertTrue(waitFor("cardEditorTag.scrolled-gutter-tag").exists)
+        waitForMissing("cardEditorTagInput")
+        waitForElementToDisappear(keyboard)
+    }
+
+    func testInlineTagEntryCommitsFromShellGutterAndRejectsBlankOrHashOnlyInput() {
         launchCardEditorFixture(mode: "empty")
 
         waitForButton("cardEditorAddTag").tap()
         waitFor("cardEditorTagInput").typeText("focus-tag")
-        let body = waitFor("cardEditorBodyWebView")
-        body.coordinate(
-            withNormalizedOffset: CGVector(dx: 0.25, dy: 0.08)
-        ).tap()
+        tapCardEditorNonEditorGutter()
         XCTAssertTrue(waitFor("cardEditorTag.focus-tag").exists)
+        waitForElementToDisappear(app.keyboards.firstMatch)
 
         let tags = app.descendants(matching: .any).matching(
             NSPredicate(format: "identifier BEGINSWITH %@", "cardEditorTag.")
         )
         let countBeforeBlank = tags.count
-        _ = waitFor("cardEditorFormattingBar")
-        let focusedTagActions = app.buttons.matching(
-            identifier: "cardEditorAddTag"
-        )
-        XCTAssertEqual(focusedTagActions.count, 1)
-        let focusedTagAction = focusedTagActions.firstMatch
-        XCTAssertTrue(focusedTagAction.isHittable)
-        focusedTagAction.tap()
-        waitForMissing("cardEditorFormattingBar")
+        waitForButton("cardEditorAddTag").tap()
         let blankInput = waitFor("cardEditorTagInput")
         XCTAssertTrue(blankInput.isHittable)
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 10))
-        blankInput.typeText("### ")
-        body.coordinate(
-            withNormalizedOffset: CGVector(dx: 0.25, dy: 0.08)
-        ).tap()
+        blankInput.typeText("   ")
+        tapCardEditorNonEditorGutter()
+        XCTAssertEqual(tags.count, countBeforeBlank)
+        XCTAssertTrue(waitForButton("cardEditorAddTag").exists)
+
+        waitForButton("cardEditorAddTag").tap()
+        waitFor("cardEditorTagInput").typeText("### ")
+        tapCardEditorNonEditorGutter()
         XCTAssertEqual(tags.count, countBeforeBlank)
         XCTAssertTrue(waitForButton("cardEditorAddTag").exists)
     }
 
-    func testCardEditorRelatedNotesAreDisplayOnly() {
+    func testInlineTagEntryCompletesBeforePrivacyToggleInOneTap() {
+        launchCardEditorFixture(mode: "empty")
+
+        waitForButton("cardEditorAddTag").tap()
+        waitFor("cardEditorTagInput").typeText("privacy-tag")
+        let privacy = waitForButton("cardEditorPrivacyButton")
+        privacy.tap()
+
+        XCTAssertTrue(waitFor("cardEditorTag.privacy-tag").exists)
+        waitForMissing("cardEditorTagInput")
+        XCTAssertEqual(privacy.label, "Make Private")
+        XCTAssertEqual(privacy.value as? String, "Public")
+    }
+
+    func testInlineTagEntryCompletesBeforeLinksDisclosureInOneTap() {
+        launchCardEditorFixture(mode: "populated")
+
+        waitForButton("cardEditorAddTag").tap()
+        waitFor("cardEditorTagInput").typeText("links-tag")
+        let disclosure = waitForButton("cardEditorLinksDisclosure")
+        disclosure.tap()
+
+        XCTAssertTrue(waitFor("cardEditorTag.links-tag").exists)
+        waitForMissing("cardEditorTagInput")
+        XCTAssertEqual(disclosure.value as? String, "Expanded")
+        XCTAssertTrue(waitFor(cardEditorFixtureLinkIdentifier("ast_fixture_a")).exists)
+    }
+
+    func testCardEditorRelatedNotesAllowRemovingOutgoingLinksOnly() {
         launchCardEditorFixture(mode: "populated")
 
         waitForButton("cardEditorLinksDisclosure").tap()
-        for id in [
-            "ast_fixture_a",
-            "ast_fixture_b",
-            "ast_fixture_c",
-            "ast_fixture_d",
-            "ast_fixture_e",
-        ] {
-            XCTAssertTrue(waitFor("cardEditorLink.\(id)").exists)
-            XCTAssertFalse(app.buttons["cardEditorLink.\(id)"].exists)
-        }
+        let outgoing = waitFor(cardEditorFixtureLinkIdentifier("ast_fixture_a"))
+        let incoming = waitFor(
+            cardEditorFixtureLinkIdentifier(
+                "ast_fixture_source",
+                sourceID: "ast_fixture_c"
+            )
+        )
+        XCTAssertFalse(
+            app.buttons[cardEditorFixtureLinkIdentifier("ast_fixture_a")].exists
+        )
+        XCTAssertFalse(
+            app.buttons[
+                cardEditorFixtureLinkIdentifier(
+                    "ast_fixture_source",
+                    sourceID: "ast_fixture_c"
+                )
+            ].exists
+        )
+
+        let removeOutgoing = waitForButton(
+            cardEditorFixtureRemoveLinkIdentifier("ast_fixture_a")
+        )
+        assertPrimaryControl(
+            removeOutgoing,
+            identifier: cardEditorFixtureRemoveLinkIdentifier("ast_fixture_a")
+        )
+        XCTAssertFalse(
+            app.descendants(matching: .any)[
+                cardEditorFixtureRemoveLinkIdentifier(
+                    "ast_fixture_source",
+                    sourceID: "ast_fixture_c"
+                )
+            ].exists,
+            "Incoming links must stay static in the source editor"
+        )
+        assertReadingOrder(outgoing, before: incoming)
+        captureVisual("card-editor-related-links-directional")
+
+        removeOutgoing.tap()
+        waitForMissing(cardEditorFixtureLinkIdentifier("ast_fixture_a"))
+        waitForMissing(cardEditorFixtureRemoveLinkIdentifier("ast_fixture_a"))
+        XCTAssertTrue(incoming.exists)
+        XCTAssertFalse(
+            app.descendants(matching: .any)[
+                cardEditorFixtureRemoveLinkIdentifier(
+                    "ast_fixture_source",
+                    sourceID: "ast_fixture_c"
+                )
+            ].exists
+        )
         for obsoleteIdentifier in [
             "cardEditorAddLink",
             "cardEditorLinkOverflow",
             "cardEditorLinksSheet",
-            "cardEditorRemoveLink.ast_fixture_a",
-            "cardEditorNonRemovableLink.ast_fixture_c",
         ] {
             XCTAssertFalse(
                 app.descendants(matching: .any)[obsoleteIdentifier].exists
             )
         }
+        captureVisual("card-editor-related-links-after-unlink")
     }
 
     func testCardEditorTopActionsAreDirectAndOrdered() {
@@ -735,6 +1003,11 @@ final class ArcNoteUITests: XCTestCase {
         let normalBody = app.staticTexts[bodyText]
         XCTAssertTrue(normalBody.waitForExistence(timeout: 10))
         let normalBodyHeight = normalBody.frame.height
+        let normalTagWidth = waitFor("cardEditorTag.idea").frame.width
+        waitForButton("cardEditorLinksDisclosure").tap()
+        let normalLinkHeight = waitFor(
+            cardEditorFixtureLinkIdentifier("ast_fixture_a")
+        ).frame.height
 
         app.terminate()
         app = XCUIApplication()
@@ -753,6 +1026,11 @@ final class ArcNoteUITests: XCTestCase {
             accessibilityBody.frame.height,
             normalBodyHeight * 1.2,
             "The Web-backed body must visibly scale with Dynamic Type"
+        )
+        XCTAssertGreaterThan(
+            waitFor("cardEditorTag.idea").frame.width,
+            normalTagWidth * 1.05,
+            "Tag metadata must visibly scale with Dynamic Type"
         )
 
         let back = waitForButton("cardEditorLeadingAction")
@@ -798,6 +1076,14 @@ final class ArcNoteUITests: XCTestCase {
                 "\(identifier) must remain at least 44 points tall"
             )
         }
+        disclosure.tap()
+        XCTAssertGreaterThan(
+            waitFor(
+                cardEditorFixtureLinkIdentifier("ast_fixture_a")
+            ).frame.height,
+            normalLinkHeight * 1.15,
+            "Related-note metadata must visibly scale with Dynamic Type"
+        )
         XCTAssertFalse(app.descendants(matching: .any)["cardEditorAddLink"].exists)
         XCTAssertFalse(app.descendants(matching: .any)["cardEditorHeader"].exists)
         XCTAssertFalse(
@@ -3841,6 +4127,123 @@ final class ArcNoteUITests: XCTestCase {
         )
     }
 
+    func testCardEditorOutgoingUnlinkRemovesCanonicalEdgeAndStaysRemoved() throws {
+        let session = try requireSmokeSession()
+        seedAppSession(session)
+        let suffix = UUID().uuidString.lowercased()
+        let sourceToken = "editor-unlink-source-\(suffix)"
+        let targetToken = "editor-unlink-target-\(suffix)"
+        var sourceID: String?
+        var targetID: String?
+        defer {
+            if let sourceID {
+                permanentlyCleanUpSmokeCard(id: sourceID, token: session.token)
+            }
+            if let targetID {
+                permanentlyCleanUpSmokeCard(id: targetID, token: session.token)
+            }
+        }
+
+        let sourceCardID = try createSmokeCard(
+            token: session.token,
+            searchToken: sourceToken,
+            isPublic: false
+        )
+        sourceID = sourceCardID
+        let targetCardID = try createSmokeCard(
+            token: session.token,
+            searchToken: targetToken,
+            isPublic: false
+        )
+        targetID = targetCardID
+
+        let directedIdentifier = "\(sourceCardID)--\(targetCardID)"
+        let rowIdentifier = "cardEditorLink.\(directedIdentifier)"
+        let removeIdentifier = "cardEditorRemoveLink.\(directedIdentifier)"
+
+        launchAuthenticatedApp()
+        tap("tab.library")
+        waitFor("card.home.\(sourceCardID)", timeout: 30).tap()
+        waitFor("cardEditorContent", timeout: 20)
+
+        openEditorCardActions()
+        waitForEditorCardAction(
+            "cardEditorActionLink",
+            timeout: 20,
+            requireHittable: true
+        ).tap()
+        waitFor("linkPopup", timeout: 20)
+        let search = waitFor("linkPopupSearch")
+        search.tap()
+        search.typeText(targetToken)
+        waitFor("linkPopupCard.\(targetCardID)", timeout: 30).tap()
+        waitForMissing("linkPopup", timeout: 20)
+
+        let createdEdges = try fetchSmokeCardLinks(
+            id: sourceCardID,
+            token: session.token
+        )
+        XCTAssertTrue(
+            createdEdges.contains {
+                $0.sourceAssetID == sourceCardID
+                    && $0.targetAssetID == targetCardID
+            },
+            "The supported Link flow must create the exact directed edge before unlinking"
+        )
+
+        closeNewNoteEditor()
+        waitFor("card.home.\(sourceCardID)", timeout: 30).tap()
+        waitFor("cardEditorContent", timeout: 20)
+        waitForButton("cardEditorLinksDisclosure", timeout: 30).tap()
+        XCTAssertTrue(waitFor(rowIdentifier, timeout: 30).exists)
+
+        let remove = waitForButton(removeIdentifier, timeout: 20)
+        assertPrimaryControl(remove, identifier: removeIdentifier)
+        remove.tap()
+
+        waitForMissing(rowIdentifier, timeout: 30)
+        waitForMissing(removeIdentifier, timeout: 30)
+        let edgesAfterUnlink = try fetchSmokeCardLinks(
+            id: sourceCardID,
+            token: session.token
+        )
+        XCTAssertFalse(
+            edgesAfterUnlink.contains {
+                $0.sourceAssetID == sourceCardID
+                    && $0.targetAssetID == targetCardID
+            },
+            "Unlink must remove the exact source-to-target edge from canonical storage"
+        )
+
+        closeNewNoteEditor()
+        waitFor("card.home.\(sourceCardID)", timeout: 30).tap()
+        waitFor("cardEditorContent", timeout: 20)
+        let disclosure = app.buttons["cardEditorLinksDisclosure"]
+        if disclosure.waitForExistence(timeout: 3) {
+            disclosure.tap()
+            XCTAssertEqual(disclosure.value as? String, "Expanded")
+            XCTAssertFalse(
+                app.descendants(matching: .any)[rowIdentifier]
+                    .waitForExistence(timeout: 3),
+                "The hydrated related-notes section must not restore the removed edge"
+            )
+            XCTAssertFalse(app.buttons[removeIdentifier].exists)
+        } else {
+            XCTAssertFalse(
+                disclosure.exists,
+                "A source with no remaining links must omit Related Notes after hydration"
+            )
+        }
+        XCTAssertFalse(
+            try fetchSmokeCardLinks(id: sourceCardID, token: session.token)
+                .contains {
+                    $0.sourceAssetID == sourceCardID
+                        && $0.targetAssetID == targetCardID
+                },
+            "The removed edge must remain absent canonically after reopening"
+        )
+    }
+
     func testNewDirtyCardLinkActionCreatesOnceAndPersistsCanonicalRelation() throws {
         let session = try requireSmokeSession()
         seedAppSession(session)
@@ -3873,8 +4276,7 @@ final class ArcNoteUITests: XCTestCase {
         waitForButton("note.create", timeout: 20).tap()
         waitFor("cardEditorContent", timeout: 20)
         typeInCardEditorBody(bodyText)
-        tapButton("cardEditorKeyboardDismiss")
-        waitForElementToDisappear(app.keyboards.firstMatch)
+        dismissCardEditorKeyboardWithVerticalDrag()
 
         openEditorCardActions()
         waitForEditorCardAction(
@@ -3956,8 +4358,7 @@ final class ArcNoteUITests: XCTestCase {
         waitForButton("note.create", timeout: 20).tap()
         waitFor("cardEditorContent", timeout: 20)
         typeInCardEditorBody(bodyText)
-        tapButton("cardEditorKeyboardDismiss")
-        waitForElementToDisappear(app.keyboards.firstMatch)
+        dismissCardEditorKeyboardWithVerticalDrag()
 
         let privacy = waitForEnabledButton("cardEditorPrivacyButton")
         XCTAssertEqual(privacy.label, "Make Public")
@@ -4023,8 +4424,7 @@ final class ArcNoteUITests: XCTestCase {
         waitForButton("note.create", timeout: 20).tap()
         waitFor("cardEditorContent", timeout: 20)
         typeInCardEditorBody(bodyText)
-        tapButton("cardEditorKeyboardDismiss")
-        waitForElementToDisappear(app.keyboards.firstMatch)
+        dismissCardEditorKeyboardWithVerticalDrag()
 
         let baselineCardIDs = try fetchAllSmokeCardIDs(token: session.token)
         defer {
@@ -4117,8 +4517,7 @@ final class ArcNoteUITests: XCTestCase {
 
         let latestSuffix = " recovered latest \(suffix)"
         replaceCardEditorBody(with: bodyText + latestSuffix)
-        tapButton("cardEditorKeyboardDismiss")
-        waitForElementToDisappear(app.keyboards.firstMatch)
+        dismissCardEditorKeyboardWithVerticalDrag()
         waitForButton("cardEditorLeadingAction").tap()
         waitForLabel(
             "cardEditorLeadingAction",
@@ -5975,6 +6374,129 @@ final class ArcNoteUITests: XCTestCase {
             line: line
         )
         app.typeText(text)
+    }
+
+    private func dismissCardEditorKeyboardWithVerticalDrag(
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let keyboard = app.keyboards.firstMatch
+        XCTAssertTrue(
+            keyboard.exists,
+            "Expected the Card Editor keyboard before dismissing it",
+            file: file,
+            line: line
+        )
+
+        let body = waitFor(
+            "cardEditorBodyWebView",
+            timeout: 10,
+            file: file,
+            line: line
+        )
+        let formattingBar = waitFor(
+            "cardEditorFormattingBar",
+            timeout: 10,
+            file: file,
+            line: line
+        )
+        let startY = min(
+            body.frame.maxY - 12,
+            formattingBar.frame.minY - 24,
+            app.frame.maxY - 24
+        )
+        XCTAssertGreaterThan(
+            startY,
+            body.frame.minY + 24,
+            "The vertical dismissal drag must start inside the editor body",
+            file: file,
+            line: line
+        )
+        let origin = app.coordinate(
+            withNormalizedOffset: CGVector(dx: 0, dy: 0)
+        )
+        let start = origin.withOffset(
+            CGVector(dx: body.frame.midX, dy: startY)
+        )
+        let end = origin.withOffset(
+            CGVector(dx: body.frame.midX, dy: startY - 96)
+        )
+        start.press(forDuration: 0.05, thenDragTo: end)
+
+        let viewportBottom = app.frame.maxY
+        let expectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate { evaluatedObject, _ in
+                guard let element = evaluatedObject as? XCUIElement else {
+                    return false
+                }
+                return !element.exists || element.frame.minY >= viewportBottom
+            },
+            object: keyboard
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [expectation], timeout: 10),
+            .completed,
+            "The Card Editor keyboard must leave the visible viewport",
+            file: file,
+            line: line
+        )
+    }
+
+    private func tapCardEditorNonEditorGutter(
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let content = waitFor(
+            "cardEditorContent",
+            file: file,
+            line: line
+        )
+        let tags = waitFor(
+            "cardEditorTagsRow",
+            file: file,
+            line: line
+        )
+        let gutterX = app.frame.minX + 8
+        let gutterY = (content.frame.maxY + tags.frame.minY) / 2
+        XCTAssertLessThan(
+            gutterX,
+            content.frame.minX,
+            "The tag completion tap must land in the shell gutter, not the body editor",
+            file: file,
+            line: line
+        )
+        XCTAssertLessThan(
+            content.frame.maxY,
+            gutterY,
+            "The shell gutter must stay below the body editor",
+            file: file,
+            line: line
+        )
+        XCTAssertLessThan(
+            gutterY,
+            tags.frame.minY,
+            "The shell gutter must stay above the metadata controls",
+            file: file,
+            line: line
+        )
+        let origin = app.coordinate(
+            withNormalizedOffset: CGVector(dx: 0, dy: 0)
+        )
+        origin.withOffset(CGVector(dx: gutterX, dy: gutterY)).tap()
+    }
+
+    private func cardEditorFixtureLinkIdentifier(
+        _ targetID: String,
+        sourceID: String = "ast_fixture_source"
+    ) -> String {
+        "cardEditorLink.\(sourceID)--\(targetID)"
+    }
+
+    private func cardEditorFixtureRemoveLinkIdentifier(
+        _ targetID: String,
+        sourceID: String = "ast_fixture_source"
+    ) -> String {
+        "cardEditorRemoveLink.\(sourceID)--\(targetID)"
     }
 
     private func replaceCardEditorBody(

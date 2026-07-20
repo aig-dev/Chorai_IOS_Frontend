@@ -17,6 +17,12 @@ enum CardEditorFormattingCommand: String, CaseIterable, Identifiable {
     case undo
     case redo
 
+    static let scrollableCommands: [Self] = [
+        .paragraph, .heading2, .heading3, .bold, .italic, .underline,
+        .strike, .bulletList, .numberedList, .checklist, .inlineLink,
+        .undo, .redo,
+    ]
+
     var id: String { rawValue }
 
     var accessibilityIdentifier: String {
@@ -84,16 +90,7 @@ struct CardEditorFormattingBar: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Button(action: model.dismissKeyboard) {
-                Image(systemName: "keyboard.chevron.compact.down")
-                    .font(.body.weight(.semibold))
-                    .frame(minWidth: 45, minHeight: 44)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(.white)
-            .accessibilityLabel("Dismiss keyboard")
-            .accessibilityIdentifier("cardEditorKeyboardDismiss")
+            commandButton(.inlineImage)
 
             Button(action: onBeginTag) {
                 Image(systemName: "tag")
@@ -114,7 +111,7 @@ struct CardEditorFormattingBar: View {
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 4) {
-                    ForEach(CardEditorFormattingCommand.allCases) { command in
+                    ForEach(CardEditorFormattingCommand.scrollableCommands) { command in
                         commandButton(command)
                     }
                 }
@@ -123,10 +120,13 @@ struct CardEditorFormattingBar: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 4)
         .background {
-            CardEditorGlassSurface(
-                shape: Rectangle(),
-                style: .chrome
-            )
+            ZStack {
+                ZenVisualTokens.background.opacity(0.78)
+                CardEditorGlassSurface(
+                    shape: Rectangle(),
+                    style: .chrome
+                )
+            }
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("cardEditorFormattingBar")

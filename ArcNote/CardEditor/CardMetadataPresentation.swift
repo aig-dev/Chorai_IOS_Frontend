@@ -45,17 +45,17 @@ struct CardMetadataTagCapsule: View {
         HStack(spacing: 5) {
             if let leadingSystemImage {
                 Image(systemName: leadingSystemImage)
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.caption2.weight(.semibold))
             }
 
             Text(tag)
-                .font(.system(size: 12, weight: .medium))
+                .font(.caption.weight(.medium))
                 .lineLimit(1)
                 .truncationMode(.tail)
 
             if showsRemoveIndicator {
                 Image(systemName: "xmark")
-                    .font(.system(size: 9, weight: .semibold))
+                    .font(.caption2.weight(.semibold))
             }
         }
         .cardMetadataTagCapsuleStyle()
@@ -87,14 +87,14 @@ struct CardMetadataRelatedRow: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(title.isEmpty ? "Related note" : title)
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.callout.weight(.semibold))
                     .foregroundStyle(.white)
                     .lineLimit(1)
 
                 HTMLTextRenderer(
                     htmlContent: previewHTML ?? "",
                     maxLines: 2,
-                    font: .system(size: 14, weight: .regular),
+                    font: .footnote,
                     foregroundColor: .white.opacity(0.7)
                 )
             }

@@ -26,10 +26,13 @@ enum CardEditorLeadingControlState: Equatable {
 
 struct CardEditorShell: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @FocusState private var isTagInputFocused: Bool
     @ObservedObject var bodyModel: BlockNoteCardEditorModel
 
     let tags: [String]
     let links: [CardEditorLinkItem]
+    let unlinkingLinkID: String?
+    let isLinkRemovalEnabled: Bool
     let background: CardEditorBackgroundSource
     let isPublic: Bool
     let isMetadataEditable: Bool
@@ -42,6 +45,7 @@ struct CardEditorShell: View {
     let onBeginTag: () -> Void
     let onCompleteTag: () -> Void
     let onRemoveTag: (String) -> Void
+    let onRemoveLink: (CardEditorLinkItem) -> Void
     let onTogglePrivacy: () -> Void
     let onOpenCardActions: (() -> Void)?
 
@@ -49,6 +53,8 @@ struct CardEditorShell: View {
         bodyModel: BlockNoteCardEditorModel,
         tags: [String],
         links: [CardEditorLinkItem],
+        unlinkingLinkID: String? = nil,
+        isLinkRemovalEnabled: Bool = false,
         background: CardEditorBackgroundSource,
         isPublic: Bool,
         isMetadataEditable: Bool,
@@ -61,12 +67,15 @@ struct CardEditorShell: View {
         onBeginTag: @escaping () -> Void,
         onCompleteTag: @escaping () -> Void,
         onRemoveTag: @escaping (String) -> Void,
+        onRemoveLink: @escaping (CardEditorLinkItem) -> Void,
         onTogglePrivacy: @escaping () -> Void,
         onOpenCardActions: (() -> Void)? = nil
     ) {
         self.bodyModel = bodyModel
         self.tags = tags
         self.links = links
+        self.unlinkingLinkID = unlinkingLinkID
+        self.isLinkRemovalEnabled = isLinkRemovalEnabled
         self.background = background
         self.isPublic = isPublic
         self.isMetadataEditable = isMetadataEditable
@@ -79,6 +88,7 @@ struct CardEditorShell: View {
         self.onBeginTag = onBeginTag
         self.onCompleteTag = onCompleteTag
         self.onRemoveTag = onRemoveTag
+        self.onRemoveLink = onRemoveLink
         self.onTogglePrivacy = onTogglePrivacy
         self.onOpenCardActions = onOpenCardActions
     }
@@ -86,66 +96,84 @@ struct CardEditorShell: View {
     var body: some View {
         ZStack(alignment: .top) {
             CardEditorAmbientBackdrop()
+                .contentShape(Rectangle())
+                .onTapGesture(perform: completeTagEntry)
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    CardEditorBackground(background: background) {
-                        BlockNoteCardEditor(model: bodyModel)
-                    }
-                    .simultaneousGesture(
-                        TapGesture().onEnded {
-                            guard isAddingTag else { return }
-                            onCompleteTag()
-                        }
-                    )
-                    .accessibilityElement(children: .contain)
-                    .accessibilityIdentifier("cardEditorContent")
-
-                    CardEditorTagRow(
-                        tags: tags,
-                        isEditable: isMetadataEditable,
-                        isAddingTag: isAddingTag,
-                        prefersKeyboardTagAction: bodyModel.isBodyFocused,
-                        tagInput: $tagInput,
-                        onBeginTag: onBeginTag,
-                        onCompleteTag: onCompleteTag,
-                        onRemove: onRemoveTag
-                    )
-                    .accessibilityElement(children: .contain)
-                    .accessibilityIdentifier("cardEditorTagsRow")
-
-                    if !links.isEmpty {
-                        CardEditorLinkRow(links: links)
+            GeometryReader { viewport in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 14) {
+                            CardEditorBackground(background: background) {
+                                BlockNoteCardEditor(model: bodyModel)
+                            }
+                            .simultaneousGesture(
+                                TapGesture().onEnded {
+                                    completeTagEntry()
+                                }
+                            )
                             .accessibilityElement(children: .contain)
-                            .accessibilityIdentifier("cardEditorLinksRow")
-                    }
+                            .accessibilityIdentifier("cardEditorContent")
 
-                    if isInlineImageProcessing || saveMessage != nil {
-                        editorStatus
-                    }
+                            CardEditorTagRow(
+                                tags: tags,
+                                isEditable: isMetadataEditable,
+                                isAddingTag: isAddingTag,
+                                prefersKeyboardTagAction: bodyModel.isBodyFocused,
+                                tagInput: $tagInput,
+                                isTagInputFocused: $isTagInputFocused,
+                                onBeginTag: onBeginTag,
+                                onCompleteTag: completeTagEntry,
+                                onInteraction: completeTagEntry,
+                                onRemove: onRemoveTag
+                            )
+                            .accessibilityElement(children: .contain)
+                            .accessibilityIdentifier("cardEditorTagsRow")
 
+                            if !links.isEmpty {
+                                CardEditorLinkRow(
+                                    links: links,
+                                    unlinkingLinkID: unlinkingLinkID,
+                                    isRemovalEnabled: isMetadataEditable
+                                        && isLinkRemovalEnabled,
+                                    onInteraction: completeTagEntry,
+                                    onRemove: onRemoveLink
+                                )
+                                    .accessibilityElement(children: .contain)
+                                    .accessibilityIdentifier("cardEditorLinksRow")
+                            }
+
+                            if isInlineImageProcessing || saveMessage != nil {
+                                editorStatus
+                            }
+                    }
+                    .adaptiveContentGutter()
+                    .padding(.top, 56)
+                    .padding(.bottom, 96)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(minHeight: viewport.size.height, alignment: .top)
+                    .background {
+                        CardEditorBlankTapSurface(action: completeTagEntry)
+                            .allowsHitTesting(isAddingTag)
+                    }
                 }
-                .adaptiveContentGutter()
-                .padding(.top, 56)
-                .padding(.bottom, 96)
+                .scrollDismissesKeyboard(.interactively)
+                .simultaneousGesture(
+                    DragGesture(minimumDistance: 12)
+                        .onChanged { value in
+                            let horizontal = abs(value.translation.width)
+                            let vertical = abs(value.translation.height)
+                            guard bodyModel.isBodyFocused,
+                                  vertical >= 24,
+                                  vertical > horizontal else { return }
+                            bodyModel.dismissKeyboard()
+                        }
+                )
             }
-            .scrollDismissesKeyboard(.interactively)
-            .simultaneousGesture(
-                DragGesture(minimumDistance: 12)
-                    .onChanged { value in
-                        let horizontal = abs(value.translation.width)
-                        let vertical = abs(value.translation.height)
-                        guard bodyModel.isBodyFocused,
-                              vertical >= 24,
-                              vertical > horizontal else { return }
-                        bodyModel.dismissKeyboard()
-                    }
-            )
 
             CardEditorFloatingControls(
                 isPublic: isPublic,
                 isMetadataEditable: isMetadataEditable,
                 leadingControlState: leadingControlState,
+                onInteraction: completeTagEntry,
                 onLeadingControl: onLeadingControl,
                 onTogglePrivacy: onTogglePrivacy,
                 onOpenCardActions: onOpenCardActions
@@ -199,19 +227,40 @@ struct CardEditorShell: View {
             }
         }
     }
+
+    private func completeTagEntry() {
+        guard isAddingTag else { return }
+        isTagInputFocused = false
+        onCompleteTag()
+    }
+}
+
+private struct CardEditorBlankTapSurface: View {
+    let action: () -> Void
+
+    var body: some View {
+        Color.clear
+            .contentShape(Rectangle())
+            .onTapGesture(perform: action)
+            .accessibilityHidden(true)
+    }
 }
 
 private struct CardEditorFloatingControls: View {
     let isPublic: Bool
     let isMetadataEditable: Bool
     let leadingControlState: CardEditorLeadingControlState
+    let onInteraction: () -> Void
     let onLeadingControl: () -> Void
     let onTogglePrivacy: () -> Void
     let onOpenCardActions: (() -> Void)?
 
     var body: some View {
         ZStack {
-            Button(action: onLeadingControl) {
+            Button {
+                onInteraction()
+                onLeadingControl()
+            } label: {
                 Group {
                     if leadingControlState == .saving {
                         ProgressView()
@@ -241,7 +290,10 @@ private struct CardEditorFloatingControls: View {
             .accessibilitySortPriority(3)
 
             HStack(spacing: 8) {
-                Button(action: onTogglePrivacy) {
+                Button {
+                    onInteraction()
+                    onTogglePrivacy()
+                } label: {
                     Image(systemName: isPublic ? "globe" : "lock")
                         .font(.system(size: 17, weight: .semibold))
                         .frame(width: 44, height: 44)
@@ -258,6 +310,7 @@ private struct CardEditorFloatingControls: View {
                 .accessibilitySortPriority(2)
 
                 Button {
+                    onInteraction()
                     onOpenCardActions?()
                 } label: {
                     Image(systemName: "ellipsis")
@@ -405,6 +458,7 @@ struct CardEditorShellFixtureScreen: View {
                 bodyModel: bodyModel,
                 tags: tags,
                 links: links,
+                isLinkRemovalEnabled: bodyModel.canMutate,
                 background: background,
                 isPublic: isPublic,
                 isMetadataEditable: bodyModel.canMutate,
@@ -420,6 +474,9 @@ struct CardEditorShellFixtureScreen: View {
                 onRemoveTag: { tag in
                     tags.removeAll { $0 == tag }
                     actionRouter.markDirty()
+                },
+                onRemoveLink: { link in
+                    links.removeAll { $0.id == link.id }
                 },
                 onTogglePrivacy: {
                     isPublic.toggle()
@@ -661,7 +718,8 @@ private extension CardEditorShellFixtureMode {
         if self == .blocked {
             return [
                 .init(
-                    id: "ast_blocked",
+                    sourceCardID: "ast_blocked",
+                    targetCardID: "ast_blocked_target",
                     title: "Preserved relation",
                     previewHTML: "Read-only linked note"
                 ),
@@ -672,14 +730,36 @@ private extension CardEditorShellFixtureMode {
         }
         return [
             .init(
-                id: "ast_fixture_a",
+                sourceCardID: "ast_fixture_source",
+                targetCardID: "ast_fixture_a",
                 title: "Ada",
-                previewHTML: "A compact related-note preview."
+                previewHTML: "A compact related-note preview.",
+                canRemove: true
             ),
-            .init(id: "ast_fixture_b", title: "Bea"),
-            .init(id: "ast_fixture_c", title: "Chen"),
-            .init(id: "ast_fixture_d", title: "Dev"),
-            .init(id: "ast_fixture_e", title: "Eli"),
+            .init(
+                sourceCardID: "ast_fixture_source",
+                targetCardID: "ast_fixture_b",
+                title: "Bea",
+                canRemove: true
+            ),
+            .init(
+                sourceCardID: "ast_fixture_c",
+                targetCardID: "ast_fixture_source",
+                title: "Chen",
+                canRemove: false
+            ),
+            .init(
+                sourceCardID: "ast_fixture_source",
+                targetCardID: "ast_fixture_d",
+                title: "Dev",
+                canRemove: true
+            ),
+            .init(
+                sourceCardID: "ast_fixture_source",
+                targetCardID: "ast_fixture_e",
+                title: "Eli",
+                canRemove: true
+            ),
         ]
     }
 }
