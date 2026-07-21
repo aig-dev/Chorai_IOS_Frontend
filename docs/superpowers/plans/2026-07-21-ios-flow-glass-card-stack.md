@@ -639,6 +639,13 @@ xcrun simctl ui booted content_size large
 
 Expected: 1 test passes with 0 failures, all existing controls stay reachable, and no foreground content escapes the card.
 
+- [ ] **Step 10: Commit the live Flow UI fixture**
+
+```bash
+git add ArcNoteUITests/ArcNoteUITests.swift
+git commit -m "test: cover Flow glass avatar stack"
+```
+
 ### Task 4: Record visual QA and complete the requirement audit
 
 **Files:**
@@ -709,7 +716,7 @@ git status --short
 rg -n "final result: passed|Avatar:|Stack:|Glass:|Accessibility:" docs/qa/ios-flow-glass-card-stack-design-qa.md
 ```
 
-Expected: no whitespace errors; only intended implementation, test, and QA files differ from the two task commits; the report contains one passing result and all four evidence findings.
+Expected: no whitespace errors; only the intended QA file remains uncommitted after the three preceding implementation/test commits; the report contains one passing result and all four evidence findings.
 
 - [ ] **Step 4: Commit the QA evidence**
 
@@ -730,4 +737,4 @@ xcodebuild -project ArcNote.xcodeproj -scheme 'ArcNote Production' -destination 
 git status --short
 ```
 
-Expected: focused and full tests pass, both builds succeed, and the worktree is clean after the three implementation/QA commits.
+Expected: focused and full tests pass, both builds succeed, and the worktree is clean after the four implementation/test/QA commits.
