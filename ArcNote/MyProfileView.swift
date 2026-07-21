@@ -14,7 +14,6 @@ struct MyProfileView: View {
     
     // 导航状态
     @State private var navigateToDetail = false
-    @State private var navigateToEdit = false
     @State private var selectedCardId: String? = nil
     @State private var showFollowList = false
     @State private var followListKind: FollowListKind = .followers
@@ -274,33 +273,9 @@ struct MyProfileView: View {
             
             cardsManager.loadUserCards(refresh: true)
         }
-        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NavigateToDetail"))) { notification in
-            if let cardId = notification.userInfo?["cardId"] as? String {
-                selectedCardId = cardId
-                DispatchQueue.main.async {
-                    navigateToDetail = true
-                }
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NavigateToEdit"))) { notification in
-            if let cardId = notification.userInfo?["cardId"] as? String {
-                print("编辑cardId=\(cardId)")
-                selectedCardId = cardId
-                DispatchQueue.main.async {
-                    navigateToEdit = true
-                }
-            }
-        }
         .navigationDestination(isPresented: $navigateToDetail) {
             if let cardId = selectedCardId {
                 DetailView(cardId: cardId)
-            } else {
-                EmptyView()
-            }
-        }
-        .navigationDestination(isPresented: $navigateToEdit) {
-            if let cardId = selectedCardId {
-                NewNoteView(cardId: cardId)
             } else {
                 EmptyView()
             }

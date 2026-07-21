@@ -139,9 +139,7 @@ public enum SparkSessionPhase: Equatable, Sendable {
 }
 
 public enum SparkNotice: Equatable, Sendable {
-    case saved(assetID: String)
     case saveFailed
-    case undoFailed
     case moreFailed
 }
 
@@ -226,8 +224,6 @@ public struct SparkSessionSnapshot: Codable, Equatable, Sendable {
 
 public enum SparkGestureDecision: Equatable, Sendable {
     case next
-    case save
-    case sparkDeeper
     case cancel
 }
 
@@ -246,21 +242,12 @@ public enum SparkGestureResolver {
 
         if horizontalMagnitude >= verticalMagnitude * dominanceRatio {
             if abs(translationX) >= translationThreshold {
-                return translationX > 0 ? .save : .next
+                return .next
             }
             if abs(predictedEndX) >= predictionThreshold {
-                return predictedEndX > 0 ? .save : .next
+                return .next
             }
             return .cancel
-        }
-
-        if verticalMagnitude >= horizontalMagnitude * dominanceRatio {
-            if translationY <= -translationThreshold {
-                return .sparkDeeper
-            }
-            if predictedEndY <= -predictionThreshold {
-                return .sparkDeeper
-            }
         }
 
         return .cancel

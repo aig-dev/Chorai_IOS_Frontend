@@ -54,6 +54,9 @@ final class SparkContinuationSourceContractTests: XCTestCase {
     }
 
     func testSparkResultCardUsesTheFlowCardPresentationLanguage() throws {
+        let continuation = try source(
+            at: "ArcNote/CoreFlow/SparkContinuationViews.swift"
+        )
         let card = try sparkResultCardSource()
 
         XCTAssertFalse(
@@ -69,15 +72,9 @@ final class SparkContinuationSourceContractTests: XCTestCase {
                 ".accessibilityIdentifier(\"spark.continue.\\(result.id)\")"
             )
         )
-        XCTAssertFalse(
-            card.contains(
-                ".accessibilityAction(named: Text(\"Spark deeper\"), onSparkDeeper)"
-            ),
-            "A failed card must not advertise a guarded no-op accessibility action"
-        )
         XCTAssertTrue(
-            card.contains("SparkDeeperAccessibilityActionModifier("),
-            "The accessibility continuation action must follow allowsSparkDeeper"
+            card.contains(".disabled(!allowsSparkDeeper)"),
+            "The direct continuation button must follow the loaded state"
         )
         XCTAssertTrue(
             card.contains(
@@ -85,7 +82,7 @@ final class SparkContinuationSourceContractTests: XCTestCase {
             )
         )
         XCTAssertTrue(card.contains(".lineSpacing(5)"))
-        XCTAssertTrue(card.contains("iconSize: CGFloat = 22"))
+        XCTAssertTrue(continuation.contains("iconSize: CGFloat = 22"))
         XCTAssertTrue(
             card.contains("iconSize: 24"),
             "Favorite uses the same optical compensation as the Flow footer"
@@ -97,8 +94,61 @@ final class SparkContinuationSourceContractTests: XCTestCase {
             card.contains("count: result.card.likeCount"),
             "Spark and Flow cards must expose the same engagement metrics"
         )
-        XCTAssertTrue(card.contains(".frame(width: iconSize, height: iconSize)"))
-        XCTAssertTrue(card.contains(".frame(minWidth: 44, minHeight: 44)"))
+        XCTAssertTrue(
+            continuation.contains(".frame(width: iconSize, height: iconSize)")
+        )
+        XCTAssertTrue(
+            continuation.contains(".frame(minWidth: 44, minHeight: 44)")
+        )
+    }
+
+    func testSparkFooterFavoriteIsInteractiveAndOutsideTheDetailTapRegion() throws {
+        let card = try sparkResultCardSource()
+
+        XCTAssertTrue(card.contains("let onToggleFavorite: () -> Void"))
+        XCTAssertTrue(card.contains("Button(action: onToggleFavorite)"))
+        XCTAssertTrue(
+            card.contains(
+                ".accessibilityIdentifier(\"spark.favorite.\\(result.id)\")"
+            )
+        )
+        XCTAssertTrue(
+            card.contains(
+                ".accessibilityValue(result.card.isFavorited ? \"true\" : \"false\")"
+            )
+        )
+
+        guard let contentStart = card.range(of: "private var tappableContent"),
+              let footerStart = card.range(of: "private var engagementFooter") else {
+            XCTFail("Unable to isolate the Spark content and footer regions")
+            return
+        }
+
+        let tappableContent = String(
+            card[contentStart.lowerBound..<footerStart.lowerBound]
+        )
+        let engagementFooter = String(card[footerStart.lowerBound...])
+        XCTAssertTrue(tappableContent.contains(".onTapGesture(perform: onOpenCard)"))
+        XCTAssertFalse(
+            engagementFooter.contains(".onTapGesture(perform: onOpenCard)"),
+            "The footer must not inherit the card-detail tap target"
+        )
+    }
+
+    func testSparkCardHasNoBottomCueUpwardContinuationOrSavedOverlay() throws {
+        let continuation = try source(
+            at: "ArcNote/CoreFlow/SparkContinuationViews.swift"
+        )
+        let card = try sparkResultCardSource()
+
+        XCTAssertFalse(continuation.contains("SparkUpwardCue"))
+        XCTAssertFalse(card.contains("SparkDeeperAccessibilityActionModifier"))
+        XCTAssertFalse(card.contains("case .sparkDeeper"))
+        XCTAssertFalse(card.contains("let onSave: () -> Void"))
+        XCTAssertFalse(card.contains("Save result"))
+        XCTAssertFalse(continuation.contains("case .saved"))
+        XCTAssertFalse(continuation.contains("spark.save.undo"))
+        XCTAssertFalse(continuation.contains("SparkIconNotice"))
     }
 
     private func sparkResultCardSource() throws -> String {
@@ -106,9 +156,7 @@ final class SparkContinuationSourceContractTests: XCTestCase {
             at: "ArcNote/CoreFlow/SparkContinuationViews.swift"
         )
         guard let start = source.range(of: "private struct SparkResultCard: View"),
-              let end = source.range(
-                of: "private struct SparkGestureIndicator: View"
-              ) else {
+              let end = source.range(of: "private struct SparkAvatar: View") else {
             XCTFail("Unable to isolate SparkResultCard source")
             return ""
         }

@@ -577,13 +577,6 @@ struct ExploreView: View {
             showExplorePopupMenu = false
             showFilterTags = false
         }
-        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NavigateToDetail"))) { notification in
-            if let cardId = notification.userInfo?["cardId"] as? String {
-                print("收到导航到详情页通知: cardId=\(cardId)")
-                selectedCardId = cardId
-                navigateToDetail = true
-            }
-        }
         .onTapGesture {
             // 点击输入框之外的地方关闭键盘
             if isSearchMode {

@@ -47,6 +47,11 @@ class LinkPopupManager: ObservableObject {
     private var isInitiatingCardOwned = true
     private var navigateAfterLink = true
     private var presentationMode: LinkPopupPresentationMode = .createLink
+    private var onNavigate: ((CardNavigationRoute) -> Void)?
+    private var presentationID = UUID()
+    private var linkRequestCancellable: AnyCancellable?
+    private var searchRequestID = UUID()
+    private var searchRequestCancellable: AnyCancellable?
     
     static let shared = LinkPopupManager()
     
@@ -64,8 +69,17 @@ class LinkPopupManager: ObservableObject {
         cardId: String? = nil,
         isInitiatingCardOwned: Bool = true,
         navigateAfterLink: Bool = true,
-        mode: LinkPopupPresentationMode = .createLink
+        mode: LinkPopupPresentationMode = .createLink,
+        onNavigate: ((CardNavigationRoute) -> Void)? = nil
     ) {
+        linkRequestCancellable?.cancel()
+        linkRequestCancellable = nil
+        searchRequestCancellable?.cancel()
+        searchRequestCancellable = nil
+        isLinking = false
+        isLoading = false
+        presentationID = UUID()
+        searchRequestID = UUID()
         showErrorAlert = false
         errorMessage = ""
         isShowing = true
@@ -73,12 +87,21 @@ class LinkPopupManager: ObservableObject {
         self.isInitiatingCardOwned = isInitiatingCardOwned
         self.navigateAfterLink = navigateAfterLink
         self.presentationMode = mode
+        self.onNavigate = onNavigate
         self.searchType = isInitiatingCardOwned ? "own+favorite" : "own"
         // 打开时获取初始数据（不带关键词）
         searchCards(keyword: "")
     }
     
     func hide() {
+        linkRequestCancellable?.cancel()
+        linkRequestCancellable = nil
+        searchRequestCancellable?.cancel()
+        searchRequestCancellable = nil
+        isLinking = false
+        isLoading = false
+        presentationID = UUID()
+        searchRequestID = UUID()
         isShowing = false
         showErrorAlert = false
         errorMessage = ""
@@ -87,10 +110,13 @@ class LinkPopupManager: ObservableObject {
         currentCardId = nil
         isInitiatingCardOwned = true
         navigateAfterLink = true
+        onNavigate = nil
     }
     
     // MARK: - Link 卡片
     func linkCard(linkItem: LinkItem) {
+        guard !isLinking else { return }
+
         if presentationMode == .selectionOnly {
             hide()
             onCardSelected?(linkItem)
@@ -122,8 +148,12 @@ class LinkPopupManager: ObservableObject {
             }
             
             let linkRequest = LinkRequest(linkedCardId: actualLinkedCardId)
+            let requestPresentationID = presentationID
+            let shouldNavigate = navigateAfterLink
+            let navigate = onNavigate
+            let selectionCallback = onCardSelected
             
-            NetworkManager.shared.createCardLink(
+            linkRequestCancellable = NetworkManager.shared.createCardLink(
                 cardId: actualCardId,
                 reques: linkRequest,
                 presentsError: false
@@ -131,57 +161,58 @@ class LinkPopupManager: ObservableObject {
                 .receive(on: DispatchQueue.main)
                 .sink(
                     receiveCompletion: { [weak self] completion in
-                        self?.isLinking = false
+                        guard let self,
+                              self.presentationID == requestPresentationID else {
+                            return
+                        }
+                        self.isLinking = false
                         if case .failure(let error) = completion {
                             print("关联卡片失败: \(error.localizedDescription)")
                             // 检查是否是400错误（卡片链接已存在）
                             switch error {
                             case .serverError(let code, _):
                                 if code == 400 {
-                                    self?.errorMessage = "卡片链接已存在"
+                                    self.errorMessage = "卡片链接已存在"
                                 } else {
-                                    self?.errorMessage = "链接失败"
+                                    self.errorMessage = "链接失败"
                                 }
-                                self?.showErrorAlert = true
+                                self.showErrorAlert = true
                             case .api(let statusCode, _, _):
-                                self?.errorMessage = statusCode == 400 ? "卡片链接已存在" : "链接失败"
-                                self?.showErrorAlert = true
+                                self.errorMessage = statusCode == 400 ? "卡片链接已存在" : "链接失败"
+                                self.showErrorAlert = true
                             default:
-                                self?.errorMessage = "链接失败"
-                                self?.showErrorAlert = true
+                                self.errorMessage = "链接失败"
+                                self.showErrorAlert = true
                             }
                         }
                     },
                     receiveValue: { [weak self] response in
-                        self?.isLinking = false
+                        guard let self,
+                              self.presentationID == requestPresentationID else {
+                            return
+                        }
+                        self.isLinking = false
                         if response.success {
-                            guard let self = self else { return }
-                            let shouldNavigate = self.navigateAfterLink
                             self.hide()
 
                             if shouldNavigate {
                                 let isOwnCard = linkItem.authorId == currentActorId
-                                NotificationCenter.default.post(
-                                    name: NSNotification.Name(
-                                        isOwnCard
-                                            ? "NavigateToEdit"
-                                            : "NavigateToDetail"
-                                    ),
-                                    object: nil,
-                                    userInfo: ["cardId": linkItem.id]
+                                navigate?(
+                                    isOwnCard
+                                        ? .editor(linkItem.id)
+                                        : .detail(linkItem.id)
                                 )
                             }
                             
                             // 调用回调
-                            self.onCardSelected?(linkItem)
+                            selectionCallback?(linkItem)
                         } else {
                             print("失败: \(response.message)")
-                            self?.errorMessage = "链接失败"
-                            self?.showErrorAlert = true
+                            self.errorMessage = "链接失败"
+                            self.showErrorAlert = true
                         }
                     }
                 )
-                .store(in: &cancellables)
         } else {
             print("选择卡片: \(linkItem.title)")
             hide()
@@ -191,7 +222,16 @@ class LinkPopupManager: ObservableObject {
     
     // 搜索卡片
     private func searchCards(keyword: String) {
+        guard isShowing else { return }
+
+        searchRequestCancellable?.cancel()
+        searchRequestCancellable = nil
+        let requestPresentationID = presentationID
+        let requestSearchID = UUID()
+        searchRequestID = requestSearchID
+
         guard AuthManager.shared.currentUser != nil else {
+            isLoading = false
             print("用户未登录")
             return
         }
@@ -201,7 +241,7 @@ class LinkPopupManager: ObservableObject {
         // 根据关键词决定搜索类型
         let searchValue = keyword.isEmpty ? "" : keyword
         
-        NetworkManager.shared.getUserAllCards(
+        searchRequestCancellable = NetworkManager.shared.getUserAllCards(
             searchType: searchType,
             search: searchValue,
             limit: 50,
@@ -210,13 +250,23 @@ class LinkPopupManager: ObservableObject {
         .receive(on: DispatchQueue.main)
         .sink(
             receiveCompletion: { [weak self] completion in
-                self?.isLoading = false
+                guard let self,
+                      self.presentationID == requestPresentationID,
+                      self.searchRequestID == requestSearchID else {
+                    return
+                }
+                self.isLoading = false
                 if case .failure(let error) = completion {
                     print("搜索卡片失败: \(error.localizedDescription)")
                 }
             },
             receiveValue: { [weak self] response in
-                self?.isLoading = false
+                guard let self,
+                      self.presentationID == requestPresentationID,
+                      self.searchRequestID == requestSearchID else {
+                    return
+                }
+                self.isLoading = false
                 if response.success {
                     // 合并所有类型的卡片
                     var allCards: [UserAllCard] = []
@@ -225,7 +275,7 @@ class LinkPopupManager: ObservableObject {
                     allCards.append(contentsOf: response.data.likedCards)
                     allCards.append(contentsOf: response.data.linkedCards)
                     
-                    self?.linkItems = allCards.map { card in
+                    self.linkItems = allCards.map { card in
                         LinkItem(
                             id: card.id,
                             avatar: card.author?.avatar ?? "", // 使用author的avatar字段
@@ -241,7 +291,6 @@ class LinkPopupManager: ObservableObject {
                 }
             }
         )
-        .store(in: &cancellables)
     }
     
     // 过滤后的Link项目

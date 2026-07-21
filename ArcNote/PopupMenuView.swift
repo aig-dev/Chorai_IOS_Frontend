@@ -1,4 +1,116 @@
+import CoreFlow
 import SwiftUI
+
+enum CardNavigationRoute {
+    case detail(String)
+    case editor(String)
+    case spark(String)
+    case merge(String)
+    case root(cardID: String, type: String?)
+}
+
+struct CardNavigationDismissal {
+    let route: CardNavigationRoute
+    let didCommit: Bool
+}
+
+private struct NavigateCardActionKey: EnvironmentKey {
+    static let defaultValue: (CardNavigationRoute) -> Void = { _ in }
+}
+
+private struct CardNavigationOnboardingStoreKey: EnvironmentKey {
+    static let defaultValue: OnboardingGuideStore? = nil
+}
+
+private struct CardNavigationMergeCompletedKey: EnvironmentKey {
+    static let defaultValue: (String) -> Void = { _ in }
+}
+
+extension EnvironmentValues {
+    var navigateCard: (CardNavigationRoute) -> Void {
+        get { self[NavigateCardActionKey.self] }
+        set { self[NavigateCardActionKey.self] = newValue }
+    }
+
+    var cardNavigationOnboardingStore: OnboardingGuideStore? {
+        get { self[CardNavigationOnboardingStoreKey.self] }
+        set { self[CardNavigationOnboardingStoreKey.self] = newValue }
+    }
+
+    var cardNavigationMergeCompleted: (String) -> Void {
+        get { self[CardNavigationMergeCompletedKey.self] }
+        set { self[CardNavigationMergeCompletedKey.self] = newValue }
+    }
+}
+
+private struct CardNavigationDestination: View {
+    let route: CardNavigationRoute
+    let onboardingStore: OnboardingGuideStore?
+    let mergeCompleted: (String) -> Void
+
+    @ViewBuilder
+    var body: some View {
+        switch route {
+        case .detail(let cardID):
+            DetailView(cardId: cardID)
+        case .editor(let cardID):
+            NewNoteView(cardId: cardID)
+        case .spark(let cardID):
+            if let actorID = AuthManager.shared.currentUser?.id {
+                SparkContinuationView(
+                    cardID: cardID,
+                    actorID: actorID,
+                    onboardingStore: onboardingStore
+                )
+            } else {
+                EmptyView()
+            }
+        case .merge(let cardID):
+            MergeView(
+                cardId: cardID,
+                onboardingStore: onboardingStore,
+                onCommitted: mergeCompleted
+            )
+        case .root(let cardID, let type):
+            RootView(cardId: cardID, type: type)
+        }
+    }
+}
+
+private struct CardNavigationHostModifier: ViewModifier {
+    @Environment(\.cardNavigationOnboardingStore) private var onboardingStore
+    @Environment(\.cardNavigationMergeCompleted) private var mergeCompleted
+    @State private var presentedRoute: CardNavigationRoute?
+
+    private var isPresentingRoute: Binding<Bool> {
+        Binding(
+            get: { presentedRoute != nil },
+            set: { isPresented in
+                if !isPresented {
+                    presentedRoute = nil
+                }
+            }
+        )
+    }
+
+    func body(content: Content) -> some View {
+        content
+            .environment(\.navigateCard, present)
+            .navigationDestination(isPresented: isPresentingRoute) {
+                if let presentedRoute {
+                    CardNavigationDestination(
+                        route: presentedRoute,
+                        onboardingStore: onboardingStore,
+                        mergeCompleted: mergeCompleted
+                    )
+                }
+            }
+    }
+
+    private func present(_ route: CardNavigationRoute) {
+        presentedRoute = route
+    }
+}
 
 // MARK: - Custom Scale Transition
 extension AnyTransition {
@@ -36,12 +148,38 @@ enum PopupMenuLayout {
 
 // MARK: - PopupMenu Modifier
 struct PopupMenuModifier: ViewModifier {
+    @Environment(\.cardNavigationOnboardingStore) private var onboardingStore
+    @Environment(\.cardNavigationMergeCompleted) private var mergeCompleted
+    @State private var presentedRoute: CardNavigationRoute?
+    @State private var didCommitPresentedMerge = false
     @Binding var isPresented: Bool
     let layout: PopupMenuLayout
     let cardData: UserCard?
     let isOwnCard: Bool
     let isSparkEnabled: Bool
     let onSpark: (() -> Void)?
+    let onRouteDismissed: (CardNavigationDismissal) -> Void
+
+    private var isPresentingRoute: Binding<Bool> {
+        Binding(
+            get: { presentedRoute != nil },
+            set: { isPresented in
+                if !isPresented {
+                    let dismissal = presentedRoute.map {
+                        CardNavigationDismissal(
+                            route: $0,
+                            didCommit: didCommitPresentedMerge
+                        )
+                    }
+                    presentedRoute = nil
+                    didCommitPresentedMerge = false
+                    if let dismissal {
+                        onRouteDismissed(dismissal)
+                    }
+                }
+            }
+        )
+    }
     
     func body(content: Content) -> some View {
         content
@@ -54,11 +192,34 @@ struct PopupMenuModifier: ViewModifier {
                             cardData: cardData,
                             isOwnCard: isOwnCard,
                             isSparkEnabled: isSparkEnabled,
-                            onSpark: onSpark
+                            onSpark: onSpark,
+                            onNavigate: present
                         )
                     }
                 }
             )
+            .environment(\.navigateCard, present)
+            .navigationDestination(isPresented: isPresentingRoute) {
+                if let presentedRoute {
+                    CardNavigationDestination(
+                        route: presentedRoute,
+                        onboardingStore: onboardingStore,
+                        mergeCompleted: handlePresentedMergeCompleted
+                    )
+                }
+            }
+    }
+
+    private func present(_ route: CardNavigationRoute) {
+        didCommitPresentedMerge = false
+        presentedRoute = route
+    }
+
+    private func handlePresentedMergeCompleted(_ cardID: String) {
+        if case .merge = presentedRoute {
+            didCommitPresentedMerge = true
+        }
+        mergeCompleted(cardID)
     }
 }
 
@@ -70,6 +231,7 @@ struct PopupMenuOverlay: View {
     let isOwnCard: Bool
     let isSparkEnabled: Bool
     let onSpark: (() -> Void)?
+    let onNavigate: (CardNavigationRoute) -> Void
 
     init(
         isPresented: Binding<Bool>,
@@ -77,7 +239,8 @@ struct PopupMenuOverlay: View {
         cardData: UserCard?,
         isOwnCard: Bool,
         isSparkEnabled: Bool = true,
-        onSpark: (() -> Void)? = nil
+        onSpark: (() -> Void)? = nil,
+        onNavigate: @escaping (CardNavigationRoute) -> Void = { _ in }
     ) {
         _isPresented = isPresented
         self.layout = layout
@@ -85,6 +248,7 @@ struct PopupMenuOverlay: View {
         self.isOwnCard = isOwnCard
         self.isSparkEnabled = isSparkEnabled
         self.onSpark = onSpark
+        self.onNavigate = onNavigate
     }
     
     var body: some View {
@@ -169,11 +333,7 @@ struct PopupMenuOverlay: View {
             return
         }
 
-        NotificationCenter.default.post(
-            name: NSNotification.Name("NavigateToSpark"),
-            object: nil,
-            userInfo: ["cardId": cardID]
-        )
+        onNavigate(.spark(cardID))
     }
     
     // MARK: 菜单内容
@@ -209,25 +369,21 @@ struct PopupMenuOverlay: View {
                 HStack(spacing: 15) {
                     MenuButton(icon: "menu_link", text: "Link", color: .pink, onTap: {
                         isPresented = false
-                        LinkPopupManager.shared.show(cardId: cardData?.id, isInitiatingCardOwned: isOwnCard)
+                        LinkPopupManager.shared.show(
+                            cardId: cardData?.id,
+                            isInitiatingCardOwned: isOwnCard,
+                            onNavigate: onNavigate
+                        )
                     })
                     MenuButton(icon: isOwnCard ? "menu_view" : "menu_view", text: isOwnCard ? "Edit" : "View", color: .blue, onTap: {
                         isPresented = false
                         if isOwnCard {
                             if let cardId = cardData?.id {
-                                NotificationCenter.default.post(
-                                    name: NSNotification.Name("NavigateToEdit"),
-                                    object: nil,
-                                    userInfo: ["cardId": cardId]
-                                )
+                                onNavigate(.editor(cardId))
                             }
                         } else {
                             if let cardId = cardData?.id {
-                                NotificationCenter.default.post(
-                                    name: NSNotification.Name("NavigateToDetail"),
-                                    object: nil,
-                                    userInfo: ["cardId": cardId]
-                                )
+                                onNavigate(.detail(cardId))
                             }
                         }
                     })
@@ -239,11 +395,7 @@ struct PopupMenuOverlay: View {
                     MenuButton(icon: "menu_view", text: "Edit", color: .blue, onTap: {
                         isPresented = false
                         if let cardId = cardData?.id {
-                            NotificationCenter.default.post(
-                                name: NSNotification.Name("NavigateToEdit"),
-                                object: nil,
-                                userInfo: ["cardId": cardId]
-                            )
+                            onNavigate(.editor(cardId))
                         }
                     })
                     MenuButton(
@@ -256,11 +408,7 @@ struct PopupMenuOverlay: View {
                     MenuButton(icon: "menu_merge", text: "Merge", color: .orange, onTap: {
                         isPresented = false
                         if let cardId = cardData?.id {
-                            NotificationCenter.default.post(
-                                name: NSNotification.Name("NavigateToMerge"),
-                                object: nil,
-                                userInfo: ["cardId": cardId]
-                            )
+                            onNavigate(.merge(cardId))
                         }
                     })
                 }
@@ -285,18 +433,18 @@ struct PopupMenuOverlay: View {
                     )
                     MenuButton(icon: "menu_link", text: "Link", color: .pink, onTap: {
                         isPresented = false
-                        LinkPopupManager.shared.show(cardId: cardData?.id, isInitiatingCardOwned: isOwnCard)
+                        LinkPopupManager.shared.show(
+                            cardId: cardData?.id,
+                            isInitiatingCardOwned: isOwnCard,
+                            onNavigate: onNavigate
+                        )
                     })
                 }
                 HStack(spacing: 15) {
                     if let card = cardData {
                         MenuButton(icon: "menu_root", text: "Root", color: .teal, onTap: {
                             isPresented = false
-                            NotificationCenter.default.post(
-                                name: NSNotification.Name("NavigateToRoot"),
-                                object: nil,
-                                userInfo: ["cardId": card.id]
-                            )
+                            onNavigate(.root(cardID: card.id, type: nil))
                         })
                     } else {
                     }
@@ -325,11 +473,7 @@ struct PopupMenuOverlay: View {
                     MenuButton(icon: "menu_view", text: "View", color: .blue, onTap: {
                         isPresented = false
                         if let cardId = cardData?.id {
-                            NotificationCenter.default.post(
-                                name: NSNotification.Name("NavigateToDetail"),
-                                object: nil,
-                                userInfo: ["cardId": cardId]
-                            )
+                            onNavigate(.detail(cardId))
                         }
                     })
                     MenuButton(
@@ -349,19 +493,20 @@ struct PopupMenuOverlay: View {
                     )
                     MenuButton(icon: "menu_link", text: "Link", color: .pink, onTap: {
                         isPresented = false
-                        LinkPopupManager.shared.show(cardId: cardData?.id, isInitiatingCardOwned: isOwnCard)
+                        LinkPopupManager.shared.show(
+                            cardId: cardData?.id,
+                            isInitiatingCardOwned: isOwnCard,
+                            onNavigate: onNavigate
+                        )
                     })
                 }
                 HStack(spacing: 15) {
                     MenuButton(icon: "menu_root", text: "Root", color: .teal, onTap: {
                         // grid3x2 布局来自 AIList，传递 type: "favourite"
                         if let cardId = cardData?.id {
-                        isPresented = false
-                            // 使用 NotificationCenter 发送导航通知
-                            NotificationCenter.default.post(
-                                name: NSNotification.Name("NavigateToRoot"),
-                                object: nil,
-                                userInfo: ["cardId": cardId, "type": "favourite"]
+                            isPresented = false
+                            onNavigate(
+                                .root(cardID: cardId, type: "favourite")
                             )
                         }
                     })
@@ -414,13 +559,18 @@ struct MenuButton: View {
 
 // MARK: - View Extension
 extension View {
+    func cardNavigationHost() -> some View {
+        modifier(CardNavigationHostModifier())
+    }
+
     func popupMenu(
         isPresented: Binding<Bool>,
         layout: PopupMenuLayout = .grid2x2,
         cardData: UserCard? = nil,
         isOwnCard: Bool = false,
         isSparkEnabled: Bool = true,
-        onSpark: (() -> Void)? = nil
+        onSpark: (() -> Void)? = nil,
+        onRouteDismissed: @escaping (CardNavigationDismissal) -> Void = { _ in }
     ) -> some View {
         self.modifier(
             PopupMenuModifier(
@@ -429,7 +579,8 @@ extension View {
                 cardData: cardData,
                 isOwnCard: isOwnCard,
                 isSparkEnabled: isSparkEnabled,
-                onSpark: onSpark
+                onSpark: onSpark,
+                onRouteDismissed: onRouteDismissed
             )
         )
     }

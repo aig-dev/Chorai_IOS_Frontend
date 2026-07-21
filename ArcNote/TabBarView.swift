@@ -4,6 +4,11 @@ import CoreFlow
 import WebKit
 
 struct TabBarView: View {
+    private struct PendingLibraryReturn: Equatable {
+        let actorID: String
+        let sessionID: String
+    }
+
     @StateObject private var authManager = AuthManager.shared
     @StateObject private var coordinator = CoreFlowCoordinator()
     @StateObject private var onboardingStore = OnboardingGuideStore(
@@ -16,12 +21,12 @@ struct TabBarView: View {
     @State private var showSideMenu = false
     @State private var currentMenuCardData: UserCard? = nil
     @State private var navigationPath = NavigationPath()
-    @State private var navigateToEdit = false
-    @State private var selectedEditCardId: String? = nil
     @State private var navigateToMerge = false
     @State private var selectedMergeCardId: String? = nil
     @State private var mergeResumeMetadata: MergeResumeMetadata?
     @State private var hasObservedActiveOnboarding = false
+    @State private var hasRoutedInitialOnboardingState = false
+    @State private var pendingLibraryReturn: PendingLibraryReturn?
     @State private var showOnboardingCompletionAcknowledgement = false
     @State private var shareRoute: ShareRoute?
     @State private var reportRoute: ReportRoute?
@@ -106,20 +111,17 @@ struct TabBarView: View {
         }
     }
 
-    private func routeOnboardingState(_ state: String?) {
-        guard let state,
+    private func routeInitialOnboardingState(_ state: String?) {
+        guard !hasRoutedInitialOnboardingState,
+              let state,
               let destination = OnboardingGuidePrimaryTabDestination.forState(
                 state
               ) else {
             return
         }
+        hasRoutedInitialOnboardingState = true
 
         DispatchQueue.main.async {
-            if !navigationPath.isEmpty {
-                navigationPath.removeLast(navigationPath.count)
-            }
-            navigateToMerge = false
-
             switch destination {
             case .library:
                 coordinator.selectedTab = .library
@@ -287,6 +289,48 @@ struct TabBarView: View {
             .noteCreated(cardID: cardID, content: content)
         )
     }
+
+    private func handleLibraryCardRouteDismissed(
+        _ dismissal: CardNavigationDismissal
+    ) {
+        guard dismissal.didCommit,
+              case .merge = dismissal.route,
+              onboardingStore.phase == .active,
+              let actorID = authManager.currentUser?.id,
+              let session = onboardingStore.session,
+              session.flowVersion
+                == OnboardingGuideStore.canonicalFlowVersion,
+              [
+                "product_merge_intro",
+                "product_merge_preview",
+                "product_library_intro"
+              ]
+                .contains(session.state) else {
+            return
+        }
+        pendingLibraryReturn = PendingLibraryReturn(
+            actorID: actorID,
+            sessionID: session.sessionID
+        )
+        recordReturnedLibraryIfReady()
+    }
+
+    private func recordReturnedLibraryIfReady() {
+        guard let pendingLibraryReturn else { return }
+        guard onboardingStore.phase == .active,
+              authManager.currentUser?.id == pendingLibraryReturn.actorID,
+              let session = onboardingStore.session,
+              session.sessionID == pendingLibraryReturn.sessionID else {
+            self.pendingLibraryReturn = nil
+            return
+        }
+        guard coordinator.selectedTab == .library,
+              session.state == "product_library_intro" else {
+            return
+        }
+        self.pendingLibraryReturn = nil
+        onboardingStore.receive(.libraryViewed)
+    }
     
     var body: some View {
         NavigationStack(path: $navigationPath) {
@@ -338,7 +382,8 @@ struct TabBarView: View {
                     showSideMenu: $showSideMenu,
                     refreshID: coordinator.libraryRefreshID,
                     onboardingStore: onboardingStore,
-                    onNoteCreated: handleNoteCreated
+                    onNoteCreated: handleNoteCreated,
+                    onCardRouteDismissed: handleLibraryCardRouteDismissed
                 )
                     .tag(CoreTab.library)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -390,6 +435,7 @@ struct TabBarView: View {
                 if coordinator.selectedTab == .library,
                    onboardingStore.session?.state
                     == "product_library_intro" {
+                    pendingLibraryReturn = nil
                     onboardingStore.receive(.libraryViewed)
                 }
             }
@@ -570,11 +616,10 @@ struct TabBarView: View {
         }
         .popupMenu(isPresented: $showPopupMenu, layout: .grid2x2, cardData: currentMenuCardData)
         .linkPopup()
+        .environment(\.cardNavigationOnboardingStore, onboardingStore)
+        .environment(\.cardNavigationMergeCompleted, coordinator.mergeCompleted)
         .navigationBarHidden(true)
         .navigationBarBackButtonHidden(true)
-        .navigationDestination(isPresented: $navigateToEdit) {
-            NewNoteView(cardId: selectedEditCardId ?? "")
-        }
         .navigationDestination(isPresented: $navigateToMerge) {
             MergeView(
                 cardId: selectedMergeCardId ?? "",
@@ -611,30 +656,6 @@ struct TabBarView: View {
         .sheet(item: $reportRoute) { route in
             ContentReportView(targetType: .asset, targetID: route.cardID)
         }
-        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NavigateToEdit"))) { notification in
-            if let cardId = notification.userInfo?["cardId"] as? String {
-                selectedEditCardId = cardId
-                DispatchQueue.main.async {
-                    navigateToEdit = true
-                }
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NavigateToSpark"))) { notification in
-            if let cardId = notification.userInfo?["cardId"] as? String {
-                DispatchQueue.main.async {
-                    navigationPath.append(TabRoute.spark(cardId))
-                }
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NavigateToMerge"))) { notification in
-            if let cardId = notification.userInfo?["cardId"] as? String {
-                selectedMergeCardId = cardId
-                DispatchQueue.main.async {
-                    navigateToMerge = false
-                    navigateToMerge = true
-                }
-            }
-        }
         .onReceive(
             NotificationCenter.default.publisher(
                 for: NSNotification.Name("ShowCardShare")
@@ -664,6 +685,8 @@ struct TabBarView: View {
         }
         .onChange(of: authManager.currentUser?.id) { _ in
             hasObservedActiveOnboarding = false
+            hasRoutedInitialOnboardingState = false
+            pendingLibraryReturn = nil
             showOnboardingCompletionAcknowledgement = false
             refreshMergeResumeMetadata()
             loadOnboardingIfVerified()
@@ -673,18 +696,25 @@ struct TabBarView: View {
                 loadOnboardingIfVerified()
             }
         }
-        .onChange(of: onboardingStore.session?.state) { state in
-            routeOnboardingState(state)
-        }
         .onChange(of: onboardingStore.phase) { phase in
             switch phase {
             case .active:
                 hasObservedActiveOnboarding = true
-            case .completed where hasObservedActiveOnboarding:
-                showOnboardingCompletionAcknowledgement = true
+                routeInitialOnboardingState(onboardingStore.session?.state)
+            case .completed:
+                pendingLibraryReturn = nil
+                if hasObservedActiveOnboarding {
+                    showOnboardingCompletionAcknowledgement = true
+                }
             default:
-                break
+                pendingLibraryReturn = nil
             }
+        }
+        .onChange(of: onboardingStore.session?.state) { _ in
+            recordReturnedLibraryIfReady()
+        }
+        .onChange(of: onboardingStore.session?.sessionID) { _ in
+            recordReturnedLibraryIfReady()
         }
         .onAppear {
             refreshMergeResumeMetadata()

@@ -105,6 +105,7 @@ struct NewNoteView: View {
             loadExistingCard()
             loadRelatedLinks()
         }
+        .cardNavigationHost()
     }
 
     private func loadExistingCard() {
@@ -212,6 +213,7 @@ private final class CardEditorNativeActionRouter: ObservableObject {
 @MainActor
 private struct CardEditorSessionView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.navigateCard) private var navigateCard
 
     let seed: CardEditorSeed
     let onCreated: (String, String) -> Void
@@ -314,11 +316,25 @@ private struct CardEditorSessionView: View {
                     isEnabled: bodyModel.canMutate && !isBusy,
                     isPinned: isPinned,
                     onBackground: presentBackgroundActions,
-                    onSpark: { performPersistedCardAction(.notification("NavigateToSpark")) },
-                    onMerge: { performPersistedCardAction(.notification("NavigateToMerge")) },
+                    onSpark: {
+                        performPersistedCardAction(
+                            .navigation(CardNavigationRoute.spark)
+                        )
+                    },
+                    onMerge: {
+                        performPersistedCardAction(
+                            .navigation(CardNavigationRoute.merge)
+                        )
+                    },
                     onShare: { performPersistedCardAction(.notification("ShowCardShare")) },
                     onLink: addOntologyLink,
-                    onRoot: { performPersistedCardAction(.notification("NavigateToRoot")) },
+                    onRoot: {
+                        performPersistedCardAction(
+                            .navigation {
+                                .root(cardID: $0, type: nil)
+                            }
+                        )
+                    },
                     onRemove: { showRemoveCardConfirmation = true },
                     onTogglePin: { performPersistedCardAction(.togglePin) }
                 )
@@ -1166,6 +1182,9 @@ private struct CardEditorSessionView: View {
         _ action: CardEditorPersistedAction
     ) {
         switch action {
+        case .navigation(let route):
+            guard let cardID = editingStore.cardID else { return }
+            navigateCard(route(cardID))
         case let .notification(name):
             postCardAction(name)
         case .togglePin:
@@ -1262,6 +1281,7 @@ private enum CardEditorSessionError: Error {
 }
 
 private enum CardEditorPersistedAction {
+    case navigation((String) -> CardNavigationRoute)
     case notification(String)
     case togglePin
 }

@@ -21,7 +21,6 @@ struct UserProfileView: View {
     
     // 导航状态
     @State private var navigateToDetail = false
-    @State private var navigateToEdit = false
     @State private var selectedCardId: String? = nil
     @State private var showReport = false
     @State private var showActionSheet = false
@@ -386,23 +385,6 @@ struct UserProfileView: View {
             print("开始加载用户公开卡片: actorId=\(actorId)")
             cardsManager.loadPublicProfileCards(actorId: actorId, refresh: true)
         }
-        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NavigateToDetail"))) { notification in
-            if let cardId = notification.userInfo?["cardId"] as? String {
-                selectedCardId = cardId
-                DispatchQueue.main.async {
-                    navigateToDetail = true
-                }
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NavigateToEdit"))) { notification in
-            if let cardId = notification.userInfo?["cardId"] as? String {
-                print("到编辑页通知: cardId=\(cardId)")
-                selectedCardId = cardId
-                DispatchQueue.main.async {
-                    navigateToEdit = true
-                }
-            }
-        }
         .confirmationDialog("", isPresented: $showActionSheet, titleVisibility: .hidden) {
             Button("Report this user", role: .destructive) {
                 showReport = true
@@ -434,13 +416,6 @@ struct UserProfileView: View {
         .navigationDestination(isPresented: $navigateToDetail) {
             if let cardId = selectedCardId {
                 DetailView(cardId: cardId)
-            } else {
-                EmptyView()
-            }
-        }
-        .navigationDestination(isPresented: $navigateToEdit) {
-            if let cardId = selectedCardId {
-                NewNoteView(cardId: cardId)
             } else {
                 EmptyView()
             }

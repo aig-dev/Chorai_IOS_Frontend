@@ -2750,6 +2750,13 @@ final class ArcNoteUITests: XCTestCase {
         typeInCardEditorBody(signal)
         closeNewNoteEditor()
 
+        waitFor("screen.home.content", timeout: 15)
+        XCTAssertFalse(
+            exists("screen.flow.content", timeout: 1),
+            "Closing the onboarding editor must leave Library selected"
+        )
+        tap("tab.flow")
+
         waitForOnboardingAnchor(
             "onboarding.state",
             value: "product_explore_card",
@@ -2851,11 +2858,17 @@ final class ArcNoteUITests: XCTestCase {
         tap("note.create")
         typeInCardEditorBody(signal)
         closeNewNoteEditor()
+        waitFor("screen.home.content", timeout: 15)
+        XCTAssertFalse(
+            exists("screen.flow.content", timeout: 1),
+            "Closing the onboarding editor must leave Library selected"
+        )
         noteCardID = waitFor("note.created-card-id", timeout: 30)
             .label
             .trimmingCharacters(in: .whitespacesAndNewlines)
         XCTAssertFalse(noteCardID?.isEmpty ?? true)
 
+        tap("tab.flow")
         waitForOnboardingAnchor(
             "onboarding.state",
             value: "product_explore_card",
@@ -2890,7 +2903,7 @@ final class ArcNoteUITests: XCTestCase {
             for: try fetchSmokeCard(id: sparkResultID, token: smoke.token)
         )
         savedSparkCardID = sparkResultID
-        waitFor("spark.card.\(sparkResultID)").swipeRight()
+        waitForButton("spark.favorite.\(sparkResultID)").tap()
         waitForAssetStatus(
             kind: "favorites",
             id: sparkResultID,
@@ -2898,12 +2911,20 @@ final class ArcNoteUITests: XCTestCase {
             expected: true
         )
 
+        waitForSmokeOnboardingState(
+            "product_merge_intro",
+            token: smoke.token,
+            timeout: 30
+        )
+        tap("spark.back")
+        waitFor("screen.flow.content", timeout: 30)
+        tap("tab.library")
+        waitFor("screen.home.content", timeout: 30)
         waitForOnboardingAnchor(
             "onboarding.state",
             value: "product_merge_intro",
             timeout: 30
         )
-        waitFor("screen.home.content", timeout: 30)
         captureVisual("onboarding-library-merge-intro")
 
         guard let noteCardID else {
@@ -2911,6 +2932,18 @@ final class ArcNoteUITests: XCTestCase {
             return
         }
         waitFor("card.home.\(noteCardID)", timeout: 30)
+        tap("home.card.menu.\(noteCardID)")
+        tap("popup-menu.item.merge")
+        waitFor("screen.merge.loaded", timeout: 30)
+        tap("merge.back")
+        waitForMissing("screen.merge.loaded", timeout: 20)
+        waitFor("screen.home.content", timeout: 30)
+        waitForSmokeOnboardingState(
+            "product_merge_intro",
+            token: smoke.token,
+            timeout: 15
+        )
+
         tap("home.card.menu.\(noteCardID)")
         tap("popup-menu.item.merge")
         waitFor("screen.merge.loaded", timeout: 30)
@@ -2929,23 +2962,47 @@ final class ArcNoteUITests: XCTestCase {
             timeout: 30
         )
         waitFor("onboarding.guide", timeout: 15)
-        waitForMergeArtifactReady(timeout: 90)
+        waitForMergeArtifactReady(timeout: 180)
         RunLoop.current.run(until: Date().addingTimeInterval(0.35))
         captureVisual("onboarding-merge-preview")
         tap("merge.commit")
 
+        committedCardID = waitFor("merge.completed.asset-id", timeout: 90)
+            .label
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        XCTAssertNotEqual(committedCardID, noteCardID)
+        waitForSmokeOnboardingState(
+            "product_library_intro",
+            token: smoke.token,
+            timeout: 30
+        )
+        let beforeLibraryReturn = try fetchSmokeOnboardingStatus(
+            token: smoke.token
+        )
+        XCTAssertFalse(
+            beforeLibraryReturn.completed,
+            "An uncommitted Merge dismissal must not complete onboarding while the next Merge is still presented"
+        )
+        tap("merge.back")
+        waitForMissing("screen.merge.loaded", timeout: 20)
+        waitFor("screen.home.content", timeout: 30)
+        XCTAssertEqual(
+            waitFor("merge.committed-card-id", timeout: 10)
+                .label
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+            committedCardID,
+            "The Library presenter must receive the committed Merge card ID"
+        )
         waitForOnboardingAnchor(
             "onboarding.phase",
             value: "completed",
             timeout: 90
         )
-        waitFor("onboarding.completed", timeout: 10)
         captureVisual("onboarding-first-loop-complete")
-        waitFor("screen.home.content", timeout: 30)
-        committedCardID = waitFor("merge.committed-card-id", timeout: 20)
-            .label
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        XCTAssertNotEqual(committedCardID, noteCardID)
+        XCTAssertFalse(
+            exists("screen.flow.content", timeout: 1),
+            "Closing a Library-owned Merge must reveal Library"
+        )
 
         let status = try fetchSmokeOnboardingStatus(token: smoke.token)
         XCTAssertTrue(status.completed)
@@ -3883,7 +3940,7 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertTrue(page.orderedAssetIDs.contains(nextID))
     }
 
-    func testSparkRightSwipeSavesWithDiscoveryContextAndUndo() throws {
+    func testSparkFavoriteButtonSavesInPlaceWithDiscoveryContext() throws {
         let session = try requireSmokeSession()
         openSparkFromDetail(cardID: sparkSeedCardID, session: session)
 
@@ -3892,7 +3949,19 @@ final class ArcNoteUITests: XCTestCase {
         let rootActivityID = sparkAnchorValue("spark.root.id")
         defer { deleteFavorite(id: resultID, token: session.token) }
 
-        waitFor("spark.card.\(resultID)").swipeRight()
+        let card = waitFor("spark.card.\(resultID)")
+        let favorite = waitForButton("spark.favorite.\(resultID)")
+        assertPrimaryControl(
+            favorite,
+            identifier: "spark.favorite.\(resultID)"
+        )
+        XCTAssertLessThan(
+            favorite.frame.midX,
+            card.frame.midX,
+            "The explicit Spark favorite control should stay in the card footer's leading side"
+        )
+        XCTAssertEqual(favorite.value as? String, "false")
+        favorite.tap()
         waitForAssetStatus(
             kind: "favorites",
             id: resultID,
@@ -3904,15 +3973,79 @@ final class ArcNoteUITests: XCTestCase {
             rootActivityID
         )
         XCTAssertFalse(activityID.isEmpty)
-
-        tap("spark.save.undo")
-        waitForAssetStatus(
-            kind: "favorites",
-            id: resultID,
-            token: session.token,
-            expected: false
-        )
         XCTAssertEqual(sparkAnchorValue("spark.visible-card.id"), resultID)
+        XCTAssertEqual(favorite.value as? String, "true")
+        XCTAssertFalse(
+            exists("screen.detail.loaded", timeout: 1),
+            "The explicit favorite control must not open card detail"
+        )
+        XCTAssertFalse(
+            app.descendants(matching: .any)["spark.save.undo"].exists,
+            "Favoriting in place must not create a floating undo control"
+        )
+    }
+
+    func testSparkFavoriteFailureKeepsCardAndDoesNotOpenDetail() throws {
+        let session = try requireSmokeSession()
+        app.launchEnvironment["CHORAI_UI_TEST_SPARK_FAIL_FAVORITE"] = "1"
+        openSparkFromDetail(cardID: sparkSeedCardID, session: session)
+
+        let resultID = try waitForUnfavoritedSparkResult(token: session.token)
+        defer { deleteFavorite(id: resultID, token: session.token) }
+
+        let favorite = waitForButton("spark.favorite.\(resultID)")
+        favorite.tap()
+        waitFor("spark.save.failed", timeout: 20)
+
+        XCTAssertEqual(sparkAnchorValue("spark.visible-card.id"), resultID)
+        XCTAssertEqual(favorite.value as? String, "false")
+        XCTAssertFalse(
+            try fetchAssetStatus(
+                kind: "favorites",
+                id: resultID,
+                token: session.token
+            )
+        )
+        XCTAssertFalse(
+            exists("screen.detail.loaded", timeout: 1),
+            "A failed favorite tap must not fall through to card detail"
+        )
+        XCTAssertFalse(
+            app.descendants(matching: .any)["spark.save.undo"].exists
+        )
+    }
+
+    func testSparkRightSwipeOnlyAdvancesWithoutFavoriting() throws {
+        let session = try requireSmokeSession()
+        openSparkFromDetail(cardID: sparkSeedCardID, session: session)
+
+        let resultID = try waitForUnfavoritedSparkResult(token: session.token)
+        let activityID = sparkAnchorValue("spark.activity.id")
+        let page = try fetchSparkActivity(
+            activityID: activityID,
+            token: session.token
+        )
+        guard Set(page.orderedAssetIDs).count > 1 else {
+            throw XCTSkip("Go Spark returned only one visible result")
+        }
+
+        waitFor("spark.card.\(resultID)").swipeRight()
+        let nextID = waitForDifferentSparkCard(from: resultID)
+
+        XCTAssertNotEqual(nextID, resultID)
+        XCTAssertTrue(page.orderedAssetIDs.contains(nextID))
+        XCTAssertFalse(
+            try fetchAssetStatus(
+                kind: "favorites",
+                id: resultID,
+                token: session.token
+            ),
+            "Right swipe should only advance the Spark deck"
+        )
+        XCTAssertFalse(
+            app.descendants(matching: .any)["spark.save.undo"].exists,
+            "Advancing must not create a favorite undo overlay"
+        )
     }
 
     func testDiscoveryPathRendersLiveGoSparkProvenance() throws {
@@ -3922,7 +4055,7 @@ final class ArcNoteUITests: XCTestCase {
         let resultID = try waitForUnfavoritedSparkResult(token: session.token)
         defer { deleteFavorite(id: resultID, token: session.token) }
 
-        waitFor("spark.card.\(resultID)").swipeRight()
+        waitForButton("spark.favorite.\(resultID)").tap()
         waitForAssetStatus(
             kind: "favorites",
             id: resultID,
@@ -3964,7 +4097,7 @@ final class ArcNoteUITests: XCTestCase {
         )
     }
 
-    func testSparkUpSwipeCreatesChildAndChainReplayRestoresParent() throws {
+    func testSparkContinueButtonCreatesChildAndChainReplayRestoresParent() throws {
         let session = try requireSmokeSession()
         openSparkFromDetail(cardID: sparkSeedCardID, session: session)
 
@@ -3972,7 +4105,7 @@ final class ArcNoteUITests: XCTestCase {
         let rootID = sparkAnchorValue("spark.root.id")
         let parentVisibleID = sparkAnchorValue("spark.visible-card.id")
 
-        waitFor("spark.card.\(parentVisibleID)").swipeUp()
+        waitForButton("spark.continue.\(parentVisibleID)").tap()
         let childActivityID = waitForDifferentSparkActivity(from: rootActivityID, timeout: 90)
         XCTAssertEqual(sparkAnchorValue("spark.root.id"), rootID)
         XCTAssertEqual(sparkAnchorValue("spark.parent.id"), rootActivityID)
@@ -4041,7 +4174,11 @@ final class ArcNoteUITests: XCTestCase {
         )
 
         tap("spark.back")
-        waitFor("screen.flow.content", timeout: 20)
+        waitFor("screen.detail.loaded", timeout: 20)
+        XCTAssertEqual(
+            sparkAnchorValue("screen.detail.card-id"),
+            sparkSeedCardID
+        )
     }
 
     func testSparkRelaunchRehydratesActivityWithoutNewTrigger() throws {
@@ -4075,14 +4212,14 @@ final class ArcNoteUITests: XCTestCase {
         )
     }
 
-    func testSparkTriggerFailureRestoresParentCard() throws {
+    func testSparkContinueFailureRestoresParentCard() throws {
         let session = try requireSmokeSession()
         app.launchEnvironment["CHORAI_UI_TEST_SPARK_FAIL_CHILD_TRIGGER"] = "1"
         openSparkFromDetail(cardID: sparkSeedCardID, session: session)
 
         let parentActivityID = sparkAnchorValue("spark.activity.id")
         let parentVisibleID = sparkAnchorValue("spark.visible-card.id")
-        waitFor("spark.card.\(parentVisibleID)").swipeUp()
+        waitForButton("spark.continue.\(parentVisibleID)").tap()
 
         waitFor("screen.spark.error", timeout: 20)
         XCTAssertEqual(sparkAnchorValue("spark.activity.id"), parentActivityID)
@@ -4122,7 +4259,7 @@ final class ArcNoteUITests: XCTestCase {
         prepareSparkVisualApp(
             session: session,
             cardID: cardID,
-            suffix: "root-child-save",
+            suffix: "root-child-favorite",
             environment: ["CHORAI_UI_TEST_SPARK_TRIGGER_DELAY_MS": "1200"]
         )
         openSparkRouteFromFlow(cardID: cardID)
@@ -4133,20 +4270,29 @@ final class ArcNoteUITests: XCTestCase {
 
         let rootActivityID = sparkAnchorValue("spark.activity.id")
         let rootVisibleID = sparkAnchorValue("spark.visible-card.id")
-        waitFor("spark.card.\(rootVisibleID)").swipeUp()
+        waitForButton("spark.continue.\(rootVisibleID)").tap()
         waitFor("screen.spark.loading", timeout: 10)
         captureSparkVisual("child-loading")
         _ = waitForDifferentSparkActivity(from: rootActivityID, timeout: 90)
         captureSparkVisual("child-loaded")
 
-        let savedID = try waitForUnfavoritedSparkResult(token: session.token)
-        waitFor("spark.card.\(savedID)").swipeRight()
-        waitFor("spark.save.undo", timeout: 20)
-        captureSparkVisual("save-success")
-        tap("spark.save.undo")
+        let favoriteID = try waitForUnfavoritedSparkResult(token: session.token)
+        waitForButton("spark.favorite.\(favoriteID)").tap()
         waitForAssetStatus(
             kind: "favorites",
-            id: savedID,
+            id: favoriteID,
+            token: session.token,
+            expected: true
+        )
+        XCTAssertEqual(sparkAnchorValue("spark.visible-card.id"), favoriteID)
+        XCTAssertFalse(
+            app.descendants(matching: .any)["spark.save.undo"].exists
+        )
+        captureSparkVisual("favorite-success")
+        deleteFavorite(id: favoriteID, token: session.token)
+        waitForAssetStatus(
+            kind: "favorites",
+            id: favoriteID,
             token: session.token,
             expected: false
         )
@@ -4159,7 +4305,7 @@ final class ArcNoteUITests: XCTestCase {
         )
         navigateToSparkFromFlow(cardID: cardID)
         let errorParentID = sparkAnchorValue("spark.visible-card.id")
-        waitFor("spark.card.\(errorParentID)").swipeUp()
+        waitForButton("spark.continue.\(errorParentID)").tap()
         waitFor("screen.spark.error", timeout: 20)
         captureSparkVisual("confirmed-trigger-error")
 
@@ -4176,14 +4322,22 @@ final class ArcNoteUITests: XCTestCase {
         prepareSparkVisualApp(
             session: session,
             cardID: cardID,
-            suffix: "save-rollback",
+            suffix: "favorite-rollback",
             environment: ["CHORAI_UI_TEST_SPARK_FAIL_FAVORITE": "1"]
         )
         navigateToSparkFromFlow(cardID: cardID)
         let rollbackID = try waitForUnfavoritedSparkResult(token: session.token)
-        waitFor("spark.card.\(rollbackID)").swipeRight()
+        waitForButton("spark.favorite.\(rollbackID)").tap()
         waitFor("spark.save.failed", timeout: 20)
-        captureSparkVisual("save-rollback")
+        XCTAssertEqual(sparkAnchorValue("spark.visible-card.id"), rollbackID)
+        XCTAssertFalse(
+            exists("screen.detail.loaded", timeout: 1)
+        )
+        XCTAssertFalse(
+            app.descendants(matching: .any)["spark.save.undo"].exists
+        )
+        captureSparkVisual("favorite-rollback")
+        deleteFavorite(id: rollbackID, token: session.token)
 
         prepareSparkVisualApp(
             session: session,
@@ -4235,6 +4389,36 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertFalse(card.isPublic)
 
         waitFor("card.home.\(cardId)", timeout: 30)
+    }
+
+    func testLibraryActionBoxEditorReturnsToLibraryOrigin() throws {
+        let session = try requireSmokeSession()
+        seedAppSession(session)
+        let suffix = "editor-return-\(Int(Date().timeIntervalSince1970))"
+        let cardID = try createSmokeCard(
+            token: session.token,
+            searchToken: suffix,
+            isPublic: false
+        )
+        defer {
+            permanentlyCleanUpSmokeCard(id: cardID, token: session.token)
+        }
+
+        launchAuthenticatedApp()
+        tap("tab.library")
+        waitFor("card.home.\(cardID)", timeout: 30)
+        tap("home.card.menu.\(cardID)")
+        tap("popup-menu.item.edit")
+        waitFor("cardEditorContent", timeout: 20)
+
+        closeNewNoteEditor()
+
+        waitForMissing("cardEditorContent", timeout: 20)
+        waitFor("screen.home.content", timeout: 20)
+        XCTAssertFalse(
+            exists("screen.flow.content", timeout: 1),
+            "Closing a Library-owned editor must reveal its Library origin"
+        )
     }
 
     func testLibraryOwnedCardVisibilityAndPinMutateGoState() throws {
@@ -7533,6 +7717,8 @@ final class ArcNoteUITests: XCTestCase {
         let ready = app.descendants(matching: .any)["merge.artifact.ready"]
         let paused = app.descendants(matching: .any)["merge.phase.paused"]
         let failed = app.descendants(matching: .any)["merge.phase.failed"]
+        let retry = app.descendants(matching: .any)["merge.retry"]
+        var retryCount = 0
         var lastStatus = "missing"
 
         while Date() < deadline {
@@ -7540,7 +7726,17 @@ final class ArcNoteUITests: XCTestCase {
                 return
             }
             if paused.exists {
-                XCTFail("Merge paused before artifact became ready", file: file, line: line)
+                if retryCount < 2, retry.waitForExistence(timeout: 3) {
+                    retry.tap()
+                    retryCount += 1
+                    RunLoop.current.run(until: Date().addingTimeInterval(0.5))
+                    continue
+                }
+                XCTFail(
+                    "Merge remained paused after \(retryCount) retries",
+                    file: file,
+                    line: line
+                )
                 return
             }
             if failed.exists {

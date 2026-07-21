@@ -104,13 +104,6 @@ struct SparkContinuationView: View {
             guard !Task.isCancelled, presentationRevision == 0 else { return }
             presentationRevision = 1
         }
-        .task(id: store.savedAssetID) {
-            guard let assetID = store.savedAssetID else { return }
-            onboardingStore?.receive(.sparkResultSaved(assetID: assetID))
-            try? await Task.sleep(nanoseconds: 3_000_000_000)
-            guard !Task.isCancelled else { return }
-            store.expireUndo(assetID: assetID)
-        }
         .onChange(of: store.activeActivityID) { activityID in
             guard activityID != nil else { return }
             onboardingStore?.receive(.sparkStarted(assetID: rootCardID))
@@ -293,53 +286,52 @@ struct SparkContinuationView: View {
     @ViewBuilder
     private var loadedDeck: some View {
         if let result = store.currentResult {
-            ZStack {
-                if store.nextResult != nil {
-                    RoundedRectangle(
-                        cornerRadius: ZenVisualTokens.cardRadius,
-                        style: .continuous
-                    )
-                    .fill(ZenVisualTokens.cardFill.opacity(0.72))
-                    .overlay(
+            VStack(spacing: 8) {
+                ZStack {
+                    if store.nextResult != nil {
                         RoundedRectangle(
                             cornerRadius: ZenVisualTokens.cardRadius,
                             style: .continuous
                         )
-                        .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                        .fill(ZenVisualTokens.cardFill.opacity(0.72))
+                        .overlay(
+                            RoundedRectangle(
+                                cornerRadius: ZenVisualTokens.cardRadius,
+                                style: .continuous
+                            )
+                            .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                        )
+                        .offset(y: 11)
+                        .scaleEffect(0.968)
+                        .accessibilityHidden(true)
+                    }
+
+                    SparkResultCard(
+                        result: result,
+                        isInteractionLocked: store.isInteractionLocked,
+                        allowsSparkDeeper: store.phase == .loaded,
+                        forcesAccessibleAppearance: usesAccessibilityEvidenceMode,
+                        onNext: store.advance,
+                        onToggleFavorite: {
+                            store.toggleFavoriteCurrent { assetID in
+                                onboardingStore?.receive(
+                                    .sparkResultSaved(assetID: assetID)
+                                )
+                            }
+                        },
+                        onSparkDeeper: store.sparkCurrentDeeper,
+                        onOpenCard: { openDetail(result.card.id) },
+                        onOpenAuthor: {
+                            if let authorID = result.card.author?.id {
+                                openAuthor(authorID)
+                            }
+                        },
+                        onOpenMenu: { openMenu(result.card) }
                     )
-                    .offset(y: 11)
-                    .scaleEffect(0.968)
-                    .accessibilityHidden(true)
+                    .id(result.id)
                 }
 
-                SparkResultCard(
-                    result: result,
-                    isInteractionLocked: store.isInteractionLocked,
-                    allowsSparkDeeper: store.phase == .loaded,
-                    forcesAccessibleAppearance: usesAccessibilityEvidenceMode,
-                    onNext: store.advance,
-                    onSave: store.saveCurrent,
-                    onSparkDeeper: store.sparkCurrentDeeper,
-                    onOpenCard: { openDetail(result.card.id) },
-                    onOpenAuthor: {
-                        if let authorID = result.card.author?.id {
-                            openAuthor(authorID)
-                        }
-                    },
-                    onOpenMenu: { openMenu(result.card) }
-                )
-                .id(result.id)
-
-                if !store.didShowUpwardCue {
-                    SparkUpwardCue()
-                        .frame(maxHeight: .infinity, alignment: .bottom)
-                        .padding(.bottom, 18)
-                        .allowsHitTesting(false)
-                }
-            }
-            .overlay(alignment: .bottomTrailing) {
                 noticeView
-                    .padding(14)
             }
         }
     }
@@ -347,39 +339,17 @@ struct SparkContinuationView: View {
     @ViewBuilder
     private var noticeView: some View {
         switch store.notice {
-        case .saved:
-            if store.canUndoSave {
-                Button(action: store.undoLastSave) {
-                    Image("favorite_active")
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 20, height: 20)
-                        .frame(width: 44, height: 44)
-                        .background(Circle().fill(Color.black.opacity(0.72)))
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Undo save")
-                .accessibilityIdentifier("spark.save.undo")
-            } else {
-                Image("favorite_active")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 20, height: 20)
-                    .frame(width: 44, height: 44)
-                    .background(Circle().fill(Color.black.opacity(0.72)))
-                    .accessibilityLabel("Saved")
-            }
         case .saveFailed:
-            SparkIconNotice(image: "favorite", label: "Save failed")
+            Text("Favorite failed. Try again.")
+                .font(.footnote)
+                .foregroundStyle(Color.white.opacity(0.72))
+                .frame(minHeight: 44)
                 .accessibilityIdentifier("spark.save.failed")
-        case .undoFailed:
-            Button(action: store.undoLastSave) {
-                SparkIconNotice(image: "favorite_active", label: "Retry undo")
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Retry undo")
         case .moreFailed:
-            SparkIconNotice(image: "menu_spark", label: "More results paused")
+            Text("More results paused.")
+                .font(.footnote)
+                .foregroundStyle(Color.white.opacity(0.72))
+                .frame(minHeight: 44)
         case nil:
             EmptyView()
         }
@@ -586,30 +556,13 @@ private struct SparkChainRail: View {
     }
 }
 
-private struct SparkDeeperAccessibilityActionModifier: ViewModifier {
-    let isEnabled: Bool
-    let action: () -> Void
-
-    @ViewBuilder
-    func body(content: Content) -> some View {
-        if isEnabled {
-            content.accessibilityAction(
-                named: Text("Spark deeper"),
-                action
-            )
-        } else {
-            content
-        }
-    }
-}
-
 private struct SparkResultCard: View {
     let result: SparkResult
     let isInteractionLocked: Bool
     let allowsSparkDeeper: Bool
     let forcesAccessibleAppearance: Bool
     let onNext: () -> Void
-    let onSave: () -> Void
+    let onToggleFavorite: () -> Void
     let onSparkDeeper: () -> Void
     let onOpenCard: () -> Void
     let onOpenAuthor: () -> Void
@@ -621,7 +574,7 @@ private struct SparkResultCard: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var dragOffset: CGSize = .zero
     @State private var isResolvingGesture = false
-    @State private var thresholdDecision: SparkGestureDecision = .cancel
+    @State private var isHorizontalSwipeCommitted = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -672,73 +625,8 @@ private struct SparkResultCard: View {
                 .tracking(0.7)
                 .foregroundStyle(ZenVisualTokens.accent.opacity(0.82))
 
-            VStack(alignment: .leading, spacing: 12) {
-                Text(FlowTextPreview.make(result.card.content))
-                    .font(.system(size: 17, weight: .regular, design: .rounded))
-                    .lineSpacing(5)
-                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? 5 : 7)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                if !result.card.tags.isEmpty {
-                    HStack(spacing: 8) {
-                        ForEach(Array(result.card.tags.prefix(3)), id: \.self) { tag in
-                            Text(tag)
-                                .font(.caption)
-                                .lineLimit(1)
-                                .padding(.horizontal, 10)
-                                .frame(minHeight: 28)
-                                .background(
-                                    Capsule().fill(Color.white.opacity(0.08))
-                                )
-                        }
-                    }
-                }
-
-                Spacer(minLength: 0)
-
-                HStack(spacing: 10) {
-                    SparkCount(
-                        image: result.card.isFavorited
-                            ? "favorite_active"
-                            : "favorite",
-                        count: result.card.favoriteCount,
-                        label: "favorites",
-                        iconSize: 24
-                    )
-
-                    Spacer(minLength: 16)
-
-                    SparkCount(
-                        image: result.card.isLiked ? "like_active" : "like",
-                        count: result.card.likeCount,
-                        label: "likes"
-                    )
-
-                    SparkCount(
-                        image: "comment",
-                        count: result.card.commentCount,
-                        label: "comments"
-                    )
-                }
-            }
-            .contentShape(Rectangle())
-            .onTapGesture(perform: onOpenCard)
-            .gesture(cardGesture)
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel(
-                "\(bucketLabel). \(FlowTextPreview.make(result.card.content))"
-            )
-            .accessibilityAddTraits(.isButton)
-            .accessibilityAction(named: Text("Next result"), onNext)
-            .accessibilityAction(named: Text("Save result"), onSave)
-            .modifier(
-                SparkDeeperAccessibilityActionModifier(
-                    isEnabled: allowsSparkDeeper,
-                    action: onSparkDeeper
-                )
-            )
-            .accessibilityAction(named: Text("Open card"), onOpenCard)
-            .accessibilityIdentifier("spark.card.\(result.id)")
+            tappableContent
+            engagementFooter
         }
         .padding(22)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -749,15 +637,89 @@ private struct SparkResultCard: View {
                 style: .continuous
             )
         )
-        .overlay(gestureIndicator)
-        .offset(dragOffset)
+        .offset(x: dragOffset.width)
         .rotationEffect(
             reduceMotion ? .zero : .degrees(Double(dragOffset.width / 42))
         )
-        .scaleEffect(
-            reduceMotion ? 1 : max(0.975, 1 - abs(dragOffset.height) / 2_800)
-        )
         .disabled(isInteractionLocked || isResolvingGesture)
+    }
+
+    private var tappableContent: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(FlowTextPreview.make(result.card.content))
+                .font(.system(size: 17, weight: .regular, design: .rounded))
+                .lineSpacing(5)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? 5 : 7)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            if !result.card.tags.isEmpty {
+                HStack(spacing: 8) {
+                    ForEach(Array(result.card.tags.prefix(3)), id: \.self) { tag in
+                        Text(tag)
+                            .font(.caption)
+                            .lineLimit(1)
+                            .padding(.horizontal, 10)
+                            .frame(minHeight: 28)
+                            .background(
+                                Capsule().fill(Color.white.opacity(0.08))
+                            )
+                    }
+                }
+            }
+        }
+        .frame(
+            maxWidth: .infinity,
+            maxHeight: .infinity,
+            alignment: .topLeading
+        )
+        .contentShape(Rectangle())
+        .onTapGesture(perform: onOpenCard)
+        .gesture(cardGesture)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(
+            "\(bucketLabel). \(FlowTextPreview.make(result.card.content))"
+        )
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction(named: Text("Next result"), onNext)
+        .accessibilityAction(named: Text("Open card"), onOpenCard)
+        .accessibilityIdentifier("spark.card.\(result.id)")
+    }
+
+    private var engagementFooter: some View {
+        HStack(spacing: 10) {
+            Button(action: onToggleFavorite) {
+                SparkCount(
+                    image: result.card.isFavorited
+                        ? "favorite_active"
+                        : "favorite",
+                    count: result.card.favoriteCount,
+                    label: "favorites",
+                    iconSize: 24
+                )
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(
+                result.card.isFavorited ? "Unfavorite" : "Favorite"
+            )
+            .accessibilityValue(result.card.isFavorited ? "true" : "false")
+            .accessibilityIdentifier("spark.favorite.\(result.id)")
+
+            Spacer(minLength: 16)
+
+            SparkCount(
+                image: result.card.isLiked ? "like_active" : "like",
+                count: result.card.likeCount,
+                label: "likes"
+            )
+
+            SparkCount(
+                image: "comment",
+                count: result.card.commentCount,
+                label: "comments"
+            )
+        }
+        .padding(.bottom, -18)
+        .foregroundStyle(Color.white.opacity(0.58))
     }
 
     private var cardBackground: some View {
@@ -796,58 +758,42 @@ private struct SparkResultCard: View {
         forcesAccessibleAppearance ? .increased : systemContrast
     }
 
-    @ViewBuilder
-    private var gestureIndicator: some View {
-        switch thresholdDecision {
-        case .save:
-            SparkGestureIndicator(image: "favorite_active")
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                .padding(18)
-        case .sparkDeeper:
-            SparkGestureIndicator(image: "menu_spark")
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-                .padding(18)
-        case .next, .cancel:
-            EmptyView()
-        }
-    }
-
     private var cardGesture: some Gesture {
         DragGesture(minimumDistance: 18)
             .onChanged { value in
                 guard !isInteractionLocked, !isResolvingGesture else { return }
-                dragOffset = value.translation
+                dragOffset = CGSize(width: value.translation.width, height: 0)
                 let decision = SparkGestureResolver.resolve(
                     translationX: Double(value.translation.width),
                     translationY: Double(value.translation.height),
                     predictedEndX: Double(value.predictedEndTranslation.width),
                     predictedEndY: Double(value.predictedEndTranslation.height)
                 )
-                let allowedDecision = decision == .sparkDeeper && !allowsSparkDeeper
-                    ? .cancel
-                    : decision
-                if thresholdDecision == .cancel, allowedDecision != .cancel {
+                if !isHorizontalSwipeCommitted, decision == .next {
                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
                 }
-                thresholdDecision = allowedDecision
+                isHorizontalSwipeCommitted = decision == .next
             }
             .onEnded { value in
-                var decision = SparkGestureResolver.resolve(
+                let decision = SparkGestureResolver.resolve(
                     translationX: Double(value.translation.width),
                     translationY: Double(value.translation.height),
                     predictedEndX: Double(value.predictedEndTranslation.width),
                     predictedEndY: Double(value.predictedEndTranslation.height)
                 )
-                if decision == .sparkDeeper, !allowsSparkDeeper {
-                    decision = .cancel
-                }
-                resolve(decision)
+                let exitDirection: CGFloat = value.predictedEndTranslation.width >= 0
+                    ? 1
+                    : -1
+                resolve(decision, exitDirection: exitDirection)
             }
     }
 
-    private func resolve(_ decision: SparkGestureDecision) {
+    private func resolve(
+        _ decision: SparkGestureDecision,
+        exitDirection: CGFloat
+    ) {
         guard decision != .cancel else {
-            thresholdDecision = .cancel
+            isHorizontalSwipeCommitted = false
             withAnimation(
                 .spring(
                     response: ZenVisualTokens.transitionDuration,
@@ -861,24 +807,11 @@ private struct SparkResultCard: View {
         guard !isResolvingGesture else { return }
 
         isResolvingGesture = true
-        UIImpactFeedbackGenerator(
-            style: decision == .save ? .medium : .light
-        ).impactOccurred()
-        let action: () -> Void
-        switch decision {
-        case .next:
-            action = onNext
-        case .save:
-            action = onSave
-        case .sparkDeeper:
-            action = onSparkDeeper
-        case .cancel:
-            return
-        }
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
 
         guard !reduceMotion else {
             resetGesture()
-            action()
+            onNext()
             return
         }
 
@@ -888,29 +821,20 @@ private struct SparkResultCard: View {
                 dampingFraction: 0.86
             )
         ) {
-            switch decision {
-            case .next:
-                dragOffset = CGSize(width: -640, height: 0)
-            case .save:
-                dragOffset = CGSize(width: 640, height: 0)
-            case .sparkDeeper:
-                dragOffset = CGSize(width: 0, height: -900)
-            case .cancel:
-                break
-            }
+            dragOffset = CGSize(width: 640 * exitDirection, height: 0)
         }
 
         DispatchQueue.main.asyncAfter(
             deadline: .now() + ZenVisualTokens.transitionDuration
         ) {
             resetGesture()
-            action()
+            onNext()
         }
     }
 
     private func resetGesture() {
         dragOffset = .zero
-        thresholdDecision = .cancel
+        isHorizontalSwipeCommitted = false
         isResolvingGesture = false
     }
 
@@ -991,38 +915,6 @@ private struct SparkCount: View {
         .foregroundStyle(Color.white.opacity(0.56))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(count) \(label)")
-    }
-}
-
-private struct SparkGestureIndicator: View {
-    let image: String
-
-    var body: some View {
-        Image(image)
-            .resizable()
-            .scaledToFit()
-            .frame(width: 22, height: 22)
-            .frame(width: 44, height: 44)
-            .background(Circle().fill(Color.black.opacity(0.56)))
-            .accessibilityHidden(true)
-    }
-}
-
-private struct SparkUpwardCue: View {
-    var body: some View {
-        HStack(spacing: 4) {
-            Image("menu_spark")
-                .resizable()
-                .scaledToFit()
-                .frame(width: 16, height: 16)
-            Image(systemName: "chevron.up")
-                .font(.caption2.weight(.semibold))
-        }
-        .foregroundStyle(Color.white.opacity(0.42))
-        .padding(.horizontal, 10)
-        .frame(height: 32)
-        .background(Capsule().fill(Color.black.opacity(0.3)))
-        .accessibilityHidden(true)
     }
 }
 
@@ -1153,20 +1045,5 @@ private struct SparkFailureNotice: View {
         .padding(.leading, 14)
         .padding(.trailing, canRetry ? 4 : 14)
         .background(Capsule().fill(Color.black.opacity(0.72)))
-    }
-}
-
-private struct SparkIconNotice: View {
-    let image: String
-    let label: String
-
-    var body: some View {
-        Image(image)
-            .resizable()
-            .scaledToFit()
-            .frame(width: 20, height: 20)
-            .frame(width: 44, height: 44)
-            .background(Circle().fill(Color.black.opacity(0.72)))
-            .accessibilityLabel(label)
     }
 }

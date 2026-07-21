@@ -31,18 +31,18 @@ final class CoreSparkModelsTests: XCTestCase {
         )
     }
 
-    func testGestureResolverRequiresDominantAxis() {
+    func testGestureResolverHandlesOnlyDominantHorizontalActions() {
         XCTAssertEqual(
             resolve(x: -90, y: 10, predictedX: -100, predictedY: 12),
             .next
         )
         XCTAssertEqual(
             resolve(x: 92, y: 8, predictedX: 120, predictedY: 10),
-            .save
+            .next
         )
         XCTAssertEqual(
             resolve(x: 5, y: -90, predictedX: 8, predictedY: -120),
-            .sparkDeeper
+            .cancel
         )
         XCTAssertEqual(
             resolve(x: 90, y: -80, predictedX: 100, predictedY: -90),
@@ -57,11 +57,15 @@ final class CoreSparkModelsTests: XCTestCase {
         )
         XCTAssertEqual(
             resolve(x: 6, y: -38, predictedX: 8, predictedY: -150),
-            .sparkDeeper
+            .cancel
         )
     }
 
-    func testDownwardDragNeverSparks() {
+    func testVerticalDragsAlwaysCancel() {
+        XCTAssertEqual(
+            resolve(x: 2, y: -100, predictedX: 5, predictedY: -150),
+            .cancel
+        )
         XCTAssertEqual(
             resolve(x: 2, y: 100, predictedX: 5, predictedY: 150),
             .cancel

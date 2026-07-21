@@ -70,7 +70,7 @@ final class LinkPopupSelectionSourceContractTests: XCTestCase {
             canonicalBranch.range(of: "if response.success")
         )
         let callback = try XCTUnwrap(
-            canonicalBranch.range(of: "self.onCardSelected?(linkItem)")
+            canonicalBranch.range(of: "selectionCallback?(linkItem)")
         )
         XCTAssertLessThan(mutation.lowerBound, success.lowerBound)
         XCTAssertLessThan(success.lowerBound, callback.lowerBound)
@@ -88,7 +88,7 @@ final class LinkPopupSelectionSourceContractTests: XCTestCase {
             Self.slice(
                 canonicalBranch,
                 from: "} else {\n                            print(\"失败:",
-                through: ".store(in: &cancellables)"
+                through: "self.showErrorAlert = true\n                        }"
             )
         )
         XCTAssertFalse(rejectedResponse.contains("onCardSelected"))

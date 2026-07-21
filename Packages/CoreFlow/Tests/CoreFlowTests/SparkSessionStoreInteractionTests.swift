@@ -5,155 +5,74 @@ import XCTest
 
 @MainActor
 final class SparkSessionStoreInteractionTests: XCTestCase {
-    func testSaveCarriesActivityAdvancesOptimisticallyAndLocksDuplicates() async {
+    func testFooterFavoriteMutatesVisibleResultInPlaceWithDiscoveryContext() async {
         let harness = makeHarness()
-        await loadRoot(harness, resultCount: 4)
+        await loadRoot(harness, resultCount: 3)
         let favoriteSubject = harness.service.enqueueFavorite()
+        var favoritedAssetIDs: [String] = []
 
-        harness.store.saveCurrent()
-        harness.store.saveCurrent()
+        harness.store.toggleFavoriteCurrent { favoritedAssetIDs.append($0) }
+        harness.store.toggleFavoriteCurrent()
 
         XCTAssertEqual(
             harness.service.favoriteCalls,
             [.init(assetID: "ast_result_1", sparkActivityID: "act_root")]
         )
-        XCTAssertEqual(harness.store.visibleIndex, 1)
+        XCTAssertEqual(harness.store.visibleIndex, 0)
+        XCTAssertEqual(harness.store.currentResult?.id, "ast_result_1")
+        XCTAssertEqual(harness.store.currentResult?.card.favoriteCount, 1)
+        XCTAssertEqual(harness.store.currentResult?.card.isFavorited, true)
         XCTAssertTrue(harness.store.isInteractionLocked)
 
         favoriteSubject.send(())
         favoriteSubject.send(completion: .finished)
         await settle()
 
+        XCTAssertEqual(harness.store.visibleIndex, 0)
         XCTAssertFalse(harness.store.isInteractionLocked)
-        XCTAssertEqual(harness.store.notice, .saved(assetID: "ast_result_1"))
-        XCTAssertTrue(harness.store.canUndoSave)
+        XCTAssertNil(harness.store.notice)
+        XCTAssertEqual(favoritedAssetIDs, ["ast_result_1"])
     }
 
-    func testSaveFailureRestoresExactResultAndIndex() async {
+    func testFooterUnfavoriteMutatesVisibleResultInPlace() async {
         let harness = makeHarness()
-        await loadRoot(harness, resultCount: 4)
-        harness.store.advance()
-        let favoriteSubject = harness.service.enqueueFavorite()
-
-        harness.store.saveCurrent()
-        favoriteSubject.send(completion: .failure(.server))
-        await settle()
-
-        XCTAssertEqual(harness.store.visibleIndex, 1)
-        XCTAssertEqual(harness.store.currentResult?.id, "ast_result_2")
-        XCTAssertEqual(harness.store.notice, .saveFailed)
-        XCTAssertEqual(harness.store.phase, .loaded)
-        XCTAssertFalse(harness.store.isInteractionLocked)
-    }
-
-    func testUndoNewFavoriteUnfavoritesAndRestoresSavedResult() async {
-        let harness = makeHarness()
-        await loadRoot(harness, resultCount: 3)
-        let favoriteSubject = harness.service.enqueueFavorite()
-        _ = harness.service.enqueueMore()
-
-        harness.store.saveCurrent()
-        favoriteSubject.send(())
-        favoriteSubject.send(completion: .finished)
-        await settle()
+        await loadRoot(
+            harness,
+            resultCount: 3,
+            firstResultIsFavorited: true
+        )
         let unfavoriteSubject = harness.service.enqueueUnfavorite()
 
-        harness.store.undoLastSave()
+        harness.store.toggleFavoriteCurrent()
 
         XCTAssertEqual(harness.service.unfavoriteAssetIDs, ["ast_result_1"])
         XCTAssertEqual(harness.store.visibleIndex, 0)
-        XCTAssertEqual(harness.store.currentResult?.id, "ast_result_1")
-        XCTAssertTrue(harness.store.isInteractionLocked)
+        XCTAssertEqual(harness.store.currentResult?.card.favoriteCount, 0)
+        XCTAssertEqual(harness.store.currentResult?.card.isFavorited, false)
 
         unfavoriteSubject.send(())
         unfavoriteSubject.send(completion: .finished)
         await settle()
 
-        XCTAssertFalse(harness.store.isInteractionLocked)
-        XCTAssertNil(harness.store.notice)
-        XCTAssertFalse(harness.store.canUndoSave)
-    }
-
-    func testAlreadyFavoritedResultAttachesContextWithoutUndoOrUnfavorite() async {
-        let harness = makeHarness()
-        await loadRoot(
-            harness,
-            resultCount: 3,
-            firstResultIsFavorited: true
-        )
-        let favoriteSubject = harness.service.enqueueFavorite()
-        _ = harness.service.enqueueMore()
-
-        harness.store.saveCurrent()
-        favoriteSubject.send(())
-        favoriteSubject.send(completion: .finished)
-        await settle()
-
-        XCTAssertEqual(
-            harness.service.favoriteCalls,
-            [.init(assetID: "ast_result_1", sparkActivityID: "act_root")]
-        )
-        XCTAssertFalse(harness.store.canUndoSave)
-
-        harness.store.undoLastSave()
-
-        XCTAssertTrue(harness.service.unfavoriteAssetIDs.isEmpty)
-        XCTAssertEqual(harness.store.visibleIndex, 1)
-    }
-
-    func testUndoFailureReturnsToPostSaveIndexAndCanRetry() async {
-        let harness = makeHarness()
-        await loadRoot(harness, resultCount: 3)
-        let favoriteSubject = harness.service.enqueueFavorite()
-        _ = harness.service.enqueueMore()
-        harness.store.saveCurrent()
-        favoriteSubject.send(())
-        favoriteSubject.send(completion: .finished)
-        await settle()
-        let firstUnfavorite = harness.service.enqueueUnfavorite()
-
-        harness.store.undoLastSave()
-        firstUnfavorite.send(completion: .failure(.server))
-        await settle()
-
-        XCTAssertEqual(harness.store.visibleIndex, 1)
-        XCTAssertEqual(harness.store.notice, .undoFailed)
-        XCTAssertTrue(harness.store.canUndoSave)
-
-        let retryUnfavorite = harness.service.enqueueUnfavorite()
-        harness.store.undoLastSave()
-        retryUnfavorite.send(())
-        retryUnfavorite.send(completion: .finished)
-        await settle()
-
-        XCTAssertEqual(harness.service.unfavoriteAssetIDs.count, 2)
         XCTAssertEqual(harness.store.visibleIndex, 0)
         XCTAssertNil(harness.store.notice)
+        XCTAssertFalse(harness.store.isInteractionLocked)
     }
 
-    func testSavedNoticeExpiresByAssetEvenWhenFavoriteAlreadyExisted() async {
+    func testFooterFavoriteFailureRestoresExactVisibleResult() async {
         let harness = makeHarness()
-        await loadRoot(
-            harness,
-            resultCount: 3,
-            firstResultIsFavorited: true
-        )
+        await loadRoot(harness, resultCount: 3)
+        let original = harness.store.currentResult
         let favoriteSubject = harness.service.enqueueFavorite()
-        _ = harness.service.enqueueMore()
-        harness.store.saveCurrent()
-        favoriteSubject.send(())
-        favoriteSubject.send(completion: .finished)
+
+        harness.store.toggleFavoriteCurrent()
+        favoriteSubject.send(completion: .failure(.server))
         await settle()
 
-        XCTAssertEqual(harness.store.savedAssetID, "ast_result_1")
-        XCTAssertNil(harness.store.undoAssetID)
-
-        harness.store.expireUndo(assetID: "ast_other")
-        XCTAssertEqual(harness.store.notice, .saved(assetID: "ast_result_1"))
-
-        harness.store.expireUndo(assetID: "ast_result_1")
-        XCTAssertNil(harness.store.notice)
-        XCTAssertNil(harness.store.savedAssetID)
+        XCTAssertEqual(harness.store.currentResult, original)
+        XCTAssertEqual(harness.store.visibleIndex, 0)
+        XCTAssertEqual(harness.store.notice, .saveFailed)
+        XCTAssertFalse(harness.store.isInteractionLocked)
     }
 
     func testMoreDeduplicatesSourceAndStopsAfterTwoEmptyBatches() async {

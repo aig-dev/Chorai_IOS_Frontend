@@ -8,6 +8,7 @@ struct HomeView: View {
     let refreshID: UUID
     var onboardingStore: OnboardingGuideStore?
     let onNoteCreated: (String, String) -> Void
+    let onCardRouteDismissed: (CardNavigationDismissal) -> Void
     @State private var selectedSegment = 0 // 0: Notes, 1: AI
 
     @State private var showPopupMenu = false
@@ -31,14 +32,13 @@ struct HomeView: View {
     @State private var selectedCardId: String? = nil
     @State private var navigateToUserProfile = false
     @State private var selectedActorId: String? = nil
-    @State private var navigateToRoot = false
-    @State private var rootViewType: String? = nil
 
     init(
         showSideMenu: Binding<Bool>,
         refreshID: UUID,
         onboardingStore: OnboardingGuideStore? = nil,
         onNoteCreated: @escaping (String, String) -> Void = { _, _ in },
+        onCardRouteDismissed: @escaping (CardNavigationDismissal) -> Void = { _ in },
         librarySearchManager: LibrarySearchManager = LibrarySearchManager()
     ) {
         _showSideMenu = showSideMenu
@@ -48,6 +48,7 @@ struct HomeView: View {
         self.refreshID = refreshID
         self.onboardingStore = onboardingStore
         self.onNoteCreated = onNoteCreated
+        self.onCardRouteDismissed = onCardRouteDismissed
     }
 
     // MARK: - 分段控制器背景
@@ -79,7 +80,7 @@ struct HomeView: View {
         // 使用默认排序（Latest Edited）
         cardsManager.loadUserCards(refresh: true, sortBy: "updated_at", sortOrder: "desc")
     }
-    
+
     // MARK: 应用排序
     private func applySort(sortBy: String, sortOrder: String) {
         print("应用排序: sortBy=\(sortBy), sortOrder=\(sortOrder)")
@@ -598,7 +599,8 @@ struct HomeView: View {
                 ? (getCurrentCard() ?? currentMenuCardData)
                 : currentMenuCardData,
             isOwnCard: librarySearchSession.scope == .notes
-                || (!librarySearchSession.isActive && selectedSegment == 0)
+                || (!librarySearchSession.isActive && selectedSegment == 0),
+            onRouteDismissed: onCardRouteDismissed
         )
         .onAppear {
             // 使用默认排序（Latest Edited）
@@ -724,33 +726,6 @@ struct HomeView: View {
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("CloseAllPopups"))) { _ in
             showPopupMenu = false
             showFilterTags = false
-        }
-        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NavigateToDetail"))) { notification in
-            if let cardId = notification.userInfo?["cardId"] as? String {
-                selectedCardId = cardId
-                DispatchQueue.main.async {
-                    navigateToDetail = true
-                }
-                
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NavigateToEdit"))) { notification in
-            if let cardId = notification.userInfo?["cardId"] as? String {
-                selectedCardId = cardId
-                DispatchQueue.main.async {
-                    navigateToEdit = true
-                }
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NavigateToRoot"))) { notification in
-            if let cardId = notification.userInfo?["cardId"] as? String {
-                let type = notification.userInfo?["type"] as? String
-                selectedCardId = cardId
-                rootViewType = type
-                DispatchQueue.main.async {
-                    navigateToRoot = true
-                }
-            }
         }
         .overlay(
             // 确认删除对话框
@@ -928,13 +903,6 @@ struct HomeView: View {
         .navigationDestination(isPresented: $navigateToEdit) {
             if let cardId = selectedCardId {
                 NewNoteView(cardId: cardId)
-            } else {
-                EmptyView()
-            }
-        }
-        .navigationDestination(isPresented: $navigateToRoot) {
-            if let cardId = selectedCardId {
-                RootView(cardId: cardId, type: rootViewType)
             } else {
                 EmptyView()
             }

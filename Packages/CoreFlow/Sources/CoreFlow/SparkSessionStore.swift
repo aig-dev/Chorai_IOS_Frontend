@@ -14,21 +14,6 @@ public final class SparkSessionStore: ObservableObject {
     @Published public private(set) var didShowUpwardCue = false
     @Published public private(set) var isMoreExhausted = false
 
-    public var canUndoSave: Bool {
-        undoEntry?.createdFavorite == true
-    }
-
-    public var undoAssetID: String? {
-        canUndoSave ? undoEntry?.result.id : nil
-    }
-
-    public var savedAssetID: String? {
-        guard case .saved(let assetID) = notice else {
-            return nil
-        }
-        return assetID
-    }
-
     public var currentResult: SparkResult? {
         guard results.indices.contains(visibleIndex) else {
             return nil
@@ -53,13 +38,6 @@ public final class SparkSessionStore: ObservableObject {
         let didShowUpwardCue: Bool
     }
 
-    private struct UndoEntry {
-        let result: SparkResult
-        let originalIndex: Int
-        let postSaveIndex: Int
-        let createdFavorite: Bool
-    }
-
     private let actorID: String
     private let rootSourceAssetID: String
     private let service: CoreSparkServing
@@ -71,8 +49,6 @@ public final class SparkSessionStore: ObservableObject {
     private var lastFailedTrigger: PendingSparkTrigger?
     private var lastFailedSourceCard: FlowCard?
     private var lastFailedReplayActivityID: String?
-    private var undoEntry: UndoEntry?
-
     private var nextCursor: String?
     private var seenAssetIDs = Set<String>()
     private var hasRequestedMore = false
@@ -145,7 +121,9 @@ public final class SparkSessionStore: ObservableObject {
         prefetchIfNeeded()
     }
 
-    public func saveCurrent() {
+    public func toggleFavoriteCurrent(
+        onFavoriteSucceeded: ((String) -> Void)? = nil
+    ) {
         guard
             !isInteractionLocked,
             let result = currentResult,
@@ -154,104 +132,60 @@ public final class SparkSessionStore: ObservableObject {
             return
         }
 
-        let entry = UndoEntry(
-            result: result,
-            originalIndex: visibleIndex,
-            postSaveIndex: visibleIndex + 1,
-            createdFavorite: !result.card.isFavorited
-        )
-        undoEntry = nil
         notice = nil
-        visibleIndex = entry.postSaveIndex
-        phase = currentResult == nil ? .empty : .loaded
+        let nextIsFavorited = !result.card.isFavorited
+        let nextFavoriteCount = nextIsFavorited
+            ? result.card.favoriteCount + 1
+            : max(0, result.card.favoriteCount - 1)
+        let optimisticResult = SparkResult(
+            card: result.card.replacingFavorite(
+                isFavorited: nextIsFavorited,
+                favoriteCount: nextFavoriteCount
+            ),
+            bucket: result.bucket,
+            score: result.score,
+            resultID: result.resultID
+        )
+        results[visibleIndex] = optimisticResult
         isInteractionLocked = true
         persistCurrentState()
 
         var receivedValue = false
-        interactionCancellable = service.favorite(
-            assetID: result.id,
-            sparkActivityID: sparkActivityID
-        )
+        let mutation = nextIsFavorited
+            ? service.favorite(
+                assetID: result.id,
+                sparkActivityID: sparkActivityID
+            )
+            : service.unfavorite(assetID: result.id)
+        interactionCancellable = mutation
         .receive(on: DispatchQueue.main)
         .sink(
             receiveCompletion: { [weak self] completion in
                 guard let self else { return }
                 self.isInteractionLocked = false
-                if case .failure = completion {
-                    self.visibleIndex = entry.originalIndex
-                    self.phase = .loaded
-                    self.notice = .saveFailed
-                    self.undoEntry = nil
-                    self.persistCurrentState()
-                } else if !receivedValue {
-                    self.visibleIndex = entry.originalIndex
-                    self.phase = .loaded
-                    self.notice = .saveFailed
-                    self.undoEntry = nil
-                    self.persistCurrentState()
-                } else {
-                    self.prefetchIfNeeded()
+                switch completion {
+                case .failure:
+                    self.restoreFavoriteMutation(result)
+                case .finished where !receivedValue:
+                    self.restoreFavoriteMutation(result)
+                case .finished:
+                    if nextIsFavorited {
+                        onFavoriteSucceeded?(result.id)
+                    }
                 }
             },
-            receiveValue: { [weak self] in
-                guard let self else { return }
+            receiveValue: {
                 receivedValue = true
-                self.undoEntry = entry
-                self.notice = .saved(assetID: result.id)
             }
         )
     }
 
-    public func undoLastSave() {
-        guard
-            !isInteractionLocked,
-            let entry = undoEntry,
-            entry.createdFavorite
-        else {
-            return
+    private func restoreFavoriteMutation(_ result: SparkResult) {
+        if let index = results.firstIndex(where: { $0.id == result.id }) {
+            results[index] = result
         }
-
-        undoEntry = nil
-        notice = nil
-        visibleIndex = entry.originalIndex
-        phase = .loaded
-        isInteractionLocked = true
+        notice = .saveFailed
         persistCurrentState()
-
-        var receivedValue = false
-        interactionCancellable = service.unfavorite(assetID: entry.result.id)
-            .receive(on: DispatchQueue.main)
-            .sink(
-                receiveCompletion: { [weak self] completion in
-                    guard let self else { return }
-                    self.isInteractionLocked = false
-                    if case .failure = completion {
-                        self.visibleIndex = entry.postSaveIndex
-                        self.phase = self.currentResult == nil ? .empty : .loaded
-                        self.undoEntry = entry
-                        self.notice = .undoFailed
-                    } else if !receivedValue {
-                        self.visibleIndex = entry.postSaveIndex
-                        self.phase = self.currentResult == nil ? .empty : .loaded
-                        self.undoEntry = entry
-                        self.notice = .undoFailed
-                    }
-                    self.persistCurrentState()
-                },
-                receiveValue: { _ in
-                    receivedValue = true
-                }
-            )
-    }
-
-    public func expireUndo(assetID: String) {
-        guard undoEntry?.result.id == assetID else {
-            return
-        }
-        undoEntry = nil
-        if notice == .saved(assetID: assetID) {
-            notice = nil
-        }
     }
 
     public func sparkCurrentDeeper() {
@@ -513,7 +447,6 @@ public final class SparkSessionStore: ObservableObject {
         visibleIndex = 0
         activeActivityID = page.activityID
         resetMoreState(sourceAssetID: page.sourceAssetID)
-        undoEntry = nil
         pendingTrigger = nil
         lastFailedTrigger = nil
         lastFailedSourceCard = nil
@@ -678,7 +611,6 @@ public final class SparkSessionStore: ObservableObject {
             : min(savedNode.visibleIndex, replayedResults.count - 1)
         activeActivityID = page.activityID
         resetMoreState(sourceAssetID: page.sourceAssetID)
-        undoEntry = nil
         pendingTrigger = nil
         lastFailedReplayActivityID = nil
         isInteractionLocked = false
@@ -892,9 +824,9 @@ public final class SparkSessionStore: ObservableObject {
                     return
                 }
                 self.isLoadingMore = false
-                if case .failure = completion, self.undoEntry == nil {
+                if case .failure = completion {
                     self.notice = .moreFailed
-                } else if !receivedPage, self.undoEntry == nil {
+                } else if !receivedPage {
                     self.notice = .moreFailed
                 }
             },

@@ -810,11 +810,8 @@ final class NewNoteViewSourceContractTests: XCTestCase {
 
         for wiring in [
             "onBackground: presentBackgroundActions",
-            "onSpark: { performPersistedCardAction(.notification(\"NavigateToSpark\")) }",
-            "onMerge: { performPersistedCardAction(.notification(\"NavigateToMerge\")) }",
             "onShare: { performPersistedCardAction(.notification(\"ShowCardShare\")) }",
             "onLink: addOntologyLink",
-            "onRoot: { performPersistedCardAction(.notification(\"NavigateToRoot\")) }",
             "onRemove: { showRemoveCardConfirmation = true }",
             "onTogglePin: { performPersistedCardAction(.togglePin) }",
         ] {
@@ -823,6 +820,9 @@ final class NewNoteViewSourceContractTests: XCTestCase {
                 "Card Actions must preserve its lazy-persist route: \(wiring)"
             )
         }
+        XCTAssertTrue(source.contains(".navigation(CardNavigationRoute.spark)"))
+        XCTAssertTrue(source.contains(".navigation(CardNavigationRoute.merge)"))
+        XCTAssertTrue(source.contains(".root(cardID: $0, type: nil)"))
 
         let presentation = try XCTUnwrap(
             Self.functionBody(
@@ -1193,6 +1193,11 @@ final class NewNoteViewSourceContractTests: XCTestCase {
     func testIDScopedCardActionsPersistLazilyAndRecoverTheirExactStoreIntent() throws {
         let source = try Self.newNoteSource()
         XCTAssertTrue(source.contains("enum CardEditorPersistedAction"))
+        XCTAssertTrue(
+            source.contains(
+                "case navigation((String) -> CardNavigationRoute)"
+            )
+        )
         XCTAssertTrue(source.contains("case notification(String)"))
         XCTAssertTrue(source.contains("case togglePin"))
         XCTAssertFalse(source.contains("case persistedAction(CardEditorPersistedAction)"))
@@ -1222,18 +1227,13 @@ final class NewNoteViewSourceContractTests: XCTestCase {
         XCTAssertFalse(action.contains("hasSaveFailure = true"))
         XCTAssertFalse(source.contains("retryCurrentFailure"))
 
-        for notification in [
-            "ShowCardShare",
-            "NavigateToSpark",
-            "NavigateToMerge",
-            "NavigateToRoot",
-        ] {
-            XCTAssertTrue(
-                source.contains(
-                    "performPersistedCardAction(.notification(\"\(notification)\"))"
-                )
+        XCTAssertTrue(
+            source.contains(
+                "performPersistedCardAction(.notification(\"ShowCardShare\"))"
             )
-        }
+        )
+        XCTAssertTrue(source.contains("navigateCard(route(cardID))"))
+        XCTAssertFalse(source.contains(".notification(\"NavigateTo"))
         XCTAssertTrue(source.contains("performPersistedCardAction(.togglePin)"))
 
         XCTAssertTrue(source.contains("func togglePinnedCard()"))

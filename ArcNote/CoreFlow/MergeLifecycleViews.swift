@@ -353,6 +353,7 @@ private struct MergeLifecycleView: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Back")
+            .accessibilityIdentifier("merge.back")
 
             Spacer()
 
@@ -984,6 +985,8 @@ private struct MergeEntryLoadingView: View {
                             .frame(width: 44, height: 44)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel("Back")
+                    .accessibilityIdentifier("merge.back")
                     Spacer()
                 }
                 Spacer()
@@ -1027,6 +1030,8 @@ private struct MergeEntryFailureView: View {
                             .frame(width: 44, height: 44)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel("Back")
+                    .accessibilityIdentifier("merge.back")
                     Spacer()
                 }
                 Spacer()
