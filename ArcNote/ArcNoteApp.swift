@@ -47,7 +47,10 @@ struct ArcNoteApp: App {
     private let isChoraProfileUITestRoute = ProcessInfo.processInfo.arguments
         .contains("--ui-test-chora-profile")
     private let isSettingsUITestRoute = ProcessInfo.processInfo.arguments
-        .contains("--ui-test-settings")
+        .contains("--ui-test-settings") || ProcessInfo.processInfo.arguments
+        .contains("--ui-test-settings-live-profile")
+    private let isLiveProfileSettingsUITestRoute = ProcessInfo.processInfo.arguments
+        .contains("--ui-test-settings-live-profile")
     private let isLibraryUITestRoute = ProcessInfo.processInfo.arguments
         .contains("--ui-test-library")
     private let isLibraryPreviewUITestRoute = ProcessInfo.processInfo.arguments
@@ -126,7 +129,7 @@ struct ArcNoteApp: App {
                 } else if isSettingsUITestRoute {
                     NavigationStack {
                         SettingsView(
-                            loadsProfileOnAppear: false,
+                            loadsProfileOnAppear: isLiveProfileSettingsUITestRoute,
                             choraProfileDestination: {
                                 AnyView(ChoraProfileFixtureScreen())
                             },

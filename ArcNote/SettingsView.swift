@@ -248,7 +248,9 @@ struct SettingsView: View {
             AccountPrivacyView()
         }
         .navigationDestination(isPresented: $navigateToEditProfile) {
-            EditProfileView()
+            EditProfileView(loadsProfileOnAppear: loadsProfileOnAppear) {
+                navigateToEditProfile = false
+            }
         }
         .navigationDestination(isPresented: $navigateToChoraProfile) {
             if let choraProfileDestination {
