@@ -60,18 +60,45 @@ final class FlowCardPresentationSourceContractTests: XCTestCase {
         )
     }
 
+    func testFlowUsesTintedNativeGlassWithAccessibilityFallbacks() throws {
+        let source = try flowViewSource()
+
+        XCTAssertTrue(source.contains("private struct FlowGlassSurface: View"))
+        XCTAssertTrue(source.contains("shape.fill(.ultraThinMaterial)"))
+        XCTAssertTrue(source.contains("if !reduceTransparency"))
+        XCTAssertTrue(source.contains("ZenVisualTokens.opaqueCardFill"))
+        XCTAssertTrue(source.contains("FlowGlassSurface(layer: .foreground)"))
+        XCTAssertTrue(source.contains("contrast == .increased"))
+    }
+
+    func testFlowDeckUsesAtMostTwoTruthfulNoninteractiveBackplates() throws {
+        let source = try flowViewSource()
+
+        XCTAssertTrue(source.contains("min(2, max(0, store.cards.count - 1))"))
+        XCTAssertTrue(source.contains("ForEach(backplateDepths.reversed(), id: \\.self)"))
+        XCTAssertTrue(source.contains("FlowDeckBackplate(depth: depth)"))
+        XCTAssertTrue(source.contains(".scaleEffect(depth == 1 ? 0.972 : 0.944)"))
+        XCTAssertTrue(source.contains(".offset(x: depth == 1 ? 7 : 14, y: depth == 1 ? 14 : 28)"))
+        XCTAssertTrue(source.contains(".allowsHitTesting(false)"))
+        XCTAssertTrue(source.contains(".accessibilityHidden(true)"))
+    }
+
     private func flowCardSource() throws -> String {
-        let source = try String(
-            contentsOf: Self.repositoryRoot
-                .appendingPathComponent("ArcNote/CoreFlow/FlowViews.swift"),
-            encoding: .utf8
-        )
+        let source = try flowViewSource()
         guard let start = source.range(of: "struct FlowCardView: View"),
               let end = source.range(of: "struct FlowDeckView: View") else {
             XCTFail("Unable to isolate FlowCardView source")
             return ""
         }
         return String(source[start.lowerBound..<end.lowerBound])
+    }
+
+    private func flowViewSource() throws -> String {
+        try String(
+            contentsOf: Self.repositoryRoot
+                .appendingPathComponent("ArcNote/CoreFlow/FlowViews.swift"),
+            encoding: .utf8
+        )
     }
 
     private static var repositoryRoot: URL {

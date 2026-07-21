@@ -11,6 +11,130 @@ enum ZenVisualTokens {
     static let accent = Color(red: 0.69, green: 0.58, blue: 1.0)
     static let cardFill = Color.white.opacity(0.07)
     static let cardBorder = Color.white.opacity(0.14)
+    static let opaqueCardFill = Color(red: 0.09, green: 0.075, blue: 0.15)
+    static let glassTint = Color(red: 0.105, green: 0.065, blue: 0.18)
+}
+
+private enum FlowGlassLayer {
+    case foreground
+    case rear(depth: Int)
+
+    var tintOpacity: Double {
+        switch self {
+        case .foreground:
+            return 0.64
+        case .rear(let depth):
+            return depth == 1 ? 0.72 : 0.78
+        }
+    }
+
+    var edgeOpacity: Double {
+        switch self {
+        case .foreground:
+            return 0.46
+        case .rear(let depth):
+            return depth == 1 ? 0.28 : 0.2
+        }
+    }
+
+    var shadowOpacity: Double {
+        switch self {
+        case .foreground:
+            return 0.3
+        case .rear(let depth):
+            return depth == 1 ? 0.2 : 0.14
+        }
+    }
+
+    var shadowRadius: CGFloat {
+        switch self {
+        case .foreground:
+            return 18
+        case .rear(let depth):
+            return depth == 1 ? 14 : 10
+        }
+    }
+
+    var shadowY: CGFloat {
+        switch self {
+        case .foreground:
+            return 10
+        case .rear(let depth):
+            return depth == 1 ? 8 : 6
+        }
+    }
+}
+
+private struct FlowGlassSurface: View {
+    let layer: FlowGlassLayer
+
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorSchemeContrast) private var contrast
+
+    private var shape: RoundedRectangle {
+        RoundedRectangle(
+            cornerRadius: ZenVisualTokens.cardRadius,
+            style: .continuous
+        )
+    }
+
+    var body: some View {
+        ZStack {
+            shape.fill(
+                reduceTransparency
+                    ? ZenVisualTokens.opaqueCardFill
+                    : Color.clear
+            )
+
+            if !reduceTransparency {
+                shape.fill(.ultraThinMaterial)
+            }
+
+            shape.fill(
+                ZenVisualTokens.glassTint.opacity(layer.tintOpacity)
+            )
+        }
+        .clipShape(shape)
+        .overlay(
+            shape.strokeBorder(
+                edgeGradient,
+                lineWidth: contrast == .increased ? 1.5 : 1
+            )
+        )
+        .shadow(
+            color: Color.black.opacity(layer.shadowOpacity),
+            radius: layer.shadowRadius,
+            x: 0,
+            y: layer.shadowY
+        )
+    }
+
+    private var edgeGradient: LinearGradient {
+        let contrastBoost = contrast == .increased ? 1.35 : 1
+        let opacity = min(0.78, layer.edgeOpacity * contrastBoost)
+
+        return LinearGradient(
+            colors: [
+                Color.white.opacity(opacity),
+                ZenVisualTokens.accent.opacity(opacity * 0.48),
+                Color.white.opacity(opacity * 0.18)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+}
+
+private struct FlowDeckBackplate: View {
+    let depth: Int
+
+    var body: some View {
+        FlowGlassSurface(layer: .rear(depth: depth))
+            .scaleEffect(depth == 1 ? 0.972 : 0.944)
+            .offset(x: depth == 1 ? 7 : 14, y: depth == 1 ? 14 : 28)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+    }
 }
 
 enum FlowTextPreview {
@@ -74,8 +198,6 @@ struct FlowCardView: View {
     let onToggleLike: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-    @Environment(\.colorSchemeContrast) private var contrast
     @State private var dragOffset: CGSize = .zero
     @State private var isResolvingSwipe = false
 
@@ -207,21 +329,7 @@ struct FlowCardView: View {
     }
 
     private var cardBackground: some View {
-        RoundedRectangle(cornerRadius: ZenVisualTokens.cardRadius, style: .continuous)
-            .fill(
-                reduceTransparency
-                    ? Color(red: 0.09, green: 0.075, blue: 0.15)
-                    : ZenVisualTokens.cardFill
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: ZenVisualTokens.cardRadius, style: .continuous)
-                    .stroke(
-                        contrast == .increased
-                            ? Color.white.opacity(0.42)
-                            : ZenVisualTokens.cardBorder,
-                        lineWidth: 1
-                    )
-            )
+        FlowGlassSurface(layer: .foreground)
     }
 
     private var resolvedAvatarURL: URL? {
@@ -352,6 +460,12 @@ struct FlowDeckView: View {
     let onCardSaved: (String) -> Void
     let onCardDismissed: (String) -> Void
 
+    private var backplateDepths: [Int] {
+        let count = min(2, max(0, store.cards.count - 1))
+        guard count > 0 else { return [] }
+        return Array(1...count)
+    }
+
     var body: some View {
         VStack(spacing: 12) {
             Group {
@@ -431,12 +545,8 @@ struct FlowDeckView: View {
     private var loadedDeck: some View {
         if let card = store.currentCard {
             ZStack {
-                if store.nextCard != nil {
-                    RoundedRectangle(cornerRadius: ZenVisualTokens.cardRadius, style: .continuous)
-                        .fill(ZenVisualTokens.cardFill.opacity(0.7))
-                        .offset(y: 12)
-                        .scaleEffect(0.965)
-                        .accessibilityHidden(true)
+                ForEach(backplateDepths.reversed(), id: \.self) { depth in
+                    FlowDeckBackplate(depth: depth)
                 }
 
                 FlowCardView(
