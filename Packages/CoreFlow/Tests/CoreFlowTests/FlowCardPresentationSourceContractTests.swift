@@ -39,6 +39,27 @@ final class FlowCardPresentationSourceContractTests: XCTestCase {
         )
     }
 
+    func testFlowAvatarCanonicalizesRelativeResourceURLBeforeLoading() throws {
+        let source = try flowCardSource()
+
+        XCTAssertTrue(
+            source.contains("APIConfiguration.resourceURLString(rawURL)"),
+            "Flow must resolve backend-relative avatar paths against the active API environment"
+        )
+        XCTAssertTrue(
+            source.contains("AsyncImage(url: resolvedAvatarURL)"),
+            "AsyncImage must receive the canonical URL"
+        )
+        XCTAssertTrue(
+            source.contains(".frame(width: 32, height: 32)"),
+            "The approved Flow avatar is a stable 32-point circle"
+        )
+        XCTAssertTrue(
+            source.contains("case .failure:"),
+            "A failed request must retain the quiet avatar fallback"
+        )
+    }
+
     private func flowCardSource() throws -> String {
         let source = try String(
             contentsOf: Self.repositoryRoot

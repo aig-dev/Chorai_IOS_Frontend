@@ -224,22 +224,48 @@ struct FlowCardView: View {
             )
     }
 
+    private var resolvedAvatarURL: URL? {
+        guard let candidate = card.author?.avatarURL else { return nil }
+        let rawURL = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !rawURL.isEmpty else { return nil }
+
+        return URL(string: APIConfiguration.resourceURLString(rawURL))
+    }
+
     @ViewBuilder
     private var authorAvatar: some View {
-        if let rawURL = card.author?.avatarURL, let url = URL(string: rawURL) {
-            AsyncImage(url: url) { image in
-                image.resizable().scaledToFill()
-            } placeholder: {
-                Circle()
-                    .fill(Color.white.opacity(0.1))
-                    .overlay(Image(systemName: "person.fill").font(.caption))
+        Group {
+            if let resolvedAvatarURL {
+                AsyncImage(url: resolvedAvatarURL) { phase in
+                    switch phase {
+                    case .empty:
+                        avatarPlaceholder
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    case .failure:
+                        avatarPlaceholder
+                    @unknown default:
+                        avatarPlaceholder
+                    }
+                }
+            } else {
+                avatarPlaceholder
             }
-            .frame(width: 28, height: 28)
-            .clipShape(Circle())
-        } else {
-            Image(systemName: "person.crop.circle.fill")
-                .font(.system(size: 28))
         }
+        .frame(width: 32, height: 32)
+        .clipShape(Circle())
+    }
+
+    private var avatarPlaceholder: some View {
+        Circle()
+            .fill(Color.white.opacity(0.1))
+            .overlay(
+                Image(systemName: "person.fill")
+                    .font(.caption)
+                    .foregroundStyle(Color.white.opacity(0.72))
+            )
     }
 
     private func engagementMetric(
