@@ -11,6 +11,7 @@ struct TabBarView: View {
 
     @StateObject private var authManager = AuthManager.shared
     @StateObject private var coordinator = CoreFlowCoordinator()
+    @StateObject private var keyboardLayout = KeyboardLayoutObserver()
     @StateObject private var onboardingStore = OnboardingGuideStore(
         service: NetworkCoreOnboardingService(),
         persistence: UserDefaultsOnboardingGuidePersistence()
@@ -551,10 +552,14 @@ struct TabBarView: View {
             CommentPopupView()
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            CoreTabBar(selectedTab: $coordinator.selectedTab)
-            .adaptiveContentGutter()
-            .padding(.bottom, 6)
+            if !keyboardLayout.isVisible {
+                CoreTabBar(selectedTab: $coordinator.selectedTab)
+                    .adaptiveContentGutter()
+                    .padding(.bottom, 6)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
         }
+        .animation(.easeOut(duration: 0.2), value: keyboardLayout.isVisible)
         .overlay(alignment: .top) {
             ZStack(alignment: .top) {
                 if showOnboardingCompletionAcknowledgement {

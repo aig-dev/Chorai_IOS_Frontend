@@ -13,6 +13,7 @@ struct ExploreView: View {
     var onboardingStore: OnboardingGuideStore? = nil
     @State private var isSearchMode = false
     @State private var searchText = ""
+    @FocusState private var isSearchFocused: Bool
     @StateObject private var cardsManager = RecommendedCardsManager(autoLoad: false)
     @StateObject private var flowStore = FlowDeckStore(service: NetworkCoreFlowService())
     @StateObject private var searchManager = SearchManager.shared
@@ -274,12 +275,14 @@ struct ExploreView: View {
     }
     
     var body: some View {
-        VStack(spacing: 0) {
+        KeyboardStableViewport(isFocused: isSearchFocused) { _ in
+            VStack(spacing: 0) {
             // 顶部导航栏
             HStack {
                 if isSearchMode {
                     // 搜索模式 - 返回按钮
                     Button(action: {
+                        isSearchFocused = false
                         withAnimation(.easeInOut(duration: 0.3)) {
                             isSearchMode = false
                             searchText = ""
@@ -307,6 +310,7 @@ struct ExploreView: View {
                         TextField("Please enter your search...", text: $searchText)
                             .foregroundColor(.white)
                             .textFieldStyle(PlainTextFieldStyle())
+                            .focused($isSearchFocused)
                             .accessibilityIdentifier("explore.search.input")
                             .submitLabel(.search)
                             .placeholder(when: searchText.isEmpty) {
@@ -363,6 +367,9 @@ struct ExploreView: View {
                     Button(action: {
                         withAnimation(.easeInOut(duration: 0.3)) {
                             isSearchMode = true
+                        }
+                        DispatchQueue.main.async {
+                            isSearchFocused = true
                         }
                     }) {
                         ZStack {
@@ -532,9 +539,16 @@ struct ExploreView: View {
                     )
                 }
             }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                if isSearchMode {
+                    isSearchFocused = false
+                }
+            }
             .padding(.horizontal, 20)
             .padding(.top, showFilterTags ? 15 : 15)
             .padding(.bottom, 150)
+        }
         }
         #if DEBUG
         .overlay(alignment: .topTrailing) {
@@ -542,6 +556,9 @@ struct ExploreView: View {
                 Button(action: {
                     withAnimation(.easeInOut(duration: 0.3)) {
                         isSearchMode = true
+                    }
+                    DispatchQueue.main.async {
+                        isSearchFocused = true
                     }
                 }) {
                     Color.white.opacity(0.01)
@@ -577,12 +594,6 @@ struct ExploreView: View {
             showExplorePopupMenu = false
             showFilterTags = false
         }
-        .onTapGesture {
-            // 点击输入框之外的地方关闭键盘
-            if isSearchMode {
-                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-            }
-        }
         .popupMenu(isPresented: $showExplorePopupMenu, layout: .grid2x2, cardData: currentExploreCardData, isOwnCard: isCurrentExploreCardOwned)
         .navigationDestination(isPresented: $navigateToUserProfile) {
             if let actorId = selectedActorId {
@@ -617,6 +628,7 @@ struct ExploreView: View {
     // MARK: - 执行搜索
     private func performSearch() {
         let trimmedText = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        isSearchFocused = false
         
         if !trimmedText.isEmpty {
             currentSearchIndex = 0 // 重置搜索索引

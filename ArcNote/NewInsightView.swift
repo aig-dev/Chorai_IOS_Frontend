@@ -49,7 +49,9 @@ struct NewInsightView: View {
                 }
             
             // 主要内容
-            VStack(spacing: 24) {
+            GeometryReader { geometry in
+                ScrollView {
+                    VStack(spacing: 24) {
                 // 标题和徽章
                 VStack(spacing: 12) {
                     Text(titleText)
@@ -220,20 +222,25 @@ struct NewInsightView: View {
                     .accessibilityIdentifier("new-insight.accept")
                 }
             }
-            .padding(24)
-            .background(
-                ZStack {
-                    Image(backgroundImageForRate(currentRate))
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .clipped()
-                    
-                    RoundedRectangle(cornerRadius: 20)
-                        .fill(Color.black.opacity(0.3))
+                .padding(24)
+                .background(
+                    ZStack {
+                        Image(backgroundImageForRate(currentRate))
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .clipped()
+
+                        RoundedRectangle(cornerRadius: 20)
+                            .fill(Color.black.opacity(0.3))
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: 20))
+                )
+                .adaptiveContentGutter()
+                .padding(.vertical, 12)
+                .frame(minHeight: geometry.size.height, alignment: .center)
                 }
-                .clipShape(RoundedRectangle(cornerRadius: 20))
-            )
-            .adaptiveContentGutter()
+                .scrollDismissesKeyboard(.interactively)
+            }
         }
         .transition(.opacity.combined(with: .scale))
         .onAppear {

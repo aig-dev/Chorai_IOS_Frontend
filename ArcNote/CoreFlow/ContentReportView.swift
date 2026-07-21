@@ -26,8 +26,11 @@ struct ContentReportView: View {
 
             VStack(spacing: 18) {
                 header
-                content
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                ScrollView {
+                    content
+                        .frame(maxWidth: .infinity, minHeight: 360)
+                }
+                .scrollDismissesKeyboard(.interactively)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .adaptiveContentGutter()

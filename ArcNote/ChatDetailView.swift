@@ -219,6 +219,7 @@ struct ChatDetailView: View {
                     .adaptiveContentGutter()
                     .padding(.bottom, selectCardManager.selectedNotes.isEmpty ? 100 : 200) // 为底部输入框和选中notes留出空间
                 }
+                .scrollDismissesKeyboard(.interactively)
                 .onAppear {
                     scrollToBottom(proxy, animated: false)
                 }
@@ -318,12 +319,6 @@ struct ChatDetailView: View {
                                 .foregroundColor(Color(red: 0.627, green: 0.627, blue: 0.627)) // A0A0A0
                         }
                         .focused($isTextFieldFocused)
-                        .onTapGesture {
-                            // 防止系统自动滚动
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                                isTextFieldFocused = true
-                            }
-                        }
                     
                     Button(action: {
                         if !messageText.isEmpty {
@@ -514,6 +509,7 @@ struct SelectCardPopupView: View {
                             .padding(.bottom, 20)
                             }
                         }
+                        .scrollDismissesKeyboard(.interactively)
                         .frame(maxHeight: .infinity)
                     }
                     .frame(
@@ -542,7 +538,9 @@ struct SelectCardPopupView: View {
                 
                 .animation(.easeInOut(duration: 0.3), value: manager.isShowing)
                 .onAppear {
-                    isSearchFocused = true
+                    DispatchQueue.main.async {
+                        isSearchFocused = true
+                    }
                 }
                 .onChange(of: searchText) { newValue in
                     searchWorkItem?.cancel()

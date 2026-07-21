@@ -437,6 +437,7 @@ struct LinkPopupView: View {
                             }
                             .padding(.bottom, 20)
                         }
+                        .scrollDismissesKeyboard(.interactively)
                         .frame(maxHeight: .infinity)
                     }
                     .frame(
@@ -466,18 +467,14 @@ struct LinkPopupView: View {
                 }
                 
                 .animation(.easeInOut(duration: 0.3), value: manager.isShowing)
-                .ignoresSafeArea(.all)
                 .onAppear {
-                    isTextFieldFocused = true
-                    // 强制禁用键盘自动调整
-                    if let window = keyWindow() {
-                        window.endEditing(true)
+                    DispatchQueue.main.async {
+                        isTextFieldFocused = true
                     }
-                    disableKeyboardAdjustment()
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .ignoresSafeArea(.all)
+            .ignoresSafeArea(.container, edges: .all)
         }
     }
 }
@@ -647,7 +644,7 @@ struct LinkPopupModifier: ViewModifier {
                     }
                 }
                 .animation(.easeInOut(duration: 0.3), value: manager.isShowing)
-                .ignoresSafeArea(.all)
+                .ignoresSafeArea(.container, edges: .all)
             )
     }
 }
@@ -656,40 +653,6 @@ struct LinkPopupModifier: ViewModifier {
 extension View {
     func linkPopup() -> some View {
         self.modifier(LinkPopupModifier())
-    }
-}
-
-// MARK: - Window Helper
-private func keyWindow() -> UIWindow? {
-    UIApplication.shared.connectedScenes
-        .compactMap { $0 as? UIWindowScene }
-        .flatMap { $0.windows }
-        .first { $0.isKeyWindow }
-}
-
-// MARK: - 禁用键盘调整扩展
-extension View {
-    func disableKeyboardAdjustment() {
-        // 递归查找并禁用所有UITextField的自动调整
-        if let window = keyWindow() {
-            disableKeyboardAdjustmentRecursive(in: window)
-        }
-    }
-    
-    private func disableKeyboardAdjustmentRecursive(in view: UIView) {
-        // 如果是UITextField，禁用自动调整
-        if let textField = view as? UITextField {
-            textField.autocorrectionType = .no
-            textField.autocapitalizationType = .none
-            textField.smartDashesType = .no
-            textField.smartQuotesType = .no
-            textField.smartInsertDeleteType = .no
-        }
-        
-        // 递归处理子视图
-        for subview in view.subviews {
-            disableKeyboardAdjustmentRecursive(in: subview)
-        }
     }
 }
 

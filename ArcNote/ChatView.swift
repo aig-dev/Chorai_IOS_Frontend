@@ -7,6 +7,7 @@ struct ChatView: View {
     @Binding var showSideMenu: Bool
     @State private var isSearchMode = false
     @State private var searchText = ""
+    @FocusState private var isSearchFocused: Bool
     @State private var selectedChat: String? = nil
     @StateObject private var chatManager: ChatManager
     private let humanActorID: String
@@ -108,13 +109,15 @@ struct ChatView: View {
     }
     
     var body: some View {
-        VStack(spacing: 0) {
+        KeyboardStableViewport(isFocused: isSearchFocused) { _ in
+            VStack(spacing: 0) {
             // 顶部导航栏
             ZStack {
                 if isSearchMode {
                     // 搜索模式
                     HStack {
                         Button(action: {
+                            isSearchFocused = false
                             withAnimation(.easeInOut(duration: 0.3)) {
                                 isSearchMode = false
                                 searchText = ""
@@ -135,7 +138,12 @@ struct ChatView: View {
                             TextField("Please enter your search...", text: $searchText)
                                 .foregroundColor(.white)
                                 .textFieldStyle(PlainTextFieldStyle())
+                                .focused($isSearchFocused)
                                 .accessibilityIdentifier("chat.search.input")
+                                .submitLabel(.search)
+                                .onSubmit {
+                                    isSearchFocused = false
+                                }
                                 .placeholder(when: searchText.isEmpty) {
                                     Text("Please enter your search...")
                                         .foregroundColor(.white.opacity(0.5))
@@ -183,6 +191,9 @@ struct ChatView: View {
                         Button(action: {
                             withAnimation(.easeInOut(duration: 0.3)) {
                                 isSearchMode = true
+                            }
+                            DispatchQueue.main.async {
+                                isSearchFocused = true
                             }
                         }) {
                             Image("search")
@@ -279,10 +290,12 @@ struct ChatView: View {
                 .adaptiveContentGutter()
                 .padding(.bottom, 20)
             }
+            .scrollDismissesKeyboard(.interactively)
             .refreshable {
                 chatManager.refreshConversations()
             }
             Spacer()
+        }
         }
         .accessibilityIdentifier("screen.chat.content")
         #if DEBUG

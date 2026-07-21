@@ -1189,6 +1189,41 @@ final class ArcNoteUITests: XCTestCase {
         )
     }
 
+    func testSignInKeepsTopChromeStableAndSubmitReachableWithKeyboard() {
+        app.launchArguments.append("--ui-test-sign-in")
+        app.launch()
+
+        waitFor("screen.sign-in")
+        let title = app.staticTexts["Sign In"]
+        XCTAssertTrue(title.waitForExistence(timeout: 10))
+        let initialTitleFrame = title.frame
+        let password = waitFor("signin.password")
+
+        password.tap()
+
+        let keyboard = app.keyboards.firstMatch
+        XCTAssertTrue(keyboard.waitForExistence(timeout: 10))
+        XCTAssertEqual(
+            title.frame.minY,
+            initialTitleFrame.minY,
+            accuracy: 2,
+            "Opening the keyboard must not move Sign In chrome through the top safe area"
+        )
+        XCTAssertGreaterThanOrEqual(title.frame.minY, app.frame.minY)
+        XCTAssertTrue(password.isHittable)
+
+        let submit = waitFor("signin.submit")
+        if !submit.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(
+            submit.isHittable,
+            "The Sign In action must remain reachable while editing"
+        )
+        XCTAssertLessThanOrEqual(submit.frame.maxY, keyboard.frame.minY + 1)
+        captureVisual("sign-in-keyboard-safe")
+    }
+
     func testNotificationContractFixtureRoute() throws {
         app.launchArguments.append("--ui-test-notification-contract")
         app.launch()
@@ -1888,6 +1923,7 @@ final class ArcNoteUITests: XCTestCase {
         waitFor("library.fixture.session")
         let normalFilter = waitFor("home.filter")
         let searchButton = waitFor("home.search")
+        let normalHeaderTop = min(normalFilter.frame.minY, searchButton.frame.minY)
         XCTAssertTrue(normalFilter.isHittable)
         XCTAssertTrue(searchButton.isHittable)
         XCTAssertFalse(app.textFields["home.search.input"].exists)
@@ -1897,12 +1933,34 @@ final class ArcNoteUITests: XCTestCase {
         let input = waitFor("home.search.input")
         let close = waitFor("home.search.close")
         let inlineFilter = waitFor("home.search.filter")
-        XCTAssertTrue(input.isHittable)
-        XCTAssertTrue(close.isHittable)
-        XCTAssertTrue(inlineFilter.isHittable)
+        let keyboard = app.keyboards.firstMatch
+        XCTAssertTrue(keyboard.waitForExistence(timeout: 10))
+        let keyboardLayoutDescription = [
+            "input=\(input.frame)",
+            "close=\(close.frame)",
+            "filter=\(inlineFilter.frame)",
+            "keyboard=\(keyboard.frame)",
+            "app=\(app.frame)",
+        ].joined(separator: " ")
+        XCTAssertTrue(input.isHittable, keyboardLayoutDescription)
+        XCTAssertTrue(close.isHittable, keyboardLayoutDescription)
+        XCTAssertTrue(inlineFilter.isHittable, keyboardLayoutDescription)
+        XCTAssertEqual(
+            close.frame.minY,
+            normalHeaderTop,
+            accuracy: 2,
+            "The inline Library header must not move when its keyboard opens"
+        )
+        XCTAssertGreaterThanOrEqual(close.frame.minY, app.frame.minY)
+        XCTAssertLessThanOrEqual(
+            inlineFilter.frame.maxY,
+            keyboard.frame.minY + 1,
+            "Every Library search control must stay above the keyboard"
+        )
         XCTAssertGreaterThanOrEqual(close.frame.height, 44)
         XCTAssertGreaterThanOrEqual(inlineFilter.frame.height, 44)
         XCTAssertGreaterThan(inlineFilter.frame.minX, input.frame.minX)
+        captureVisual("library-inline-search-keyboard-safe")
         XCTAssertFalse(app.buttons["home.filter"].exists)
         XCTAssertFalse(app.buttons["home.search"].exists)
         XCTAssertFalse(app.staticTexts["My Collection"].exists)

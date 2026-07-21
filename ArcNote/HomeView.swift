@@ -342,8 +342,9 @@ struct HomeView: View {
                 Image(systemName: "chevron.left")
                     .font(.system(size: 19, weight: .semibold))
                     .foregroundStyle(Color.white)
-                    .frame(minWidth: 44, minHeight: 44)
+                    .frame(minWidth: 44, minHeight: 52)
             }
+            .frame(minWidth: 44, minHeight: 52)
             .accessibilityLabel("Close Library search")
             .accessibilityIdentifier("home.search.close")
 
@@ -375,8 +376,9 @@ struct HomeView: View {
                         Image(systemName: "xmark.circle.fill")
                             .font(.system(size: 17, weight: .semibold))
                             .foregroundStyle(Color.white.opacity(0.58))
-                            .frame(minWidth: 44, minHeight: 44)
+                            .frame(minWidth: 44, minHeight: 52)
                     }
+                    .frame(minWidth: 44, minHeight: 52)
                     .accessibilityLabel("Clear search")
                     .accessibilityIdentifier("home.search.clear")
                 }
@@ -390,8 +392,9 @@ struct HomeView: View {
                         .resizable()
                         .aspectRatio(contentMode: .fit)
                         .frame(width: 21, height: 21)
-                        .frame(minWidth: 44, minHeight: 44)
+                        .frame(minWidth: 44, minHeight: 52)
                 }
+                .frame(minWidth: 44, minHeight: 52)
                 .accessibilityLabel("Search filters")
                 .accessibilityHint("Shows Library sort options")
                 .accessibilityIdentifier("home.search.filter")
@@ -430,7 +433,8 @@ struct HomeView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
+        KeyboardStableViewport(isFocused: isLibrarySearchFocused) { geometry in
+            VStack(spacing: 0) {
             // 顶部导航栏
             Group {
                 if librarySearchSession.isActive {
@@ -589,7 +593,14 @@ struct HomeView: View {
                     }
                 )
             }
+            }
+            .frame(
+                width: geometry.size.width,
+                height: geometry.size.height,
+                alignment: .top
+            )
         }
+        .scrollDismissesKeyboard(.interactively)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("screen.home.content")
         .popupMenu(

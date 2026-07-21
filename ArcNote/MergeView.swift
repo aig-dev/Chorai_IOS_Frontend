@@ -5,6 +5,7 @@ private struct LegacyMergeView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.presentationMode) var presentationMode
     @State private var searchText = ""
+    @FocusState private var isSearchFocused: Bool
     @State private var selectedCards: Set<String> = []
     @State private var showLoading = false
     @State private var showNewInsight = false
@@ -94,7 +95,8 @@ private struct LegacyMergeView: View {
     }
     
     var body: some View {
-        ZStack {
+        KeyboardStableViewport(isFocused: isSearchFocused) { _ in
+            ZStack {
             // 背景图片
 //            Image("home_bg")
 //                .resizable()
@@ -172,6 +174,7 @@ private struct LegacyMergeView: View {
                         TextField("", text: $searchText)
                             .foregroundColor(.white)
                             .textFieldStyle(PlainTextFieldStyle())
+                            .focused($isSearchFocused)
                             .accessibilityIdentifier("merge.search.input")
                             .placeholder(when: searchText.isEmpty) {
                                 Text("Please enter your search...")
@@ -262,6 +265,7 @@ private struct LegacyMergeView: View {
                         }
                         .padding(.bottom, 100) // 为悬浮按钮留出空间
                     }
+                    .scrollDismissesKeyboard(.interactively)
                 }
             }.background(
                 Image("home_bg")
@@ -373,6 +377,7 @@ private struct LegacyMergeView: View {
             #if DEBUG
             mergeDebugAnchors
             #endif
+        }
         }
         .navigationBarHidden(true)
         .gesture(

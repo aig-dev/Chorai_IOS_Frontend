@@ -401,6 +401,7 @@ struct SignUpView: View {
                         }
                         .frame(minHeight: geometry.size.height)
                     }
+                    .scrollDismissesKeyboard(.interactively)
             }
             .background(
                 Image("login_bg")
@@ -439,10 +440,6 @@ struct SignUpView: View {
                 url: URL(string: "https://chorai.app/privacy")!,
                 title: "Privacy Policy"
             )
-        }
-        .onTapGesture {
-            // 点击空白区域关闭键盘
-            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
         }
         .alert("Notice", isPresented: $showAlert) {
             Button("OK") { }

@@ -1318,6 +1318,7 @@ private struct CardEditorInlineLinkSheet: View {
                 TextField("Link text", text: $labelText)
                     .accessibilityIdentifier("cardEditorInlineLinkText")
             }
+            .scrollDismissesKeyboard(.interactively)
             .navigationTitle("Insert Link")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

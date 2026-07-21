@@ -208,6 +208,7 @@ private struct MergeLifecycleView: View {
     @ObservedObject var candidates: MergeCandidateStore
     @StateObject private var store: MergeSessionStore
     @State private var searchText = ""
+    @FocusState private var isTextInputFocused: Bool
     @State private var showCancelConfirmation = false
     @State private var committedCardID: String?
     @State private var showCommittedDetail = false
@@ -241,7 +242,8 @@ private struct MergeLifecycleView: View {
     }
 
     var body: some View {
-        ZStack {
+        KeyboardStableViewport(isFocused: isTextInputFocused) { _ in
+            ZStack {
             atmosphere
 
             VStack(spacing: 0) {
@@ -261,6 +263,7 @@ private struct MergeLifecycleView: View {
             }
 
             automationAnchors
+        }
         }
         .foregroundStyle(.white)
         .navigationBarHidden(true)
@@ -469,6 +472,7 @@ private struct MergeLifecycleView: View {
                 .padding(.top, 18)
                 .padding(.bottom, 104)
             }
+            .scrollDismissesKeyboard(.interactively)
             .overlay(alignment: .bottom) {
                 selectionAction
             }
@@ -483,6 +487,7 @@ private struct MergeLifecycleView: View {
             TextField("Search", text: $searchText)
                 .textFieldStyle(.plain)
                 .foregroundStyle(.white)
+                .focused($isTextInputFocused)
                 .accessibilityIdentifier("merge.search.input")
         }
         .padding(.horizontal, 16)
@@ -530,6 +535,7 @@ private struct MergeLifecycleView: View {
                         .font(.system(size: 21, weight: .semibold))
                         .textFieldStyle(.plain)
                         .foregroundStyle(.white)
+                        .focused($isTextInputFocused)
                         .disabled(store.isTitleOverrideLocked)
                         .accessibilityLabel("Merged card title")
                         .accessibilityIdentifier("merge.artifact.title")
@@ -587,6 +593,7 @@ private struct MergeLifecycleView: View {
                     }
                 }
             }
+            .scrollDismissesKeyboard(.interactively)
             .overlay(alignment: .bottom) {
                 artifactActions
             }

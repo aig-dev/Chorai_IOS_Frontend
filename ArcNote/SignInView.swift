@@ -31,7 +31,9 @@ struct SignInView: View {
     
     
     var body: some View {
-        VStack(spacing: 0) {
+        GeometryReader { geometry in
+            ScrollView {
+                VStack(spacing: 0) {
                 // 顶部导航栏
                 HStack {
                     Button(action: {
@@ -194,6 +196,13 @@ struct SignInView: View {
                 )
                 .padding(.top, 24)
                 .padding(.bottom, 50)
+                }
+                .frame(
+                    minHeight: geometry.size.height,
+                    alignment: .top
+                )
+            }
+            .scrollDismissesKeyboard(.interactively)
         }
         .background(
             Image("login_bg")
@@ -217,10 +226,6 @@ struct SignInView: View {
         }
         .navigationDestination(isPresented: $showChooseInterests) {
             ChooseInterestsView()
-        }
-        .onTapGesture {
-            // 点击空白区域关闭键盘
-            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
         }
         .alert("Notice", isPresented: $showAlert) {
             Button("OK") { }

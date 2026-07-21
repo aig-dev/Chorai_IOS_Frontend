@@ -2,21 +2,6 @@ import Combine
 import CoreFlow
 import SwiftUI
 
-// MARK: 禁用键盘调整的扩展
-extension View {
-    func disableKeyboardAdjustment(in view: UIView) {
-        if let scrollView = view as? UIScrollView {
-            scrollView.keyboardDismissMode = .none
-            scrollView.contentInsetAdjustmentBehavior = .never
-        }
-        
-        for subview in view.subviews {
-            disableKeyboardAdjustment(in: subview)
-        }
-    }
-}
-
-
 // MARK: 评论弹窗管理器
 class CommentPopupManager: ObservableObject {
     @Published var isShowing = false
@@ -160,7 +145,6 @@ class CommentPopupManager: ObservableObject {
 struct CommentPopupView: View {
     @ObservedObject private var manager = CommentPopupManager.shared
     @State private var commentText = ""
-    @State private var keyboardHeight: CGFloat = 0
     @State private var slideOffset: CGFloat = 0
     @FocusState private var isTextFieldFocused: Bool
     
@@ -179,7 +163,10 @@ struct CommentPopupView: View {
                 
                 // 弹窗内容
                 GeometryReader { geometry in
-                    let sheetHeight = geometry.size.height * 0.6
+                    let sheetHeight = min(
+                        max(geometry.size.height * 0.6, 280),
+                        geometry.size.height
+                    )
                     let hiddenOffset = sheetHeight + geometry.safeAreaInsets.bottom
 
                     VStack(spacing: 0) {
@@ -214,8 +201,7 @@ struct CommentPopupView: View {
                         .frame(height: 60) // 固定头部高度
                         
                         // 评论列表
-                        ScrollViewReader { proxy in
-                            ScrollView(.vertical, showsIndicators: true) {
+                        ScrollView(.vertical, showsIndicators: true) {
                                 LazyVStack(spacing: 16) {
                                     // 加载状态
                                     if manager.isLoading && manager.comments.isEmpty {
@@ -258,20 +244,12 @@ struct CommentPopupView: View {
                                 .padding(.top, 10)
                                 .padding(.bottom, 20)
                             }
+                            .scrollDismissesKeyboard(.interactively)
                             .frame(maxHeight: .infinity)
                             .clipped()
                             .refreshable {
                                 manager.refreshComments()
                             }
-                            .onChange(of: keyboardHeight) { _ in
-                                // 当键盘高度变化时，滚动到顶部避免系统自动滚动
-                                if let firstComment = manager.comments.first {
-                                    withAnimation(.easeInOut(duration: 0.3)) {
-                                        proxy.scrollTo(firstComment.id, anchor: .top)
-                                    }
-                                }
-                            }
-                        }
                         
                         // 评论输入框
                         HStack(spacing: 12) {
@@ -285,12 +263,6 @@ struct CommentPopupView: View {
                                             .foregroundColor(Color(red: 0.627, green: 0.627, blue: 0.627)) // A0A0A0
                                     }
                                     .focused($isTextFieldFocused)
-                                    .onTapGesture {
-                                        // 防止系统自动滚动
-                                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                                            isTextFieldFocused = true
-                                        }
-                                    }
                                     .accessibilityIdentifier("comment.input")
                                 
                                 Button(action: {
@@ -342,20 +314,10 @@ struct CommentPopupView: View {
                     .accessibilityIdentifier("adaptive-layout.comment-surface")
                     .position(
                         x: geometry.size.width / 2,
-                        y: geometry.size.height - sheetHeight / 2 - keyboardHeight
-                            + geometry.safeAreaInsets.bottom
+                        y: geometry.size.height - sheetHeight / 2
                     )
                     .offset(y: slideOffset)
-                    .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { notification in
-                        if let keyboardFrame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect {
-                            keyboardHeight = keyboardFrame.height - 20
-                        }
-                    }
-                    .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
-                        keyboardHeight = 0
-                    }
                     .animation(.easeInOut(duration: 0.4), value: slideOffset)
-                    .animation(.easeInOut(duration: 0.3), value: keyboardHeight)
                     .onChange(of: manager.isShowing) { isShowing in
                         if isShowing {
                             slideOffset = hiddenOffset
@@ -393,19 +355,6 @@ struct CommentPopupView: View {
                 } message: {
                     Text(manager.errorMessage)
                 }
-//                .ignoresSafeArea(.container, edges: .bottom)
-                .ignoresSafeArea(.keyboard, edges: .bottom)
-//                .onAppear {
-//                    // 禁用系统键盘处理
-//                    UIApplication.shared.windows.first?.endEditing(true)
-//                    
-//                    // 禁用所有ScrollView的自动键盘处理
-//                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-//                        if let window = UIApplication.shared.windows.first {
-//                            disableKeyboardAdjustment(in: window)
-//                        }
-//                    }
-//                }
             }
 //        }
     }

@@ -119,6 +119,7 @@ struct ChoraProfileView: View {
                         "chora.profile.section-order"
                     )
                 }
+                .scrollDismissesKeyboard(.interactively)
             }
         }
         .navigationBarHidden(true)
