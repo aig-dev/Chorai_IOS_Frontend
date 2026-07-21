@@ -3386,6 +3386,10 @@ final class ArcNoteUITests: XCTestCase {
             throw XCTSkip("The smoke profile needs an avatar that can be restored")
         }
         addTeardownBlock { [self] in
+            try updateCurrentSmokeAvatar(
+                token: session.token,
+                avatarURL: originalAvatarURL
+            )
             try updateCurrentSmokeProfile(
                 token: session.token,
                 username: originalProfile.username,
@@ -3393,10 +3397,6 @@ final class ArcNoteUITests: XCTestCase {
                 bio: originalProfile.bio,
                 city: originalProfile.city,
                 birthday: originalProfile.birthday
-            )
-            try updateCurrentSmokeAvatar(
-                token: session.token,
-                avatarURL: originalAvatarURL
             )
             let restoredProfile = try fetchCurrentSmokeProfile(
                 token: session.token
@@ -3441,7 +3441,10 @@ final class ArcNoteUITests: XCTestCase {
             )
             cardIDs.append(cardID)
             addTeardownBlock { [self] in
-                permanentlyCleanUpSmokeCard(id: cardID, token: session.token)
+                try permanentlyCleanUpFlowFixtureCard(
+                    id: cardID,
+                    token: session.token
+                )
             }
         }
         let route = waitForRecommendedSmokeCardRoute(
@@ -6158,7 +6161,6 @@ final class ArcNoteUITests: XCTestCase {
 
     private struct SmokeRecommendedRoute {
         let targetCardID: String
-        let orderedCardIDs: [String]
     }
 
     private func waitForRecommendedSmokeCardRoute(
@@ -6208,8 +6210,7 @@ final class ArcNoteUITests: XCTestCase {
                     )
                     if stableTriple == previousStableTriple {
                         return SmokeRecommendedRoute(
-                            targetCardID: rankedCard.element,
-                            orderedCardIDs: Array(orderedCardIDs.prefix(50))
+                            targetCardID: rankedCard.element
                         )
                     }
                     previousStableTriple = stableTriple
@@ -6231,8 +6232,7 @@ final class ArcNoteUITests: XCTestCase {
             line: line
         )
         return SmokeRecommendedRoute(
-            targetCardID: cardIDs.first ?? "",
-            orderedCardIDs: lastCardIDs
+            targetCardID: cardIDs.first ?? ""
         )
     }
 
@@ -8481,6 +8481,73 @@ final class ArcNoteUITests: XCTestCase {
         request.httpMethod = "DELETE"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         _ = try? sendRawRequest(request)
+    }
+
+    private func permanentlyCleanUpFlowFixtureCard(
+        id: String,
+        token: String
+    ) throws {
+        let baseURL = UITestAPIConfiguration.baseURL
+        guard let cardURL = URL(string: "\(baseURL)/api/cards/\(id)") else {
+            throw NSError(
+                domain: "ArcNoteUITests",
+                code: 33,
+                userInfo: [
+                    NSLocalizedDescriptionKey:
+                        "Invalid Flow fixture card URL for \(id)"
+                ]
+            )
+        }
+        guard let permanentURL = URL(
+            string: "\(baseURL)/api/cards/trash/\(id)/permanent"
+        ) else {
+            throw NSError(
+                domain: "ArcNoteUITests",
+                code: 34,
+                userInfo: [
+                    NSLocalizedDescriptionKey:
+                        "Invalid Flow fixture permanent-delete URL for \(id)"
+                ]
+            )
+        }
+
+        var softDeleteRequest = URLRequest(url: cardURL)
+        softDeleteRequest.httpMethod = "DELETE"
+        softDeleteRequest.setValue(
+            "Bearer \(token)",
+            forHTTPHeaderField: "Authorization"
+        )
+        _ = try sendRawRequest(softDeleteRequest)
+
+        var permanentDeleteRequest = URLRequest(url: permanentURL)
+        permanentDeleteRequest.httpMethod = "DELETE"
+        permanentDeleteRequest.setValue(
+            "Bearer \(token)",
+            forHTTPHeaderField: "Authorization"
+        )
+        _ = try sendRawRequest(permanentDeleteRequest)
+
+        var verifyRequest = URLRequest(url: cardURL)
+        verifyRequest.httpMethod = "GET"
+        verifyRequest.setValue(
+            "Bearer \(token)",
+            forHTTPHeaderField: "Authorization"
+        )
+        do {
+            _ = try sendRawRequest(verifyRequest)
+            throw NSError(
+                domain: "ArcNoteUITests",
+                code: 35,
+                userInfo: [
+                    NSLocalizedDescriptionKey:
+                        "Flow fixture card \(id) persisted after cleanup; "
+                        + "expected HTTP 404"
+                ]
+            )
+        } catch let error as NSError
+        where error.domain == "ArcNoteUITests" && error.code == 404 {
+            return
+        }
     }
 
     private func waitForSmokeCardState(
