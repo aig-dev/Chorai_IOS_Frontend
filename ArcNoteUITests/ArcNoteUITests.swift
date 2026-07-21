@@ -3425,7 +3425,7 @@ final class ArcNoteUITests: XCTestCase {
         )
         XCTAssertTrue(
             cardIDs.contains(visibleCardID),
-            "A fresh authored card must be foreground so its uploaded avatar is visible"
+            "A fresh authored card must be foreground so its pre-provisioned relative avatar is visible"
         )
         captureVisual("flow-glass-avatar-stack")
 
@@ -9180,7 +9180,9 @@ final class ArcNoteUITests: XCTestCase {
         let candidate = rawURL
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
-        guard candidate.hasPrefix("/"), !candidate.hasPrefix("//") else {
+        guard candidate.hasPrefix("/"),
+              !candidate.hasPrefix("//"),
+              candidate.count > 1 else {
             throw XCTSkip(
                 "Pre-provision the smoke profile with a reusable backend-relative avatar URL"
             )

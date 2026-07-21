@@ -94,6 +94,7 @@ final class FlowCardPresentationSourceContractTests: XCTestCase {
 
     func testFlowGlassUIFixtureReusesExistingAvatarArtifact() throws {
         let source = try flowGlassUITestSource()
+        let helperSource = try reusableAvatarHelperSource()
 
         XCTAssertTrue(
             source.contains("reusableRelativeAvatarURL"),
@@ -110,6 +111,10 @@ final class FlowCardPresentationSourceContractTests: XCTestCase {
         XCTAssertFalse(
             source.contains("updateCurrentSmokeProfile"),
             "The Flow fixture must require a pre-provisioned relative avatar instead of attempting an unsupported profile avatar write"
+        )
+        XCTAssertTrue(
+            helperSource.contains("candidate.count > 1"),
+            "The reusable avatar prerequisite must reject the root path"
         )
     }
 
@@ -145,11 +150,7 @@ final class FlowCardPresentationSourceContractTests: XCTestCase {
     }
 
     private func flowGlassUITestSource() throws -> String {
-        let source = try String(
-            contentsOf: Self.repositoryRoot
-                .appendingPathComponent("ArcNoteUITests/ArcNoteUITests.swift"),
-            encoding: .utf8
-        )
+        let source = try flowUITestFileSource()
         guard let start = source.range(of: "func testFlowGlassDeckRenders"),
               let end = source.range(
                 of: "func testFlowFavoriteIconActivatesWithoutAdvancingCard",
@@ -159,6 +160,27 @@ final class FlowCardPresentationSourceContractTests: XCTestCase {
             return ""
         }
         return String(source[start.lowerBound..<end.lowerBound])
+    }
+
+    private func reusableAvatarHelperSource() throws -> String {
+        let source = try flowUITestFileSource()
+        guard let start = source.range(of: "private func reusableRelativeAvatarURL"),
+              let end = source.range(
+                of: "private func waitForCurrentSmokeProfile",
+                range: start.upperBound..<source.endIndex
+              ) else {
+            XCTFail("Unable to isolate the reusable avatar helper")
+            return ""
+        }
+        return String(source[start.lowerBound..<end.lowerBound])
+    }
+
+    private func flowUITestFileSource() throws -> String {
+        try String(
+            contentsOf: Self.repositoryRoot
+                .appendingPathComponent("ArcNoteUITests/ArcNoteUITests.swift"),
+            encoding: .utf8
+        )
     }
 
     private static var repositoryRoot: URL {
