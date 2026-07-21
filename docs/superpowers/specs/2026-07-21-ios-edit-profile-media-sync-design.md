@@ -139,8 +139,9 @@ Implementation follows red-green-refactor:
 3. Add profile-contract fixture assertions for `background_url`, canonical
    avatar/background resource URLs, and birthday normalization.
 4. Add a live Go smoke test for the background multipart route using an
-   in-process JPEG, then restore the prior URL through the JSON background
-   endpoint when one exists.
+   in-process JPEG. Require a non-empty prior URL before mutation so the test
+   can restore it through the JSON background endpoint; otherwise skip with an
+   explicit reversible-fixture prerequisite.
 5. Run the focused UI tests, existing profile save/avatar tests, and the full
    relevant UI test class when local prerequisites permit.
 6. Build both `ArcNote` and `ArcNote Production` for an iOS Simulator.
