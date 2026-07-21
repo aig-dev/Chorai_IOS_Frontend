@@ -439,7 +439,7 @@ git commit -m "feat: add Flow glass card stack"
 - Modify: `ArcNoteUITests/ArcNoteUITests.swift`
 
 **Interfaces:**
-- Consumes: the Task 1 avatar resolver, Task 2 glass primitives, the Local Go stack, existing profile/card smoke helpers, and a reusable same-origin profile avatar.
+- Consumes: the Task 1 avatar resolver, Task 2 glass primitives, the Local Go stack, existing profile/card smoke helpers, and a pre-provisioned backend-relative profile avatar.
 - Produces: `testFlowGlassDeckRendersReusableRelativeAvatarAndThreeCardStack()`, fresh unit/build/UI result bundles, and a kept `flow-glass-avatar-stack` attachment for design QA.
 
 - [ ] **Step 1: Add a repeatable live relative-avatar and three-card UI fixture**
@@ -447,11 +447,10 @@ git commit -m "feat: add Flow glass card stack"
 Add `testFlowGlassDeckRendersReusableRelativeAvatarAndThreeCardStack()` beside
 the existing Flow UI tests. It must:
 
-1. Reuse the smoke profile's existing same-origin avatar artifact, or
-   `CHORAI_UI_TEST_FLOW_RELATIVE_AVATAR_URL`; never invoke the upload endpoint.
-2. Convert an absolute same-origin URL to its equivalent root-relative path only
-   when necessary, restore the exact original profile in a throwing teardown, and
-   assert the live profile value is root-relative.
+1. Require and reuse the smoke profile's pre-provisioned root-relative avatar
+   artifact; skip with setup guidance when it is missing.
+2. Never invoke the avatar upload/update endpoints or attempt to write
+   `avatar_url` through the general profile endpoint.
 3. Create three fresh public cards, register strict permanent cleanup for each,
    and use recommendation pagination to discover their ranked route.
 4. Launch Flow, swipe through at most 50 visible cards to the ranked target,
@@ -525,7 +524,7 @@ xcodebuild test \
   CODE_SIGNING_ALLOWED=NO
 ```
 
-Expected: 2 tests pass with 0 failures. The new fixture proves the backend returns or preserves a reusable relative avatar path without creating a new upload, creates enough fresh authored cards for two truthful rear layers, follows paginated recommendations to the target, preserves swipe, and keeps `flow-glass-avatar-stack`; the existing test proves engagement ordering and Spark placement remain unchanged.
+Expected: 2 tests pass with 0 failures. The new fixture proves a pre-provisioned reusable relative avatar path renders without creating a new upload or profile mutation, creates enough fresh authored cards for two truthful rear layers, follows paginated recommendations to the target, preserves swipe, and keeps `flow-glass-avatar-stack`; the existing test proves engagement ordering and Spark placement remain unchanged.
 
 - [ ] **Step 8: Export and inspect the screenshot**
 

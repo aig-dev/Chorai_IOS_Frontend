@@ -107,6 +107,10 @@ final class FlowCardPresentationSourceContractTests: XCTestCase {
             source.contains("waitForEditProfileAvatarUploadStatus"),
             "The Flow fixture must not depend on an upload mutation"
         )
+        XCTAssertFalse(
+            source.contains("updateCurrentSmokeProfile"),
+            "The Flow fixture must require a pre-provisioned relative avatar instead of attempting an unsupported profile avatar write"
+        )
     }
 
     private func flowCardSource() throws -> String {

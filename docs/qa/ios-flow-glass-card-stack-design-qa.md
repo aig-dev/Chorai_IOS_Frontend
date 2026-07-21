@@ -60,12 +60,11 @@ request.
 - Avatar: Flow trims the author value, passes it through
   `APIConfiguration.resourceURLString`, and gives the resulting URL to
   `AsyncImage`. The resolver preserves absolute HTTP(S) URLs and canonicalizes
-  backend-relative paths. The main live fixture reuses the smoke profile's
-  existing same-origin avatar artifact, converts an absolute value to its
-  equivalent root-relative path only when needed, and never invokes the avatar
-  upload endpoint. The main capture proves that relative value renders as the
-  blue/yellow author image. Missing, empty, loading, invalid, and failed values
-  use the same quiet 32-point circular person fallback.
+  backend-relative paths. The main live fixture requires and reuses the smoke
+  profile's pre-provisioned backend-relative avatar artifact; it never invokes
+  an avatar or profile mutation endpoint. The main capture proves that relative
+  value renders as the blue/yellow author image. Missing, empty, loading,
+  invalid, and failed values use the same quiet 32-point circular person fallback.
 - Stack: the deck derives zero, one, or two rear surfaces from the number of cards
   remaining, capped at two. The main capture shows a real three-card route as one
   foreground plus two rear rims. Rear surfaces instantiate only the shared glass
@@ -105,14 +104,12 @@ claim full accessibility compliance.
 
 ## Fixture repeatability and route deviation
 
-The final live fixture does not upload an image. It reuses an existing same-origin
-avatar resource from the smoke profile, or the explicit
-`CHORAI_UI_TEST_FLOW_RELATIVE_AVATAR_URL` override. If the existing value is
-absolute, the fixture temporarily writes only its equivalent root-relative value
-through `PUT /api/v1/profile/me`, then restores the exact original profile during
-teardown. This avoids orphaned media and the 10-per-hour avatar-upload/update
-limit. All three temporary cards are soft-deleted, permanently deleted, and
-verified absent during teardown.
+The final live fixture neither uploads an image nor mutates the profile. It
+requires the smoke profile to be pre-provisioned with a reusable root-relative
+avatar URL and explicitly skips with setup guidance when that prerequisite is
+missing. This avoids orphaned media and the 10-per-hour avatar-update limit. All
+three temporary cards are soft-deleted, permanently deleted, and verified absent
+during teardown.
 
 The original plan assumed one of the three fresh cards would immediately be the
 foreground recommendation. Recommendation order is paginated and non-deterministic

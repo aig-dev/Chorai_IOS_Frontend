@@ -3383,40 +3383,10 @@ final class ArcNoteUITests: XCTestCase {
         let relativeAvatarURL = try reusableRelativeAvatarURL(
             from: originalProfile.avatarURL
         )
-        if relativeAvatarURL != originalProfile.avatarURL {
-            addTeardownBlock { [self] in
-                try updateCurrentSmokeProfile(
-                    token: session.token,
-                    username: originalProfile.username,
-                    avatarURL: originalProfile.avatarURL,
-                    bio: originalProfile.bio,
-                    city: originalProfile.city,
-                    birthday: originalProfile.birthday
-                )
-                let restoredProfile = try fetchCurrentSmokeProfile(
-                    token: session.token
-                )
-                XCTAssertEqual(restoredProfile.username, originalProfile.username)
-                XCTAssertEqual(restoredProfile.avatarURL, originalProfile.avatarURL)
-                XCTAssertEqual(restoredProfile.bio, originalProfile.bio)
-                XCTAssertEqual(restoredProfile.city, originalProfile.city)
-                XCTAssertEqual(restoredProfile.birthday, originalProfile.birthday)
-            }
-            try updateCurrentSmokeProfile(
-                token: session.token,
-                username: originalProfile.username,
-                avatarURL: relativeAvatarURL,
-                bio: originalProfile.bio,
-                city: originalProfile.city,
-                birthday: originalProfile.birthday
-            )
-        }
-
-        let fixtureProfile = try fetchCurrentSmokeProfile(token: session.token)
         XCTAssertTrue(
-            fixtureProfile.avatarURL.hasPrefix("/")
-                && !fixtureProfile.avatarURL.hasPrefix("//"),
-            "The reusable fixture must exercise a backend-relative avatar URL"
+            relativeAvatarURL.hasPrefix("/")
+                && !relativeAvatarURL.hasPrefix("//"),
+            "The pre-provisioned fixture must use a backend-relative avatar URL"
         )
 
         let runID = Int(Date().timeIntervalSince1970)
@@ -9207,60 +9177,15 @@ final class ArcNoteUITests: XCTestCase {
     }
 
     private func reusableRelativeAvatarURL(from rawURL: String) throws -> String {
-        let configuredURL = ProcessInfo.processInfo.environment[
-            "CHORAI_UI_TEST_FLOW_RELATIVE_AVATAR_URL"
-        ]
-        let candidate = (configuredURL ?? rawURL)
+        let candidate = rawURL
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
-        guard !candidate.isEmpty else {
+        guard candidate.hasPrefix("/"), !candidate.hasPrefix("//") else {
             throw XCTSkip(
-                "The smoke profile needs a reusable avatar resource"
+                "Pre-provision the smoke profile with a reusable backend-relative avatar URL"
             )
         }
-        if candidate.hasPrefix("/") && !candidate.hasPrefix("//") {
-            return candidate
-        }
-
-        guard let avatarURL = URL(string: candidate),
-              let baseURL = URL(string: UITestAPIConfiguration.baseURL),
-              avatarURL.scheme?.lowercased() == baseURL.scheme?.lowercased(),
-              normalizedSmokeHost(avatarURL.host) == normalizedSmokeHost(baseURL.host),
-              effectivePort(for: avatarURL) == effectivePort(for: baseURL),
-              let components = URLComponents(url: avatarURL, resolvingAgainstBaseURL: false) else {
-            throw XCTSkip(
-                "Set CHORAI_UI_TEST_FLOW_RELATIVE_AVATAR_URL to a reusable same-origin avatar path"
-            )
-        }
-
-        let path = components.percentEncodedPath
-        guard path.hasPrefix("/"), path.count > 1 else {
-            throw XCTSkip("The reusable avatar URL needs a non-root resource path")
-        }
-        if let query = components.percentEncodedQuery, !query.isEmpty {
-            return "\(path)?\(query)"
-        }
-        return path
-    }
-
-    private func normalizedSmokeHost(_ host: String?) -> String? {
-        guard let host = host?.lowercased() else { return nil }
-        if ["localhost", "127.0.0.1", "::1"].contains(host) {
-            return "loopback"
-        }
-        return host
-    }
-
-    private func effectivePort(for url: URL) -> Int? {
-        if let port = url.port { return port }
-        switch url.scheme?.lowercased() {
-        case "http":
-            return 80
-        case "https":
-            return 443
-        default:
-            return nil
-        }
+        return candidate
     }
 
     private func waitForCurrentSmokeProfile(token: String, bio: String, city: String, timeout: TimeInterval = 15, file: StaticString = #filePath, line: UInt = #line) {
