@@ -3375,6 +3375,108 @@ final class ArcNoteUITests: XCTestCase {
         )
     }
 
+    func testFlowGlassDeckRendersUploadedRelativeAvatarAndThreeCardStack() throws {
+        let session = try requireSmokeSession()
+        seedAppSession(session)
+
+        let originalProfile = try fetchCurrentSmokeProfile(token: session.token)
+        let originalAvatarURL = originalProfile.avatarURL
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !originalAvatarURL.isEmpty else {
+            throw XCTSkip("The smoke profile needs an avatar that can be restored")
+        }
+        addTeardownBlock { [self] in
+            try updateCurrentSmokeProfile(
+                token: session.token,
+                username: originalProfile.username,
+                avatarURL: originalAvatarURL,
+                bio: originalProfile.bio,
+                city: originalProfile.city,
+                birthday: originalProfile.birthday
+            )
+            try updateCurrentSmokeAvatar(
+                token: session.token,
+                avatarURL: originalAvatarURL
+            )
+            let restoredProfile = try fetchCurrentSmokeProfile(
+                token: session.token
+            )
+            XCTAssertEqual(restoredProfile.username, originalProfile.username)
+            XCTAssertEqual(restoredProfile.avatarURL, originalAvatarURL)
+            XCTAssertEqual(restoredProfile.bio, originalProfile.bio)
+            XCTAssertEqual(restoredProfile.city, originalProfile.city)
+            XCTAssertEqual(restoredProfile.birthday, originalProfile.birthday)
+        }
+
+        launchAuthenticatedApp()
+        waitFor("screen.flow.content", timeout: 30)
+        tap("side-menu.open")
+        let settings = app.buttons["Settings"]
+        XCTAssertTrue(
+            settings.waitForExistence(timeout: 10),
+            "The open side menu must expose Settings"
+        )
+        settings.tap()
+        waitFor("screen.settings.loaded", timeout: 20)
+        tap("settings.personal-data")
+        waitFor("screen.edit-profile.loaded", timeout: 20)
+        tap("edit-profile.avatar-smoke-upload")
+        waitForEditProfileAvatarUploadStatus("success", timeout: 45)
+
+        let uploadedProfile = waitForCurrentSmokeProfileAvatarChanged(
+            token: session.token,
+            previousAvatarURL: originalProfile.avatarURL
+        )
+        XCTAssertTrue(
+            uploadedProfile.avatarURL.hasPrefix("/"),
+            "The live fixture must exercise a backend-relative avatar URL"
+        )
+
+        let runID = Int(Date().timeIntervalSince1970)
+        var cardIDs: [String] = []
+        for index in 0..<3 {
+            let cardID = try createPublicSmokeCard(
+                token: session.token,
+                searchToken: "flow-glass-\(runID)-\(index)"
+            )
+            cardIDs.append(cardID)
+            addTeardownBlock { [self] in
+                permanentlyCleanUpSmokeCard(id: cardID, token: session.token)
+            }
+        }
+        let route = waitForRecommendedSmokeCardRoute(
+            cardIDs: cardIDs,
+            token: session.token,
+            timeout: 45
+        )
+
+        app.terminate()
+        launchAuthenticatedApp()
+        waitFor("screen.flow.content", timeout: 30)
+
+        var visibleCardID = flowVisibleCardID()
+        for _ in 0..<50 where visibleCardID != route.targetCardID {
+            waitFor("flow.card.\(visibleCardID)").swipeLeft()
+            visibleCardID = waitForDifferentVisibleFlowCard(from: visibleCardID)
+        }
+        XCTAssertEqual(
+            visibleCardID,
+            route.targetCardID,
+            "Flow must navigate to the ranked authored card within 50 cards"
+        )
+        XCTAssertTrue(
+            cardIDs.contains(visibleCardID),
+            "A fresh authored card must be foreground so its uploaded avatar is visible"
+        )
+        captureVisual("flow-glass-avatar-stack")
+
+        waitFor("flow.card.\(visibleCardID)").swipeLeft()
+        XCTAssertNotEqual(
+            waitForDifferentVisibleFlowCard(from: visibleCardID),
+            visibleCardID
+        )
+    }
+
     func testFlowFavoriteIconActivatesWithoutAdvancingCard() throws {
         let session = try requireSmokeSession()
         seedAppSession(session)
@@ -6052,6 +6154,129 @@ final class ArcNoteUITests: XCTestCase {
 
     private func flowVisibleCardID() -> String {
         anchorLabel("flow.visible-card.id")
+    }
+
+    private struct SmokeRecommendedRoute {
+        let targetCardID: String
+        let orderedCardIDs: [String]
+    }
+
+    private func waitForRecommendedSmokeCardRoute(
+        cardIDs: [String],
+        token: String,
+        timeout: TimeInterval,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) -> SmokeRecommendedRoute {
+        let expectedIDs = Set(cardIDs)
+        let deadline = Date().addingTimeInterval(timeout)
+        var lastCardIDs: [String] = []
+        var lastError: Error?
+        var previousStableTriple: [String]?
+
+        while Date() < deadline {
+            do {
+                var orderedCardIDs: [String] = []
+                var seenCardIDs = Set<String>()
+                var refreshToken: String?
+
+                for _ in 0..<3 {
+                    let page = try fetchRecommendedSmokePage(
+                        token: token,
+                        refreshToken: refreshToken
+                    )
+                    let countBeforePage = orderedCardIDs.count
+                    for cardID in page.cardIDs
+                    where seenCardIDs.insert(cardID).inserted {
+                        orderedCardIDs.append(cardID)
+                    }
+
+                    guard orderedCardIDs.count > countBeforePage,
+                          let nextToken = page.nextRefreshToken,
+                          !nextToken.isEmpty else {
+                        break
+                    }
+                    refreshToken = nextToken
+                }
+                if let rankedCard = orderedCardIDs.enumerated().first(where: {
+                    expectedIDs.contains($0.element)
+                        && $0.offset < 50
+                        && $0.offset + 2 < orderedCardIDs.count
+                }) {
+                    let stableTriple = Array(
+                        orderedCardIDs[rankedCard.offset...(rankedCard.offset + 2)]
+                    )
+                    if stableTriple == previousStableTriple {
+                        return SmokeRecommendedRoute(
+                            targetCardID: rankedCard.element,
+                            orderedCardIDs: Array(orderedCardIDs.prefix(50))
+                        )
+                    }
+                    previousStableTriple = stableTriple
+                } else {
+                    previousStableTriple = nil
+                }
+                lastCardIDs = orderedCardIDs
+            } catch {
+                lastError = error
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(3))
+        }
+
+        XCTFail(
+            "A fresh authored card with two successors did not become ranked; "
+                + "created=\(cardIDs), last=\(lastCardIDs), "
+                + "error=\(String(describing: lastError))",
+            file: file,
+            line: line
+        )
+        return SmokeRecommendedRoute(
+            targetCardID: cardIDs.first ?? "",
+            orderedCardIDs: lastCardIDs
+        )
+    }
+
+    private func fetchRecommendedSmokePage(
+        token: String,
+        refreshToken: String?
+    ) throws -> (cardIDs: [String], nextRefreshToken: String?) {
+        let baseURL = UITestAPIConfiguration.baseURL
+        guard var components = URLComponents(
+            string: "\(baseURL)/api/v1/explore/recommended"
+        ) else {
+            throw URLError(.badURL)
+        }
+        components.queryItems = [URLQueryItem(name: "limit", value: "20")]
+        if let refreshToken, !refreshToken.isEmpty {
+            components.queryItems?.append(
+                URLQueryItem(name: "refresh_token", value: refreshToken)
+            )
+        }
+        guard let url = components.url else {
+            throw URLError(.badURL)
+        }
+
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        let data = try sendRawRequest(request)
+        guard
+            let response = try JSONSerialization.jsonObject(with: data)
+                as? [String: Any],
+            let cards = response["data"] as? [[String: Any]]
+        else {
+            throw NSError(
+                domain: "ArcNoteUITests",
+                code: 32,
+                userInfo: [
+                    NSLocalizedDescriptionKey:
+                        "Invalid recommended cards response"
+                ]
+            )
+        }
+        return (
+            cards.compactMap { $0["id"] as? String },
+            response["next_refresh_token"] as? String
+        )
     }
 
     private func anchorLabel(_ identifier: String) -> String {
@@ -8925,6 +9150,31 @@ final class ArcNoteUITests: XCTestCase {
         }
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
+        _ = try sendRawRequest(request)
+    }
+
+    private func updateCurrentSmokeAvatar(
+        token: String,
+        avatarURL: String
+    ) throws {
+        let baseURL = UITestAPIConfiguration.baseURL
+        guard let url = URL(string: "\(baseURL)/api/v1/profile/me/avatar") else {
+            throw NSError(
+                domain: "ArcNoteUITests",
+                code: 14,
+                userInfo: [
+                    NSLocalizedDescriptionKey: "Invalid Go profile avatar URL"
+                ]
+            )
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "PUT"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: [
+            "avatar_url": avatarURL
+        ])
         _ = try sendRawRequest(request)
     }
 
