@@ -1135,18 +1135,37 @@ extension NetworkManager {
     }
 
     func uploadAvatar(imageData: Data) -> AnyPublisher<AvatarUploadResponse, NetworkError> {
+        uploadProfileImage(
+            imageData: imageData,
+            endpoint: "/api/v1/profile/me/avatar",
+            fieldName: "avatar",
+            fileName: "avatar.jpg"
+        )
+    }
+
+    func uploadProfileBackground(imageData: Data) -> AnyPublisher<AvatarUploadResponse, NetworkError> {
+        uploadProfileImage(
+            imageData: imageData,
+            endpoint: "/api/v1/profile/me/background",
+            fieldName: "background",
+            fileName: "background.jpg"
+        )
+    }
+
+    private func uploadProfileImage(
+        imageData: Data,
+        endpoint: String,
+        fieldName: String,
+        fileName: String
+    ) -> AnyPublisher<AvatarUploadResponse, NetworkError> {
         return Future<AvatarUploadResponse, NetworkError> { [weak self] promise in
             guard let self = self else {
                 promise(.failure(.unknown))
                 return
             }
 
-            let url = "\(self.baseURL)/api/v1/profile/me/avatar"
-
-            var headers = HTTPHeaders()
-            if let token = self.authToken {
-                headers.add(.authorization(bearerToken: token))
-            }
+            let url = "\(self.baseURL)\(endpoint)"
+            let headers = self.authorizedHeaders()
 
             DispatchQueue.main.async {
                 self.isLoading = true
@@ -1154,7 +1173,12 @@ extension NetworkManager {
 
             self.session.upload(
                 multipartFormData: { multipartFormData in
-                    multipartFormData.append(imageData, withName: "avatar", fileName: "avatar.jpg", mimeType: "image/jpeg")
+                    multipartFormData.append(
+                        imageData,
+                        withName: fieldName,
+                        fileName: fileName,
+                        mimeType: "image/jpeg"
+                    )
                 },
                 to: url,
                 method: .put,
@@ -1896,13 +1920,12 @@ extension NetworkManager {
     }
 
     // MARK: 更新用户资料
-    func updateUserProfile(
+    func updateUserProfilePublisher(
         username: String,
         bio: String,
         location: String,
-        birthday: String,
-        completion: @escaping (Result<UserProfileResponse, NetworkError>) -> Void
-    ) {
+        birthday: String
+    ) -> AnyPublisher<UserProfileResponse, NetworkError> {
         var parameters: Parameters = [
             "username": username,
             "bio": bio,
@@ -1914,11 +1937,26 @@ extension NetworkManager {
             parameters["birthday"] = trimmedBirthday
         }
 
-        self.request(
+        return request(
             endpoint: "/api/v1/profile/me",
             method: .put,
             parameters: parameters,
             responseType: UserProfileResponse.self
+        )
+    }
+
+    func updateUserProfile(
+        username: String,
+        bio: String,
+        location: String,
+        birthday: String,
+        completion: @escaping (Result<UserProfileResponse, NetworkError>) -> Void
+    ) {
+        updateUserProfilePublisher(
+            username: username,
+            bio: bio,
+            location: location,
+            birthday: birthday
         )
         .sink(
             receiveCompletion: { completionResult in

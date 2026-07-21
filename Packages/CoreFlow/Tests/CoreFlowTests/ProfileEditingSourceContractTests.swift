@@ -19,7 +19,8 @@ final class ProfileEditingSourceContractTests: XCTestCase {
             )
         )
         XCTAssertTrue(source.contains("/api/v1/profile/me/background"))
-        XCTAssertTrue(source.contains("withName: \"background\""))
+        XCTAssertTrue(source.contains("fieldName: \"background\""))
+        XCTAssertTrue(source.contains("withName: fieldName"))
         XCTAssertTrue(source.contains("method: .put"))
     }
 

@@ -7,6 +7,7 @@ struct UserProfile: Codable, Equatable {
     let email: String?
     let username: String
     let avatar: String?
+    let background: String?
     let bio: String?
     let createdAt: String?
     let followersCount: Int?
@@ -20,6 +21,7 @@ struct UserProfile: Codable, Equatable {
         case email
         case username
         case avatarUrl = "avatar_url"
+        case backgroundUrl = "background_url"
         case bio
         case createdAt = "created_at"
         case followerCount = "follower_count"
@@ -35,6 +37,7 @@ struct UserProfile: Codable, Equatable {
         email = try container.decodeIfPresent(String.self, forKey: .email)
         username = try container.decode(String.self, forKey: .username)
         avatar = try container.decodeIfPresent(String.self, forKey: .avatarUrl)
+        background = try container.decodeIfPresent(String.self, forKey: .backgroundUrl)
         bio = try container.decodeIfPresent(String.self, forKey: .bio)
         createdAt = try container.decodeIfPresent(String.self, forKey: .createdAt)
         followersCount = try container.decode(Int.self, forKey: .followerCount)
@@ -50,6 +53,7 @@ struct UserProfile: Codable, Equatable {
         try container.encodeIfPresent(email, forKey: .email)
         try container.encode(username, forKey: .username)
         try container.encodeIfPresent(avatar, forKey: .avatarUrl)
+        try container.encodeIfPresent(background, forKey: .backgroundUrl)
         try container.encodeIfPresent(bio, forKey: .bio)
         try container.encodeIfPresent(createdAt, forKey: .createdAt)
         try container.encodeIfPresent(followersCount, forKey: .followerCount)
