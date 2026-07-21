@@ -308,6 +308,8 @@ struct HomeView: View {
                             id: cardId,
                             title: favorite.title ?? "",
                             content: favorite.content,
+                            contentJSON: favorite.contentJSON,
+                            backgroundMediaRef: favorite.backgroundMediaRef,
                             contentHash: "",
                             isPublic: false, // 收藏的卡片默认设为私有
                             tags: favorite.tags ?? [],
@@ -691,7 +693,7 @@ struct NotesListView: View {
     var body: some View {
         ZStack {
             ScrollView {
-                VStack(spacing: 20) {
+                LazyVStack(spacing: 20) {
             if cardsManager.isLoading && cardsManager.cards.isEmpty {
                 VStack {
                             Spacer(minLength: 0)
@@ -928,7 +930,7 @@ struct AIListView: View {
     
     var body: some View {
         ScrollView {
-            VStack(spacing: 20) {
+            LazyVStack(spacing: 20) {
                 if favoritesManager.isLoading && favoritesManager.favorites.isEmpty {
                     VStack {
                         Spacer(minLength: 0)
@@ -955,6 +957,8 @@ struct AIListView: View {
                             name: favorite.author.username,
                             time: formatFavoriteTime(favorite.favoritedAt),
                             content: favorite.content,
+                            contentJSON: favorite.contentJSON,
+                            backgroundMediaRef: favorite.backgroundMediaRef,
                             tags: favorite.tags ?? [],
                             showSpark: true,
                             favoriteCount: favorite.favoriteCount ?? 0,
@@ -1046,11 +1050,120 @@ struct AIListView: View {
     }
 }
 
+// MARK: - Library card background
+struct LibraryCardBackgroundSurface<Fallback: View>: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorSchemeContrast) private var contrast
 
+    let backgroundMediaRef: String?
+    @ViewBuilder let fallback: () -> Fallback
 
+    init(
+        backgroundMediaRef: String?,
+        @ViewBuilder fallback: @escaping () -> Fallback
+    ) {
+        self.backgroundMediaRef = backgroundMediaRef
+        self.fallback = fallback
+    }
+
+    private var shape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: 16, style: .continuous)
+    }
+
+    private var backgroundURL: URL? {
+        guard let backgroundMediaRef else { return nil }
+        let trimmedRef = backgroundMediaRef.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        guard !trimmedRef.isEmpty else { return nil }
+        let normalizedRef = trimmedRef.hasPrefix("chorai-assets/")
+            ? "/\(trimmedRef)"
+            : trimmedRef
+        return CardEditingMediaURLResolver.resolve(
+            normalizedRef,
+            canonicalizeRelativePath: APIConfiguration.resourceURLString
+        )
+    }
+
+    private var veilOpacity: Double {
+        LibraryCardReadabilityPolicy.veilOpacity(
+            reduceTransparency: reduceTransparency,
+            increasedContrast: contrast == .increased
+        )
+    }
+
+    private var bottomShadeOpacity: Double {
+        reduceTransparency || contrast == .increased ? 0.30 : 0.22
+    }
+
+    var body: some View {
+        ZStack {
+            fallback()
+
+            if let backgroundURL {
+                GeometryReader { geometry in
+                    AsyncImage(
+                        url: backgroundURL,
+                        transaction: Transaction(
+                            animation: reduceMotion
+                                ? nil
+                                : .easeOut(duration: 0.22)
+                        )
+                    ) { phase in
+                        switch phase {
+                        case .success(let image):
+                            ZStack {
+                                image
+                                    .resizable()
+                                    .interpolation(.high)
+                                    .scaledToFill()
+                                    .saturation(0.88)
+                                    .frame(
+                                        width: geometry.size.width,
+                                        height: geometry.size.height
+                                    )
+                                    .clipped()
+
+                                ZStack {
+                                    Color.black.opacity(veilOpacity)
+                                    LinearGradient(
+                                        colors: [
+                                            Color.black.opacity(0.08),
+                                            Color.clear,
+                                            Color.black.opacity(bottomShadeOpacity),
+                                        ],
+                                        startPoint: .top,
+                                        endPoint: .bottom
+                                    )
+                                }
+
+                                shape
+                                    .stroke(Color.white.opacity(0.16), lineWidth: 1)
+                            }
+                            .frame(
+                                width: geometry.size.width,
+                                height: geometry.size.height
+                            )
+                            .transition(.opacity)
+                        case .empty, .failure:
+                            Color.clear
+                        @unknown default:
+                            Color.clear
+                        }
+                    }
+                }
+            }
+        }
+        .clipShape(shape)
+        .accessibilityHidden(true)
+        .allowsHitTesting(false)
+    }
+}
 
 // MARK: - Notes 卡片组件
 struct NotesCard: View {
+    @Environment(\.colorSchemeContrast) private var contrast
     let card: UserCard
     let onShowMenu: (UserCard) -> Void
     let onCardTap: ((String) -> Void)?
@@ -1078,7 +1191,7 @@ struct NotesCard: View {
                     
                     Text(formatDate(card.updatedAt))
                         .font(.system(size: 12, weight: .regular))
-                        .foregroundColor(.white.opacity(0.7))
+                        .foregroundColor(.white.opacity(metadataOpacity))
                     
                     // 只有当卡片是置顶状态时才显示pin图标
                     if card.isPinned {
@@ -1105,11 +1218,12 @@ struct NotesCard: View {
             
             // 内容文本
             VStack(alignment: .leading, spacing: 8) {
-                HTMLTextRenderer(htmlContent: card.content, maxLines: 3)
-                    .onTapGesture {
-                        // 只有点击内容文本才跳转到详细页面
-                        onCardTap?(card.id)
-                    }
+                LibraryCardContentPreview(
+                    content: card.content,
+                    contentJSON: card.contentJSON,
+                    cardID: card.id,
+                    onTap: { onCardTap?(card.id) }
+                )
             }
             
             // 底部标签 - 横向滚动视图
@@ -1130,16 +1244,45 @@ struct NotesCard: View {
             
         }
         .padding(20)
-        .background(notesCardBackground)
+        .background {
+            LibraryCardBackgroundSurface(
+                backgroundMediaRef: card.backgroundMediaRef
+            ) {
+                notesCardBackground
+            }
+        }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("card.home.\(card.id)")
     }
     
     // MARK: Background Views
+
+    private var hasCustomBackground: Bool {
+        guard let backgroundMediaRef = card.backgroundMediaRef else {
+            return false
+        }
+        return !backgroundMediaRef.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        ).isEmpty
+    }
+
+    private var metadataOpacity: Double {
+        LibraryCardReadabilityPolicy.metadataOpacity(
+            hasBackground: hasCustomBackground,
+            increasedContrast: contrast == .increased
+        )
+    }
     
     private var notesCardTagBackground: some View {
         RoundedRectangle(cornerRadius: 15)
-            .fill(Color.white.opacity(0.2))
+            .fill(
+                (hasCustomBackground ? Color.black : Color.white)
+                    .opacity(
+                        LibraryCardReadabilityPolicy.tagSurfaceOpacity(
+                            hasBackground: hasCustomBackground
+                        )
+                    )
+            )
             .overlay(tagTopLeftHighlight)
             .overlay(tagBottomRightHighlight)
             .overlay(tagTopEdgeHighlight)
@@ -1323,10 +1466,13 @@ struct NotesCard: View {
 
 // MARK: - Home 页面卡片组件
 struct HomePostCard: View {
+    @Environment(\.colorSchemeContrast) private var contrast
     let profileImage: String
     let name: String
     let time: String
     let content: String
+    let contentJSON: String?
+    let backgroundMediaRef: String?
     let tags: [String]
     let showSpark: Bool
     let favoriteCount: Int
@@ -1338,11 +1484,13 @@ struct HomePostCard: View {
     let onUnfavorite: ((String) -> Void)?
     let onAvatarTap: ((String) -> Void)?
     
-    init(profileImage: String, name: String, time: String, content: String, tags: [String], showSpark: Bool, favoriteCount: Int, cardId: String, rate: Int = 0, authorId: String? = nil, onShowMenu: @escaping (String) -> Void, onCardTap: ((String) -> Void)? = nil, onUnfavorite: ((String) -> Void)? = nil, onAvatarTap: ((String) -> Void)? = nil) {
+    init(profileImage: String, name: String, time: String, content: String, contentJSON: String? = nil, backgroundMediaRef: String? = nil, tags: [String], showSpark: Bool, favoriteCount: Int, cardId: String, rate: Int = 0, authorId: String? = nil, onShowMenu: @escaping (String) -> Void, onCardTap: ((String) -> Void)? = nil, onUnfavorite: ((String) -> Void)? = nil, onAvatarTap: ((String) -> Void)? = nil) {
         self.profileImage = profileImage
         self.name = name
         self.time = time
         self.content = content
+        self.contentJSON = contentJSON
+        self.backgroundMediaRef = backgroundMediaRef
         self.tags = tags
         self.showSpark = showSpark
         self.favoriteCount = favoriteCount
@@ -1409,7 +1557,7 @@ struct HomePostCard: View {
                     
                     Text(time)
                         .font(.system(size: 12, weight: .regular))
-                        .foregroundColor(.white.opacity(0.7))
+                        .foregroundColor(.white.opacity(metadataOpacity))
                 }
                 
                 Spacer()
@@ -1425,14 +1573,14 @@ struct HomePostCard: View {
                 .accessibilityIdentifier("home.card.menu.\(cardId)")
             }
             
-            // 内容文本
-            HTMLTextRenderer(htmlContent: content, maxLines: 3)
-                .font(.system(size: 14, weight: .regular))
-                .foregroundColor(.white.opacity(0.9))
-                .onTapGesture {
-                    // 只有点击内容文本才跳转到详细页面
-                    onCardTap?(cardId)
-                }
+            // 内容预览
+            LibraryCardContentPreview(
+                content: content,
+                contentJSON: contentJSON,
+                cardID: cardId,
+                textFont: .system(size: 14, weight: .regular),
+                onTap: { onCardTap?(cardId) }
+            )
             
             // 底部标签和交互
             VStack(spacing: 12) {
@@ -1467,38 +1615,70 @@ struct HomePostCard: View {
                                 .frame(width: 18, height: 18)
                             Text("\(favoriteCount)")
                                 .font(.system(size: 14, weight: .medium))
-                                .foregroundColor(.white.opacity(0.8))
+                                .foregroundColor(.white.opacity(engagementOpacity))
                         }
                         }
-                        .foregroundColor(.white.opacity(0.8))
+                        .foregroundColor(.white.opacity(engagementOpacity))
                     }
                 }
             }
         }
         .padding(20)
-        .background(
-            Group {
-                if rate < 3 {
-                    homePostCardBackground
-                } else {
-                    ZStack {
-                        backgroundImageForRate(rate)
-                        RoundedRectangle(cornerRadius: 16)
-                            .stroke(Color.white.opacity(0.1), lineWidth: 1)
-        }
+        .background {
+            LibraryCardBackgroundSurface(
+                backgroundMediaRef: backgroundMediaRef
+            ) {
+                Group {
+                    if rate < 3 {
+                        homePostCardBackground
+                    } else {
+                        ZStack {
+                            backgroundImageForRate(rate)
+                            RoundedRectangle(cornerRadius: 16)
+                                .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                        }
+                    }
                 }
             }
-        )
+        }
         .clipShape(RoundedRectangle(cornerRadius: 16))
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("card.home.\(cardId)")
     }
     
     // MARK: - Background Views
+
+    private var hasCustomBackground: Bool {
+        guard let backgroundMediaRef else { return false }
+        return !backgroundMediaRef.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        ).isEmpty
+    }
+
+    private var metadataOpacity: Double {
+        LibraryCardReadabilityPolicy.metadataOpacity(
+            hasBackground: hasCustomBackground,
+            increasedContrast: contrast == .increased
+        )
+    }
+
+    private var engagementOpacity: Double {
+        LibraryCardReadabilityPolicy.engagementOpacity(
+            hasBackground: hasCustomBackground,
+            increasedContrast: contrast == .increased
+        )
+    }
     
     private var homePostCardTagBackground: some View {
         RoundedRectangle(cornerRadius: 20)
-            .fill(Color.white.opacity(0.2))
+            .fill(
+                (hasCustomBackground ? Color.black : Color.white)
+                    .opacity(
+                        LibraryCardReadabilityPolicy.tagSurfaceOpacity(
+                            hasBackground: hasCustomBackground
+                        )
+                    )
+            )
             .overlay(homePostCardTagTopLeftHighlight)
             .overlay(homePostCardTagBottomRightHighlight)
             .overlay(homePostCardTagTopEdgeHighlight)
@@ -1688,6 +1868,116 @@ struct HomePostCard: View {
     HomeView(showSideMenu: .constant(false), refreshID: UUID())
 }
 
+// MARK: - Library 富内容预览
+struct LibraryCardContentPreview: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    private let preview: LibraryCardPreviewContent
+    private let cardID: String
+    private let textFont: Font
+    private let onTap: (() -> Void)?
+
+    init(
+        content: String,
+        contentJSON: String?,
+        cardID: String,
+        textFont: Font = .system(size: 17, weight: .regular),
+        onTap: (() -> Void)? = nil
+    ) {
+        preview = LibraryCardPreviewParser.parse(
+            content: content,
+            contentJSON: contentJSON
+        )
+        self.cardID = cardID
+        self.textFont = textFont
+        self.onTap = onTap
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if let imageURL {
+                libraryImage(url: imageURL)
+            }
+
+            if !preview.text.isEmpty {
+                Text(preview.text)
+                    .font(textFont)
+                    .foregroundColor(.white.opacity(0.9))
+                    .lineLimit(3)
+                    .multilineTextAlignment(.leading)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+        .onTapGesture { onTap?() }
+    }
+
+    private var imageURL: URL? {
+        guard let source = preview.imageSource else { return nil }
+        let normalizedSource = source.hasPrefix("chorai-assets/")
+            ? "/\(source)"
+            : source
+        return CardEditingMediaURLResolver.resolve(
+            normalizedSource,
+            canonicalizeRelativePath: APIConfiguration.resourceURLString
+        )
+    }
+
+    private func libraryImage(url: URL) -> some View {
+        AsyncImage(
+            url: url,
+            transaction: Transaction(
+                animation: reduceMotion ? nil : .easeInOut(duration: 0.2)
+            )
+        ) { phase in
+            switch phase {
+            case .success(let image):
+                image.resizable()
+                    .interpolation(.high)
+                    .scaledToFit()
+                    .frame(maxWidth: .infinity, maxHeight: 480)
+            case .failure:
+                imageUnavailable
+            case .empty:
+                imageLoading
+            @unknown default:
+                imageUnavailable
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .background(Color.black.opacity(0.14))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.white.opacity(0.1), lineWidth: 1)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(
+            preview.imageAlternativeText ?? "Note image"
+        )
+        .accessibilityIdentifier("library.card.image.\(cardID)")
+    }
+
+    private var imageLoading: some View {
+        ZStack {
+            Color.white.opacity(0.04)
+            ProgressView()
+                .tint(.white.opacity(0.8))
+        }
+        .frame(maxWidth: .infinity, minHeight: 180, maxHeight: 240)
+    }
+
+    private var imageUnavailable: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "photo")
+                .font(.system(size: 26, weight: .light))
+            Text("Image unavailable")
+                .font(.caption)
+        }
+        .foregroundColor(.white.opacity(0.55))
+        .frame(maxWidth: .infinity, minHeight: 140)
+    }
+}
+
 // MARK: - HTML 文本渲染组件
 struct HTMLTextRenderer: View {
     let htmlContent: String
@@ -1850,6 +2140,7 @@ struct HomeFilterTag: View {
 
 // MARK: - Notes 彩色卡片组件
 struct NotesColorCard: View {
+    @Environment(\.colorSchemeContrast) private var contrast
     let card: UserCard
     let onShowMenu: (UserCard) -> Void
     let onCardTap: ((String) -> Void)?
@@ -1877,7 +2168,7 @@ struct NotesColorCard: View {
                     
                     Text(formatDate(card.updatedAt))
                         .font(.system(size: 12, weight: .regular))
-                        .foregroundColor(.white.opacity(0.7))
+                        .foregroundColor(.white.opacity(metadataOpacity))
                     
                     // 只有当卡片是置顶状态时才显示pin图标
                     if card.isPinned {
@@ -1904,11 +2195,12 @@ struct NotesColorCard: View {
             
             // 内容文本
             VStack(alignment: .leading, spacing: 8) {
-                HTMLTextRenderer(htmlContent: card.content, maxLines: 3)
-                    .onTapGesture {
-                        // 只有点击内容文本才跳转到详细页面
-                        onCardTap?(card.id)
-                    }
+                LibraryCardContentPreview(
+                    content: card.content,
+                    contentJSON: card.contentJSON,
+                    cardID: card.id,
+                    onTap: { onCardTap?(card.id) }
+                )
             }
             
             // 底部标签 - 横向滚动视图
@@ -1929,21 +2221,41 @@ struct NotesColorCard: View {
             
         }
         .padding(20)
-        .background(
-            ZStack {
-                // 根据 rate 值显示不同的背景
-                backgroundImageForRate(card.rate)
-                
-                RoundedRectangle(cornerRadius: 16)
-                    .stroke(Color.white.opacity(0.1), lineWidth: 1)
+        .background {
+            LibraryCardBackgroundSurface(
+                backgroundMediaRef: card.backgroundMediaRef
+            ) {
+                ZStack {
+                    // 根据 rate 值显示不同的背景
+                    backgroundImageForRate(card.rate)
+
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                }
             }
-        )
+        }
         .clipShape(RoundedRectangle(cornerRadius: 16))
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("card.home.\(card.id)")
     }
     
     // MARK: 根据 rate 值返回背景图片
+    private var hasCustomBackground: Bool {
+        guard let backgroundMediaRef = card.backgroundMediaRef else {
+            return false
+        }
+        return !backgroundMediaRef.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        ).isEmpty
+    }
+
+    private var metadataOpacity: Double {
+        LibraryCardReadabilityPolicy.metadataOpacity(
+            hasBackground: hasCustomBackground,
+            increasedContrast: contrast == .increased
+        )
+    }
+
     private func backgroundImageForRate(_ rate: Int) -> some View {
         Group {
             if rate >= 3 && rate <= 8 {
@@ -1987,7 +2299,14 @@ struct NotesColorCard: View {
     
     private var notesCardTagBackground: some View {
         RoundedRectangle(cornerRadius: 15)
-            .fill(Color.white.opacity(0.2))
+            .fill(
+                (hasCustomBackground ? Color.black : Color.white)
+                    .opacity(
+                        LibraryCardReadabilityPolicy.tagSurfaceOpacity(
+                            hasBackground: hasCustomBackground
+                        )
+                    )
+            )
             .overlay(tagTopLeftHighlight)
             .overlay(tagBottomRightHighlight)
             .overlay(tagTopEdgeHighlight)

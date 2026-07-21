@@ -68,6 +68,8 @@ struct DetailView: View {
             id: detail.id,
             title: detail.title,
             content: detail.content,
+            contentJSON: detail.contentJSON,
+            backgroundMediaRef: detail.backgroundMediaRef,
             contentHash: detail.contentHash,
             isPublic: detail.isPublic,
             tags: detail.tags,

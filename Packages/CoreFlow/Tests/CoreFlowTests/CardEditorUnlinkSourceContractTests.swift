@@ -20,7 +20,7 @@ final class CardEditorUnlinkSourceContractTests: XCTestCase {
         )
     }
 
-    func testLinkRowNestsIndependentUnlinkActionInsideCapability() throws {
+    func testLinkRowRequiresConfirmationBeforeIndependentUnlinkAction() throws {
         let metadata = try source(
             at: "ArcNote/CardEditor/CardEditorMetadataRows.swift"
         )
@@ -33,6 +33,11 @@ final class CardEditorUnlinkSourceContractTests: XCTestCase {
 
         XCTAssertTrue(row.contains("let isRemovalEnabled: Bool"))
         XCTAssertTrue(row.contains("let onRemove: (CardEditorLinkItem) -> Void"))
+        XCTAssertTrue(
+            row.contains(
+                "@State private var pendingRemoval: CardEditorLinkItem?"
+            )
+        )
         XCTAssertTrue(row.contains("CardMetadataRelatedRow("))
         XCTAssertEqual(
             occurrenceCount(".accessibilityElement(children: .combine)", in: row),
@@ -44,7 +49,11 @@ final class CardEditorUnlinkSourceContractTests: XCTestCase {
             "The unlink control must remain independent from relation content"
         )
         XCTAssertTrue(removable.contains("Button {"))
-        XCTAssertTrue(removable.contains("onRemove(link)"))
+        XCTAssertTrue(removable.contains("pendingRemoval = link"))
+        XCTAssertFalse(
+            removable.contains("onRemove(link)"),
+            "Tapping the inline control must only request confirmation"
+        )
         XCTAssertTrue(removable.contains("Image(systemName: \"xmark\")"))
         XCTAssertTrue(removable.contains(".frame(width: 44, height: 44)"))
         XCTAssertTrue(removable.contains(".disabled(!isRemovalEnabled)"))
@@ -61,11 +70,7 @@ final class CardEditorUnlinkSourceContractTests: XCTestCase {
             occurrenceCount("cardEditorRemoveLink.", in: removable),
             "Removal identifiers must exist only inside if link.canRemove"
         )
-        XCTAssertEqual(
-            occurrenceCount("onRemove(link)", in: row),
-            occurrenceCount("onRemove(link)", in: removable),
-            "The removal callback must exist only inside if link.canRemove"
-        )
+        XCTAssertEqual(occurrenceCount("onRemove(link)", in: row), 1)
         XCTAssertEqual(
             occurrenceCount("Image(systemName: \"xmark\")", in: row),
             occurrenceCount("Image(systemName: \"xmark\")", in: removable),
@@ -73,6 +78,13 @@ final class CardEditorUnlinkSourceContractTests: XCTestCase {
         )
         XCTAssertTrue(progress.contains("ProgressView()"))
         XCTAssertTrue(progress.contains(".frame(width: 44, height: 44)"))
+        XCTAssertTrue(row.contains(".alert(item: $pendingRemoval)"))
+        XCTAssertTrue(row.contains(#"title: Text("Unlink this note?")"#))
+        XCTAssertTrue(row.contains(#"primaryButton: .cancel(Text("Cancel"))"#))
+        XCTAssertTrue(
+            row.contains(#"secondaryButton: .destructive(Text("Unlink"))"#)
+        )
+        XCTAssertTrue(row.contains("Neither note will be deleted."))
         XCTAssertFalse(row.contains("confirmationDialog"))
         XCTAssertFalse(row.contains("CardEditorLinkManagementSheet"))
     }
@@ -96,7 +108,7 @@ final class CardEditorUnlinkSourceContractTests: XCTestCase {
         XCTAssertFalse(shell.contains("CardEditorLinkManagementSheet"))
     }
 
-    func testSessionDeduplicatesEdgesAndDeletesOnlyCanonicalOutgoingEdge() throws {
+    func testSessionDeduplicatesEdgesAndDeletesCanonicalEdgeFromEitherDirection() throws {
         let sessionSource = try source(at: "ArcNote/NewNoteView.swift")
         let session = try body(
             in: sessionSource,
@@ -133,14 +145,15 @@ final class CardEditorUnlinkSourceContractTests: XCTestCase {
         XCTAssertTrue(items.contains("guard seenEdges.insert(edge).inserted else"))
         XCTAssertTrue(items.contains("sourceCardID: link.sourceCardID"))
         XCTAssertTrue(items.contains("targetCardID: link.targetCardID"))
-        XCTAssertTrue(items.contains("canRemove: link.sourceCardID == cardID"))
+        XCTAssertTrue(items.contains("canRemove: true"))
 
         XCTAssertTrue(remove.contains("guard bodyModel.canMutate,"))
         XCTAssertTrue(remove.contains("!isBusy,"))
         XCTAssertTrue(remove.contains("item.canRemove,"))
         XCTAssertTrue(remove.contains("unlinkingLinkID == nil,"))
         XCTAssertTrue(remove.contains("let cardID = editingStore.cardID,"))
-        XCTAssertTrue(remove.contains("cardID == item.sourceCardID,"))
+        XCTAssertTrue(remove.contains("cardID == item.sourceCardID"))
+        XCTAssertTrue(remove.contains("|| cardID == item.targetCardID"))
         XCTAssertTrue(
             remove.contains("let link = editingStore.links.first(where: {")
         )
@@ -153,7 +166,7 @@ final class CardEditorUnlinkSourceContractTests: XCTestCase {
         XCTAssertFalse(remove.contains("links.remove"))
     }
 
-    func testFixturesIncludeOutgoingActionsIncomingStaticRowAndFailClosedBlockedRow() throws {
+    func testFixturesIncludeActionsForBothDirectionsAndFailClosedBlockedRow() throws {
         let shellSource = try source(at: "ArcNote/CardEditor/CardEditorShell.swift")
         let fixtures = try body(
             in: shellSource,
@@ -187,10 +200,15 @@ final class CardEditorUnlinkSourceContractTests: XCTestCase {
                     "sourceCardID: \"ast_fixture_c\"",
                     "targetCardID: \"ast_fixture_source\"",
                     "title: \"Chen\"",
-                    "canRemove: false",
+                    "canRemove: true",
                 ],
                 in: fixtures
             )
+        )
+        XCTAssertEqual(
+            occurrenceCount("canRemove: true", in: fixtures),
+            5,
+            "Every editable fixture relationship must expose unlink"
         )
 
         let blockedStart = try XCTUnwrap(fixtures.range(of: "if self == .blocked"))

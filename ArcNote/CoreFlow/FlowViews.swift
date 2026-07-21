@@ -121,27 +121,19 @@ struct FlowCardView: View {
                 }
             }
 
-            VStack(alignment: .leading, spacing: 12) {
-                if let title = card.title, !title.isEmpty {
-                    Text(title)
-                        .font(.title3.weight(.semibold))
-                        .lineLimit(2)
-                }
-
-                Text(FlowTextPreview.make(card.content))
-                    .font(.system(size: 17, weight: .regular, design: .rounded))
-                    .lineSpacing(5)
-                    .lineLimit(7)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .contentShape(Rectangle())
-            .onTapGesture(perform: onOpenDetail)
-            .gesture(cardDragGesture)
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel("Open card")
-            .accessibilityAddTraits(.isButton)
-            .accessibilityIdentifier("flow.card.\(card.id)")
-            .accessibilityAction { onOpenDetail() }
+            Text(FlowTextPreview.make(card.content))
+                .font(.system(size: 17, weight: .regular, design: .rounded))
+                .lineSpacing(5)
+                .lineLimit(7)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+                .onTapGesture(perform: onOpenDetail)
+                .gesture(cardDragGesture)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Open card")
+                .accessibilityAddTraits(.isButton)
+                .accessibilityIdentifier("flow.card.\(card.id)")
+                .accessibilityAction { onOpenDetail() }
 
             if !card.tags.isEmpty {
                 HStack(spacing: 8) {
@@ -163,7 +155,7 @@ struct FlowCardView: View {
                     engagementMetric(
                         image: card.isFavorited ? "favorite_active" : "favorite",
                         count: card.favoriteCount,
-                        imageOpacity: card.isFavorited ? 1 : 0.58
+                        iconSize: 24
                     )
                 }
                 .buttonStyle(.plain)
@@ -185,7 +177,7 @@ struct FlowCardView: View {
                 .accessibilityValue(card.isLiked ? "true" : "false")
                 .accessibilityIdentifier("flow.like.\(card.id)")
 
-                CommentButton(cardId: card.id, commentCount: card.commentCount)
+                CommentButton(cardId: card.id, commentCount: card.commentCount, iconSize: 22)
                     .buttonStyle(.plain)
                     .frame(minWidth: 44, minHeight: 44)
                     .contentShape(Rectangle())
@@ -253,14 +245,13 @@ struct FlowCardView: View {
     private func engagementMetric(
         image: String,
         count: Int,
-        imageOpacity: Double = 1
+        iconSize: CGFloat = 22
     ) -> some View {
         HStack(spacing: 6) {
             Image(image)
                 .resizable()
                 .scaledToFit()
-                .frame(width: 22, height: 22)
-                .opacity(imageOpacity)
+                .frame(width: iconSize, height: iconSize)
             Text("\(count)")
                 .font(.system(size: 15, weight: .medium, design: .rounded))
                 .monospacedDigit()

@@ -81,7 +81,9 @@ struct SparkContinuationView: View {
             isPresented: $showPopupMenu,
             layout: menuCardIsOwned ? .grid3x3 : .grid3x2,
             cardData: currentMenuCard,
-            isOwnCard: menuCardIsOwned
+            isOwnCard: menuCardIsOwned,
+            isSparkEnabled: store.phase == .loaded,
+            onSpark: store.sparkCurrentDeeper
         )
         .navigationDestination(isPresented: $showDetail) {
             if let cardID = selectedDetailCardID {
@@ -489,7 +491,7 @@ private struct SparkChainRail: View {
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 6) {
-                ForEach(nodes) { node in
+                ForEach(displayedNodes) { node in
                     Button {
                         onSelect(node.activityID)
                     } label: {
@@ -531,17 +533,73 @@ private struct SparkChainRail: View {
                 }
 
                 if showsPendingNode {
-                    Image("menu_spark")
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 18, height: 18)
+                    ZStack {
+                        Circle()
+                            .fill(ZenVisualTokens.accent.opacity(0.16))
+                        Circle()
+                            .stroke(
+                                ZenVisualTokens.accent.opacity(0.52),
+                                style: StrokeStyle(
+                                    lineWidth: 1,
+                                    dash: [3, 3]
+                                )
+                            )
+                        Text("\(pendingDepth + 1)")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(Color.white.opacity(0.72))
+                    }
+                        .frame(width: 32, height: 32)
                         .frame(width: 44, height: 44)
-                        .opacity(0.5)
-                        .accessibilityLabel("Spark loading")
+                        .accessibilityLabel(
+                            "Spark depth \(pendingDepth), loading"
+                        )
+                        .accessibilityIdentifier("spark.chain.pending")
                 }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var displayedNodes: [SparkChainNode] {
+        guard
+            showsPendingNode,
+            let activeActivityID,
+            let activeIndex = nodes.firstIndex(where: {
+                $0.activityID == activeActivityID
+            })
+        else {
+            return nodes
+        }
+
+        return Array(nodes.prefix(through: activeIndex))
+    }
+
+    private var pendingDepth: Int {
+        if let activeActivityID,
+           let activeNode = nodes.first(where: {
+               $0.activityID == activeActivityID
+           }) {
+            return activeNode.chainDepth + 1
+        }
+
+        return displayedNodes.last.map { $0.chainDepth + 1 } ?? 0
+    }
+}
+
+private struct SparkDeeperAccessibilityActionModifier: ViewModifier {
+    let isEnabled: Bool
+    let action: () -> Void
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if isEnabled {
+            content.accessibilityAction(
+                named: Text("Spark deeper"),
+                action
+            )
+        } else {
+            content
+        }
     }
 }
 
@@ -566,8 +624,8 @@ private struct SparkResultCard: View {
     @State private var thresholdDecision: SparkGestureDecision = .cancel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 10) {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(spacing: 12) {
                 Button(action: onOpenAuthor) {
                     HStack(spacing: 8) {
                         SparkAvatar(author: result.card.author, size: 28)
@@ -583,17 +641,30 @@ private struct SparkResultCard: View {
 
                 Spacer()
 
-                Button(action: onOpenMenu) {
-                    Image("menu")
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 18, height: 18)
-                        .frame(width: 44, height: 44)
-                        .contentShape(Rectangle())
+                HStack(spacing: 2) {
+                    Button(action: onOpenMenu) {
+                        Image(systemName: "ellipsis")
+                            .font(.body.weight(.semibold))
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("More actions")
+                    .accessibilityIdentifier("spark.menu.\(result.id)")
+
+                    Button(action: onSparkDeeper) {
+                        Image("menu_spark")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 22, height: 22)
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!allowsSparkDeeper)
+                    .accessibilityLabel("Continue Spark")
+                    .accessibilityIdentifier("spark.continue.\(result.id)")
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("More actions")
-                .accessibilityIdentifier("spark.menu.\(result.id)")
             }
 
             Text(bucketLabel)
@@ -602,29 +673,22 @@ private struct SparkResultCard: View {
                 .foregroundStyle(ZenVisualTokens.accent.opacity(0.82))
 
             VStack(alignment: .leading, spacing: 12) {
-                if let title = result.card.title,
-                   !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Text(title)
-                        .font(.title3.weight(.semibold))
-                        .lineLimit(2)
-                }
-
                 Text(FlowTextPreview.make(result.card.content))
                     .font(.system(size: 17, weight: .regular, design: .rounded))
-                    .lineSpacing(dynamicTypeSize.isAccessibilitySize ? 3 : 5)
+                    .lineSpacing(5)
                     .lineLimit(dynamicTypeSize.isAccessibilitySize ? 5 : 7)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                 if !result.card.tags.isEmpty {
-                    HStack(spacing: 7) {
+                    HStack(spacing: 8) {
                         ForEach(Array(result.card.tags.prefix(3)), id: \.self) { tag in
                             Text(tag)
-                                .font(.caption2)
+                                .font(.caption)
                                 .lineLimit(1)
-                                .padding(.horizontal, 9)
-                                .frame(minHeight: 27)
+                                .padding(.horizontal, 10)
+                                .frame(minHeight: 28)
                                 .background(
-                                    Capsule().fill(Color.white.opacity(0.075))
+                                    Capsule().fill(Color.white.opacity(0.08))
                                 )
                         }
                     }
@@ -632,14 +696,24 @@ private struct SparkResultCard: View {
 
                 Spacer(minLength: 0)
 
-                HStack(spacing: 18) {
+                HStack(spacing: 10) {
                     SparkCount(
                         image: result.card.isFavorited
                             ? "favorite_active"
                             : "favorite",
                         count: result.card.favoriteCount,
-                        label: "favorites"
+                        label: "favorites",
+                        iconSize: 24
                     )
+
+                    Spacer(minLength: 16)
+
+                    SparkCount(
+                        image: result.card.isLiked ? "like_active" : "like",
+                        count: result.card.likeCount,
+                        label: "likes"
+                    )
+
                     SparkCount(
                         image: "comment",
                         count: result.card.commentCount,
@@ -657,7 +731,12 @@ private struct SparkResultCard: View {
             .accessibilityAddTraits(.isButton)
             .accessibilityAction(named: Text("Next result"), onNext)
             .accessibilityAction(named: Text("Save result"), onSave)
-            .accessibilityAction(named: Text("Spark deeper"), onSparkDeeper)
+            .modifier(
+                SparkDeeperAccessibilityActionModifier(
+                    isEnabled: allowsSparkDeeper,
+                    action: onSparkDeeper
+                )
+            )
             .accessibilityAction(named: Text("Open card"), onOpenCard)
             .accessibilityIdentifier("spark.card.\(result.id)")
         }
@@ -883,17 +962,32 @@ private struct SparkCount: View {
     let image: String
     let count: Int
     let label: String
+    let iconSize: CGFloat
+
+    init(
+        image: String,
+        count: Int,
+        label: String,
+        iconSize: CGFloat = 22
+    ) {
+        self.image = image
+        self.count = count
+        self.label = label
+        self.iconSize = iconSize
+    }
 
     var body: some View {
         HStack(spacing: 6) {
             Image(image)
                 .resizable()
                 .scaledToFit()
-                .frame(width: 16, height: 16)
+                .frame(width: iconSize, height: iconSize)
             Text("\(count)")
-                .font(.caption)
+                .font(.system(size: 15, weight: .medium, design: .rounded))
                 .monospacedDigit()
         }
+        .frame(minWidth: 44, minHeight: 44)
+        .contentShape(Rectangle())
         .foregroundStyle(Color.white.opacity(0.56))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(count) \(label)")

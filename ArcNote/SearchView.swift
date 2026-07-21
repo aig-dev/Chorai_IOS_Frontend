@@ -461,6 +461,8 @@ struct SearchView: View {
             id: card.id,
             title: card.title,
             content: card.content,
+            contentJSON: card.contentJSON,
+            backgroundMediaRef: card.backgroundMediaRef,
             contentHash: card.contentHash,
             isPublic: card.isPublic,
             tags: card.tags,

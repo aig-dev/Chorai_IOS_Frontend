@@ -369,7 +369,9 @@ public final class CardEditingStore: ObservableObject {
     public func deleteLink(_ link: CardEditingLink) async -> Bool {
         guard let operationID = beginOperation() else { return false }
         defer { endOperation(operationID) }
-        guard cardID == link.sourceCardID else {
+        guard let cardID,
+              cardID == link.sourceCardID
+                || cardID == link.targetCardID else {
             fail(with: .invalidDraft(code: "invalid_link_source"))
             return false
         }

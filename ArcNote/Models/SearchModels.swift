@@ -39,6 +39,8 @@ struct SearchCard: Codable, Identifiable {
     let id: String
     let title: String?
     let content: String
+    let contentJSON: String?
+    let backgroundMediaRef: String?
     let contentHash: String
     let isPublic: Bool
     let tags: [String]
@@ -60,6 +62,8 @@ struct SearchCard: Codable, Identifiable {
         case id
         case title
         case content
+        case contentJSON = "content_json"
+        case backgroundMediaRef = "background_media_ref"
         case tags
         case author
         case rate
@@ -83,6 +87,8 @@ struct SearchCard: Codable, Identifiable {
         id = try container.decode(String.self, forKey: .id)
         title = try container.decodeIfPresent(String.self, forKey: .title)
         content = try container.decode(String.self, forKey: .content)
+        contentJSON = try container.decodeIfPresent(String.self, forKey: .contentJSON)
+        backgroundMediaRef = try container.decodeIfPresent(String.self, forKey: .backgroundMediaRef)
         contentHash = try container.decode(String.self, forKey: .contentHash)
         isPublic = try container.decode(Bool.self, forKey: .isPublic)
 
@@ -108,6 +114,8 @@ struct SearchCard: Codable, Identifiable {
         try container.encode(id, forKey: .id)
         try container.encodeIfPresent(title, forKey: .title)
         try container.encode(content, forKey: .content)
+        try container.encodeIfPresent(contentJSON, forKey: .contentJSON)
+        try container.encodeIfPresent(backgroundMediaRef, forKey: .backgroundMediaRef)
         try container.encode(contentHash, forKey: .contentHash)
         try container.encode(isPublic, forKey: .isPublic)
         try container.encode(tags, forKey: .tags)

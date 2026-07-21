@@ -16,6 +16,7 @@ public struct FlowCard: Identifiable, Equatable, Sendable {
     public let id: String
     public let title: String?
     public let content: String
+    public let backgroundMediaRef: String?
     public let contentHash: String?
     public let tags: [String]
     public let isPublic: Bool
@@ -35,6 +36,7 @@ public struct FlowCard: Identifiable, Equatable, Sendable {
         id: String,
         title: String?,
         content: String,
+        backgroundMediaRef: String? = nil,
         contentHash: String?,
         tags: [String],
         isPublic: Bool,
@@ -53,6 +55,7 @@ public struct FlowCard: Identifiable, Equatable, Sendable {
         self.id = id
         self.title = title
         self.content = content
+        self.backgroundMediaRef = backgroundMediaRef
         self.contentHash = contentHash
         self.tags = tags
         self.isPublic = isPublic
@@ -74,6 +77,7 @@ public struct FlowCard: Identifiable, Equatable, Sendable {
             id: id,
             title: title,
             content: content,
+            backgroundMediaRef: backgroundMediaRef,
             contentHash: contentHash,
             tags: tags,
             isPublic: isPublic,
@@ -99,6 +103,7 @@ public struct FlowCard: Identifiable, Equatable, Sendable {
             id: id,
             title: title,
             content: content,
+            backgroundMediaRef: backgroundMediaRef,
             contentHash: contentHash,
             tags: tags,
             isPublic: isPublic,

@@ -493,6 +493,28 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertTrue(waitFor("cardEditorBodyWebView").exists)
     }
 
+    func testCardEditorInlineImageRendersPixelsWithinPhoneViewport() {
+        launchCardEditorFixture(mode: "inline-image")
+
+        let webView = waitFor("cardEditorBodyWebView")
+        let image = app.images.matching(
+            NSPredicate(format: "label == %@", "Inline image fixture")
+        ).firstMatch
+        XCTAssertTrue(
+            image.waitForExistence(timeout: 20),
+            "The hydrated BlockNote image must render as an image, not alt text"
+        )
+        XCTAssertGreaterThan(image.frame.width, 240)
+        XCTAssertGreaterThan(image.frame.height, 160)
+        XCTAssertGreaterThanOrEqual(image.frame.minX, webView.frame.minX - 1)
+        XCTAssertLessThanOrEqual(image.frame.maxX, webView.frame.maxX + 1)
+        XCTAssertFalse(
+            app.staticTexts["Inline image fixture"].exists,
+            "A successful image load must not expose broken-image fallback text"
+        )
+        captureVisual("card-editor-inline-image")
+    }
+
     func testCardEditorSlashTypesWithoutOpeningCommandMenu() {
         launchCardEditorFixture(mode: "empty")
 
@@ -779,7 +801,7 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertTrue(waitFor(cardEditorFixtureLinkIdentifier("ast_fixture_a")).exists)
     }
 
-    func testCardEditorRelatedNotesAllowRemovingOutgoingLinksOnly() {
+    func testCardEditorRelatedNotesRequireConfirmationForEveryDirection() {
         launchCardEditorFixture(mode: "populated")
 
         waitForButton("cardEditorLinksDisclosure").tap()
@@ -809,30 +831,63 @@ final class ArcNoteUITests: XCTestCase {
             removeOutgoing,
             identifier: cardEditorFixtureRemoveLinkIdentifier("ast_fixture_a")
         )
-        XCTAssertFalse(
-            app.descendants(matching: .any)[
-                cardEditorFixtureRemoveLinkIdentifier(
-                    "ast_fixture_source",
-                    sourceID: "ast_fixture_c"
-                )
-            ].exists,
-            "Incoming links must stay static in the source editor"
+        let removeIncoming = waitForButton(
+            cardEditorFixtureRemoveLinkIdentifier(
+                "ast_fixture_source",
+                sourceID: "ast_fixture_c"
+            )
         )
+        assertPrimaryControl(
+            removeIncoming,
+            identifier: cardEditorFixtureRemoveLinkIdentifier(
+                "ast_fixture_source",
+                sourceID: "ast_fixture_c"
+            )
+        )
+        for removeIdentifier in [
+            cardEditorFixtureRemoveLinkIdentifier("ast_fixture_a"),
+            cardEditorFixtureRemoveLinkIdentifier("ast_fixture_b"),
+            cardEditorFixtureRemoveLinkIdentifier(
+                "ast_fixture_source",
+                sourceID: "ast_fixture_c"
+            ),
+            cardEditorFixtureRemoveLinkIdentifier("ast_fixture_d"),
+            cardEditorFixtureRemoveLinkIdentifier("ast_fixture_e"),
+        ] {
+            XCTAssertTrue(
+                app.descendants(matching: .any)[removeIdentifier].exists,
+                "Every related note must expose unlink: \(removeIdentifier)"
+            )
+        }
         assertReadingOrder(outgoing, before: incoming)
-        captureVisual("card-editor-related-links-directional")
+        captureVisual("card-editor-related-links-removable")
 
         removeOutgoing.tap()
-        waitForMissing(cardEditorFixtureLinkIdentifier("ast_fixture_a"))
-        waitForMissing(cardEditorFixtureRemoveLinkIdentifier("ast_fixture_a"))
-        XCTAssertTrue(incoming.exists)
-        XCTAssertFalse(
-            app.descendants(matching: .any)[
-                cardEditorFixtureRemoveLinkIdentifier(
-                    "ast_fixture_source",
-                    sourceID: "ast_fixture_c"
-                )
-            ].exists
+        let confirmation = app.alerts["Unlink this note?"]
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 5))
+        XCTAssertTrue(confirmation.staticTexts["Neither note will be deleted."].exists)
+        captureVisual("card-editor-related-links-unlink-confirmation")
+        confirmation.buttons["Cancel"].tap()
+        XCTAssertTrue(outgoing.exists)
+        XCTAssertTrue(removeOutgoing.exists)
+
+        removeIncoming.tap()
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 5))
+        confirmation.buttons["Unlink"].tap()
+        waitForMissing(
+            cardEditorFixtureLinkIdentifier(
+                "ast_fixture_source",
+                sourceID: "ast_fixture_c"
+            )
         )
+        waitForMissing(
+            cardEditorFixtureRemoveLinkIdentifier(
+                "ast_fixture_source",
+                sourceID: "ast_fixture_c"
+            )
+        )
+        XCTAssertTrue(outgoing.exists)
+        XCTAssertTrue(removeOutgoing.exists)
         for obsoleteIdentifier in [
             "cardEditorAddLink",
             "cardEditorLinkOverflow",
@@ -842,7 +897,7 @@ final class ArcNoteUITests: XCTestCase {
                 app.descendants(matching: .any)[obsoleteIdentifier].exists
             )
         }
-        captureVisual("card-editor-related-links-after-unlink")
+        captureVisual("card-editor-related-links-after-confirmed-unlink")
     }
 
     func testCardEditorTopActionsAreDirectAndOrdered() {
@@ -3751,6 +3806,64 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertEqual(sparkAnchorValue("spark.depth"), "0")
     }
 
+    func testSparkMenuContinuesCurrentChainWithoutPushingAnotherScreen() throws {
+        let session = try requireSmokeSession()
+        app.launchEnvironment["CHORAI_UI_TEST_SPARK_TRIGGER_DELAY_MS"] = "2200"
+        openSparkFromDetail(cardID: sparkSeedCardID, session: session)
+
+        let rootActivityID = sparkAnchorValue("spark.activity.id")
+        let rootID = sparkAnchorValue("spark.root.id")
+        let parentVisibleID = sparkAnchorValue("spark.visible-card.id")
+
+        tap("spark.menu.\(parentVisibleID)")
+        tap("popup-menu.item.spark")
+        waitFor("spark.chain.pending", timeout: 10)
+        captureVisual("spark-menu-pending-chain")
+
+        let childActivityID = waitForDifferentSparkActivity(
+            from: rootActivityID,
+            timeout: 90
+        )
+        XCTAssertNotEqual(childActivityID, rootActivityID)
+        XCTAssertEqual(sparkAnchorValue("spark.root.id"), rootID)
+        XCTAssertEqual(sparkAnchorValue("spark.parent.id"), rootActivityID)
+        XCTAssertEqual(sparkAnchorValue("spark.depth"), "1")
+        XCTAssertEqual(sparkAnchorValue("spark.source.card-id"), parentVisibleID)
+        waitFor("spark.chain.\(rootActivityID)")
+        waitFor("spark.chain.\(childActivityID)")
+        captureVisual("spark-menu-child-chain")
+
+        tap("spark.chain.\(rootActivityID)")
+        waitForSparkActivity(rootActivityID, timeout: 60)
+        XCTAssertEqual(sparkAnchorValue("spark.visible-card.id"), parentVisibleID)
+
+        tap("spark.menu.\(parentVisibleID)")
+        tap("popup-menu.item.spark")
+        let branchPending = waitFor("spark.chain.pending", timeout: 10)
+        XCTAssertEqual(branchPending.label, "Spark depth 1, loading")
+        XCTAssertFalse(
+            app.descendants(matching: .any)["spark.chain.\(childActivityID)"].exists,
+            "A pending branch must replace, not follow, the replayed node's descendants"
+        )
+
+        let branchActivityID = waitForDifferentSparkActivity(
+            from: rootActivityID,
+            timeout: 90
+        )
+        XCTAssertNotEqual(branchActivityID, childActivityID)
+        XCTAssertEqual(sparkAnchorValue("spark.root.id"), rootID)
+        XCTAssertEqual(sparkAnchorValue("spark.parent.id"), rootActivityID)
+        XCTAssertEqual(sparkAnchorValue("spark.depth"), "1")
+        waitFor("spark.chain.\(rootActivityID)")
+        waitFor("spark.chain.\(branchActivityID)")
+        XCTAssertFalse(
+            app.descendants(matching: .any)["spark.chain.\(childActivityID)"].exists
+        )
+
+        tap("spark.back")
+        waitFor("screen.flow.content", timeout: 20)
+    }
+
     func testSparkRelaunchRehydratesActivityWithoutNewTrigger() throws {
         let session = try requireSmokeSession()
         let cardID = sparkSeedCardID
@@ -3795,6 +3908,10 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertEqual(sparkAnchorValue("spark.activity.id"), parentActivityID)
         XCTAssertEqual(sparkAnchorValue("spark.visible-card.id"), parentVisibleID)
         waitFor("spark.card.\(parentVisibleID)")
+        XCTAssertFalse(waitFor("spark.continue.\(parentVisibleID)").isEnabled)
+
+        tap("spark.menu.\(parentVisibleID)")
+        XCTAssertFalse(waitFor("popup-menu.item.spark").isEnabled)
     }
 
     func testSparkResultDetailAndMenuRemainReachable() throws {
@@ -4228,6 +4345,10 @@ final class ArcNoteUITests: XCTestCase {
         let remove = waitForButton(removeIdentifier, timeout: 20)
         assertPrimaryControl(remove, identifier: removeIdentifier)
         remove.tap()
+
+        let confirmation = app.alerts["Unlink this note?"]
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 5))
+        confirmation.buttons["Unlink"].tap()
 
         waitForMissing(rowIdentifier, timeout: 30)
         waitForMissing(removeIdentifier, timeout: 30)

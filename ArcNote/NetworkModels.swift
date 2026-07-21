@@ -74,6 +74,8 @@ struct Card: Codable, Identifiable {
     let id: String
     let title: String?
     let content: String
+    let contentJSON: String?
+    let backgroundMediaRef: String?
     let contentHash: String?
     let tags: [String]
     let isPublic: Bool
@@ -91,7 +93,7 @@ struct Card: Codable, Identifiable {
     let author: UserInfo?
 
     enum CodingKeys: String, CodingKey {
-        case id, title, content, contentHash = "content_hash", tags, isPublic = "is_public"
+        case id, title, content, contentJSON = "content_json", backgroundMediaRef = "background_media_ref", contentHash = "content_hash", tags, isPublic = "is_public"
         case createdAt = "created_at", updatedAt = "updated_at", favoriteCount = "favorite_count"
         case likeCount = "like_count", viewCount = "view_count", commentCount = "comment_count", rate
         case isFavorited = "is_favorited", isLiked = "is_liked", isPinned = "is_pinned"
@@ -422,6 +424,8 @@ struct UserCard: Codable, Identifiable {
     let id: String
     let title: String?
     let content: String
+    let contentJSON: String?
+    let backgroundMediaRef: String?
     let contentHash: String
     let isPublic: Bool
     let tags: [String]
@@ -436,9 +440,50 @@ struct UserCard: Codable, Identifiable {
     let favoriteCount: Int?
     let rate: Int
 
+    init(
+        id: String,
+        title: String?,
+        content: String,
+        contentJSON: String? = nil,
+        backgroundMediaRef: String? = nil,
+        contentHash: String,
+        isPublic: Bool,
+        tags: [String],
+        createdAt: String,
+        updatedAt: String,
+        likeCount: Int,
+        commentCount: Int?,
+        isLiked: Bool,
+        isPinned: Bool,
+        pinnedAt: String?,
+        isFavorited: Bool?,
+        favoriteCount: Int?,
+        rate: Int
+    ) {
+        self.id = id
+        self.title = title
+        self.content = content
+        self.contentJSON = contentJSON
+        self.backgroundMediaRef = backgroundMediaRef
+        self.contentHash = contentHash
+        self.isPublic = isPublic
+        self.tags = tags
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.likeCount = likeCount
+        self.commentCount = commentCount
+        self.isLiked = isLiked
+        self.isPinned = isPinned
+        self.pinnedAt = pinnedAt
+        self.isFavorited = isFavorited
+        self.favoriteCount = favoriteCount
+        self.rate = rate
+    }
 
     enum CodingKeys: String, CodingKey {
         case id, title, content, tags, rate
+        case contentJSON = "content_json"
+        case backgroundMediaRef = "background_media_ref"
         case contentHash = "content_hash"
         case isPublic = "is_public"
         case createdAt = "created_at"

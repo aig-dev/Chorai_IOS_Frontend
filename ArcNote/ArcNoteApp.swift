@@ -50,6 +50,8 @@ struct ArcNoteApp: App {
         .contains("--ui-test-settings")
     private let isLibraryUITestRoute = ProcessInfo.processInfo.arguments
         .contains("--ui-test-library")
+    private let isLibraryPreviewUITestRoute = ProcessInfo.processInfo.arguments
+        .contains("--ui-test-library-preview")
     private let isChatVisibilityUITestRoute = ProcessInfo.processInfo.arguments
         .contains("--ui-test-chat-visibility")
     private let isNotificationInboxUITestRoute = ProcessInfo.processInfo.arguments
@@ -133,6 +135,8 @@ struct ArcNoteApp: App {
                             }
                         )
                     }
+                } else if isLibraryPreviewUITestRoute {
+                    LibraryCardPreviewFixtureScreen()
                 } else if isLibraryUITestRoute {
                     NavigationStack {
                         LibraryFixtureScreen()
@@ -499,6 +503,133 @@ private struct LibraryFixtureScreen: View {
                 .frame(width: 1, height: 1)
                 .accessibilityIdentifier("library.fixture.session")
         }
+    }
+}
+
+@MainActor
+private struct LibraryCardPreviewFixtureScreen: View {
+    @StateObject private var cardsManager = HomeCardsManager()
+    private let card: UserCard
+    private let showsCollectCard: Bool
+
+    init() {
+        let environment = ProcessInfo.processInfo.environment
+        showsCollectCard = environment[
+            "CHORAI_UI_TEST_LIBRARY_STYLE"
+        ] == "collect"
+        let imageURL = environment[
+            "CHORAI_UI_TEST_LIBRARY_IMAGE_URL"
+        ] ?? "/chorai-assets/library-preview-fixture.jpeg"
+        let rawBackgroundRef = environment[
+            "CHORAI_UI_TEST_LIBRARY_BACKGROUND_URL"
+        ]?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let backgroundMediaRef = rawBackgroundRef?.isEmpty == false
+            ? rawBackgroundRef
+            : nil
+        let contentJSON: String?
+        let content: String
+        let tags: [String]
+
+        if backgroundMediaRef != nil {
+            contentJSON = nil
+            content = "On Reincarnation and Eternal Souls, imagining identities that return through memory, nature, and time."
+            tags = ["Spirituality", "Philosophy"]
+        } else {
+            let blocks: [[String: Any]] = [
+                [
+                    "id": "library-preview-image",
+                    "type": "image",
+                    "props": [
+                        "url": imageURL,
+                        "name": "Complete Library image preview",
+                    ],
+                    "content": [],
+                    "children": [],
+                ],
+            ]
+            let document = try? JSONSerialization.data(
+                withJSONObject: ["blocks": blocks]
+            )
+            contentJSON = document.flatMap {
+                String(data: $0, encoding: .utf8)
+            }
+            content = "![Inline image](\(imageURL))"
+            tags = []
+        }
+
+        card = UserCard(
+            id: "library-preview-fixture",
+            title: nil,
+            content: content,
+            contentJSON: contentJSON,
+            backgroundMediaRef: backgroundMediaRef,
+            contentHash: "fixture",
+            isPublic: false,
+            tags: tags,
+            createdAt: "2026-07-20T18:33:45+08:00",
+            updatedAt: "2026-07-20T18:33:45+08:00",
+            likeCount: 0,
+            commentCount: 0,
+            isLiked: false,
+            isPinned: false,
+            pinnedAt: nil,
+            isFavorited: false,
+            favoriteCount: 0,
+            rate: Int(environment["CHORAI_UI_TEST_LIBRARY_RATE"] ?? "0") ?? 0
+        )
+    }
+
+    var body: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color(red: 0.11, green: 0.04, blue: 0.18),
+                    Color(red: 0.03, green: 0.07, blue: 0.14),
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+
+            ScrollView {
+                Group {
+                    if showsCollectCard {
+                        HomePostCard(
+                            profileImage: "",
+                            name: "Chorai",
+                            time: "just now favorited",
+                            content: card.content,
+                            contentJSON: card.contentJSON,
+                            backgroundMediaRef: card.backgroundMediaRef,
+                            tags: card.tags,
+                            showSpark: true,
+                            favoriteCount: 7,
+                            cardId: card.id,
+                            rate: card.rate,
+                            authorId: nil,
+                            onShowMenu: { _ in }
+                        )
+                    } else if card.rate < 3 {
+                        NotesCard(
+                            card: card,
+                            onShowMenu: { _ in },
+                            cardsManager: cardsManager,
+                            onCardTap: { _ in }
+                        )
+                    } else {
+                        NotesColorCard(
+                            card: card,
+                            onShowMenu: { _ in },
+                            cardsManager: cardsManager,
+                            onCardTap: { _ in }
+                        )
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 32)
+            }
+        }
+        .accessibilityIdentifier("library.preview.fixture")
     }
 }
 

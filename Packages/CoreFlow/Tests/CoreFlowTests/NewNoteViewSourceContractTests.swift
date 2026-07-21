@@ -179,8 +179,8 @@ final class NewNoteViewSourceContractTests: XCTestCase {
         XCTAssertFalse(source.contains("adoptAlreadyCreatedLink"))
         XCTAssertFalse(selection.contains("replaceLinks("))
         XCTAssertTrue(
-            source.contains("canRemove: link.sourceCardID == cardID"),
-            "Only outgoing editor links should expose inline unlink"
+            source.contains("canRemove: true"),
+            "Every canonical related-note edge should expose inline unlink"
         )
         let remove = try XCTUnwrap(
             Self.functionBody(
@@ -189,6 +189,7 @@ final class NewNoteViewSourceContractTests: XCTestCase {
             )
         )
         XCTAssertTrue(remove.contains("cardID == item.sourceCardID"))
+        XCTAssertTrue(remove.contains("|| cardID == item.targetCardID"))
         XCTAssertTrue(remove.contains("editingStore.deleteLink(link)"))
         XCTAssertFalse(remove.contains("links.remove"))
     }

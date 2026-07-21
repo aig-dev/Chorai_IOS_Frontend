@@ -523,7 +523,7 @@ private struct CardEditorSessionView: View {
     }
 
     private var editorLinkItems: [CardEditorLinkItem] {
-        guard let cardID = editingStore.cardID else { return [] }
+        guard editingStore.cardID != nil else { return [] }
         var seenEdges = Set<CardEditorLinkEdge>()
         return editingStore.links.compactMap { link in
             let edge = CardEditorLinkEdge(
@@ -537,7 +537,7 @@ private struct CardEditorSessionView: View {
                 title: link.authorName ?? link.title,
                 previewHTML: link.previewHTML,
                 avatarURL: link.authorAvatarURL,
-                canRemove: link.sourceCardID == cardID
+                canRemove: true
             )
         }
     }
@@ -549,7 +549,8 @@ private struct CardEditorSessionView: View {
               item.canRemove,
               unlinkingLinkID == nil,
               let cardID = editingStore.cardID,
-              cardID == item.sourceCardID,
+              (cardID == item.sourceCardID
+                  || cardID == item.targetCardID),
               let link = editingStore.links.first(where: {
                   $0.sourceCardID == item.sourceCardID
                       && $0.targetCardID == item.targetCardID

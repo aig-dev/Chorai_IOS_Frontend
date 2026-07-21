@@ -34,11 +34,17 @@ final class BlockNoteEditorResourceTests: XCTestCase {
         XCTAssertEqual(manifest.schemaVersion, BlockNoteEditorProtocol.schemaVersion)
     }
 
-    func testBundledContentSecurityPolicyAllowsHTTPSImagesWithoutExternalNavigation() throws {
+    func testBundledContentSecurityPolicyAllowsOnlySecureAndLocalObjectStorageImages() throws {
         let indexURL = try BlockNoteEditorResources.indexURL()
         let indexHTML = try String(contentsOf: indexURL, encoding: .utf8)
 
-        XCTAssertTrue(indexHTML.contains("img-src 'self' data: blob: https:"))
+        XCTAssertTrue(
+            indexHTML.contains(
+                "img-src 'self' data: blob: https: http://127.0.0.1:9000 http://localhost:9000"
+            )
+        )
+        XCTAssertFalse(indexHTML.contains("http://127.0.0.1:*"))
+        XCTAssertFalse(indexHTML.contains("http://localhost:*"))
         XCTAssertTrue(indexHTML.contains("connect-src 'none'"))
     }
 
@@ -61,7 +67,7 @@ final class BlockNoteEditorResourceTests: XCTestCase {
         }
     }
 
-    func testBundledEditorCanvasIsTransparentForNativeComposition() throws {
+    func testBundledEditorStylesSupportNativeCompositionAndResponsiveImages() throws {
         let editorCSSURL = try BlockNoteEditorResources.resourceDirectory()
             .appendingPathComponent("editor.css", isDirectory: false)
         let editorCSS = try String(contentsOf: editorCSSURL, encoding: .utf8)
@@ -71,6 +77,9 @@ final class BlockNoteEditorResourceTests: XCTestCase {
             "html,body,#root",
             "background:transparent!important",
             ".ios-editor-root,.ios-blocknote-view",
+            "[data-content-type=image]>.bn-file-block-content-wrapper",
+            "[data-content-type=image] .bn-visual-media-wrapper",
+            "border-radius:12px",
         ] {
             XCTAssertTrue(
                 editorCSS.contains(marker),

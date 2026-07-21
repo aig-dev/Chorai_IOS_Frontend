@@ -19,6 +19,8 @@ struct FavoriteItem: Codable {
     let id: String
     let title: String?
     let content: String
+    let contentJSON: String?
+    let backgroundMediaRef: String?
     let createdAt: String
     let favoritedAt: String
     let isPinned: Bool
@@ -35,6 +37,8 @@ struct FavoriteItem: Codable {
         case id
         case title
         case content
+        case contentJSON = "content_json"
+        case backgroundMediaRef = "background_media_ref"
         case createdAt = "created_at"
         case isPinned = "is_pinned"
         case pinnedAt = "pinned_at"
@@ -65,6 +69,8 @@ struct FavoriteItem: Codable {
         id = card.id
         title = card.title
         content = card.content
+        contentJSON = card.contentJSON
+        backgroundMediaRef = card.backgroundMediaRef
         createdAt = card.createdAt
         favoritedAt = try container.decode(String.self, forKey: .favoritedAt)
         isPinned = cardIsPinned
@@ -80,6 +86,8 @@ struct FavoriteItem: Codable {
         try container.encode(id, forKey: .id)
         try container.encodeIfPresent(title, forKey: .title)
         try container.encode(content, forKey: .content)
+        try container.encodeIfPresent(contentJSON, forKey: .contentJSON)
+        try container.encodeIfPresent(backgroundMediaRef, forKey: .backgroundMediaRef)
         try container.encode(createdAt, forKey: .createdAt)
         try container.encode(favoritedAt, forKey: .favoritedAt)
         try container.encode(isPinned, forKey: .isPinned)

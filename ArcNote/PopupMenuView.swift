@@ -40,13 +40,22 @@ struct PopupMenuModifier: ViewModifier {
     let layout: PopupMenuLayout
     let cardData: UserCard?
     let isOwnCard: Bool
+    let isSparkEnabled: Bool
+    let onSpark: (() -> Void)?
     
     func body(content: Content) -> some View {
         content
             .overlay(
                 Group {
                     if isPresented {
-                        PopupMenuOverlay(isPresented: $isPresented, layout: layout, cardData: cardData, isOwnCard: isOwnCard)
+                        PopupMenuOverlay(
+                            isPresented: $isPresented,
+                            layout: layout,
+                            cardData: cardData,
+                            isOwnCard: isOwnCard,
+                            isSparkEnabled: isSparkEnabled,
+                            onSpark: onSpark
+                        )
                     }
                 }
             )
@@ -59,6 +68,24 @@ struct PopupMenuOverlay: View {
     let layout: PopupMenuLayout
     let cardData: UserCard?
     let isOwnCard: Bool
+    let isSparkEnabled: Bool
+    let onSpark: (() -> Void)?
+
+    init(
+        isPresented: Binding<Bool>,
+        layout: PopupMenuLayout,
+        cardData: UserCard?,
+        isOwnCard: Bool,
+        isSparkEnabled: Bool = true,
+        onSpark: (() -> Void)? = nil
+    ) {
+        _isPresented = isPresented
+        self.layout = layout
+        self.cardData = cardData
+        self.isOwnCard = isOwnCard
+        self.isSparkEnabled = isSparkEnabled
+        self.onSpark = onSpark
+    }
     
     var body: some View {
         ActionBoxOverlay(
@@ -131,6 +158,23 @@ struct PopupMenuOverlay: View {
             userInfo: ["cardId": cardID]
         )
     }
+
+    private func sparkCard() {
+        guard isSparkEnabled else { return }
+        guard let cardID = cardData?.id else { return }
+        isPresented = false
+
+        if let onSpark {
+            onSpark()
+            return
+        }
+
+        NotificationCenter.default.post(
+            name: NSNotification.Name("NavigateToSpark"),
+            object: nil,
+            userInfo: ["cardId": cardID]
+        )
+    }
     
     // MARK: 菜单内容
     @ViewBuilder
@@ -139,16 +183,13 @@ struct PopupMenuOverlay: View {
         case .grid2x2:
             VStack(spacing: 15) {
                 HStack(spacing: 15) {
-                    MenuButton(icon: "menu_spark", text: "Spark", color: .red, onTap: {
-                        isPresented = false
-                        if let cardId = cardData?.id {
-                            NotificationCenter.default.post(
-                                name: NSNotification.Name("NavigateToSpark"),
-                                object: nil,
-                                userInfo: ["cardId": cardId]
-                            )
-                        }
-                    })
+                    MenuButton(
+                        icon: "menu_spark",
+                        text: "Spark",
+                        color: .red,
+                        isEnabled: isSparkEnabled,
+                        onTap: sparkCard
+                    )
                     if isOwnCard {
                         MenuButton(
                             icon: "menu_share",
@@ -205,16 +246,13 @@ struct PopupMenuOverlay: View {
                             )
                         }
                     })
-                    MenuButton(icon: "menu_spark", text: "Spark", color: .red, onTap: {
-                        isPresented = false
-                        if let cardId = cardData?.id {
-                            NotificationCenter.default.post(
-                                name: NSNotification.Name("NavigateToSpark"),
-                                object: nil,
-                                userInfo: ["cardId": cardId]
-                            )
-                        }
-                    })
+                    MenuButton(
+                        icon: "menu_spark",
+                        text: "Spark",
+                        color: .red,
+                        isEnabled: isSparkEnabled,
+                        onTap: sparkCard
+                    )
                     MenuButton(icon: "menu_merge", text: "Merge", color: .orange, onTap: {
                         isPresented = false
                         if let cardId = cardData?.id {
@@ -294,16 +332,13 @@ struct PopupMenuOverlay: View {
                             )
                         }
                     })
-                    MenuButton(icon: "menu_spark", text: "Spark", color: .red, onTap: {
-                        isPresented = false
-                        if let cardId = cardData?.id {
-                            NotificationCenter.default.post(
-                                name: NSNotification.Name("NavigateToSpark"),
-                                object: nil,
-                                userInfo: ["cardId": cardId]
-                            )
-                        }
-                    })
+                    MenuButton(
+                        icon: "menu_spark",
+                        text: "Spark",
+                        color: .red,
+                        isEnabled: isSparkEnabled,
+                        onTap: sparkCard
+                    )
                 }
                 HStack(spacing: 15) {
                     MenuButton(
@@ -348,12 +383,20 @@ struct MenuButton: View {
     let icon: String
     let text: String
     let color: Color
+    let isEnabled: Bool
     let onTap: (() -> Void)?
     
-    init(icon: String, text: String, color: Color, onTap: (() -> Void)? = nil) {
+    init(
+        icon: String,
+        text: String,
+        color: Color,
+        isEnabled: Bool = true,
+        onTap: (() -> Void)? = nil
+    ) {
         self.icon = icon
         self.text = text
         self.color = color
+        self.isEnabled = isEnabled
         self.onTap = onTap
     }
     
@@ -362,6 +405,7 @@ struct MenuButton: View {
             icon: .asset(icon),
             text: text,
             color: color,
+            isEnabled: isEnabled,
             accessibilityIdentifier: "popup-menu.item.\(text.lowercased().replacingOccurrences(of: " ", with: "-"))",
             action: onTap ?? {}
         )
@@ -370,8 +414,24 @@ struct MenuButton: View {
 
 // MARK: - View Extension
 extension View {
-    func popupMenu(isPresented: Binding<Bool>, layout: PopupMenuLayout = .grid2x2, cardData: UserCard? = nil, isOwnCard: Bool = false) -> some View {
-        self.modifier(PopupMenuModifier(isPresented: isPresented, layout: layout, cardData: cardData, isOwnCard: isOwnCard))
+    func popupMenu(
+        isPresented: Binding<Bool>,
+        layout: PopupMenuLayout = .grid2x2,
+        cardData: UserCard? = nil,
+        isOwnCard: Bool = false,
+        isSparkEnabled: Bool = true,
+        onSpark: (() -> Void)? = nil
+    ) -> some View {
+        self.modifier(
+            PopupMenuModifier(
+                isPresented: isPresented,
+                layout: layout,
+                cardData: cardData,
+                isOwnCard: isOwnCard,
+                isSparkEnabled: isSparkEnabled,
+                onSpark: onSpark
+            )
+        )
     }
 }
 

@@ -1802,6 +1802,51 @@ final class CardEditingStoreTests: XCTestCase {
         XCTAssertEqual(service.deleteLinkRequests, [link, link])
     }
 
+    func testDeleteLinkAllowsEditedCardToBeTargetOfCanonicalEdge() async {
+        let incomingLink = CardEditingLink(
+            sourceCardID: "ast_source",
+            targetCardID: "ast_editing",
+            title: "Incoming companion"
+        )
+        let service = MockCardEditingService()
+        service.deleteLinkResults = [.success(())]
+        let store = CardEditingStore(
+            cardID: "ast_editing",
+            draft: .init(title: nil, content: "Body", tags: [], isPublic: false),
+            backgroundMediaRef: nil,
+            links: [incomingLink],
+            service: service
+        )
+
+        let deleted = await store.deleteLink(incomingLink)
+
+        XCTAssertTrue(deleted)
+        XCTAssertEqual(service.deleteLinkRequests, [incomingLink])
+        XCTAssertTrue(store.links.isEmpty)
+    }
+
+    func testDeleteLinkRejectsEdgeUnrelatedToEditedCard() async {
+        let unrelatedLink = CardEditingLink(
+            sourceCardID: "ast_source",
+            targetCardID: "ast_target",
+            title: "Unrelated companion"
+        )
+        let service = MockCardEditingService()
+        let store = CardEditingStore(
+            cardID: "ast_editing",
+            draft: .init(title: nil, content: "Body", tags: [], isPublic: false),
+            backgroundMediaRef: nil,
+            links: [unrelatedLink],
+            service: service
+        )
+
+        let deleted = await store.deleteLink(unrelatedLink)
+
+        XCTAssertFalse(deleted)
+        XCTAssertTrue(service.deleteLinkRequests.isEmpty)
+        XCTAssertEqual(store.links, [unrelatedLink])
+    }
+
     func testCreateLinkFailureDoesNotPublishLocalRelationship() async {
         let link = CardEditingLink(
             sourceCardID: "ast_1",

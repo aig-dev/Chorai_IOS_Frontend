@@ -577,12 +577,14 @@ struct CommentButton: View {
     let cardId: String
     let cardsManager: RecommendedCardsManager?
     let useRelatedCardsManager: Bool
+    let iconSize: CGFloat
     @State private var staticCommentCount: Int = 0
     
     init(cardId: String, cardsManager: RecommendedCardsManager) {
         self.cardId = cardId
         self.cardsManager = cardsManager
         self.useRelatedCardsManager = false
+        self.iconSize = 20
         self.staticCommentCount = 0
     }
     
@@ -590,13 +592,15 @@ struct CommentButton: View {
         self.cardId = cardId
         self.cardsManager = nil
         self.useRelatedCardsManager = true
+        self.iconSize = 20
         self.staticCommentCount = 0
     }
     
-    init(cardId: String, commentCount: Int = 0) {
+    init(cardId: String, commentCount: Int = 0, iconSize: CGFloat = 20) {
         self.cardId = cardId
         self.cardsManager = nil
         self.useRelatedCardsManager = false
+        self.iconSize = iconSize
         self.staticCommentCount = commentCount
     }
     
@@ -608,7 +612,7 @@ struct CommentButton: View {
                 Image("comment")
                     .resizable()
                     .aspectRatio(contentMode: .fit)
-                    .frame(width: 20, height: 20)
+                    .frame(width: iconSize, height: iconSize)
                 Text("\(displayCommentCount)")
                     .font(.system(size: 14, weight: .medium))
                     .foregroundColor(.white.opacity(0.8))

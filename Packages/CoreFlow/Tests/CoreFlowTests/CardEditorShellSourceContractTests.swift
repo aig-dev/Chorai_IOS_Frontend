@@ -1253,6 +1253,15 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         XCTAssertTrue(fixture.contains("case longTag = \"long-tag\""))
         XCTAssertTrue(fixture.contains("case legacyHTML = \"legacy-html\""))
         XCTAssertTrue(fixture.contains("case bridgeFailure = \"bridge-failure\""))
+        XCTAssertTrue(fixture.contains("case inlineImage = \"inline-image\""))
+        XCTAssertTrue(
+            fixture.contains(
+                "CHORAI_CARD_EDITOR_FIXTURE_INLINE_IMAGE_URL"
+            )
+        )
+        XCTAssertTrue(fixture.contains(#""type":"image""#))
+        XCTAssertTrue(fixture.contains(#""showPreview":true"#))
+        XCTAssertTrue(fixture.contains("fixtureBackgroundData.base64EncodedString()"))
         XCTAssertTrue(fixture.contains("contentJSON: nil"))
         XCTAssertTrue(
             fixture.contains("<p>Legacy <strong>rich</strong> text</p>")

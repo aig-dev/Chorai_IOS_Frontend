@@ -146,6 +146,7 @@ struct CardEditorLinkRow: View {
     let onInteraction: () -> Void
     let onRemove: (CardEditorLinkItem) -> Void
 
+    @State private var pendingRemoval: CardEditorLinkItem?
     @State private var isExpanded = false
 
     var body: some View {
@@ -205,7 +206,7 @@ struct CardEditorLinkRow: View {
                                     } else {
                                         Button {
                                             onInteraction()
-                                            onRemove(link)
+                                            pendingRemoval = link
                                         } label: {
                                             Image(systemName: "xmark")
                                                 .font(
@@ -242,6 +243,16 @@ struct CardEditorLinkRow: View {
                         .opacity.combined(with: .move(edge: .top))
                     )
                 }
+            }
+            .alert(item: $pendingRemoval) { link in
+                Alert(
+                    title: Text("Unlink this note?"),
+                    message: Text("Neither note will be deleted."),
+                    primaryButton: .cancel(Text("Cancel")),
+                    secondaryButton: .destructive(Text("Unlink")) {
+                        onRemove(link)
+                    }
+                )
             }
         }
     }

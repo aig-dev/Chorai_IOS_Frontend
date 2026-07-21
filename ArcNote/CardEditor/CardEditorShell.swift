@@ -373,6 +373,7 @@ private enum CardEditorShellFixtureMode: String {
     case longTag = "long-tag"
     case legacyHTML = "legacy-html"
     case bridgeFailure = "bridge-failure"
+    case inlineImage = "inline-image"
 }
 
 @MainActor
@@ -662,6 +663,21 @@ struct CardEditorShellFixtureScreen: View {
             )
         }
 
+        if mode == .inlineImage {
+            let configuredURL = ProcessInfo.processInfo.environment[
+                "CHORAI_CARD_EDITOR_FIXTURE_INLINE_IMAGE_URL"
+            ]?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let imageURL = configuredURL.flatMap { $0.isEmpty ? nil : $0 }
+                ?? "data:image/jpeg;base64,\(fixtureBackgroundData.base64EncodedString())"
+            let encodedURL = (try? JSONEncoder().encode(imageURL))
+                .flatMap { String(data: $0, encoding: .utf8) }
+                ?? "\"\""
+            return BlockNoteInitialDocument(
+                contentJSON: #"[{"id":"inline-image-fixture","type":"image","props":{"backgroundColor":"default","textAlignment":"center","name":"Inline image fixture","url":\#(encodedURL),"caption":"","showPreview":true},"children":[]}]"#,
+                fallbackMarkdown: ""
+            )
+        }
+
         if mode == .keyboard {
             let heading = #"{"id":"heading-fixture","type":"heading","props":{"backgroundColor":"default","textColor":"default","textAlignment":"left","level":2,"isToggleable":false},"content":[{"type":"text","text":"A selected heading","styles":{"bold":true}}],"children":[]}"#
             let paragraphs = (0..<14).map { index in
@@ -709,7 +725,7 @@ private extension CardEditorShellFixtureMode {
             return ["archive"]
         case .longTag:
             return ["this-is-an-intentionally-long-tag-that-must-compress"]
-        case .empty, .legacyHTML, .bridgeFailure:
+        case .empty, .legacyHTML, .bridgeFailure, .inlineImage:
             return []
         }
     }
@@ -746,7 +762,7 @@ private extension CardEditorShellFixtureMode {
                 sourceCardID: "ast_fixture_c",
                 targetCardID: "ast_fixture_source",
                 title: "Chen",
-                canRemove: false
+                canRemove: true
             ),
             .init(
                 sourceCardID: "ast_fixture_source",
