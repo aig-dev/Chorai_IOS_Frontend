@@ -1588,6 +1588,38 @@ final class ArcNoteUITests: XCTestCase {
         )
     }
 
+    func testSettingsEditProfileBackReturnsToSettings() throws {
+        app.launchArguments.append("--ui-test-settings")
+        app.launch()
+
+        waitFor("screen.settings.loaded")
+        tap("settings.personal-data")
+        waitFor("screen.edit-profile.loaded")
+
+        let backButton = waitForButton("edit-profile.back")
+        XCTAssertGreaterThanOrEqual(backButton.frame.width, 44)
+        XCTAssertGreaterThanOrEqual(backButton.frame.height, 44)
+        backButton.tap()
+
+        waitForMissing("screen.edit-profile.loaded")
+        waitFor("screen.settings.loaded")
+    }
+
+    func testSettingsEditProfileOffersAccessibleBackgroundUpload() throws {
+        app.launchArguments.append("--ui-test-settings")
+        app.launch()
+
+        waitFor("screen.settings.loaded")
+        tap("settings.personal-data")
+        waitFor("screen.edit-profile.loaded")
+
+        let backgroundButton = waitForButton("edit-profile.background")
+        XCTAssertEqual(backgroundButton.label, "Add background photo")
+        XCTAssertGreaterThanOrEqual(backgroundButton.frame.width, 44)
+        XCTAssertGreaterThanOrEqual(backgroundButton.frame.height, 44)
+        captureVisual("edit-profile-empty-background")
+    }
+
     func testSettingsShowsSingleInvitationCreditsEntry() throws {
         app.launchArguments.append("--ui-test-settings")
         app.launch()
@@ -2957,7 +2989,6 @@ final class ArcNoteUITests: XCTestCase {
 
     func testSettingsPersonalDataSaveUpdatesGoProfileMe() throws {
         let session = try requireSmokeSession()
-        seedAppSession(session)
 
         let originalProfile = try fetchCurrentSmokeProfile(token: session.token)
         let uniqueSuffix = Int(Date().timeIntervalSince1970)
@@ -2985,15 +3016,7 @@ final class ArcNoteUITests: XCTestCase {
         )
         waitForCurrentSmokeProfile(token: session.token, bio: "", city: "")
 
-        launchAuthenticatedApp()
-
-        waitFor("tab.flow")
-        waitFor("screen.flow.content", timeout: 20)
-        tap("side-menu.open")
-        tap("side-menu.settings")
-
-        waitFor("screen.settings.loaded", timeout: 20)
-        tap("settings.personal-data")
+        launchLiveProfileSettingsFixture(session: session)
 
         waitFor("screen.edit-profile.loaded", timeout: 20)
         let loadedProfileId = waitFor("edit-profile.profile-id", timeout: 20)
@@ -3010,7 +3033,6 @@ final class ArcNoteUITests: XCTestCase {
 
     func testSettingsAvatarPickerUploadsGoProfileAvatar() throws {
         let session = try requireSmokeSession()
-        seedAppSession(session)
 
         let originalProfile = try fetchCurrentSmokeProfile(token: session.token)
         defer {
@@ -3024,15 +3046,7 @@ final class ArcNoteUITests: XCTestCase {
             )
         }
 
-        launchAuthenticatedApp()
-
-        waitFor("tab.flow")
-        waitFor("screen.flow.content", timeout: 20)
-        tap("side-menu.open")
-        tap("side-menu.settings")
-
-        waitFor("screen.settings.loaded", timeout: 20)
-        tap("settings.personal-data")
+        launchLiveProfileSettingsFixture(session: session)
 
         waitFor("screen.edit-profile.loaded", timeout: 20)
         let loadedProfileId = waitFor("edit-profile.profile-id", timeout: 20)
@@ -3042,7 +3056,7 @@ final class ArcNoteUITests: XCTestCase {
 
         tap("edit-profile.avatar")
         try selectFirstPhotoFromImagePicker()
-        waitForEditProfileAvatarUploadStatus("success", timeout: 45)
+        tapEditProfileSave()
 
         let updatedProfile = waitForCurrentSmokeProfileAvatarChanged(
             token: session.token,
@@ -3051,9 +3065,56 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertFalse(updatedProfile.avatarURL.isEmpty)
     }
 
+    func testSettingsBackgroundSaveUploadsGoProfileBackground() throws {
+        let session = try requireSmokeSession()
+
+        let originalProfile = try fetchCurrentSmokeProfile(token: session.token)
+        guard !originalProfile.backgroundURL.isEmpty else {
+            throw XCTSkip(
+                "Pre-provision the smoke profile with a reusable background before running this mutating test"
+            )
+        }
+        defer {
+            try? updateCurrentSmokeProfile(
+                token: session.token,
+                username: originalProfile.username,
+                avatarURL: originalProfile.avatarURL,
+                bio: originalProfile.bio,
+                city: originalProfile.city,
+                birthday: originalProfile.birthday,
+                backgroundURL: originalProfile.backgroundURL
+            )
+        }
+
+        launchLiveProfileSettingsFixture(session: session)
+
+        waitFor("screen.edit-profile.loaded", timeout: 20)
+        waitForLabel(
+            "edit-profile.profile-id",
+            expected: session.actorId,
+            timeout: 20
+        )
+        waitForLabel(
+            "edit-profile.background",
+            expected: "Change background photo",
+            timeout: 20
+        )
+        tap("edit-profile.background-smoke-stage")
+        waitForLabel(
+            "edit-profile.background-upload-status",
+            expected: "staged"
+        )
+        tapEditProfileSave()
+
+        let updatedProfile = waitForCurrentSmokeProfileBackgroundChanged(
+            token: session.token,
+            previousBackgroundURL: originalProfile.backgroundURL
+        )
+        XCTAssertFalse(updatedProfile.backgroundURL.isEmpty)
+    }
+
     func testSettingsAvatarSmokeUploadUpdatesGoProfileAvatar() throws {
         let session = try requireSmokeSession()
-        seedAppSession(session)
 
         let originalProfile = try fetchCurrentSmokeProfile(token: session.token)
         defer {
@@ -3067,15 +3128,7 @@ final class ArcNoteUITests: XCTestCase {
             )
         }
 
-        launchAuthenticatedApp()
-
-        waitFor("tab.flow")
-        waitFor("screen.flow.content", timeout: 20)
-        tap("side-menu.open")
-        tap("side-menu.settings")
-
-        waitFor("screen.settings.loaded", timeout: 20)
-        tap("settings.personal-data")
+        launchLiveProfileSettingsFixture(session: session)
 
         waitFor("screen.edit-profile.loaded", timeout: 20)
         let loadedProfileId = waitFor("edit-profile.profile-id", timeout: 20)
@@ -7039,7 +7092,9 @@ final class ArcNoteUITests: XCTestCase {
         RunLoop.current.run(until: Date().addingTimeInterval(0.2))
         app.typeKey("a", modifierFlags: .command)
         app.typeKey(.delete, modifierFlags: [])
-        if let remaining = element.value as? String, !remaining.isEmpty {
+        let remaining = (element.value as? String) ?? ""
+        let placeholder = element.placeholderValue ?? ""
+        if !remaining.isEmpty && remaining != placeholder {
             element.press(forDuration: 1)
             let selectAllMenuItem = app.menuItems["Select All"].firstMatch
             let selectAllButton = app.buttons["Select All"].firstMatch
@@ -7400,14 +7455,49 @@ final class ArcNoteUITests: XCTestCase {
     }
 
     private func tapEditProfileSave(file: StaticString = #filePath, line: UInt = #line) {
-        _ = waitFor("edit-profile.save", timeout: 10, file: file, line: line)
-        let visibleSaveButton = app.buttons["Save"].firstMatch
-        if visibleSaveButton.waitForExistence(timeout: 3) {
-            visibleSaveButton.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
-            return
-        }
+        let saveButton = waitForButton(
+            "edit-profile.save",
+            timeout: 10,
+            file: file,
+            line: line
+        )
+        XCTAssertTrue(
+            saveButton.isHittable,
+            "Edit profile Save must be inside the tappable safe area",
+            file: file,
+            line: line
+        )
+        saveButton.tap()
+    }
 
-        app.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.1)).tap()
+    private func launchLiveProfileSettingsFixture(
+        session: SmokeSession,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        seedAppSession(session)
+        app.launchEnvironment["CHORAI_UI_TEST"] = "1"
+        app.launchEnvironment["CHORAI_API_BASE_URL"] =
+            UITestAPIConfiguration.baseURL
+        app.launchArguments.append("--ui-test-settings-live-profile")
+        app.launch()
+        waitFor("screen.settings.loaded", timeout: 20, file: file, line: line)
+        let personalData = waitFor(
+            "settings.personal-data",
+            timeout: 10,
+            file: file,
+            line: line
+        )
+        for _ in 0..<4 where !personalData.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(
+            personalData.isHittable,
+            "Personal Data should be reachable by scrolling Settings",
+            file: file,
+            line: line
+        )
+        personalData.tap()
     }
 
     private func waitForFinalEditProfileSaveStatus(timeout: TimeInterval = 20, file: StaticString = #filePath, line: UInt = #line) -> String {
@@ -7920,6 +8010,7 @@ final class ArcNoteUITests: XCTestCase {
     private struct SmokeProfile: Decodable {
         let username: String
         let avatarURL: String
+        let backgroundURL: String
         let bio: String
         let city: String
         let birthday: String
@@ -7928,15 +8019,24 @@ final class ArcNoteUITests: XCTestCase {
             case username
             case avatar
             case avatarURL = "avatar_url"
+            case backgroundURL = "background_url"
             case bio
             case city
             case location
             case birthday
         }
 
-        init(username: String, avatarURL: String, bio: String, city: String, birthday: String) {
+        init(
+            username: String,
+            avatarURL: String,
+            backgroundURL: String = "",
+            bio: String,
+            city: String,
+            birthday: String
+        ) {
             self.username = username
             self.avatarURL = avatarURL
+            self.backgroundURL = backgroundURL
             self.bio = bio
             self.city = city
             self.birthday = birthday
@@ -7948,6 +8048,7 @@ final class ArcNoteUITests: XCTestCase {
             avatarURL = (try? container.decode(String.self, forKey: .avatarURL))
                 ?? (try? container.decode(String.self, forKey: .avatar))
                 ?? ""
+            backgroundURL = (try? container.decode(String.self, forKey: .backgroundURL)) ?? ""
             bio = (try? container.decode(String.self, forKey: .bio)) ?? ""
             city = (try? container.decode(String.self, forKey: .city))
                 ?? (try? container.decode(String.self, forKey: .location))
@@ -9218,7 +9319,15 @@ final class ArcNoteUITests: XCTestCase {
         )
     }
 
-    private func updateCurrentSmokeProfile(token: String, username: String, avatarURL: String, bio: String, city: String, birthday: String) throws {
+    private func updateCurrentSmokeProfile(
+        token: String,
+        username: String,
+        avatarURL: String,
+        bio: String,
+        city: String,
+        birthday: String,
+        backgroundURL: String? = nil
+    ) throws {
         let baseURL = UITestAPIConfiguration.baseURL
         guard let url = URL(string: "\(baseURL)/api/v1/profile/me") else {
             throw NSError(domain: "ArcNoteUITests", code: 14, userInfo: [NSLocalizedDescriptionKey: "Invalid Go profile/me URL"])
@@ -9236,6 +9345,9 @@ final class ArcNoteUITests: XCTestCase {
         ]
         if !birthday.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             body["birthday"] = birthday
+        }
+        if let backgroundURL {
+            body["background_url"] = backgroundURL
         }
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
@@ -9305,6 +9417,53 @@ final class ArcNoteUITests: XCTestCase {
             XCTFail("Timed out waiting for profile avatar URL change; previous: \(previousAvatarURL), last profile: \(String(describing: lastProfile))", file: file, line: line)
         }
         return lastProfile ?? SmokeProfile(username: "", avatarURL: "", bio: "", city: "", birthday: "")
+    }
+
+    private func waitForCurrentSmokeProfileBackgroundChanged(
+        token: String,
+        previousBackgroundURL: String,
+        timeout: TimeInterval = 30,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) -> SmokeProfile {
+        let deadline = Date().addingTimeInterval(timeout)
+        var lastProfile: SmokeProfile?
+        var lastError: Error?
+
+        while Date() < deadline {
+            do {
+                let profile = try fetchCurrentSmokeProfile(token: token)
+                lastProfile = profile
+                if !profile.backgroundURL.isEmpty &&
+                    profile.backgroundURL != previousBackgroundURL {
+                    return profile
+                }
+            } catch {
+                lastError = error
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.4))
+        }
+
+        if let lastError {
+            XCTFail(
+                "Timed out waiting for profile background URL change; last error: \(lastError)",
+                file: file,
+                line: line
+            )
+        } else {
+            XCTFail(
+                "Timed out waiting for profile background URL change; previous: \(previousBackgroundURL), last profile: \(String(describing: lastProfile))",
+                file: file,
+                line: line
+            )
+        }
+        return lastProfile ?? SmokeProfile(
+            username: "",
+            avatarURL: "",
+            bio: "",
+            city: "",
+            birthday: ""
+        )
     }
 
     private func waitForChatMessage(conversationId: String, content: String, token: String, timeout: TimeInterval = 15, file: StaticString = #filePath, line: UInt = #line) {
