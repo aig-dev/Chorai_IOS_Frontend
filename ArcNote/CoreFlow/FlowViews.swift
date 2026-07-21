@@ -213,6 +213,8 @@ struct FlowCardView: View {
                     }
                 }
                 .buttonStyle(.plain)
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
                 .accessibilityLabel("Open author")
                 .disabled(card.author == nil)
 

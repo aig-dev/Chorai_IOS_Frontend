@@ -17,35 +17,36 @@ accessibility compliance.
 1. Approved reference, 658 x 848: dark violet glass, a fine light-catching rim,
    and visible rear-card depth.
 
-   ![Approved glass-card reference](/Users/luffylu/.codex/attachments/1e4c906b-cb0d-4690-9368-879a9de7239c/image-2.png)
+   ![Approved glass-card reference](assets/ios-flow-glass-card-stack/approved-reference.png)
 
 2. Original reported screen, 660 x 950: the avatar had fallen back to the person
    glyph and the stack read as a single heavy surface.
 
-   ![Original reported Flow screen](/Users/luffylu/.codex/attachments/1e4c906b-cb0d-4690-9368-879a9de7239c/image-1.png)
+   ![Original reported Flow screen](assets/ios-flow-glass-card-stack/original-flow.png)
 
-3. Main accepted capture, 1206 x 2622: the uploaded blue/yellow avatar is visible,
-   the foreground card has a highlighted glass rim, and two content-free rear
-   surfaces are distinct at the bottom and right.
+3. Main accepted capture, 1206 x 2622: the reusable blue/yellow profile avatar is
+   visible from a backend-relative URL, the foreground card has a highlighted
+   glass rim, and two content-free rear surfaces are distinct at the bottom and
+   right.
 
-   ![Main accepted Flow glass stack](/tmp/ChoraiFlowGlassRootAttachments-20260721/3FD4084C-E8C5-4923-8EAF-1541E760D6A8.png)
+   ![Main accepted Flow glass stack](assets/ios-flow-glass-card-stack/main-dark.png)
 
 4. Increase Contrast capture, 1206 x 2622: the brighter foreground and rear rims
    remain controlled and the content stays readable.
 
-   ![Flow glass stack with Increase Contrast](/tmp/ChoraiFlowGlassContrastAttachments-20260721/138D3641-9434-45C5-9A36-2D9EF00D8829.png)
+   ![Flow glass stack with Increase Contrast](assets/ios-flow-glass-card-stack/increase-contrast.png)
 
 5. Reduce Transparency capture, 1206 x 2622: the card and rear surfaces use the
    opaque deep-violet fallback and remain visibly separated without background
    bleed.
 
-   ![Flow opaque fallback with Reduce Transparency](/tmp/ChoraiFlowGlassReduceTransparencyRootAttachments-20260721/F8941B07-2E5C-449C-9CCC-0777F1D1A65E.png)
+   ![Flow opaque fallback with Reduce Transparency](assets/ios-flow-glass-card-stack/reduce-transparency.png)
 
 6. Accessibility XXXL capture, 1206 x 2622: long author, body, and tag content
    truncates according to the existing limits, while the header and engagement
    controls remain complete and no content escapes the card.
 
-   ![Flow glass stack at Accessibility XXXL](/tmp/ChoraiFlowGlassXXXLAttachments-20260721/5F60D575-BF7B-43F0-B840-89331C1A1E6B.png)
+   ![Flow glass stack at Accessibility XXXL](assets/ios-flow-glass-card-stack/accessibility-xxxl.png)
 
 All six files were reopened and inspected at original resolution during this
 audit. Each accepted runtime image shows a loaded, stable Flow state rather than
@@ -59,9 +60,12 @@ request.
 - Avatar: Flow trims the author value, passes it through
   `APIConfiguration.resourceURLString`, and gives the resulting URL to
   `AsyncImage`. The resolver preserves absolute HTTP(S) URLs and canonicalizes
-  backend-relative paths. The main live capture proves a valid uploaded relative
-  avatar renders as the blue/yellow author image. Missing, empty, loading, invalid,
-  and failed values use the same quiet 32-point circular person fallback.
+  backend-relative paths. The main live fixture reuses the smoke profile's
+  existing same-origin avatar artifact, converts an absolute value to its
+  equivalent root-relative path only when needed, and never invokes the avatar
+  upload endpoint. The main capture proves that relative value renders as the
+  blue/yellow author image. Missing, empty, loading, invalid, and failed values
+  use the same quiet 32-point circular person fallback.
 - Stack: the deck derives zero, one, or two rear surfaces from the number of cards
   remaining, capped at two. The main capture shows a real three-card route as one
   foreground plus two rear rims. Rear surfaces instantiate only the shared glass
@@ -78,8 +82,9 @@ request.
   Spark, favorite, like, comment, card identity, and swipe callbacks in place.
   The live gate finds the favorite, like, comment, and Spark controls, toggles
   favorite without advancing, and proves a left swipe advances. Existing focused
-  journeys cover author/detail, Spark, like, and right-swipe routes. Menu, Spark,
-  favorite, like, and comment retain effective 44-point targets.
+  journeys cover author/detail, Spark, like, and right-swipe routes. Author, menu,
+  Spark, favorite, like, and comment retain effective 44-point targets while the
+  visible avatar remains 32 points.
 - Accessibility: rear layers are noninteractive and removed from the accessibility
   tree; foreground actions retain explicit labels. The Reduce Motion branch still
   bypasses the fly-out animation. Increase Contrast strengthens the rim, Reduce
@@ -98,26 +103,56 @@ resolve these labeled controls, but a manual VoiceOver traversal was not recorde
 Accordingly, this report confirms the scoped implementation evidence and does not
 claim full accessibility compliance.
 
+## Fixture repeatability and route deviation
+
+The final live fixture does not upload an image. It reuses an existing same-origin
+avatar resource from the smoke profile, or the explicit
+`CHORAI_UI_TEST_FLOW_RELATIVE_AVATAR_URL` override. If the existing value is
+absolute, the fixture temporarily writes only its equivalent root-relative value
+through `PUT /api/v1/profile/me`, then restores the exact original profile during
+teardown. This avoids orphaned media and the 10-per-hour avatar-upload/update
+limit. All three temporary cards are soft-deleted, permanently deleted, and
+verified absent during teardown.
+
+The original plan assumed one of the three fresh cards would immediately be the
+foreground recommendation. Recommendation order is paginated and non-deterministic
+in the live stack, so the implemented journey first discovers the page containing
+the fixture cards, then swipes through at most 50 visible cards to the ranked
+target. This is the only route deviation; the accepted screenshot and subsequent
+swipe still exercise the production Flow deck.
+
 ## Verification
 
-| Gate | Result | Evidence |
+| Gate | Result | Durable evidence |
 | --- | --- | --- |
-| Main dark-mode journeys | 2 passed / 0 failed | `/tmp/ChoraiFlowGlass-20260721-UITests-Stable2.xcresult` |
-| Main kept attachments | `flow-glass-avatar-stack` and `flow-compact-icon-chrome` | `/tmp/ChoraiFlowGlassAttachments-20260721-UITests-Stable2` |
-| Increase Contrast | 1 passed / 0 failed | `/tmp/ChoraiFlowGlassContrastStable-20260721.xcresult` |
-| Reduce Transparency fallback | 1 passed / 0 failed | `/tmp/ChoraiFlowGlassReduceTransparencyFavorite-20260721.xcresult` |
-| Accessibility XXXL | 1 passed / 0 failed | `/tmp/ChoraiFlowGlassXXXLStable-20260721.xcresult` |
-| Review-hardening live Flow | 1 passed / 0 failed | `/tmp/ChoraiFlowGlassReviewFix-20260721.xcresult` |
-| Focused Flow presentation contracts | 5 passed / 0 failed | `FlowCardPresentationSourceContractTests` |
-| Full CoreFlow feature baseline | 476 passed / 0 failed | Task 3 full-suite run |
-| `ArcNote` generic Simulator build | passed | Task 3 build gate |
-| `ArcNote Production` generic Simulator build | passed | Task 3 build gate |
-| Task 3 independent review | approved | reviewed after `4e11fba` |
+| Reusable relative-avatar and three-card journey | 1 passed / 0 failed | `ArcNoteUITests` scheme; [main capture](assets/ios-flow-glass-card-stack/main-dark.png) |
+| Increase Contrast | 1 passed / 0 failed | [committed capture](assets/ios-flow-glass-card-stack/increase-contrast.png) |
+| Reduce Transparency fallback | 1 passed / 0 failed | [committed capture](assets/ios-flow-glass-card-stack/reduce-transparency.png) |
+| Accessibility XXXL | 1 passed / 0 failed | [committed capture](assets/ios-flow-glass-card-stack/accessibility-xxxl.png) |
+| Focused Flow presentation contracts | 6 passed / 0 failed | `FlowCardPresentationSourceContractTests` |
+| Full CoreFlow completion gate | 490 passed / 0 failed | fresh final suite run |
+| `ArcNote` generic Simulator build | passed | fresh final build gate |
+| `ArcNote Production` generic Simulator build | passed | fresh final build gate |
 
-The Reduce Transparency replay used the already-verified app build and the
-favorite journey. A fresh avatar upload in that variant reached HTTP 429 before
-card creation, so the relative-avatar path was not re-proven in the Reduce
-Transparency run; it is proven by the main and review-hardening live Flow runs.
+The live UI testable belongs to the `ArcNoteUITests` scheme; the `ArcNote` scheme
+builds the app but has no testables. The exact final live commands are:
+
+```bash
+xcodebuild build-for-testing \
+  -project ArcNote.xcodeproj \
+  -scheme ArcNoteUITests \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
+  -derivedDataPath /tmp/chorai-flow-glass-review2-derived \
+  CODE_SIGNING_ALLOWED=NO
+
+xcodebuild test-without-building \
+  -project ArcNote.xcodeproj \
+  -scheme ArcNoteUITests \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
+  -derivedDataPath /tmp/chorai-flow-glass-review2-derived \
+  -only-testing:ArcNoteUITests/ArcNoteUITests/testFlowGlassDeckRendersReusableRelativeAvatarAndThreeCardStack \
+  CODE_SIGNING_ALLOWED=NO
+```
 
 ## Requirement audit
 
@@ -130,9 +165,12 @@ Transparency run; it is proven by the main and review-hardening live Flow runs.
 - [x] Native Material, violet tint, fine highlight, and shadow hierarchy align with the approved reference.
 - [x] Author, detail, menu, Spark, favorite, like, comment, and swipe wiring remains intact.
 - [x] Existing 44-point action targets and the Reduce Motion path remain intact.
+- [x] The author action has a 44-point target while its avatar remains 32 points.
 - [x] Increase Contrast strengthens the rim without washing out content.
 - [x] Reduce Transparency produces distinct opaque foreground and rear surfaces.
 - [x] Accessibility XXXL keeps controls complete and content inside the foreground card.
 - [x] Focused contracts, the full CoreFlow feature baseline, both app builds, and live Simulator journeys passed.
+- [x] Visual references and accepted captures are committed under `docs/qa/assets`.
+- [x] The live fixture creates no avatar upload artifact and documents its paginated navigation.
 
 final result: passed

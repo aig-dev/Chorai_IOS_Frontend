@@ -439,92 +439,34 @@ git commit -m "feat: add Flow glass card stack"
 - Modify: `ArcNoteUITests/ArcNoteUITests.swift`
 
 **Interfaces:**
-- Consumes: the Task 1 avatar resolver, Task 2 glass primitives, the Local Go stack, existing profile/card smoke helpers, and `edit-profile.avatar-smoke-upload`.
-- Produces: `testFlowGlassDeckRendersUploadedRelativeAvatarAndThreeCardStack()`, fresh unit/build/UI result bundles, and a kept `flow-glass-avatar-stack` attachment for design QA.
+- Consumes: the Task 1 avatar resolver, Task 2 glass primitives, the Local Go stack, existing profile/card smoke helpers, and a reusable same-origin profile avatar.
+- Produces: `testFlowGlassDeckRendersReusableRelativeAvatarAndThreeCardStack()`, fresh unit/build/UI result bundles, and a kept `flow-glass-avatar-stack` attachment for design QA.
 
-- [ ] **Step 1: Add a reversible live relative-avatar and three-card UI fixture**
+- [ ] **Step 1: Add a repeatable live relative-avatar and three-card UI fixture**
 
-Add this test beside the existing Flow UI tests:
+Add `testFlowGlassDeckRendersReusableRelativeAvatarAndThreeCardStack()` beside
+the existing Flow UI tests. It must:
 
-```swift
-func testFlowGlassDeckRendersUploadedRelativeAvatarAndThreeCardStack() throws {
-    let session = try requireSmokeSession()
-    seedAppSession(session)
+1. Reuse the smoke profile's existing same-origin avatar artifact, or
+   `CHORAI_UI_TEST_FLOW_RELATIVE_AVATAR_URL`; never invoke the upload endpoint.
+2. Convert an absolute same-origin URL to its equivalent root-relative path only
+   when necessary, restore the exact original profile in a throwing teardown, and
+   assert the live profile value is root-relative.
+3. Create three fresh public cards, register strict permanent cleanup for each,
+   and use recommendation pagination to discover their ranked route.
+4. Launch Flow, swipe through at most 50 visible cards to the ranked target,
+   capture `flow-glass-avatar-stack`, and prove the next swipe advances.
 
-    let originalProfile = try fetchCurrentSmokeProfile(token: session.token)
-    defer {
-        try? updateCurrentSmokeProfile(
-            token: session.token,
-            username: originalProfile.username,
-            avatarURL: originalProfile.avatarURL,
-            bio: originalProfile.bio,
-            city: originalProfile.city,
-            birthday: originalProfile.birthday
-        )
-    }
-
-    launchAuthenticatedApp()
-    waitFor("screen.flow.content", timeout: 30)
-    tap("side-menu.open")
-    tap("side-menu.settings")
-    waitFor("screen.settings.loaded", timeout: 20)
-    tap("settings.personal-data")
-    waitFor("screen.edit-profile.loaded", timeout: 20)
-    tap("edit-profile.avatar-smoke-upload")
-    waitForEditProfileAvatarUploadStatus("success", timeout: 45)
-
-    let uploadedProfile = waitForCurrentSmokeProfileAvatarChanged(
-        token: session.token,
-        previousAvatarURL: originalProfile.avatarURL
-    )
-    XCTAssertTrue(
-        uploadedProfile.avatarURL.hasPrefix("/"),
-        "The live fixture must exercise a backend-relative avatar URL"
-    )
-
-    let runID = Int(Date().timeIntervalSince1970)
-    var cardIDs: [String] = []
-    for index in 0..<3 {
-        cardIDs.append(
-            try createPublicSmokeCard(
-                token: session.token,
-                searchToken: "flow-glass-\(runID)-\(index)"
-            )
-        )
-    }
-    defer {
-        for cardID in cardIDs {
-            permanentlyCleanUpSmokeCard(id: cardID, token: session.token)
-        }
-    }
-
-    app.terminate()
-    launchAuthenticatedApp()
-    waitFor("screen.flow.content", timeout: 30)
-
-    let visibleCardID = flowVisibleCardID()
-    XCTAssertTrue(
-        cardIDs.contains(visibleCardID),
-        "A fresh authored card must be foreground so its uploaded avatar is visible"
-    )
-    captureVisual("flow-glass-avatar-stack")
-
-    waitFor("flow.card.\(visibleCardID)").swipeLeft()
-    XCTAssertNotEqual(
-        waitForDifferentVisibleFlowCard(from: visibleCardID),
-        visibleCardID
-    )
-}
-```
-
-This fixture restores the original profile and permanently removes all three cards even when an assertion fails.
+The paginated lookup and bounded navigation are explicit deviations from the
+original immediate-foreground assumption; they keep the live test deterministic
+without weakening its production-route coverage.
 
 - [ ] **Step 2: Compile the new UI test before running live dependencies**
 
 ```bash
 xcodebuild build-for-testing \
   -project ArcNote.xcodeproj \
-  -scheme ArcNote \
+  -scheme ArcNoteUITests \
   -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
   -derivedDataPath /tmp/chorai-flow-glass-derived \
   CODE_SIGNING_ALLOWED=NO
@@ -538,7 +480,7 @@ Expected: `** TEST BUILD SUCCEEDED **`.
 swift test --package-path Packages/CoreFlow --filter FlowCardPresentationSourceContractTests
 ```
 
-Expected: 5 tests pass with 0 failures.
+Expected: 6 tests pass with 0 failures.
 
 - [ ] **Step 4: Run the complete CoreFlow suite**
 
@@ -574,16 +516,16 @@ Expected: config validation succeeds, the Local profile resolves to port 8180, a
 ```bash
 xcodebuild test \
   -project ArcNote.xcodeproj \
-  -scheme ArcNote \
+  -scheme ArcNoteUITests \
   -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
   -derivedDataPath /tmp/chorai-flow-glass-derived \
   -resultBundlePath /tmp/ChoraiFlowGlass-20260721.xcresult \
-  -only-testing:ArcNoteUITests/ArcNoteUITests/testFlowGlassDeckRendersUploadedRelativeAvatarAndThreeCardStack \
+  -only-testing:ArcNoteUITests/ArcNoteUITests/testFlowGlassDeckRendersReusableRelativeAvatarAndThreeCardStack \
   -only-testing:ArcNoteUITests/ArcNoteUITests/testFlowFavoriteIconActivatesWithoutAdvancingCard \
   CODE_SIGNING_ALLOWED=NO
 ```
 
-Expected: 2 tests pass with 0 failures. The new fixture proves the backend returned a relative avatar path, creates enough fresh authored cards for two truthful rear layers, preserves swipe, and keeps `flow-glass-avatar-stack`; the existing test proves engagement ordering and Spark placement remain unchanged.
+Expected: 2 tests pass with 0 failures. The new fixture proves the backend returns or preserves a reusable relative avatar path without creating a new upload, creates enough fresh authored cards for two truthful rear layers, follows paginated recommendations to the target, preserves swipe, and keeps `flow-glass-avatar-stack`; the existing test proves engagement ordering and Spark placement remain unchanged.
 
 - [ ] **Step 8: Export and inspect the screenshot**
 
@@ -593,7 +535,7 @@ xcrun xcresulttool export attachments \
   --output-path /tmp/ChoraiFlowGlassAttachments-20260721
 ```
 
-Expected: the export manifest lists the kept `flow-glass-avatar-stack` and `flow-compact-icon-chrome` attachments. Open `flow-glass-avatar-stack` and the approved reference at `/Users/luffylu/.codex/attachments/1e4c906b-cb0d-4690-9368-879a9de7239c/image-2.png` with the local image viewer.
+Expected: the export manifest lists the kept `flow-glass-avatar-stack` and `flow-compact-icon-chrome` attachments. Open `flow-glass-avatar-stack` and the approved reference, then commit the accepted images under `docs/qa/assets/ios-flow-glass-card-stack` so the comparison remains portable.
 
 Confirm all of the following in the same dark-mode state:
 
@@ -611,11 +553,11 @@ Run the focused UI journey once with Increase Contrast enabled:
 xcrun simctl ui booted increase_contrast enabled
 xcodebuild test \
   -project ArcNote.xcodeproj \
-  -scheme ArcNote \
+  -scheme ArcNoteUITests \
   -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
   -derivedDataPath /tmp/chorai-flow-glass-contrast-derived \
   -resultBundlePath /tmp/ChoraiFlowGlassContrast-20260721.xcresult \
-  -only-testing:ArcNoteUITests/ArcNoteUITests/testFlowGlassDeckRendersUploadedRelativeAvatarAndThreeCardStack \
+  -only-testing:ArcNoteUITests/ArcNoteUITests/testFlowGlassDeckRendersReusableRelativeAvatarAndThreeCardStack \
   CODE_SIGNING_ALLOWED=NO
 xcrun simctl ui booted increase_contrast disabled
 ```
@@ -628,7 +570,7 @@ Run the existing interaction journey at Accessibility XXXL and restore the norma
 xcrun simctl ui booted content_size accessibility-extra-extra-extra-large
 xcodebuild test \
   -project ArcNote.xcodeproj \
-  -scheme ArcNote \
+  -scheme ArcNoteUITests \
   -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
   -derivedDataPath /tmp/chorai-flow-glass-xxxl-derived \
   -resultBundlePath /tmp/ChoraiFlowGlassXXXL-20260721.xcresult \
@@ -670,8 +612,8 @@ Create `docs/qa/ios-flow-glass-card-stack-design-qa.md` with this exact evidence
 
 ## Visual truth
 
-- Approved reference: `/Users/luffylu/.codex/attachments/1e4c906b-cb0d-4690-9368-879a9de7239c/image-2.png`
-- Live capture: `flow-glass-avatar-stack` in `/tmp/ChoraiFlowGlass-20260721.xcresult`
+- Approved reference: `docs/qa/assets/ios-flow-glass-card-stack/approved-reference.png`
+- Live capture: `docs/qa/assets/ios-flow-glass-card-stack/main-dark.png`
 - Viewport: iPhone 17 Pro Simulator, dark appearance
 
 ## Findings
@@ -686,12 +628,12 @@ No actionable P0, P1, or P2 mismatch remains.
 
 ## Verification
 
-- `swift test --package-path Packages/CoreFlow --filter FlowCardPresentationSourceContractTests`: 5 tests passed, 0 failed.
+- `swift test --package-path Packages/CoreFlow --filter FlowCardPresentationSourceContractTests`: 6 tests passed, 0 failed.
 - `swift test --package-path Packages/CoreFlow`: full suite passed, 0 failed.
 - Local `ArcNote` generic Simulator build: passed.
 - `ArcNote Production` generic Simulator build: passed.
-- Default relative-avatar and interaction journeys: 2 tests passed, 0 failed.
-- `testFlowGlassDeckRendersUploadedRelativeAvatarAndThreeCardStack`, Increased Contrast: 1 test passed, 0 failed.
+- Default relative-avatar and interaction journeys through the `ArcNoteUITests` scheme: 2 tests passed, 0 failed.
+- `testFlowGlassDeckRendersReusableRelativeAvatarAndThreeCardStack`, Increased Contrast: 1 test passed, 0 failed.
 - `testFlowFavoriteIconActivatesWithoutAdvancingCard`, Accessibility XXXL: 1 test passed, 0 failed.
 - Reduce Transparency visual inspection: passed.
 
@@ -721,7 +663,7 @@ Expected: no whitespace errors; only the intended QA file remains uncommitted af
 - [ ] **Step 4: Commit the QA evidence**
 
 ```bash
-git add docs/qa/ios-flow-glass-card-stack-design-qa.md
+git add docs/qa/ios-flow-glass-card-stack-design-qa.md docs/qa/assets/ios-flow-glass-card-stack
 git commit -m "docs: record iOS Flow glass QA"
 ```
 
@@ -737,4 +679,4 @@ xcodebuild -project ArcNote.xcodeproj -scheme 'ArcNote Production' -destination 
 git status --short
 ```
 
-Expected: focused and full tests pass, both builds succeed, and the worktree is clean after the four implementation/test/QA commits.
+Expected: focused and full tests pass, both builds succeed, and no Flow-scoped path remains uncommitted. Preserve unrelated concurrent worktree changes.

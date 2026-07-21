@@ -41,6 +41,7 @@ final class FlowCardPresentationSourceContractTests: XCTestCase {
 
     func testFlowAvatarCanonicalizesRelativeResourceURLBeforeLoading() throws {
         let source = try flowCardSource()
+        let authorButtonSource = try flowAuthorButtonSource()
 
         XCTAssertTrue(
             source.contains("APIConfiguration.resourceURLString(rawURL)"),
@@ -53,6 +54,14 @@ final class FlowCardPresentationSourceContractTests: XCTestCase {
         XCTAssertTrue(
             source.contains(".frame(width: 32, height: 32)"),
             "The approved Flow avatar is a stable 32-point circle"
+        )
+        XCTAssertTrue(
+            authorButtonSource.contains(".frame(minHeight: 44)"),
+            "The author action must keep a 44-point minimum tap target"
+        )
+        XCTAssertTrue(
+            authorButtonSource.contains(".contentShape(Rectangle())"),
+            "The author action must make its padded target hittable"
         )
         XCTAssertTrue(
             source.contains("case .failure:"),
@@ -83,11 +92,41 @@ final class FlowCardPresentationSourceContractTests: XCTestCase {
         XCTAssertTrue(source.contains(".accessibilityHidden(true)"))
     }
 
+    func testFlowGlassUIFixtureReusesExistingAvatarArtifact() throws {
+        let source = try flowGlassUITestSource()
+
+        XCTAssertTrue(
+            source.contains("reusableRelativeAvatarURL"),
+            "The Flow fixture must reuse an existing avatar resource"
+        )
+        XCTAssertFalse(
+            source.contains("avatar-smoke-upload"),
+            "The Flow fixture must not create an orphaned upload or consume the avatar upload limit"
+        )
+        XCTAssertFalse(
+            source.contains("waitForEditProfileAvatarUploadStatus"),
+            "The Flow fixture must not depend on an upload mutation"
+        )
+    }
+
     private func flowCardSource() throws -> String {
         let source = try flowViewSource()
         guard let start = source.range(of: "struct FlowCardView: View"),
               let end = source.range(of: "struct FlowDeckView: View") else {
             XCTFail("Unable to isolate FlowCardView source")
+            return ""
+        }
+        return String(source[start.lowerBound..<end.lowerBound])
+    }
+
+    private func flowAuthorButtonSource() throws -> String {
+        let source = try flowCardSource()
+        guard let start = source.range(of: "Button(action: onOpenAuthor)"),
+              let end = source.range(
+                of: "Spacer()",
+                range: start.upperBound..<source.endIndex
+              ) else {
+            XCTFail("Unable to isolate the Flow author button")
             return ""
         }
         return String(source[start.lowerBound..<end.lowerBound])
@@ -99,6 +138,23 @@ final class FlowCardPresentationSourceContractTests: XCTestCase {
                 .appendingPathComponent("ArcNote/CoreFlow/FlowViews.swift"),
             encoding: .utf8
         )
+    }
+
+    private func flowGlassUITestSource() throws -> String {
+        let source = try String(
+            contentsOf: Self.repositoryRoot
+                .appendingPathComponent("ArcNoteUITests/ArcNoteUITests.swift"),
+            encoding: .utf8
+        )
+        guard let start = source.range(of: "func testFlowGlassDeckRenders"),
+              let end = source.range(
+                of: "func testFlowFavoriteIconActivatesWithoutAdvancingCard",
+                range: start.upperBound..<source.endIndex
+              ) else {
+            XCTFail("Unable to isolate the Flow glass UI fixture")
+            return ""
+        }
+        return String(source[start.lowerBound..<end.lowerBound])
     }
 
     private static var repositoryRoot: URL {

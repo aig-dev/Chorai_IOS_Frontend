@@ -3375,61 +3375,48 @@ final class ArcNoteUITests: XCTestCase {
         )
     }
 
-    func testFlowGlassDeckRendersUploadedRelativeAvatarAndThreeCardStack() throws {
+    func testFlowGlassDeckRendersReusableRelativeAvatarAndThreeCardStack() throws {
         let session = try requireSmokeSession()
         seedAppSession(session)
 
         let originalProfile = try fetchCurrentSmokeProfile(token: session.token)
-        let originalAvatarURL = originalProfile.avatarURL
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !originalAvatarURL.isEmpty else {
-            throw XCTSkip("The smoke profile needs an avatar that can be restored")
-        }
-        addTeardownBlock { [self] in
-            try updateCurrentSmokeAvatar(
-                token: session.token,
-                avatarURL: originalAvatarURL
-            )
+        let relativeAvatarURL = try reusableRelativeAvatarURL(
+            from: originalProfile.avatarURL
+        )
+        if relativeAvatarURL != originalProfile.avatarURL {
+            addTeardownBlock { [self] in
+                try updateCurrentSmokeProfile(
+                    token: session.token,
+                    username: originalProfile.username,
+                    avatarURL: originalProfile.avatarURL,
+                    bio: originalProfile.bio,
+                    city: originalProfile.city,
+                    birthday: originalProfile.birthday
+                )
+                let restoredProfile = try fetchCurrentSmokeProfile(
+                    token: session.token
+                )
+                XCTAssertEqual(restoredProfile.username, originalProfile.username)
+                XCTAssertEqual(restoredProfile.avatarURL, originalProfile.avatarURL)
+                XCTAssertEqual(restoredProfile.bio, originalProfile.bio)
+                XCTAssertEqual(restoredProfile.city, originalProfile.city)
+                XCTAssertEqual(restoredProfile.birthday, originalProfile.birthday)
+            }
             try updateCurrentSmokeProfile(
                 token: session.token,
                 username: originalProfile.username,
-                avatarURL: originalAvatarURL,
+                avatarURL: relativeAvatarURL,
                 bio: originalProfile.bio,
                 city: originalProfile.city,
                 birthday: originalProfile.birthday
             )
-            let restoredProfile = try fetchCurrentSmokeProfile(
-                token: session.token
-            )
-            XCTAssertEqual(restoredProfile.username, originalProfile.username)
-            XCTAssertEqual(restoredProfile.avatarURL, originalAvatarURL)
-            XCTAssertEqual(restoredProfile.bio, originalProfile.bio)
-            XCTAssertEqual(restoredProfile.city, originalProfile.city)
-            XCTAssertEqual(restoredProfile.birthday, originalProfile.birthday)
         }
 
-        launchAuthenticatedApp()
-        waitFor("screen.flow.content", timeout: 30)
-        tap("side-menu.open")
-        let settings = app.buttons["Settings"]
+        let fixtureProfile = try fetchCurrentSmokeProfile(token: session.token)
         XCTAssertTrue(
-            settings.waitForExistence(timeout: 10),
-            "The open side menu must expose Settings"
-        )
-        settings.tap()
-        waitFor("screen.settings.loaded", timeout: 20)
-        tap("settings.personal-data")
-        waitFor("screen.edit-profile.loaded", timeout: 20)
-        tap("edit-profile.avatar-smoke-upload")
-        waitForEditProfileAvatarUploadStatus("success", timeout: 45)
-
-        let uploadedProfile = waitForCurrentSmokeProfileAvatarChanged(
-            token: session.token,
-            previousAvatarURL: originalProfile.avatarURL
-        )
-        XCTAssertTrue(
-            uploadedProfile.avatarURL.hasPrefix("/"),
-            "The live fixture must exercise a backend-relative avatar URL"
+            fixtureProfile.avatarURL.hasPrefix("/")
+                && !fixtureProfile.avatarURL.hasPrefix("//"),
+            "The reusable fixture must exercise a backend-relative avatar URL"
         )
 
         let runID = Int(Date().timeIntervalSince1970)
@@ -3453,7 +3440,6 @@ final class ArcNoteUITests: XCTestCase {
             timeout: 45
         )
 
-        app.terminate()
         launchAuthenticatedApp()
         waitFor("screen.flow.content", timeout: 30)
 
@@ -9220,29 +9206,61 @@ final class ArcNoteUITests: XCTestCase {
         _ = try sendRawRequest(request)
     }
 
-    private func updateCurrentSmokeAvatar(
-        token: String,
-        avatarURL: String
-    ) throws {
-        let baseURL = UITestAPIConfiguration.baseURL
-        guard let url = URL(string: "\(baseURL)/api/v1/profile/me/avatar") else {
-            throw NSError(
-                domain: "ArcNoteUITests",
-                code: 14,
-                userInfo: [
-                    NSLocalizedDescriptionKey: "Invalid Go profile avatar URL"
-                ]
+    private func reusableRelativeAvatarURL(from rawURL: String) throws -> String {
+        let configuredURL = ProcessInfo.processInfo.environment[
+            "CHORAI_UI_TEST_FLOW_RELATIVE_AVATAR_URL"
+        ]
+        let candidate = (configuredURL ?? rawURL)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !candidate.isEmpty else {
+            throw XCTSkip(
+                "The smoke profile needs a reusable avatar resource"
+            )
+        }
+        if candidate.hasPrefix("/") && !candidate.hasPrefix("//") {
+            return candidate
+        }
+
+        guard let avatarURL = URL(string: candidate),
+              let baseURL = URL(string: UITestAPIConfiguration.baseURL),
+              avatarURL.scheme?.lowercased() == baseURL.scheme?.lowercased(),
+              normalizedSmokeHost(avatarURL.host) == normalizedSmokeHost(baseURL.host),
+              effectivePort(for: avatarURL) == effectivePort(for: baseURL),
+              let components = URLComponents(url: avatarURL, resolvingAgainstBaseURL: false) else {
+            throw XCTSkip(
+                "Set CHORAI_UI_TEST_FLOW_RELATIVE_AVATAR_URL to a reusable same-origin avatar path"
             )
         }
 
-        var request = URLRequest(url: url)
-        request.httpMethod = "PUT"
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONSerialization.data(withJSONObject: [
-            "avatar_url": avatarURL
-        ])
-        _ = try sendRawRequest(request)
+        let path = components.percentEncodedPath
+        guard path.hasPrefix("/"), path.count > 1 else {
+            throw XCTSkip("The reusable avatar URL needs a non-root resource path")
+        }
+        if let query = components.percentEncodedQuery, !query.isEmpty {
+            return "\(path)?\(query)"
+        }
+        return path
+    }
+
+    private func normalizedSmokeHost(_ host: String?) -> String? {
+        guard let host = host?.lowercased() else { return nil }
+        if ["localhost", "127.0.0.1", "::1"].contains(host) {
+            return "loopback"
+        }
+        return host
+    }
+
+    private func effectivePort(for url: URL) -> Int? {
+        if let port = url.port { return port }
+        switch url.scheme?.lowercased() {
+        case "http":
+            return 80
+        case "https":
+            return 443
+        default:
+            return nil
+        }
     }
 
     private func waitForCurrentSmokeProfile(token: String, bio: String, city: String, timeout: TimeInterval = 15, file: StaticString = #filePath, line: UInt = #line) {
