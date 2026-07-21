@@ -1,652 +1,345 @@
+import Combine
+import CoreFlow
 import SwiftUI
 
-struct SearchView: View {
-    @Environment(\.dismiss) private var dismiss
-    @State private var searchText = ""
-    @State private var selectedCollection = "All"
-    @State private var selectedLabel = "All"
-    @State private var selectedTime = "All"
-    @ObservedObject private var searchManager = SearchManager.shared
-    @StateObject private var searchCardsManager = HomeCardsManager()
-    @State private var selectedCardId: String?
-    @State private var navigateToDetail = false
-    @State private var navigateToEdit = false
-    @State private var showPopupMenu = false
-    @State private var popupMenuLayout: PopupMenuLayout = .grid3x3
-    @State private var currentMenuCardData: UserCard?
-    @State private var isCurrentMenuCardOwned = false
-    @FocusState private var isSearchFieldFocused: Bool
-    @State private var lastSearchQuery = ""
-    @State private var isShowingFilters = true
-    
-    // MARK: - 计算属性
-    
-    private var searchInputBackground: some View {
-        RoundedRectangle(cornerRadius: 30)
-            .fill(.ultraThinMaterial.opacity(0.3))
-            .overlay(searchInputTopLeftHighlight)
-            .overlay(searchInputBottomRightHighlight)
-            .overlay(searchInputTopEdgeHighlight)
-            .overlay(searchInputBottomEdgeHighlight)
-    }
-    
-    private var searchInputTopLeftHighlight: some View {
-        RoundedRectangle(cornerRadius: 30)
-            .stroke(Color.white, lineWidth: 1)
-            .offset(x: 0, y: -1)
-            .mask(
-                RoundedRectangle(cornerRadius: 30)
-                    .fill(
-                        RadialGradient(
-                            colors: [Color.white, Color.clear],
-                            center: .topLeading,
-                            startRadius: 10,
-                            endRadius: 35
-                        )
-                    )
-            )
-    }
-    
-    private var searchInputBottomRightHighlight: some View {
-        RoundedRectangle(cornerRadius: 30)
-            .stroke(Color.white, lineWidth: 1)
-            .offset(x: 0, y: 0)
-            .mask(
-                RoundedRectangle(cornerRadius: 30)
-                    .fill(
-                        RadialGradient(
-                            colors: [Color.white, Color.clear],
-                            center: .bottomTrailing,
-                            startRadius: 10,
-                            endRadius: 35
-                        )
-                    )
-            )
-    }
-    
-    private var searchInputTopEdgeHighlight: some View {
-        RoundedRectangle(cornerRadius: 30)
-            .stroke(Color.white, lineWidth: 1)
-            .offset(x: 0, y: -1)
-            .mask(
-                RoundedRectangle(cornerRadius: 30)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.white, Color.clear],
-                            startPoint: .top,
-                            endPoint: UnitPoint(x: 0, y: 0.05)
-                        )
-                    )
-            )
-    }
-    
-    private var searchInputBottomEdgeHighlight: some View {
-        RoundedRectangle(cornerRadius: 30)
-            .stroke(Color.white, lineWidth: 1)
-            .offset(x: 0, y: 1)
-            .mask(
-                RoundedRectangle(cornerRadius: 30)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.white, Color.clear],
-                            startPoint: .bottom,
-                            endPoint: UnitPoint(x: 1, y: 0.05)
-                        )
-                    )
-            )
+struct LibrarySearchCard: Identifiable {
+    let source: UserAllCard
+    let card: UserCard
+
+    init(source: UserAllCard) {
+        self.source = source
+        card = source.libraryUserCard
     }
 
-    private var filteredSearchCards: [SearchCard] {
-        searchManager.searchResults.filter { card in
-            matchesCollection(card) && matchesLabel(card) && matchesTime(card)
+    var id: String { card.id }
+    var author: UserAllCardAuthor? { source.author }
+}
+
+final class LibrarySearchManager: ObservableObject {
+    typealias SearchRequest = (
+        _ query: String,
+        _ scope: LibrarySearchScope
+    ) -> AnyPublisher<[UserAllCard], NetworkError>
+
+    @Published private(set) var results: [LibrarySearchCard] = []
+    @Published private(set) var isLoading = false
+    @Published private(set) var error: NetworkError?
+
+    private var rawResults: [LibrarySearchCard] = []
+    private var requestCancellable: AnyCancellable?
+    private var activeRequestID: UUID?
+    private let searchRequest: SearchRequest
+
+    init(searchRequest: SearchRequest? = nil) {
+        self.searchRequest = searchRequest ?? { query, scope in
+            NetworkManager.shared.getUserAllCards(
+                searchType: scope.apiSearchType,
+                search: query,
+                limit: 200
+            )
+            .map { response in
+                switch scope {
+                case .notes:
+                    response.data.ownCards
+                case .collect:
+                    response.data.favoritedCards
+                }
+            }
+            .eraseToAnyPublisher()
         }
     }
-    
-    var body: some View {
-        VStack(spacing: 0) {
-                HStack(alignment: .center, spacing: 16) {
-                    Button(action: {
-                        dismiss()
-                    }) {
-                        Image(systemName: "chevron.left")
-                            .font(.title2)
-                            .foregroundColor(.white)
-                    }
-                    
-                    HStack(spacing: 12) {
-                        Image(systemName: "magnifyingglass")
-                            .foregroundColor(.white.opacity(0.7))
-                        
-                        TextField("Please enter your search...", text: $searchText)
-                            .foregroundColor(.white)
-                            .textFieldStyle(PlainTextFieldStyle())
-                            .placeholder(when: searchText.isEmpty) {
-                                Text("Please enter your search...")
-                                    .foregroundColor(.white.opacity(0.5))
-                            }
-                            .focused($isSearchFieldFocused)
-                            .submitLabel(.search)
-                            .onSubmit {
-                                performSearch(reset: true)
-                            }
-                        
-                        if !searchText.isEmpty {
-                            Button(action: {
-                                searchText = ""
-                            }) {
-                                Image(systemName: "xmark.circle.fill")
-                                    .foregroundColor(.white.opacity(0.7))
-                            }
-                        }
-                    }
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 13)
-                    .background(searchInputBackground)
+
+    func search(
+        query: String,
+        scope: LibrarySearchScope,
+        sort: LibrarySortOption
+    ) {
+        requestCancellable?.cancel()
+
+        let requestID = UUID()
+        activeRequestID = requestID
+        rawResults = []
+        results = []
+        error = nil
+        isLoading = true
+
+        requestCancellable = searchRequest(query, scope)
+        .receive(on: DispatchQueue.main)
+        .sink(
+            receiveCompletion: { [weak self] completion in
+                guard let self,
+                      requestID == self.activeRequestID else {
+                    return
                 }
-                .adaptiveContentGutter()
-                
-                
-                ScrollView {
-                    VStack(spacing: 30) {
-                        if isShowingFilters {
-                            filtersSection
-                        } else {
-                            searchResultsSection
-                        }
-                    }
-                    .adaptiveContentGutter()
-                    .padding(.top, 30)
-                    .padding(.bottom, 120)
+                self.isLoading = false
+                if case let .failure(error) = completion {
+                    self.error = error
                 }
-                .refreshable {
-                    if !lastSearchQuery.isEmpty {
-                        performSearch(reset: true, queryOverride: lastSearchQuery)
-                    }
+            },
+            receiveValue: { [weak self] cards in
+                guard let self,
+                      requestID == self.activeRequestID else {
+                    return
                 }
-        }
-        .popupMenu(
-            isPresented: $showPopupMenu,
-            layout: popupMenuLayout,
-            cardData: currentMenuCardData,
-            isOwnCard: isCurrentMenuCardOwned
-        )
-        .navigationDestination(isPresented: $navigateToDetail) {
-            if let cardId = selectedCardId {
-                DetailView(cardId: cardId)
-            } else {
-                EmptyView()
+
+                self.rawResults = cards.map(LibrarySearchCard.init(source:))
+                self.applySort(sort)
             }
-        }
-        .navigationDestination(isPresented: $navigateToEdit) {
-            NewNoteView(cardId: selectedCardId ?? "")
-        }
-        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NavigateToEdit"))) { notification in
-            if let cardId = notification.userInfo?["cardId"] as? String {
-                selectedCardId = cardId
-                DispatchQueue.main.async {
-                    navigateToEdit = true
-                }
-            }
-        }
-        .onAppear {
-            isSearchFieldFocused = true
-        }
-        .onChange(of: searchText) { newValue in
-            if newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                searchManager.clearSearchResults()
-                lastSearchQuery = ""
-                withAnimation(.easeInOut(duration: 0.25)) {
-                    isShowingFilters = true
-                }
-            }
-        }
-        .onChange(of: searchManager.searchResults.count) { newValue in
-            if newValue > 0 {
-                withAnimation(.easeInOut(duration: 0.25)) {
-                    isShowingFilters = false
-                }
-            }
-        }
-        .onChange(of: selectedCollection) { _ in
-            showResultsIfNeeded()
-        }
-        .onChange(of: searchManager.isLoading) { newValue in
-            if newValue && !lastSearchQuery.isEmpty {
-                withAnimation(.easeInOut(duration: 0.25)) {
-                    isShowingFilters = false
-                }
-            }
-        }
-        .onChange(of: selectedLabel) { _ in
-            showResultsIfNeeded()
-        }
-        .onChange(of: selectedTime) { _ in
-            showResultsIfNeeded()
-        }
-        .navigationBarHidden(true)
-        .background(
-            Image("home_bg")
-                .resizable()
-                .aspectRatio(contentMode: .fill)
-                .ignoresSafeArea()
         )
     }
-    
-    @ViewBuilder
-    private var searchResultsSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            
-            if searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && searchManager.searchResults.isEmpty {
-                Text("Type a keyword and press return to search across your notes and community cards.")
-                    .font(.system(size: 14, weight: .regular))
-                    .foregroundColor(.white.opacity(0.6))
-                    .padding(20)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(
-                        RoundedRectangle(cornerRadius: 16)
-                            .fill(Color.white.opacity(0.08))
-                    )
-            } else if searchManager.isLoading && searchManager.searchResults.isEmpty {
-                HStack {
-                    Spacer()
-                    RotatingLoaderView()
-                    Spacer()
-                }
-                .padding(.vertical, 40)
-            } else if filteredSearchCards.isEmpty {
-                VStack(spacing: 8) {
-                    Image(systemName: "doc.text.magnifyingglass")
-                        .font(.system(size: 36))
-                        .foregroundColor(.white.opacity(0.5))
-                    Text("No results match the current filters")
-                        .font(.system(size: 14, weight: .regular))
-                        .foregroundColor(.white.opacity(0.7))
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 60)
-            } else {
-                LazyVStack(spacing: 20) {
-                    ForEach(Array(filteredSearchCards.enumerated()), id: \.element.id) { index, searchCard in
-                        let userCard = convertToUserCard(searchCard)
-                        Group {
-                            if userCard.rate < 3 {
-                                NotesCard(
-                                    card: userCard,
-                                    onShowMenu: { card in
-                                        let isOwnCard = isOwnedByCurrentUser(authorId: searchCard.author.id)
-                                        handleShowMenu(for: card, isOwnCard: isOwnCard)
-                                    },
-                                    cardsManager: searchCardsManager,
-                                    onCardTap: { cardId in
-                                        handleCardTap(cardId)
-                                    }
-                                )
-                            } else {
-                                NotesColorCard(
-                                    card: userCard,
-                                    onShowMenu: { card in
-                                        let isOwnCard = isOwnedByCurrentUser(authorId: searchCard.author.id)
-                                        handleShowMenu(for: card, isOwnCard: isOwnCard)
-                                    },
-                                    cardsManager: searchCardsManager,
-                                    onCardTap: { cardId in
-                                        handleCardTap(cardId)
-                                    }
-                                )
-                            }
-                        }
-                        .onAppear {
-                            handleLoadMoreIfNeeded(currentIndex: index)
-                        }
-                    }
-                    
-                    if searchManager.isLoading && !filteredSearchCards.isEmpty {
-                        RotatingLoaderView()
-                            .padding(.top, 10)
-                    }
-                }
-            }
+
+    func applySort(_ sort: LibrarySortOption) {
+        results = rawResults.sorted { lhs, rhs in
+            Self.precedes(lhs, rhs, descriptor: sort.descriptor)
         }
     }
-    
-    @ViewBuilder
-    private var filtersSection: some View {
-        VStack(alignment: .leading, spacing: 30) {
-            VStack(alignment: .leading, spacing: 16) {
-                Text("My Collection")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(.white)
-                
-                FlowLayout(
-                    spacing: 12,
-                    items: ["All", "My Notes", "Favorite", "Community"],
-                    isSelected: { selectedCollection == $0 },
-                    onTap: { selectedCollection = $0 }
-                )
-            }
-            
-            VStack(alignment: .leading, spacing: 16) {
-                Text("Label")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(.white)
-                
-                FlowLayout(
-                    spacing: 12,
-                    items: ["All", "Design", "UI", "My Notes", "User Experience", "Mobile App"],
-                    isSelected: { selectedLabel == $0 },
-                    onTap: { selectedLabel = $0 }
-                )
-            }
-            
-            VStack(alignment: .leading, spacing: 16) {
-                Text("Time")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(.white)
-                
-                FlowLayout(
-                    spacing: 12,
-                    items: ["All", "Within a week", "Within a month", "Within three months"],
-                    isSelected: { selectedTime == $0 },
-                    onTap: { selectedTime = $0 }
-                )
-            }
+
+    func clear() {
+        requestCancellable?.cancel()
+        requestCancellable = nil
+        activeRequestID = nil
+        rawResults = []
+        results = []
+        error = nil
+        isLoading = false
+    }
+
+    func remove(cardID: String) {
+        rawResults.removeAll { $0.id == cardID }
+        results.removeAll { $0.id == cardID }
+    }
+
+    private static func precedes(
+        _ lhs: LibrarySearchCard,
+        _ rhs: LibrarySearchCard,
+        descriptor: LibrarySortDescriptor
+    ) -> Bool {
+        let comparison: ComparisonResult
+
+        switch descriptor.field {
+        case .updatedAt:
+            comparison = compareDates(lhs.card.updatedAt, rhs.card.updatedAt)
+        case .createdAt:
+            comparison = compareDates(lhs.card.createdAt, rhs.card.createdAt)
+        case .rate:
+            comparison = compareInts(lhs.card.rate, rhs.card.rate)
+        }
+
+        if comparison == .orderedSame {
+            return lhs.id < rhs.id
+        }
+        switch descriptor.order {
+        case .ascending:
+            return comparison == .orderedAscending
+        case .descending:
+            return comparison == .orderedDescending
         }
     }
-    
-    private func performSearch(reset: Bool = false, queryOverride: String? = nil) {
-        let query = (queryOverride ?? searchText).trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else {
-            searchManager.clearSearchResults()
-            lastSearchQuery = ""
-            return
-        }
-        
-        lastSearchQuery = query
-        if reset {
-            searchManager.clearSearchResults()
-        }
-        
-        searchManager.searchCards(query: query) { _ in }
-        showResultsIfNeeded(animated: true)
+
+    private static func compareInts(_ lhs: Int, _ rhs: Int) -> ComparisonResult {
+        if lhs < rhs { return .orderedAscending }
+        if lhs > rhs { return .orderedDescending }
+        return .orderedSame
     }
-    
-    private func handleCardTap(_ cardId: String) {
-        selectedCardId = cardId
-        navigateToDetail = true
+
+    private static func compareDates(
+        _ lhs: String,
+        _ rhs: String
+    ) -> ComparisonResult {
+        let lhsDate = parseDate(lhs) ?? .distantPast
+        let rhsDate = parseDate(rhs) ?? .distantPast
+        return lhsDate.compare(rhsDate)
     }
-    
-    private func handleShowMenu(for card: UserCard, isOwnCard: Bool) {
-        currentMenuCardData = card
-        isCurrentMenuCardOwned = isOwnCard
-        popupMenuLayout = .grid3x3
-        showPopupMenu = true
-    }
-    
-    private func handleLoadMoreIfNeeded(currentIndex: Int) {
-        if currentIndex == filteredSearchCards.count - 1,
-           searchManager.hasMoreData,
-           !searchManager.isLoading,
-           !lastSearchQuery.isEmpty {
-            searchManager.loadMoreSearchResults(query: lastSearchQuery)
-        }
-    }
-    
-    private func matchesCollection(_ card: SearchCard) -> Bool {
-        guard let currentUserId = AuthManager.shared.currentUser?.id else {
-            return selectedCollection != "My Notes"
-        }
-        
-        switch selectedCollection {
-        case "All":
-            return true
-        case "My Notes":
-            return card.author.id == currentUserId
-        case "Favorite":
-            return card.isFavorited ?? false
-        case "Community":
-            return card.author.id != currentUserId
-        default:
-            return true
-        }
-    }
-    
-    private func matchesLabel(_ card: SearchCard) -> Bool {
-        guard selectedLabel != "All" else {
-            return true
-        }
-        return card.tags.contains { tag in
-            tag.localizedCaseInsensitiveContains(selectedLabel)
-        }
-    }
-    
-    private func matchesTime(_ card: SearchCard) -> Bool {
-        guard selectedTime != "All" else {
-            return true
-        }
-        guard let date = parseDate(card.updatedAt) ?? parseDate(card.createdAt) else {
-            return true
-        }
-        let interval = Date().timeIntervalSince(date)
-        switch selectedTime {
-        case "Within a week":
-            return interval <= 7 * 24 * 60 * 60
-        case "Within a month":
-            return interval <= 30 * 24 * 60 * 60
-        case "Within three months":
-            return interval <= 90 * 24 * 60 * 60
-        default:
-            return true
-        }
-    }
-    
-    private func parseDate(_ dateString: String) -> Date? {
-        let isoFormatter = ISO8601DateFormatter()
-        isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let date = isoFormatter.date(from: dateString) {
+
+    private static func parseDate(_ value: String) -> Date? {
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [
+            .withInternetDateTime,
+            .withFractionalSeconds,
+        ]
+        if let date = fractional.date(from: value) {
             return date
         }
-        isoFormatter.formatOptions = [.withInternetDateTime]
-        return isoFormatter.date(from: dateString)
-    }
-    
-    private func isOwnedByCurrentUser(authorId: String) -> Bool {
-        guard let currentUserId = AuthManager.shared.currentUser?.id else {
-            return false
-        }
-        return authorId == currentUserId
-    }
-    
-    private func convertToUserCard(_ card: SearchCard) -> UserCard {
-        return UserCard(
-            id: card.id,
-            title: card.title,
-            content: card.content,
-            contentJSON: card.contentJSON,
-            backgroundMediaRef: card.backgroundMediaRef,
-            contentHash: card.contentHash,
-            isPublic: card.isPublic,
-            tags: card.tags,
-            createdAt: card.createdAt,
-            updatedAt: card.updatedAt,
-            likeCount: card.likeCount,
-            commentCount: card.commentCount,
-            isLiked: card.isLiked ?? false,
-            isPinned: card.isPinned ?? false,
-            pinnedAt: card.pinnedAt,
-            isFavorited: card.isFavorited,
-            favoriteCount: card.favoriteCount,
-            rate: card.rate
-        )
-    }
-    
-    private func showResultsIfNeeded(animated: Bool = false) {
-        guard !searchManager.searchResults.isEmpty else { return }
-        if animated {
-            withAnimation(.easeInOut(duration: 0.25)) {
-                isShowingFilters = false
-            }
-        } else {
-            isShowingFilters = false
-        }
+        return ISO8601DateFormatter().date(from: value)
     }
 }
 
-// MARK: - 搜索筛选标签组件
-struct SearchFilterTag: View {
-    let title: String
-    let isSelected: Bool
-    let action: () -> Void
-    
+struct LibrarySearchResultsView: View {
+    let scope: LibrarySearchScope
+    @ObservedObject var manager: LibrarySearchManager
+    @ObservedObject var cardsManager: HomeCardsManager
+    let query: String
+    let onShowMenu: (LibrarySearchCard) -> Void
+    let onCardTap: (String) -> Void
+    let onAvatarTap: (String) -> Void
+    let onUnfavorite: (String) -> Void
+    let onRetry: () -> Void
+
     var body: some View {
-        Button(action: action) {
-            Text(title)
-                .font(.system(size: 14, weight: .medium))
-                .foregroundColor(isSelected ? .white : .white.opacity(0.7))
-                .lineLimit(1)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .background(tagBackground)
-        }
-        .animation(.easeInOut(duration: 0.2), value: isSelected)
-    }
-    
-    private var tagBackground: some View {
-        RoundedRectangle(cornerRadius: 20)
-            .fill(isSelected ? Color.white.opacity(0.3) : Color.white.opacity(0.1))
-            .overlay(tagTopLeftHighlight)
-            .overlay(tagBottomRightHighlight)
-            .overlay(tagTopEdgeHighlight)
-            .overlay(tagBottomEdgeHighlight)
-    }
-    
-    private var tagTopLeftHighlight: some View {
-        RoundedRectangle(cornerRadius: 20)
-            .stroke(Color.white, lineWidth: 1)
-            .offset(x: 0, y: -1)
-            .mask(
-                RoundedRectangle(cornerRadius: 20)
-                    .fill(
-                        RadialGradient(
-                            colors: [Color.white, Color.clear],
-                            center: .topLeading,
-                            startRadius: 5,
-                            endRadius: 20
-                        )
-                    )
-            )
-    }
-    
-    private var tagBottomRightHighlight: some View {
-        RoundedRectangle(cornerRadius: 20)
-            .stroke(Color.white, lineWidth: 1)
-            .offset(x: 0, y: 0)
-            .mask(
-                RoundedRectangle(cornerRadius: 20)
-                    .fill(
-                        RadialGradient(
-                            colors: [Color.white, Color.clear],
-                            center: .bottomTrailing,
-                            startRadius: 5,
-                            endRadius: 20
-                        )
-                    )
-            )
-    }
-    
-    private var tagTopEdgeHighlight: some View {
-        RoundedRectangle(cornerRadius: 20)
-            .stroke(Color.white, lineWidth: 1)
-            .offset(x: 0, y: -1)
-            .mask(
-                RoundedRectangle(cornerRadius: 20)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.white, Color.clear],
-                            startPoint: .top,
-                            endPoint: UnitPoint(x: 0, y: 0.05)
-                        )
-                    )
-            )
-    }
-    
-    private var tagBottomEdgeHighlight: some View {
-        RoundedRectangle(cornerRadius: 20)
-            .stroke(Color.white, lineWidth: 1)
-            .offset(x: 0, y: 1)
-            .mask(
-                RoundedRectangle(cornerRadius: 20)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.white, Color.clear],
-                            startPoint: .bottom,
-                            endPoint: UnitPoint(x: 1, y: 0.05)
-                        )
-                    )
-            )
-    }
-}
+        ScrollView {
+            LazyVStack(spacing: 20) {
+                resultSummary
 
-#Preview {
-    SearchView()
-}
-
-// MARK: - FlowLayout 组件
-struct FlowLayout: View {
-    @Environment(\.adaptiveLayoutMetrics) private var adaptiveLayout
-    let spacing: CGFloat
-    let items: [String]
-    let isSelected: (String) -> Bool
-    let onTap: (String) -> Void
-    
-    init(spacing: CGFloat = 12, items: [String], isSelected: @escaping (String) -> Bool, onTap: @escaping (String) -> Void) {
-        self.spacing = spacing
-        self.items = items
-        self.isSelected = isSelected
-        self.onTap = onTap
-    }
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: spacing) {
-            ForEach(0..<rows.count, id: \.self) { rowIndex in
-                HStack(spacing: spacing) {
-                    ForEach(rows[rowIndex], id: \.self) { item in
-                        SearchFilterTag(title: item, isSelected: isSelected(item)) {
-                            onTap(item)
-                        }
+                if manager.isLoading && manager.results.isEmpty {
+                    loadingState
+                } else if let error = manager.error,
+                          manager.results.isEmpty {
+                    errorState(error)
+                } else if manager.results.isEmpty {
+                    emptyState
+                } else {
+                    ForEach(manager.results) { result in
+                        resultCard(result)
                     }
-                    Spacer()
                 }
             }
+            .adaptiveContentGutter()
+            .padding(.top, 20)
+            .padding(.bottom, 120)
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("home.search.results")
     }
-    
-    private var rows: [[String]] {
-        var result: [[String]] = [[]]
-        var currentRow = 0
-        var currentWidth: CGFloat = 0
-        let maxWidth = max(0, adaptiveLayout.contentWidth)
-        
-        for item in items {
-            let itemWidth = estimateWidth(for: item)
-            
-            if currentWidth + itemWidth > maxWidth && !result[currentRow].isEmpty {
-                currentRow += 1
-                result.append([])
-                currentWidth = itemWidth + spacing
+
+    private var resultSummary: some View {
+        HStack(spacing: 8) {
+            Text(manager.isLoading ? "Searching…" : resultCountLabel)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(Color.white.opacity(0.82))
+
+            Text("for “\(query)”")
+                .font(.system(size: 14, weight: .regular))
+                .foregroundStyle(Color.white.opacity(0.56))
+                .lineLimit(1)
+
+            Spacer(minLength: 0)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private var resultCountLabel: String {
+        manager.results.count == 1 ? "1 result" : "\(manager.results.count) results"
+    }
+
+    private var loadingState: some View {
+        VStack(spacing: 14) {
+            RotatingLoaderView()
+            Text("Searching your Library")
+                .font(.system(size: 14, weight: .regular))
+                .foregroundStyle(Color.white.opacity(0.64))
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 96)
+        .accessibilityLabel("Searching your Library")
+    }
+
+    private func errorState(_ error: NetworkError) -> some View {
+        VStack(spacing: 14) {
+            Image(systemName: "exclamationmark.magnifyingglass")
+                .font(.system(size: 34, weight: .light))
+                .foregroundStyle(Color.white.opacity(0.62))
+
+            Text("Search couldn’t be completed")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(Color.white)
+
+            Text(error.localizedDescription)
+                .font(.system(size: 13, weight: .regular))
+                .foregroundStyle(Color.white.opacity(0.58))
+                .multilineTextAlignment(.center)
+
+            Button("Try Again", action: onRetry)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(Color.white)
+                .frame(minWidth: 120, minHeight: 44)
+                .background(
+                    Capsule().fill(Color.white.opacity(0.14))
+                )
+                .accessibilityIdentifier("home.search.retry")
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 72)
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "doc.text.magnifyingglass")
+                .font(.system(size: 38, weight: .light))
+                .foregroundStyle(Color.white.opacity(0.52))
+
+            Text("No Library results")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(Color.white.opacity(0.82))
+
+            Text("Try another title or phrase.")
+                .font(.system(size: 14, weight: .regular))
+                .foregroundStyle(Color.white.opacity(0.54))
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 96)
+        .accessibilityElement(children: .combine)
+    }
+
+    @ViewBuilder
+    private func resultCard(_ result: LibrarySearchCard) -> some View {
+        switch scope {
+        case .notes:
+            if result.card.rate < 3 {
+                NotesCard(
+                    card: result.card,
+                    onShowMenu: { _ in onShowMenu(result) },
+                    cardsManager: cardsManager,
+                    onCardTap: onCardTap
+                )
             } else {
-                currentWidth += itemWidth + spacing
+                NotesColorCard(
+                    card: result.card,
+                    onShowMenu: { _ in onShowMenu(result) },
+                    cardsManager: cardsManager,
+                    onCardTap: onCardTap
+                )
             }
-            
-            result[currentRow].append(item)
+
+        case .collect:
+            HomePostCard(
+                profileImage: result.author?.avatar ?? "",
+                name: result.author?.username ?? "Unknown author",
+                time: relativeTime(result.card.updatedAt),
+                content: result.card.content,
+                contentJSON: result.card.contentJSON,
+                backgroundMediaRef: result.card.backgroundMediaRef,
+                tags: result.card.tags,
+                showSpark: true,
+                favoriteCount: result.card.favoriteCount ?? 0,
+                cardId: result.card.id,
+                rate: result.card.rate,
+                authorId: result.author?.id,
+                onShowMenu: { _ in onShowMenu(result) },
+                onCardTap: onCardTap,
+                onUnfavorite: onUnfavorite,
+                onAvatarTap: onAvatarTap
+            )
         }
-        
-        return result
     }
-    
-    private func estimateWidth(for text: String) -> CGFloat {
-        let font = UIFont.systemFont(ofSize: 14, weight: .medium)
-        let attributes = [NSAttributedString.Key.font: font]
-        let size = (text as NSString).size(withAttributes: attributes)
-        return size.width + 32 + spacing // 32是左右内边距
+
+    private func relativeTime(_ value: String) -> String {
+        guard let date = Self.parseDate(value) else {
+            return "Recently updated"
+        }
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .abbreviated
+        return formatter.localizedString(for: date, relativeTo: Date())
     }
-} 
+
+    private static func parseDate(_ value: String) -> Date? {
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [
+            .withInternetDateTime,
+            .withFractionalSeconds,
+        ]
+        if let date = fractional.date(from: value) {
+            return date
+        }
+        return ISO8601DateFormatter().date(from: value)
+    }
+}

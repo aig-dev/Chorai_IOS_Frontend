@@ -2,6 +2,8 @@ import CoreFlow
 import SwiftUI
 
 struct HomeView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Binding var showSideMenu: Bool
     let refreshID: UUID
     var onboardingStore: OnboardingGuideStore?
@@ -12,7 +14,10 @@ struct HomeView: View {
     @State private var popupMenuLayout: PopupMenuLayout = .grid2x2
     @State private var showFilterTags = false
     @State private var selectedFilter = "Latest Edited" // 默认筛选
+    @State private var librarySearchSession = LibrarySearchSession()
     @StateObject private var cardsManager = HomeCardsManager()
+    @StateObject private var librarySearchManager = LibrarySearchManager()
+    @FocusState private var isLibrarySearchFocused: Bool
     @State private var currentCardId: String? = nil
     @State private var currentMenuCardData: UserCard? = nil
     @StateObject private var favoritesManager = FavoritesManager.shared
@@ -33,14 +38,18 @@ struct HomeView: View {
         showSideMenu: Binding<Bool>,
         refreshID: UUID,
         onboardingStore: OnboardingGuideStore? = nil,
-        onNoteCreated: @escaping (String, String) -> Void = { _, _ in }
+        onNoteCreated: @escaping (String, String) -> Void = { _, _ in },
+        librarySearchManager: LibrarySearchManager = LibrarySearchManager()
     ) {
         _showSideMenu = showSideMenu
+        _librarySearchManager = StateObject(
+            wrappedValue: librarySearchManager
+        )
         self.refreshID = refreshID
         self.onboardingStore = onboardingStore
         self.onNoteCreated = onNoteCreated
     }
-    
+
     // MARK: - 分段控制器背景
     private func segmentBackground(for segment: Int) -> some View {
         RoundedRectangle(cornerRadius: 16)
@@ -74,6 +83,10 @@ struct HomeView: View {
     // MARK: 应用排序
     private func applySort(sortBy: String, sortOrder: String) {
         print("应用排序: sortBy=\(sortBy), sortOrder=\(sortOrder)")
+        if librarySearchSession.submittedQuery != nil {
+            librarySearchManager.applySort(selectedSortOption)
+            return
+        }
         if selectedSegment == 0 {
             // NotesList 排序
             cardsManager.loadUserCards(refresh: true, sortBy: sortBy, sortOrder: sortOrder)
@@ -81,6 +94,90 @@ struct HomeView: View {
             // Favorites list follows the Go API contract: page/per_page only.
             favoritesManager.loadFavorites(refresh: true)
         }
+    }
+
+    private var selectedSortOption: LibrarySortOption {
+        LibrarySortOption(rawValue: selectedFilter) ?? .latestEdited
+    }
+
+    private var librarySearchQuery: Binding<String> {
+        Binding(
+            get: { librarySearchSession.draftQuery },
+            set: { value in
+                librarySearchSession.updateDraft(value)
+                if librarySearchSession.submittedQuery == nil {
+                    librarySearchManager.clear()
+                }
+            }
+        )
+    }
+
+    private func enterLibrarySearch() {
+        let scope: LibrarySearchScope = selectedSegment == 0
+            ? .notes
+            : .collect
+        showFilterTags = false
+
+        if reduceMotion {
+            librarySearchSession.enter(scope: scope)
+        } else {
+            withAnimation(.easeInOut(duration: 0.22)) {
+                librarySearchSession.enter(scope: scope)
+            }
+        }
+
+        DispatchQueue.main.async {
+            isLibrarySearchFocused = true
+        }
+    }
+
+    private func exitLibrarySearch() {
+        isLibrarySearchFocused = false
+        showFilterTags = false
+        librarySearchManager.clear()
+
+        if reduceMotion {
+            librarySearchSession.exit()
+        } else {
+            withAnimation(.easeInOut(duration: 0.22)) {
+                librarySearchSession.exit()
+            }
+        }
+    }
+
+    private func clearLibrarySearch() {
+        librarySearchManager.clear()
+        librarySearchSession.clear()
+        DispatchQueue.main.async {
+            isLibrarySearchFocused = true
+        }
+    }
+
+    private func submitLibrarySearch() {
+        guard let query = librarySearchSession.submit(),
+              let scope = librarySearchSession.scope else {
+            librarySearchManager.clear()
+            return
+        }
+
+        isLibrarySearchFocused = false
+        librarySearchManager.search(
+            query: query,
+            scope: scope,
+            sort: selectedSortOption
+        )
+    }
+
+    private func retryLibrarySearch() {
+        guard let query = librarySearchSession.submittedQuery,
+              let scope = librarySearchSession.scope else {
+            return
+        }
+        librarySearchManager.search(
+            query: query,
+            scope: scope,
+            sort: selectedSortOption
+        )
     }
     
     // MARK: - 分段控制器高光效果
@@ -149,14 +246,10 @@ struct HomeView: View {
                     )
             )
     }
-    
-    var body: some View {
-        VStack(spacing: 0) {
-            // 顶部导航栏
-            ZStack {
-                
+
+    private var libraryHeader: some View {
+        ZStack {
             HStack {
-                // 左侧按钮
                 Button(action: {
                     withAnimation(.easeInOut(duration: 0.3)) {
                         showSideMenu = true
@@ -166,77 +259,192 @@ struct HomeView: View {
                         .resizable()
                         .aspectRatio(contentMode: .fit)
                         .frame(width: 24, height: 24)
+                        .frame(minWidth: 44, minHeight: 44)
                 }
+                .accessibilityLabel("Open menu")
                 .accessibilityIdentifier("side-menu.open")
-                
+
                 Spacer()
-                
-                    // 右侧按钮组
-                    HStack(spacing: 16) {
-                        Button(action: {
-                            withAnimation(.easeInOut(duration: 0.3)) {
-                                showFilterTags.toggle()
-                            }
-                        }) {
-                            Image("filter")
-                                .resizable()
-                                .aspectRatio(contentMode: .fit)
-                                .frame(width: 24, height: 24)
-                        }
-                        
-                        NavigationLink(destination: SearchView()) {
-                            Image("search")
-                                .resizable()
-                                .aspectRatio(contentMode: .fit)
-                                .frame(width: 24, height: 24)
-                        }
-                        .accessibilityIdentifier("home.search")
-                    }
-                }
-                
-                // 分段控制器 绝对居中
-                HStack(spacing: 0) {
-                    // Notes 按钮
+
+                HStack(spacing: 8) {
                     Button(action: {
-                        withAnimation(.easeInOut(duration: 0.3)) {
-                            selectedSegment = 0
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            showFilterTags.toggle()
                         }
                     }) {
-                        Image(selectedSegment == 0 ? "notes_active" : "notes")
+                        Image("filter")
                             .resizable()
                             .aspectRatio(contentMode: .fit)
                             .frame(width: 24, height: 24)
-                            .frame(width: 50, height: 32)
-                            .background(segmentBackground(for: 0))
+                            .frame(minWidth: 44, minHeight: 44)
                     }
-                    .accessibilityIdentifier("home.segment.notes")
-                    
-                    // Collect 按钮
-                    Button(action: {
-                        withAnimation(.easeInOut(duration: 0.3)) {
-                            selectedSegment = 1
-                        }
-                    }) {
-                        Image(selectedSegment == 1 ? "collect_active" : "collect")
+                    .accessibilityLabel("Library filters")
+                    .accessibilityIdentifier("home.filter")
+
+                    Button(action: enterLibrarySearch) {
+                        Image("search")
                             .resizable()
                             .aspectRatio(contentMode: .fit)
                             .frame(width: 24, height: 24)
-                            .frame(width: 50, height: 32)
-                            .background(segmentBackground(for: 1))
+                            .frame(minWidth: 44, minHeight: 44)
                     }
-                    .accessibilityIdentifier("home.segment.collect")
+                    .accessibilityLabel("Search Library")
+                    .accessibilityHint("Replaces the Library header with a search field")
+                    .accessibilityIdentifier("home.search")
                 }
-                .padding(.horizontal, 4)
-                .padding(.vertical, 4)
-                .background(
-                    RoundedRectangle(cornerRadius: 20)
-                        .fill(Color.black.opacity(0.3))
+            }
+
+            HStack(spacing: 0) {
+                Button(action: {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        selectedSegment = 0
+                    }
+                }) {
+                    Image(selectedSegment == 0 ? "notes_active" : "notes")
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 24, height: 24)
+                        .frame(width: 50, height: 32)
+                        .background(segmentBackground(for: 0))
+                }
+                .frame(minWidth: 44, minHeight: 44)
+                .accessibilityLabel("Notes")
+                .accessibilityIdentifier("home.segment.notes")
+
+                Button(action: {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        selectedSegment = 1
+                    }
+                }) {
+                    Image(selectedSegment == 1 ? "collect_active" : "collect")
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 24, height: 24)
+                        .frame(width: 50, height: 32)
+                        .background(segmentBackground(for: 1))
+                }
+                .frame(minWidth: 44, minHeight: 44)
+                .accessibilityLabel("Collect")
+                .accessibilityIdentifier("home.segment.collect")
+            }
+            .padding(.horizontal, 4)
+            .background(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .fill(Color.black.opacity(0.3))
+            )
+        }
+    }
+
+    private var librarySearchHeader: some View {
+        HStack(spacing: 8) {
+            Button(action: exitLibrarySearch) {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 19, weight: .semibold))
+                    .foregroundStyle(Color.white)
+                    .frame(minWidth: 44, minHeight: 44)
+            }
+            .accessibilityLabel("Close Library search")
+            .accessibilityIdentifier("home.search.close")
+
+            HStack(spacing: 0) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 17, weight: .medium))
+                    .foregroundStyle(Color.white.opacity(0.62))
+                    .padding(.leading, 16)
+                    .padding(.trailing, 10)
+                    .accessibilityHidden(true)
+
+                TextField("Search your Library", text: librarySearchQuery)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 16, weight: .regular))
+                    .foregroundStyle(Color.white)
+                    .tint(Color.white)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                    .submitLabel(.search)
+                    .focused($isLibrarySearchFocused)
+                    .onSubmit {
+                        submitLibrarySearch()
+                    }
+                    .accessibilityLabel("Search your Library")
+                    .accessibilityIdentifier("home.search.input")
+
+                if !librarySearchSession.draftQuery.isEmpty {
+                    Button(action: clearLibrarySearch) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(Color.white.opacity(0.58))
+                            .frame(minWidth: 44, minHeight: 44)
+                    }
+                    .accessibilityLabel("Clear search")
+                    .accessibilityIdentifier("home.search.clear")
+                }
+
+                Button(action: {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        showFilterTags.toggle()
+                    }
+                }) {
+                    Image("filter")
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 21, height: 21)
+                        .frame(minWidth: 44, minHeight: 44)
+                }
+                .accessibilityLabel("Search filters")
+                .accessibilityHint("Shows Library sort options")
+                .accessibilityIdentifier("home.search.filter")
+            }
+            .frame(minHeight: 52)
+            .padding(.trailing, 4)
+            .background(librarySearchInputBackground)
+        }
+    }
+
+    @ViewBuilder
+    private var librarySearchInputBackground: some View {
+        let shape = RoundedRectangle(cornerRadius: 26, style: .continuous)
+        if reduceTransparency {
+            shape
+                .fill(Color(red: 0.12, green: 0.09, blue: 0.20))
+                .overlay(shape.stroke(Color.white.opacity(0.3), lineWidth: 1))
+        } else {
+            shape
+                .fill(.ultraThinMaterial)
+                .overlay(Color.black.opacity(0.18).clipShape(shape))
+                .overlay(
+                    shape.stroke(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(0.52),
+                                Color.white.opacity(0.12),
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 1
+                    )
                 )
+        }
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // 顶部导航栏
+            Group {
+                if librarySearchSession.isActive {
+                    librarySearchHeader
+                        .transition(.opacity.combined(with: .move(edge: .trailing)))
+                } else {
+                    libraryHeader
+                        .transition(.opacity.combined(with: .move(edge: .leading)))
+                }
             }
             .adaptiveContentGutter()
             .padding(.top, 60)
 
-            if let onboardingStore {
+            if !librarySearchSession.isActive,
+               let onboardingStore {
                 OnboardingGuideLine(
                     store: onboardingStore,
                     allowedStates: [
@@ -281,7 +489,48 @@ struct HomeView: View {
             }
             
             // 主要内容区域
-            if selectedSegment == 0 {
+            if let submittedQuery = librarySearchSession.submittedQuery,
+               let searchScope = librarySearchSession.scope {
+                LibrarySearchResultsView(
+                    scope: searchScope,
+                    manager: librarySearchManager,
+                    cardsManager: cardsManager,
+                    query: submittedQuery,
+                    onShowMenu: { result in
+                        currentCardId = result.id
+                        currentMenuCardData = result.card
+                        popupMenuLayout = searchScope == .notes
+                            ? .grid3x3
+                            : .grid3x2
+                        showPopupMenu = true
+                    },
+                    onCardTap: { cardID in
+                        selectedCardId = cardID
+                        DispatchQueue.main.async {
+                            if searchScope == .notes {
+                                navigateToEdit = true
+                            } else {
+                                navigateToDetail = true
+                            }
+                        }
+                    },
+                    onAvatarTap: { authorID in
+                        selectedActorId = authorID
+                        DispatchQueue.main.async {
+                            navigateToUserProfile = true
+                        }
+                    },
+                    onUnfavorite: { cardID in
+                        favoritesManager.unfavoriteCard(cardId: cardID) { result in
+                            if case .success = result {
+                                favoritesManager.removeFavoriteFromList(cardId: cardID)
+                                librarySearchManager.remove(cardID: cardID)
+                            }
+                        }
+                    },
+                    onRetry: retryLibrarySearch
+                )
+            } else if selectedSegment == 0 {
                 // Notes 列表
                 NotesListView(
                     cardsManager: cardsManager,
@@ -348,7 +597,8 @@ struct HomeView: View {
             cardData: selectedSegment == 0
                 ? (getCurrentCard() ?? currentMenuCardData)
                 : currentMenuCardData,
-            isOwnCard: selectedSegment == 0
+            isOwnCard: librarySearchSession.scope == .notes
+                || (!librarySearchSession.isActive && selectedSegment == 0)
         )
         .onAppear {
             // 使用默认排序（Latest Edited）
@@ -381,10 +631,16 @@ struct HomeView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("SwitchToNotesList"))) { _ in
             // 切换到NotesList (selectedSegment = 0)
+            if librarySearchSession.isActive {
+                exitLibrarySearch()
+            }
             selectedSegment = 0
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("SwitchToAIList"))) { _ in
             // 切换到AIList (selectedSegment = 1)
+            if librarySearchSession.isActive {
+                exitLibrarySearch()
+            }
             selectedSegment = 1
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("DeleteCard"))) { _ in
@@ -394,7 +650,8 @@ struct HomeView: View {
             }
             
             // 找到要删除的卡片数据
-            if let card = cardsManager.cards.first(where: { $0.id == cardId }) {
+            if let card = cardsManager.cards.first(where: { $0.id == cardId })
+                ?? currentMenuCardData.flatMap({ $0.id == cardId ? $0 : nil }) {
                 cardToDelete = card
                 deleteCardError = nil
                 showDeleteConfirmation = true
@@ -411,10 +668,16 @@ struct HomeView: View {
                 return
             }
             
-            cardsManager.toggleCardVisibility(cardId: cardId) { result in
+            cardsManager.toggleCardVisibility(
+                cardId: cardId,
+                fallbackCard: currentMenuCardData
+            ) { result in
                 switch result {
                 case .success:
                     print("卡片可见性切换成功")
+                    if librarySearchSession.isActive {
+                        retryLibrarySearch()
+                    }
                 case .failure(let error):
                     print("卡片可见性切换失败: \(error.localizedDescription)")
                 }
@@ -430,10 +693,16 @@ struct HomeView: View {
             
             
             // 执行切换置顶状态操作
-            cardsManager.toggleCardPin(cardId: cardId) { result in
+            cardsManager.toggleCardPin(
+                cardId: cardId,
+                fallbackCard: currentMenuCardData
+            ) { result in
                 switch result {
                 case .success:
                     print("卡片置顶状态切换成功")
+                    if librarySearchSession.isActive {
+                        retryLibrarySearch()
+                    }
                 case .failure(let error):
                     print("卡片置顶状态切换失败: \(error.localizedDescription)")
                 }
@@ -586,6 +855,7 @@ struct HomeView: View {
                                         switch result {
                                         case .success:
                                             print("卡片删除成功")
+                                            librarySearchManager.remove(cardID: card.id)
                                             currentCardId = nil
                                             withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                                                 animateDeleteConfirmation = false

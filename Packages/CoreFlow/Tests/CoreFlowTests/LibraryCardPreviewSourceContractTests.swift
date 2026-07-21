@@ -155,7 +155,19 @@ final class LibraryCardPreviewSourceContractTests: XCTestCase {
         let search = try source(at: "ArcNote/SearchView.swift")
         XCTAssertTrue(
             search.contains(
-                "backgroundMediaRef: card.backgroundMediaRef"
+                "backgroundMediaRef: result.card.backgroundMediaRef"
+            )
+        )
+
+        let librarySearchModels = try source(
+            at: "ArcNote/Models/UserAllCardsModels.swift"
+        )
+        XCTAssertTrue(
+            librarySearchModels.contains("let backgroundMediaRef: String?")
+        )
+        XCTAssertTrue(
+            librarySearchModels.contains(
+                "backgroundMediaRef: backgroundMediaRef"
             )
         )
 

@@ -230,7 +230,11 @@ class HomeCardsManager: ObservableObject {
     }
     
     // MARK: - 切换卡片可见性
-    func toggleCardVisibility(cardId: String, completion: @escaping (Result<Bool, NetworkError>) -> Void) {
+    func toggleCardVisibility(
+        cardId: String,
+        fallbackCard: UserCard? = nil,
+        completion: @escaping (Result<Bool, NetworkError>) -> Void
+    ) {
         guard authManager.currentUser != nil else {
             print("用户未登录")
             completion(.failure(.unauthorized))
@@ -238,7 +242,11 @@ class HomeCardsManager: ObservableObject {
         }
         
         // 获取当前卡片的可见性状态，然后切换
-        guard let currentCard = cards.first(where: { $0.id == cardId }) else {
+        let matchingFallbackCard = fallbackCard.flatMap {
+            $0.id == cardId ? $0 : nil
+        }
+        guard let currentCard = cards.first(where: { $0.id == cardId })
+            ?? matchingFallbackCard else {
             print("未找到卡片: cardId=\(cardId)")
             completion(.failure(.serverError(404, "卡片未找到")))
             return
@@ -291,7 +299,11 @@ class HomeCardsManager: ObservableObject {
     }
     
     // MARK: - 切换卡片置顶状态
-    func toggleCardPin(cardId: String, completion: @escaping (Result<Bool, NetworkError>) -> Void) {
+    func toggleCardPin(
+        cardId: String,
+        fallbackCard: UserCard? = nil,
+        completion: @escaping (Result<Bool, NetworkError>) -> Void
+    ) {
         guard authManager.currentUser != nil else {
             print("用户未登录")
             completion(.failure(.unauthorized))
@@ -299,7 +311,11 @@ class HomeCardsManager: ObservableObject {
         }
         
         // 获取当前卡片的置顶状态，然后选择调用Pin还是Unpin API
-        guard let currentCard = cards.first(where: { $0.id == cardId }) else {
+        let matchingFallbackCard = fallbackCard.flatMap {
+            $0.id == cardId ? $0 : nil
+        }
+        guard let currentCard = cards.first(where: { $0.id == cardId })
+            ?? matchingFallbackCard else {
             print("未找到卡片: cardId=\(cardId)")
             completion(.failure(.serverError(404, "卡片未找到")))
             return

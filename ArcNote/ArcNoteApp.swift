@@ -482,9 +482,34 @@ private actor ChoraNoteImportFixtureService: CoreNoteImportServing {
 @MainActor
 private struct LibraryFixtureScreen: View {
     @State private var showSideMenu = false
+    @StateObject private var searchManager: LibrarySearchManager
     private let refreshID = UUID()
 
     init() {
+        _searchManager = StateObject(
+            wrappedValue: LibrarySearchManager(
+                searchRequest: { query, scope in
+                    let candidates = scope == .notes
+                        ? [Self.noteResult]
+                        : [Self.collectResult]
+                    let normalizedQuery = query.lowercased()
+                    let matches = candidates.filter { card in
+                        card.title?.lowercased().contains(normalizedQuery) == true
+                            || card.content.lowercased().contains(normalizedQuery)
+                            || card.tags.contains {
+                                $0.lowercased().contains(normalizedQuery)
+                            }
+                    }
+                    return Just(matches)
+                        .setFailureType(to: NetworkError.self)
+                        .delay(
+                            for: .milliseconds(120),
+                            scheduler: DispatchQueue.main
+                        )
+                        .eraseToAnyPublisher()
+                }
+            )
+        )
         AuthManager.shared.currentUser = nil
         AuthManager.shared.isLoggedIn = false
         AuthManager.shared.authToken = nil
@@ -492,17 +517,83 @@ private struct LibraryFixtureScreen: View {
     }
 
     var body: some View {
-        HomeView(
-            showSideMenu: $showSideMenu,
-            refreshID: refreshID
-        )
-        .overlay(alignment: .topLeading) {
-            Text("isolated")
-                .font(.system(size: 1))
-                .foregroundColor(.clear)
-                .frame(width: 1, height: 1)
-                .accessibilityIdentifier("library.fixture.session")
+        ZStack {
+            Image("home_bg")
+                .resizable()
+                .scaledToFill()
+                .ignoresSafeArea()
+
+            HomeView(
+                showSideMenu: $showSideMenu,
+                refreshID: refreshID,
+                librarySearchManager: searchManager
+            )
+            .overlay(alignment: .topLeading) {
+                Text("isolated")
+                    .font(.system(size: 1))
+                    .foregroundColor(.clear)
+                    .frame(width: 1, height: 1)
+                    .accessibilityIdentifier("library.fixture.session")
+            }
         }
+    }
+
+    private static let noteResult = fixtureCard(
+        id: "library-search-note-design",
+        content: "Design systems turn shared decisions into reusable patterns.",
+        rate: 9,
+        isPublic: false,
+        isFavorited: false,
+        authorID: "fixture-owner",
+        authorName: "You"
+    )
+
+    private static let collectResult = fixtureCard(
+        id: "library-search-collect-design",
+        content: "A collected field note about humane mobile interaction design.",
+        rate: 27,
+        isPublic: true,
+        isFavorited: true,
+        authorID: "fixture-author",
+        authorName: "Mira"
+    )
+
+    private static func fixtureCard(
+        id: String,
+        content: String,
+        rate: Int,
+        isPublic: Bool,
+        isFavorited: Bool,
+        authorID: String,
+        authorName: String
+    ) -> UserAllCard {
+        UserAllCard(
+            id: id,
+            title: "Design Library result",
+            content: content,
+            contentJSON: nil,
+            backgroundMediaRef: nil,
+            contentHash: "fixture-\(id)",
+            tags: ["Design", "Library"],
+            isPublic: isPublic,
+            createdAt: "2026-07-20T09:30:00Z",
+            updatedAt: "2026-07-21T09:30:00Z",
+            ownerActorId: authorID,
+            likeCount: 12,
+            favoriteCount: 7,
+            commentCount: 3,
+            viewCount: 24,
+            rate: rate,
+            isLiked: false,
+            isPinned: false,
+            pinnedAt: nil,
+            isFavorited: isFavorited,
+            author: UserAllCardAuthor(
+                id: authorID,
+                username: authorName,
+                avatar: nil
+            )
+        )
     }
 }
 

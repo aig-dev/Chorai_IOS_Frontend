@@ -1849,6 +1849,72 @@ final class ArcNoteUITests: XCTestCase {
         waitFor("cardEditorContent")
     }
 
+    func testLibrarySearchTransformsHeaderAndWaitsForKeyboardSubmit() {
+        app.launchArguments.append("--ui-test-library")
+        app.launch()
+
+        waitFor("library.fixture.session")
+        let normalFilter = waitFor("home.filter")
+        let searchButton = waitFor("home.search")
+        XCTAssertTrue(normalFilter.isHittable)
+        XCTAssertTrue(searchButton.isHittable)
+        XCTAssertFalse(app.textFields["home.search.input"].exists)
+
+        searchButton.tap()
+
+        let input = waitFor("home.search.input")
+        let close = waitFor("home.search.close")
+        let inlineFilter = waitFor("home.search.filter")
+        XCTAssertTrue(input.isHittable)
+        XCTAssertTrue(close.isHittable)
+        XCTAssertTrue(inlineFilter.isHittable)
+        XCTAssertGreaterThanOrEqual(close.frame.height, 44)
+        XCTAssertGreaterThanOrEqual(inlineFilter.frame.height, 44)
+        XCTAssertGreaterThan(inlineFilter.frame.minX, input.frame.minX)
+        XCTAssertFalse(app.buttons["home.filter"].exists)
+        XCTAssertFalse(app.buttons["home.search"].exists)
+        XCTAssertFalse(app.staticTexts["My Collection"].exists)
+        XCTAssertFalse(app.staticTexts["Label"].exists)
+        XCTAssertFalse(app.staticTexts["Time"].exists)
+
+        input.typeText("design")
+        waitFor("home.search.clear")
+        XCTAssertFalse(
+            app.descendants(matching: .any)["home.search.results"].exists,
+            "Typing must keep the current Library list until keyboard Search"
+        )
+
+        input.typeText("\n")
+        waitFor("home.search.results")
+        waitFor("card.home.library-search-note-design")
+        XCTAssertTrue(
+            app.staticTexts.matching(
+                NSPredicate(format: "label CONTAINS %@", "1 result")
+            ).firstMatch.waitForExistence(timeout: 2)
+        )
+        captureVisual("library-inline-search-submitted")
+
+        tap("home.search.clear")
+        XCTAssertFalse(
+            app.descendants(matching: .any)["home.search.results"]
+                .waitForExistence(timeout: 1)
+        )
+        XCTAssertTrue(waitFor("home.search.input").isHittable)
+
+        tap("home.search.close")
+        XCTAssertTrue(waitFor("home.filter").isHittable)
+        XCTAssertTrue(waitFor("home.search").isHittable)
+        XCTAssertFalse(app.textFields["home.search.input"].exists)
+
+        tap("home.segment.collect")
+        tap("home.search")
+        let collectInput = waitFor("home.search.input")
+        collectInput.typeText("design\n")
+        waitFor("home.search.results")
+        waitFor("card.home.library-search-collect-design")
+        captureVisual("library-inline-search-collect-result")
+    }
+
     func testChoraProfileLoadedFixtureRendersOrderedProductionSections() throws {
         app.launchArguments.append("--ui-test-chora-profile")
         app.launchEnvironment["CHORAI_CHORA_PROFILE_FIXTURE_MODE"] = "loaded"

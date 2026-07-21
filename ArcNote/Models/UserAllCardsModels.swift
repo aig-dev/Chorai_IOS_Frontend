@@ -27,6 +27,8 @@ struct UserAllCard: Codable, Identifiable {
     let id: String
     let title: String?
     let content: String
+    let contentJSON: String?
+    let backgroundMediaRef: String?
     let contentHash: String
     let tags: [String]
     let isPublic: Bool
@@ -38,10 +40,16 @@ struct UserAllCard: Codable, Identifiable {
     let commentCount: Int
     let viewCount: Int
     let rate: Int
+    let isLiked: Bool?
+    let isPinned: Bool?
+    let pinnedAt: String?
+    let isFavorited: Bool?
     let author: UserAllCardAuthor?
     
     enum CodingKeys: String, CodingKey {
         case id, title, content, rate
+        case contentJSON = "content_json"
+        case backgroundMediaRef = "background_media_ref"
         case contentHash = "content_hash"
         case tags
         case isPublic = "is_public"
@@ -52,7 +60,34 @@ struct UserAllCard: Codable, Identifiable {
         case favoriteCount = "favorite_count"
         case commentCount = "comment_count"
         case viewCount = "view_count"
+        case isLiked = "is_liked"
+        case isPinned = "is_pinned"
+        case pinnedAt = "pinned_at"
+        case isFavorited = "is_favorited"
         case author
+    }
+
+    var libraryUserCard: UserCard {
+        UserCard(
+            id: id,
+            title: title,
+            content: content,
+            contentJSON: contentJSON,
+            backgroundMediaRef: backgroundMediaRef,
+            contentHash: contentHash,
+            isPublic: isPublic,
+            tags: tags,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            likeCount: likeCount,
+            commentCount: commentCount,
+            isLiked: isLiked ?? false,
+            isPinned: isPinned ?? false,
+            pinnedAt: pinnedAt,
+            isFavorited: isFavorited,
+            favoriteCount: favoriteCount,
+            rate: rate
+        )
     }
 }
 
