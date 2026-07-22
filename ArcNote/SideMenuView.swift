@@ -69,7 +69,7 @@ struct SideMenuView: View {
                                         HStack(spacing: 8) {
                                             Image("syn").resizable().frame(width: 20, height: 20)
                                             
-                                            Text(userProfileManager.isCreditLoading ? "--" : "\(userProfileManager.creditTotal)")
+                                            Text(userProfileManager.isCreditLoading ? "--" : "\(userProfileManager.synBalance)")
                                                 .font(.system(size: 16, weight: .semibold))
                                                 .foregroundColor(.yellow)
                                             

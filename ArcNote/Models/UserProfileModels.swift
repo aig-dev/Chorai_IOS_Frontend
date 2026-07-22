@@ -103,8 +103,10 @@ class UserProfileManager: ObservableObject {
 
     private init() {}
 
-    var creditTotal: Int {
-        creditBalance.reduce(0) { $0 + $1.balance }
+    var synBalance: Int {
+        creditBalance
+            .filter { $0.creditTier == "credit" }
+            .reduce(0) { $0 + $1.balance }
     }
 
     var regularCreditTotal: Int {

@@ -134,7 +134,7 @@ struct MyProfileView: View {
                                                 .font(.system(size: 19, weight: .bold))
                                                 .foregroundColor(.white.opacity(0.7))
                                         } else {
-                                            Text("\(userProfileManager.creditTotal)")
+                                            Text("\(userProfileManager.synBalance)")
                                                 .font(.system(size: 19, weight: .bold))
                                                 .foregroundColor(.white)
                                         }
