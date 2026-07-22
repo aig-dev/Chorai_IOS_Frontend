@@ -9,6 +9,7 @@ struct SideMenuView: View {
     @State private var navigateToSettings = false
     @State private var navigateToMyProfile = false
     @State private var navigateToHelpReport = false
+    @State private var areFollowCountsVisible = false
     @ObservedObject private var userProfileManager = UserProfileManager.shared
     @StateObject private var notificationStore = NotificationInboxStore(
         service: NetworkNotificationService()
@@ -77,15 +78,10 @@ struct SideMenuView: View {
                                         // 关注统计
                                         HStack(spacing: 20) {
                                             HStack(spacing: 4) {
-                                                if userProfileManager.isLoading {
-                                                    Text("--")
-                                                        .font(.system(size: 16, weight: .semibold))
-                                                        .foregroundColor(.white.opacity(0.7))
-                                                } else {
-                                                    Text("\(userProfileManager.userProfile?.followingCount ?? 0)")
+                                                Text(userProfileManager.isLoading ? "--" : "\(userProfileManager.userProfile?.followingCount ?? 0)")
                                                     .font(.system(size: 16, weight: .semibold))
-                                                    .foregroundColor(.white)
-                                                }
+                                                    .foregroundColor(userProfileManager.isLoading ? .white.opacity(0.7) : .white)
+                                                    .opacity(areFollowCountsVisible ? 1 : 0)
                                                 Text("following")
                                                     .font(.system(size: 14, weight: .regular))
                                                     .foregroundColor(.white.opacity(0.7))
@@ -93,15 +89,10 @@ struct SideMenuView: View {
                                             Spacer()
                                             
                                             HStack(spacing: 4) {
-                                                if userProfileManager.isLoading {
-                                                    Text("--")
-                                                        .font(.system(size: 16, weight: .semibold))
-                                                        .foregroundColor(.white.opacity(0.7))
-                                                } else {
-                                                    Text("\(userProfileManager.userProfile?.followersCount ?? 0)")
+                                                Text(userProfileManager.isLoading ? "--" : "\(userProfileManager.userProfile?.followersCount ?? 0)")
                                                     .font(.system(size: 16, weight: .semibold))
-                                                    .foregroundColor(.white)
-                                                }
+                                                    .foregroundColor(userProfileManager.isLoading ? .white.opacity(0.7) : .white)
+                                                    .opacity(areFollowCountsVisible ? 1 : 0)
                                                 Text("followers")
                                                     .font(.system(size: 14, weight: .regular))
                                                     .foregroundColor(.white.opacity(0.7))
@@ -214,6 +205,16 @@ struct SideMenuView: View {
             }
         }
         .animation(.easeInOut(duration: 0.3), value: isPresented)
+        .task(id: isPresented) {
+            guard isPresented else { return }
+            do {
+                try await Task.sleep(nanoseconds: 300_000_000)
+            } catch {
+                return
+            }
+            guard !Task.isCancelled, isPresented else { return }
+            areFollowCountsVisible = true
+        }
         .navigationDestination(isPresented: $navigateToNotification) {
             NotificationView()
         }
@@ -240,6 +241,7 @@ struct SideMenuView: View {
             }
         }
         .onChange(of: isPresented) { isShowing in
+            areFollowCountsVisible = false
             // 当侧边栏显示时加载用户资料
             if isShowing {
                 userProfileManager.fetchCurrentUserProfile()
