@@ -81,6 +81,28 @@ final class ContentReportStoreTests: XCTestCase {
         XCTAssertEqual(service.requests.first?.targetID, "act_1")
     }
 
+    func testCommentTargetUsesCanonicalCommentType() async {
+        let service = MockContentReportService()
+        service.result = .success(
+            ContentReportReceipt(
+                reportID: "rpt_comment",
+                status: "OPEN",
+                updatedAt: "2026-07-22T00:00:00Z"
+            )
+        )
+        let store = ContentReportStore(
+            targetType: .comment,
+            targetID: "cmt_1",
+            service: service
+        )
+
+        store.submit()
+        await waitForReportStore { store.phase.isSubmitted }
+
+        XCTAssertEqual(service.requests.first?.targetType, "COMMENT")
+        XCTAssertEqual(service.requests.first?.targetID, "cmt_1")
+    }
+
     func testRetryPreservesDraftAndResubmitsExactRequest() async {
         let service = MockContentReportService()
         service.results = [

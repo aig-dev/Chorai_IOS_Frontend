@@ -444,7 +444,7 @@ struct CommentRowView: View {
     let onReply: (CommentModel) -> Void
     
     @State private var showActionSheet = false
-    @State private var navigateToReport = false
+    @State private var showReport = false
     @State private var cancellables = Set<AnyCancellable>()
     
     init(
@@ -491,6 +491,8 @@ struct CommentRowView: View {
                                     .font(.system(size: 16, weight: .medium))
                                     .foregroundColor(.white.opacity(0.7))
                             }
+                            .accessibilityLabel("Comment actions")
+                            .accessibilityIdentifier("comment.actions.\(comment.id)")
                         }
                     }
                     
@@ -515,15 +517,11 @@ struct CommentRowView: View {
                             .foregroundColor(.white.opacity(0.6))
 
                         Button(action: { onReply(comment) }) {
-                            HStack(spacing: 4) {
-                                Image("comment")
-                                    .resizable()
-                                    .frame(width: 16, height: 16)
-                                Text(comment.replies.isEmpty ? "Reply" : "\(comment.replies.count)")
-                                    .font(.system(size: 12, weight: .medium))
-                            }
-                            .foregroundColor(.white.opacity(0.72))
-                            .frame(minWidth: 44, minHeight: 44, alignment: .leading)
+                            Image("comment")
+                                .resizable()
+                                .frame(width: 16, height: 16)
+                                .foregroundColor(.white.opacity(0.72))
+                                .frame(minWidth: 44, minHeight: 44, alignment: .leading)
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("Reply to \(comment.user.displayName)")
@@ -542,19 +540,16 @@ struct CommentRowView: View {
             }
         }
         .confirmationDialog("", isPresented: $showActionSheet, titleVisibility: .hidden) {
-            Button("Report this user", role: .destructive) {
-                navigateToReport = true
+            Button("Report content", role: .destructive) {
+                showReport = true
             }
-            Button("Block this user", role: .destructive) {
+            Button("Block user", role: .destructive) {
                 blockUser()
             }
             Button("Cancel", role: .cancel) {}
         }
-        .navigationDestination(isPresented: $navigateToReport) {
-            WebViewPage(
-                url: ChoraiWebDestination.report,
-                title: "Help & Report"
-            )
+        .sheet(isPresented: $showReport) {
+            ContentReportView(targetType: .comment, targetID: comment.id)
         }
     }
 

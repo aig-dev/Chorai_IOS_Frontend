@@ -7,7 +7,14 @@ struct ContentReportView: View {
     private let subject: String
 
     init(targetType: ContentReportTargetType, targetID: String) {
-        subject = targetType == .actor ? "profile" : "card"
+        switch targetType {
+        case .asset:
+            subject = "card"
+        case .actor:
+            subject = "profile"
+        case .comment:
+            subject = "comment"
+        }
         _store = StateObject(
             wrappedValue: ContentReportStore(
                 targetType: targetType,

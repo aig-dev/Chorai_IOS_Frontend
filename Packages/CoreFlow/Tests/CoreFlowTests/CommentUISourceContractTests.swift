@@ -19,6 +19,16 @@ final class CommentUISourceContractTests: XCTestCase {
         XCTAssertTrue(popup.contains(#"Image(isPrivateMode ? "secret_active" : "secret")"#))
         XCTAssertTrue(popup.contains(#".accessibilityIdentifier("comment.visibility.toggle")"#))
         XCTAssertTrue(popup.contains(#".accessibilityIdentifier("comment.reply.\(comment.id)")"#))
+        XCTAssertTrue(popup.contains(#".accessibilityIdentifier("comment.actions.\(comment.id)")"#))
+        XCTAssertFalse(popup.contains(#"comment.replies.isEmpty ? "Reply""#))
+        XCTAssertTrue(popup.contains(#"Button("Report content", role: .destructive)"#))
+        XCTAssertTrue(popup.contains(#"Button("Block user", role: .destructive)"#))
+        XCTAssertTrue(popup.contains("ContentReportView(targetType: .comment, targetID: comment.id)"))
+        XCTAssertTrue(
+            popup.contains(
+                "CommentRowView(comment: subComment, isSubComment: true, onReply: onReply)"
+            )
+        )
         XCTAssertTrue(popup.contains("APIConfiguration.resourceURLString"))
         XCTAssertTrue(popup.contains("comment.user.displayName"))
         XCTAssertFalse(popup.contains("comment.user.username ?? comment.user.id"))

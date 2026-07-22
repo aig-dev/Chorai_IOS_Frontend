@@ -23,6 +23,7 @@ public enum ContentReportReason: String, CaseIterable, Equatable, Identifiable, 
 public enum ContentReportTargetType: String, Equatable, Sendable {
     case asset = "ASSET"
     case actor = "ACTOR"
+    case comment = "COMMENT"
 }
 
 public struct ContentReportRequest: Equatable, Sendable {
