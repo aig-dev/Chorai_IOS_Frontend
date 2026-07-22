@@ -353,14 +353,9 @@ struct ExploreView: View {
                     
                     Spacer()
                     
-                    HStack(spacing: 7) {
-                        Circle()
-                            .fill(ZenVisualTokens.accent)
-                            .frame(width: 7, height: 7)
-                        Text("Flow")
-                            .font(.system(size: 18, weight: .semibold, design: .rounded))
-                            .foregroundColor(.white)
-                    }
+                    Text("Explore")
+                        .font(.system(size: 18, weight: .semibold, design: .rounded))
+                        .foregroundColor(.white)
                     
                     Spacer()
                     
