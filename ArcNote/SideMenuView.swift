@@ -34,12 +34,8 @@ struct SideMenuView: View {
                         // 侧边菜单区域 叠加背景图
             HStack {
                 ZStack(alignment: .top) {
-                    // 背景图片 叠加在后面，显示在头部位置
-                    Image("side_bg")
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(width: adaptiveLayout.drawerWidth)
-                        .clipped()
+                    // 与 Personal Profile 共用背景资源，加载失败时保留默认图。
+                    profileBackground
                     
                     // 内容层
                     VStack(alignment: .leading, spacing: 0) {
@@ -177,10 +173,10 @@ struct SideMenuView: View {
                                     navigateToMyProfile = true
                                 }) {
                                     Group {
-                                        if let avatarUrl = userProfileManager.userProfile?.avatar, !avatarUrl.isEmpty {
-                                            let fullAvatarUrl = APIConfiguration.resourceURLString(avatarUrl)
-                                            
-                                            AsyncImage(url: URL(string: fullAvatarUrl)) { image in
+                                        if let avatarURL = profileResourceURL(
+                                            userProfileManager.userProfile?.avatar
+                                        ) {
+                                            AsyncImage(url: avatarURL) { image in
                                                 image
                                                     .resizable()
                                                     .aspectRatio(contentMode: .fill)
@@ -210,6 +206,7 @@ struct SideMenuView: View {
                 }
                 .frame(width: adaptiveLayout.drawerWidth)
                 .ignoresSafeArea()
+                .clipped()
                 .offset(x: isPresented ? 0 : -adaptiveLayout.drawerWidth)
                 .accessibilityIdentifier("adaptive-layout.drawer")
                 
@@ -249,6 +246,62 @@ struct SideMenuView: View {
                 refreshNotificationIndicator()
             }
         }
+    }
+
+    private var profileBackgroundHeight: CGFloat {
+        adaptiveLayout.drawerWidth * (495.0 / 762.0)
+    }
+
+    private var profileBackground: some View {
+        Group {
+            if let backgroundURL = profileResourceURL(
+                userProfileManager.userProfile?.background
+            ) {
+                AsyncImage(url: backgroundURL) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                    case .empty:
+                        fallbackProfileBackground
+                    case .failure:
+                        fallbackProfileBackground
+                    @unknown default:
+                        fallbackProfileBackground
+                    }
+                }
+            } else {
+                fallbackProfileBackground
+            }
+        }
+        .frame(
+            width: adaptiveLayout.drawerWidth,
+            height: profileBackgroundHeight
+        )
+        .clipped()
+        .overlay {
+            LinearGradient(
+                colors: [.clear, .black.opacity(0.28)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        }
+    }
+
+    private var fallbackProfileBackground: some View {
+        Image("side_bg")
+            .resizable()
+            .aspectRatio(contentMode: .fill)
+    }
+
+    private func profileResourceURL(_ rawValue: String?) -> URL? {
+        guard let rawValue else { return nil }
+        let trimmedValue = rawValue.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        guard !trimmedValue.isEmpty else { return nil }
+        return URL(string: APIConfiguration.resourceURLString(trimmedValue))
     }
 
     private func refreshNotificationIndicator() {

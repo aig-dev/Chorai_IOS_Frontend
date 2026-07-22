@@ -21,6 +21,30 @@ final class SidebarProfileCreditSourceContractTests: XCTestCase {
         XCTAssertFalse(profile.contains("userProfileManager.creditTotal"))
     }
 
+    func testSidebarUsesProfileMediaAndClipsWholeDrawerBeforeOffset() throws {
+        let sidebar = try source(at: "ArcNote/SideMenuView.swift")
+
+        XCTAssertTrue(sidebar.contains("private var profileBackground: some View"))
+        XCTAssertTrue(sidebar.contains("profileResourceURL("))
+        XCTAssertTrue(
+            sidebar.contains("userProfileManager.userProfile?.background")
+        )
+        XCTAssertTrue(
+            sidebar.contains("userProfileManager.userProfile?.avatar")
+        )
+        XCTAssertTrue(sidebar.contains("APIConfiguration.resourceURLString"))
+        XCTAssertTrue(sidebar.contains("Image(\"side_bg\")"))
+        XCTAssertTrue(sidebar.contains("Image(\"avatar\")"))
+
+        let clipBeforeOffset = """
+                .frame(width: adaptiveLayout.drawerWidth)
+                .ignoresSafeArea()
+                .clipped()
+                .offset(x: isPresented ? 0 : -adaptiveLayout.drawerWidth)
+"""
+        XCTAssertTrue(sidebar.contains(clipBeforeOffset))
+    }
+
     private func source(at path: String) throws -> String {
         try String(
             contentsOf: Self.repositoryRoot.appendingPathComponent(path),
