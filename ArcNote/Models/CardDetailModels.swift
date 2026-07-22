@@ -23,6 +23,8 @@ struct CardDetail: Codable {
     let rate: Int
     let author: CardDetailAuthor?
     let backgroundMediaRef: String?
+    let ownerActorId: String?
+    let isOwner: Bool?
     
     enum CodingKeys: String, CodingKey {
         case id, title, content, tags, rate
@@ -41,6 +43,8 @@ struct CardDetail: Codable {
         case commentCount = "comment_count"
         case author
         case backgroundMediaRef = "background_media_ref"
+        case ownerActorId = "owner_actor_id"
+        case isOwner = "is_owner"
     }
 
     init(from decoder: Decoder) throws {
@@ -71,6 +75,11 @@ struct CardDetail: Codable {
             String.self,
             forKey: .backgroundMediaRef
         )
+        ownerActorId = try container.decodeIfPresent(
+            String.self,
+            forKey: .ownerActorId
+        )
+        isOwner = try container.decodeIfPresent(Bool.self, forKey: .isOwner)
     }
 }
 

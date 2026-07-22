@@ -87,7 +87,8 @@ extension Card {
                     username: $0.username,
                     avatarURL: $0.avatar
                 )
-            }
+            },
+            isOwner: isOwner ?? false
         )
     }
 }
@@ -111,7 +112,8 @@ extension FlowCard {
             pinnedAt: pinnedAt,
             isFavorited: isFavorited,
             favoriteCount: favoriteCount,
-            rate: rate
+            rate: rate,
+            isOwner: isOwner
         )
     }
 }

@@ -31,6 +31,7 @@ public struct FlowCard: Identifiable, Equatable, Sendable {
     public let isPinned: Bool
     public let pinnedAt: String?
     public let author: FlowAuthor?
+    public let isOwner: Bool
 
     public init(
         id: String,
@@ -50,7 +51,8 @@ public struct FlowCard: Identifiable, Equatable, Sendable {
         isLiked: Bool,
         isPinned: Bool,
         pinnedAt: String?,
-        author: FlowAuthor?
+        author: FlowAuthor?,
+        isOwner: Bool = false
     ) {
         self.id = id
         self.title = title
@@ -70,6 +72,7 @@ public struct FlowCard: Identifiable, Equatable, Sendable {
         self.isPinned = isPinned
         self.pinnedAt = pinnedAt
         self.author = author
+        self.isOwner = isOwner
     }
 
     public func replacingLike(with state: CardLikeState) -> FlowCard {
@@ -91,7 +94,8 @@ public struct FlowCard: Identifiable, Equatable, Sendable {
             isLiked: state.isLiked,
             isPinned: isPinned,
             pinnedAt: pinnedAt,
-            author: author
+            author: author,
+            isOwner: isOwner
         )
     }
 
@@ -117,7 +121,8 @@ public struct FlowCard: Identifiable, Equatable, Sendable {
             isLiked: isLiked,
             isPinned: isPinned,
             pinnedAt: pinnedAt,
-            author: author
+            author: author,
+            isOwner: isOwner
         )
     }
 }

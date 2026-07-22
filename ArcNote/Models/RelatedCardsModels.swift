@@ -20,6 +20,8 @@ struct RelatedCard: Codable, Identifiable {
     let isPinned: Bool
     let pinnedAt: String?
     let author: RelatedCardAuthor?
+    let ownerActorId: String?
+    let isOwner: Bool
 
     enum CodingKeys: String, CodingKey {
         case id, title, content, tags, rate
@@ -34,6 +36,8 @@ struct RelatedCard: Codable, Identifiable {
         case updatedAt = "updated_at"
         case isPinned = "is_pinned"
         case pinnedAt = "pinned_at"
+        case ownerActorId = "owner_actor_id"
+        case isOwner = "is_owner"
         case author
     }
 
@@ -56,6 +60,8 @@ struct RelatedCard: Codable, Identifiable {
         isPinned = try container.decodeIfPresent(Bool.self, forKey: .isPinned) ?? false
         pinnedAt = try container.decodeIfPresent(String.self, forKey: .pinnedAt)
         author = try container.decodeIfPresent(RelatedCardAuthor.self, forKey: .author)
+        ownerActorId = try container.decodeIfPresent(String.self, forKey: .ownerActorId)
+        isOwner = try container.decodeIfPresent(Bool.self, forKey: .isOwner) ?? false
     }
 }
 
@@ -400,6 +406,9 @@ class RelatedCardsManager: ObservableObject {
     func toggleFavorite(for cardId: String) {
         guard authManager.currentUser != nil else {
             print("用户未登录，无法收藏")
+            return
+        }
+        guard relatedCards.first(where: { $0.id == cardId })?.isOwner != true else {
             return
         }
 

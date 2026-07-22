@@ -46,7 +46,11 @@ public final class FlowDeckStore: ObservableObject {
     public func toggleFavoriteCurrent(
         onFavoriteSucceeded: ((String) -> Void)? = nil
     ) {
-        guard !isInteractionLocked, let card = cards.first else { return }
+        guard
+            !isInteractionLocked,
+            let card = cards.first,
+            !card.isOwner
+        else { return }
 
         notice = nil
         let nextIsFavorited = !card.isFavorited

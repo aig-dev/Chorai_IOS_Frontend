@@ -935,23 +935,25 @@ struct PostCard: View {
                 // 交互统计
                 HStack {
                     // 左边一个 - 收藏按钮
-                    Button(action: {
-                        cardsManager.toggleFavorite(for: card.id)
-                    }) {
-                        HStack(spacing: 4) {
-                            Image(cardsManager.getFavoriteState(for: card.id) ? "favorite_active" : "favorite")
-                                .resizable()
-                                .aspectRatio(contentMode: .fit)
-                                .frame(width: 26, height: 26)
-                            Text("\(cardsManager.getFavoriteCount(for: card.id))")
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundColor(.white.opacity(0.8))
+                    if card.isOwner != true {
+                        Button(action: {
+                            cardsManager.toggleFavorite(for: card.id)
+                        }) {
+                            HStack(spacing: 4) {
+                                Image(cardsManager.getFavoriteState(for: card.id) ? "favorite_active" : "favorite")
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fit)
+                                    .frame(width: 26, height: 26)
+                                Text("\(cardsManager.getFavoriteCount(for: card.id))")
+                                    .font(.system(size: 14, weight: .medium))
+                                    .foregroundColor(.white.opacity(0.8))
+                            }
                         }
+                        .accessibilityElement(children: .combine)
+                        .accessibilityLabel("Favorite")
+                        .accessibilityValue(cardsManager.getFavoriteState(for: card.id) ? "true" : "false")
+                        .accessibilityIdentifier("card.favorite.\(card.id)")
                     }
-                    .accessibilityElement(children: .combine)
-                    .accessibilityLabel("Favorite")
-                    .accessibilityValue(cardsManager.getFavoriteState(for: card.id) ? "true" : "false")
-                    .accessibilityIdentifier("card.favorite.\(card.id)")
                     
                     Spacer()
                     

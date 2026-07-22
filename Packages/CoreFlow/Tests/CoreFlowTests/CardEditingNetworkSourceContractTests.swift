@@ -18,6 +18,25 @@ final class CardEditingNetworkSourceContractTests: XCTestCase {
         )
     }
 
+    func testCardDetailUsesCanonicalOwnershipForFavoriteAvailability() throws {
+        let modelSource = try source("ArcNote/Models/CardDetailModels.swift")
+        let detailSource = try source("ArcNote/DetailView.swift")
+
+        XCTAssertTrue(modelSource.contains(#"case isOwner = "is_owner""#))
+        XCTAssertTrue(
+            modelSource.contains(
+                "isOwner = try container.decodeIfPresent(Bool.self, forKey: .isOwner)"
+            )
+        )
+        XCTAssertTrue(
+            detailSource.contains(
+                "if let isOwner = cardDetailManager.cardDetail?.isOwner"
+            ),
+            "Detail ownership must prefer the backend is_owner value"
+        )
+        XCTAssertTrue(detailSource.contains("guard !isCurrentCardOwned else { return }"))
+    }
+
     func testCardWritePathsUseOptionalTitleParameters() throws {
         let source = try source("ArcNote/NetworkManager.swift")
 

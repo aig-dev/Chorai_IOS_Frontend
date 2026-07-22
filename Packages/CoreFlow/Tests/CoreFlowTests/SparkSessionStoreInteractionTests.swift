@@ -5,6 +5,105 @@ import XCTest
 
 @MainActor
 final class SparkSessionStoreInteractionTests: XCTestCase {
+    func testTriggeredPageFiltersCurrentSourceResult() async {
+        let harness = makeHarness()
+        let cardSubject = harness.service.enqueueCard()
+        let triggerSubject = harness.service.enqueueTrigger()
+
+        harness.store.start()
+        cardSubject.send(card("ast_root"))
+        cardSubject.send(completion: .finished)
+        await settle()
+        triggerSubject.send(
+            SparkActivityPage(
+                activityID: "act_root",
+                parentActivityID: nil,
+                rootActivityID: "act_root",
+                chainDepth: 0,
+                sourceAssetID: "ast_root",
+                groups: [
+                    .related: [result("ast_root"), result("ast_result_1")],
+                    .angles: [],
+                    .keywords: []
+                ],
+                createdAt: Date(timeIntervalSince1970: 1_001)
+            )
+        )
+        triggerSubject.send(completion: .finished)
+        await settle()
+
+        XCTAssertEqual(harness.store.results.map(\.id), ["ast_result_1"])
+        XCTAssertEqual(harness.store.currentResult?.id, "ast_result_1")
+    }
+
+    func testChildPageFiltersCurrentAndAncestorSources() async {
+        let harness = makeHarness()
+        await loadRoot(harness, resultCount: 2)
+        let childTrigger = harness.service.enqueueTrigger()
+
+        harness.store.sparkCurrentDeeper()
+        childTrigger.send(
+            SparkActivityPage(
+                activityID: "act_child",
+                parentActivityID: "act_root",
+                rootActivityID: "act_root",
+                chainDepth: 1,
+                sourceAssetID: "ast_result_1",
+                groups: [
+                    .related: [
+                        result("ast_root"),
+                        result("ast_result_1"),
+                        result("ast_child_result")
+                    ],
+                    .angles: [],
+                    .keywords: []
+                ],
+                createdAt: Date(timeIntervalSince1970: 1_002)
+            )
+        )
+        childTrigger.send(completion: .finished)
+        await settle()
+
+        XCTAssertEqual(harness.store.results.map(\.id), ["ast_child_result"])
+        XCTAssertEqual(harness.store.currentResult?.id, "ast_child_result")
+
+        let moreSubject = harness.service.enqueueMore()
+        harness.store.advance()
+        moreSubject.send(
+            SparkMorePage(
+                results: [
+                    result("ast_root"),
+                    result("ast_result_1"),
+                    result("ast_child_more")
+                ],
+                nextCursor: nil,
+                round: 0,
+                sourceAssetID: "ast_result_1"
+            )
+        )
+        moreSubject.send(completion: .finished)
+        await settle()
+
+        XCTAssertEqual(
+            harness.store.results.map(\.id),
+            ["ast_child_result", "ast_child_more"]
+        )
+    }
+
+    func testOwnedResultCannotBeFavorited() async {
+        let harness = makeHarness()
+        await loadRoot(harness, resultCount: 1, firstResultIsOwner: true)
+        let original = harness.store.currentResult
+
+        harness.store.toggleFavoriteCurrent()
+
+        XCTAssertTrue(harness.service.favoriteCalls.isEmpty)
+        XCTAssertTrue(harness.service.unfavoriteAssetIDs.isEmpty)
+        XCTAssertEqual(harness.store.currentResult, original)
+        XCTAssertFalse(harness.store.isInteractionLocked)
+        XCTAssertNil(harness.store.notice)
+    }
+
     func testFooterFavoriteMutatesVisibleResultInPlaceWithDiscoveryContext() async {
         let harness = makeHarness()
         await loadRoot(harness, resultCount: 3)
@@ -396,7 +495,8 @@ final class SparkSessionStoreInteractionTests: XCTestCase {
     private func loadRoot(
         _ harness: Harness,
         resultCount: Int,
-        firstResultIsFavorited: Bool = false
+        firstResultIsFavorited: Bool = false,
+        firstResultIsOwner: Bool = false
     ) async {
         let cardSubject = harness.service.enqueueCard()
         let triggerSubject = harness.service.enqueueTrigger()
@@ -412,7 +512,8 @@ final class SparkSessionStoreInteractionTests: XCTestCase {
                 depth: 0,
                 source: "ast_root",
                 resultCount: resultCount,
-                firstResultIsFavorited: firstResultIsFavorited
+                firstResultIsFavorited: firstResultIsFavorited,
+                firstResultIsOwner: firstResultIsOwner
             )
         )
         triggerSubject.send(completion: .finished)
@@ -426,12 +527,14 @@ final class SparkSessionStoreInteractionTests: XCTestCase {
         depth: Int,
         source: String,
         resultCount: Int,
-        firstResultIsFavorited: Bool = false
+        firstResultIsFavorited: Bool = false,
+        firstResultIsOwner: Bool = false
     ) -> SparkActivityPage {
         let pageResults = (resultCount > 0 ? Array(1...resultCount) : []).map { index in
             result(
                 "ast_result_\(index)",
-                isFavorited: index == 1 && firstResultIsFavorited
+                isFavorited: index == 1 && firstResultIsFavorited,
+                isOwner: index == 1 && firstResultIsOwner
             )
         }
         return SparkActivityPage(
@@ -447,10 +550,11 @@ final class SparkSessionStoreInteractionTests: XCTestCase {
 
     private func result(
         _ id: String,
-        isFavorited: Bool = false
+        isFavorited: Bool = false,
+        isOwner: Bool = false
     ) -> SparkResult {
         SparkResult(
-            card: card(id, isFavorited: isFavorited),
+            card: card(id, isFavorited: isFavorited, isOwner: isOwner),
             bucket: .related,
             score: 0.9,
             resultID: "sr_\(id)"
@@ -459,7 +563,8 @@ final class SparkSessionStoreInteractionTests: XCTestCase {
 
     private func card(
         _ id: String,
-        isFavorited: Bool = false
+        isFavorited: Bool = false,
+        isOwner: Bool = false
     ) -> FlowCard {
         FlowCard(
             id: id,
@@ -478,7 +583,8 @@ final class SparkSessionStoreInteractionTests: XCTestCase {
             isLiked: false,
             isPinned: false,
             pinnedAt: nil,
-            author: nil
+            author: nil,
+            isOwner: isOwner
         )
     }
 

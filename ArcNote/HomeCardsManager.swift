@@ -181,6 +181,9 @@ class HomeCardsManager: ObservableObject {
         guard authManager.currentUser != nil else {
             return
         }
+        guard cards.first(where: { $0.id == cardId })?.isOwner != true else {
+            return
+        }
         
         let isCurrentlyFavorited = getFavoriteState(for: cardId)
         
@@ -279,7 +282,9 @@ class HomeCardsManager: ObservableObject {
                                 pinnedAt: self?.cards[index].pinnedAt,
                                 isFavorited: self?.cards[index].isFavorited,
                                 favoriteCount: self?.cards[index].favoriteCount,
-                                rate: self?.cards[index].rate ?? 0
+                                rate: self?.cards[index].rate ?? 0,
+                                ownerActorId: self?.cards[index].ownerActorId,
+                                isOwner: self?.cards[index].isOwner
                             )
                         }
                         // The visibility response is the committed source state. The card
@@ -358,7 +363,9 @@ class HomeCardsManager: ObservableObject {
                                 pinnedAt: updatedCard.pinnedAt,
                                 isFavorited: self?.cards[index].isFavorited,
                                 favoriteCount: self?.cards[index].favoriteCount,
-                                rate: self?.cards[index].rate ?? 0
+                                rate: self?.cards[index].rate ?? 0,
+                                ownerActorId: self?.cards[index].ownerActorId,
+                                isOwner: self?.cards[index].isOwner
                             )
                         }
                         print("置顶状态切换成功: cardId=\(cardId), isPinned=\(updatedCard.isPinned ?? false)")

@@ -447,7 +447,8 @@ private extension RelatedCard {
                     username: $0.username,
                     avatarURL: $0.avatarUrl
                 )
-            }
+            },
+            isOwner: isOwner
         )
     }
 }

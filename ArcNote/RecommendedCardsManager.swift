@@ -317,6 +317,9 @@ class RecommendedCardsManager: ObservableObject {
         guard authManager.currentUser != nil else {
             return
         }
+        guard cards.first(where: { $0.id == cardId })?.isOwner != true else {
+            return
+        }
         
         let isCurrentlyFavorited = getFavoriteState(for: cardId)
         let currentCount = cardFavoriteCounts[cardId] ?? 0

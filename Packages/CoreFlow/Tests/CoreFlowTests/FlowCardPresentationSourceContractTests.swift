@@ -39,6 +39,16 @@ final class FlowCardPresentationSourceContractTests: XCTestCase {
         )
     }
 
+    func testOwnedFlowCardOmitsFavoriteControl() throws {
+        let source = try flowCardSource()
+
+        XCTAssertTrue(
+            source.contains("if !card.isOwner"),
+            "Owned cards must not expose a favorite action in Flow"
+        )
+        XCTAssertTrue(source.contains("Button(action: onToggleFavorite)"))
+    }
+
     func testFlowAvatarCanonicalizesRelativeResourceURLBeforeLoading() throws {
         let source = try flowCardSource()
         let authorButtonSource = try flowAuthorButtonSource()

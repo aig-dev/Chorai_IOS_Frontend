@@ -636,23 +636,21 @@ struct UserPostCard: View {
             // 互动统计
             HStack(spacing: 16) {
                 // 收藏按钮
-                Button(action: {
-                    if !disableFavorite {
-                    toggleFavorite()
-                    }
-                }) {
-                    HStack(spacing: 4) {
-                        Image(isFavorited ? "favorite_active" : "favorite")
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 24, height: 24)
-                        Text("\(favoriteCount)")
-                            .font(.system(size: 17, weight: .medium))
-                            .foregroundColor(.white.opacity(0.8))
+                if !disableFavorite && card.isOwner != true {
+                    Button(action: {
+                        toggleFavorite()
+                    }) {
+                        HStack(spacing: 4) {
+                            Image(isFavorited ? "favorite_active" : "favorite")
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .frame(width: 24, height: 24)
+                            Text("\(favoriteCount)")
+                                .font(.system(size: 17, weight: .medium))
+                                .foregroundColor(.white.opacity(0.8))
+                        }
                     }
                 }
-                .disabled(disableFavorite)
-                .opacity(disableFavorite ? 0.5 : 1.0)
                 
                 Spacer()
                 
@@ -722,6 +720,7 @@ struct UserPostCard: View {
             print("用户未登录")
             return
         }
+        guard !disableFavorite, card.isOwner != true else { return }
         
         let networkManager = NetworkManager.shared
         

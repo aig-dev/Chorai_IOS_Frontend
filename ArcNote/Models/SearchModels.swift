@@ -57,6 +57,8 @@ struct SearchCard: Codable, Identifiable {
     let author: SearchAuthor
     let linkedCards: SearchLinkedCards?
     let rate: Int
+    let ownerActorId: String?
+    let isOwner: Bool?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -80,6 +82,8 @@ struct SearchCard: Codable, Identifiable {
         case isLiked = "is_liked"
         case pinnedAt = "pinned_at"
         case linkedCards = "linked_cards"
+        case ownerActorId = "owner_actor_id"
+        case isOwner = "is_owner"
     }
 
     init(from decoder: Decoder) throws {
@@ -107,6 +111,8 @@ struct SearchCard: Codable, Identifiable {
         linkedCards = try container.decodeIfPresent(SearchLinkedCards.self, forKey: .linkedCards)
         rate = try container.decode(Int.self, forKey: .rate)
         author = try container.decode(SearchAuthor.self, forKey: .author)
+        ownerActorId = try container.decodeIfPresent(String.self, forKey: .ownerActorId)
+        isOwner = try container.decodeIfPresent(Bool.self, forKey: .isOwner)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -132,6 +138,8 @@ struct SearchCard: Codable, Identifiable {
         try container.encode(author, forKey: .author)
         try container.encodeIfPresent(linkedCards, forKey: .linkedCards)
         try container.encode(rate, forKey: .rate)
+        try container.encodeIfPresent(ownerActorId, forKey: .ownerActorId)
+        try container.encodeIfPresent(isOwner, forKey: .isOwner)
     }
 }
 

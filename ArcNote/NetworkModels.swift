@@ -91,6 +91,8 @@ struct Card: Codable, Identifiable {
     let isPinned: Bool?
     let pinnedAt: String?
     let author: UserInfo?
+    let ownerActorId: String?
+    let isOwner: Bool?
 
     enum CodingKeys: String, CodingKey {
         case id, title, content, contentJSON = "content_json", backgroundMediaRef = "background_media_ref", contentHash = "content_hash", tags, isPublic = "is_public"
@@ -98,6 +100,7 @@ struct Card: Codable, Identifiable {
         case likeCount = "like_count", viewCount = "view_count", commentCount = "comment_count", rate
         case isFavorited = "is_favorited", isLiked = "is_liked", isPinned = "is_pinned"
         case pinnedAt = "pinned_at", author
+        case ownerActorId = "owner_actor_id", isOwner = "is_owner"
     }
 }
 
@@ -439,6 +442,8 @@ struct UserCard: Codable, Identifiable {
     let isFavorited: Bool?
     let favoriteCount: Int?
     let rate: Int
+    let ownerActorId: String?
+    let isOwner: Bool?
 
     init(
         id: String,
@@ -458,7 +463,9 @@ struct UserCard: Codable, Identifiable {
         pinnedAt: String?,
         isFavorited: Bool?,
         favoriteCount: Int?,
-        rate: Int
+        rate: Int,
+        ownerActorId: String? = nil,
+        isOwner: Bool? = nil
     ) {
         self.id = id
         self.title = title
@@ -478,6 +485,8 @@ struct UserCard: Codable, Identifiable {
         self.isFavorited = isFavorited
         self.favoriteCount = favoriteCount
         self.rate = rate
+        self.ownerActorId = ownerActorId
+        self.isOwner = isOwner
     }
 
     enum CodingKeys: String, CodingKey {
@@ -495,6 +504,8 @@ struct UserCard: Codable, Identifiable {
         case pinnedAt = "pinned_at"
         case isFavorited = "is_favorited"
         case favoriteCount = "favorite_count"
+        case ownerActorId = "owner_actor_id"
+        case isOwner = "is_owner"
     }
 }
 

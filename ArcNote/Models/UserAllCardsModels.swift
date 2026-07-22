@@ -44,6 +44,7 @@ struct UserAllCard: Codable, Identifiable {
     let isPinned: Bool?
     let pinnedAt: String?
     let isFavorited: Bool?
+    let isOwner: Bool?
     let author: UserAllCardAuthor?
     
     enum CodingKeys: String, CodingKey {
@@ -64,6 +65,7 @@ struct UserAllCard: Codable, Identifiable {
         case isPinned = "is_pinned"
         case pinnedAt = "pinned_at"
         case isFavorited = "is_favorited"
+        case isOwner = "is_owner"
         case author
     }
 
@@ -86,7 +88,9 @@ struct UserAllCard: Codable, Identifiable {
             pinnedAt: pinnedAt,
             isFavorited: isFavorited,
             favoriteCount: favoriteCount,
-            rate: rate
+            rate: rate,
+            ownerActorId: ownerActorId,
+            isOwner: isOwner
         )
     }
 }

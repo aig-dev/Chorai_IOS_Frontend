@@ -131,6 +131,10 @@ final class SparkContinuationSourceContractTests: XCTestCase {
         let card = try sparkResultCardSource()
 
         XCTAssertTrue(card.contains("let onToggleFavorite: () -> Void"))
+        XCTAssertTrue(
+            card.contains("if !result.card.isOwner"),
+            "Owned Spark results must not expose a favorite action"
+        )
         XCTAssertTrue(card.contains("Button(action: onToggleFavorite)"))
         XCTAssertTrue(
             card.contains(

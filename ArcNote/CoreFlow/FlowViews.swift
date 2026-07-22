@@ -275,17 +275,19 @@ struct FlowCardView: View {
             Spacer(minLength: 0)
 
             HStack(spacing: 10) {
-                Button(action: onToggleFavorite) {
-                    engagementMetric(
-                        image: card.isFavorited ? "favorite_active" : "favorite",
-                        count: card.favoriteCount,
-                        iconSize: 24
-                    )
+                if !card.isOwner {
+                    Button(action: onToggleFavorite) {
+                        engagementMetric(
+                            image: card.isFavorited ? "favorite_active" : "favorite",
+                            count: card.favoriteCount,
+                            iconSize: 24
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(card.isFavorited ? "Unfavorite" : "Favorite")
+                    .accessibilityValue(card.isFavorited ? "true" : "false")
+                    .accessibilityIdentifier("flow.favorite.\(card.id)")
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel(card.isFavorited ? "Unfavorite" : "Favorite")
-                .accessibilityValue(card.isFavorited ? "true" : "false")
-                .accessibilityIdentifier("flow.favorite.\(card.id)")
 
                 Spacer(minLength: 16)
 

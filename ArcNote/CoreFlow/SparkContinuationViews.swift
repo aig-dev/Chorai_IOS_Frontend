@@ -730,22 +730,24 @@ private struct SparkResultCard: View {
 
     private var engagementFooter: some View {
         HStack(spacing: 10) {
-            Button(action: onToggleFavorite) {
-                SparkCount(
-                    image: result.card.isFavorited
-                        ? "favorite_active"
-                        : "favorite",
-                    count: result.card.favoriteCount,
-                    label: "favorites",
-                    iconSize: 24
+            if !result.card.isOwner {
+                Button(action: onToggleFavorite) {
+                    SparkCount(
+                        image: result.card.isFavorited
+                            ? "favorite_active"
+                            : "favorite",
+                        count: result.card.favoriteCount,
+                        label: "favorites",
+                        iconSize: 24
+                    )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(
+                    result.card.isFavorited ? "Unfavorite" : "Favorite"
                 )
+                .accessibilityValue(result.card.isFavorited ? "true" : "false")
+                .accessibilityIdentifier("spark.favorite.\(result.id)")
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel(
-                result.card.isFavorited ? "Unfavorite" : "Favorite"
-            )
-            .accessibilityValue(result.card.isFavorited ? "true" : "false")
-            .accessibilityIdentifier("spark.favorite.\(result.id)")
 
             Spacer(minLength: 16)
 

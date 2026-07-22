@@ -181,6 +181,27 @@ final class FlowDeckStoreTests: XCTestCase {
     }
 
     @MainActor
+    func testOwnedCardCannotBeFavorited() async {
+        let service = MockCoreFlowService()
+        service.recommendedResults = [
+            .success(FlowPage(cards: [card("owned", isOwner: true)], nextRefreshToken: nil))
+        ]
+        let store = FlowDeckStore(service: service)
+        store.loadInitialIfNeeded()
+        await settle()
+        let original = store.currentCard
+
+        store.toggleFavoriteCurrent()
+        await settle()
+
+        XCTAssertEqual(store.currentCard, original)
+        XCTAssertTrue(service.favoritedAssetIDs.isEmpty)
+        XCTAssertTrue(service.unfavoritedAssetIDs.isEmpty)
+        XCTAssertFalse(store.isInteractionLocked)
+        XCTAssertNil(store.notice)
+    }
+
+    @MainActor
     func testApplyLikeStateUpdatesMatchingCardWithoutAdvancingDeck() async {
         let service = MockCoreFlowService()
         service.recommendedResults = [
@@ -229,7 +250,11 @@ final class FlowDeckStoreTests: XCTestCase {
         XCTAssertEqual(store.cards, before)
     }
 
-    private func card(_ id: String, isFavorited: Bool = false) -> FlowCard {
+    private func card(
+        _ id: String,
+        isFavorited: Bool = false,
+        isOwner: Bool = false
+    ) -> FlowCard {
         FlowCard(
             id: id,
             title: "Title \(id)",
@@ -247,7 +272,8 @@ final class FlowDeckStoreTests: XCTestCase {
             isLiked: false,
             isPinned: false,
             pinnedAt: nil,
-            author: FlowAuthor(id: "act_1", username: "Ada", avatarURL: nil)
+            author: FlowAuthor(id: "act_1", username: "Ada", avatarURL: nil),
+            isOwner: isOwner
         )
     }
 

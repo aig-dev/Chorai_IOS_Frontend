@@ -591,6 +591,7 @@ private struct LibraryFixtureScreen: View {
             isPinned: false,
             pinnedAt: nil,
             isFavorited: isFavorited,
+            isOwner: authorID == "fixture-owner",
             author: UserAllCardAuthor(
                 id: authorID,
                 username: authorName,

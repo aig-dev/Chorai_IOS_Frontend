@@ -53,6 +53,9 @@ struct DetailView: View {
     }
     
     private var isCurrentCardOwned: Bool {
+        if let isOwner = cardDetailManager.cardDetail?.isOwner {
+            return isOwner
+        }
         guard let authorId = cardDetailManager.cardDetail?.author?.actorId,
               let currentUserId = AuthManager.shared.currentUser?.id else {
             return false
@@ -82,7 +85,9 @@ struct DetailView: View {
             pinnedAt: detail.pinnedAt,
             isFavorited: detail.isFavorited,
             favoriteCount: detail.favoriteCount,
-            rate: detail.rate
+            rate: detail.rate,
+            ownerActorId: detail.ownerActorId,
+            isOwner: detail.isOwner
         )
     }
     
@@ -357,17 +362,19 @@ struct DetailView: View {
                         .accessibilityIdentifier("detail.comment.open")
                     
                     // 收藏按钮
-                    Button(action: {
-                        toggleFavorite()
-                    }) {
-                    HStack(spacing: 6) {
-                        Image(isFavorited ? "favorite_active" : "favorite")
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 25, height: 25)
+                    if !isCurrentCardOwned {
+                        Button(action: {
+                            toggleFavorite()
+                        }) {
+                            HStack(spacing: 6) {
+                                Image(isFavorited ? "favorite_active" : "favorite")
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fit)
+                                    .frame(width: 25, height: 25)
                             Text("\(favoriteCount)")
-                            .font(.system(size: 16, weight: .medium))
-                            .foregroundColor(.white)
+                                    .font(.system(size: 16, weight: .medium))
+                                    .foregroundColor(.white)
+                            }
                         }
                     }
                     
@@ -547,6 +554,7 @@ struct DetailView: View {
             print("用户未登录")
             return
         }
+        guard !isCurrentCardOwned else { return }
         
         let networkManager = NetworkManager.shared
         

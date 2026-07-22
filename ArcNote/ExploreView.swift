@@ -444,7 +444,8 @@ struct ExploreView: View {
                                     cardsManager: cardsManager,
                                     onShowMenu: { cardData in
                                         currentExploreCardData = convertCardToUserCard(cardData)
-                                        isCurrentExploreCardOwned = isOwnedByCurrentUser(authorId: cardData.author?.id)
+                                        isCurrentExploreCardOwned = cardData.isOwner
+                                            ?? isOwnedByCurrentUser(authorId: cardData.author?.id)
                                         showExplorePopupMenu = true
                                     },
                                     onSwipe: { translation, isEnded in
@@ -674,7 +675,9 @@ struct ExploreView: View {
                 followersCount: nil,
                 followingCount: nil,
                 isFollowing: nil
-            )
+            ),
+            ownerActorId: searchCard.ownerActorId,
+            isOwner: searchCard.isOwner
         )
     }
     
@@ -720,7 +723,9 @@ struct ExploreView: View {
             pinnedAt: card.pinnedAt,
             isFavorited: card.isFavorited,
             favoriteCount: card.favoriteCount,
-            rate: 0 // Card 模型没有 rate 字段，默认为 0
+            rate: 0, // Card 模型没有 rate 字段，默认为 0
+            ownerActorId: card.ownerActorId,
+            isOwner: card.isOwner
         )
     }
     

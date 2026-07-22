@@ -880,7 +880,9 @@ struct InspiredNoteCard: View {
                             pinnedAt: nil,
                             isFavorited: card.isFavorited,
                             favoriteCount: card.favoriteCount,
-                            rate: 0 // RelatedCard 模型没有 rate 字段，默认为 0
+                            rate: 0, // RelatedCard 模型没有 rate 字段，默认为 0
+                            ownerActorId: card.ownerActorId,
+                            isOwner: card.isOwner
                         )
                         onMenuTap(userCard)
                     }) {
@@ -929,17 +931,19 @@ struct InspiredNoteCard: View {
                 // 交互统计
                 HStack {
                     // 左边一个 收藏按钮
-                    Button(action: {
-                        relatedCardsManager.toggleFavorite(for: card.id)
-                    }) {
-                        HStack(spacing: 4) {
-                            Image(relatedCardsManager.getFavoriteState(for: card.id) ? "favorite_active" : "favorite")
-                                .resizable()
-                                .aspectRatio(contentMode: .fit)
-                                .frame(width: 18, height: 18)
-                            Text("\(relatedCardsManager.getFavoriteCount(for: card.id))")
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundColor(.white.opacity(0.8))
+                    if !card.isOwner {
+                        Button(action: {
+                            relatedCardsManager.toggleFavorite(for: card.id)
+                        }) {
+                            HStack(spacing: 4) {
+                                Image(relatedCardsManager.getFavoriteState(for: card.id) ? "favorite_active" : "favorite")
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fit)
+                                    .frame(width: 18, height: 18)
+                                Text("\(relatedCardsManager.getFavoriteCount(for: card.id))")
+                                    .font(.system(size: 14, weight: .medium))
+                                    .foregroundColor(.white.opacity(0.8))
+                            }
                         }
                     }
                     

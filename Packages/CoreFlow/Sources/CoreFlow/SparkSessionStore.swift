@@ -127,7 +127,8 @@ public final class SparkSessionStore: ObservableObject {
         guard
             !isInteractionLocked,
             let result = currentResult,
-            let sparkActivityID = activeActivityID
+            let sparkActivityID = activeActivityID,
+            !result.card.isOwner
         else {
             return
         }
@@ -455,10 +456,13 @@ public final class SparkSessionStore: ObservableObject {
         }
 
         sourceCard = source
-        results = page.orderedResults
+        results = filteredResults(from: page)
         visibleIndex = 0
         activeActivityID = page.activityID
-        resetMoreState(sourceAssetID: page.sourceAssetID)
+        resetMoreState(
+            sourceAssetID: page.sourceAssetID,
+            activityID: page.activityID
+        )
         pendingTrigger = nil
         lastFailedTrigger = nil
         lastFailedSourceCard = nil
@@ -615,19 +619,48 @@ public final class SparkSessionStore: ObservableObject {
             chain.append(updatedNode)
         }
 
-        let replayedResults = page.orderedResults
+        let replayedResults = filteredResults(from: page)
         sourceCard = source
         results = replayedResults
         visibleIndex = replayedResults.isEmpty
             ? 0
             : min(savedNode.visibleIndex, replayedResults.count - 1)
         activeActivityID = page.activityID
-        resetMoreState(sourceAssetID: page.sourceAssetID)
+        resetMoreState(
+            sourceAssetID: page.sourceAssetID,
+            activityID: page.activityID
+        )
         pendingTrigger = nil
         lastFailedReplayActivityID = nil
         isInteractionLocked = false
         phase = replayedResults.isEmpty ? .empty : .loaded
         persistCurrentState()
+    }
+
+    private func filteredResults(from page: SparkActivityPage) -> [SparkResult] {
+        let excludedSourceAssetIDs = sourceAssetIDs(
+            through: page.activityID,
+            fallback: page.sourceAssetID
+        )
+        return page.orderedResults.filter {
+            !excludedSourceAssetIDs.contains($0.id)
+        }
+    }
+
+    private func sourceAssetIDs(
+        through activityID: String,
+        fallback sourceAssetID: String
+    ) -> Set<String> {
+        var sourceAssetIDs = Set([sourceAssetID])
+        guard let activityIndex = chain.firstIndex(where: {
+            $0.activityID == activityID
+        }) else {
+            return sourceAssetIDs
+        }
+        sourceAssetIDs.formUnion(
+            chain[...activityIndex].map(\.sourceAssetID)
+        )
+        return sourceAssetIDs
     }
 
     private static func restoredSource(
@@ -796,12 +829,20 @@ public final class SparkSessionStore: ObservableObject {
             )
     }
 
-    private func resetMoreState(sourceAssetID: String) {
+    private func resetMoreState(
+        sourceAssetID: String,
+        activityID: String
+    ) {
         moreCancellable?.cancel()
         moreCancellable = nil
         nextCursor = nil
         seenAssetIDs = Set(results.map(\.id))
-        seenAssetIDs.insert(sourceAssetID)
+        seenAssetIDs.formUnion(
+            sourceAssetIDs(
+                through: activityID,
+                fallback: sourceAssetID
+            )
+        )
         hasRequestedMore = false
         consecutiveEmptyMorePages = 0
         isLoadingMore = false
