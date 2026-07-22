@@ -6,6 +6,11 @@ struct SparkContinuationView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var systemDynamicTypeSize
     @StateObject private var store: SparkSessionStore
+    @StateObject private var likeStore = CardLikeStore(
+        state: CardLikeState(cardID: "", isLiked: false, likeCount: 0),
+        service: NetworkCoreCardLikeService(),
+        onCommit: CardEngagementCenter.shared.publish
+    )
     @State private var showPopupMenu = false
     @State private var currentMenuCard: UserCard?
     @State private var menuCardIsOwned = false
@@ -68,15 +73,18 @@ struct SparkContinuationView: View {
             .adaptiveContentGutter()
             .padding(.top, 8)
             .padding(.bottom, 18)
+            .foregroundStyle(.white)
 
             automationAnchors
                 .id(automationStateIdentity)
         }
-        .foregroundStyle(.white)
         .navigationBarHidden(true)
         .navigationBarBackButtonHidden(true)
         .preferredColorScheme(.dark)
-        .overlay(CommentPopupView())
+        .overlay {
+            CommentPopupView()
+                .environment(\.colorScheme, .light)
+        }
         .popupMenu(
             isPresented: $showPopupMenu,
             layout: menuCardIsOwned ? .grid3x3 : .grid3x2,
@@ -103,6 +111,20 @@ struct SparkContinuationView: View {
             try? await Task.sleep(nanoseconds: 700_000_000)
             guard !Task.isCancelled, presentationRevision == 0 else { return }
             presentationRevision = 1
+        }
+        .onChange(of: store.currentResult?.id) { _ in
+            guard let card = store.currentResult?.card else { return }
+            likeStore.hydrate(
+                CardLikeState(
+                    cardID: card.id,
+                    isLiked: card.isLiked,
+                    likeCount: card.likeCount
+                )
+            )
+        }
+        .onReceive(CardEngagementCenter.shared.likes) { state in
+            store.applyLikeState(state)
+            likeStore.applyCommitted(state)
         }
         .onChange(of: store.activeActivityID) { activityID in
             guard activityID != nil else { return }
@@ -309,6 +331,8 @@ struct SparkContinuationView: View {
                     SparkResultCard(
                         result: result,
                         isInteractionLocked: store.isInteractionLocked,
+                        isLikeMutationInFlight: likeStore.isMutating,
+                        likeErrorMessage: likeErrorMessage(for: result.card.id),
                         allowsSparkDeeper: store.phase == .loaded,
                         forcesAccessibleAppearance: usesAccessibilityEvidenceMode,
                         onNext: store.advance,
@@ -319,6 +343,7 @@ struct SparkContinuationView: View {
                                 )
                             }
                         },
+                        onToggleLike: likeStore.toggle,
                         onSparkDeeper: store.sparkCurrentDeeper,
                         onOpenCard: { openDetail(result.card.id) },
                         onOpenAuthor: {
@@ -334,6 +359,14 @@ struct SparkContinuationView: View {
                 noticeView
             }
         }
+    }
+
+    private func likeErrorMessage(for cardID: String) -> String? {
+        guard likeStore.state.cardID == cardID,
+              case .failed = likeStore.phase else {
+            return nil
+        }
+        return "Like failed. Try again."
     }
 
     @ViewBuilder
@@ -559,10 +592,13 @@ private struct SparkChainRail: View {
 private struct SparkResultCard: View {
     let result: SparkResult
     let isInteractionLocked: Bool
+    let isLikeMutationInFlight: Bool
+    let likeErrorMessage: String?
     let allowsSparkDeeper: Bool
     let forcesAccessibleAppearance: Bool
     let onNext: () -> Void
     let onToggleFavorite: () -> Void
+    let onToggleLike: () -> Void
     let onSparkDeeper: () -> Void
     let onOpenCard: () -> Void
     let onOpenAuthor: () -> Void
@@ -620,13 +656,22 @@ private struct SparkResultCard: View {
                 }
             }
 
-            Text(bucketLabel)
-                .font(.caption2.weight(.semibold))
-                .tracking(0.7)
-                .foregroundStyle(ZenVisualTokens.accent.opacity(0.82))
+            if let bucketLabel {
+                Text(bucketLabel)
+                    .font(.caption2.weight(.semibold))
+                    .tracking(0.7)
+                    .foregroundStyle(ZenVisualTokens.accent.opacity(0.82))
+            }
 
             tappableContent
             engagementFooter
+
+            if let likeErrorMessage {
+                Text(likeErrorMessage)
+                    .font(.footnote)
+                    .foregroundStyle(Color.white.opacity(0.72))
+                    .accessibilityIdentifier("spark.like.error.\(result.id)")
+            }
         }
         .padding(22)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -676,9 +721,7 @@ private struct SparkResultCard: View {
         .onTapGesture(perform: onOpenCard)
         .gesture(cardGesture)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(
-            "\(bucketLabel). \(FlowTextPreview.make(result.card.content))"
-        )
+        .accessibilityLabel(accessibilityCardLabel)
         .accessibilityAddTraits(.isButton)
         .accessibilityAction(named: Text("Next result"), onNext)
         .accessibilityAction(named: Text("Open card"), onOpenCard)
@@ -706,17 +749,30 @@ private struct SparkResultCard: View {
 
             Spacer(minLength: 16)
 
-            SparkCount(
-                image: result.card.isLiked ? "like_active" : "like",
-                count: result.card.likeCount,
-                label: "likes"
-            )
+            Button(action: onToggleLike) {
+                SparkCount(
+                    image: result.card.isLiked ? "like_active" : "like",
+                    count: result.card.likeCount,
+                    label: "likes"
+                )
+            }
+            .buttonStyle(.plain)
+            .disabled(isLikeMutationInFlight)
+            .accessibilityLabel(result.card.isLiked ? "Unlike" : "Like")
+            .accessibilityValue(result.card.isLiked ? "true" : "false")
+            .accessibilityIdentifier("spark.like.\(result.id)")
 
-            SparkCount(
-                image: "comment",
-                count: result.card.commentCount,
-                label: "comments"
+            CommentButton(
+                cardId: result.card.id,
+                commentCount: result.card.commentCount,
+                iconSize: 22
             )
+            .buttonStyle(.plain)
+            .frame(minWidth: 44, minHeight: 44)
+            .contentShape(Rectangle())
+            .accessibilityLabel("Comments")
+            .accessibilityValue("\(result.card.commentCount)")
+            .accessibilityIdentifier("spark.comment.\(result.id)")
         }
         .padding(.bottom, -18)
         .foregroundStyle(Color.white.opacity(0.58))
@@ -838,14 +894,20 @@ private struct SparkResultCard: View {
         isResolvingGesture = false
     }
 
-    private var bucketLabel: String {
+    private var accessibilityCardLabel: String {
+        let content = FlowTextPreview.make(result.card.content)
+        guard let bucketLabel else { return content }
+        return "\(bucketLabel). \(content)"
+    }
+
+    private var bucketLabel: String? {
         switch result.bucket {
         case .related:
             return "RELATED"
         case .angles:
             return "ANGLE"
         case .keywords:
-            return "KEYWORD"
+            return nil
         }
     }
 }

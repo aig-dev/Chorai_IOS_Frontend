@@ -188,6 +188,18 @@ public final class SparkSessionStore: ObservableObject {
         persistCurrentState()
     }
 
+    public func applyLikeState(_ state: CardLikeState) {
+        results = results.map { result in
+            guard result.id == state.cardID else { return result }
+            return SparkResult(
+                card: result.card.replacingLike(with: state),
+                bucket: result.bucket,
+                score: result.score,
+                resultID: result.resultID
+            )
+        }
+    }
+
     public func sparkCurrentDeeper() {
         guard
             !isInteractionLocked,

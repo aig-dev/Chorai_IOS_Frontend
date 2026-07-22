@@ -75,6 +75,26 @@ final class SparkSessionStoreInteractionTests: XCTestCase {
         XCTAssertFalse(harness.store.isInteractionLocked)
     }
 
+    func testLikeCommitUpdatesMatchingResultWithoutMovingDeck() async {
+        let harness = makeHarness()
+        await loadRoot(harness, resultCount: 3)
+
+        harness.store.applyLikeState(
+            CardLikeState(
+                cardID: "ast_result_1",
+                isLiked: true,
+                likeCount: 1
+            )
+        )
+
+        XCTAssertEqual(harness.store.visibleIndex, 0)
+        XCTAssertEqual(harness.store.currentResult?.id, "ast_result_1")
+        XCTAssertEqual(harness.store.currentResult?.card.isLiked, true)
+        XCTAssertEqual(harness.store.currentResult?.card.likeCount, 1)
+        XCTAssertEqual(harness.store.results[1].card.isLiked, false)
+        XCTAssertEqual(harness.store.results[1].card.likeCount, 0)
+    }
+
     func testMoreDeduplicatesSourceAndStopsAfterTwoEmptyBatches() async {
         let harness = makeHarness()
         await loadRoot(harness, resultCount: 4)

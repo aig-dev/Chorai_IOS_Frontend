@@ -31,6 +31,31 @@ final class SparkContinuationSourceContractTests: XCTestCase {
         )
     }
 
+    func testSparkScopesWhiteForegroundStyleAwayFromSharedCommentPopup() throws {
+        let continuation = try source(
+            at: "ArcNote/CoreFlow/SparkContinuationViews.swift"
+        )
+
+        XCTAssertTrue(
+            continuation.contains(
+                ".padding(.bottom, 18)\n            .foregroundStyle(.white)\n\n            automationAnchors"
+            ),
+            "Spark's white foreground style must stay scoped to its screen content"
+        )
+        XCTAssertFalse(
+            continuation.contains(
+                "}\n        .foregroundStyle(.white)\n        .navigationBarHidden(true)"
+            ),
+            "A root foreground style leaks into CommentPopupView and changes Explore's material"
+        )
+        XCTAssertTrue(
+            continuation.contains(
+                "CommentPopupView()\n                .environment(\\.colorScheme, .light)"
+            ),
+            "Spark must render the shared comment popup in Explore's app-level Light environment"
+        )
+    }
+
     func testPendingContinuationAppearsAsTheNextNumberedHistoryNode() throws {
         let continuation = try source(
             at: "ArcNote/CoreFlow/SparkContinuationViews.swift"
@@ -133,6 +158,45 @@ final class SparkContinuationSourceContractTests: XCTestCase {
             engagementFooter.contains(".onTapGesture(perform: onOpenCard)"),
             "The footer must not inherit the card-detail tap target"
         )
+    }
+
+    func testSparkFooterLikeAndCommentsAreInteractive() throws {
+        let continuation = try source(
+            at: "ArcNote/CoreFlow/SparkContinuationViews.swift"
+        )
+        let card = try sparkResultCardSource()
+
+        XCTAssertTrue(
+            continuation.contains("@StateObject private var likeStore = CardLikeStore(")
+        )
+        XCTAssertTrue(continuation.contains("store.applyLikeState(state)"))
+        XCTAssertTrue(card.contains("let isLikeMutationInFlight: Bool"))
+        XCTAssertTrue(card.contains("let onToggleLike: () -> Void"))
+        XCTAssertTrue(card.contains("Button(action: onToggleLike)"))
+        XCTAssertTrue(card.contains(".disabled(isLikeMutationInFlight)"))
+        XCTAssertTrue(
+            card.contains(
+                ".accessibilityIdentifier(\"spark.like.\\(result.id)\")"
+            )
+        )
+        XCTAssertTrue(card.contains("CommentButton("))
+        XCTAssertTrue(card.contains("cardId: result.card.id"))
+        XCTAssertTrue(
+            card.contains(
+                ".accessibilityIdentifier(\"spark.comment.\\(result.id)\")"
+            )
+        )
+    }
+
+    func testKeywordResultsDoNotRenderKeywordBucketLabel() throws {
+        let card = try sparkResultCardSource()
+
+        XCTAssertTrue(card.contains("if let bucketLabel"))
+        XCTAssertTrue(card.contains("private var bucketLabel: String?"))
+        XCTAssertTrue(
+            card.contains("case .keywords:\n            return nil")
+        )
+        XCTAssertFalse(card.contains("return \"KEYWORD\""))
     }
 
     func testSparkCardHasNoBottomCueUpwardContinuationOrSavedOverlay() throws {
