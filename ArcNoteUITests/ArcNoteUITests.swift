@@ -2376,18 +2376,38 @@ final class ArcNoteUITests: XCTestCase {
     func testMainTabsRenderAgainstSeededGoSession() throws {
         launchAuthenticatedApp()
 
-        waitFor("tab.flow")
-        waitFor("tab.library")
-        waitFor("tab.chat")
+        let flowTab = waitFor("tab.flow")
+        let libraryTab = waitFor("tab.library")
+        let chatTab = waitFor("tab.chat")
+
+        XCTAssertEqual(flowTab.label, "Explore")
+        XCTAssertEqual(libraryTab.label, "Home")
+        XCTAssertEqual(chatTab.label, "Chat")
+        assertEqualTabBarHitRegions([flowTab, libraryTab, chatTab])
+        XCTAssertTrue(flowTab.isSelected)
+        XCTAssertFalse(libraryTab.isSelected)
+        XCTAssertFalse(chatTab.isSelected)
+        captureVisual("tab-bar-explore-selected")
 
         tap("tab.library")
         waitFor("screen.home.content", timeout: 20)
+        XCTAssertFalse(flowTab.isSelected)
+        XCTAssertTrue(libraryTab.isSelected)
+        XCTAssertFalse(chatTab.isSelected)
+        captureVisual("tab-bar-home-selected")
 
         tap("tab.chat")
         waitFor("screen.chat.content", timeout: 20)
+        XCTAssertFalse(flowTab.isSelected)
+        XCTAssertFalse(libraryTab.isSelected)
+        XCTAssertTrue(chatTab.isSelected)
+        captureVisual("tab-bar-chat-selected")
 
         tap("tab.flow")
         waitFor("screen.flow.content", timeout: 20)
+        XCTAssertTrue(flowTab.isSelected)
+        XCTAssertFalse(libraryTab.isSelected)
+        XCTAssertFalse(chatTab.isSelected)
     }
 
     func testExploreSearchSubmitsAgainstGoSearchRoute() throws {
@@ -6791,6 +6811,47 @@ final class ArcNoteUITests: XCTestCase {
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
+    }
+
+    private func assertEqualTabBarHitRegions(
+        _ tabs: [XCUIElement],
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        guard let reference = tabs.first else {
+            XCTFail("Expected at least one tab", file: file, line: line)
+            return
+        }
+
+        XCTAssertGreaterThanOrEqual(
+            reference.frame.height,
+            44,
+            file: file,
+            line: line
+        )
+        for tab in tabs.dropFirst() {
+            XCTAssertEqual(
+                tab.frame.width,
+                reference.frame.width,
+                accuracy: 1,
+                file: file,
+                line: line
+            )
+            XCTAssertEqual(
+                tab.frame.height,
+                reference.frame.height,
+                accuracy: 1,
+                file: file,
+                line: line
+            )
+            XCTAssertEqual(
+                tab.frame.midY,
+                reference.frame.midY,
+                accuracy: 1,
+                file: file,
+                line: line
+            )
+        }
     }
 
     private func waitForSessionPhase(

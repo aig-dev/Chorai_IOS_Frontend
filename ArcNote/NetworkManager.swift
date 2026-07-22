@@ -1668,7 +1668,8 @@ extension NetworkManager {
 
     func createComment(cardId: String, request: CreateCommentRequest, completion: @escaping (Result<CreateCommentResponse, NetworkError>) -> Void) {
         var parameters: Parameters = [
-            "body": request.content
+            "body": request.content,
+            "visibility": request.visibility.rawValue
         ]
         if let parentCommentId = request.parentCommentId {
             parameters["parent_comment_id"] = parentCommentId

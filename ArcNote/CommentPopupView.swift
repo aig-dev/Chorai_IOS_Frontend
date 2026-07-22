@@ -7,6 +7,8 @@ class CommentPopupManager: ObservableObject {
     @Published var isShowing = false
     @Published var comments: [CommentModel] = []
     @Published var isLoading = false
+    @Published var loadedCommentCount = 0
+    @Published var isSubmitting = false
     @Published var showErrorAlert = false
     @Published var errorMessage = ""
     
@@ -25,6 +27,10 @@ class CommentPopupManager: ObservableObject {
         
         commentManager.$isLoading
             .assign(to: \.isLoading, on: self)
+            .store(in: &cancellables)
+
+        commentManager.$loadedCommentCount
+            .assign(to: \.loadedCommentCount, on: self)
             .store(in: &cancellables)
         
         // 设置评论数量变化回调
@@ -55,17 +61,31 @@ class CommentPopupManager: ObservableObject {
         commentManager.loadComments(for: cardId, refresh: true)
     }
     
-    func addComment(_ content: String) {
-        guard let cardId = currentCardId else { return }
+    func addComment(
+        _ content: String,
+        parentCommentId: String? = nil,
+        visibility: CommentVisibility = .publicComment,
+        completion: ((Bool) -> Void)? = nil
+    ) {
+        let trimmedContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let cardId = currentCardId, !trimmedContent.isEmpty, !isSubmitting else {
+            completion?(false)
+            return
+        }
+        isSubmitting = true
         
         commentManager.createComment(
             for: cardId,
-            content: content
+            content: trimmedContent,
+            parentCommentId: parentCommentId,
+            visibility: visibility
         ) { result in
             DispatchQueue.main.async {
+                self.isSubmitting = false
                 switch result {
                 case .success(let comment):
                     print("评论发布成功: id=\(comment.id)")
+                    completion?(true)
                 case .failure(let error):
                     print("评论发布失败: \(error.localizedDescription)")
                     
@@ -81,6 +101,7 @@ class CommentPopupManager: ObservableObject {
                         self.errorMessage = "Failed comment: \(error.localizedDescription)"
                         self.showErrorAlert = true
                     }
+                    completion?(false)
                 }
             }
         }
@@ -98,46 +119,7 @@ class CommentPopupManager: ObservableObject {
     
     // MARK: - 移除评论（用于拉黑后移除）
     func removeComment(commentId: String) {
-        DispatchQueue.main.async {
-            // 从主评论列表中移除
-            if let index = self.comments.firstIndex(where: { $0.id == commentId }) {
-                self.comments.remove(at: index)
-
-                // 更新评论数量
-                if let cardId = self.currentCardId {
-                    let newCount = self.comments.count
-                    NotificationCenter.default.post(
-                        name: NSNotification.Name("CommentCountChanged"),
-                        object: nil,
-                        userInfo: ["cardId": cardId, "newCount": newCount]
-                    )
-                }
-            } else {
-                // 从子评论中移除
-                for i in 0..<self.comments.count {
-                    if let replyIndex = self.comments[i].replies.firstIndex(where: { $0.id == commentId }) {
-                        self.comments[i].replies.remove(at: replyIndex)
-                        print("已移除回复: replyId=\(commentId)")
-                        
-                        // 更新回复数量
-                        var updatedComment = self.comments[i]
-                        updatedComment = CommentModel(
-                            id: updatedComment.id,
-                            commentAssetId: updatedComment.commentAssetId,
-                            cardId: updatedComment.cardId,
-                            parentCommentId: updatedComment.parentCommentId,
-                            content: updatedComment.content,
-                            createdAt: updatedComment.createdAt,
-                            updatedAt: updatedComment.updatedAt,
-                            user: updatedComment.user,
-                            replies: updatedComment.replies
-                        )
-                        self.comments[i] = updatedComment
-                        break
-                    }
-                }
-            }
-        }
+        commentManager.removeComment(commentId: commentId)
     }
 }
 
@@ -145,6 +127,8 @@ class CommentPopupManager: ObservableObject {
 struct CommentPopupView: View {
     @ObservedObject private var manager = CommentPopupManager.shared
     @State private var commentText = ""
+    @State private var isPrivateMode = false
+    @State private var replyTarget: CommentModel?
     @State private var slideOffset: CGFloat = 0
     @FocusState private var isTextFieldFocused: Bool
     
@@ -218,9 +202,21 @@ struct CommentPopupView: View {
                                         .padding(.vertical, 40)
                                     } else {
                                         ForEach(manager.comments) { comment in
-                                            CommentRowView(comment: comment)
+                                            CommentRowView(comment: comment) { selectedComment in
+                                                enterReplyMode(for: selectedComment)
+                                            }
                                                 .id(comment.id)
                                                 .accessibilityIdentifier("comment.row.\(comment.id)")
+                                        }
+
+                                        if !manager.comments.isEmpty {
+                                            Color.clear
+                                                .frame(height: 1)
+                                                .id("comment-load-more-\(manager.loadedCommentCount)")
+                                                .onAppear {
+                                                    manager.loadMoreComments()
+                                                }
+                                                .accessibilityHidden(true)
                                         }
                                         
                                         // 加载更多指示器
@@ -252,50 +248,76 @@ struct CommentPopupView: View {
                             }
                         
                         // 评论输入框
-                        HStack(spacing: 12) {
-                            HStack(spacing: 12){
-                                TextField("Add Comment", text: $commentText)
-                                    .textFieldStyle(PlainTextFieldStyle())
-                                    .foregroundColor(.white)
-                                    .padding(.vertical, 12)
-                                    .placeholder(when: commentText.isEmpty) {
-                                        Text("Add Comment")
-                                            .foregroundColor(Color(red: 0.627, green: 0.627, blue: 0.627)) // A0A0A0
+                        VStack(spacing: 8) {
+                            if let replyTarget {
+                                HStack(spacing: 8) {
+                                    Text("Replying to \(replyTarget.user.displayName)")
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundColor(.white.opacity(0.72))
+                                        .lineLimit(1)
+                                    Spacer()
+                                    Button(action: exitReplyMode) {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .font(.system(size: 18))
+                                            .foregroundColor(.white.opacity(0.65))
                                     }
-                                    .focused($isTextFieldFocused)
-                                    .accessibilityIdentifier("comment.input")
-                                
-                                Button(action: {
-                                    if !commentText.isEmpty {
-                                        manager.addComment(commentText)
-                                        
-                                        // 重置状态
-                                        commentText = ""
-                                        isTextFieldFocused = false
-                                    }
-                                }) {
-                                    Image("send")
-                                        .resizable()
-                                        .frame(width: 40,height: 40)
+                                    .accessibilityLabel("Cancel reply")
+                                    .accessibilityIdentifier("comment.reply.cancel")
                                 }
-                                .accessibilityIdentifier("comment.send")
-                                .disabled(commentText.isEmpty)
                             }
-                            .padding(.leading, 16)
-                            .padding(.trailing, 2)
-                            .padding(.vertical, 2)
-                            .background(
-                                RoundedRectangle(cornerRadius: 15)
-                                    .background(.ultraThinMaterial)
-                                    .roundedButtonHighlightEffect(cornerRadius: 30)
-                            )
-                            .cornerRadius(30)
+
+                            HStack(spacing: 12) {
+                                Button(action: {
+                                    guard !isReplyPrivacyLocked else { return }
+                                    isPrivateMode.toggle()
+                                }) {
+                                    Image(isPrivateMode ? "secret_active" : "secret")
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fit)
+                                        .frame(width: 30, height: 30)
+                                        .frame(width: 44, height: 44)
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel(isPrivateMode ? "Private comment" : "Public comment")
+                                .accessibilityValue(isPrivateMode ? "Visible only to you and the card author" : "Visible to card readers")
+                                .accessibilityHint(isReplyPrivacyLocked ? "Replies to a private thread stay private" : "Double tap to change comment privacy")
+                                .accessibilityIdentifier("comment.visibility.toggle")
+
+                                HStack(spacing: 12) {
+                                    TextField(composerPlaceholder, text: $commentText)
+                                        .textFieldStyle(PlainTextFieldStyle())
+                                        .foregroundColor(.white)
+                                        .padding(.vertical, 12)
+                                        .placeholder(when: commentText.isEmpty) {
+                                            Text(composerPlaceholder)
+                                                .foregroundColor(Color(red: 0.627, green: 0.627, blue: 0.627))
+                                        }
+                                        .focused($isTextFieldFocused)
+                                        .accessibilityIdentifier("comment.input")
+
+                                    Button(action: submitComment) {
+                                        Image("send")
+                                            .resizable()
+                                            .frame(width: 40, height: 40)
+                                    }
+                                    .accessibilityIdentifier("comment.send")
+                                    .disabled(trimmedCommentText.isEmpty || manager.isSubmitting)
+                                }
+                                .padding(.leading, 16)
+                                .padding(.trailing, 2)
+                                .padding(.vertical, 2)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 15)
+                                        .background(.ultraThinMaterial)
+                                        .roundedButtonHighlightEffect(cornerRadius: 30)
+                                )
+                                .cornerRadius(30)
+                            }
                         }
                         .padding(.top, 10)
                         .adaptiveContentGutter()
-                        .padding(.bottom, 40)
-                        .frame(height: 80) // 固定输入框区域高度
-//                        .background(Color.white.opacity(0.1))
+                        .padding(.bottom, 24)
+                        .frame(minHeight: 80)
                     }
                     .frame(maxWidth: geometry.size.width, maxHeight: sheetHeight)
                     .background(
@@ -317,6 +339,8 @@ struct CommentPopupView: View {
                         y: geometry.size.height - sheetHeight / 2
                     )
                     .offset(y: slideOffset)
+                    .opacity(manager.isShowing ? 1 : 0)
+                    .allowsHitTesting(manager.isShowing)
                     .animation(.easeInOut(duration: 0.4), value: slideOffset)
                     .onChange(of: manager.isShowing) { isShowing in
                         if isShowing {
@@ -345,7 +369,7 @@ struct CommentPopupView: View {
 
                 .onChange(of: manager.isShowing) { isShowing in
                     if !isShowing {
-                        isTextFieldFocused = false
+                        resetComposer()
                     }
                 }
                 .alert("Error", isPresented: $manager.showErrorAlert) {
@@ -358,21 +382,79 @@ struct CommentPopupView: View {
             }
 //        }
     }
-    
+
+    private var trimmedCommentText: String {
+        commentText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var composerPlaceholder: String {
+        guard let replyTarget else {
+            return isPrivateMode ? "Add a private comment" : "Add Comment"
+        }
+        return "Reply to \(replyTarget.user.displayName)"
+    }
+
+    private var isReplyPrivacyLocked: Bool {
+        replyTarget?.visibility == .privateComment
+    }
+
+    private func submitComment() {
+        guard !trimmedCommentText.isEmpty else { return }
+        manager.addComment(
+            trimmedCommentText,
+            parentCommentId: replyTarget?.id,
+            visibility: isPrivateMode ? .privateComment : .publicComment
+        ) { didSucceed in
+            guard didSucceed else { return }
+            commentText = ""
+            replyTarget = nil
+            isPrivateMode = false
+            isTextFieldFocused = false
+        }
+    }
+
+    private func enterReplyMode(for comment: CommentModel) {
+        replyTarget = comment
+        if comment.visibility == .privateComment {
+            isPrivateMode = true
+        }
+        DispatchQueue.main.async {
+            isTextFieldFocused = true
+        }
+    }
+
+    private func exitReplyMode() {
+        replyTarget = nil
+        isPrivateMode = false
+        isTextFieldFocused = false
+    }
+
+    private func resetComposer() {
+        commentText = ""
+        replyTarget = nil
+        isPrivateMode = false
+        isTextFieldFocused = false
+    }
 }
 
 // MARK: 评论行视图
 struct CommentRowView: View {
     let comment: CommentModel
     let isSubComment: Bool
+    let onReply: (CommentModel) -> Void
     
     @State private var showActionSheet = false
     @State private var navigateToReport = false
     @State private var cancellables = Set<AnyCancellable>()
     
-    init(comment: CommentModel, isSubComment: Bool = false) {
+    init(
+        comment: CommentModel,
+        isSubComment: Bool = false,
+        onReply: @escaping (CommentModel) -> Void = { _ in }
+    ) {
         self.comment = comment
         self.isSubComment = isSubComment
+        self.onReply = onReply
     }
     
     // 检查是否是当前用户的评论
@@ -387,23 +469,15 @@ struct CommentRowView: View {
         VStack(alignment: .leading, spacing: isSubComment ? 4 : 12) {
             // 评论内容
             HStack(alignment: .top, spacing: 12) {
-                // 头像
-                AsyncImage(url: URL(string: comment.user.avatarUrl ?? "")) { image in
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                } placeholder: {
-                    Image(systemName: "person.circle.fill")
-                        .font(.system(size: 40))
-                        .foregroundColor(.white.opacity(0.5))
-                }
-                .frame(width: 40, height: 40)
-                .clipShape(Circle())
+                avatarView
+                    .frame(width: 40, height: 40)
+                    .clipShape(Circle())
+                    .accessibilityLabel("\(comment.user.displayName) avatar")
                 
                 VStack(alignment: .leading, spacing: 8) {
                     // 用户名和时间
                     HStack {
-                        Text(comment.user.username ?? comment.user.id)
+                        Text(comment.user.displayName)
                             .font(.system(size: 14, weight: .semibold))
                             .foregroundColor(.white)
                         
@@ -427,17 +501,41 @@ struct CommentRowView: View {
                         .multilineTextAlignment(.leading)
                         .accessibilityIdentifier("comment.content.\(comment.id)")
                     
-                    Text(formatDate(comment.createdAt))
-                        .font(.system(size: 12, weight: .regular))
-                        .foregroundColor(.white.opacity(0.6))
+                    HStack(spacing: 10) {
+                        if comment.visibility == .privateComment {
+                            Image("secret_active")
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .frame(width: 14, height: 14)
+                                .accessibilityLabel("Private comment")
+                        }
+
+                        Text(formatDate(comment.createdAt))
+                            .font(.system(size: 12, weight: .regular))
+                            .foregroundColor(.white.opacity(0.6))
+
+                        Button(action: { onReply(comment) }) {
+                            HStack(spacing: 4) {
+                                Image("comment")
+                                    .resizable()
+                                    .frame(width: 16, height: 16)
+                                Text(comment.replies.isEmpty ? "Reply" : "\(comment.replies.count)")
+                                    .font(.system(size: 12, weight: .medium))
+                            }
+                            .foregroundColor(.white.opacity(0.72))
+                            .frame(minWidth: 44, minHeight: 44, alignment: .leading)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Reply to \(comment.user.displayName)")
+                        .accessibilityIdentifier("comment.reply.\(comment.id)")
+                    }
                 }
             }
             
-            // 子评论（只有主评论才显示）
-            if !isSubComment && !comment.replies.isEmpty {
+            if !comment.replies.isEmpty {
                 VStack(spacing: 8) {
                     ForEach(comment.replies) { subComment in
-                        CommentRowView(comment: subComment, isSubComment: true)
+                        CommentRowView(comment: subComment, isSubComment: true, onReply: onReply)
                     }
                 }
                 .padding(.leading, 52) // 缩进对齐
@@ -459,10 +557,41 @@ struct CommentRowView: View {
             )
         }
     }
+
+    @ViewBuilder
+    private var avatarView: some View {
+        if let avatarURL {
+            AsyncImage(url: avatarURL) { phase in
+                if case .success(let image) = phase {
+                    image
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                } else {
+                    fallbackAvatar
+                }
+            }
+        } else {
+            fallbackAvatar
+        }
+    }
+
+    private var fallbackAvatar: some View {
+        Image("avatar")
+            .resizable()
+            .aspectRatio(contentMode: .fill)
+    }
+
+    private var avatarURL: URL? {
+        guard let rawValue = comment.user.avatarUrl?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !rawValue.isEmpty else {
+            return nil
+        }
+        return URL(string: APIConfiguration.resourceURLString(rawValue))
+    }
     
     // MARK: - 拉黑用户
     private func blockUser() {
-        guard let currentUserId = AuthManager.shared.currentUser?.id else {
+        guard AuthManager.shared.currentUser != nil else {
             return
         }
         
@@ -488,32 +617,7 @@ struct CommentRowView: View {
     
     // MARK: 日期格式化方法
     private func formatDate(_ dateString: String) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
-        
-        if let date = formatter.date(from: dateString) {
-            let now = Date()
-            let timeInterval = now.timeIntervalSince(date)
-            
-            if timeInterval < 60 {
-                return "刚刚"
-            } else if timeInterval < 3600 {
-                let minutes = Int(timeInterval / 60)
-                return "\(minutes)分钟前"
-            } else if timeInterval < 86400 {
-                let hours = Int(timeInterval / 3600)
-                return "\(hours)小时前"
-            } else if timeInterval < 604800 {
-                let days = Int(timeInterval / 86400)
-                return "\(days)天前"
-            } else {
-                let displayFormatter = DateFormatter()
-                displayFormatter.dateFormat = "MM-dd"
-                return displayFormatter.string(from: date)
-            }
-        }
-        
-        return dateString
+        CommentTimestamp.displayText(for: dateString)
     }
 }
 
