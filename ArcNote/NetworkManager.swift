@@ -220,6 +220,21 @@ class NetworkManager: ObservableObject {
         !suppressesPayloadLogging
     }
 
+    private static func appendAccessPair(
+        code: String?,
+        key: String?,
+        to parameters: inout Parameters
+    ) {
+        guard let code = code?.trimmingCharacters(in: .whitespacesAndNewlines),
+              let key = key?.trimmingCharacters(in: .whitespacesAndNewlines),
+              code.isEmpty == false,
+              key.isEmpty == false else {
+            return
+        }
+        parameters["access_code"] = code
+        parameters["idempotency_key"] = key
+    }
+
     private func requestData(
         endpoint: String,
         method: HTTPMethod = .get,
@@ -432,11 +447,19 @@ extension NetworkManager {
             endpoint: "/api/auth/login",
             method: .post,
             parameters: parameters,
-            responseType: AuthResponse.self
+            responseType: AuthResponse.self,
+            suppressesPayloadLogging: true
         )
     }
 
-    func register(username: String, email: String, password: String, verificationCode: String? = nil) -> AnyPublisher<AuthResponse, NetworkError> {
+    func register(
+        username: String,
+        email: String,
+        password: String,
+        verificationCode: String? = nil,
+        accessCode: String? = nil,
+        idempotencyKey: String? = nil
+    ) -> AnyPublisher<AuthResponse, NetworkError> {
         var parameters: Parameters = [
             "username": username,
             "email": email,
@@ -446,12 +469,18 @@ extension NetworkManager {
         if let verificationCode = verificationCode {
             parameters["verification_code"] = verificationCode
         }
+        Self.appendAccessPair(
+            code: accessCode,
+            key: idempotencyKey,
+            to: &parameters
+        )
 
         return self.request(
             endpoint: "/api/auth/register",
             method: .post,
             parameters: parameters,
-            responseType: AuthResponse.self
+            responseType: AuthResponse.self,
+            suppressesPayloadLogging: true
         )
     }
 
@@ -468,16 +497,26 @@ extension NetworkManager {
         )
     }
 
-    func googleLogin(idToken: String) -> AnyPublisher<AuthResponse, NetworkError> {
-        let parameters: Parameters = [
+    func googleLogin(
+        idToken: String,
+        accessCode: String? = nil,
+        idempotencyKey: String? = nil
+    ) -> AnyPublisher<AuthResponse, NetworkError> {
+        var parameters: Parameters = [
             "id_token": idToken
         ]
+        Self.appendAccessPair(
+            code: accessCode,
+            key: idempotencyKey,
+            to: &parameters
+        )
 
         return request(
             endpoint: "/api/auth/google-login",
             method: .post,
             parameters: parameters,
-            responseType: AuthResponse.self
+            responseType: AuthResponse.self,
+            suppressesPayloadLogging: true
         )
     }
 
@@ -500,6 +539,44 @@ extension NetworkManager {
             method: .post,
             responseType: AuthActionResponse.self,
             presentsError: presentsError
+        )
+    }
+
+    func getAccess() -> AnyPublisher<AccessResponse, NetworkError> {
+        request(
+            endpoint: APIEnvironment.AccessRoute.state,
+            responseType: AccessResponse.self,
+            presentsError: false
+        )
+    }
+
+    func claimAccess(
+        _ input: ClaimInput
+    ) -> AnyPublisher<ClaimResponse, NetworkError> {
+        let parameters: Parameters = [
+            "access_code": input.accessCode,
+            "idempotency_key": input.idempotencyKey,
+        ]
+        return request(
+            endpoint: APIEnvironment.AccessRoute.claim,
+            method: .post,
+            parameters: parameters,
+            responseType: ClaimResponse.self,
+            presentsError: false,
+            suppressesPayloadLogging: true
+        )
+    }
+
+    func resolveCampaign() -> AnyPublisher<CampaignResponse, NetworkError> {
+        let version = Bundle.main.object(
+            forInfoDictionaryKey: "CFBundleShortVersionString"
+        ) as? String ?? "0.0.0"
+        return request(
+            endpoint: APIEnvironment.AccessRoute.campaign,
+            parameters: ["platform": "ios", "version": version],
+            encoding: URLEncoding.default,
+            responseType: CampaignResponse.self,
+            presentsError: false
         )
     }
 
@@ -2293,12 +2370,18 @@ extension NetworkManager {
         if !fullName.isEmpty {
             parameters["full_name"] = fullName
         }
+        Self.appendAccessPair(
+            code: loginRequest.accessCode,
+            key: loginRequest.idempotencyKey,
+            to: &parameters
+        )
 
         return self.request(
             endpoint: "/api/auth/apple-login",
             method: .post,
             parameters: parameters,
-            responseType: AuthResponse.self
+            responseType: AuthResponse.self,
+            suppressesPayloadLogging: true
         )
     }
 

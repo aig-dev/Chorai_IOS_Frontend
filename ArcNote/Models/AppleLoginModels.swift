@@ -7,6 +7,22 @@ struct AppleLoginRequest {
     let identityToken: String
     let authorizationCode: String
     let userInfo: AppleUserInfo
+    let accessCode: String?
+    let idempotencyKey: String?
+
+    init(
+        identityToken: String,
+        authorizationCode: String,
+        userInfo: AppleUserInfo,
+        accessCode: String? = nil,
+        idempotencyKey: String? = nil
+    ) {
+        self.identityToken = identityToken
+        self.authorizationCode = authorizationCode
+        self.userInfo = userInfo
+        self.accessCode = accessCode
+        self.idempotencyKey = idempotencyKey
+    }
 }
 
 /// Apple用户信息

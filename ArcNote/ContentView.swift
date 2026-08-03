@@ -8,6 +8,7 @@
 import SwiftUI
 import GoogleSignIn
 import Combine
+import CoreFlow
 import AuthenticationServices
 
 struct ContentView: View {
@@ -19,16 +20,18 @@ struct ContentView: View {
     @State private var appleSignInDelegate: AppleSignInDelegate?
     @State private var showUnauthorizedAlert = false
     @State private var showChooseInterests = false
+    @State private var accessKey = "ios-\(UUID().uuidString.lowercased())"
+    @State private var accessKeyCode: String?
+    @StateObject private var accessStore = AccessStore(
+        service: NetworkAccess.shared,
+        codes: KeychainStore.shared,
+        hosts: ["chorai.com"]
+    )
     
     var body: some View {
         NavigationStack {
-            // 根据登录状态显示不同视图
             if authManager.isAuthenticated {
-                if showChooseInterests {
-                    ChooseInterestsView()
-                } else {
-                    TabBarView()
-                }
+                authenticatedView
             } else {
                 loginView
             }
@@ -40,6 +43,9 @@ struct ContentView: View {
             if phase == .active {
                 authManager.verifyRestoredSession(force: true)
             }
+        }
+        .onOpenURL { url in
+            _ = accessStore.capture(url)
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("UnauthorizedError"))) { _ in
             showUnauthorizedAlert = true
@@ -69,6 +75,32 @@ struct ContentView: View {
                 .accessibilityIdentifier("auth.session.phase")
             #endif
         }
+    }
+
+    @ViewBuilder
+    private var authenticatedView: some View {
+        if authManager.canEnterProduct {
+            if showChooseInterests {
+                ChooseInterestsView()
+            } else {
+                TabBarView()
+            }
+        } else if authManager.accessState?.status == "required" {
+            accessGate(unavailable: false)
+        } else {
+            accessGate(unavailable: true)
+        }
+    }
+
+    private func accessGate(unavailable: Bool) -> some View {
+        AccessGateView(
+            store: accessStore,
+            unavailable: unavailable,
+            onAllowed: { state in
+                authManager.applyAccess(state)
+            },
+            onSignOut: signOut
+        )
     }
     
     // 登录视图
@@ -287,7 +319,12 @@ struct ContentView: View {
     
     // MARK: 处理Google登录响应
     private func handleGoogleLoginResponse(idToken: String) {
-        authManager.googleLogin(idToken: idToken)
+        let pair = pendingAccessPair()
+        authManager.googleLogin(
+            idToken: idToken,
+            accessCode: pair.code,
+            idempotencyKey: pair.key
+        )
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { completion in
@@ -297,10 +334,9 @@ struct ContentView: View {
                 },
                 receiveValue: { authResponse in
                     print("后端Google登录成功")
-                    // 先保存用户会话
-                    authManager.saveUserSession(authResponse)
                     // 根据 isNewUser 判断跳转到哪个页面
-                    if authResponse.data.isNewUser == true {
+                    if authResponse.data.isNewUser == true &&
+                        authResponse.data.productAccess.status == "allowed" {
                     showChooseInterests = true
                     } else {
                         // 如果不是新用户，直接显示 TabBarView（ContentView 会自动处理）
@@ -323,10 +359,9 @@ struct ContentView: View {
                 },
                 receiveValue: { authResponse in
                     print("后端Apple登录成功")
-                    // 先保存用户会话
-                    authManager.saveUserSession(authResponse)
                     // 根据 isNewUser 判断跳转到哪个页面
-                    if authResponse.data.isNewUser == true {
+                    if authResponse.data.isNewUser == true &&
+                        authResponse.data.productAccess.status == "allowed" {
                     showChooseInterests = true
                     } else {
                         // 如果不是新用户，直接显示 TabBarView（ContentView 会自动处理）
@@ -370,10 +405,13 @@ struct ContentView: View {
                             )
                         )
                         
+                        let pair = pendingAccessPair()
                         let appleLoginRequest = AppleLoginRequest(
                             identityToken: identityTokenString,
                             authorizationCode: authorizationCodeString,
-                            userInfo: appleUserInfo
+                            userInfo: appleUserInfo,
+                            accessCode: pair.code,
+                            idempotencyKey: pair.key
                         )
                         
                         // 调用后端Apple登录接口
@@ -390,6 +428,31 @@ struct ContentView: View {
         let authorizationController = ASAuthorizationController(authorizationRequests: [request])
         authorizationController.delegate = appleSignInDelegate
         authorizationController.performRequests()
+    }
+
+    private func pendingAccessPair() -> (code: String?, key: String?) {
+        guard let code = KeychainStore.shared.load() else {
+            return (nil, nil)
+        }
+        if accessKeyCode != code {
+            accessKeyCode = code
+            accessKey = "ios-\(UUID().uuidString.lowercased())"
+        }
+        return (code, accessKey)
+    }
+
+    private func signOut() {
+        authManager.logoutCurrentSession()
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { completion in
+                    if case .failure = completion {
+                        authManager.invalidateLocalSession(clearCode: true)
+                    }
+                },
+                receiveValue: { }
+            )
+            .store(in: &cancellables)
     }
 }
 

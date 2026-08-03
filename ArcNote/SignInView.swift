@@ -28,6 +28,8 @@ struct SignInView: View {
     @StateObject private var authManager = AuthManager.shared
     @State private var cancellables = Set<AnyCancellable>()
     @State private var appleSignInDelegate: AppleSignInDelegate?
+    @State private var accessKey = "ios-\(UUID().uuidString.lowercased())"
+    @State private var accessKeyCode: String?
     
     
     var body: some View {
@@ -286,14 +288,7 @@ struct SignInView: View {
                 },
                 receiveValue: { authResponse in
                     isSigningIn = false
-                // 先保存用户会话
-                authManager.saveUserSession(authResponse)
-                // 根据 isNewUser 判断跳转到哪个页面
-                if authResponse.data.isNewUser == true {
-                    showChooseInterests = true
-                } else {
-                        showTabBar = true
-                    }
+                    routeAfterAuth(authResponse)
                 }
             )
             .store(in: &cancellables)
@@ -380,7 +375,12 @@ struct SignInView: View {
     
     // MARK: - 处理Google登录响应
     private func handleGoogleLoginResponse(idToken: String) {
-        authManager.googleLogin(idToken: idToken)
+        let pair = pendingAccessPair()
+        authManager.googleLogin(
+            idToken: idToken,
+            accessCode: pair.code,
+            idempotencyKey: pair.key
+        )
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { completion in
@@ -391,14 +391,7 @@ struct SignInView: View {
                 },
                 receiveValue: { authResponse in
                     print("后端Google登录成功")
-                    // 保存用户会话
-                    authManager.saveUserSession(authResponse)
-                    // 根据 isNewUser
-                    if authResponse.data.isNewUser == true {
-                        showChooseInterests = true
-                    } else {
-                        showTabBar = true
-                    }
+                    routeAfterAuth(authResponse)
                 }
             )
             .store(in: &cancellables)
@@ -436,10 +429,13 @@ struct SignInView: View {
                             )
                         )
                         
+                        let pair = pendingAccessPair()
                         let appleLoginRequest = AppleLoginRequest(
                             identityToken: identityTokenString,
                             authorizationCode: authorizationCodeString,
-                            userInfo: appleUserInfo
+                            userInfo: appleUserInfo,
+                            accessCode: pair.code,
+                            idempotencyKey: pair.key
                         )
                         
                         self.handleAppleLoginResponse(request: appleLoginRequest)
@@ -471,17 +467,30 @@ struct SignInView: View {
                 },
                 receiveValue: { authResponse in
                     print("后端Apple登录成功")
-                    // 存用户会话
-                    authManager.saveUserSession(authResponse)
-                    // 根据 isNewUser 判断跳转到哪个页面
-                    if authResponse.data.isNewUser == true {
-                        showChooseInterests = true
-                    } else {
-                        showTabBar = true
-                    }
+                    routeAfterAuth(authResponse)
                 }
             )
             .store(in: &cancellables)
+    }
+
+    private func pendingAccessPair() -> (code: String?, key: String?) {
+        guard let code = KeychainStore.shared.load() else {
+            return (nil, nil)
+        }
+        if accessKeyCode != code {
+            accessKeyCode = code
+            accessKey = "ios-\(UUID().uuidString.lowercased())"
+        }
+        return (code, accessKey)
+    }
+
+    private func routeAfterAuth(_ response: AuthResponse) {
+        guard response.data.productAccess.status == "allowed" else { return }
+        if response.data.isNewUser == true {
+            showChooseInterests = true
+        } else {
+            showTabBar = true
+        }
     }
 }
 

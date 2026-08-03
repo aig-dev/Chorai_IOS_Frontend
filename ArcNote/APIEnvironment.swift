@@ -7,6 +7,12 @@ enum APIEnvironment: String, CaseIterable {
     static let infoDictionaryKey = "ChoraiAPIEnvironment"
     static let overrideEnvironmentKey = "CHORAI_API_BASE_URL"
 
+    enum AccessRoute {
+        static let state = "/api/v1/access"
+        static let claim = "/api/v1/access/claim"
+        static let campaign = "/api/v1/access/campaign"
+    }
+
     var baseURL: URL {
         let rawValue: String
         switch self {

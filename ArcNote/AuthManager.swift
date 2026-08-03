@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import CoreFlow
 import Security
 
 enum AuthSessionPhase: String, Equatable {
@@ -19,6 +20,7 @@ class AuthManager: ObservableObject {
     @Published var currentUser: User?
     @Published var authToken: String?
     @Published private(set) var sessionPhase: AuthSessionPhase = .signedOut
+    @Published private(set) var accessState: AccessState?
     
     private let userDefaults = UserDefaults.standard
     private let networkManager = NetworkManager.shared
@@ -32,6 +34,7 @@ class AuthManager: ObservableObject {
     
     // MARK: 用户会话管理
     func loadUserSession() {
+        accessState = nil
         isLoggedIn = userDefaults.bool(forKey: "is_logged_in")
         authToken = SessionTokenStore.load()
         migrateLegacyAuthTokenIfNeeded()
@@ -100,6 +103,7 @@ class AuthManager: ObservableObject {
         isLoggedIn = true
         verifiedToken = userData.token
         sessionPhase = .verified
+        applyAccess(userData.productAccess)
 
         print("用户\(userData.user.id),登录成功")
         let user = userData.user
@@ -115,7 +119,7 @@ class AuthManager: ObservableObject {
         networkManager.setAuthToken(userData.token)
     }
     
-    private func clearUserSession() {
+    private func clearUserSession(clearCode: Bool = false) {
         sessionVerification?.cancel()
         sessionVerification = nil
         verifiedToken = nil
@@ -126,6 +130,10 @@ class AuthManager: ObservableObject {
         currentUser = nil
         isLoggedIn = false
         sessionPhase = .signedOut
+        accessState = nil
+        if clearCode {
+            KeychainStore.shared.clear()
+        }
         
         // 清除UserDefaults
         userDefaults.removeObject(forKey: "is_logged_in")
@@ -154,12 +162,21 @@ class AuthManager: ObservableObject {
     }
     
     // MARK: 注册方法
-    func register(username: String, email: String, password: String, verificationCode: String) -> AnyPublisher<AuthResponse, NetworkError> {
+    func register(
+        username: String,
+        email: String,
+        password: String,
+        verificationCode: String,
+        accessCode: String? = nil,
+        idempotencyKey: String? = nil
+    ) -> AnyPublisher<AuthResponse, NetworkError> {
         return networkManager.register(
             username: username,
             email: email,
             password: password,
-            verificationCode: verificationCode
+            verificationCode: verificationCode,
+            accessCode: accessCode,
+            idempotencyKey: idempotencyKey
         )
         .receive(on: DispatchQueue.main)
         .handleEvents(receiveOutput: { [weak self] authResponse in
@@ -168,8 +185,8 @@ class AuthManager: ObservableObject {
         .eraseToAnyPublisher()
     }
     
-    func invalidateLocalSession() {
-        clearUserSession()
+    func invalidateLocalSession(clearCode: Bool = false) {
+        clearUserSession(clearCode: clearCode)
     }
 
     func verifyRestoredSession(force: Bool = false) {
@@ -198,6 +215,7 @@ class AuthManager: ObservableObject {
                 if case .unauthorized = error {
                     self.invalidateLocalSession()
                 } else {
+                    self.accessState = nil
                     self.sessionPhase = .degraded
                 }
             } receiveValue: { [weak self] response in
@@ -212,13 +230,14 @@ class AuthManager: ObservableObject {
                 self.currentUser = data.user
                 self.persistUserProjection(data.user)
                 self.verifiedToken = token
+                self.applyAccess(data.productAccess)
                 self.sessionPhase = .verified
             }
     }
 
     func logoutCurrentSession() -> AnyPublisher<Void, NetworkError> {
         guard isAuthenticated else {
-            invalidateLocalSession()
+            invalidateLocalSession(clearCode: true)
             return Just(())
                 .setFailureType(to: NetworkError.self)
                 .eraseToAnyPublisher()
@@ -237,7 +256,7 @@ class AuthManager: ObservableObject {
             }
             .catch { [weak self] error -> AnyPublisher<Void, NetworkError> in
                 if case .unauthorized = error {
-                    self?.invalidateLocalSession()
+                    self?.invalidateLocalSession(clearCode: true)
                     return Just(())
                         .setFailureType(to: NetworkError.self)
                         .eraseToAnyPublisher()
@@ -245,7 +264,7 @@ class AuthManager: ObservableObject {
                 return Fail(error: error).eraseToAnyPublisher()
             }
             .handleEvents(receiveOutput: { [weak self] in
-                self?.invalidateLocalSession()
+                self?.invalidateLocalSession(clearCode: true)
             })
             .eraseToAnyPublisher()
     }
@@ -256,14 +275,41 @@ class AuthManager: ObservableObject {
     }
     
     // MARK: Google登录
-    func googleLogin(idToken: String) -> AnyPublisher<AuthResponse, NetworkError> {
-        return networkManager.googleLogin(idToken: idToken)
+    func googleLogin(
+        idToken: String,
+        accessCode: String? = nil,
+        idempotencyKey: String? = nil
+    ) -> AnyPublisher<AuthResponse, NetworkError> {
+        return networkManager.googleLogin(
+            idToken: idToken,
+            accessCode: accessCode,
+            idempotencyKey: idempotencyKey
+        )
+            .receive(on: DispatchQueue.main)
+            .handleEvents(receiveOutput: { [weak self] response in
+                self?.saveUserSession(response)
+            })
             .eraseToAnyPublisher()
     }
     
     func appleLogin(request: AppleLoginRequest) -> AnyPublisher<AuthResponse, NetworkError> {
         return networkManager.appleLogin(loginRequest: request)
+            .receive(on: DispatchQueue.main)
+            .handleEvents(receiveOutput: { [weak self] response in
+                self?.saveUserSession(response)
+            })
             .eraseToAnyPublisher()
+    }
+
+    func applyAccess(_ state: AccessState) {
+        guard state.isValid else {
+            accessState = nil
+            return
+        }
+        accessState = state
+        if state.status == "allowed" {
+            KeychainStore.shared.clear()
+        }
     }
 
     private func migrateLegacyAuthTokenIfNeeded() {
@@ -295,6 +341,13 @@ class AuthManager: ObservableObject {
 extension AuthManager {
     var isAuthenticated: Bool {
         return isLoggedIn && authToken != nil && currentUser != nil
+    }
+
+    var canEnterProduct: Bool {
+        isAuthenticated &&
+            sessionPhase == .verified &&
+            accessState?.isValid == true &&
+            accessState?.status == "allowed"
     }
     
     var userDisplayName: String {

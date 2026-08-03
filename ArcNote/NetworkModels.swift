@@ -1,4 +1,5 @@
 import Foundation
+import CoreFlow
 
 // MARK: 网络响应基础模型
 struct NetworkResponse<T: Codable>: Codable {
@@ -326,10 +327,12 @@ struct AuthResponseData: Codable {
     let token: String
     let user: User
     let isNewUser: Bool?
+    let productAccess: AccessState
 
     enum CodingKeys: String, CodingKey {
         case token, user
         case isNewUser = "is_new_user"
+        case productAccess = "product_access"
     }
 }
 
@@ -353,11 +356,13 @@ struct VerifyTokenData: Codable {
     let user: User
     let expiresAt: String
     let issuedAt: String
+    let productAccess: AccessState
 
     enum CodingKeys: String, CodingKey {
         case valid, user
         case expiresAt = "expires_at"
         case issuedAt = "issued_at"
+        case productAccess = "product_access"
     }
 }
 
@@ -365,6 +370,21 @@ struct VerifyTokenResponse: Codable {
     let success: Bool
     let message: String?
     let data: VerifyTokenData?
+}
+
+struct AccessResponse: Codable {
+    let success: Bool
+    let data: AccessState
+}
+
+struct ClaimResponse: Codable {
+    let success: Bool
+    let data: ClaimResult
+}
+
+struct CampaignResponse: Codable {
+    let success: Bool
+    let data: CampaignBlock
 }
 
 struct AuthActionResponse: Codable {

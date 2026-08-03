@@ -1559,23 +1559,14 @@ private struct SignupInvitationFixtureScreen: View {
 
     var body: some View {
         SignUpView(
-            registrar: registrar,
-            invitationService: service,
-            invitationPersistence: persistence,
             initialValues: SignUpInitialValues(
                 username: "fixture-user",
                 email: "fixture@chorai.test",
                 verificationCode: "123456",
                 password: "fixture-password",
                 confirmPassword: "fixture-password",
-                invitationCode: mode == .blank ? "" : "  MixedCase09  "
-            ),
-            navigatesAfterRegistration: false,
-            onRegistrationComplete: { _, completedWithPendingCode in
-                recorder.recordCompletion(
-                    pendingCode: completedWithPendingCode
-                )
-            }
+                accessCode: mode == .blank ? "" : "  MixedCase09  "
+            )
         )
         .overlay(alignment: .topLeading) {
             VStack(spacing: 0) {

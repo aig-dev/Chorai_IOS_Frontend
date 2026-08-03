@@ -23,6 +23,8 @@
 		C0DEF3002F8000010000001C /* CardEditorBackgroundActions.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF3002F8000010000002C /* CardEditorBackgroundActions.swift */; };
 		C0DEF3002F8000010000001D /* AdaptiveLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF3002F8000010000002D /* AdaptiveLayout.swift */; };
 		C0DEF1012F60000100000003 /* NetworkCoreFlowService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1012F60000100000002 /* NetworkCoreFlowService.swift */; };
+		C0DEF1402F60000100000003 /* AccessGateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1402F60000100000002 /* AccessGateView.swift */; };
+		C0DEF1412F60000100000003 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1412F60000100000002 /* KeychainStore.swift */; };
 		C0DEF1022F60000100000003 /* NetworkCoreSparkService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1022F60000100000002 /* NetworkCoreSparkService.swift */; };
 		C0DEF1022F60000100000005 /* SparkContinuationViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1022F60000100000004 /* SparkContinuationViews.swift */; };
 		C0DEF1032F60000100000003 /* NetworkCoreMergeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1032F60000100000002 /* NetworkCoreMergeService.swift */; };
@@ -144,6 +146,8 @@
 
 /* Begin PBXFileReference section */
 		C0DEF1012F60000100000002 /* NetworkCoreFlowService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkCoreFlowService.swift; sourceTree = "<group>"; };
+		C0DEF1402F60000100000002 /* AccessGateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessGateView.swift; sourceTree = "<group>"; };
+		C0DEF1412F60000100000002 /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
 		C0DEF1022F60000100000002 /* NetworkCoreSparkService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkCoreSparkService.swift; sourceTree = "<group>"; };
 		C0DEF1022F60000100000004 /* SparkContinuationViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SparkContinuationViews.swift; sourceTree = "<group>"; };
 		C0DEF1032F60000100000002 /* NetworkCoreMergeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkCoreMergeService.swift; sourceTree = "<group>"; };
@@ -383,6 +387,8 @@
 			isa = PBXGroup;
 			children = (
 				A10000012F90000100000004 /* APIEnvironment.swift */,
+				C0DEF1402F60000100000002 /* AccessGateView.swift */,
+				C0DEF1412F60000100000002 /* KeychainStore.swift */,
 				C0DEF3002F80000100000001 /* CardEditor */,
 				C0DEF1012F60000100000001 /* CoreFlow */,
 				C0DEF1162F60000100000002 /* FollowListView.swift */,
@@ -612,6 +618,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				A10000012F90000100000005 /* APIEnvironment.swift in Sources */,
+				C0DEF1402F60000100000003 /* AccessGateView.swift in Sources */,
+				C0DEF1412F60000100000003 /* KeychainStore.swift in Sources */,
 				C0DEF3002F80000100000011 /* BlockNoteCardEditor.swift in Sources */,
 				C0DEF3002F80000100000012 /* CardEditorShell.swift in Sources */,
 				C0DEF3002F80000100000013 /* CardEditorMetadataRows.swift in Sources */,
