@@ -5,7 +5,7 @@ import Foundation
 public final class InvitationCreditOverviewStore: ObservableObject {
     @Published public private(set) var actorID: String?
     @Published public private(set) var referral: InvitationReferral?
-    @Published public private(set) var balances: CreditBalances?
+    @Published public private(set) var balance: CreditBalance?
     @Published public private(set) var referralPhase: InvitationCreditSectionPhase = .idle
     @Published public private(set) var balancePhase: InvitationCreditSectionPhase = .idle
 
@@ -19,7 +19,7 @@ public final class InvitationCreditOverviewStore: ObservableObject {
     public func load(actorID rawActorID: String) async {
         generation = UUID()
         referral = nil
-        balances = nil
+        balance = nil
         referralPhase = .idle
         balancePhase = .idle
 
@@ -38,7 +38,7 @@ public final class InvitationCreditOverviewStore: ObservableObject {
             actorID: actorID,
             generation: requestedGeneration
         )
-        async let balanceLoad: Void = fetchBalances(
+        async let balanceLoad: Void = fetchBalance(
             actorID: actorID,
             generation: requestedGeneration
         )
@@ -54,13 +54,13 @@ public final class InvitationCreditOverviewStore: ObservableObject {
         generation = UUID()
         let requestedGeneration = generation
         referralPhase = referral == nil ? .loading : .refreshing
-        balancePhase = balances == nil ? .loading : .refreshing
+        balancePhase = balance == nil ? .loading : .refreshing
 
         async let referralLoad: Void = fetchReferral(
             actorID: actorID,
             generation: requestedGeneration
         )
-        async let balanceLoad: Void = fetchBalances(
+        async let balanceLoad: Void = fetchBalance(
             actorID: actorID,
             generation: requestedGeneration
         )
@@ -77,14 +77,14 @@ public final class InvitationCreditOverviewStore: ObservableObject {
         await fetchReferral(actorID: actorID, generation: requestedGeneration)
     }
 
-    public func retryBalances() async {
+    public func retryBalance() async {
         guard let actorID else {
             balancePhase = .failed(.invalidActor)
             return
         }
         let requestedGeneration = generation
-        balancePhase = balances == nil ? .loading : .refreshing
-        await fetchBalances(actorID: actorID, generation: requestedGeneration)
+        balancePhase = balance == nil ? .loading : .refreshing
+        await fetchBalance(actorID: actorID, generation: requestedGeneration)
     }
 
     private func fetchReferral(actorID: String, generation: UUID) async {
@@ -105,13 +105,13 @@ public final class InvitationCreditOverviewStore: ObservableObject {
         }
     }
 
-    private func fetchBalances(actorID: String, generation: UUID) async {
+    private func fetchBalance(actorID: String, generation: UUID) async {
         do {
-            let value = try await service.balances(actorID: actorID)
+            let value = try await service.balance(actorID: actorID)
             guard isCurrent(actorID: actorID, generation: generation) else {
                 return
             }
-            balances = value
+            balance = value
             balancePhase = .ready
         } catch is CancellationError {
             return

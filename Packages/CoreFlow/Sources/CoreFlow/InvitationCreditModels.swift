@@ -7,28 +7,6 @@ public enum InvitationCode {
     }
 }
 
-public enum CreditTier: Equatable, Hashable, Sendable {
-    case credit
-    case premiumCredit
-    case unknown(String)
-
-    public init(canonical: String) {
-        switch canonical {
-        case "credit": self = .credit
-        case "premium_credit": self = .premiumCredit
-        default: self = .unknown(canonical)
-        }
-    }
-
-    public var canonical: String {
-        switch self {
-        case .credit: return "credit"
-        case .premiumCredit: return "premium_credit"
-        case .unknown(let value): return value
-        }
-    }
-}
-
 public enum InvitationStatus: Equatable, Hashable, Sendable {
     case registered
     case qualified
@@ -186,94 +164,94 @@ public struct InvitationRecord: Equatable, Identifiable, Sendable {
 public struct InvitationReward: Equatable, Identifiable, Sendable {
     public let id: String
     public let recipientRole: String
-    public let tier: CreditTier
     public let amount: Int
-    public let isMilestoneBonus: Bool
+    public let milestoneThreshold: Int
     public let status: InvitationRewardStatus
     public let createdAt: Date
 
     public init(
         id: String,
         recipientRole: String,
-        tier: CreditTier,
         amount: Int,
-        isMilestoneBonus: Bool,
+        milestoneThreshold: Int,
         status: InvitationRewardStatus,
         createdAt: Date
     ) {
         self.id = id
         self.recipientRole = recipientRole
-        self.tier = tier
         self.amount = amount
-        self.isMilestoneBonus = isMilestoneBonus
+        self.milestoneThreshold = milestoneThreshold
         self.status = status
         self.createdAt = createdAt
+    }
+
+    public var isMilestoneBonus: Bool {
+        milestoneThreshold > 0
     }
 }
 
 public struct CreditBalance: Equatable, Sendable {
-    public let tier: CreditTier
     public let balance: Int
     public let updatedAt: Date?
 
-    public init(tier: CreditTier, balance: Int, updatedAt: Date?) {
-        self.tier = tier
+    public init(balance: Int, updatedAt: Date?) {
         self.balance = balance
         self.updatedAt = updatedAt
-    }
-}
-
-public struct CreditBalances: Equatable, Sendable {
-    public let regular: Int
-    public let premium: Int
-
-    public init(regular: Int, premium: Int) {
-        self.regular = regular
-        self.premium = premium
-    }
-
-    public static func normalized(_ entries: [CreditBalance]) -> Self {
-        Self(
-            regular: entries.first(where: { $0.tier == .credit })?.balance ?? 0,
-            premium: entries.first(where: { $0.tier == .premiumCredit })?.balance ?? 0
-        )
     }
 }
 
 public struct CreditLedgerEntry: Equatable, Identifiable, Sendable {
     public let id: String
     public let transactionID: String
-    public let tier: CreditTier
+    public let account: String
     public let direction: LedgerDirection
     public let delta: Int
     public let runningBalance: Int
     public let status: LedgerStatus
+    public let ruleID: String
     public let actionType: String
     public let category: String
+    public let referenceID: String
+    public let referenceType: String
+    public let activityID: String?
     public let createdAt: Date
+    public let settledAt: Date?
+    public let refundedAt: Date?
 
     public init(
         id: String,
         transactionID: String,
-        tier: CreditTier,
+        account: String,
         direction: LedgerDirection,
         delta: Int,
         runningBalance: Int,
         status: LedgerStatus,
+        ruleID: String,
         actionType: String,
         category: String,
-        createdAt: Date
+        referenceID: String,
+        referenceType: String,
+        activityID: String?,
+        createdAt: Date,
+        settledAt: Date?,
+        refundedAt: Date?
     ) {
         self.id = id
         self.transactionID = transactionID
-        self.tier = tier
+        self.account = account
         self.direction = direction
         self.delta = delta
         self.runningBalance = runningBalance
         self.status = status
+        self.ruleID = ruleID
         self.actionType = actionType
         self.category = category
+        self.referenceID = referenceID
+        self.referenceType = referenceType
+        self.activityID = activityID
         self.createdAt = createdAt
+        self.settledAt = settledAt
+        self.refundedAt = refundedAt
     }
 }
 

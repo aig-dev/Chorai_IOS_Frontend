@@ -7,15 +7,15 @@ final class InvitationRewardStoreTests: XCTestCase {
         let service = InvitationCreditServiceStub()
         await service.setRewardResults([
             .success(.init(
-                items: [reward(id: "rew_1", milestone: true)],
+                items: [reward(id: "rew_1", milestoneThreshold: 10)],
                 total: 2,
                 page: 1,
                 limit: 1
             )),
             .success(.init(
                 items: [
-                    reward(id: "rew_1", milestone: true),
-                    reward(id: "rew_2", milestone: false)
+                    reward(id: "rew_1", milestoneThreshold: 10),
+                    reward(id: "rew_2", milestoneThreshold: 0)
                 ],
                 total: 2,
                 page: 2,
@@ -50,13 +50,12 @@ final class InvitationRewardStoreTests: XCTestCase {
         XCTAssertEqual(store.items, [])
     }
 
-    private func reward(id: String, milestone: Bool) -> InvitationReward {
+    private func reward(id: String, milestoneThreshold: Int) -> InvitationReward {
         .init(
             id: id,
             recipientRole: "inviter",
-            tier: .credit,
             amount: 5,
-            isMilestoneBonus: milestone,
+            milestoneThreshold: milestoneThreshold,
             status: .issued,
             createdAt: Date(timeIntervalSince1970: 1)
         )

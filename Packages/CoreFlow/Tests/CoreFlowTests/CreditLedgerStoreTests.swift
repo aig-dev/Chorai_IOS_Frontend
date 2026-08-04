@@ -27,6 +27,9 @@ final class CreditLedgerStoreTests: XCTestCase {
         XCTAssertEqual(cursors, [nil, "cursor_1"])
         XCTAssertFalse(store.hasMore)
         XCTAssertEqual(store.phase, .ready)
+        XCTAssertEqual(store.entries.last?.account, "actor")
+        XCTAssertEqual(store.entries.last?.ruleID, "rule_invitation")
+        XCTAssertEqual(store.entries.last?.referenceID, "invitation_1")
     }
 
     func testLoadMoreFailureRetainsEntriesAndCursorForRetry() async {
@@ -85,14 +88,20 @@ final class CreditLedgerStoreTests: XCTestCase {
         .init(
             id: id,
             transactionID: "tx_\(id)",
-            tier: .credit,
+            account: "actor",
             direction: .earn,
             delta: 5,
             runningBalance: 10,
             status: .settled,
+            ruleID: "rule_invitation",
             actionType: "INVITATION_REWARD",
             category: "growth",
-            createdAt: Date(timeIntervalSince1970: 1)
+            referenceID: "invitation_1",
+            referenceType: "invitation",
+            activityID: nil,
+            createdAt: Date(timeIntervalSince1970: 1),
+            settledAt: Date(timeIntervalSince1970: 2),
+            refundedAt: nil
         )
     }
 }

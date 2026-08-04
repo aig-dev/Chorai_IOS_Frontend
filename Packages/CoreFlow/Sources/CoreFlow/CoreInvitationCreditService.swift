@@ -14,7 +14,7 @@ public protocol CoreInvitationCreditServing: Sendable {
         page: Int,
         limit: Int
     ) async throws -> InvitationRewardPage
-    func balances(actorID: String) async throws -> CreditBalances
+    func balance(actorID: String) async throws -> CreditBalance
     func ledger(
         actorID: String,
         cursor: String?,

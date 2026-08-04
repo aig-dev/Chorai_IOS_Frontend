@@ -2,26 +2,18 @@ import XCTest
 @testable import CoreFlow
 
 final class InvitationCreditModelsTests: XCTestCase {
-    func testBalancesKeepRegularAndPremiumSeparate() {
-        let balances = CreditBalances.normalized([
-            CreditBalance(tier: .premiumCredit, balance: 4, updatedAt: nil),
-            CreditBalance(tier: .credit, balance: 12, updatedAt: nil)
-        ])
+    func testCreditBalanceRepresentsOneWallet() {
+        let updatedAt = Date(timeIntervalSince1970: 1_722_772_800)
 
-        XCTAssertEqual(balances, CreditBalances(regular: 12, premium: 4))
-    }
+        let balance = CreditBalance(balance: 230, updatedAt: updatedAt)
 
-    func testBalancesDefaultOnlyMissingCanonicalTierToZero() {
-        let balances = CreditBalances.normalized([
-            CreditBalance(tier: .credit, balance: 12, updatedAt: nil),
-            CreditBalance(tier: .unknown("future_credit"), balance: 99, updatedAt: nil)
-        ])
-
-        XCTAssertEqual(balances, CreditBalances(regular: 12, premium: 0))
+        XCTAssertEqual(
+            balance,
+            CreditBalance(balance: 230, updatedAt: updatedAt)
+        )
     }
 
     func testUnknownCanonicalValuesRemainLossless() {
-        XCTAssertEqual(CreditTier(canonical: "future_credit"), .unknown("future_credit"))
         XCTAssertEqual(
             InvitationStatus(canonical: "future_invitation"),
             .unknown("future_invitation")
@@ -38,6 +30,71 @@ final class InvitationCreditModelsTests: XCTestCase {
             LedgerStatus(canonical: "future_status"),
             .unknown("future_status")
         )
+    }
+
+    func testRewardMilestonePresentationDerivesFromThreshold() {
+        let createdAt = Date(timeIntervalSince1970: 1_722_772_800)
+        let baseReward = InvitationReward(
+            id: "rew_base",
+            recipientRole: "inviter",
+            amount: 5,
+            milestoneThreshold: 0,
+            status: .issued,
+            createdAt: createdAt
+        )
+        let milestoneReward = InvitationReward(
+            id: "rew_milestone",
+            recipientRole: "invitee",
+            amount: 20,
+            milestoneThreshold: 10,
+            status: .pending,
+            createdAt: createdAt
+        )
+
+        XCTAssertFalse(baseReward.isMilestoneBonus)
+        XCTAssertTrue(milestoneReward.isMilestoneBonus)
+    }
+
+    func testLedgerEntryCarriesCompleteAuditContract() {
+        let createdAt = Date(timeIntervalSince1970: 1_722_772_800)
+        let settledAt = createdAt.addingTimeInterval(5)
+        let refundedAt = createdAt.addingTimeInterval(10)
+
+        let entry = CreditLedgerEntry(
+            id: "log_1",
+            transactionID: "tx_1",
+            account: "actor",
+            direction: .earn,
+            delta: 25,
+            runningBalance: 230,
+            status: .refunded,
+            ruleID: "rule_invitation",
+            actionType: "INVITATION_REWARD",
+            category: "growth",
+            referenceID: "inv_1",
+            referenceType: "invitation",
+            activityID: "activity_1",
+            createdAt: createdAt,
+            settledAt: settledAt,
+            refundedAt: refundedAt
+        )
+
+        XCTAssertEqual(entry.id, "log_1")
+        XCTAssertEqual(entry.transactionID, "tx_1")
+        XCTAssertEqual(entry.account, "actor")
+        XCTAssertEqual(entry.direction, .earn)
+        XCTAssertEqual(entry.delta, 25)
+        XCTAssertEqual(entry.runningBalance, 230)
+        XCTAssertEqual(entry.status, .refunded)
+        XCTAssertEqual(entry.ruleID, "rule_invitation")
+        XCTAssertEqual(entry.actionType, "INVITATION_REWARD")
+        XCTAssertEqual(entry.category, "growth")
+        XCTAssertEqual(entry.referenceID, "inv_1")
+        XCTAssertEqual(entry.referenceType, "invitation")
+        XCTAssertEqual(entry.activityID, "activity_1")
+        XCTAssertEqual(entry.createdAt, createdAt)
+        XCTAssertEqual(entry.settledAt, settledAt)
+        XCTAssertEqual(entry.refundedAt, refundedAt)
     }
 
     func testInvitationCodeNormalizationTrimsWithoutChangingCase() {
