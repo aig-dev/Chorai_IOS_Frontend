@@ -373,6 +373,9 @@ struct CreditLedgerView: View {
         .padding(.vertical, 16)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(ledgerAccessibilityLabel(entry))
+        #if DEBUG
+        .accessibilityValue(ledgerAuditAccessibilityValue(entry))
+        #endif
         .accessibilityIdentifier("credit-ledger.row.\(entry.id)")
     }
 
@@ -397,6 +400,35 @@ struct CreditLedgerView: View {
             InvitationCreditPresentation.date(entry.createdAt)
         ].joined(separator: ", ")
     }
+
+    #if DEBUG
+    private func ledgerAuditAccessibilityValue(
+        _ entry: CreditLedgerEntry
+    ) -> String {
+        [
+            entry.id,
+            entry.transactionID,
+            entry.account,
+            entry.direction.canonical,
+            String(entry.delta),
+            String(entry.runningBalance),
+            entry.status.canonical,
+            entry.ruleID,
+            entry.actionType,
+            entry.category,
+            entry.referenceID,
+            entry.referenceType,
+            entry.activityID ?? "nil",
+            String(Int(entry.createdAt.timeIntervalSince1970)),
+            entry.settledAt.map {
+                String(Int($0.timeIntervalSince1970))
+            } ?? "nil",
+            entry.refundedAt.map {
+                String(Int($0.timeIntervalSince1970))
+            } ?? "nil"
+        ].joined(separator: "|")
+    }
+    #endif
 
     @ViewBuilder
     private var pagination: some View {

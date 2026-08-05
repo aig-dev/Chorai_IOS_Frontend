@@ -42,6 +42,8 @@ struct ArcNoteApp: App {
         .contains("--ui-test-discovery-path")
     private let isInvitationCreditUITestRoute = ProcessInfo.processInfo.arguments
         .contains("--ui-test-invitation-credits")
+    private let isProfileCreditSurfaceUITestRoute = ProcessInfo.processInfo.arguments
+        .contains("--ui-test-profile-credit-surfaces")
     private let isSignupInvitationUITestRoute = ProcessInfo.processInfo.arguments
         .contains("--ui-test-signup-invitation")
     private let isChoraProfileUITestRoute = ProcessInfo.processInfo.arguments
@@ -90,11 +92,15 @@ struct ArcNoteApp: App {
         )
         APIMigrationUITestSeed.applyIfPresent()
         APIMigrationSmokeRunner.startIfRequested()
-        if ProcessInfo.processInfo.arguments.contains("--ui-test-settings") {
+        if ProcessInfo.processInfo.arguments.contains("--ui-test-settings")
+            || ProcessInfo.processInfo.arguments.contains(
+                "--ui-test-profile-credit-surfaces"
+            ) {
             UserProfileManager.shared.creditBalance = CreditBalanceData(
                 balance: 230,
                 updatedAt: "2024-03-09T16:00:00Z"
             )
+            UserProfileManager.shared.isCreditLoading = false
         }
         #endif
     }
@@ -117,6 +123,12 @@ struct ArcNoteApp: App {
                 } else if isChoraProfileUITestRoute {
                     NavigationStack {
                         ChoraProfileFixtureScreen()
+                    }
+                } else if isProfileCreditSurfaceUITestRoute {
+                    NavigationStack {
+                        ProfileCreditSurfaceFixtureScreen(
+                            userProfileManager: .shared
+                        )
                     }
                 } else if isSettingsUITestRoute {
                     NavigationStack {
@@ -192,6 +204,20 @@ struct ArcNoteApp: App {
 }
 
 #if DEBUG
+@MainActor
+private struct ProfileCreditSurfaceFixtureScreen: View {
+    @State private var isSideMenuPresented = true
+    let userProfileManager: UserProfileManager
+
+    var body: some View {
+        SideMenuView(
+            isPresented: $isSideMenuPresented,
+            userProfileManager: userProfileManager,
+            loadsDataOnAppear: false
+        )
+    }
+}
+
 private enum ChoraProfileFixtureMode: String {
     case loading
     case loaded
@@ -1907,15 +1933,29 @@ private enum InvitationCreditFixtureMode: String {
     case historyPagination = "history-pagination"
     case rewardPagination = "reward-pagination"
     case ledgerPagination = "ledger-pagination"
+    case transportSuccess = "transport-success"
+    case transportBalanceSuccessFalse = "transport-balance-success-false"
+    case transportBalanceNilData = "transport-balance-nil-data"
     case historyEmpty = "history-empty"
     case rewardEmpty = "reward-empty"
     case ledgerEmpty = "ledger-empty"
+
+    var usesJSONTransport: Bool {
+        switch self {
+        case .transportSuccess,
+             .transportBalanceSuccessFalse,
+             .transportBalanceNilData:
+            return true
+        default:
+            return false
+        }
+    }
 }
 
 @MainActor
 private struct InvitationCreditFixtureScreen: View {
     private let mode: InvitationCreditFixtureMode
-    private let service: InvitationCreditFixtureService
+    private let service: any CoreInvitationCreditServing
     private let persistence: InvitationCreditFixturePersistence
     @StateObject private var historyStore: InvitationHistoryStore
     @StateObject private var rewardStore: InvitationRewardStore
@@ -1927,7 +1967,14 @@ private struct InvitationCreditFixtureScreen: View {
                 "CHORAI_INVITATION_CREDIT_FIXTURE_MODE"
             ] ?? "success"
         ) ?? .success
-        let service = InvitationCreditFixtureService(mode: mode)
+        let service: any CoreInvitationCreditServing
+        if mode.usesJSONTransport {
+            service = NetworkInvitationCreditService(
+                network: InvitationCreditJSONFixtureTransport(mode: mode)
+            )
+        } else {
+            service = InvitationCreditFixtureService(mode: mode)
+        }
         let persistence = InvitationCreditFixturePersistence()
         if mode == .pendingRedemption {
             persistence.save(
@@ -1992,6 +2039,8 @@ private actor InvitationCreditFixtureService:
     CoreInvitationCreditServing {
     private let mode: InvitationCreditFixtureMode
     private let fixtureDate = Date(timeIntervalSince1970: 1_710_000_000)
+    private var rewardPaginationAttempts = 0
+    private var ledgerPaginationAttempts = 0
 
     init(mode: InvitationCreditFixtureMode) {
         self.mode = mode
@@ -2080,14 +2129,42 @@ private actor InvitationCreditFixtureService:
             )
         }
         if mode == .rewardPagination {
-            let id = page == 1 ? "rew_1" : "rew_2"
+            if page == 1 {
+                return InvitationRewardPage(
+                    items: [
+                        InvitationReward(
+                            id: "rew_1",
+                            recipientRole: "inviter",
+                            amount: 5,
+                            milestoneThreshold: 10,
+                            status: .issued,
+                            createdAt: fixtureDate
+                        )
+                    ],
+                    total: 2,
+                    page: page,
+                    limit: limit
+                )
+            }
+            rewardPaginationAttempts += 1
+            if rewardPaginationAttempts == 1 {
+                throw InvitationCreditError.requestFailed(message: nil)
+            }
             return InvitationRewardPage(
                 items: [
                     InvitationReward(
-                        id: id,
+                        id: "rew_1",
                         recipientRole: "inviter",
-                        amount: page == 1 ? 5 : 2,
-                        milestoneThreshold: page == 1 ? 10 : 0,
+                        amount: 5,
+                        milestoneThreshold: 10,
+                        status: .issued,
+                        createdAt: fixtureDate
+                    ),
+                    InvitationReward(
+                        id: "rew_2",
+                        recipientRole: "invitee",
+                        amount: 2,
+                        milestoneThreshold: 0,
                         status: .issued,
                         createdAt: fixtureDate
                     )
@@ -2129,8 +2206,15 @@ private actor InvitationCreditFixtureService:
                     hasMore: true
                 )
             }
+            ledgerPaginationAttempts += 1
+            if ledgerPaginationAttempts == 1 {
+                throw InvitationCreditError.requestFailed(message: nil)
+            }
             return CreditLedgerPage(
-                entries: [ledgerEntry(id: "log_2", action: "SPARK_SIMILAR")],
+                entries: [
+                    ledgerEntry(id: "log_1", action: "FUTURE_ACTION"),
+                    ledgerEntry(id: "log_2", action: "SPARK_SIMILAR")
+                ],
                 cursor: nil,
                 hasMore: false
             )
@@ -2165,6 +2249,212 @@ private actor InvitationCreditFixtureService:
     private func pauseIfLoading() async throws {
         guard mode == .loading else { return }
         try await Task.sleep(nanoseconds: 60_000_000_000)
+    }
+}
+
+private final class InvitationCreditJSONFixtureTransport:
+    InvitationCreditNetworkTransporting {
+    private let mode: InvitationCreditFixtureMode
+
+    init(mode: InvitationCreditFixtureMode) {
+        self.mode = mode
+    }
+
+    func getUserGroup(
+        presentsError: Bool
+    ) -> AnyPublisher<InvitationReferralResponse, NetworkError> {
+        decode(
+            InvitationReferralResponse.self,
+            json: #"""
+            {
+              "success": true,
+              "message": null,
+              "data": {
+                "code": "MixedCase09",
+                "link": "https://chorai.test/r/MixedCase09",
+                "used_count": 3,
+                "next_milestone": 5
+              }
+            }
+            """#
+        )
+    }
+
+    func validateInvitationCode(
+        _ request: ValidateInvitationRequest,
+        presentsError: Bool
+    ) -> AnyPublisher<InvitationValidateResponse, NetworkError> {
+        decode(
+            InvitationValidateResponse.self,
+            json: #"""
+            {"success":true,"message":null,"data":{"valid":true}}
+            """#
+        )
+    }
+
+    func useInvitationCode(
+        _ request: UseInvitationRequest,
+        presentsError: Bool
+    ) -> AnyPublisher<InvitationRedeemResponse, NetworkError> {
+        decode(
+            InvitationRedeemResponse.self,
+            json: #"""
+            {
+              "success": true,
+              "message": null,
+              "data": {
+                "invitation_record_id": "inv_transport_1",
+                "status": "registered"
+              }
+            }
+            """#
+        )
+    }
+
+    func getInvitationRecords(
+        page: Int,
+        limit: Int,
+        status: String?,
+        presentsError: Bool
+    ) -> AnyPublisher<InvitationRecordsResponse, NetworkError> {
+        decode(
+            InvitationRecordsResponse.self,
+            json: """
+            {
+              "success": true,
+              "message": null,
+              "data": {
+                "items": [],
+                "total": 0,
+                "page": \(page),
+                "limit": \(limit)
+              }
+            }
+            """
+        )
+    }
+
+    func getInvitationRewards(
+        page: Int,
+        limit: Int,
+        presentsError: Bool
+    ) -> AnyPublisher<InvitationRewardsResponse, NetworkError> {
+        decode(
+            InvitationRewardsResponse.self,
+            json: """
+            {
+              "success": true,
+              "message": null,
+              "data": {
+                "items": [{
+                  "invitation_reward_id": "rew_transport_1",
+                  "recipient_role": "inviter",
+                  "amount": 11,
+                  "milestone_threshold": 10,
+                  "status": "issued",
+                  "created_at": "2024-03-09T16:00:00Z"
+                }],
+                "total": 1,
+                "page": \(page),
+                "limit": \(limit)
+              }
+            }
+            """
+        )
+    }
+
+    func getUserCredit(
+        presentsError: Bool
+    ) -> AnyPublisher<NetworkResponse<CreditBalanceData>, NetworkError> {
+        let json: String
+        switch mode {
+        case .transportBalanceSuccessFalse:
+            json = #"""
+            {
+              "success": false,
+              "message": "Balance unavailable",
+              "data": {
+                "balance": 999,
+                "updated_at": "2024-03-09T16:00:00Z"
+              }
+            }
+            """#
+        case .transportBalanceNilData:
+            json = #"""
+            {"success":true,"message":null,"data":null}
+            """#
+        default:
+            json = #"""
+            {
+              "success": true,
+              "message": null,
+              "data": {
+                "balance": 230,
+                "updated_at": "2024-03-09T16:00:00Z"
+              }
+            }
+            """#
+        }
+        return decode(
+            NetworkResponse<CreditBalanceData>.self,
+            json: json
+        )
+    }
+
+    func getCreditLedger(
+        cursor: String?,
+        limit: Int,
+        presentsError: Bool
+    ) -> AnyPublisher<CreditLedgerResponse, NetworkError> {
+        decode(
+            CreditLedgerResponse.self,
+            json: #"""
+            {
+              "success": true,
+              "message": null,
+              "data": {
+                "entries": [{
+                  "log_id": "log_transport_1",
+                  "transaction_id": "tx_transport_1",
+                  "account": "actor:act_transport",
+                  "direction": "earn",
+                  "delta": 11,
+                  "running_balance": 230,
+                  "status": "settled",
+                  "rule_id": "rule_transport",
+                  "action_type": "INVITATION_REWARD",
+                  "category": "growth",
+                  "reference_id": "ref_transport",
+                  "reference_type": "invitation",
+                  "activity_id": "activity_transport",
+                  "created_at": "2024-03-09T16:00:00Z",
+                  "settled_at": "2024-03-09T16:01:00Z",
+                  "refunded_at": "2024-03-09T16:02:00Z"
+                }],
+                "cursor": null,
+                "has_more": false
+              }
+            }
+            """#
+        )
+    }
+
+    private func decode<Response: Decodable>(
+        _ response: Response.Type,
+        json: String
+    ) -> AnyPublisher<Response, NetworkError> {
+        do {
+            let value = try JSONDecoder().decode(
+                response,
+                from: Data(json.utf8)
+            )
+            return Just(value)
+                .setFailureType(to: NetworkError.self)
+                .eraseToAnyPublisher()
+        } catch {
+            return Fail(error: NetworkError.decodingError)
+                .eraseToAnyPublisher()
+        }
     }
 }
 

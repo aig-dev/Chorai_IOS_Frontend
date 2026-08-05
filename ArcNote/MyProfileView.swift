@@ -6,7 +6,8 @@ struct MyProfileView: View {
     @Environment(\.adaptiveLayoutMetrics) private var adaptiveLayout
     @State private var showPopupMenu = false
     @StateObject private var cardsManager = HomeCardsManager()
-    @StateObject private var userProfileManager = UserProfileManager.shared
+    @ObservedObject private var userProfileManager: UserProfileManager
+    private let loadsDataOnAppear: Bool
     
     // 菜单相关状态
     @State private var popupMenuLayout: PopupMenuLayout = .grid2x2
@@ -17,6 +18,16 @@ struct MyProfileView: View {
     @State private var selectedCardId: String? = nil
     @State private var showFollowList = false
     @State private var followListKind: FollowListKind = .followers
+
+    init(
+        userProfileManager: UserProfileManager = .shared,
+        loadsDataOnAppear: Bool = true
+    ) {
+        _userProfileManager = ObservedObject(
+            wrappedValue: userProfileManager
+        )
+        self.loadsDataOnAppear = loadsDataOnAppear
+    }
     
     var body: some View {
         VStack(spacing: 0) {
@@ -142,6 +153,15 @@ struct MyProfileView: View {
                                             .font(.system(size: 17, weight: .regular))
                                             .foregroundColor(.white.opacity(0.7))
                                     }
+                                    .accessibilityElement(children: .ignore)
+                                    .accessibilityLabel(
+                                        userProfileManager.isCreditLoading
+                                            ? "Loading Credits"
+                                            : "\(userProfileManager.creditTotal) Credits"
+                                    )
+                                    .accessibilityIdentifier(
+                                        "my-profile.credit-balance"
+                                    )
                                 }
                             }
                             .padding(.horizontal, 20)
@@ -268,6 +288,7 @@ struct MyProfileView: View {
             CommentPopupView()
         )
         .onAppear {
+            guard loadsDataOnAppear else { return }
             // 加载当前用户资料
             userProfileManager.fetchCurrentUserProfile()
             

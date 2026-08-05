@@ -2,12 +2,49 @@ import Combine
 import CoreFlow
 import Foundation
 
+protocol InvitationCreditNetworkTransporting {
+    func getUserGroup(
+        presentsError: Bool
+    ) -> AnyPublisher<InvitationReferralResponse, NetworkError>
+    func validateInvitationCode(
+        _ request: ValidateInvitationRequest,
+        presentsError: Bool
+    ) -> AnyPublisher<InvitationValidateResponse, NetworkError>
+    func useInvitationCode(
+        _ request: UseInvitationRequest,
+        presentsError: Bool
+    ) -> AnyPublisher<InvitationRedeemResponse, NetworkError>
+    func getInvitationRecords(
+        page: Int,
+        limit: Int,
+        status: String?,
+        presentsError: Bool
+    ) -> AnyPublisher<InvitationRecordsResponse, NetworkError>
+    func getInvitationRewards(
+        page: Int,
+        limit: Int,
+        presentsError: Bool
+    ) -> AnyPublisher<InvitationRewardsResponse, NetworkError>
+    func getUserCredit(
+        presentsError: Bool
+    ) -> AnyPublisher<NetworkResponse<CreditBalanceData>, NetworkError>
+    func getCreditLedger(
+        cursor: String?,
+        limit: Int,
+        presentsError: Bool
+    ) -> AnyPublisher<CreditLedgerResponse, NetworkError>
+}
+
+extension NetworkManager: InvitationCreditNetworkTransporting {}
+
 struct NetworkInvitationCreditService:
     CoreInvitationCreditServing,
     @unchecked Sendable {
-    private let network: NetworkManager
+    private let network: any InvitationCreditNetworkTransporting
 
-    init(network: NetworkManager = .shared) {
+    init(
+        network: any InvitationCreditNetworkTransporting = NetworkManager.shared
+    ) {
         self.network = network
     }
 
@@ -96,6 +133,7 @@ struct NetworkInvitationCreditService:
                 network.getInvitationRecords(
                     page: page,
                     limit: limit,
+                    status: nil,
                     presentsError: false
                 )
             )

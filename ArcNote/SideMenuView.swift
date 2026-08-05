@@ -10,14 +10,31 @@ struct SideMenuView: View {
     @State private var navigateToMyProfile = false
     @State private var navigateToHelpReport = false
     @State private var areFollowCountsVisible = false
-    @ObservedObject private var userProfileManager = UserProfileManager.shared
+    @ObservedObject private var userProfileManager: UserProfileManager
     @StateObject private var notificationStore = NotificationInboxStore(
         service: NetworkNotificationService()
     )
+    private let loadsDataOnAppear: Bool
     
     // 回调函数
     var onMyNotesTapped: (() -> Void)?
     var onFavoritesTapped: (() -> Void)?
+
+    init(
+        isPresented: Binding<Bool>,
+        userProfileManager: UserProfileManager = .shared,
+        loadsDataOnAppear: Bool = true,
+        onMyNotesTapped: (() -> Void)? = nil,
+        onFavoritesTapped: (() -> Void)? = nil
+    ) {
+        _isPresented = isPresented
+        _userProfileManager = ObservedObject(
+            wrappedValue: userProfileManager
+        )
+        self.loadsDataOnAppear = loadsDataOnAppear
+        self.onMyNotesTapped = onMyNotesTapped
+        self.onFavoritesTapped = onFavoritesTapped
+    }
     
     var body: some View {
         ZStack {
@@ -74,6 +91,15 @@ struct SideMenuView: View {
                                                 .font(.system(size: 16, weight: .medium))
                                                 .foregroundColor(.white)
                                         }
+                                        .accessibilityElement(children: .ignore)
+                                        .accessibilityLabel(
+                                            userProfileManager.isCreditLoading
+                                                ? "Loading Credits"
+                                                : "\(userProfileManager.creditTotal) Credits"
+                                        )
+                                        .accessibilityIdentifier(
+                                            "side-menu.credit-balance"
+                                        )
                                         
                                         // 关注统计
                                         HStack(spacing: 20) {
@@ -191,6 +217,7 @@ struct SideMenuView: View {
                                 }
                                 .offset(y: -40) // 向上偏移，让头像中心点与内容区域上边框重叠
                                 .padding(.leading, 24) // 靠左对齐，与内容区域左边距一致
+                                .accessibilityIdentifier("side-menu.profile")
                             }
                         }
                     }
@@ -199,6 +226,7 @@ struct SideMenuView: View {
                 .ignoresSafeArea()
                 .clipped()
                 .offset(x: isPresented ? 0 : -adaptiveLayout.drawerWidth)
+                .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("adaptive-layout.drawer")
                 
                 Spacer()
@@ -225,7 +253,10 @@ struct SideMenuView: View {
             SettingsView()
         }
         .navigationDestination(isPresented: $navigateToMyProfile) {
-            MyProfileView()
+            MyProfileView(
+                userProfileManager: userProfileManager,
+                loadsDataOnAppear: loadsDataOnAppear
+            )
         }
         .navigationDestination(isPresented: $navigateToHelpReport) {
             WebViewPage(
@@ -235,7 +266,7 @@ struct SideMenuView: View {
         }
         .onAppear {
             // 当侧边栏出现时加载用户资料
-            if isPresented {
+            if isPresented, loadsDataOnAppear {
                 userProfileManager.fetchCurrentUserProfile()
                 refreshNotificationIndicator()
             }
@@ -243,7 +274,7 @@ struct SideMenuView: View {
         .onChange(of: isPresented) { isShowing in
             areFollowCountsVisible = false
             // 当侧边栏显示时加载用户资料
-            if isShowing {
+            if isShowing, loadsDataOnAppear {
                 userProfileManager.fetchCurrentUserProfile()
                 refreshNotificationIndicator()
             }

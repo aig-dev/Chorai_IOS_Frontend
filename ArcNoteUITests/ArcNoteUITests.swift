@@ -1460,6 +1460,58 @@ final class ArcNoteUITests: XCTestCase {
         waitFor("invitation-credits.balance.retry")
     }
 
+    func testInvitationCreditTransportFixtureFlowsJSONThroughServiceStoresAndRows() throws {
+        launchInvitationCreditFixture(mode: "transport-success")
+
+        XCTAssertEqual(
+            waitFor("invitation-credits.balance.credit").value as? String,
+            "230"
+        )
+        XCTAssertFalse(
+            app.descendants(matching: .any)[
+                "invitation-credits.balance.premium-credit"
+            ].exists
+        )
+
+        tap("invitation-credits.rewards.link")
+        let reward = waitFor("invitation-rewards.row.rew_transport_1")
+        XCTAssertTrue(reward.label.contains("+11"))
+        XCTAssertTrue(reward.label.contains("Credits"))
+        XCTAssertTrue(reward.label.contains("Milestone bonus"))
+
+        tap("settings.destination.back")
+        waitFor("screen.invitation-credits")
+        let ledgerLink = waitFor("invitation-credits.ledger.link")
+        for _ in 0..<3 where !ledgerLink.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(ledgerLink.isHittable)
+        ledgerLink.tap()
+        let ledger = waitFor("credit-ledger.row.log_transport_1")
+        XCTAssertEqual(
+            ledger.value as? String,
+            "log_transport_1|tx_transport_1|actor:act_transport|earn|11|230|settled|rule_transport|INVITATION_REWARD|growth|ref_transport|invitation|activity_transport|1710000000|1710000060|1710000120"
+        )
+    }
+
+    func testInvitationCreditTransportFixtureRejectsUnsuccessfulAndMissingBalanceData() throws {
+        launchInvitationCreditFixture(mode: "transport-balance-success-false")
+        waitFor("invitation-credits.balance.error")
+        XCTAssertFalse(
+            app.descendants(matching: .any)[
+                "invitation-credits.balance.credit"
+            ].exists
+        )
+
+        launchInvitationCreditFixture(mode: "transport-balance-nil-data")
+        waitFor("invitation-credits.balance.error")
+        XCTAssertFalse(
+            app.descendants(matching: .any)[
+                "invitation-credits.balance.credit"
+            ].exists
+        )
+    }
+
     func testInvitationCreditDetailPaginationFixtures() throws {
         launchInvitationCreditFixture(mode: "history-pagination")
         waitFor("screen.invitation-history")
@@ -1475,9 +1527,30 @@ final class ArcNoteUITests: XCTestCase {
         )
         XCTAssertTrue(firstReward.label.contains("Credits"))
         tap("invitation-rewards.load-more")
+        waitFor("invitation-rewards.pagination-error")
+        XCTAssertTrue(firstReward.exists)
+        XCTAssertFalse(
+            app.descendants(matching: .any)[
+                "invitation-rewards.row.rew_2"
+            ].exists
+        )
+        tap("invitation-rewards.pagination-error.retry")
         let secondReward = waitFor("invitation-rewards.row.rew_2")
         XCTAssertTrue(secondReward.label.contains("Credits"))
         XCTAssertFalse(secondReward.label.contains("Premium"))
+        let rewardRows = app.otherElements.matching(
+            NSPredicate(
+                format: "identifier BEGINSWITH %@",
+                "invitation-rewards.row."
+            )
+        ).allElementsBoundByIndex
+        XCTAssertEqual(
+            rewardRows.map(\.identifier),
+            [
+                "invitation-rewards.row.rew_1",
+                "invitation-rewards.row.rew_2"
+            ]
+        )
 
         launchInvitationCreditFixture(mode: "ledger-pagination")
         waitFor("screen.credit-ledger")
@@ -1485,7 +1558,25 @@ final class ArcNoteUITests: XCTestCase {
             waitFor("credit-ledger.row.log_1").label.contains("Future action")
         )
         tap("credit-ledger.load-more")
+        waitFor("credit-ledger.pagination-error")
+        XCTAssertTrue(
+            app.descendants(matching: .any)["credit-ledger.row.log_1"].exists
+        )
+        XCTAssertFalse(
+            app.descendants(matching: .any)["credit-ledger.row.log_2"].exists
+        )
+        tap("credit-ledger.pagination-error.retry")
         waitFor("credit-ledger.row.log_2")
+        let ledgerRows = app.otherElements.matching(
+            NSPredicate(
+                format: "identifier BEGINSWITH %@",
+                "credit-ledger.row."
+            )
+        ).allElementsBoundByIndex
+        XCTAssertEqual(
+            ledgerRows.map(\.identifier),
+            ["credit-ledger.row.log_1", "credit-ledger.row.log_2"]
+        )
     }
 
     func testInvitationCreditsRecoveryFixtures() throws {
@@ -1681,6 +1772,37 @@ final class ArcNoteUITests: XCTestCase {
         waitFor("screen.invitation-credits")
     }
 
+    func testSidebarAndMyProfileShareSingleCreditBalanceFixture() throws {
+        app.launchArguments.append("--ui-test-profile-credit-surfaces")
+        app.launch()
+
+        waitFor("adaptive-layout.drawer")
+        XCTAssertEqual(
+            waitFor("side-menu.credit-balance").label,
+            "230 Credits"
+        )
+        XCTAssertFalse(app.staticTexts["SYN"].exists)
+        XCTAssertEqual(
+            app.staticTexts.matching(
+                NSPredicate(format: "label CONTAINS[c] %@", "Premium Credit")
+            ).count,
+            0
+        )
+
+        tap("side-menu.profile")
+        XCTAssertEqual(
+            waitFor("my-profile.credit-balance").label,
+            "230 Credits"
+        )
+        XCTAssertFalse(app.staticTexts["SYN"].exists)
+        XCTAssertEqual(
+            app.staticTexts.matching(
+                NSPredicate(format: "label CONTAINS[c] %@", "Premium Credit")
+            ).count,
+            0
+        )
+    }
+
     func testInvitationCreditsDecodeLiveGoResponses() throws {
         let liveGoBaseURL = "http://127.0.0.1:8081"
         guard let session = fetchSmokeSession(
@@ -1708,8 +1830,15 @@ final class ArcNoteUITests: XCTestCase {
         settingsRow.tap()
 
         waitFor("screen.invitation-credits", timeout: 20)
-        waitFor("invitation-credits.balance.credit", timeout: 20)
-        waitFor("invitation-credits.balance.premium-credit", timeout: 20)
+        let credit = waitFor(
+            "invitation-credits.balance.credit",
+            timeout: 20
+        )
+        let creditValue = try XCTUnwrap(credit.value as? String)
+        XCTAssertNotNil(Int(creditValue))
+        XCTAssertFalse(app.descendants(matching: .any)[
+            "invitation-credits.balance.premium-credit"
+        ].exists)
         waitFor("invitation-credits.referral.code", timeout: 20)
         XCTAssertFalse(app.descendants(matching: .any)[
             "invitation-credits.balance.error"
