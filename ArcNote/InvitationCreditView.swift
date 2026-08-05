@@ -117,37 +117,29 @@ struct InvitationCreditView: View {
 
     private var balanceSection: some View {
         ChoraSectionSurface(
-            title: "Balances",
+            title: "Balance",
             identifier: "invitation-credits.balance.section"
         ) {
-            if let balances = overview.balances {
-                VStack(spacing: 16) {
-                    balanceRow(
-                        title: "Credits",
-                        value: balances.regular,
-                        identifier: "invitation-credits.balance.credit"
-                    )
-                    Divider().background(Color.white.opacity(0.16))
-                    balanceRow(
-                        title: "Premium Credits",
-                        value: balances.premium,
-                        identifier: "invitation-credits.balance.premium-credit"
-                    )
-                }
+            if let balance = overview.balance {
+                balanceRow(
+                    title: "Credits",
+                    value: balance.balance,
+                    identifier: "invitation-credits.balance.credit"
+                )
             }
 
             switch overview.balancePhase {
             case .idle, .loading:
-                if overview.balances == nil {
+                if overview.balance == nil {
                     ChoraLoadingRow(
-                        text: "Loading balances…",
+                        text: "Loading balance…",
                         identifier: "invitation-credits.balance.loading"
                     )
                 }
             case .refreshing:
                 ProgressView()
                     .tint(.white)
-                    .accessibilityLabel("Refreshing balances")
+                    .accessibilityLabel("Refreshing balance")
                     .accessibilityIdentifier(
                         "invitation-credits.balance.refreshing"
                     )
@@ -155,11 +147,11 @@ struct InvitationCreditView: View {
                 InvitationCreditInlineError(
                     text: InvitationCreditPresentation.message(
                         error,
-                        fallback: "Balances couldn’t be loaded."
+                        fallback: "Your Credit balance couldn’t be loaded."
                     ),
                     identifier: "invitation-credits.balance.error"
                 ) {
-                    Task { await overview.retryBalances() }
+                    Task { await overview.retryBalance() }
                 }
             case .ready:
                 EmptyView()
@@ -618,14 +610,6 @@ enum InvitationCreditPresentation {
             .lowercased()
         guard let first = text.first else { return "Unknown" }
         return String(first).uppercased() + text.dropFirst()
-    }
-
-    static func tier(_ value: CreditTier) -> String {
-        switch value {
-        case .credit: return "Credits"
-        case .premiumCredit: return "Premium Credits"
-        case .unknown(let canonical): return readable(canonical)
-        }
     }
 
     static func date(_ value: Date) -> String {

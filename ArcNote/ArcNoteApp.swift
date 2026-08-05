@@ -91,18 +91,10 @@ struct ArcNoteApp: App {
         APIMigrationUITestSeed.applyIfPresent()
         APIMigrationSmokeRunner.startIfRequested()
         if ProcessInfo.processInfo.arguments.contains("--ui-test-settings") {
-            UserProfileManager.shared.creditBalance = [
-                CreditBalanceData(
-                    creditTier: "premium_credit",
-                    balance: 4,
-                    updatedAt: "2024-03-09T16:00:00Z"
-                ),
-                CreditBalanceData(
-                    creditTier: "credit",
-                    balance: 12,
-                    updatedAt: "2024-03-09T16:00:00Z"
-                )
-            ]
+            UserProfileManager.shared.creditBalance = CreditBalanceData(
+                balance: 230,
+                updatedAt: "2024-03-09T16:00:00Z"
+            )
         }
         #endif
     }
@@ -1858,7 +1850,7 @@ private actor SignupInvitationFixtureService:
         throw InvitationCreditError.requestFailed(message: nil)
     }
 
-    func balances(actorID: String) async throws -> CreditBalances {
+    func balance(actorID: String) async throws -> CreditBalance {
         throw InvitationCreditError.requestFailed(message: nil)
     }
 
@@ -2094,9 +2086,8 @@ private actor InvitationCreditFixtureService:
                     InvitationReward(
                         id: id,
                         recipientRole: "inviter",
-                        tier: page == 1 ? .credit : .premiumCredit,
                         amount: page == 1 ? 5 : 2,
-                        isMilestoneBonus: page == 1,
+                        milestoneThreshold: page == 1 ? 10 : 0,
                         status: .issued,
                         createdAt: fixtureDate
                     )
@@ -2114,12 +2105,12 @@ private actor InvitationCreditFixtureService:
         )
     }
 
-    func balances(actorID: String) async throws -> CreditBalances {
+    func balance(actorID: String) async throws -> CreditBalance {
         try await pauseIfLoading()
         if mode == .balanceError {
             throw InvitationCreditError.requestFailed(message: nil)
         }
-        return CreditBalances(regular: 12, premium: 4)
+        return CreditBalance(balance: 230, updatedAt: fixtureDate)
     }
 
     func ledger(
@@ -2154,14 +2145,20 @@ private actor InvitationCreditFixtureService:
         CreditLedgerEntry(
             id: id,
             transactionID: "tx_\(id)",
-            tier: .credit,
+            account: "actor:act_invitation_fixture",
             direction: .earn,
             delta: 5,
             runningBalance: 7,
             status: .settled,
+            ruleID: "rule_\(id)",
             actionType: action,
             category: "future_category",
-            createdAt: fixtureDate
+            referenceID: "ref_\(id)",
+            referenceType: "invitation",
+            activityID: "activity_\(id)",
+            createdAt: fixtureDate,
+            settledAt: fixtureDate.addingTimeInterval(60),
+            refundedAt: nil
         )
     }
 
@@ -2392,7 +2389,7 @@ private struct InvitationCreditContractFixtureView: View {
                 from: Data(Self.referralJSON.utf8)
             )
             let balanceResponse = try decoder.decode(
-                NetworkResponse<[CreditBalanceData]>.self,
+                NetworkResponse<CreditBalanceData>.self,
                 from: Data(Self.balanceJSON.utf8)
             )
             let recordResponse = try decoder.decode(
@@ -2422,7 +2419,7 @@ private struct InvitationCreditContractFixtureView: View {
             guard let balanceData = balanceResponse.data else {
                 throw InvitationCreditError.contract(code: "missing_balance")
             }
-            let balances = try NetworkInvitationCreditService.mapBalances(
+            let balance = try NetworkInvitationCreditService.mapBalance(
                 balanceData
             )
             let records = try NetworkInvitationCreditService.mapInvitationPage(
@@ -2467,8 +2464,12 @@ private struct InvitationCreditContractFixtureView: View {
                     String(referral.usedCount),
                     referral.nextMilestone.map(String.init) ?? "nil"
                 ].joined(separator: ","),
-                "invitation.contract.balance":
-                    "credit:\(balances.regular),premium_credit:\(balances.premium)",
+                "invitation.contract.balance": [
+                    String(balance.balance),
+                    balance.updatedAt.map {
+                        String(Int($0.timeIntervalSince1970))
+                    } ?? "nil"
+                ].joined(separator: ","),
                 "invitation.contract.record": [
                     record.id,
                     record.status.canonical,
@@ -2476,22 +2477,33 @@ private struct InvitationCreditContractFixtureView: View {
                 ].joined(separator: ","),
                 "invitation.contract.reward": [
                     reward.id,
-                    reward.tier.canonical,
+                    reward.recipientRole,
                     String(reward.amount),
+                    String(reward.milestoneThreshold),
                     reward.status.canonical,
-                    String(reward.isMilestoneBonus),
                     String(Int(reward.createdAt.timeIntervalSince1970))
                 ].joined(separator: ","),
                 "invitation.contract.ledger": [
                     entry.id,
+                    entry.transactionID,
+                    entry.account,
                     entry.direction.canonical,
                     String(entry.delta),
-                    entry.tier.canonical,
-                    entry.actionType,
                     String(entry.runningBalance),
                     entry.status.canonical,
-                    ledger.cursor ?? "nil",
-                    String(ledger.hasMore)
+                    entry.ruleID,
+                    entry.actionType,
+                    entry.category,
+                    entry.referenceID,
+                    entry.referenceType,
+                    entry.activityID ?? "nil",
+                    String(Int(entry.createdAt.timeIntervalSince1970)),
+                    entry.settledAt.map {
+                        String(Int($0.timeIntervalSince1970))
+                    } ?? "nil",
+                    entry.refundedAt.map {
+                        String(Int($0.timeIntervalSince1970))
+                    } ?? "nil"
                 ].joined(separator: ","),
                 "invitation.contract.logging": "request-and-response-redacted",
                 "invitation.contract.empty-pages": "invitations:0,rewards:0",
@@ -2537,10 +2549,10 @@ private struct InvitationCreditContractFixtureView: View {
     private static let balanceJSON = #"""
     {
       "success": true,
-      "data": [
-        {"credit_tier": "premium_credit", "balance": 4, "updated_at": "2024-03-09T16:00:00Z"},
-        {"credit_tier": "credit", "balance": 12, "updated_at": "2024-03-09T16:00:00.000Z"}
-      ]
+      "data": {
+        "balance": 230,
+        "updated_at": "2024-03-09T16:00:00Z"
+      }
     }
     """#
 
@@ -2569,9 +2581,8 @@ private struct InvitationCreditContractFixtureView: View {
         "items": [{
           "invitation_reward_id": "rew_1",
           "recipient_role": "inviter",
-          "credit_tier": "credit",
           "amount": 5,
-          "is_milestone_bonus": true,
+          "milestone_threshold": 10,
           "status": "issued",
           "created_at": "2024-03-09T16:00:00Z"
         }],
@@ -2601,18 +2612,20 @@ private struct InvitationCreditContractFixtureView: View {
         "entries": [{
           "log_id": "log_1",
           "transaction_id": "tx_1",
-          "credit_tier": "credit",
+          "account": "actor:act_contract",
           "direction": "future_direction",
           "delta": 5,
           "running_balance": 7,
           "status": "future_status",
-          "rule_id": "rule_private",
+          "rule_id": "rule_1",
           "action_type": "FUTURE_ACTION",
           "category": "growth",
-          "reference_id": "ref_private",
+          "reference_id": "ref_1",
           "reference_type": "invitation",
-          "activity_id": null,
-          "created_at": "2024-03-09T16:00:00Z"
+          "activity_id": "activity_1",
+          "created_at": "2024-03-09T16:00:00Z",
+          "settled_at": "2024-03-09T16:01:00Z",
+          "refunded_at": "2024-03-09T16:02:00Z"
         }],
         "has_more": false
       }

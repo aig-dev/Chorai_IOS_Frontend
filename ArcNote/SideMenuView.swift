@@ -62,15 +62,15 @@ struct SideMenuView: View {
                                                 .foregroundColor(.white)
                                         }
                                         
-                                        // SYN 积分
+                                        // Credit balance
                                         HStack(spacing: 8) {
                                             Image("syn").resizable().frame(width: 20, height: 20)
                                             
-                                            Text(userProfileManager.isCreditLoading ? "--" : "\(userProfileManager.synBalance)")
+                                            Text(userProfileManager.isCreditLoading ? "--" : "\(userProfileManager.creditTotal)")
                                                 .font(.system(size: 16, weight: .semibold))
                                                 .foregroundColor(.yellow)
                                             
-                                            Text("SYN")
+                                            Text("Credits")
                                                 .font(.system(size: 16, weight: .medium))
                                                 .foregroundColor(.white)
                                         }

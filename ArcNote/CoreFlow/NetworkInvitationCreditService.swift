@@ -138,7 +138,7 @@ struct NetworkInvitationCreditService:
         }
     }
 
-    func balances(actorID: String) async throws -> CreditBalances {
+    func balance(actorID: String) async throws -> CreditBalance {
         try Self.requireActor(actorID)
         do {
             let response = try await firstValue(
@@ -149,7 +149,7 @@ struct NetworkInvitationCreditService:
                     message: Self.safeMessage(response.message)
                 )
             }
-            return try Self.mapBalances(data)
+            return try Self.mapBalance(data)
         } catch {
             throw Self.mapNetworkError(error)
         }
@@ -199,26 +199,15 @@ struct NetworkInvitationCreditService:
         )
     }
 
-    static func mapBalances(
-        _ response: [CreditBalanceData]
-    ) throws -> CreditBalances {
-        var seenCanonical = Set<String>()
-        let values = try response.map { value -> CreditBalance in
-            let tier = CreditTier(canonical: value.creditTier)
-            if tier == .credit || tier == .premiumCredit {
-                guard seenCanonical.insert(tier.canonical).inserted else {
-                    throw InvitationCreditError.contract(code: "duplicate_credit_tier")
-                }
-            }
-            return CreditBalance(
-                tier: tier,
-                balance: value.balance,
-                updatedAt: value.updatedAt.isEmpty
-                    ? nil
-                    : try parseDate(value.updatedAt)
-            )
-        }
-        return CreditBalances.normalized(values)
+    static func mapBalance(
+        _ response: CreditBalanceData
+    ) throws -> CreditBalance {
+        CreditBalance(
+            balance: response.balance,
+            updatedAt: response.updatedAt.isEmpty
+                ? nil
+                : try parseDate(response.updatedAt)
+        )
     }
 
     static func mapInvitationPage(
@@ -254,9 +243,8 @@ struct NetworkInvitationCreditService:
                 return InvitationReward(
                     id: item.invitationRewardId,
                     recipientRole: item.recipientRole,
-                    tier: CreditTier(canonical: item.creditTier),
                     amount: item.amount,
-                    isMilestoneBonus: item.isMilestoneBonus,
+                    milestoneThreshold: item.milestoneThreshold,
                     status: InvitationRewardStatus(canonical: item.status),
                     createdAt: try parseDate(item.createdAt)
                 )
@@ -276,14 +264,20 @@ struct NetworkInvitationCreditService:
                 return CreditLedgerEntry(
                     id: item.logId,
                     transactionID: item.transactionId,
-                    tier: CreditTier(canonical: item.creditTier),
+                    account: item.account,
                     direction: LedgerDirection(canonical: item.direction),
                     delta: item.delta,
                     runningBalance: item.runningBalance,
                     status: LedgerStatus(canonical: item.status),
+                    ruleID: item.ruleId,
                     actionType: item.actionType,
                     category: item.category,
-                    createdAt: try parseDate(item.createdAt)
+                    referenceID: item.referenceId,
+                    referenceType: item.referenceType,
+                    activityID: item.activityId,
+                    createdAt: try parseDate(item.createdAt),
+                    settledAt: try item.settledAt.map(parseDate),
+                    refundedAt: try item.refundedAt.map(parseDate)
                 )
             },
             cursor: response.cursor.flatMap(InvitationCode.normalized),

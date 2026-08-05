@@ -92,7 +92,7 @@ struct PrivacySettingsData: Codable, Equatable {
 // MARK: 用户资料管理器
 class UserProfileManager: ObservableObject {
     @Published var userProfile: UserProfile?
-    @Published var creditBalance: [CreditBalanceData] = []
+    @Published var creditBalance: CreditBalanceData?
     @Published var isCreditLoading: Bool = false
     @Published var isLoading: Bool = false
     @Published var error: NetworkError?
@@ -103,16 +103,8 @@ class UserProfileManager: ObservableObject {
 
     private init() {}
 
-    var synBalance: Int {
-        creditBalance
-            .filter { $0.creditTier == "credit" }
-            .reduce(0) { $0 + $1.balance }
-    }
-
-    var regularCreditTotal: Int {
-        creditBalance
-            .filter { $0.creditTier == "credit" }
-            .reduce(0) { $0 + $1.balance }
+    var creditTotal: Int {
+        creditBalance?.balance ?? 0
     }
 
     // 获取用户资料
@@ -177,7 +169,7 @@ class UserProfileManager: ObservableObject {
                     }
                 },
                 receiveValue: { [weak self] response in
-                    self?.creditBalance = response.data ?? []
+                    self?.creditBalance = response.data
                 }
             )
             .store(in: &cancellables)

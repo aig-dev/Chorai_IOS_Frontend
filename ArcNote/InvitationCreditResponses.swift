@@ -1,13 +1,11 @@
 import Foundation
 
 struct CreditBalanceData: Codable {
-    let creditTier: String
     let balance: Int
     let updatedAt: String
 
     enum CodingKeys: String, CodingKey {
         case balance
-        case creditTier = "credit_tier"
         case updatedAt = "updated_at"
     }
 }
@@ -129,9 +127,8 @@ struct InvitationRecordItem: Codable, Identifiable {
 struct InvitationRewardItem: Codable, Identifiable {
     let invitationRewardId: String
     let recipientRole: String
-    let creditTier: String
     let amount: Int
-    let isMilestoneBonus: Bool
+    let milestoneThreshold: Int
     let status: String
     let createdAt: String
 
@@ -140,9 +137,8 @@ struct InvitationRewardItem: Codable, Identifiable {
     enum CodingKeys: String, CodingKey {
         case invitationRewardId = "invitation_reward_id"
         case recipientRole = "recipient_role"
-        case creditTier = "credit_tier"
         case amount
-        case isMilestoneBonus = "is_milestone_bonus"
+        case milestoneThreshold = "milestone_threshold"
         case status
         case createdAt = "created_at"
     }
@@ -168,7 +164,7 @@ struct CreditLedgerData: Codable {
 struct CreditLedgerEntryResponse: Codable {
     let logId: String
     let transactionId: String
-    let creditTier: String
+    let account: String
     let direction: String
     let delta: Int
     let runningBalance: Int
@@ -184,10 +180,9 @@ struct CreditLedgerEntryResponse: Codable {
     let refundedAt: String?
 
     enum CodingKeys: String, CodingKey {
-        case delta, direction, status, category
+        case account, delta, direction, status, category
         case logId = "log_id"
         case transactionId = "transaction_id"
-        case creditTier = "credit_tier"
         case runningBalance = "running_balance"
         case ruleId = "rule_id"
         case actionType = "action_type"

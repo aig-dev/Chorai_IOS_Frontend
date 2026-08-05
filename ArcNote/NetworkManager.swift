@@ -1298,11 +1298,11 @@ extension NetworkManager {
 
     func getUserCredit(
         presentsError: Bool = false
-    ) -> AnyPublisher<NetworkResponse<[CreditBalanceData]>, NetworkError> {
+    ) -> AnyPublisher<NetworkResponse<CreditBalanceData>, NetworkError> {
         return request(
             endpoint: "/api/v1/credits/balance",
             method: .get,
-            responseType: NetworkResponse<[CreditBalanceData]>.self,
+            responseType: NetworkResponse<CreditBalanceData>.self,
             presentsError: presentsError,
             suppressesPayloadLogging: true
         )

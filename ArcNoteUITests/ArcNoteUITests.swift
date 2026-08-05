@@ -1338,11 +1338,12 @@ final class ArcNoteUITests: XCTestCase {
         let expectedValues = [
             "invitation.contract.referral":
                 "MixedCase09,https://chorai.test/r/MixedCase09,3,nil",
-            "invitation.contract.balance": "credit:12,premium_credit:4",
+            "invitation.contract.balance": "230,1710000000",
             "invitation.contract.record": "inv_1,registered,1710000000",
-            "invitation.contract.reward": "rew_1,credit,5,issued,true,1710000000",
+            "invitation.contract.reward":
+                "rew_1,inviter,5,10,issued,1710000000",
             "invitation.contract.ledger":
-                "log_1,future_direction,5,credit,FUTURE_ACTION,7,future_status,nil,false",
+                "log_1,tx_1,actor:act_contract,future_direction,5,7,future_status,rule_1,FUTURE_ACTION,growth,ref_1,invitation,activity_1,1710000000,1710000060,1710000120",
             "invitation.contract.logging": "request-and-response-redacted",
             "invitation.contract.empty-pages": "invitations:0,rewards:0",
             "invitation.contract.auth":
@@ -1419,11 +1420,12 @@ final class ArcNoteUITests: XCTestCase {
         waitFor("screen.invitation-credits")
         XCTAssertEqual(
             waitFor("invitation-credits.balance.credit").value as? String,
-            "12"
+            "230"
         )
-        XCTAssertEqual(
-            waitFor("invitation-credits.balance.premium-credit").value as? String,
-            "4"
+        XCTAssertFalse(
+            app.descendants(matching: .any)[
+                "invitation-credits.balance.premium-credit"
+            ].exists
         )
         waitFor("invitation-credits.referral.share")
         tap("invitation-credits.referral.copy")
@@ -1441,11 +1443,12 @@ final class ArcNoteUITests: XCTestCase {
         launchInvitationCreditFixture(mode: "referral-error")
         XCTAssertEqual(
             waitFor("invitation-credits.balance.credit").value as? String,
-            "12"
+            "230"
         )
-        XCTAssertEqual(
-            waitFor("invitation-credits.balance.premium-credit").value as? String,
-            "4"
+        XCTAssertFalse(
+            app.descendants(matching: .any)[
+                "invitation-credits.balance.premium-credit"
+            ].exists
         )
         waitFor("invitation-credits.referral.error")
         waitFor("invitation-credits.referral.retry")
@@ -1466,12 +1469,15 @@ final class ArcNoteUITests: XCTestCase {
 
         launchInvitationCreditFixture(mode: "reward-pagination")
         waitFor("screen.invitation-rewards")
+        let firstReward = waitFor("invitation-rewards.row.rew_1")
         XCTAssertTrue(
-            waitFor("invitation-rewards.row.rew_1").label
-                .contains("Milestone bonus")
+            firstReward.label.contains("Milestone bonus")
         )
+        XCTAssertTrue(firstReward.label.contains("Credits"))
         tap("invitation-rewards.load-more")
-        waitFor("invitation-rewards.row.rew_2")
+        let secondReward = waitFor("invitation-rewards.row.rew_2")
+        XCTAssertTrue(secondReward.label.contains("Credits"))
+        XCTAssertFalse(secondReward.label.contains("Premium"))
 
         launchInvitationCreditFixture(mode: "ledger-pagination")
         waitFor("screen.credit-ledger")
@@ -1664,7 +1670,7 @@ final class ArcNoteUITests: XCTestCase {
             identifier: "settings.invitation-credits"
         )
         XCTAssertEqual(rows.count, 1)
-        XCTAssertEqual(rows.firstMatch.value as? String, "12 Credits")
+        XCTAssertEqual(rows.firstMatch.value as? String, "230 Credits")
         XCTAssertFalse(app.staticTexts["Upgrade"].exists)
 
         for _ in 0..<3 where !rows.firstMatch.isHittable {

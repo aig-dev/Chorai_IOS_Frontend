@@ -191,7 +191,7 @@ struct InvitationRewardsView: View {
                     .font(.title3.weight(.semibold))
                     .foregroundColor(.white)
                     .monospacedDigit()
-                Text(InvitationCreditPresentation.tier(reward.tier))
+                Text("Credits")
                     .font(.subheadline.weight(.medium))
                     .foregroundColor(.white.opacity(0.7))
                 Spacer(minLength: 12)
@@ -227,7 +227,7 @@ struct InvitationRewardsView: View {
     private func rewardAccessibilityLabel(_ reward: InvitationReward) -> String {
         [
             rewardAmount(reward.amount),
-            InvitationCreditPresentation.tier(reward.tier),
+            "Credits",
             InvitationCreditPresentation.readable(reward.status.canonical),
             reward.isMilestoneBonus ? "Milestone bonus" : nil,
             InvitationCreditPresentation.date(reward.createdAt)
@@ -349,7 +349,6 @@ struct CreditLedgerView: View {
             }
 
             HStack(alignment: .firstTextBaseline, spacing: 10) {
-                Text(InvitationCreditPresentation.tier(entry.tier))
                 Text(
                     InvitationCreditPresentation.readable(
                         entry.direction.canonical
@@ -393,7 +392,6 @@ struct CreditLedgerView: View {
             InvitationCreditPresentation.readable(entry.category),
             InvitationCreditPresentation.readable(entry.direction.canonical),
             signedDelta(entry),
-            InvitationCreditPresentation.tier(entry.tier),
             "Balance \(entry.runningBalance)",
             InvitationCreditPresentation.readable(entry.status.canonical),
             InvitationCreditPresentation.date(entry.createdAt)

@@ -163,7 +163,7 @@ struct SettingsView: View {
                                 title: "Invitations & Credits",
                                 subtitle: userProfileManager.isCreditLoading
                                     ? "Loading…"
-                                    : "\(userProfileManager.regularCreditTotal.formatted()) Credits",
+                                    : "\(userProfileManager.creditTotal.formatted()) Credits",
                                 accessibilityIdentifier: "settings.invitation-credits"
                             ) {
                                 navigateToInvitationCredits = true
