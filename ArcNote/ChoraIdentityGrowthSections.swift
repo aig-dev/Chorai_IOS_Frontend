@@ -25,6 +25,11 @@ struct ChoraIdentitySection: View {
             guard let data = image?.jpegData(compressionQuality: 0.88) else { return }
             store.setAvatarDraft(.init(data: data, filename: "chora-avatar.jpg", mimeType: "image/jpeg"))
         }
+        .onChange(of: store.avatarDraft) { draft in
+            if draft == nil {
+                selectedImage = nil
+            }
+        }
     }
 
     private var form: some View {
@@ -37,6 +42,7 @@ struct ChoraIdentitySection: View {
                 .buttonStyle(.plain)
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel("Chora avatar. Choose a photo")
+                .accessibilityValue(resolvedAvatarValue ?? "Brand default avatar")
                 .accessibilityIdentifier("chora.identity.avatar")
                 VStack(alignment: .leading, spacing: 4) {
                     Text(store.identity?.displayName ?? "Chora").font(.title3.weight(.semibold)).foregroundColor(.white)
@@ -62,12 +68,33 @@ struct ChoraIdentitySection: View {
 
     @ViewBuilder private var avatar: some View {
         if let selectedImage { Image(uiImage: selectedImage).resizable().aspectRatio(contentMode: .fill) }
-        else if let value = store.identity?.avatarURL, let url = URL(string: APIConfiguration.resourceURLString(value)) {
-            AsyncImage(url: url) { phase in
+        else if let avatarURL {
+            AsyncImage(url: avatarURL) { phase in
                 if let image = phase.image { image.resizable().aspectRatio(contentMode: .fill) }
-                else { Image("bot").resizable().aspectRatio(contentMode: .fill) }
+                else { Image("logo").resizable().aspectRatio(contentMode: .fill) }
             }
-        } else { Image("bot").resizable().aspectRatio(contentMode: .fill) }
+        } else { Image("logo").resizable().aspectRatio(contentMode: .fill) }
+    }
+
+    private var resolvedAvatarValue: String? {
+        guard let value = store.identity?.avatarURL?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+              !value.isEmpty,
+              value != "avatar",
+              !Self.isBackendDefaultAvatar(value) else {
+            return nil
+        }
+        return value
+    }
+
+    private var avatarURL: URL? {
+        guard let resolvedAvatarValue else { return nil }
+        return URL(string: APIConfiguration.resourceURLString(resolvedAvatarValue))
+    }
+
+    private static func isBackendDefaultAvatar(_ value: String) -> Bool {
+        URL(string: value)?.path == "/uploads/avatars/default.png"
+            || value == "/uploads/avatars/default.png"
     }
 
     private var errors: [(String, String)] {

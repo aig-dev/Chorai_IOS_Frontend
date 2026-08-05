@@ -138,7 +138,7 @@ class CardDetailManager: ObservableObject {
                         print("详细信息获取成功: \(String(describing: response.data.title))")
                         completion(.success(response.data))
                     } else {
-                        print("详细信息获取失败: \(response.message)")
+                        print("详细信息获取失败: \(response.message ?? "未知错误")")
                         self?.error = .serverError(500, response.message)
                         completion(.failure(.serverError(500, response.message)))
                     }

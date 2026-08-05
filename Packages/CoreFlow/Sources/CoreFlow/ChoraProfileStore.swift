@@ -171,6 +171,7 @@ public final class ChoraProfileStore: ObservableObject {
             var mutationErrors: [
                 ChoraProfileField: ChoraProfileError
             ] = [:]
+            var uploadedAvatarURL: String?
 
             if snapshot.fields.contains(.displayName) {
                 do {
@@ -196,7 +197,7 @@ public final class ChoraProfileStore: ObservableObject {
             }
             if snapshot.fields.contains(.avatar), let avatar = snapshot.avatar {
                 do {
-                    try await service.updateAvatar(
+                    uploadedAvatarURL = try await service.updateAvatar(
                         agentActorID: snapshot.expectedAgent,
                         avatar: avatar
                     )
@@ -219,6 +220,7 @@ public final class ChoraProfileStore: ObservableObject {
                 )
                 self?.publishCanonical(
                     canonical,
+                    uploadedAvatarURL: uploadedAvatarURL,
                     mutationErrors: mutationErrors,
                     snapshot: snapshot
                 )
@@ -251,19 +253,32 @@ public final class ChoraProfileStore: ObservableObject {
 
     private func publishCanonical(
         _ canonical: ChoraIdentity,
+        uploadedAvatarURL: String?,
         mutationErrors: [ChoraProfileField: ChoraProfileError],
         snapshot: SaveSnapshot
     ) {
-        identity = canonical
+        var resolvedIdentity = canonical
+        if snapshot.fields.contains(.avatar),
+           mutationErrors[.avatar] == nil,
+           let uploadedAvatarURL {
+            resolvedIdentity = ChoraIdentity(
+                humanActorID: canonical.humanActorID,
+                agentActorID: canonical.agentActorID,
+                displayName: canonical.displayName,
+                avatarURL: uploadedAvatarURL,
+                preferredAddress: canonical.preferredAddress
+            )
+        }
+        identity = resolvedIdentity
         if snapshot.fields.contains(.displayName),
            displayNameDraft == snapshot.displayName,
            mutationErrors[.displayName] == nil {
-            displayNameDraft = canonical.displayName
+            displayNameDraft = resolvedIdentity.displayName
         }
         if snapshot.fields.contains(.preferredAddress),
            preferredAddressDraft == snapshot.preferredAddress,
            mutationErrors[.preferredAddress] == nil {
-            preferredAddressDraft = canonical.preferredAddress
+            preferredAddressDraft = resolvedIdentity.preferredAddress
         }
         if snapshot.fields.contains(.avatar),
            avatarDraft == snapshot.avatar,

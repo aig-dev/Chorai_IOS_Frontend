@@ -96,7 +96,7 @@ struct NetworkChoraProfileService: CoreChoraProfileServing, @unchecked Sendable 
     func updateAvatar(
         agentActorID: String,
         avatar: ChoraAvatarDraft
-    ) async throws {
+    ) async throws -> String {
         do {
             let response = try await firstValue(
                 network.updateChoraAgentAvatar(
@@ -109,6 +109,10 @@ struct NetworkChoraProfileService: CoreChoraProfileServing, @unchecked Sendable 
             guard response.data.actorID == agentActorID else {
                 throw ChoraProfileError.agentActorChanged
             }
+            guard let avatarURL = Self.normalized(response.data.avatarURL) else {
+                throw ChoraProfileError.requestFailed
+            }
+            return avatarURL
         } catch {
             throw Self.mapNetworkError(error)
         }

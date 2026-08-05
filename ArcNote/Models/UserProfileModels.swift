@@ -205,7 +205,7 @@ class UserProfileManager: ObservableObject {
                         self?.userProfile = response.data
                         completion(.success(true))
                     } else {
-                        print("用户资料更新失败: \(response.message)")
+                        print("用户资料更新失败: \(response.message ?? "未知错误")")
                         completion(.failure(.serverError(500, response.message)))
                     }
                 case .failure(let error):

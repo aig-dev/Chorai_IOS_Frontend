@@ -161,7 +161,7 @@ class HomeCardsManager: ObservableObject {
                         print("卡片删除成功: cardId=\(cardId)")
                         completion(.success(true))
                     } else {
-                        print("卡片删除失败: \(response.message)")
+                        print("卡片删除失败: \(response.message ?? "未知错误")")
                         completion(.failure(.serverError(500, response.message)))
                     }
                 case .failure(let error):
@@ -292,7 +292,7 @@ class HomeCardsManager: ObservableObject {
                         // so an immediate reload would overwrite this value with stale data.
                         completion(.success(true))
                     } else {
-                        print("卡片可见性切换失败: \(response.message)")
+                        print("卡片可见性切换失败: \(response.message ?? "未知错误")")
                         completion(.failure(.serverError(500, response.message)))
                     }
                 case .failure(let error):

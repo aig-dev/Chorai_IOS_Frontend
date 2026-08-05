@@ -21,9 +21,32 @@ protocol ChatDetailFetching {
         conversationId: String,
         request: SendMessageRequest
     ) -> AnyPublisher<SendMessageResponse, NetworkError>
+    func getReferencedNote(
+        cardId: String
+    ) -> AnyPublisher<NoteCard, NetworkError>
 }
 
-extension NetworkManager: ChatConversationFetching, ChatDetailFetching {}
+extension NetworkManager: ChatConversationFetching, ChatDetailFetching {
+    func getReferencedNote(
+        cardId: String
+    ) -> AnyPublisher<NoteCard, NetworkError> {
+        getCardDetailPublisher(cardId: cardId, presentsError: false)
+            .map { response in
+                let card = response.data
+                return NoteCard(
+                    id: card.id,
+                    title: (card.title?.isEmpty ?? true)
+                        ? "Untitled"
+                        : (card.title ?? ""),
+                    description: card.content,
+                    isPublic: card.isPublic,
+                    username: card.author?.userName ?? "Unknown",
+                    avatarUrl: card.author?.avatarUrl
+                )
+            }
+            .eraseToAnyPublisher()
+    }
+}
 
 @MainActor
 final class ChatHistoryVisibilityDependency: ObservableObject {
@@ -272,6 +295,8 @@ class ChatDetailManager: ObservableObject {
     
     private let fetcher: any ChatDetailFetching
     private let humanActorID: String
+    private let currentUserAvatarURL: String?
+    private let participantAvatarURL: String?
     private var canonicalMessages: [APIChatMessage] = []
     private weak var visibilityDependency: ChatHistoryVisibilityDependency?
     private var visibilityCancellable: AnyCancellable?
@@ -284,9 +309,13 @@ class ChatDetailManager: ObservableObject {
 
     init(
         humanActorID: String = AuthManager.shared.currentUser?.id ?? "",
+        currentUserAvatarURL: String? = AuthManager.shared.userAvatar,
+        participantAvatarURL: String? = nil,
         fetcher: any ChatDetailFetching = NetworkManager.shared
     ) {
         self.humanActorID = humanActorID
+        self.currentUserAvatarURL = currentUserAvatarURL
+        self.participantAvatarURL = participantAvatarURL
         self.fetcher = fetcher
     }
 
@@ -335,6 +364,19 @@ class ChatDetailManager: ObservableObject {
             page: 1,
             perPage: 20
         )
+            .flatMap { [fetcher] firstPage -> AnyPublisher<MessagesListResponse, NetworkError> in
+                let latestPage = max(1, firstPage.pagination.pages)
+                guard latestPage > 1 else {
+                    return Just(firstPage)
+                        .setFailureType(to: NetworkError.self)
+                        .eraseToAnyPublisher()
+                }
+                return fetcher.getMessages(
+                    conversationId: conversationId,
+                    page: latestPage,
+                    perPage: firstPage.pagination.perPage
+                )
+            }
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { [weak self] completion in
@@ -347,6 +389,7 @@ class ChatDetailManager: ObservableObject {
                 receiveValue: { [weak self] response in
                     self?.canonicalMessages = response.messages
                     self?.publishVisibleMessages()
+                    self?.hydrateReferencedNotes()
                     print("获取成功")
                 }
             )
@@ -382,12 +425,14 @@ class ChatDetailManager: ObservableObject {
                     }
                 },
                 receiveValue: { [weak self] response in
-                    // 将新消息添加到消息列表
+                    guard let self else { return }
                     var message = response.message
                     message.referencedAssetId = message.referencedAssetId ?? attachedCardId
                     message.attachedCards = attachedNotes
-                    self?.canonicalMessages.append(message)
-                    self?.publishVisibleMessages()
+                    self.canonicalMessages.removeAll { $0.id == message.id }
+                    self.canonicalMessages.append(message)
+                    self.publishVisibleMessages()
+                    self.loadMessages(conversationId: conversationId)
                     print("发送消息成功: id=\(response.message.id)")
                 }
             )
@@ -401,7 +446,8 @@ class ChatDetailManager: ObservableObject {
         }
         print("转换消息原始消息数量: \(messages.count), 当前用户ID: \(userId)")
         let sortedMessages = messages.sorted { lhs, rhs in
-            parseAPIDate(lhs.createdAt) < parseAPIDate(rhs.createdAt)
+            (ChatTimestamp.parse(lhs.createdAt) ?? .distantPast)
+                < (ChatTimestamp.parse(rhs.createdAt) ?? .distantPast)
         }
         return sortedMessages.map { apiMessage in
             let isFromMe = apiMessage.senderId == userId
@@ -411,7 +457,9 @@ class ChatDetailManager: ObservableObject {
                 content: apiMessage.content,
                 isFromMe: isFromMe,
                 timestamp: formatMessageTime(apiMessage.createdAt),
-                avatar: "avatar",
+                avatarURL: isFromMe
+                    ? currentUserAvatarURL
+                    : (conversation?.partner.avatarUrl ?? participantAvatarURL),
                 attachedNotes: apiMessage.attachedCards.isEmpty ? nil : apiMessage.attachedCards
             )
         }
@@ -429,16 +477,56 @@ class ChatDetailManager: ObservableObject {
             )
         }
     }
-    
-    private func parseAPIDate(_ dateString: String) -> Date {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
-        formatter.timeZone = TimeZone(abbreviation: "UTC")
-        return formatter.date(from: dateString) ?? Date.distantPast
+
+    private func hydrateReferencedNotes() {
+        let referencedIDs = Set(
+            canonicalMessages.compactMap { message in
+                message.attachedCards.isEmpty
+                    ? message.referencedAssetId
+                    : nil
+            }
+        )
+        guard !referencedIDs.isEmpty else { return }
+
+        let requests = referencedIDs.map { [fetcher] cardID in
+            fetcher.getReferencedNote(cardId: cardID)
+                .map { (cardID, Optional($0)) }
+                .catch { _ in Just((cardID, nil)) }
+                .eraseToAnyPublisher()
+        }
+
+        Publishers.MergeMany(requests)
+            .collect()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] hydratedNotes in
+                guard let self else { return }
+                let notesByID = Dictionary(
+                    uniqueKeysWithValues: hydratedNotes.compactMap { cardID, note in
+                        note.map { (cardID, $0) }
+                    }
+                )
+                guard !notesByID.isEmpty else { return }
+                self.canonicalMessages = self.canonicalMessages.map { message in
+                    guard
+                        message.attachedCards.isEmpty,
+                        let cardID = message.referencedAssetId,
+                        let note = notesByID[cardID]
+                    else {
+                        return message
+                    }
+                    var hydrated = message
+                    hydrated.attachedCards = [note]
+                    return hydrated
+                }
+                self.publishVisibleMessages()
+            }
+            .store(in: &cancellables)
     }
     
     private func formatMessageTime(_ dateString: String) -> String {
-        let date = parseAPIDate(dateString)
+        guard let date = ChatTimestamp.parse(dateString) else {
+            return "Unknown"
+        }
         let calendar = Calendar.current
         
         if calendar.isDateInToday(date) {
@@ -460,6 +548,23 @@ class ChatDetailManager: ObservableObject {
         timeFormatter.locale = Locale(identifier: "en_US_POSIX")
         timeFormatter.dateFormat = "HH:mm"
         return timeFormatter.string(from: date)
+    }
+}
+
+enum ChatTimestamp {
+    static func parse(_ value: String) -> Date? {
+        let fractionalFormatter = ISO8601DateFormatter()
+        fractionalFormatter.formatOptions = [
+            .withInternetDateTime,
+            .withFractionalSeconds
+        ]
+        if let date = fractionalFormatter.date(from: value) {
+            return date
+        }
+
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter.date(from: value)
     }
 }
 

@@ -2052,6 +2052,13 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertTrue((notion.value as? String)?.contains("Expanded") == true)
     }
 
+    func testChoraProfileUsesBrandFallbackForMissingAgentAvatar() throws {
+        launchChoraProfileFixture(mode: "loaded")
+
+        let avatar = waitFor("chora.identity.avatar")
+        XCTAssertEqual(avatar.value as? String, "Brand default avatar")
+    }
+
     func testChoraLocalNotesPickerAndExactAssetDestination() throws {
         launchChoraProfileFixture(mode: "local-import-done")
         app.swipeUp(); app.swipeUp()
@@ -2130,6 +2137,59 @@ final class ArcNoteUITests: XCTestCase {
         tap("chat.conversation.conversation_before")
         waitFor("chat.message.message_after")
         XCTAssertFalse(app.descendants(matching: .any)["chat.message.message_before"].exists)
+    }
+
+    func testChatUsesBrandFallbackAvatarForBackendDefaultAvatar() throws {
+        app.launchArguments.append("--ui-test-chat-visibility")
+        app.launch()
+
+        tap("chat.fixture.open-list")
+        let avatar = waitFor("chat.conversation.avatar.conversation_before")
+        XCTAssertEqual(avatar.label, "Chora default avatar")
+    }
+
+    func testChatRestoresLatestSentMessageAndHydratesCompactAttachment() throws {
+        app.launchArguments.append("--ui-test-chat-visibility")
+        app.launch()
+
+        tap("chat.fixture.open-attachment-list")
+        XCTAssertEqual(
+            waitFor("chat.conversation.avatar.conversation_attachment").value as? String,
+            "/fixture-partner-avatar.png"
+        )
+        tap("chat.conversation.conversation_attachment")
+        let timestamp = app.staticTexts
+            .matching(identifier: "chat.message.message_with_attachment")
+            .firstMatch
+        XCTAssertTrue(timestamp.waitForExistence(timeout: 10))
+        XCTAssertEqual(timestamp.label, "2020-01-01")
+        let messageElements = app.descendants(matching: .any)
+            .matching(identifier: "chat.message.message_with_attachment")
+            .allElementsBoundByIndex
+        XCTAssertTrue(
+            messageElements.contains {
+                ($0.value as? String) == "/fixture-partner-avatar.png"
+            }
+        )
+        XCTAssertEqual(
+            waitFor("chat.attachment.avatar.ast_fixture_note").value as? String,
+            "/fixture-avatar.png"
+        )
+        XCTAssertEqual(
+            waitFor("chat.attachment.preview.ast_fixture_note").label,
+            "Fixture note preview that must remain on one line"
+        )
+
+        let input = waitFor("chat.message.input")
+        input.tap()
+        input.typeText("Persisted fixture message")
+        tap("chat.message.send")
+        waitFor("chat.message.message_sent_persisted")
+
+        app.buttons["Back"].tap()
+        tap("chat.conversation.conversation_attachment")
+        waitFor("chat.message.message_sent_persisted")
+        waitFor("chat.attachment.preview.ast_fixture_note")
     }
 
     func testChoraProfileFixtureStatesStaySectionLocal() throws {

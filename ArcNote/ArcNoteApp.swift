@@ -343,7 +343,9 @@ private actor ChoraProfileFixtureService: CoreChoraProfileServing {
     func updateAvatar(
         agentActorID: String,
         avatar: ChoraAvatarDraft
-    ) async throws {}
+    ) async throws -> String {
+        "https://cdn.chorai.test/chora-avatar.png"
+    }
 }
 
 private actor ChoraNoteImportFixtureService: CoreNoteImportServing {
@@ -871,18 +873,29 @@ private final class ChatVisibilityFixtureService:
 {
     private let humanActorID: String
     private let conversationID: String
+    private let includesAttachmentScenario: Bool
+    private let partnerAvatarURL: String?
     private var hasPostCutoffMessage = false
+    private var sentMessages: [APIChatMessage] = []
     private let conversationSubject:
         CurrentValueSubject<ConversationsResponse, Never>
 
-    init(humanActorID: String, conversationID: String) {
+    init(
+        humanActorID: String,
+        conversationID: String,
+        includesAttachmentScenario: Bool = false,
+        partnerAvatarURL: String? = nil
+    ) {
         self.humanActorID = humanActorID
         self.conversationID = conversationID
+        self.includesAttachmentScenario = includesAttachmentScenario
+        self.partnerAvatarURL = partnerAvatarURL
         conversationSubject = CurrentValueSubject(
             Self.conversations(
                 humanActorID: humanActorID,
                 conversationID: conversationID,
-                hasPostCutoffMessage: false
+                hasPostCutoffMessage: false,
+                partnerAvatarURL: partnerAvatarURL
             )
         )
     }
@@ -893,7 +906,8 @@ private final class ChatVisibilityFixtureService:
             Self.conversations(
                 humanActorID: humanActorID,
                 conversationID: conversationID,
-                hasPostCutoffMessage: true
+                hasPostCutoffMessage: true,
+                partnerAvatarURL: partnerAvatarURL
             )
         )
     }
@@ -915,7 +929,7 @@ private final class ChatVisibilityFixtureService:
                     partner: ChatPartner(
                         id: "partner_\(humanActorID)",
                         username: "Fixture Partner",
-                        avatarUrl: nil
+                        avatarUrl: partnerAvatarURL
                     ),
                     createdAt: Self.beforeTimestamp,
                     lastMessageTime: hasPostCutoffMessage
@@ -933,6 +947,51 @@ private final class ChatVisibilityFixtureService:
         page: Int,
         perPage: Int
     ) -> AnyPublisher<MessagesListResponse, NetworkError> {
+        if includesAttachmentScenario {
+            let olderMessages = (0..<20).map { index in
+                APIChatMessage(
+                    id: "message_old_\(index)",
+                    content: "Older message \(index)",
+                    senderId: "partner_\(humanActorID)",
+                    receiverId: humanActorID,
+                    createdAt: String(format: "2020-01-01T00:00:%02dZ", index),
+                    messageType: "text",
+                    isFromCurrentUser: false
+                )
+            }
+            let attachmentMessage = APIChatMessage(
+                id: "message_with_attachment",
+                content: "Attached note",
+                senderId: "partner_\(humanActorID)",
+                receiverId: humanActorID,
+                createdAt: "2020-01-01T00:01:00Z",
+                messageType: "text",
+                referencedAssetId: "ast_fixture_note",
+                isFromCurrentUser: false
+            )
+            let allMessages = olderMessages + [attachmentMessage] + sentMessages
+            let lowerBound = min((page - 1) * perPage, allMessages.count)
+            let upperBound = min(lowerBound + perPage, allMessages.count)
+            return Just(
+                MessagesListResponse(
+                    success: true,
+                    data: MessagesListData(
+                        items: Array(allMessages[lowerBound..<upperBound]),
+                        pagination: ChatPagination(
+                            page: page,
+                            perPage: perPage,
+                            total: allMessages.count,
+                            pages: max(1, Int(ceil(Double(allMessages.count) / Double(perPage)))),
+                            hasNext: upperBound < allMessages.count,
+                            hasPrev: page > 1
+                        )
+                    )
+                )
+            )
+            .setFailureType(to: NetworkError.self)
+            .eraseToAnyPublisher()
+        }
+
         var messages = [
             APIChatMessage(
                 id: "message_before",
@@ -974,14 +1033,54 @@ private final class ChatVisibilityFixtureService:
         conversationId: String,
         request: SendMessageRequest
     ) -> AnyPublisher<SendMessageResponse, NetworkError> {
-        Empty<SendMessageResponse, NetworkError>(completeImmediately: true)
+        if includesAttachmentScenario {
+            let message = APIChatMessage(
+                id: "message_sent_persisted",
+                content: request.content,
+                senderId: humanActorID,
+                receiverId: "partner_\(humanActorID)",
+                createdAt: "2020-01-01T00:02:00Z",
+                messageType: "text",
+                referencedAssetId: request.attachedCardId,
+                isFromCurrentUser: true
+            )
+            sentMessages.append(message)
+            return Just(
+                SendMessageResponse(
+                    success: true,
+                    data: SendMessageData(message: message)
+                )
+            )
+            .setFailureType(to: NetworkError.self)
             .eraseToAnyPublisher()
+        }
+
+        return Empty<SendMessageResponse, NetworkError>(completeImmediately: true)
+            .eraseToAnyPublisher()
+    }
+
+    func getReferencedNote(
+        cardId: String
+    ) -> AnyPublisher<NoteCard, NetworkError> {
+        Just(
+            NoteCard(
+                id: cardId,
+                title: "Fixture note title",
+                description: "Fixture note preview that must remain on one line",
+                isPublic: true,
+                username: "Fixture Author",
+                avatarUrl: "/fixture-avatar.png"
+            )
+        )
+        .setFailureType(to: NetworkError.self)
+        .eraseToAnyPublisher()
     }
 
     private static func conversations(
         humanActorID: String,
         conversationID: String,
-        hasPostCutoffMessage: Bool
+        hasPostCutoffMessage: Bool,
+        partnerAvatarURL: String?
     ) -> ConversationsResponse {
         let timestamp = hasPostCutoffMessage ? afterTimestamp : beforeTimestamp
         let messageID = hasPostCutoffMessage ? "message_after" : "message_before"
@@ -994,7 +1093,7 @@ private final class ChatVisibilityFixtureService:
                         partner: ChatPartner(
                             id: "partner_\(humanActorID)",
                             username: "Fixture Partner",
-                            avatarUrl: nil
+                            avatarUrl: partnerAvatarURL
                         ),
                         lastMessage: LastMessage(
                             content: messageID,
@@ -1035,11 +1134,18 @@ private struct ChatVisibilityFixtureScreen: View {
         )
     @StateObject private var humanAService = ChatVisibilityFixtureService(
         humanActorID: "human_a",
-        conversationID: "conversation_before"
+        conversationID: "conversation_before",
+        partnerAvatarURL: "/uploads/avatars/default.png"
     )
     @StateObject private var humanBService = ChatVisibilityFixtureService(
         humanActorID: "human_b",
         conversationID: "conversation_other_actor"
+    )
+    @StateObject private var attachmentService = ChatVisibilityFixtureService(
+        humanActorID: "human_attachment",
+        conversationID: "conversation_attachment",
+        includesAttachmentScenario: true,
+        partnerAvatarURL: "/fixture-partner-avatar.png"
     )
 
     var body: some View {
@@ -1064,6 +1170,16 @@ private struct ChatVisibilityFixtureScreen: View {
                     )
                 }
                 .accessibilityIdentifier("chat.fixture.open-other-list")
+
+                NavigationLink("Open attachment chat") {
+                    ChatView(
+                        showSideMenu: .constant(false),
+                        humanActorID: "human_attachment",
+                        conversationFetcher: attachmentService,
+                        detailFetcher: attachmentService
+                    )
+                }
+                .accessibilityIdentifier("chat.fixture.open-attachment-list")
 
                 NavigationLink("Open clear chat history") {
                     ChoraChatHistorySection(
@@ -3470,7 +3586,7 @@ private final class APIMigrationSmokeRunner {
                 }
             }
 
-            let recommended = try await expect("recommended") {
+            _ = try await expect("recommended") {
                 NetworkManager.shared.getRecommendedCards(limit: 3)
             }
             _ = try await expect("my-cards") {

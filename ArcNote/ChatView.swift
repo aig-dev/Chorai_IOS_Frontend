@@ -250,23 +250,18 @@ struct ChatView: View {
                                 conversationId: conversation.id,
                                 contactName: conversation.partner.username ?? conversation.partner.id,
                                 contactStatus: "Online",
-                                contactAvatar: conversation.partner.avatarUrl ?? "avatar",
+                                contactAvatar: conversation.partner.avatarUrl,
                                 humanActorID: humanActorID,
                                 fetcher: detailFetcher
                             )) {
                                 ChatListCell(
                                     avatar: AnyView(
-                                        AsyncImage(url: resolvedAvatarURL(conversation.partner.avatarUrl)) { image in
-                                            image
-                                                .resizable()
-                                                .aspectRatio(contentMode: .fill)
-                                        } placeholder: {
-                                            Image("avatar")
-                                                .resizable()
-                                                .aspectRatio(contentMode: .fit)
-                                        }
-                                        .frame(width: 56, height: 56)
-                                        .clipShape(Circle())
+                                        ChatAvatarView(
+                                            rawValue: conversation.partner.avatarUrl,
+                                            size: 56,
+                                            accessibilityIdentifier:
+                                                "chat.conversation.avatar.\(conversation.id)"
+                                        )
                                     ),
                                     title: conversation.partner.username ?? conversation.partner.id,
                                     subtitle: conversation.lastMessage?.content ?? "No messages yet",
@@ -326,11 +321,7 @@ struct ChatView: View {
     
     // MARK: - 时间格式化
     private func formatConversationTime(_ dateString: String) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
-        formatter.timeZone = TimeZone(abbreviation: "UTC")
-        
-        guard let date = formatter.date(from: dateString) else {
+        guard let date = ChatTimestamp.parse(dateString) else {
             return "Unknown"
         }
         
@@ -354,13 +345,6 @@ struct ChatView: View {
         }
     }
 
-    private func resolvedAvatarURL(_ rawValue: String?) -> URL? {
-        guard let rawValue, !rawValue.isEmpty else {
-            return nil
-        }
-
-        return URL(string: APIConfiguration.resourceURLString(rawValue))
-    }
 }
 
 struct ChatListCell: View {

@@ -8,5 +8,8 @@ public protocol CoreChoraProfileServing: Sendable {
         humanActorID: String,
         value: String?
     ) async throws
-    func updateAvatar(agentActorID: String, avatar: ChoraAvatarDraft) async throws
+    func updateAvatar(
+        agentActorID: String,
+        avatar: ChoraAvatarDraft
+    ) async throws -> String
 }

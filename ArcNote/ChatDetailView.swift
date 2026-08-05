@@ -82,7 +82,7 @@ struct ChatMessage: Identifiable {
     let content: String
     let isFromMe: Bool
     let timestamp: String
-    let avatar: String
+    let avatarURL: String?
     let attachedNotes: [NoteCard]?
 }
 
@@ -95,7 +95,7 @@ struct ChatDetailView: View {
     @State private var messageText = ""
     @State private var contactName: String
     @State private var contactStatus: String
-    @State private var contactAvatar: String
+    @State private var contactAvatar: String?
     @State private var searchText = ""
     @FocusState private var isTextFieldFocused: Bool
     @ObservedObject private var selectCardManager = SelectCardPopupManager.shared
@@ -108,7 +108,7 @@ struct ChatDetailView: View {
         conversationId: String,
         contactName: String = "Thompson",
         contactStatus: String = "5 minutes ago online",
-        contactAvatar: String = "avatar",
+        contactAvatar: String? = nil,
         humanActorID: String = AuthManager.shared.currentUser?.id ?? "",
         fetcher: any ChatDetailFetching = NetworkManager.shared
     ) {
@@ -119,6 +119,7 @@ struct ChatDetailView: View {
         _chatDetailManager = StateObject(
             wrappedValue: ChatDetailManager(
                 humanActorID: humanActorID,
+                participantAvatarURL: contactAvatar,
                 fetcher: fetcher
             )
         )
@@ -140,12 +141,11 @@ struct ChatDetailView: View {
                 .accessibilityLabel("Back")
                 
                 HStack(spacing: 10) {
-                    // 默认头像
-                    // Image("avatar")
-                    //     .resizable()
-                    //     .aspectRatio(contentMode: .fill)
-                    //     .frame(width: 40, height: 40)
-                    //     .clipShape(Circle())
+                    ChatAvatarView(
+                        rawValue: chatDetailManager.conversation?.partner.avatarUrl
+                            ?? contactAvatar,
+                        size: 40
+                    )
                     
                     VStack(alignment: .leading, spacing: 2) {
                         Text(chatDetailManager.conversation?.partner.username ?? contactName)
@@ -237,24 +237,20 @@ struct ChatDetailView: View {
                     VStack(spacing: 0) {
                         ForEach(Array(selectCardManager.selectedNotes.enumerated()), id: \.element.id) { index, note in
                             VStack(spacing: 0) {
-                                HStack(alignment: .top, spacing: 12) {
-                                    Image("avatar")
-                                        .resizable()
-                                        .aspectRatio(contentMode: .fill)
-                                        .frame(width: 28, height: 28)
-                                        .clipShape(Circle())
-                                    
-                                    VStack(alignment: .leading, spacing: 6) {
-                                        Text(note.username)
-                                            .font(.system(size: 14, weight: .semibold))
-                                            .foregroundColor(.white)
-                                            .lineLimit(1)
-                                        
-                                        Text(note.description)
-                                            .font(.system(size: 12, weight: .regular))
-                                            .foregroundColor(.white.opacity(0.6))
-                                            .lineLimit(2)
-                                    }
+                                HStack(spacing: 10) {
+                                    NoteAuthorAvatarView(note: note, size: 22)
+
+                                    HTMLTextRenderer(
+                                        htmlContent: note.description,
+                                        maxLines: 1
+                                    )
+                                    .font(.system(size: 12, weight: .regular))
+                                    .foregroundColor(.white.opacity(0.72))
+                                    .lineLimit(1)
+                                    .accessibilityLabel(note.description)
+                                    .accessibilityIdentifier(
+                                        "chat.attachment.preview.\(note.id)"
+                                    )
                                     
                                     Spacer()
                                     
@@ -561,11 +557,7 @@ struct NoteCardView: View {
     
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            Image("avatar")
-                .resizable()
-                .aspectRatio(contentMode: .fill)
-                .frame(width: 28, height: 28)
-                .clipShape(Circle())
+            NoteAuthorAvatarView(note: card, size: 28)
             
             VStack(alignment: .leading, spacing: 6) {
                 Text(card.username)
@@ -644,20 +636,20 @@ struct ChatMessageView: View {
                         .frame(maxWidth: messageBubbleWidth, alignment: .trailing)
 //                        50 * 2 + 20 * 2 + 16 * 2
                         // 头像
-                        Image(message.avatar)
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                            .frame(width: 50, height: 50)
-                            .clipShape(Circle())
+                        ChatAvatarView(
+                            rawValue: message.avatarURL,
+                            size: 50,
+                            accessibilityIdentifier: "chat.message.avatar.\(message.id)"
+                        )
                     }
                 } else {
                     HStack(alignment: .top, spacing: 16) {
                         // 头像
-                        Image(message.avatar)
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                            .frame(width: 50, height: 50)
-                            .clipShape(Circle())
+                        ChatAvatarView(
+                            rawValue: message.avatarURL,
+                            size: 50,
+                            accessibilityIdentifier: "chat.message.avatar.\(message.id)"
+                        )
                         
                         // 消息内容
                         VStack(alignment: .leading, spacing: 8) {
@@ -687,6 +679,7 @@ struct ChatMessageView: View {
             }
             
         }
+        .accessibilityValue(message.avatarURL ?? "default")
         .accessibilityIdentifier("chat.message.\(message.id)")
     }
 }
@@ -701,11 +694,7 @@ struct AttachedNotesView: View {
             ForEach(Array(notes.enumerated()), id: \.element.id) { index, note in
                 VStack(spacing: 0) {
                     HStack(alignment: .top, spacing: 10) {
-                        Image("avatar")
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                            .frame(width: 24, height: 24)
-                            .clipShape(Circle())
+                        NoteAuthorAvatarView(note: note, size: 24)
                         
                         VStack(alignment: .leading, spacing: 4) {
                             Text(note.username)
@@ -752,15 +741,19 @@ struct AttachedNotesBubbleView: View {
                 VStack(spacing: 0) {
                     NavigationLink(destination: DetailView(cardId: note.id)) {
                         HStack(spacing: 10) {
-                            Image(systemName: "doc.text")
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundColor(.white.opacity(0.7))
-                                .frame(width: 16, height: 16)
-                            
-                            Text(note.title)
+                            NoteAuthorAvatarView(note: note, size: 20)
+
+                            HTMLTextRenderer(
+                                htmlContent: note.description,
+                                maxLines: 1
+                            )
                                 .font(.system(size: 12, weight: .regular))
                                 .foregroundColor(.white)
                                 .lineLimit(1)
+                                .accessibilityLabel(note.description)
+                                .accessibilityIdentifier(
+                                    "chat.attachment.preview.\(note.id)"
+                                )
                             
                             Spacer()
                         }
@@ -768,6 +761,7 @@ struct AttachedNotesBubbleView: View {
                         .padding(.vertical, 8)
                     }
                     .buttonStyle(PlainButtonStyle())
+                    .accessibilityIdentifier("chat.attachment.\(note.id)")
                     
                     if index < notes.count - 1 {
                         Rectangle()
@@ -783,6 +777,82 @@ struct AttachedNotesBubbleView: View {
             RoundedRectangle(cornerRadius: 12)
                 .stroke(Color.white.opacity(0.3), lineWidth: 1)
         )
+    }
+}
+
+struct ChatAvatarView: View {
+    let rawValue: String?
+    let size: CGFloat
+    let accessibilityIdentifier: String
+
+    init(
+        rawValue: String?,
+        size: CGFloat,
+        accessibilityIdentifier: String = "chat.avatar"
+    ) {
+        self.rawValue = rawValue
+        self.size = size
+        self.accessibilityIdentifier = accessibilityIdentifier
+    }
+
+    private var resolvedAvatarValue: String? {
+        guard let rawValue = rawValue?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !rawValue.isEmpty,
+              rawValue != "avatar",
+              !Self.isBackendDefaultAvatar(rawValue)
+        else {
+            return nil
+        }
+        return rawValue
+    }
+
+    private static func isBackendDefaultAvatar(_ rawValue: String) -> Bool {
+        URL(string: rawValue)?.path == "/uploads/avatars/default.png"
+            || rawValue == "/uploads/avatars/default.png"
+    }
+
+    private var avatarURL: URL? {
+        guard let resolvedAvatarValue else {
+            return nil
+        }
+        return URL(string: APIConfiguration.resourceURLString(resolvedAvatarValue))
+    }
+
+    var body: some View {
+        AsyncImage(url: avatarURL) { phase in
+            switch phase {
+            case .success(let image):
+                image
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+            default:
+                Image("logo")
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(Circle())
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(
+            resolvedAvatarValue == nil ? "Chora default avatar" : "Chat avatar"
+        )
+        .accessibilityValue(resolvedAvatarValue ?? "default")
+        .accessibilityIdentifier(accessibilityIdentifier)
+    }
+}
+
+private struct NoteAuthorAvatarView: View {
+    let note: NoteCard
+    let size: CGFloat
+
+    var body: some View {
+        ChatAvatarView(
+            rawValue: note.avatarUrl,
+            size: size,
+            accessibilityIdentifier: "chat.attachment.avatar.\(note.id)"
+        )
+        .accessibilityLabel("\(note.username) avatar")
     }
 }
 

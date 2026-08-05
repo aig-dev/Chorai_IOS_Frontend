@@ -207,7 +207,7 @@ class LinkPopupManager: ObservableObject {
                             // 调用回调
                             selectionCallback?(linkItem)
                         } else {
-                            print("失败: \(response.message)")
+                            print("失败: \(response.message ?? "未知错误")")
                             self.errorMessage = "链接失败"
                             self.showErrorAlert = true
                         }

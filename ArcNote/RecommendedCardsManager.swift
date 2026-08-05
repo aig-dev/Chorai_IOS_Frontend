@@ -249,8 +249,9 @@ class RecommendedCardsManager: ObservableObject {
                 return
             }
             
-            // 更新评论数量
-            self?.cardCommentCounts[cardId] = newCount
+            Task { @MainActor [weak self] in
+                self?.cardCommentCounts[cardId] = newCount
+            }
         }
     }
     

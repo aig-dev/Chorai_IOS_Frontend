@@ -654,6 +654,39 @@ final class ChoraProfileStoreTests: XCTestCase {
         XCTAssertEqual(draft.mimeType, "image/png")
     }
 
+    func testAvatarSavePublishesAuthoritativeUploadURLWhenReloadIsStale() async {
+        let initial = ChoraIdentity.fixture(avatarURL: "/avatars/old.png")
+        let staleReload = ChoraIdentity.fixture(avatarURL: "/avatars/old.png")
+        let service = ChoraProfileServiceSpy(
+            identities: [
+                .init(result: .success(initial)),
+                .init(result: .success(staleReload))
+            ],
+            growth: [.init(result: .success(nil))],
+            avatarResults: [.success("/avatars/latest.png")]
+        )
+        let store = ChoraProfileStore(service: service)
+        let draft = ChoraAvatarDraft(
+            data: Data([0x01, 0x02]),
+            filename: "latest.jpg",
+            mimeType: "image/jpeg"
+        )
+
+        await store.load(humanActorID: "act_human")
+        store.setAvatarDraft(draft)
+        store.save()
+        await waitUntil { !store.isSaving }
+
+        XCTAssertEqual(store.identity?.avatarURL, "/avatars/latest.png")
+        XCTAssertNil(store.avatarDraft)
+        XCTAssertTrue(store.fieldErrors.isEmpty)
+        let updates = await service.updateRequests()
+        XCTAssertEqual(
+            updates,
+            [.avatar(agentActorID: "act_chora", value: draft)]
+        )
+    }
+
     func testRetryGrowthKeepsIdentityDraftsAndDoesNotReloadIdentity() async {
         let service = ChoraProfileServiceSpy(
             identities: [.init(result: .success(.fixture()))],
@@ -696,13 +729,14 @@ private extension ChoraIdentity {
         humanActorID: String = "act_human",
         agentActorID: String = "act_chora",
         displayName: String = "Chora",
+        avatarURL: String? = "/chora.png",
         preferredAddress: String? = "Luffy"
     ) -> ChoraIdentity {
         .init(
             humanActorID: humanActorID,
             agentActorID: agentActorID,
             displayName: displayName,
-            avatarURL: "/chora.png",
+            avatarURL: avatarURL,
             preferredAddress: preferredAddress
         )
     }
@@ -758,7 +792,7 @@ private actor ChoraProfileServiceSpy: CoreChoraProfileServing {
     private var displayNameResults: [Result<Void, TestError>]
     private var displayNameDelays: [UInt64]
     private var addressResults: [Result<Void, TestError>]
-    private var avatarResults: [Result<Void, TestError>]
+    private var avatarResults: [Result<String, TestError>]
     private var recordedIdentityCount = 0
     private var recordedGrowth: [String] = []
     private var recordedUpdates: [UpdateRequest] = []
@@ -769,7 +803,7 @@ private actor ChoraProfileServiceSpy: CoreChoraProfileServing {
         displayNameResults: [Result<Void, TestError>] = [],
         displayNameDelays: [UInt64] = [],
         addressResults: [Result<Void, TestError>] = [],
-        avatarResults: [Result<Void, TestError>] = []
+        avatarResults: [Result<String, TestError>] = []
     ) {
         self.identities = identities
         self.growthScripts = growth
@@ -824,9 +858,12 @@ private actor ChoraProfileServiceSpy: CoreChoraProfileServing {
         try addressResults.removeFirst().get()
     }
 
-    func updateAvatar(agentActorID: String, avatar: ChoraAvatarDraft) async throws {
+    func updateAvatar(
+        agentActorID: String,
+        avatar: ChoraAvatarDraft
+    ) async throws -> String {
         recordedUpdates.append(.avatar(agentActorID: agentActorID, value: avatar))
-        try avatarResults.removeFirst().get()
+        return try avatarResults.removeFirst().get()
     }
 
     func growthRequests() -> [String] { recordedGrowth }
@@ -861,7 +898,12 @@ private actor SuspendedGrowthService: CoreChoraProfileServing {
 
     func updateDisplayName(agentActorID: String, displayName: String) async throws {}
     func updatePreferredAddress(humanActorID: String, value: String?) async throws {}
-    func updateAvatar(agentActorID: String, avatar: ChoraAvatarDraft) async throws {}
+    func updateAvatar(
+        agentActorID: String,
+        avatar: ChoraAvatarDraft
+    ) async throws -> String {
+        "/chora.png"
+    }
 
     func didStartGrowth() -> Bool { started }
     func cancellationCount() -> Int { cancellations }

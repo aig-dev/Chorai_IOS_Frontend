@@ -318,7 +318,7 @@ class RelatedCardsManager: ObservableObject {
 
                     } else {
                         self?.error = response.message
-                        print("生成相关卡片失败: \(response.message)")
+                        print("生成相关卡片失败: \(response.message ?? "未知错误")")
                     }
                 }
             )

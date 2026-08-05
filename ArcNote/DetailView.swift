@@ -541,7 +541,7 @@ struct DetailView: View {
                         let allLinks = response.data.outgoingLinks + response.data.incomingLinks
                         self.relatedNotes = allLinks
                     } else {
-                        print("关联笔记失败: \(response.message)")
+                        print("关联笔记失败: \(response.message ?? "未知错误")")
                     }
                 }
             )
@@ -644,7 +644,7 @@ struct DetailView: View {
     
     // MARK: 关注功能
     private func checkFollowStatus() {
-        guard let currentUserId = AuthManager.shared.currentUser?.id else {
+        guard AuthManager.shared.currentUser != nil else {
             print("用户未登录，无法检查关注状态")
             return
         }
@@ -678,7 +678,7 @@ struct DetailView: View {
     
     private func toggleFollow() {
         guard !isFollowLoading else { return }
-        guard let currentUserId = AuthManager.shared.currentUser?.id else {
+        guard AuthManager.shared.currentUser != nil else {
             print("用户未登录")
             return
         }

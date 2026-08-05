@@ -232,7 +232,7 @@ class SearchManager: ObservableObject {
                         self?.hasMoreData = response.data.count == self?.perPage
                         completion(.success(response.data))
                     } else {
-                        print("搜索失败: \(response.message)")
+                        print("搜索失败: \(response.message ?? "未知错误")")
                         self?.error = .serverError(500, response.message)
                         completion(.failure(.serverError(500, response.message)))
                     }
