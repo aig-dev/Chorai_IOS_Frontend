@@ -69,6 +69,24 @@ final class IOSAccessSourceTests: XCTestCase {
         }
     }
 
+    func testGoogleLoginForwardsThePendingAccessPairAtEveryEntryPoint() throws {
+        let entries: [(path: String, pairSource: String)] = [
+            ("ArcNote/ContentView.swift", "pendingAccessPair"),
+            ("ArcNote/SignInView.swift", "pendingAccessPair"),
+            ("ArcNote/SignUpView.swift", "currentAccessPair"),
+        ]
+
+        for entry in entries {
+            let source = try source(entry.path)
+
+            XCTAssertTrue(source.contains("private func handleGoogleLoginResponse"), entry.path)
+            XCTAssertTrue(source.contains("let pair = \(entry.pairSource)()"), entry.path)
+            XCTAssertTrue(source.contains("authManager.googleLogin("), entry.path)
+            XCTAssertTrue(source.contains("accessCode: pair.code"), entry.path)
+            XCTAssertTrue(source.contains("idempotencyKey: pair.key"), entry.path)
+        }
+    }
+
     func testPrivateBetaEntryUsesShortCodeFormat() throws {
         let signup = try source("ArcNote/SignUpView.swift")
         let gate = try source("ArcNote/AccessGateView.swift")
