@@ -41,6 +41,28 @@ final class AccessStoreTests: XCTestCase {
         XCTAssertNil(store.pendingCode)
     }
 
+    func testShortAccessCodeIsClaimedUnchanged() async {
+        let service = AccessServiceStub()
+        service.claimResult = .success(
+            ClaimResult(
+                access: AccessState(
+                    mode: "private_beta",
+                    status: "allowed",
+                    scope: "product_full",
+                    reasonCode: nil
+                ),
+                cohort: "invited_beta"
+            )
+        )
+        let codes = CodeMemoryStore()
+        codes.save("CRAI-7KQ9")
+        let store = AccessStore(service: service, codes: codes, hosts: ["chorai.com"])
+
+        await store.claim()
+
+        XCTAssertEqual(service.claimInputs.map(\.accessCode), ["CRAI-7KQ9"])
+    }
+
     func testMalformedAllowedStateFailsClosed() async {
         let service = AccessServiceStub()
         service.stateResult = .success(

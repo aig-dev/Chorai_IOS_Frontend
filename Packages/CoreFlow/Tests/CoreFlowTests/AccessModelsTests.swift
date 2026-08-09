@@ -20,13 +20,13 @@ final class AccessModelsTests: XCTestCase {
 
     func testClaimInputEncodesExplicitSnakeCaseKeys() throws {
         let data = try JSONEncoder().encode(
-            ClaimInput(accessCode: "CRAI-AAAA-BBBB", idempotencyKey: "ios-attempt-1")
+            ClaimInput(accessCode: "CRAI-7KQ9", idempotencyKey: "ios-attempt-1")
         )
         let object = try XCTUnwrap(
             JSONSerialization.jsonObject(with: data) as? [String: String]
         )
 
-        XCTAssertEqual(object["access_code"], "CRAI-AAAA-BBBB")
+        XCTAssertEqual(object["access_code"], "CRAI-7KQ9")
         XCTAssertEqual(object["idempotency_key"], "ios-attempt-1")
         XCTAssertNil(object["accessCode"])
     }

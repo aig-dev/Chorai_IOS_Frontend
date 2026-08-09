@@ -69,6 +69,15 @@ final class IOSAccessSourceTests: XCTestCase {
         }
     }
 
+    func testPrivateBetaEntryUsesShortCodeFormat() throws {
+        let signup = try source("ArcNote/SignUpView.swift")
+        let gate = try source("ArcNote/AccessGateView.swift")
+
+        XCTAssertTrue(signup.contains("placeholder: \"CRAI-XXXX\""))
+        XCTAssertTrue(signup.contains("(9...64).contains(code.count)"))
+        XCTAssertTrue(gate.contains("TextField(\"CRAI-XXXX\", text: $code)"))
+    }
+
     func testUniversalLinkAndNewSourcesAreRegistered() throws {
         let entitlements = try source("ArcNote/ArcNote.entitlements")
         let project = try source("ArcNote.xcodeproj/project.pbxproj")

@@ -180,7 +180,7 @@ struct SignUpView: View {
 
                                 InputField(
                                     icon: "key",
-                                    placeholder: "Product Access Code",
+                                    placeholder: "CRAI-XXXX",
                                     text: $accessCode,
                                     accessibilityIdentifier: "signup.access-code"
                                 )
@@ -528,7 +528,7 @@ struct SignUpView: View {
         let entered = accessCode.trimmingCharacters(in: .whitespacesAndNewlines)
         let code = entered.isEmpty ? KeychainStore.shared.load() : entered
         guard let code,
-              (16...64).contains(code.count) else {
+              (9...64).contains(code.count) else {
             return (nil, nil)
         }
         if accessKeyCode != code {

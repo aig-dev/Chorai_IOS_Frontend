@@ -52,7 +52,7 @@ struct AccessGateView: View {
                     }
 
                     VStack(alignment: .leading, spacing: 12) {
-                        TextField("Product Access Code", text: $code)
+                        TextField("CRAI-XXXX", text: $code)
                             .textInputAutocapitalization(.characters)
                             .autocorrectionDisabled()
                             .foregroundStyle(.white)
