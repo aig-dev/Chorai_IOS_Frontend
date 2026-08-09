@@ -31,6 +31,26 @@ final class AccessModelsTests: XCTestCase {
         XCTAssertNil(object["accessCode"])
     }
 
+    func testAuthAccessPairOnlyEmitsACompleteNormalizedPair() throws {
+        XCTAssertNil(AuthAccessPair(code: "CRAI-7KQ9", idempotencyKey: nil))
+        XCTAssertNil(AuthAccessPair(code: nil, idempotencyKey: "ios-attempt-1"))
+
+        let pair = try XCTUnwrap(
+            AuthAccessPair(
+                code: "  CRAI-7KQ9  ",
+                idempotencyKey: "  ios-attempt-1  "
+            )
+        )
+
+        XCTAssertEqual(
+            pair.requestFields,
+            [
+                "access_code": "CRAI-7KQ9",
+                "idempotency_key": "ios-attempt-1",
+            ]
+        )
+    }
+
     func testCampaignBlockDecodesBoundedPresentationKeys() throws {
         let data = Data(#"{"campaign_id":"campaign_1","surface":"access.gate","template_key":"private_beta","content":{"title":"Join","description":"Use a code","action_label":"Unlock"}}"#.utf8)
 

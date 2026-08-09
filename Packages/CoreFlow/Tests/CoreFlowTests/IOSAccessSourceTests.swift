@@ -47,6 +47,7 @@ final class IOSAccessSourceTests: XCTestCase {
         XCTAssertTrue(network.contains("APIEnvironment.AccessRoute.state"))
         XCTAssertTrue(network.contains("APIEnvironment.AccessRoute.claim"))
         XCTAssertTrue(network.contains("APIEnvironment.AccessRoute.campaign"))
+        XCTAssertTrue(network.contains("AuthAccessPair"))
         XCTAssertTrue(network.contains("\"access_code\""))
         XCTAssertTrue(network.contains("\"idempotency_key\""))
         XCTAssertTrue(auth.contains("@Published private(set) var accessState"))

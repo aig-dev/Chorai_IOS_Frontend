@@ -50,6 +50,34 @@ public struct ClaimInput: Codable, Equatable, Sendable {
     }
 }
 
+public struct AuthAccessPair: Equatable, Sendable {
+    public let code: String
+    public let idempotencyKey: String
+
+    public init?(code: String?, idempotencyKey: String?) {
+        guard let code = Self.normalized(code, length: 9...64),
+              let idempotencyKey = Self.normalized(idempotencyKey, length: 8...128) else {
+            return nil
+        }
+        self.code = code
+        self.idempotencyKey = idempotencyKey
+    }
+
+    public var requestFields: [String: String] {
+        [
+            "access_code": code,
+            "idempotency_key": idempotencyKey,
+        ]
+    }
+
+    private static func normalized(_ value: String?, length: ClosedRange<Int>) -> String? {
+        guard let value else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard length.contains(trimmed.count) else { return nil }
+        return trimmed
+    }
+}
+
 public struct ClaimResult: Codable, Equatable, Sendable {
     public let access: AccessState
     public let cohort: String?

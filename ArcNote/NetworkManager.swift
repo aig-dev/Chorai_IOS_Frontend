@@ -225,14 +225,12 @@ class NetworkManager: ObservableObject {
         key: String?,
         to parameters: inout Parameters
     ) {
-        guard let code = code?.trimmingCharacters(in: .whitespacesAndNewlines),
-              let key = key?.trimmingCharacters(in: .whitespacesAndNewlines),
-              code.isEmpty == false,
-              key.isEmpty == false else {
+        guard let pair = AuthAccessPair(code: code, idempotencyKey: key) else {
             return
         }
-        parameters["access_code"] = code
-        parameters["idempotency_key"] = key
+        pair.requestFields.forEach { field, value in
+            parameters[field] = value
+        }
     }
 
     private func requestData(
