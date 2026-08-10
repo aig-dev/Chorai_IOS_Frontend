@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Chorai iOS private-beta onboarding and contextual guidance prototype"
+    />
+    <title>Chorai Onboarding Prototype</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="prototype-shell">
+      <header class="prototype-header">
+        <a class="brand-lockup" href="#top" aria-label="回到页面顶部">
+          <span class="brand-mark">
+            <img
+              src="../../ArcNote/Assets.xcassets/logo.imageset/logo.png"
+              alt=""
+            />
+          </span>
+          <span>Chorai</span>
+        </a>
+
+        <div class="header-copy" id="top">
+          <p class="eyebrow">iOS · PRIVATE BETA · THROWAWAY PROTOTYPE</p>
+          <h1>入口更短，指引更贴近当下。</h1>
+          <p>
+            邀请码只判断 beta 资格；Apple、Google 快速进入，Email 独立验证有效性；每个页面只解释眼前能做的事。
+          </p>
+        </div>
+
+        <div class="decision-rail" aria-label="已确认的设计决策">
+          <span><b>01</b> 邀请码独立</span>
+          <span><b>02</b> Apple / Google / Email</span>
+          <span><b>03</b> 引导跟随页面</span>
+        </div>
+      </header>
+
+      <main>
+        <section class="variant-view is-active" data-variant="A" aria-labelledby="variant-a-title">
+          <div class="section-heading">
+            <div>
+              <p class="section-kicker">VARIANT A · FLOW BOARD</p>
+              <h2 id="variant-a-title">完整路径，一眼检查摩擦。</h2>
+            </div>
+            <p>
+              从邀请码到首次价值闭环。横向滚动或点选步骤，观察引导是否真的指向当前页面。
+            </p>
+          </div>
+
+          <nav class="journey-index" id="journeyIndex" aria-label="Onboarding 步骤"></nav>
+
+          <div class="journey-viewport" aria-label="七屏 onboarding 流程">
+            <div class="journey-track" id="journeyTrack"></div>
+          </div>
+
+          <div class="flow-verdict">
+            <div class="verdict-signal" aria-hidden="true"><span></span></div>
+            <div>
+              <p class="mini-label">核心变化</p>
+              <h3>先证明价值，再追问偏好。</h3>
+            </div>
+            <p>
+              兴趣选择从注册必经步骤移到完成首次闭环之后。用户可以稍后再完善，也可以一直不选。
+            </p>
+          </div>
+        </section>
+
+        <section class="variant-view" data-variant="B" aria-labelledby="variant-b-title" hidden>
+          <div class="section-heading">
+            <div>
+              <p class="section-kicker">VARIANT B · FOCUSED WALKTHROUGH</p>
+              <h2 id="variant-b-title">逐屏看设计意图。</h2>
+            </div>
+            <p>适合产品评审：屏幕、保留或调整的原因、以及成功状态放在同一视线内。</p>
+          </div>
+
+          <div class="walkthrough-layout">
+            <nav class="step-list" id="stepList" aria-label="选择要评审的步骤"></nav>
+
+            <div class="focused-stage">
+              <div class="stage-glow" aria-hidden="true"></div>
+              <div id="focusedPhone" class="focused-phone"></div>
+              <div class="stage-controls">
+                <button type="button" id="previousStep" aria-label="上一步">←</button>
+                <span id="stepCounter" aria-live="polite"></span>
+                <button type="button" id="nextStep" aria-label="下一步">→</button>
+              </div>
+            </div>
+
+            <aside class="rationale-panel" id="rationalePanel" aria-live="polite"></aside>
+          </div>
+        </section>
+
+        <section class="variant-view" data-variant="C" aria-labelledby="variant-c-title" hidden>
+          <div class="section-heading">
+            <div>
+              <p class="section-kicker">VARIANT C · GUIDE MAP</p>
+              <h2 id="variant-c-title">把引导当成一个小型状态系统。</h2>
+            </div>
+            <p>选择页面，检查目标、文案与触发条件是否同步变化。</p>
+          </div>
+
+          <div class="guide-map-layout">
+            <div class="route-column">
+              <p class="mini-label">CURRENT ROUTE</p>
+              <div class="route-picker" id="routePicker" role="tablist" aria-label="选择页面"></div>
+              <div class="route-principle">
+                <span class="principle-number">01</span>
+                <p>页面切换时，旧页面的 guide 必须立即消失。</p>
+              </div>
+              <div class="route-principle">
+                <span class="principle-number">02</span>
+                <p>目标尚未渲染时，不显示悬空的 guide。</p>
+              </div>
+              <div class="route-principle">
+                <span class="principle-number">03</span>
+                <p>高阶能力等前置条件满足后再介绍。</p>
+              </div>
+            </div>
+
+            <div class="map-stage">
+              <div id="guidePhone" class="guide-phone"></div>
+            </div>
+
+            <aside class="logic-panel" id="logicPanel" aria-live="polite"></aside>
+          </div>
+
+          <div class="render-rule" aria-label="引导渲染规则">
+            <span class="rule-label">RENDER GUIDE ONLY IF</span>
+            <strong>route matches</strong>
+            <i>·</i>
+            <strong>target exists</strong>
+            <i>·</i>
+            <strong>prerequisites met</strong>
+          </div>
+        </section>
+
+        <section class="review-note" aria-labelledby="review-note-title">
+          <p class="section-kicker">RECOMMENDATION</p>
+          <h2 id="review-note-title">极简不等于没有指引，而是只在正确时刻说一句正确的话。</h2>
+          <div class="review-grid">
+            <div>
+              <span>注册</span>
+              <p>元素清单示意：邀请码 → Apple / Google / Email；最终排版沿用现有认证体系。</p>
+            </div>
+            <div>
+              <span>首次使用</span>
+              <p>Home 指向 +；Explore 从卡片右上角独立 Spark 图标进入；结果页再引导 Favorite。</p>
+            </div>
+            <div>
+              <span>稍后再教</span>
+              <p>兴趣与 Merge 都在用户已有内容后出现，并且可跳过。</p>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer class="variant-switcher" aria-label="切换原型视图">
+        <span class="switcher-label">REVIEW MODE</span>
+        <div class="switcher-buttons" id="variantSwitcher">
+          <button type="button" data-switch-variant="A" aria-pressed="true">
+            <b>A</b><span>完整流程</span>
+          </button>
+          <button type="button" data-switch-variant="B" aria-pressed="false">
+            <b>B</b><span>逐屏讲解</span>
+          </button>
+          <button type="button" data-switch-variant="C" aria-pressed="false">
+            <b>C</b><span>引导映射</span>
+          </button>
+        </div>
+        <span class="keyboard-hint">← → 切换</span>
+      </footer>
+    </div>
+
+    <script src="guide-state.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

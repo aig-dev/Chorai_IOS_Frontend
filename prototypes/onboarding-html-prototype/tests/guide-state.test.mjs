@@ -80,6 +80,28 @@ test("hides a guide after its current guide version has an outcome", async () =>
   );
 });
 
+test("removes target emphasis once a guide has an outcome", async () => {
+  const guideState = await loadGuideState();
+  const outcomeKey = getFunction(guideState, "outcomeKey");
+  const targetPulseClass = getFunction(guideState, "targetPulseClass");
+  const eligibleInput = {
+    guideId: "home",
+    activeRoute: "home",
+    targetVisible: true,
+    prerequisitesMet: true,
+    outcomes: {},
+  };
+
+  assert.equal(targetPulseClass(eligibleInput), "target-pulse");
+  assert.equal(
+    targetPulseClass({
+      ...eligibleInput,
+      outcomes: { [outcomeKey("home")]: "completed" },
+    }),
+    "",
+  );
+});
+
 test("records target activation as completed", async () => {
   const guideState = await loadGuideState();
   const outcomeKey = getFunction(guideState, "outcomeKey");
@@ -121,4 +143,41 @@ test("renders every approved sentence as one accessible callout without duplicat
     assert.equal((markup.match(/<p>/g) || []).length, 1);
     assert.doesNotMatch(markup, /<(button|small|span)\b/);
   }
+});
+
+test("routes a target and outside tap without making the callout itself actionable", async () => {
+  const guideState = await loadGuideState();
+  const resolveGuideInteraction = getFunction(guideState, "resolveGuideInteraction");
+
+  const targetAction = resolveGuideInteraction({
+    phoneGuideId: "home",
+    targetGuideId: "home",
+    isCallout: false,
+  });
+  assert.equal(targetAction.type, "target");
+  assert.equal(targetAction.guideId, "home");
+
+  const outsideAction = resolveGuideInteraction({
+    phoneGuideId: "explore",
+    targetGuideId: null,
+    isCallout: false,
+  });
+  assert.equal(outsideAction.type, "outside");
+  assert.equal(outsideAction.guideId, "explore");
+  assert.equal(
+    resolveGuideInteraction({
+      phoneGuideId: "spark",
+      targetGuideId: null,
+      isCallout: true,
+    }),
+    null,
+  );
+  assert.equal(
+    resolveGuideInteraction({
+      phoneGuideId: null,
+      targetGuideId: null,
+      isCallout: false,
+    }),
+    null,
+  );
 });

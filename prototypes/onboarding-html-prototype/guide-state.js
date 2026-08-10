@@ -32,6 +32,10 @@
     );
   }
 
+  function targetPulseClass(input) {
+    return shouldRenderGuide(input) ? "target-pulse" : "";
+  }
+
   function transitionGuide(outcomes, { type, guideId }) {
     if (!guideDefinitions[guideId] || !["target", "outside"].includes(type)) return outcomes;
 
@@ -39,6 +43,13 @@
       ...outcomes,
       [outcomeKey(guideId)]: type === "target" ? "completed" : "dismissed",
     };
+  }
+
+  function resolveGuideInteraction({ phoneGuideId, targetGuideId, isCallout }) {
+    if (targetGuideId) return { type: "target", guideId: targetGuideId };
+    if (isCallout || !phoneGuideId) return null;
+
+    return { type: "outside", guideId: phoneGuideId };
   }
 
   function renderGuideCallout(guideId) {
@@ -52,7 +63,9 @@
     guideDefinitions,
     outcomeKey,
     shouldRenderGuide,
+    targetPulseClass,
     transitionGuide,
+    resolveGuideInteraction,
     renderGuideCallout,
   });
 })(globalThis);
