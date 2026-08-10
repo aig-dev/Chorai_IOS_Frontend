@@ -8,6 +8,8 @@ struct RootView: View {
     @State private var selectedCardID: String?
     @State private var navigateToDetail = false
     @State private var navigateToEdit = false
+    @State private var showPopupMenu = false
+    @State private var menuCard: UserCard?
 
     let cardId: String
     let type: String?
@@ -57,6 +59,12 @@ struct RootView: View {
                 NewNoteView(cardId: selectedCardID)
             }
         }
+        .popupMenu(
+            isPresented: $showPopupMenu,
+            layout: .grid2x2,
+            cardData: menuCard,
+            isOwnCard: menuCard?.isOwner ?? false
+        )
         .task(id: cardId) {
             await store.load(cardID: cardId)
         }
@@ -68,22 +76,12 @@ struct RootView: View {
                 Image(systemName: "chevron.left")
                     .font(.system(size: 20, weight: .medium))
                     .foregroundColor(.white)
+                    .frame(minWidth: 44, minHeight: 44)
             }
             .accessibilityLabel("Back")
             .accessibilityIdentifier("discovery-path.back")
 
             Spacer()
-
-            Text("Discovery Path")
-                .font(.system(size: 24, weight: .bold))
-                .foregroundColor(.white)
-
-            Spacer()
-
-            Image(systemName: "chevron.left")
-                .font(.system(size: 20, weight: .medium))
-                .foregroundColor(.clear)
-                .accessibilityHidden(true)
         }
         .adaptiveContentGutter()
         .padding(.top, 60)
@@ -121,7 +119,8 @@ struct RootView: View {
             VStack(spacing: 22) {
                 DiscoveryPathTimeline(
                     snapshot: snapshot,
-                    openCard: openCard
+                    openCard: openCard,
+                    openMenu: openMenu
                 )
 
                 if showsEmptyState {
@@ -158,6 +157,34 @@ struct RootView: View {
         }
     }
 
+    private func openMenu(_ card: DiscoveryPathCard) {
+        let currentActorID = AuthManager.shared.currentUser?.id
+        let isOwner = currentActorID != nil
+            && card.authorActorID == currentActorID
+
+        menuCard = UserCard(
+            id: card.id,
+            title: nil,
+            content: card.content,
+            contentHash: "",
+            isPublic: false,
+            tags: card.tags,
+            createdAt: card.createdAt,
+            updatedAt: card.createdAt,
+            likeCount: 0,
+            commentCount: nil,
+            isLiked: false,
+            isPinned: false,
+            pinnedAt: nil,
+            isFavorited: nil,
+            favoriteCount: nil,
+            rate: card.rate,
+            ownerActorId: card.authorActorID,
+            isOwner: isOwner
+        )
+        showPopupMenu = true
+    }
+
     private func message(for error: DiscoveryPathError) -> String {
         switch error {
         case .invalidCard:
@@ -175,6 +202,7 @@ struct RootView: View {
 private struct DiscoveryPathTimeline: View {
     let snapshot: DiscoveryPathSnapshot
     let openCard: (DiscoveryPathCard) -> Void
+    let openMenu: (DiscoveryPathCard) -> Void
 
     var body: some View {
         VStack(spacing: 0) {
@@ -182,7 +210,8 @@ private struct DiscoveryPathTimeline: View {
                 card: snapshot.collected,
                 badge: "Collected",
                 badgeColor: Color(red: 0.67, green: 0.42, blue: 1),
-                action: { openCard(snapshot.collected) }
+                action: { openCard(snapshot.collected) },
+                onMenu: { openMenu(snapshot.collected) }
             )
             .accessibilityIdentifier("discovery-path.collected")
 
@@ -196,7 +225,8 @@ private struct DiscoveryPathTimeline: View {
                         ? "Origin" : "Step \(node.depth)",
                     badgeColor: index == snapshot.ancestors.count - 1
                         ? Color.orange : Color.white.opacity(0.65),
-                    action: { openCard(node.card) }
+                    action: { openCard(node.card) },
+                    onMenu: { openMenu(node.card) }
                 )
                 .accessibilityIdentifier(
                     "discovery-path.ancestor.\(node.card.id)"
@@ -241,79 +271,69 @@ private struct DiscoveryPathCardView: View {
     let badge: String
     let badgeColor: Color
     let action: () -> Void
+    let onMenu: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack(spacing: 10) {
-                    avatar
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 10) {
+                avatar
 
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(card.authorName)
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundColor(.white)
-                            .lineLimit(1)
-                        Text(Self.formattedDate(card.createdAt))
-                            .font(.system(size: 11))
-                            .foregroundColor(.white.opacity(0.55))
-                    }
-
-                    Spacer()
-
-                    Text(badge)
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundColor(badgeColor)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .background(
-                            Capsule().fill(badgeColor.opacity(0.12))
-                        )
-                }
-
-                if let title = card.title,
-                   !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Text(title)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(card.authorName)
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(.white)
-                        .lineLimit(2)
+                        .lineLimit(1)
+                    Text(Self.formattedDate(card.createdAt))
+                        .font(.system(size: 12))
+                        .foregroundColor(.white.opacity(0.55))
                 }
 
-                HTMLTextRenderer(htmlContent: card.content, maxLines: 3)
-                    .font(.system(size: 14))
-                    .foregroundColor(.white.opacity(0.82))
+                Spacer()
 
-                if !card.tags.isEmpty {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 7) {
-                            ForEach(card.tags.prefix(4), id: \.self) { tag in
-                                Text(tag)
-                                    .font(.system(size: 11, weight: .medium))
-                                    .foregroundColor(.white.opacity(0.82))
-                                    .padding(.horizontal, 9)
-                                    .padding(.vertical, 5)
-                                    .background(
-                                        Capsule().fill(Color.white.opacity(0.09))
-                                    )
-                            }
-                        }
+                Button(action: onMenu) {
+                    Image(systemName: "ellipsis")
+                        .font(.title3)
+                        .foregroundColor(.white)
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Card menu")
+                .accessibilityIdentifier("discovery-path.menu.\(card.id)")
+            }
+
+            Button(action: action) {
+                HTMLTextRenderer(
+                    htmlContent: card.content,
+                    maxLines: 3,
+                    font: .system(size: 14, weight: .regular),
+                    foregroundColor: .white.opacity(0.9)
+                )
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Open \(card.authorName)'s card")
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    pathRoleChip
+
+                    ForEach(card.tags.prefix(4), id: \.self) { tag in
+                        tagChip(tag)
                     }
                 }
+                .padding(.horizontal, 1)
             }
-            .padding(18)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(cardBackground)
-            .overlay(
-                RoundedRectangle(cornerRadius: 20)
-                    .stroke(Color.white.opacity(0.11), lineWidth: 1)
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 20))
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel(
-            [badge, card.title, card.authorName]
-                .compactMap { $0 }
-                .joined(separator: ", ")
-        )
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            LibraryCardBackgroundSurface(backgroundMediaRef: nil) {
+                cardBackground
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("discovery-path.card.\(card.id)")
     }
 
     @ViewBuilder
@@ -325,7 +345,7 @@ private struct DiscoveryPathCardView: View {
             } placeholder: {
                 avatarFallback
             }
-            .frame(width: 34, height: 34)
+            .frame(width: 40, height: 40)
             .clipShape(Circle())
         } else {
             avatarFallback
@@ -337,36 +357,84 @@ private struct DiscoveryPathCardView: View {
             .fill(Color.white.opacity(0.12))
             .overlay(
                 Image(systemName: "person.fill")
-                    .font(.system(size: 13))
+                    .font(.system(size: 15))
                     .foregroundColor(.white.opacity(0.65))
             )
-            .frame(width: 34, height: 34)
+            .frame(width: 40, height: 40)
+    }
+
+    private var pathRoleChip: some View {
+        Text(badge)
+            .font(.system(size: 12, weight: .medium))
+            .foregroundColor(badgeColor)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(badgeColor.opacity(0.16))
+            )
+            .accessibilityIdentifier("discovery-path.role.\(card.id)")
+    }
+
+    private func tagChip(_ tag: String) -> some View {
+        Text(tag)
+            .font(.system(size: 12, weight: .medium))
+            .foregroundColor(.white)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(Color.white.opacity(0.1))
+            )
+            .lineLimit(1)
     }
 
     @ViewBuilder
     private var cardBackground: some View {
-        ZStack {
-            Color(red: 0.08, green: 0.06, blue: 0.14).opacity(0.92)
-            LinearGradient(
-                colors: backgroundColors,
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
+        if card.rate < 3 {
+            RoundedRectangle(cornerRadius: 16)
+                .fill(.ultraThinMaterial.opacity(0.55))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                )
+        } else {
+            ZStack {
+                backgroundImageForRate(card.rate)
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(Color.white.opacity(0.1), lineWidth: 1)
+            }
         }
     }
 
-    private var backgroundColors: [Color] {
-        switch card.rate {
-        case 80...:
-            [Color.orange.opacity(0.18), Color.clear]
-        case 27...:
-            [Color.purple.opacity(0.22), Color.clear]
-        case 9...:
-            [Color.blue.opacity(0.2), Color.clear]
-        case 3...:
-            [Color.green.opacity(0.14), Color.clear]
-        default:
-            [Color.white.opacity(0.07), Color.clear]
+    private func backgroundImageForRate(_ rate: Int) -> some View {
+        Group {
+            if rate >= 3 && rate <= 8 {
+                Image("note_bg_green")
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .clipped()
+            } else if rate >= 9 && rate <= 26 {
+                Image("note_bg_blue")
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .clipped()
+            } else if rate >= 27 && rate <= 80 {
+                Image("note_bg_purple")
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .clipped()
+            } else if rate >= 81 && rate <= 242 {
+                Image("note_bg_yellow")
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .clipped()
+            } else {
+                Image("note_bg_red")
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .clipped()
+            }
         }
     }
 

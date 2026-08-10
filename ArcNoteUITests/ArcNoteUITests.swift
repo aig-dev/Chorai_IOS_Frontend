@@ -1391,6 +1391,30 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["Results"].exists)
     }
 
+    func testDiscoveryPathFixtureUsesTitlelessCardsWithFooterPathRoles() throws {
+        launchDiscoveryPathFixture(mode: "loaded")
+
+        let collectedMenu = waitForButton(
+            "discovery-path.menu.ast_collected"
+        )
+        let collectedRole = waitFor("discovery-path.role.ast_collected")
+
+        XCTAssertFalse(
+            app.staticTexts["A saved insight"].exists,
+            "Discovery-path cards must not render a separate title field"
+        )
+        XCTAssertLessThan(
+            collectedMenu.frame.minY,
+            collectedRole.frame.minY,
+            "The overflow menu belongs in the card header above its path role"
+        )
+
+        collectedMenu.tap()
+        waitFor("popup-menu.overlay")
+        waitFor("popup-menu.item.view")
+        captureVisual("discovery-path-home-card-alignment")
+    }
+
     func testDiscoveryPathFixtureShowsNoProvenanceState() throws {
         launchDiscoveryPathFixture(mode: "empty")
 
