@@ -450,9 +450,7 @@ private struct CardEditorSessionView: View {
     private var isUntouchedNewDraft: Bool {
         editingStore.cardID == nil
             && seed.isNew
-            && editingStore.bodyRevision == seed.revision
-            && editingStore.draft.content
-                .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !editingStore.draft.hasMeaningfulContent
             && editingStore.draft.tags.isEmpty
             && editingStore.draft.isPublic == seed.initialIsPublic
             && editingStore.backgroundIntent == .unchanged
@@ -461,9 +459,10 @@ private struct CardEditorSessionView: View {
 
     private var hasPendingCommit: Bool {
         if hasPendingInlineTagCandidate { return true }
+        if editingStore.cardID == nil, isUntouchedNewDraft { return false }
         if hasUncommittedEditorRevision { return true }
         if editingStore.cardID != nil { return editingStore.isDirty }
-        return !isUntouchedNewDraft
+        return true
     }
 
     private var hasUncommittedEditorRevision: Bool {
@@ -585,11 +584,17 @@ private struct CardEditorSessionView: View {
     }
 
     private func isUntouchedNewSnapshot(_ snapshot: BlockNoteSnapshot) -> Bool {
-        editingStore.cardID == nil
+        let snapshotDraft = CardEditingDraft(
+            title: editingStore.draft.title,
+            content: snapshot.fallbackMarkdown,
+            contentJSON: snapshot.contentJSON,
+            editorAtmosphere: editingStore.draft.editorAtmosphere,
+            tags: editingStore.draft.tags,
+            isPublic: editingStore.draft.isPublic
+        )
+        return editingStore.cardID == nil
             && seed.isNew
-            && snapshot.revision == seed.revision
-            && snapshot.fallbackMarkdown
-                .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !snapshotDraft.hasMeaningfulContent
             && editingStore.draft.tags.isEmpty
             && editingStore.draft.isPublic == seed.initialIsPublic
             && editingStore.backgroundIntent == .unchanged

@@ -93,4 +93,13 @@ final class LibraryCardPreviewParserTests: XCTestCase {
         )
         XCTAssertEqual(preview.text, "")
     }
+
+    func testInternalDocumentReferenceIsNeverShownAsNotePreview() {
+        let preview = LibraryCardPreviewParser.parse(
+            content: "doc://note/hash/5bae8ab616a074b9"
+        )
+
+        XCTAssertEqual(preview.text, "")
+        XCTAssertNil(preview.imageSource)
+    }
 }

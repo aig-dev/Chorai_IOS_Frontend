@@ -336,7 +336,11 @@ public enum LibraryCardPreviewParser {
                 )
                     .trimmingCharacters(in: .whitespacesAndNewlines)
             }
-            .filter { !$0.isEmpty && !$0.matchesArtifactLine }
+            .filter {
+                !$0.isEmpty
+                    && !$0.matchesArtifactLine
+                    && !$0.matchesInternalDocumentReference
+            }
             .joined(separator: "\n")
     }
 
@@ -384,5 +388,9 @@ private extension String {
         lowercased()
             .split(whereSeparator: { $0.isWhitespace })
             .map(String.init) == ["default", "left", "default"]
+    }
+
+    var matchesInternalDocumentReference: Bool {
+        lowercased().hasPrefix("doc://note/hash/")
     }
 }

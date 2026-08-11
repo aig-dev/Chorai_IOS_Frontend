@@ -105,12 +105,23 @@ public struct CardEditingDraft: Equatable, Sendable {
         }
     }
 
+    public var hasMeaningfulContent: Bool {
+        if !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return true
+        }
+        guard let contentJSON,
+              let root = Self.structuredJSONRoot(contentJSON),
+              root is [Any] || root is [String: Any] else {
+            return false
+        }
+        return Self.containsMeaningfulContent(root)
+    }
+
     public var validationError: CardEditingError? {
         if let contentJSON, !Self.hasStructuredJSONRoot(contentJSON) {
             return .invalidDraft(code: "invalid_content_json")
         }
-        if content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-           contentJSON == nil {
+        if !hasMeaningfulContent {
             return .invalidDraft(code: "empty_content")
         }
         return nil
@@ -183,11 +194,7 @@ public struct CardEditingDraft: Equatable, Sendable {
     }
 
     private static func hasStructuredJSONRoot(_ value: String) -> Bool {
-        guard let data = value.data(using: .utf8),
-              let root = try? JSONSerialization.jsonObject(
-                with: data,
-                options: [.fragmentsAllowed]
-              ) else {
+        guard let root = structuredJSONRoot(value) else {
             return false
         }
         if root is [Any] { return true }
@@ -196,6 +203,50 @@ public struct CardEditingDraft: Equatable, Sendable {
             return object["blocks"] is [Any]
         }
         return true
+    }
+
+    private static func structuredJSONRoot(_ value: String) -> Any? {
+        guard let data = value.data(using: .utf8) else { return nil }
+        return try? JSONSerialization.jsonObject(
+            with: data,
+            options: [.fragmentsAllowed]
+        )
+    }
+
+    private static func containsMeaningfulContent(_ value: Any) -> Bool {
+        if let text = value as? String {
+            return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+        if let values = value as? [Any] {
+            return values.contains(where: containsMeaningfulContent)
+        }
+        guard let object = value as? [String: Any] else { return false }
+
+        if let type = object["type"] as? String,
+           ["image", "audio", "video", "file"].contains(type.lowercased()),
+           hasMediaSource(object) {
+            return true
+        }
+
+        for key in ["text", "content", "children", "blocks", "rows", "cells"] {
+            if let candidate = object[key], containsMeaningfulContent(candidate) {
+                return true
+            }
+        }
+        return false
+    }
+
+    private static func hasMediaSource(_ object: [String: Any]) -> Bool {
+        let containers = [object, object["props"] as? [String: Any]].compactMap { $0 }
+        for container in containers {
+            for key in ["url", "src", "mediaRef", "media_ref"] {
+                guard let value = container[key] as? String else { continue }
+                if !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    return true
+                }
+            }
+        }
+        return false
     }
 
 }

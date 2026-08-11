@@ -1721,6 +1721,44 @@ final class CardEditingStoreTests: XCTestCase {
         )
     }
 
+    func testDraftRejectsSemanticallyEmptyStructuredDocuments() {
+        let documents = [
+            "[]",
+            #"{"blocks":[]}"#,
+            #"[{"id":"empty","type":"paragraph","props":{"backgroundColor":"default","textAlignment":"left","textColor":"default"},"content":[],"children":[]}]"#,
+        ]
+
+        for document in documents {
+            let draft = CardEditingDraft(
+                title: nil,
+                content: " \n ",
+                contentJSON: document,
+                editorAtmosphere: "none",
+                tags: [],
+                isPublic: false
+            )
+
+            XCTAssertEqual(
+                draft.validationError,
+                .invalidDraft(code: "empty_content"),
+                "Expected an empty structured document to be rejected: \(document)"
+            )
+        }
+    }
+
+    func testDraftAcceptsImageOnlyStructuredDocument() {
+        let draft = CardEditingDraft(
+            title: nil,
+            content: "",
+            contentJSON: #"[{"id":"image","type":"image","props":{"url":"/chorai-assets/note_media/act_1/image.png"},"content":[],"children":[]}]"#,
+            editorAtmosphere: "none",
+            tags: [],
+            isPublic: false
+        )
+
+        XCTAssertNil(draft.validationError)
+    }
+
     func testSaveRejectsInvalidStructuredDocumentWithoutCallingService() async {
         let service = MockCardEditingService()
         service.updateResults = [.success(snapshot(content: "Body", tags: []))]
@@ -1773,6 +1811,34 @@ final class CardEditingStoreTests: XCTestCase {
             .failed(.invalidDraft(code: "empty_content"))
         )
         XCTAssertTrue(service.updateRequests.isEmpty)
+    }
+
+    func testNewNoteSaveRejectsEmptyStructuredDocumentWithoutCreatingCard() async {
+        let service = MockCardEditingService()
+        service.createResults = [
+            .success(snapshot(id: "ast_unexpected", content: "", tags: []))
+        ]
+        let store = makeNewStore(
+            draft: .init(
+                title: nil,
+                content: "",
+                contentJSON: #"[{"id":"empty","type":"paragraph","props":{"backgroundColor":"default","textAlignment":"left","textColor":"default"},"content":[],"children":[]}]"#,
+                editorAtmosphere: "none",
+                tags: [],
+                isPublic: false
+            ),
+            service: service
+        )
+
+        let didSave = await store.save()
+
+        XCTAssertFalse(didSave)
+        XCTAssertNil(store.cardID)
+        XCTAssertEqual(
+            store.phase,
+            .failed(.invalidDraft(code: "empty_content"))
+        )
+        XCTAssertTrue(service.createRequests.isEmpty)
     }
 
     func testDeleteLinkFailureRetainsLinkUntilCanonicalSuccess() async {

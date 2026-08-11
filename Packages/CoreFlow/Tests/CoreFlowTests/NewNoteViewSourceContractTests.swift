@@ -106,6 +106,46 @@ final class NewNoteViewSourceContractTests: XCTestCase {
         XCTAssertFalse(source.contains("@State private var hasUnsavedChanges"))
     }
 
+    func testEmptyStructuredNewNoteDoesNotBecomePendingFromRevisionAlone() throws {
+        let source = try Self.newNoteSource()
+        let untouchedDraft = try XCTUnwrap(
+            Self.functionBody(
+                in: source,
+                signature: "var isUntouchedNewDraft: Bool"
+            )
+        )
+        XCTAssertTrue(
+            untouchedDraft.contains("!editingStore.draft.hasMeaningfulContent")
+        )
+        XCTAssertFalse(untouchedDraft.contains("bodyRevision == seed.revision"))
+
+        let pendingCommit = try XCTUnwrap(
+            Self.functionBody(
+                in: source,
+                signature: "var hasPendingCommit: Bool"
+            )
+        )
+        XCTAssertTrue(
+            pendingCommit.contains(
+                "if editingStore.cardID == nil, isUntouchedNewDraft { return false }"
+            )
+        )
+
+        let untouchedSnapshot = try XCTUnwrap(
+            Self.functionBody(
+                in: source,
+                signature: "func isUntouchedNewSnapshot("
+            )
+        )
+        XCTAssertTrue(untouchedSnapshot.contains("CardEditingDraft("))
+        XCTAssertTrue(
+            untouchedSnapshot.contains("!snapshotDraft.hasMeaningfulContent")
+        )
+        XCTAssertFalse(
+            untouchedSnapshot.contains("snapshot.revision == seed.revision")
+        )
+    }
+
     func testFatalBridgeFailureRequiresExplicitDiscardConfirmationToClose() throws {
         let source = try Self.newNoteSource()
         let leading = try XCTUnwrap(
