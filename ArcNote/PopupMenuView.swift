@@ -22,6 +22,10 @@ private struct CardNavigationOnboardingStoreKey: EnvironmentKey {
     static let defaultValue: OnboardingGuideStore? = nil
 }
 
+private struct CardNavigationContextualTipStoreKey: EnvironmentKey {
+    static let defaultValue: ContextualGuideTipStore? = nil
+}
+
 private struct CardNavigationMergeCompletedKey: EnvironmentKey {
     static let defaultValue: (String) -> Void = { _ in }
 }
@@ -37,6 +41,11 @@ extension EnvironmentValues {
         set { self[CardNavigationOnboardingStoreKey.self] = newValue }
     }
 
+    var cardNavigationContextualTipStore: ContextualGuideTipStore? {
+        get { self[CardNavigationContextualTipStoreKey.self] }
+        set { self[CardNavigationContextualTipStoreKey.self] = newValue }
+    }
+
     var cardNavigationMergeCompleted: (String) -> Void {
         get { self[CardNavigationMergeCompletedKey.self] }
         set { self[CardNavigationMergeCompletedKey.self] = newValue }
@@ -46,6 +55,7 @@ extension EnvironmentValues {
 private struct CardNavigationDestination: View {
     let route: CardNavigationRoute
     let onboardingStore: OnboardingGuideStore?
+    let contextualTipStore: ContextualGuideTipStore?
     let mergeCompleted: (String) -> Void
 
     @ViewBuilder
@@ -60,7 +70,8 @@ private struct CardNavigationDestination: View {
                 SparkContinuationView(
                     cardID: cardID,
                     actorID: actorID,
-                    onboardingStore: onboardingStore
+                    onboardingStore: onboardingStore,
+                    contextualTipStore: contextualTipStore
                 )
             } else {
                 EmptyView()
@@ -69,6 +80,7 @@ private struct CardNavigationDestination: View {
             MergeView(
                 cardId: cardID,
                 onboardingStore: onboardingStore,
+                contextualTipStore: contextualTipStore,
                 onCommitted: mergeCompleted
             )
         case .root(let cardID, let type):
@@ -79,6 +91,7 @@ private struct CardNavigationDestination: View {
 
 private struct CardNavigationHostModifier: ViewModifier {
     @Environment(\.cardNavigationOnboardingStore) private var onboardingStore
+    @Environment(\.cardNavigationContextualTipStore) private var contextualTipStore
     @Environment(\.cardNavigationMergeCompleted) private var mergeCompleted
     @State private var presentedRoute: CardNavigationRoute?
 
@@ -101,6 +114,7 @@ private struct CardNavigationHostModifier: ViewModifier {
                     CardNavigationDestination(
                         route: presentedRoute,
                         onboardingStore: onboardingStore,
+                        contextualTipStore: contextualTipStore,
                         mergeCompleted: mergeCompleted
                     )
                 }
@@ -149,6 +163,7 @@ enum PopupMenuLayout {
 // MARK: - PopupMenu Modifier
 struct PopupMenuModifier: ViewModifier {
     @Environment(\.cardNavigationOnboardingStore) private var onboardingStore
+    @Environment(\.cardNavigationContextualTipStore) private var contextualTipStore
     @Environment(\.cardNavigationMergeCompleted) private var mergeCompleted
     @State private var presentedRoute: CardNavigationRoute?
     @State private var didCommitPresentedMerge = false
@@ -204,6 +219,7 @@ struct PopupMenuModifier: ViewModifier {
                     CardNavigationDestination(
                         route: presentedRoute,
                         onboardingStore: onboardingStore,
+                        contextualTipStore: contextualTipStore,
                         mergeCompleted: handlePresentedMergeCompleted
                     )
                 }

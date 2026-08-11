@@ -59,6 +59,81 @@ final class ArcNoteUITests: XCTestCase {
         captureVisual("adaptive-layout-fixture")
     }
 
+    func testNativeOnboardingFixtureCompletesLibraryTipFromItsRealTarget() {
+        app.launchArguments.append("--ui-test-native-onboarding")
+        app.launch()
+
+        let tip = waitFor("onboarding.tip.library", timeout: 3)
+        XCTAssertEqual(tip.label, "Tap + to capture your first note.")
+        XCTAssertFalse(app.buttons["onboarding.tip.dismiss"].exists)
+        XCTAssertFalse(app.buttons["onboarding.tip.acknowledge"].exists)
+
+        waitForButton("onboarding.fixture.library.target", timeout: 3).tap()
+
+        waitForMissing("onboarding.tip.library", timeout: 3)
+        XCTAssertEqual(
+            waitFor("onboarding.fixture.library.outcome", timeout: 3).label,
+            "completed"
+        )
+    }
+
+    func testNativeOnboardingFixtureSilentlyDismissesLibraryTipOutsideTarget() {
+        app.launchArguments.append("--ui-test-native-onboarding")
+        app.launch()
+
+        waitFor("onboarding.tip.library", timeout: 3)
+        waitForButton("onboarding.fixture.library.outside", timeout: 3).tap()
+
+        waitForMissing("onboarding.tip.library", timeout: 3)
+        XCTAssertEqual(
+            waitFor("onboarding.fixture.library.outcome", timeout: 3).label,
+            "dismissed"
+        )
+    }
+
+    func testNativeOnboardingCalloutTapIsInert() {
+        app.launchArguments.append("--ui-test-native-onboarding")
+        app.launch()
+
+        let tip = waitFor("onboarding.tip.library", timeout: 3)
+        tip.tap()
+
+        XCTAssertTrue(tip.exists)
+        XCTAssertEqual(
+            waitFor("onboarding.fixture.library.outcome", timeout: 3).label,
+            "eligible"
+        )
+    }
+
+    func testPrivateBetaEntryUsesTheCurrentSignupSystemWithoutDuplicateCode() {
+        app.launchArguments.append("--ui-test-private-beta-entry")
+        app.launch()
+
+        replaceShortFixtureText("private-beta.code", with: "CRAI-7KQ9")
+        waitForButton("private-beta.continue", timeout: 3).tap()
+
+        waitFor("signup.create-account", timeout: 3)
+        waitFor("signup.get-code", timeout: 3)
+        waitFor("signup.confirm-password", timeout: 3)
+        waitForButton("auth.google", timeout: 3)
+        waitForButton("auth.apple", timeout: 3)
+        XCTAssertFalse(app.descendants(matching: .any)["signup.access-code"].exists)
+    }
+
+    func testPrivateBetaEntryRejectsMalformedCodeBeforeRegistration() {
+        app.launchArguments.append("--ui-test-private-beta-entry")
+        app.launch()
+
+        replaceShortFixtureText("private-beta.code", with: "SHORT")
+        waitForButton("private-beta.continue", timeout: 3).tap()
+
+        XCTAssertEqual(
+            waitFor("private-beta.message", timeout: 3).label,
+            "Enter a valid Product Access Code."
+        )
+        XCTAssertFalse(app.descendants(matching: .any)["signup.create-account"].exists)
+    }
+
     func testProfilePrimarySurfaceKeepsResponsiveWindowGutter() {
         launchProfileTestRoute(actorID: "act_45ea902d-5bc3-49")
 
@@ -3037,8 +3112,7 @@ final class ArcNoteUITests: XCTestCase {
         waitForSessionPhase("verified", timeout: 30)
         waitForOnboardingAnchor("onboarding.state", value: "elicit_signal")
         waitFor("screen.home.content", timeout: 30)
-        waitFor("onboarding.guide", timeout: 15)
-        waitFor("note.create.guide-halo", timeout: 15)
+        waitFor("onboarding.tip.library", timeout: 15)
         XCTAssertFalse(exists("record.open", timeout: 1))
         captureVisual("onboarding-library-plus-handoff")
 
@@ -3059,12 +3133,11 @@ final class ArcNoteUITests: XCTestCase {
             value: "product_explore_card",
             timeout: 30
         )
-        waitFor("onboarding.guide", timeout: 15)
         let visibleCardID = waitFor("flow.visible-card.id", timeout: 30)
             .label
             .trimmingCharacters(in: .whitespacesAndNewlines)
         XCTAssertFalse(visibleCardID.isEmpty)
-        captureVisual("onboarding-flow-guide")
+        captureVisual("onboarding-flow-card")
 
         waitFor("flow.card.\(visibleCardID)").swipeLeft()
         waitForOnboardingAnchor(
@@ -3072,6 +3145,7 @@ final class ArcNoteUITests: XCTestCase {
             value: "product_spark_intro",
             timeout: 30
         )
+        waitFor("onboarding.tip.flow-spark", timeout: 15)
 
         let canonical = try fetchCurrentSmokeOnboarding(token: smoke.token)
         XCTAssertEqual(canonical.sessionID, started.sessionID)
@@ -3091,6 +3165,7 @@ final class ArcNoteUITests: XCTestCase {
             value: started.sessionID,
             timeout: 10
         )
+        waitFor("onboarding.tip.flow-spark", timeout: 15)
         captureVisual("onboarding-v1-resumed")
     }
 
@@ -3111,7 +3186,7 @@ final class ArcNoteUITests: XCTestCase {
 
         waitForOnboardingAnchor("onboarding.state", value: "elicit_signal")
         waitFor("screen.home.content", timeout: 15)
-        waitFor("note.create.guide-halo", timeout: 15)
+        XCTAssertFalse(exists("onboarding.tip.library", timeout: 2))
     }
 
     func testCanonicalOnboardingCompletesRealGoFirstLoop() throws {
@@ -3150,7 +3225,7 @@ final class ArcNoteUITests: XCTestCase {
         waitForSessionPhase("verified", timeout: 30)
         waitForOnboardingAnchor("onboarding.state", value: "elicit_signal")
         waitFor("screen.home.content", timeout: 30)
-        waitFor("note.create.guide-halo", timeout: 15)
+        waitFor("onboarding.tip.library", timeout: 15)
         let signal = "iOS complete loop \(Int(Date().timeIntervalSince1970))"
         tap("note.create")
         typeInCardEditorBody(signal)
@@ -3180,27 +3255,30 @@ final class ArcNoteUITests: XCTestCase {
             value: "product_spark_intro",
             timeout: 30
         )
+        waitFor("onboarding.tip.flow-spark", timeout: 15)
 
         let sparkSourceID = waitFor("flow.visible-card.id", timeout: 30)
             .label
             .trimmingCharacters(in: .whitespacesAndNewlines)
         openFlowSparkWithResults(startingCardID: sparkSourceID)
+        waitForMissing("onboarding.tip.flow-spark", timeout: 15)
         waitForSmokeOnboardingState(
             "product_save_material",
             token: smoke.token,
             timeout: 30
         )
-        waitFor("onboarding.guide", timeout: 15)
         captureVisual("onboarding-spark-save")
 
         let sparkResultID = try waitForCompactUnfavoritedSparkResult(
             token: smoke.token
         )
+        waitFor("onboarding.tip.spark-favorite", timeout: 15)
         let mergeSearchQuery = mergeCandidateSearchQuery(
             for: try fetchSmokeCard(id: sparkResultID, token: smoke.token)
         )
         savedSparkCardID = sparkResultID
         waitForButton("spark.favorite.\(sparkResultID)").tap()
+        waitForMissing("onboarding.tip.spark-favorite", timeout: 15)
         waitForAssetStatus(
             kind: "favorites",
             id: sparkResultID,
@@ -3251,14 +3329,15 @@ final class ArcNoteUITests: XCTestCase {
         waitFor("merge.card.\(sparkResultID)", timeout: 30)
         tap("merge.card.\(sparkResultID)")
         dismissKeyboard()
+        waitFor("onboarding.tip.merge", timeout: 15)
         tap("merge.action")
+        waitForMissing("onboarding.tip.merge", timeout: 15)
 
         waitForSmokeOnboardingState(
             "product_merge_preview",
             token: smoke.token,
             timeout: 30
         )
-        waitFor("onboarding.guide", timeout: 15)
         waitForMergeArtifactReady(timeout: 180)
         RunLoop.current.run(until: Date().addingTimeInterval(0.35))
         captureVisual("onboarding-merge-preview")

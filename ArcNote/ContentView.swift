@@ -13,7 +13,6 @@ import AuthenticationServices
 
 struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
-    @State private var showSignUp = false
     @State private var showSignIn = false
     @StateObject private var authManager = AuthManager.shared
     @State private var cancellables = Set<AnyCancellable>()
@@ -224,9 +223,9 @@ struct ContentView: View {
                     }
                     .accessibilityIdentifier("welcome.login")
                     
-                                            // Sign Up 按钮
-                        NavigationLink(destination: SignUpView()) {
-                        Text("Sign Up")
+                    // Private beta entry remains independent from registration.
+                    NavigationLink(destination: PrivateBetaEntryView()) {
+                        Text("Join Private Beta")
                             .font(.headline)
                             .fontWeight(.bold)
                             .foregroundColor(.white)
@@ -241,37 +240,18 @@ struct ContentView: View {
                                     )
                             )
                     }
+                    .accessibilityIdentifier("welcome.join-private-beta")
                 }
                 .adaptiveContentGutter()
                 
-                // 分隔线
-                HStack {
-                    Rectangle()
-                        .frame(height: 1)
-                        .foregroundColor(.gray.opacity(0.3))
-                    
-                    Text("Or sign in with")
-                        .font(.caption)
-                        .foregroundColor(.gray)
-                        .padding(.horizontal, 16)
-                    
-                    Rectangle()
-                        .frame(height: 1)
-                        .foregroundColor(.gray.opacity(0.3))
-        }
-                .adaptiveContentGutter()
-                .padding(.top, 32)
-                
-                // 社交登录图标
-                SocialLoginRow(
-                    googleAction: {
-                        self.signInWithGoogle()
-                    },
-                    appleAction: {
-                        signInWithApple()
-                    }
+                Text(
+                    "Use Sign In for an existing email, Google, or Apple account."
                 )
-                .padding(.top, 24)
+                .font(.caption)
+                .foregroundColor(.gray)
+                .multilineTextAlignment(.center)
+                .adaptiveContentGutter()
+                .padding(.top, 28)
                 .padding(.bottom, max(50, geometry.safeAreaInsets.bottom + 30))
                     }
                     .frame(minHeight: geometry.size.height)
@@ -486,8 +466,18 @@ struct SocialLoginRow: View {
 
     var body: some View {
         HStack(spacing: spacing) {
-            SocialLoginButton(iconName: "btn_google", action: googleAction)
-            SocialLoginButton(iconName: "btn_apple", action: appleAction)
+            SocialLoginButton(
+                iconName: "btn_google",
+                accessibilityLabel: "Continue with Google",
+                accessibilityIdentifier: "auth.google",
+                action: googleAction
+            )
+            SocialLoginButton(
+                iconName: "btn_apple",
+                accessibilityLabel: "Continue with Apple",
+                accessibilityIdentifier: "auth.apple",
+                action: appleAction
+            )
         }
         .frame(maxWidth: .infinity, alignment: .center)
     }
@@ -496,6 +486,8 @@ struct SocialLoginRow: View {
 // 社交登录按钮组件
 struct SocialLoginButton: View {
     let iconName: String
+    let accessibilityLabel: String
+    let accessibilityIdentifier: String
     let action: () -> Void
     
     var body: some View {
@@ -516,6 +508,8 @@ struct SocialLoginButton: View {
                 )
         }
         .frame(width: 56, height: 56)
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityIdentifier(accessibilityIdentifier)
     }
 }
 

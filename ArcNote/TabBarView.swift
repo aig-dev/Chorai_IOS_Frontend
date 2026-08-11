@@ -16,6 +16,9 @@ struct TabBarView: View {
         service: NetworkCoreOnboardingService(),
         persistence: UserDefaultsOnboardingGuidePersistence()
     )
+    @StateObject private var contextualTipStore = ContextualGuideTipStore(
+        persistence: UserDefaultsContextualGuideTipPersistence()
+    )
     @State private var showPopupMenu = false
     @State private var selectedFilter = "All"
     @State private var showFilterTags = false
@@ -25,12 +28,11 @@ struct TabBarView: View {
     @State private var navigateToMerge = false
     @State private var selectedMergeCardId: String? = nil
     @State private var mergeResumeMetadata: MergeResumeMetadata?
-    @State private var hasObservedActiveOnboarding = false
     @State private var hasRoutedInitialOnboardingState = false
     @State private var pendingLibraryReturn: PendingLibraryReturn?
-    @State private var showOnboardingCompletionAcknowledgement = false
     @State private var shareRoute: ShareRoute?
     @State private var reportRoute: ReportRoute?
+    @State private var lastSelectedTab: CoreTab = .flow
 
     #if DEBUG
     @State private var lastCreatedNoteID: String?
@@ -76,9 +78,24 @@ struct TabBarView: View {
         #endif
         guard authManager.sessionPhase == .verified,
               let actorID = authManager.currentUser?.id else {
+            contextualTipStore.reset()
             return
         }
         onboardingStore.load(actorID: actorID)
+        contextualTipStore.load(actorID: actorID)
+    }
+
+    private func dismissContextualTipWhenLeaving(_ tab: CoreTab) {
+        switch (tab, onboardingStore.session?.state) {
+        case (.library, "elicit_signal"):
+            contextualTipStore.dismiss(
+                .libraryCreate,
+                onboardingState: onboardingStore.session?.state,
+                targetIsVisible: true
+            )
+        default:
+            break
+        }
     }
 
     #if DEBUG
@@ -347,14 +364,14 @@ struct TabBarView: View {
             // 主要内容区域 - 全屏显示
             TabView(selection: $coordinator.selectedTab) {
                 // Explore 页面
-	            ExploreView(
-	                showPopupMenu: $showPopupMenu,
-	                selectedFilter: $selectedFilter,
-	                showFilterTags: $showFilterTags,
-	                showSideMenu: $showSideMenu,
-	                onSpark: { cardId in
-	                    navigationPath.append(TabRoute.spark(cardId))
-	                },
+                ExploreView(
+                    showPopupMenu: $showPopupMenu,
+                    selectedFilter: $selectedFilter,
+                    showFilterTags: $showFilterTags,
+                    showSideMenu: $showSideMenu,
+                    onSpark: { cardId in
+                        navigationPath.append(TabRoute.spark(cardId))
+                    },
                     onFlowCardVisible: { assetID in
                         onboardingStore.receive(.flowViewed)
                     },
@@ -364,8 +381,9 @@ struct TabBarView: View {
                     onFlowCardDismissed: { assetID in
                         onboardingStore.receive(.flowCardDismissed(assetID: assetID))
                     },
-                    onboardingStore: onboardingStore
-	            )
+                    onboardingStore: onboardingStore,
+                    contextualTipStore: contextualTipStore
+                )
                 .tag(CoreTab.flow)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .ignoresSafeArea(.all)
@@ -383,6 +401,7 @@ struct TabBarView: View {
                     showSideMenu: $showSideMenu,
                     refreshID: coordinator.libraryRefreshID,
                     onboardingStore: onboardingStore,
+                    contextualTipStore: contextualTipStore,
                     onNoteCreated: handleNoteCreated,
                     onCardRouteDismissed: handleLibraryCardRouteDismissed
                 )
@@ -430,7 +449,11 @@ struct TabBarView: View {
                 startExploreDetailSmokeIfRequested()
                 #endif
             }
-            .onChange(of: coordinator.selectedTab) { _ in
+            .onChange(of: coordinator.selectedTab) { selectedTab in
+                if selectedTab != lastSelectedTab {
+                    dismissContextualTipWhenLeaving(lastSelectedTab)
+                    lastSelectedTab = selectedTab
+                }
                 // 切换 tab 时关闭所有 popup
                 closeAllPopups()
                 if coordinator.selectedTab == .library,
@@ -562,23 +585,6 @@ struct TabBarView: View {
         .animation(.easeOut(duration: 0.2), value: keyboardLayout.isVisible)
         .overlay(alignment: .top) {
             ZStack(alignment: .top) {
-                if showOnboardingCompletionAcknowledgement {
-                    Label("First loop complete", systemImage: "checkmark")
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 14)
-                        .frame(minHeight: 36)
-                        .background(Capsule().fill(Color.white.opacity(0.12)))
-                        .accessibilityIdentifier("onboarding.completed")
-                        .task {
-                            try? await Task.sleep(
-                                nanoseconds: 3_000_000_000
-                            )
-                            guard !Task.isCancelled else { return }
-                            showOnboardingCompletionAcknowledgement = false
-                        }
-                }
-
                 #if DEBUG
                 if let cardID = lastCreatedNoteID {
                     Text(cardID)
@@ -622,6 +628,7 @@ struct TabBarView: View {
         .popupMenu(isPresented: $showPopupMenu, layout: .grid2x2, cardData: currentMenuCardData)
         .linkPopup()
         .environment(\.cardNavigationOnboardingStore, onboardingStore)
+        .environment(\.cardNavigationContextualTipStore, contextualTipStore)
         .environment(\.cardNavigationMergeCompleted, coordinator.mergeCompleted)
         .navigationBarHidden(true)
         .navigationBarBackButtonHidden(true)
@@ -629,6 +636,7 @@ struct TabBarView: View {
             MergeView(
                 cardId: selectedMergeCardId ?? "",
                 onboardingStore: onboardingStore,
+                contextualTipStore: contextualTipStore,
                 onCommitted: coordinator.mergeCompleted
             )
         }
@@ -648,7 +656,8 @@ struct TabBarView: View {
                     SparkContinuationView(
                         cardID: cardId,
                         actorID: actorID,
-                        onboardingStore: onboardingStore
+                        onboardingStore: onboardingStore,
+                        contextualTipStore: contextualTipStore
                     )
                 } else {
                     EmptyView()
@@ -689,28 +698,23 @@ struct TabBarView: View {
             refreshMergeResumeMetadata()
         }
         .onChange(of: authManager.currentUser?.id) { _ in
-            hasObservedActiveOnboarding = false
             hasRoutedInitialOnboardingState = false
             pendingLibraryReturn = nil
-            showOnboardingCompletionAcknowledgement = false
+            contextualTipStore.reset()
             refreshMergeResumeMetadata()
             loadOnboardingIfVerified()
         }
         .onChange(of: authManager.sessionPhase) { phase in
             if phase == .verified {
                 loadOnboardingIfVerified()
+            } else {
+                contextualTipStore.reset()
             }
         }
         .onChange(of: onboardingStore.phase) { phase in
             switch phase {
             case .active:
-                hasObservedActiveOnboarding = true
                 routeInitialOnboardingState(onboardingStore.session?.state)
-            case .completed:
-                pendingLibraryReturn = nil
-                if hasObservedActiveOnboarding {
-                    showOnboardingCompletionAcknowledgement = true
-                }
             default:
                 pendingLibraryReturn = nil
             }
@@ -721,7 +725,13 @@ struct TabBarView: View {
         .onChange(of: onboardingStore.session?.sessionID) { _ in
             recordReturnedLibraryIfReady()
         }
+        .onChange(of: showSideMenu) { isPresented in
+            if isPresented {
+                dismissContextualTipWhenLeaving(coordinator.selectedTab)
+            }
+        }
         .onAppear {
+            lastSelectedTab = coordinator.selectedTab
             refreshMergeResumeMetadata()
             loadOnboardingIfVerified()
         }

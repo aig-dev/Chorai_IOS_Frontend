@@ -40,7 +40,6 @@ struct SignUpView: View {
     @State private var code = ""
     @State private var password = ""
     @State private var confirmPassword = ""
-    @State private var accessCode = ""
     
     // 验证码相关状态
     @State private var isCodeSent = false
@@ -65,6 +64,7 @@ struct SignUpView: View {
     @State private var isRegistering = false
     @State private var accessKey = "ios-\(UUID().uuidString.lowercased())"
     @State private var accessKeyCode: String?
+    private let initialAccessCode: String
 
     init(
         initialValues: SignUpInitialValues = .empty
@@ -74,7 +74,7 @@ struct SignUpView: View {
         _code = State(initialValue: initialValues.verificationCode)
         _password = State(initialValue: initialValues.password)
         _confirmPassword = State(initialValue: initialValues.confirmPassword)
-        _accessCode = State(initialValue: initialValues.accessCode)
+        initialAccessCode = initialValues.accessCode
     }
     
     var body: some View {
@@ -113,10 +113,20 @@ struct SignUpView: View {
                             // 输入字段
                             VStack(spacing: 16) {
                                 // Username
-                                InputField(icon: "person", placeholder: "Username / Email", text: $username)
+                                InputField(
+                                    icon: "person",
+                                    placeholder: "Username / Email",
+                                    text: $username,
+                                    accessibilityIdentifier: "signup.username"
+                                )
                                 
                                 // Email
-                                InputField(icon: "envelope", placeholder: "Email", text: $email)
+                                InputField(
+                                    icon: "envelope",
+                                    placeholder: "Email",
+                                    text: $email,
+                                    accessibilityIdentifier: "signup.email"
+                                )
                                 
                                 // Code
                                 HStack(spacing: 0) {
@@ -162,6 +172,7 @@ struct SignUpView: View {
                                     .font(.subheadline)
                                     .padding(.trailing, 16)
                                     .frame(height: 50)
+                                    .accessibilityIdentifier("signup.get-code")
                                 }
                                 .background(
                                     RoundedRectangle(cornerRadius: 28) // 增加圆角使其更椭圆
@@ -173,16 +184,19 @@ struct SignUpView: View {
                                 )
                                 
                                 // Password
-                                InputField(icon: "lock", placeholder: "Password", text: $password)
+                                InputField(
+                                    icon: "lock",
+                                    placeholder: "Password",
+                                    text: $password,
+                                    accessibilityIdentifier: "signup.password"
+                                )
                                 
                                 // Confirm Password
-                                InputField(icon: "checkmark", placeholder: "Confirm Password", text: $confirmPassword)
-
                                 InputField(
-                                    icon: "key",
-                                    placeholder: "CRAI-XXXX",
-                                    text: $accessCode,
-                                    accessibilityIdentifier: "signup.access-code"
+                                    icon: "checkmark",
+                                    placeholder: "Confirm Password",
+                                    text: $confirmPassword,
+                                    accessibilityIdentifier: "signup.confirm-password"
                                 )
                             }
                             .adaptiveContentGutter()
@@ -427,16 +441,10 @@ struct SignUpView: View {
             Text("Congratulations! Your account has been successfully created. You can now start using ArcNote.")
         }
         .onAppear {
-            if accessCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-               let pending = KeychainStore.shared.load() {
-                accessCode = pending
-            }
-        }
-        .onChange(of: accessCode) { value in
-            let code = value.trimmingCharacters(in: .whitespacesAndNewlines)
-            if code.isEmpty {
-                KeychainStore.shared.clear()
-            } else if code.count <= 64 {
+            let code = initialAccessCode.trimmingCharacters(
+                in: .whitespacesAndNewlines
+            )
+            if (9...64).contains(code.count) {
                 KeychainStore.shared.save(code)
             }
         }
@@ -493,9 +501,10 @@ struct SignUpView: View {
         }
 
         let pair = currentAccessPair()
-        if accessCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false,
-           pair.code == nil {
-            showAlert(message: "Enter a valid Product Access Code.")
+        guard pair.code != nil, pair.key != nil else {
+            showAlert(
+                message: "Enter a Product Access Code before creating an account."
+            )
             return
         }
 
@@ -525,8 +534,8 @@ struct SignUpView: View {
     }
 
     private func currentAccessPair() -> (code: String?, key: String?) {
-        let entered = accessCode.trimmingCharacters(in: .whitespacesAndNewlines)
-        let code = entered.isEmpty ? KeychainStore.shared.load() : entered
+        let code = KeychainStore.shared.load()?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         guard let code,
               (9...64).contains(code.count) else {
             return (nil, nil)
@@ -535,7 +544,6 @@ struct SignUpView: View {
             accessKeyCode = code
             accessKey = "ios-\(UUID().uuidString.lowercased())"
         }
-        KeychainStore.shared.save(code)
         return (code, accessKey)
     }
 
@@ -653,6 +661,12 @@ struct SignUpView: View {
     // MARK: - 处理Google登录响应
     private func handleGoogleLoginResponse(idToken: String) {
         let pair = currentAccessPair()
+        guard pair.code != nil, pair.key != nil else {
+            showAlert(
+                message: "Enter a Product Access Code before creating an account."
+            )
+            return
+        }
         authManager.googleLogin(
             idToken: idToken,
             accessCode: pair.code,
@@ -707,6 +721,12 @@ struct SignUpView: View {
                         )
                         
                         let pair = currentAccessPair()
+                        guard pair.code != nil, pair.key != nil else {
+                            showAlert(
+                                message: "Enter a Product Access Code before creating an account."
+                            )
+                            return
+                        }
                         let appleLoginRequest = AppleLoginRequest(
                             identityToken: identityTokenString,
                             authorizationCode: authorizationCodeString,

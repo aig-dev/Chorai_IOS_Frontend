@@ -65,6 +65,10 @@ struct ArcNoteApp: App {
         .contains("--ui-test-card-editor-shell")
     private let isAdaptiveLayoutUITestRoute = ProcessInfo.processInfo.arguments
         .contains("--ui-test-adaptive-layout")
+    private let isNativeOnboardingUITestRoute = ProcessInfo.processInfo.arguments
+        .contains("--ui-test-native-onboarding")
+    private let isPrivateBetaEntryUITestRoute = ProcessInfo.processInfo.arguments
+        .contains("--ui-test-private-beta-entry")
     private let profileUITestActorID: String? = {
         guard ProcessInfo.processInfo.arguments
             .contains("--ui-test-open-profile") else {
@@ -114,6 +118,12 @@ struct ArcNoteApp: App {
                     Color.clear
                 } else if isAdaptiveLayoutUITestRoute {
                     AdaptiveLayoutFixtureScreen()
+                } else if isNativeOnboardingUITestRoute {
+                    NativeOnboardingFixtureScreen()
+                } else if isPrivateBetaEntryUITestRoute {
+                    NavigationStack {
+                        PrivateBetaEntryView()
+                    }
                 } else if isCardEditorShellUITestRoute {
                     CardEditorShellFixtureScreen()
                 } else if isSignInUITestRoute {
@@ -204,6 +214,108 @@ struct ArcNoteApp: App {
 }
 
 #if DEBUG
+@MainActor
+private struct NativeOnboardingFixtureScreen: View {
+    @StateObject private var tipStore: ContextualGuideTipStore
+
+    init() {
+        _tipStore = StateObject(
+            wrappedValue: ContextualGuideTipStore(
+                persistence: NativeOnboardingTipFixturePersistence()
+            )
+        )
+    }
+
+    private var isLibraryTipVisible: Bool {
+        tipStore.isVisible(
+            .libraryCreate,
+            onboardingState: "elicit_signal",
+            targetIsVisible: true
+        )
+    }
+
+    var body: some View {
+        ZStack {
+            ZenVisualTokens.background
+                .ignoresSafeArea()
+
+            VStack(spacing: 24) {
+                Spacer()
+
+                ContextualGuideCallout(
+                    store: tipStore,
+                    tip: .libraryCreate,
+                    onboardingState: "elicit_signal",
+                    targetIsVisible: true
+                )
+
+                ZStack {
+                    Button {
+                        tipStore.complete(
+                            .libraryCreate,
+                            onboardingState: "elicit_signal",
+                            targetIsVisible: true
+                        )
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 44, height: 44)
+                            .background(
+                                Circle().fill(ZenVisualTokens.accent)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Create note")
+                    .accessibilityIdentifier("onboarding.fixture.library.target")
+
+                    ContextualGuideTargetHalo(isVisible: isLibraryTipVisible)
+                }
+
+                Button("Continue browsing") {
+                    tipStore.dismiss(
+                        .libraryCreate,
+                        onboardingState: "elicit_signal",
+                        targetIsVisible: true
+                    )
+                }
+                .buttonStyle(.bordered)
+                .frame(minHeight: 44)
+                .accessibilityIdentifier("onboarding.fixture.library.outside")
+
+                Text(tipStore.outcome(for: .libraryCreate)?.rawValue ?? "eligible")
+                    .accessibilityIdentifier("onboarding.fixture.library.outcome")
+
+                Spacer()
+            }
+            .padding(24)
+        }
+        .onAppear {
+            tipStore.load(actorID: "act_native_onboarding_fixture")
+        }
+    }
+}
+
+private final class NativeOnboardingTipFixturePersistence:
+    ContextualGuideTipPersisting {
+    private var outcomes: [ContextualGuideTipID: ContextualGuideTipOutcome] = [:]
+
+    func outcome(
+        actorID: String,
+        tip: ContextualGuideTipID
+    ) -> ContextualGuideTipOutcome? {
+        outcomes[tip]
+    }
+
+    func save(
+        _ outcome: ContextualGuideTipOutcome,
+        actorID: String,
+        tip: ContextualGuideTipID
+    ) {
+        outcomes[tip] = outcome
+    }
+}
+
 @MainActor
 private struct ProfileCreditSurfaceFixtureScreen: View {
     @State private var isSideMenuPresented = true

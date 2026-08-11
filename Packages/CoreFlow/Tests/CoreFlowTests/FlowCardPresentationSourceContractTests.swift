@@ -46,7 +46,7 @@ final class FlowCardPresentationSourceContractTests: XCTestCase {
             source.contains("if !card.isOwner"),
             "Owned cards must not expose a favorite action in Flow"
         )
-        XCTAssertTrue(source.contains("Button(action: onToggleFavorite)"))
+        XCTAssertTrue(source.contains("onToggleFavorite()"))
     }
 
     func testFlowAvatarCanonicalizesRelativeResourceURLBeforeLoading() throws {
@@ -140,7 +140,9 @@ final class FlowCardPresentationSourceContractTests: XCTestCase {
 
     private func flowAuthorButtonSource() throws -> String {
         let source = try flowCardSource()
-        guard let start = source.range(of: "Button(action: onOpenAuthor)"),
+        guard let start = source.range(
+            of: "Button {\n                    dismissFlowSparkTipIfVisible()\n                    onOpenAuthor()"
+        ),
               let end = source.range(
                 of: "Spacer()",
                 range: start.upperBound..<source.endIndex

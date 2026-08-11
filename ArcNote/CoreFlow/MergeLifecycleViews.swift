@@ -17,13 +17,16 @@ struct MergeView: View {
     @StateObject private var candidates: MergeCandidateStore
     private let onCommitted: (String) -> Void
     private let onboardingStore: OnboardingGuideStore?
+    private let contextualTipStore: ContextualGuideTipStore?
 
     init(
         cardId: String,
         onboardingStore: OnboardingGuideStore? = nil,
+        contextualTipStore: ContextualGuideTipStore? = nil,
         onCommitted: @escaping (String) -> Void = { _ in }
     ) {
         self.onboardingStore = onboardingStore
+        self.contextualTipStore = contextualTipStore
         self.onCommitted = onCommitted
         _candidates = StateObject(
             wrappedValue: MergeCandidateStore(anchorCardID: cardId)
@@ -40,6 +43,7 @@ struct MergeView: View {
                     candidates: candidates,
                     onBack: dismiss.callAsFunction,
                     onboardingStore: onboardingStore,
+                    contextualTipStore: contextualTipStore,
                     onCommitted: onCommitted
                 )
             } else if let error = candidates.anchorError {
@@ -215,6 +219,7 @@ private struct MergeLifecycleView: View {
 
     private let onBack: () -> Void
     private let onboardingStore: OnboardingGuideStore?
+    private let contextualTipStore: ContextualGuideTipStore?
     private let onCommitted: (String) -> Void
 
     init(
@@ -223,11 +228,13 @@ private struct MergeLifecycleView: View {
         candidates: MergeCandidateStore,
         onBack: @escaping () -> Void,
         onboardingStore: OnboardingGuideStore?,
+        contextualTipStore: ContextualGuideTipStore?,
         onCommitted: @escaping (String) -> Void
     ) {
         self.candidates = candidates
         self.onBack = onBack
         self.onboardingStore = onboardingStore
+        self.contextualTipStore = contextualTipStore
         self.onCommitted = onCommitted
         _store = StateObject(
             wrappedValue: MergeSessionStore(
@@ -238,6 +245,23 @@ private struct MergeLifecycleView: View {
                     keyPrefix: MergeSessionStorageConfiguration.keyPrefix
                 )
             )
+        )
+    }
+
+    private var isMergeTipVisible: Bool {
+        contextualTipStore?.isVisible(
+            .mergeAction,
+            onboardingState: onboardingStore?.session?.state,
+            targetIsVisible: store.canCreate
+        ) ?? false
+    }
+
+    private func dismissMergeTipIfVisible() {
+        guard isMergeTipVisible else { return }
+        contextualTipStore?.dismiss(
+            .mergeAction,
+            onboardingState: onboardingStore?.session?.state,
+            targetIsVisible: store.canCreate
         )
     }
 
@@ -306,7 +330,13 @@ private struct MergeLifecycleView: View {
             store.stop()
         }
         .onChange(of: searchText) { query in
+            dismissMergeTipIfVisible()
             candidates.scheduleSearch(query)
+        }
+        .onChange(of: isTextInputFocused) { isFocused in
+            if isFocused {
+                dismissMergeTipIfVisible()
+            }
         }
         .onChange(of: store.job?.jobID) { jobID in
             guard let jobID, !jobID.isEmpty else { return }
@@ -319,6 +349,7 @@ private struct MergeLifecycleView: View {
                           abs(value.translation.height) < 50 else {
                         return
                     }
+                    dismissMergeTipIfVisible()
                     onBack()
                 }
         )
@@ -348,7 +379,10 @@ private struct MergeLifecycleView: View {
 
     private var header: some View {
         HStack(spacing: 8) {
-            Button(action: onBack) {
+            Button {
+                dismissMergeTipIfVisible()
+                onBack()
+            } label: {
                 Image(systemName: "chevron.left")
                     .font(.system(size: 18, weight: .semibold))
                     .frame(width: 44, height: 44)
@@ -456,6 +490,7 @@ private struct MergeLifecycleView: View {
                                     $0.assetID == card.id
                                 },
                                 onToggleSelection: {
+                                    dismissMergeTipIfVisible()
                                     store.toggleSelection(card.coreMergeSource)
                                 }
                             )
@@ -497,7 +532,14 @@ private struct MergeLifecycleView: View {
     }
 
     private var selectionAction: some View {
-        Button(action: store.create) {
+        Button {
+            contextualTipStore?.complete(
+                .mergeAction,
+                onboardingState: onboardingStore?.session?.state,
+                targetIsVisible: store.canCreate
+            )
+            store.create()
+        } label: {
             HStack(spacing: 10) {
                 Image("menu_merge")
                     .resizable()
@@ -517,6 +559,22 @@ private struct MergeLifecycleView: View {
         .disabled(!store.canCreate)
         .accessibilityLabel("Merge \(store.selectedSources.count) cards")
         .accessibilityIdentifier("merge.action")
+        .overlay {
+            ContextualGuideTargetHalo(
+                isVisible: isMergeTipVisible
+            )
+        }
+        .overlay(alignment: .topTrailing) {
+            if let contextualTipStore {
+                ContextualGuideCallout(
+                    store: contextualTipStore,
+                    tip: .mergeAction,
+                    onboardingState: onboardingStore?.session?.state,
+                    targetIsVisible: store.canCreate
+                )
+                .offset(y: -58)
+            }
+        }
         .adaptiveContentGutter()
         .padding(.bottom, 18)
     }

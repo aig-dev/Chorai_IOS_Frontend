@@ -23,15 +23,18 @@ struct SparkContinuationView: View {
     private let actorID: String
     private let rootCardID: String
     private let onboardingStore: OnboardingGuideStore?
+    private let contextualTipStore: ContextualGuideTipStore?
 
     init(
         cardID: String,
         actorID: String,
-        onboardingStore: OnboardingGuideStore? = nil
+        onboardingStore: OnboardingGuideStore? = nil,
+        contextualTipStore: ContextualGuideTipStore? = nil
     ) {
         self.actorID = actorID
         self.rootCardID = cardID
         self.onboardingStore = onboardingStore
+        self.contextualTipStore = contextualTipStore
         let scope = ProcessInfo.processInfo.environment[
             "CHORAI_UI_TEST_SPARK_SESSION_SCOPE"
         ]
@@ -170,7 +173,10 @@ struct SparkContinuationView: View {
 
     private var header: some View {
         HStack(spacing: 10) {
-            Button(action: dismiss.callAsFunction) {
+            Button {
+                dismissSparkFavoriteTipIfVisible()
+                dismiss()
+            } label: {
                 Image(systemName: "chevron.left")
                     .font(.system(size: 18, weight: .semibold))
                     .frame(width: 44, height: 44)
@@ -192,7 +198,10 @@ struct SparkContinuationView: View {
                 showsPendingNode: store.phase == .triggering
                     || store.phase == .reconciling,
                 isInteractionLocked: store.isInteractionLocked,
-                onSelect: store.selectNode
+                onSelect: { nodeID in
+                    dismissSparkFavoriteTipIfVisible()
+                    store.selectNode(activityID: nodeID)
+                }
             )
         }
         .frame(minHeight: 44)
@@ -204,6 +213,7 @@ struct SparkContinuationView: View {
             HStack(spacing: 8) {
                 if let author = card.author {
                     Button {
+                        dismissSparkFavoriteTipIfVisible()
                         openAuthor(author.id)
                     } label: {
                         HStack(spacing: 6) {
@@ -335,23 +345,46 @@ struct SparkContinuationView: View {
                         likeErrorMessage: likeErrorMessage(for: result.card.id),
                         allowsSparkDeeper: store.phase == .loaded,
                         forcesAccessibleAppearance: usesAccessibilityEvidenceMode,
-                        onNext: store.advance,
+                        onNext: {
+                            dismissSparkFavoriteTipIfVisible()
+                            store.advance()
+                        },
                         onToggleFavorite: {
+                            contextualTipStore?.complete(
+                                .sparkFavorite,
+                                onboardingState: onboardingStore?.session?.state,
+                                targetIsVisible: !result.card.isOwner
+                            )
                             store.toggleFavoriteCurrent { assetID in
                                 onboardingStore?.receive(
                                     .sparkResultSaved(assetID: assetID)
                                 )
                             }
                         },
-                        onToggleLike: likeStore.toggle,
-                        onSparkDeeper: store.sparkCurrentDeeper,
-                        onOpenCard: { openDetail(result.card.id) },
+                        onToggleLike: {
+                            dismissSparkFavoriteTipIfVisible()
+                            likeStore.toggle()
+                        },
+                        onSparkDeeper: {
+                            dismissSparkFavoriteTipIfVisible()
+                            store.sparkCurrentDeeper()
+                        },
+                        onOpenCard: {
+                            dismissSparkFavoriteTipIfVisible()
+                            openDetail(result.card.id)
+                        },
                         onOpenAuthor: {
+                            dismissSparkFavoriteTipIfVisible()
                             if let authorID = result.card.author?.id {
                                 openAuthor(authorID)
                             }
                         },
-                        onOpenMenu: { openMenu(result.card) }
+                        onOpenMenu: {
+                            dismissSparkFavoriteTipIfVisible()
+                            openMenu(result.card)
+                        },
+                        onboardingState: onboardingStore?.session?.state,
+                        contextualTipStore: contextualTipStore
                     )
                     .id(result.id)
                 }
@@ -367,6 +400,24 @@ struct SparkContinuationView: View {
             return nil
         }
         return "Like failed. Try again."
+    }
+
+    private func dismissSparkFavoriteTipIfVisible() {
+        let targetIsVisible = store.currentResult.map {
+            !$0.card.isOwner
+        } ?? false
+        guard contextualTipStore?.isVisible(
+            .sparkFavorite,
+            onboardingState: onboardingStore?.session?.state,
+            targetIsVisible: targetIsVisible
+        ) == true else {
+            return
+        }
+        contextualTipStore?.dismiss(
+            .sparkFavorite,
+            onboardingState: onboardingStore?.session?.state,
+            targetIsVisible: targetIsVisible
+        )
     }
 
     @ViewBuilder
@@ -603,6 +654,8 @@ private struct SparkResultCard: View {
     let onOpenCard: () -> Void
     let onOpenAuthor: () -> Void
     let onOpenMenu: () -> Void
+    let onboardingState: String?
+    let contextualTipStore: ContextualGuideTipStore?
 
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
     @Environment(\.accessibilityReduceTransparency) private var systemReduceTransparency
@@ -611,6 +664,23 @@ private struct SparkResultCard: View {
     @State private var dragOffset: CGSize = .zero
     @State private var isResolvingGesture = false
     @State private var isHorizontalSwipeCommitted = false
+
+    private var isSparkFavoriteTipVisible: Bool {
+        contextualTipStore?.isVisible(
+            .sparkFavorite,
+            onboardingState: onboardingState,
+            targetIsVisible: !result.card.isOwner
+        ) ?? false
+    }
+
+    private func dismissSparkFavoriteTipIfVisible() {
+        guard isSparkFavoriteTipVisible else { return }
+        contextualTipStore?.dismiss(
+            .sparkFavorite,
+            onboardingState: onboardingState,
+            targetIsVisible: !result.card.isOwner
+        )
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -747,6 +817,22 @@ private struct SparkResultCard: View {
                 )
                 .accessibilityValue(result.card.isFavorited ? "true" : "false")
                 .accessibilityIdentifier("spark.favorite.\(result.id)")
+                .overlay {
+                    ContextualGuideTargetHalo(
+                        isVisible: isSparkFavoriteTipVisible
+                    )
+                }
+                .overlay(alignment: .topLeading) {
+                    if let contextualTipStore {
+                        ContextualGuideCallout(
+                            store: contextualTipStore,
+                            tip: .sparkFavorite,
+                            onboardingState: onboardingState,
+                            targetIsVisible: !result.card.isOwner
+                        )
+                        .offset(y: -58)
+                    }
+                }
             }
 
             Spacer(minLength: 16)
@@ -775,6 +861,11 @@ private struct SparkResultCard: View {
             .accessibilityLabel("Comments")
             .accessibilityValue("\(result.card.commentCount)")
             .accessibilityIdentifier("spark.comment.\(result.id)")
+            .simultaneousGesture(
+                TapGesture().onEnded { _ in
+                    dismissSparkFavoriteTipIfVisible()
+                }
+            )
         }
         .padding(.bottom, -18)
         .foregroundStyle(Color.white.opacity(0.58))

@@ -11,6 +11,7 @@ struct ExploreView: View {
     var onFlowCardSaved: (String) -> Void = { _ in }
     var onFlowCardDismissed: (String) -> Void = { _ in }
     var onboardingStore: OnboardingGuideStore? = nil
+    var contextualTipStore: ContextualGuideTipStore? = nil
     @State private var isSearchMode = false
     @State private var searchText = ""
     @FocusState private var isSearchFocused: Bool
@@ -32,6 +33,23 @@ struct ExploreView: View {
     // 搜索状态
     @State private var currentSearchIndex = 0
     @State private var hasSubmittedSearch = false
+
+    private var isFlowSparkTipVisible: Bool {
+        contextualTipStore?.isVisible(
+            .flowSpark,
+            onboardingState: onboardingStore?.session?.state,
+            targetIsVisible: !isSearchMode && flowStore.currentCard != nil
+        ) ?? false
+    }
+
+    private func dismissFlowSparkTipIfVisible() {
+        guard isFlowSparkTipVisible else { return }
+        contextualTipStore?.dismiss(
+            .flowSpark,
+            onboardingState: onboardingStore?.session?.state,
+            targetIsVisible: true
+        )
+    }
     
     // MARK: - 计算属性
     
@@ -340,6 +358,7 @@ struct ExploreView: View {
                 } else {
                     // 正常模式
                     Button(action: {
+                        dismissFlowSparkTipIfVisible()
                         withAnimation(.easeInOut(duration: 0.3)) {
                             showSideMenu = true
                         }
@@ -360,6 +379,7 @@ struct ExploreView: View {
                     Spacer()
                     
                     Button(action: {
+                        dismissFlowSparkTipIfVisible()
                         withAnimation(.easeInOut(duration: 0.3)) {
                             isSearchMode = true
                         }
@@ -531,7 +551,9 @@ struct ExploreView: View {
                             onFlowCardVisible(card.id)
                         },
                         onCardSaved: onFlowCardSaved,
-                        onCardDismissed: onFlowCardDismissed
+                        onCardDismissed: onFlowCardDismissed,
+                        onboardingStore: onboardingStore,
+                        contextualTipStore: contextualTipStore
                     )
                 }
             }
@@ -589,6 +611,14 @@ struct ExploreView: View {
             // 关闭所有 popup
             showExplorePopupMenu = false
             showFilterTags = false
+        }
+        .onChange(of: showFilterTags) { isPresented in
+            if isPresented {
+                dismissFlowSparkTipIfVisible()
+            }
+        }
+        .onDisappear {
+            dismissFlowSparkTipIfVisible()
         }
         .popupMenu(isPresented: $showExplorePopupMenu, layout: .grid2x2, cardData: currentExploreCardData, isOwnCard: isCurrentExploreCardOwned)
         .navigationDestination(isPresented: $navigateToUserProfile) {

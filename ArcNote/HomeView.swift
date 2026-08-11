@@ -7,6 +7,7 @@ struct HomeView: View {
     @Binding var showSideMenu: Bool
     let refreshID: UUID
     var onboardingStore: OnboardingGuideStore?
+    var contextualTipStore: ContextualGuideTipStore?
     let onNoteCreated: (String, String) -> Void
     let onCardRouteDismissed: (CardNavigationDismissal) -> Void
     @State private var selectedSegment = 0 // 0: Notes, 1: AI
@@ -37,6 +38,7 @@ struct HomeView: View {
         showSideMenu: Binding<Bool>,
         refreshID: UUID,
         onboardingStore: OnboardingGuideStore? = nil,
+        contextualTipStore: ContextualGuideTipStore? = nil,
         onNoteCreated: @escaping (String, String) -> Void = { _, _ in },
         onCardRouteDismissed: @escaping (CardNavigationDismissal) -> Void = { _ in },
         librarySearchManager: LibrarySearchManager = LibrarySearchManager()
@@ -47,6 +49,7 @@ struct HomeView: View {
         )
         self.refreshID = refreshID
         self.onboardingStore = onboardingStore
+        self.contextualTipStore = contextualTipStore
         self.onNoteCreated = onNoteCreated
         self.onCardRouteDismissed = onCardRouteDismissed
     }
@@ -101,6 +104,24 @@ struct HomeView: View {
         LibrarySortOption(rawValue: selectedFilter) ?? .latestEdited
     }
 
+    private var isLibraryTipVisible: Bool {
+        contextualTipStore?.isVisible(
+            .libraryCreate,
+            onboardingState: onboardingStore?.session?.state,
+            targetIsVisible: selectedSegment == 0
+                && librarySearchSession.submittedQuery == nil
+        ) ?? false
+    }
+
+    private func dismissLibraryTipIfVisible() {
+        guard isLibraryTipVisible else { return }
+        contextualTipStore?.dismiss(
+            .libraryCreate,
+            onboardingState: onboardingStore?.session?.state,
+            targetIsVisible: true
+        )
+    }
+
     private var librarySearchQuery: Binding<String> {
         Binding(
             get: { librarySearchSession.draftQuery },
@@ -114,6 +135,7 @@ struct HomeView: View {
     }
 
     private func enterLibrarySearch() {
+        dismissLibraryTipIfVisible()
         let scope: LibrarySearchScope = selectedSegment == 0
             ? .notes
             : .collect
@@ -252,6 +274,7 @@ struct HomeView: View {
         ZStack {
             HStack {
                 Button(action: {
+                    dismissLibraryTipIfVisible()
                     withAnimation(.easeInOut(duration: 0.3)) {
                         showSideMenu = true
                     }
@@ -270,6 +293,7 @@ struct HomeView: View {
                 HStack(spacing: 8) {
                     Button(action: {
                         withAnimation(.easeInOut(duration: 0.2)) {
+                            dismissLibraryTipIfVisible()
                             showFilterTags.toggle()
                         }
                     }) {
@@ -298,6 +322,7 @@ struct HomeView: View {
             HStack(spacing: 0) {
                 Button(action: {
                     withAnimation(.easeInOut(duration: 0.3)) {
+                        dismissLibraryTipIfVisible()
                         selectedSegment = 0
                     }
                 }) {
@@ -314,6 +339,7 @@ struct HomeView: View {
 
                 Button(action: {
                     withAnimation(.easeInOut(duration: 0.3)) {
+                        dismissLibraryTipIfVisible()
                         selectedSegment = 1
                     }
                 }) {
@@ -453,6 +479,7 @@ struct HomeView: View {
                 OnboardingGuideLine(
                     store: onboardingStore,
                     allowedStates: [
+                        "deepen_signal",
                         "elicit_signal",
                         "product_merge_intro",
                         "product_library_intro",
@@ -468,21 +495,25 @@ struct HomeView: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 12) {
                         HomeFilterTag(title: "Latest Edited", isSelected: selectedFilter == "Latest Edited") {
+                            dismissLibraryTipIfVisible()
                             selectedFilter = "Latest Edited"
                             applySort(sortBy: "updated_at", sortOrder: "desc")
                         }
                         .frame(width: 120)
                         HomeFilterTag(title: "Latest Added", isSelected: selectedFilter == "Latest Added") {
+                            dismissLibraryTipIfVisible()
                             selectedFilter = "Latest Added"
                             applySort(sortBy: "created_at", sortOrder: "desc")
                         }
                         .frame(width: 120)
                         HomeFilterTag(title: "Rarity-High Low", isSelected: selectedFilter == "Rarity-High Low") {
+                            dismissLibraryTipIfVisible()
                             selectedFilter = "Rarity-High Low"
                             applySort(sortBy: "rate", sortOrder: "desc")
                         }
                         .frame(width: 140)
                         HomeFilterTag(title: "Rarity-Low High", isSelected: selectedFilter == "Rarity-Low High") {
+                            dismissLibraryTipIfVisible()
                             selectedFilter = "Rarity-Low High"
                             applySort(sortBy: "rate", sortOrder: "asc")
                         }
@@ -550,6 +581,7 @@ struct HomeView: View {
                         showPopupMenu = true
                     },
                     onboardingStore: onboardingStore,
+                    contextualTipStore: contextualTipStore,
                     onNoteCreated: onNoteCreated
                 )
             } else {
@@ -937,7 +969,26 @@ struct NotesListView: View {
     @Binding var navigateToEdit: Bool
     let onShowMenu: (UserCard) -> Void
     var onboardingStore: OnboardingGuideStore?
+    var contextualTipStore: ContextualGuideTipStore?
     let onNoteCreated: (String, String) -> Void
+    @State private var navigateToCreate = false
+
+    private var isLibraryTipVisible: Bool {
+        contextualTipStore?.isVisible(
+            .libraryCreate,
+            onboardingState: onboardingStore?.session?.state,
+            targetIsVisible: true
+        ) ?? false
+    }
+
+    private func dismissLibraryTipIfVisible() {
+        guard isLibraryTipVisible else { return }
+        contextualTipStore?.dismiss(
+            .libraryCreate,
+            onboardingState: onboardingStore?.session?.state,
+            targetIsVisible: true
+        )
+    }
     
     var body: some View {
         ZStack {
@@ -1033,38 +1084,65 @@ struct NotesListView: View {
                 }
                 .refreshable {
                     cardsManager.refreshCards()
-            }
+                }
+                .onTapGesture {
+                    dismissLibraryTipIfVisible()
+                }
             
             VStack {
                 Spacer()
                 HStack {
                     Spacer()
-                    NavigationLink(destination: NewNoteView(onCreated: onNoteCreated)) {
-                        ZStack {
-                            Circle()
-                                .fill(.ultraThinMaterial.opacity(0.3))
-                                .frame(width: 56, height: 56)
-                                .overlay(createButtonTopLeftHighlight)
-                                .overlay(createButtonBottomRightHighlight)
-                                .overlay(createButtonTopEdgeHighlight)
-                                .overlay(createButtonBottomEdgeHighlight)
-                            
-                            Image(systemName: "plus")
-                                .font(.system(size: 24, weight: .medium))
-                                .foregroundColor(.white)
+                    VStack(alignment: .trailing, spacing: 12) {
+                        if let contextualTipStore {
+                            ContextualGuideCallout(
+                                store: contextualTipStore,
+                                tip: .libraryCreate,
+                                onboardingState: onboardingStore?.session?.state,
+                                targetIsVisible: true
+                            )
                         }
-                    }
-                    .accessibilityIdentifier("note.create")
-                    .accessibilityHint("Create a Library note")
-                    .overlay {
-                        if let onboardingStore {
-                            LibraryCreateGuideHalo(store: onboardingStore)
+
+                        ZStack {
+                            Button {
+                                contextualTipStore?.complete(
+                                    .libraryCreate,
+                                    onboardingState: onboardingStore?.session?.state,
+                                    targetIsVisible: true
+                                )
+                                navigateToCreate = true
+                            } label: {
+                                ZStack {
+                                    Circle()
+                                        .fill(.ultraThinMaterial.opacity(0.3))
+                                        .frame(width: 56, height: 56)
+                                        .overlay(createButtonTopLeftHighlight)
+                                        .overlay(createButtonBottomRightHighlight)
+                                        .overlay(createButtonTopEdgeHighlight)
+                                        .overlay(createButtonBottomEdgeHighlight)
+
+                                    Image(systemName: "plus")
+                                        .font(.system(size: 24, weight: .medium))
+                                        .foregroundColor(.white)
+                                }
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityIdentifier("note.create")
+                            .accessibilityHint("Create a Library note")
+
+                            ContextualGuideTargetHalo(isVisible: isLibraryTipVisible)
                         }
                     }
                     .padding(.trailing, 20)
                     .padding(.bottom, 130)
                 }
             }
+        }
+        .navigationDestination(isPresented: $navigateToCreate) {
+            NewNoteView(onCreated: onNoteCreated)
+        }
+        .onDisappear {
+            dismissLibraryTipIfVisible()
         }
     }
     
@@ -1133,36 +1211,6 @@ struct NotesListView: View {
                         )
                     )
             )
-    }
-}
-
-private struct LibraryCreateGuideHalo: View {
-    @ObservedObject var store: OnboardingGuideStore
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var isExpanded = false
-
-    var body: some View {
-        if store.shouldGuideLibraryCreation {
-            Circle()
-                .stroke(Color.white.opacity(0.78), lineWidth: 1.5)
-                .frame(width: 68, height: 68)
-                .shadow(color: ZenVisualTokens.accent.opacity(0.42), radius: 8)
-                .scaleEffect(reduceMotion ? 1 : (isExpanded ? 1.05 : 0.97))
-                .opacity(reduceMotion ? 0.9 : (isExpanded ? 0.55 : 1))
-                .allowsHitTesting(false)
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("Create your first Library note")
-                .accessibilityIdentifier("note.create.guide-halo")
-                .onAppear {
-                    guard !reduceMotion else { return }
-                    withAnimation(
-                        .easeInOut(duration: 1.15)
-                        .repeatForever(autoreverses: true)
-                    ) {
-                        isExpanded = true
-                    }
-                }
-        }
     }
 }
 

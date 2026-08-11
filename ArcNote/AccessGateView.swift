@@ -146,3 +146,153 @@ struct AccessGateView: View {
         }
     }
 }
+
+@MainActor
+struct PrivateBetaEntryView: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var code = ""
+    @State private var validationMessage: String?
+    @State private var showSignUp = false
+
+    var body: some View {
+        ZStack {
+            Image("login_bg")
+                .resizable()
+                .scaledToFill()
+                .ignoresSafeArea()
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    HStack {
+                        Button(action: dismiss.callAsFunction) {
+                            Image(systemName: "arrow.left")
+                                .font(.title3.weight(.semibold))
+                                .foregroundStyle(.white)
+                                .frame(width: 44, height: 44)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Back")
+
+                        Spacer()
+                    }
+
+                    Image("logo")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(height: 50)
+                        .accessibilityHidden(true)
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Join the Private Beta")
+                            .font(.system(
+                                size: 32,
+                                weight: .bold,
+                                design: .rounded
+                            ))
+                            .foregroundStyle(.white)
+
+                        Text(
+                            "Enter your Product Access Code to create an account."
+                        )
+                        .font(.system(
+                            size: 16,
+                            weight: .regular,
+                            design: .rounded
+                        ))
+                        .foregroundStyle(.white.opacity(0.72))
+                        .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        TextField("CRAI-XXXX", text: $code)
+                            .textInputAutocapitalization(.characters)
+                            .autocorrectionDisabled()
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 18)
+                            .frame(height: 56)
+                            .background(.ultraThinMaterial, in: Capsule())
+                            .overlay(
+                                Capsule()
+                                    .stroke(.white.opacity(0.28), lineWidth: 1)
+                            )
+                            .accessibilityLabel("Product Access Code")
+                            .accessibilityIdentifier("private-beta.code")
+
+                        Button(action: continueToAccountEntry) {
+                            Text("Continue")
+                                .font(.headline)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 56)
+                                .foregroundStyle(.white)
+                                .background(
+                                    LinearGradient(
+                                        colors: [
+                                            Color(
+                                                red: 0.37,
+                                                green: 0.22,
+                                                blue: 0.61
+                                            ),
+                                            Color(
+                                                red: 0.18,
+                                                green: 0.53,
+                                                blue: 0.58
+                                            ),
+                                        ],
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    ),
+                                    in: Capsule()
+                                )
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("private-beta.continue")
+
+                        if let validationMessage {
+                            Text(validationMessage)
+                                .font(.footnote)
+                                .foregroundStyle(
+                                    Color(red: 1, green: 0.68, blue: 0.7)
+                                )
+                                .fixedSize(horizontal: false, vertical: true)
+                                .accessibilityIdentifier("private-beta.message")
+                        }
+                    }
+
+                    NavigationLink(destination: SignInView()) {
+                        Text("Already have an account? Sign In")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.white.opacity(0.72))
+                            .frame(maxWidth: .infinity)
+                            .frame(minHeight: 44)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("private-beta.sign-in")
+                }
+                .padding(.horizontal, 28)
+                .padding(.top, 24)
+                .padding(.bottom, 40)
+            }
+        }
+        .navigationBarHidden(true)
+        .navigationBarBackButtonHidden(true)
+        .toolbar(.hidden, for: .navigationBar)
+        .navigationDestination(isPresented: $showSignUp) {
+            SignUpView()
+        }
+        .onAppear {
+            code = KeychainStore.shared.load() ?? ""
+        }
+    }
+
+    private func continueToAccountEntry() {
+        let trimmedCode = code.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard (9...64).contains(trimmedCode.count) else {
+            validationMessage = "Enter a valid Product Access Code."
+            return
+        }
+
+        KeychainStore.shared.save(trimmedCode)
+        validationMessage = nil
+        showSignUp = true
+    }
+}
