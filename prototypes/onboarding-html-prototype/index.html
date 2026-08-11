@@ -8,7 +8,7 @@
       content="Chorai iOS private-beta onboarding and contextual guidance prototype"
     />
     <title>Chorai Onboarding Prototype</title>
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="styles.css?v=route-picker-a11y" />
   </head>
   <body>
     <div class="prototype-shell">
@@ -106,7 +106,7 @@
           <div class="guide-map-layout">
             <div class="route-column">
               <p class="mini-label">CURRENT ROUTE</p>
-              <div class="route-picker" id="routePicker" role="tablist" aria-label="选择页面"></div>
+              <div class="route-picker" id="routePicker" role="group" aria-label="选择页面"></div>
               <div class="route-principle">
                 <span class="principle-number">01</span>
                 <p>页面切换时，旧页面的 guide 必须立即消失。</p>
@@ -176,6 +176,6 @@
     </div>
 
     <script src="guide-state.js"></script>
-    <script src="app.js"></script>
+    <script src="app.js?v=route-picker-a11y"></script>
   </body>
 </html>

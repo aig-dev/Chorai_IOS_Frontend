@@ -2328,7 +2328,7 @@ main {
   background: rgba(255, 255, 255, 0.05);
 }
 
-.route-picker button[aria-selected="true"] {
+.route-picker button[aria-pressed="true"] {
   border-color: rgba(124, 193, 189, 0.38);
   background: rgba(124, 193, 189, 0.08);
   color: var(--white);

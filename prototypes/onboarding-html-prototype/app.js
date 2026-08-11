@@ -456,7 +456,7 @@ function renderGuideMap() {
   picker.innerHTML = Object.entries(routeGuides)
     .map(
       ([key, route]) => `
-        <button type="button" role="tab" data-route="${key}" aria-selected="${key === currentRoute}">
+        <button type="button" data-route="${key}" aria-pressed="${key === currentRoute}">
           <span class="route-light route-light--${route.color}"></span>
           <span><b>${route.label}</b><small>${route.state}</small></span>
         </button>`,
@@ -483,7 +483,7 @@ function setGuideRoute(routeKey) {
           : "Tap + to create your first note";
   document.querySelector("#guidePhone").innerHTML = phoneTemplate(step, "map");
   document.querySelectorAll("[data-route]").forEach((button) => {
-    button.setAttribute("aria-selected", String(button.dataset.route === routeKey));
+    button.setAttribute("aria-pressed", String(button.dataset.route === routeKey));
   });
   document.querySelector("#logicPanel").innerHTML = `
     <div class="logic-header">
