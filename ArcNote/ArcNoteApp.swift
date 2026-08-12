@@ -219,14 +219,20 @@ private enum PrivateBetaPreflightFixtureMode: String {
     case rateLimitedWithoutRetry = "rate_limited_without_retry"
     case unavailable
     case delayedAvailable = "delayed_available"
+    case lateAvailableAfterCancellation = "late_available_after_cancellation"
 }
 
 @MainActor
 private final class PrivateBetaPreflightFixtureRecorder: ObservableObject {
     @Published private(set) var callCount = 0
+    @Published private(set) var lateCompletionCount = 0
 
     func recordCall() {
         callCount += 1
+    }
+
+    func recordLateCompletion() {
+        lateCompletionCount += 1
     }
 }
 
@@ -265,6 +271,12 @@ private actor PrivateBetaPreflightFixture: AccessCodePreflighting {
         case .delayedAvailable:
             try await Task.sleep(nanoseconds: 4_000_000_000)
             try Task.checkCancellation()
+            return AccessCodePreflightResult(available: true)
+        case .lateAvailableAfterCancellation:
+            // Model a transport that ignores cancellation and still produces
+            // a late success. The view must reject it by request identity.
+            try? await Task.sleep(nanoseconds: 60_000_000_000)
+            await recorder.recordLateCompletion()
             return AccessCodePreflightResult(available: true)
         }
     }
@@ -345,8 +357,22 @@ private struct PrivateBetaEntryFixtureScreen: View {
                     String(recorder.callCount),
                     identifier: "private-beta.fixture.call-count"
                 )
+                fixtureAnchor(
+                    String(recorder.lateCompletionCount),
+                    identifier: "private-beta.fixture.late-completion-count"
+                )
             }
             .allowsHitTesting(false)
+        }
+        .overlay(alignment: .bottomTrailing) {
+            if showsEntry, mode == .lateAvailableAfterCancellation {
+                Button("Cancel check") {
+                    showsEntry = false
+                }
+                .buttonStyle(.borderedProminent)
+                .accessibilityIdentifier("private-beta.fixture.cancel")
+                .padding(16)
+            }
         }
     }
 

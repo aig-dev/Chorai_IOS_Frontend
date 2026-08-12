@@ -206,14 +206,18 @@ final class ArcNoteUITests: XCTestCase {
     }
 
     func testPrivateBetaEntryCancellationDoesNotPersistOrNavigateAfterLateSuccess() {
-        launchPrivateBetaEntry(fixture: "delayed_available")
+        launchPrivateBetaEntry(fixture: "late_available_after_cancellation")
         replaceShortFixtureText("private-beta.code", with: "CRAI-7KQ9")
         waitForButton("private-beta.continue", timeout: 3).tap()
         waitFor("private-beta.checking", timeout: 3)
 
-        waitForButton("private-beta.back", timeout: 3).tap()
+        waitForButton("private-beta.fixture.cancel", timeout: 3).tap()
         waitFor("private-beta.fixture-host", timeout: 3)
-        RunLoop.current.run(until: Date().addingTimeInterval(4.5))
+        waitForLabel(
+            "private-beta.fixture.late-completion-count",
+            expected: "1",
+            timeout: 3
+        )
 
         XCTAssertEqual(
             waitFor("private-beta.fixture.saved-code", timeout: 3).label,
