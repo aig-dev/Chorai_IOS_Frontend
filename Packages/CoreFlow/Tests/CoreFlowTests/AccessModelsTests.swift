@@ -31,6 +31,91 @@ final class AccessModelsTests: XCTestCase {
         XCTAssertNil(object["accessCode"])
     }
 
+    func testAccessCodePreflightInputEncodesOnlyExplicitAccessCodeKey() throws {
+        let data = try JSONEncoder().encode(
+            AccessCodePreflightInput(accessCode: "CRAI-7KQ9")
+        )
+        let object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: data) as? [String: String]
+        )
+
+        XCTAssertEqual(object, ["access_code": "CRAI-7KQ9"])
+    }
+
+    func testAccessCodePreflightResultDecodesBoundedAvailability() throws {
+        let result = try JSONDecoder().decode(
+            AccessCodePreflightResult.self,
+            from: Data(#"{"available":true}"#.utf8)
+        )
+
+        XCTAssertEqual(result, AccessCodePreflightResult(available: true))
+    }
+
+    func testAccessCodePreflightErrorClassifiesOnlyExactWireContracts() {
+        XCTAssertEqual(
+            AccessCodePreflightError.classify(
+                statusCode: 403,
+                errorCode: "PRODUCT_ACCESS_CODE_INVALID",
+                retryAfterSeconds: nil
+            ),
+            .invalid
+        )
+        XCTAssertEqual(
+            AccessCodePreflightError.classify(
+                statusCode: 429,
+                errorCode: "RATE_LIMIT_EXCEEDED",
+                retryAfterSeconds: 37
+            ),
+            .rateLimited(retryAfterSeconds: 37)
+        )
+        XCTAssertEqual(
+            AccessCodePreflightError.classify(
+                statusCode: 429,
+                errorCode: "RATE_LIMIT_EXCEEDED",
+                retryAfterSeconds: 0
+            ),
+            .rateLimited(retryAfterSeconds: nil)
+        )
+        XCTAssertEqual(
+            AccessCodePreflightError.classify(
+                statusCode: 503,
+                errorCode: nil,
+                retryAfterSeconds: nil
+            ),
+            .temporarilyUnavailable
+        )
+
+        for classification in [
+            AccessCodePreflightError.classify(
+                statusCode: 200,
+                errorCode: nil,
+                retryAfterSeconds: nil
+            ),
+            AccessCodePreflightError.classify(
+                statusCode: 403,
+                errorCode: "SOME_OTHER_ERROR",
+                retryAfterSeconds: nil
+            ),
+            AccessCodePreflightError.classify(
+                statusCode: 429,
+                errorCode: "SOME_OTHER_ERROR",
+                retryAfterSeconds: 37
+            ),
+            AccessCodePreflightError.classify(
+                statusCode: 500,
+                errorCode: "INTERNAL_ERROR",
+                retryAfterSeconds: nil
+            ),
+            AccessCodePreflightError.classify(
+                statusCode: nil,
+                errorCode: nil,
+                retryAfterSeconds: nil
+            ),
+        ] {
+            XCTAssertEqual(classification, .temporarilyUnavailable)
+        }
+    }
+
     func testAuthAccessPairOnlyEmitsACompleteNormalizedPair() throws {
         XCTAssertNil(AuthAccessPair(code: "CRAI-7KQ9", idempotencyKey: nil))
         XCTAssertNil(AuthAccessPair(code: nil, idempotencyKey: "ios-attempt-1"))

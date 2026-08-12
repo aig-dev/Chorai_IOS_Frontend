@@ -50,6 +50,53 @@ public struct ClaimInput: Codable, Equatable, Sendable {
     }
 }
 
+public struct AccessCodePreflightInput: Codable, Equatable, Sendable {
+    public let accessCode: String
+
+    public init(accessCode: String) {
+        self.accessCode = accessCode
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case accessCode = "access_code"
+    }
+}
+
+public struct AccessCodePreflightResult: Codable, Equatable, Sendable {
+    public let available: Bool
+
+    public init(available: Bool) {
+        self.available = available
+    }
+}
+
+public enum AccessCodePreflightError: Error, Equatable, Sendable {
+    case invalid
+    case rateLimited(retryAfterSeconds: Int?)
+    case temporarilyUnavailable
+
+    public static func classify(
+        statusCode: Int?,
+        errorCode: String?,
+        retryAfterSeconds: Int?
+    ) -> Self {
+        if statusCode == 403,
+           errorCode == "PRODUCT_ACCESS_CODE_INVALID" {
+            return .invalid
+        }
+        if statusCode == 429,
+           errorCode == "RATE_LIMIT_EXCEEDED" {
+            let retry = retryAfterSeconds.flatMap { $0 > 0 ? $0 : nil }
+            return .rateLimited(retryAfterSeconds: retry)
+        }
+        return .temporarilyUnavailable
+    }
+}
+
+public protocol AccessCodePreflighting: Sendable {
+    func preflight(accessCode: String) async throws -> AccessCodePreflightResult
+}
+
 public struct AuthAccessPair: Equatable, Sendable {
     public let code: String
     public let idempotencyKey: String

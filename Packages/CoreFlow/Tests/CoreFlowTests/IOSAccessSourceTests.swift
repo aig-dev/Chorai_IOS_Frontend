@@ -58,6 +58,32 @@ final class IOSAccessSourceTests: XCTestCase {
         XCTAssertFalse(signup.contains("registrationStore"))
     }
 
+    func testPrivateBetaPreflightWireContractIsPublicBoundedAndRedacted() throws {
+        let environment = try source("ArcNote/APIEnvironment.swift")
+        let models = try source("ArcNote/NetworkModels.swift")
+        let network = try source("ArcNote/NetworkManager.swift")
+        let access = try source("ArcNote/KeychainStore.swift")
+
+        XCTAssertTrue(environment.contains("/api/auth/access-code/preflight"))
+        XCTAssertTrue(models.contains("enum AccessCodePreflightWireResult"))
+        XCTAssertTrue(network.contains("func preflightAccessCode"))
+        XCTAssertTrue(network.contains("请求参数: <redacted>"))
+        XCTAssertTrue(access.contains("AccessCodePreflighting"))
+
+        let methodStart = try XCTUnwrap(
+            network.range(of: "func preflightAccessCode")
+        ).lowerBound
+        let methodEnd = network.range(
+            of: "func resolveCampaign",
+            range: methodStart..<network.endIndex
+        )?.lowerBound ?? network.endIndex
+        let method = String(network[methodStart..<methodEnd])
+
+        XCTAssertTrue(method.contains("\"access_code\": input.accessCode"))
+        XCTAssertFalse(method.contains("idempotency_key"))
+        XCTAssertFalse(method.contains("print(input"))
+    }
+
     func testAuthAttemptKeyRotatesWhenThePendingCodeChanges() throws {
         for path in [
             "ArcNote/ContentView.swift",

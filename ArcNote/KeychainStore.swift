@@ -74,7 +74,7 @@ final class KeychainStore: CodeStoring, @unchecked Sendable {
     }
 }
 
-final class NetworkAccess: AccessServing, @unchecked Sendable {
+final class NetworkAccess: AccessServing, AccessCodePreflighting, @unchecked Sendable {
     static let shared = NetworkAccess()
 
     private let network: NetworkManager
@@ -97,6 +97,35 @@ final class NetworkAccess: AccessServing, @unchecked Sendable {
             throw NetworkError.decodingError
         }
         return response.data
+    }
+
+    func preflight(
+        accessCode: String
+    ) async throws -> AccessCodePreflightResult {
+        var values = network.preflightAccessCode(
+            AccessCodePreflightInput(accessCode: accessCode)
+        ).values.makeAsyncIterator()
+        guard let wireResult = await values.next() else {
+            throw AccessCodePreflightError.temporarilyUnavailable
+        }
+
+        switch wireResult {
+        case .success(let result):
+            guard result.available else {
+                throw AccessCodePreflightError.invalid
+            }
+            return result
+        case .failure(
+            let statusCode,
+            let errorCode,
+            let retryAfterSeconds
+        ):
+            throw AccessCodePreflightError.classify(
+                statusCode: statusCode,
+                errorCode: errorCode,
+                retryAfterSeconds: retryAfterSeconds
+            )
+        }
     }
 
     func campaign() async -> CampaignBlock? {

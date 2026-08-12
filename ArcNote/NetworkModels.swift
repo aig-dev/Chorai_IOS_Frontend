@@ -382,6 +382,20 @@ struct ClaimResponse: Codable {
     let data: ClaimResult
 }
 
+struct AccessCodePreflightResponse: Codable {
+    let success: Bool
+    let data: AccessCodePreflightResult
+}
+
+enum AccessCodePreflightWireResult {
+    case success(AccessCodePreflightResult)
+    case failure(
+        statusCode: Int?,
+        errorCode: String?,
+        retryAfterSeconds: Int?
+    )
+}
+
 struct CampaignResponse: Codable {
     let success: Bool
     let data: CampaignBlock

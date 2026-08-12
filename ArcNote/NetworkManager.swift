@@ -565,6 +565,75 @@ extension NetworkManager {
         )
     }
 
+    func preflightAccessCode(
+        _ input: AccessCodePreflightInput
+    ) -> AnyPublisher<AccessCodePreflightWireResult, Never> {
+        Future<AccessCodePreflightWireResult, Never> { [weak self] promise in
+            guard let self else {
+                promise(.success(.failure(
+                    statusCode: nil,
+                    errorCode: nil,
+                    retryAfterSeconds: nil
+                )))
+                return
+            }
+
+            let url = "\(self.baseURL)\(APIEnvironment.AccessRoute.preflight)"
+            let parameters: Parameters = [
+                "access_code": input.accessCode,
+            ]
+            print("请求URL: \(url)")
+            print("请求方法: \(HTTPMethod.post.rawValue)")
+            print("请求参数: <redacted>")
+
+            self.session.request(
+                url,
+                method: .post,
+                parameters: parameters,
+                encoding: JSONEncoding.default,
+                headers: self.authorizedHeaders()
+            )
+            .responseData { response in
+                let statusCode = response.response?.statusCode
+                let retryAfterSeconds = response.response
+                    .flatMap { Self.positiveRetryAfter($0) }
+
+                guard case .success(let data) = response.result else {
+                    print("响应数据: <redacted>")
+                    promise(.success(.failure(
+                        statusCode: statusCode,
+                        errorCode: nil,
+                        retryAfterSeconds: retryAfterSeconds
+                    )))
+                    return
+                }
+
+                print("响应数据: <redacted>")
+                if let statusCode,
+                   (200..<300).contains(statusCode),
+                   let decoded = try? JSONDecoder().decode(
+                       AccessCodePreflightResponse.self,
+                       from: data
+                   ),
+                   decoded.success {
+                    promise(.success(.success(decoded.data)))
+                    return
+                }
+
+                let errorCode = try? JSONDecoder().decode(
+                    ErrorResponse.self,
+                    from: data
+                ).errorCode
+                promise(.success(.failure(
+                    statusCode: statusCode,
+                    errorCode: errorCode,
+                    retryAfterSeconds: retryAfterSeconds
+                )))
+            }
+        }
+        .eraseToAnyPublisher()
+    }
+
     func resolveCampaign() -> AnyPublisher<CampaignResponse, NetworkError> {
         let version = Bundle.main.object(
             forInfoDictionaryKey: "CFBundleShortVersionString"
@@ -576,6 +645,19 @@ extension NetworkManager {
             responseType: CampaignResponse.self,
             presentsError: false
         )
+    }
+
+    private static func positiveRetryAfter(
+        _ response: HTTPURLResponse
+    ) -> Int? {
+        guard let rawValue = response.value(
+            forHTTPHeaderField: "Retry-After"
+        ),
+        let seconds = Int(rawValue),
+        seconds > 0 else {
+            return nil
+        }
+        return seconds
     }
 
     // MARK: 卡片相关API
