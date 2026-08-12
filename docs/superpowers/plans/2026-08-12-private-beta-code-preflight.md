@@ -14,11 +14,11 @@
 - The local and server request bound is 9 through 64 characters after trimming.
 - Preflight is read-only business logic: it creates no Actor, AccessGrant, CohortMember, Activity, ActionLog, Relation, reservation, or claim.
 - The only permitted preflight write is the dedicated Redis abuse-prevention counter.
-- All authoritative ineligible states return HTTP 403 with top-level `error_code: PRODUCT_ACCESS_CODE_INVALID` and `message: product access code is invalid or no longer available`.
+- All authoritative ineligible states, including `claim_count >= max_claims`, return HTTP 403 with top-level `error_code: PRODUCT_ACCESS_CODE_INVALID` and `message: product access code is invalid or no longer available`.
 - A successful preflight returns HTTP 200 with `{"success":true,"data":{"available":true}}` and no code metadata.
 - Missing policy, codec, or storage authority fails closed with HTTP 503; malformed JSON or out-of-bound input returns HTTP 400 before eligibility storage is queried.
 - The dedicated limiter is 10 preflight attempts per IP per minute, independent of registration and email verification; limiter storage failure remains fail-open.
-- Registration remains the only code claim, repeats eligibility under row lock, and rolls back account creation if the code becomes unavailable.
+- Registration remains the only code redemption, repeats eligibility under row lock, atomically increments `claim_count` below `max_claims`, and rolls back account creation if the code becomes unavailable.
 - Never log a plaintext Product Access Code or an unredacted request/response payload that contains it.
 - iOS deployment remains iOS 16+ on iPhone; do not add an iPad product target or a new dependency.
 - Keep existing Sign Up, Google, and Apple payloads unchanged: they continue forwarding one complete `access_code` plus `idempotency_key` pair.
@@ -32,7 +32,7 @@
 - Create `chorai-go/internal/access/code_eligibility.go`: one package-level eligibility evaluator, read/lock mode, typed reader interface, and bounded availability errors. It owns no HTTP or Action side effects.
 - Create `chorai-go/internal/access/code_eligibility_test.go`: table tests for every predicate and for read-only versus lock mode.
 - Modify `chorai-go/internal/ontology/actions/access_actions.go`: adapt GORM plus the campaign codec to the evaluator and keep the existing mutation/provenance sequence after a locked eligible result.
-- Modify `chorai-go/internal/ontology/actions/access_actions_test.go`: prove preflight-style evaluation makes zero product writes and final claim still consumes exactly once.
+- Modify `chorai-go/internal/ontology/actions/access_actions_test.go`: prove preflight-style evaluation makes zero product writes and final registration increments `claim_count` exactly once.
 - Modify `chorai-go/internal/ontology/actions/access_registration_test.go`: retain rollback and exactly-once registration guarantees after sharing the evaluator.
 - Modify `chorai-go/internal/ontology/actions/action_executor.go`: expose `PreflightAccessCode(context.Context, string) error` on the existing concrete dependency boundary without creating an Action.
 - Modify `chorai-go/internal/api/dto/access.go`: add the strict preflight input and bounded success result.
@@ -86,7 +86,7 @@
   }{
       {"policy is not private beta", func(f *codeEligibilityFixture) { f.policy.Mode = "open" }},
       {"digest is unknown", func(f *codeEligibilityFixture) { f.code = nil }},
-      {"code is claimed", func(f *codeEligibilityFixture) { f.code.ClaimantID = stringPointer("actor_other") }},
+      {"code capacity is exhausted", func(f *codeEligibilityFixture) { f.code.ClaimCount = f.code.MaxClaims }},
       {"code is revoked", func(f *codeEligibilityFixture) { f.code.RevokedAt = timePointer(f.now) }},
       {"code is expired", func(f *codeEligibilityFixture) { f.code.ExpiresAt = f.now }},
       {"campaign is missing", func(f *codeEligibilityFixture) { f.campaign = nil }},
@@ -193,7 +193,7 @@
   assertCodeUnclaimed(t, fixture.db, "code_preflight")
   ```
 
-  `countAccessFacts` must count actors, access grants, cohort members, activities, relations, and action logs. Add `TestRegistrationRechecksCodeAfterSuccessfulPreflight`: preflight succeeds, another actor claims the code, registration then returns `ErrCodeInvalid`, and the attempted registration actor/profile/credential/session do not exist.
+  `countAccessFacts` must count actors, access grants, cohort members, activities, relations, and action logs. Add `TestRegistrationRechecksCodeAfterSuccessfulPreflight`: preflight succeeds with one remaining slot, another actor redeems that final slot, registration then returns `ErrCodeInvalid`, and the attempted registration actor/profile/credential/session do not exist.
 
 - [ ] **Step 2: Run the focused action suites and verify RED.**
 
@@ -224,9 +224,9 @@
 
 - [ ] **Step 4: Replace duplicated claim predicates with locked evaluator output.**
 
-  Keep idempotency-key validation and the existing same-actor/same-key replay path. For an unclaimed code, call Task 1 in `CodeEligibilityForUpdate` mode, use the returned code/campaign rows for provenance relations, then execute the existing guarded `UPDATE ... claimant_id IS NULL ...` and grant/cohort writes. Remove only predicate duplication; retain the transaction boundary and all `USED`/`GENERATED` relations.
+  Keep idempotency-key validation and the existing allowed-actor replay behavior. For a code with remaining capacity, call Task 1 in `CodeEligibilityForUpdate` mode, use the returned code/campaign rows for provenance relations, then execute the existing guarded `UPDATE ... claim_count < max_claims ... SET claim_count = claim_count + 1` and grant/cohort writes. Remove only predicate duplication; retain the transaction boundary and all `USED`/`GENERATED` relations.
 
-  The claim path must still support actor-idempotent replay before treating an already-claimed code as invalid. Implement that as a narrow locked digest lookup before the shared fresh-eligibility call; no public preflight path receives actor or key information.
+  The claim path must still return an actor's existing active grant before consuming another slot, and a revoked historical grant or legacy claimant must prevent the same actor from consuming another slot. No public preflight path receives actor or key information.
 
 - [ ] **Step 5: Run action and registration suites and verify GREEN.**
 
@@ -235,7 +235,7 @@
   go test ./internal/ontology/actions -run 'Test(ClaimAccess|PreflightAccessCode|Registration|AccessActionProvenance)' -count=1
   ```
 
-  Expected: PASS, including existing single-use, paused-campaign, rollback, provenance, and idempotency cases.
+  Expected: PASS, including existing capacity, paused-campaign, rollback, provenance, and actor-idempotency cases.
 
 - [ ] **Step 6: Format and checkpoint Task 2 without unrelated backend files.**
 
@@ -357,7 +357,7 @@
   auth.POST("/access-code/preflight", preflightHandlers...)
   ```
 
-  Register it only when `r.accessHandler != nil`. Contract tests must invoke it without `actor_id`, assert 200, and assert the product access gate call count stays zero. Integration tests must verify an available code returns 200 and remains unclaimed with zero new product facts, a claimed code returns the exact 403, then a fresh code registers and claims exactly once.
+  Register it only when `r.accessHandler != nil`. Contract tests must invoke it without `actor_id`, assert 200, and assert the product access gate call count stays zero. Integration tests must verify a code with remaining capacity returns 200 without changing `claim_count`, an exhausted code returns the exact 403, then a fresh code registers and increments `claim_count` exactly once.
 
 - [ ] **Step 9: Run the complete focused Go boundary suite and verify GREEN.**
 
@@ -530,7 +530,7 @@
   func testPrivateBetaEntryCancellationDoesNotPersistOrNavigateAfterLateSuccess()
   ```
 
-  The invalid test enters `CRAI-BR8K`, expects `This Product Access Code is invalid or no longer available.`, and asserts Sign Up is absent. The 37-second rate fixture expects `Too many checks. Try again in 37 seconds.`; a nil retry fixture expects `Too many checks. Try again shortly.`. Unavailable expects `Code verification is temporarily unavailable. Try again.`.
+  The invalid fixture enters `CRAI-BR8K`, expects `This Product Access Code is invalid or no longer available.`, and asserts Sign Up is absent; live acceptance must first confirm that code is capacity-exhausted. The 37-second rate fixture expects `Too many checks. Try again in 37 seconds.`; a nil retry fixture expects `Too many checks. Try again shortly.`. Unavailable expects `Code verification is temporarily unavailable. Try again.`.
 
 - [ ] **Step 2: Run the focused UI tests and verify RED.**
 
@@ -610,7 +610,7 @@
 
 **Interfaces:**
 - Consumes: all Tasks 1–5.
-- Produces: evidence that preflight is read-only, claimed `CRAI-BR8K` is rejected at entry, a fresh code stays available until registration, registration claims it once, and both application schemes build.
+- Produces: evidence that preflight is read-only, a capacity-exhausted code is rejected at entry, a fresh code stays at `claim_count: 0` until registration, registration increments it exactly once, and both application schemes build.
 
 - [ ] **Step 1: Run format, focused Go suites, and ontology compliance.**
 
@@ -637,7 +637,7 @@
     --data '{"access_code":"CRAI-BR8K"}'
   ```
 
-  Expected: health 200; the claimed code returns 403 with the exact bounded invalid code/message and no plaintext code in backend logs.
+  Expected: health 200; if `CRAI-BR8K` is capacity-exhausted it returns 403 with the exact bounded invalid code/message and no plaintext code in backend logs. If it still has capacity, exhaust a dedicated test code through normal registrations and use that code for this assertion.
 
 - [ ] **Step 3: Issue one fresh code through the existing authenticated admin API and prove preflight is non-consuming.**
 
@@ -655,11 +655,11 @@
 
 - [ ] **Step 4: Exercise the live Simulator entry boundary.**
 
-  Launch the Debug app against `http://127.0.0.1:8180`. Enter `CRAI-BR8K`: Sign Up must not open and the invalid copy must appear. Enter `$CHORAI_PREFLIGHT_CODE`: `Checking…` appears, then Sign Up opens. Immediately re-read the admin code row and require `claim_count: 0`.
+  Launch the Debug app against `http://127.0.0.1:8180`. Enter the capacity-exhausted code selected in Step 2: Sign Up must not open and the invalid copy must appear. Enter `$CHORAI_PREFLIGHT_CODE`: `Checking…` appears, then Sign Up opens. Immediately re-read the admin code row and require `claim_count: 0`.
 
 - [ ] **Step 5: Complete one registration and prove exactly-once claim.**
 
-  Use a fresh email/username and current verification code through the normal UI. Registration must succeed. Admin read must then report `claim_count: 1`. Replaying registration or preflight with the same code must not create another account/grant/cohort membership; preflight now returns the same bounded 403.
+  Use a fresh email/username and current verification code through the normal UI. Registration must succeed. Admin read must then report `claim_count: 1`. Replaying registration for the same actor must not create another account/grant/cohort membership or increment the counter again. Preflight remains available until the shared code reaches `max_claims`, then returns the bounded 403.
 
 - [ ] **Step 6: Run CoreFlow, UI fixture, and both Simulator builds.**
 

@@ -15,7 +15,7 @@ The code must be checked at the screen where the user enters it, while final reg
 ## Options considered
 
 1. **Keep local format validation only.** This is the current behavior. It cannot distinguish an available code from a claimed, revoked, expired, unknown, or inactive-campaign code, so it does not solve the user-facing problem.
-2. **Add a read-only server preflight and claim only during registration. Recommended.** This rejects unusable codes at the entry screen without consuming scarce access. Registration revalidates under its existing transaction, preserving single-use correctness under concurrency.
+2. **Add a read-only server preflight and redeem only during registration. Recommended.** This rejects unusable codes at the entry screen without consuming scarce access. Registration revalidates under its existing transaction, preserving bounded-capacity correctness under concurrency.
 3. **Reserve the code at the entry screen.** This reduces the interval in which another user can claim the code, but introduces reservation expiry, abandoned reservations, recovery, and cleanup. It also consumes or locks access before an account exists. That complexity is not justified for this flow.
 
 ## User interaction
@@ -69,7 +69,7 @@ Content-Type: application/json
 }
 ```
 
-The unified response covers unknown digest, claimed, revoked, expired, invalid cohort, unpublished or malformed campaign, inactive or out-of-window campaign, and a policy state in which the code cannot currently be used. It must not reveal the code ID, suffix, claimant, campaign, cohort, expiry, or which predicate failed.
+The unified response covers unknown digest, exhausted redemption capacity, revoked, expired, invalid cohort, unpublished or malformed campaign, inactive or out-of-window campaign, and a policy state in which the code cannot currently be used. It must not reveal the code ID, suffix, claim count, remaining capacity, claimant, campaign, cohort, expiry, or which predicate failed.
 
 Rate limiting returns `429 Too Many Requests`, `RATE_LIMIT_EXCEEDED`, and a standards-compatible integer `Retry-After` header. Service or policy dependency failure returns `503 Service Unavailable`. Malformed JSON or a code outside the request bound returns `400 Bad Request` without querying storage.
 
@@ -80,7 +80,7 @@ The endpoint accepts no idempotency key because it performs no business mutation
 Introduce one shared availability evaluator for Private Beta codes with two execution modes:
 
 - **read-only preflight mode** performs authoritative reads without row mutation or reservation;
-- **locked claim mode** runs inside the existing registration transaction, locks the code row, repeats the same predicates, and then performs the existing single-use claim.
+- **locked claim mode** runs inside the existing registration transaction, locks the code row, repeats the same predicates, and then performs the existing guarded capacity increment.
 
 The availability predicates have one implementation so preflight and registration cannot drift. Locked claim mode remains authoritative if state changes after preflight.
 
@@ -168,11 +168,11 @@ Remove the new route and iOS preflight call, then restore the current local-form
 ### Backend test-first coverage
 
 1. An available code returns 200 while the code remains unclaimed and no Actor, AccessGrant, Activity, ActionLog, relation, or cohort member is created.
-2. Unknown, claimed, revoked, expired, invalid-cohort, unpublished, malformed-spec, inactive, not-yet-active, and ended-campaign codes all return the same 403 body.
+2. Unknown, capacity-exhausted, revoked, expired, invalid-cohort, unpublished, malformed-spec, inactive, not-yet-active, and ended-campaign codes all return the same 403 body.
 3. Missing policy, codec, or storage authority returns 503 rather than available.
 4. Malformed or out-of-bound input returns 400 before storage access.
 5. The dedicated limiter returns 429 with `Retry-After` without consuming registration or verification-code limits.
-6. Existing registration tests prove that final claim still revalidates, rolls back account creation on failure, and claims exactly once on success.
+6. Existing registration tests prove that final redemption still revalidates, rolls back account creation on failure, and increments capacity exactly once on success.
 
 ### iOS test-first coverage
 
@@ -185,9 +185,9 @@ Remove the new route and iOS preflight call, then restore the current local-form
 
 ### End-to-end acceptance
 
-- Entering the claimed code `CRAI-BR8K` does not open Sign Up and shows the bounded invalid message.
+- Entering a capacity-exhausted code (use `CRAI-BR8K` only if its current admin row shows `claim_count >= max_claims`) does not open Sign Up and shows the bounded invalid message.
 - Entering a freshly issued available code opens Sign Up, while an admin read immediately afterward still reports that code as available.
-- Completing registration with that code creates the account and changes the code to claimed exactly once.
+- Completing registration with that code creates the account and increments `claim_count` exactly once.
 - The relevant Go package, contract, and integration tests pass.
 - CoreFlow unit/source-contract tests, the Private Beta UI fixture, and both `ArcNote` and `ArcNote Production` Simulator builds pass.
 
