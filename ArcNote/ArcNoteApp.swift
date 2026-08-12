@@ -121,9 +121,7 @@ struct ArcNoteApp: App {
                 } else if isNativeOnboardingUITestRoute {
                     NativeOnboardingFixtureScreen()
                 } else if isPrivateBetaEntryUITestRoute {
-                    NavigationStack {
-                        PrivateBetaEntryView()
-                    }
+                    PrivateBetaEntryFixtureScreen()
                 } else if isCardEditorShellUITestRoute {
                     CardEditorShellFixtureScreen()
                 } else if isSignInUITestRoute {
@@ -214,6 +212,156 @@ struct ArcNoteApp: App {
 }
 
 #if DEBUG
+private enum PrivateBetaPreflightFixtureMode: String {
+    case available
+    case invalid
+    case rateLimited = "rate_limited"
+    case rateLimitedWithoutRetry = "rate_limited_without_retry"
+    case unavailable
+    case delayedAvailable = "delayed_available"
+}
+
+@MainActor
+private final class PrivateBetaPreflightFixtureRecorder: ObservableObject {
+    @Published private(set) var callCount = 0
+
+    func recordCall() {
+        callCount += 1
+    }
+}
+
+private actor PrivateBetaPreflightFixture: AccessCodePreflighting {
+    private let mode: PrivateBetaPreflightFixtureMode
+    private let recorder: PrivateBetaPreflightFixtureRecorder
+
+    init(
+        mode: PrivateBetaPreflightFixtureMode,
+        recorder: PrivateBetaPreflightFixtureRecorder
+    ) {
+        self.mode = mode
+        self.recorder = recorder
+    }
+
+    func preflight(
+        accessCode: String
+    ) async throws -> AccessCodePreflightResult {
+        _ = accessCode
+        await recorder.recordCall()
+        switch mode {
+        case .available:
+            return AccessCodePreflightResult(available: true)
+        case .invalid:
+            throw AccessCodePreflightError.invalid
+        case .rateLimited:
+            throw AccessCodePreflightError.rateLimited(
+                retryAfterSeconds: 37
+            )
+        case .rateLimitedWithoutRetry:
+            throw AccessCodePreflightError.rateLimited(
+                retryAfterSeconds: nil
+            )
+        case .unavailable:
+            throw AccessCodePreflightError.temporarilyUnavailable
+        case .delayedAvailable:
+            try await Task.sleep(nanoseconds: 4_000_000_000)
+            try Task.checkCancellation()
+            return AccessCodePreflightResult(available: true)
+        }
+    }
+}
+
+private final class PrivateBetaCodeStoreFixture:
+    ObservableObject,
+    CodeStoring,
+    @unchecked Sendable
+{
+    @Published private(set) var storedCode: String?
+
+    init(storedCode: String?) {
+        self.storedCode = storedCode
+    }
+
+    func load() -> String? {
+        storedCode
+    }
+
+    func save(_ code: String) {
+        storedCode = code
+    }
+
+    func clear() {
+        storedCode = nil
+    }
+}
+
+@MainActor
+private struct PrivateBetaEntryFixtureScreen: View {
+    @State private var showsEntry = true
+    @StateObject private var recorder: PrivateBetaPreflightFixtureRecorder
+    @StateObject private var codeStore: PrivateBetaCodeStoreFixture
+    private let mode: PrivateBetaPreflightFixtureMode
+
+    init() {
+        let environment = ProcessInfo.processInfo.environment
+        mode = PrivateBetaPreflightFixtureMode(
+            rawValue: environment[
+                "CHORAI_PRIVATE_BETA_PREFLIGHT_FIXTURE"
+            ] ?? "available"
+        ) ?? .available
+        let recorder = PrivateBetaPreflightFixtureRecorder()
+        let storedCode = environment[
+            "CHORAI_PRIVATE_BETA_STORED_CODE"
+        ].flatMap { $0.isEmpty ? nil : $0 }
+        let codeStore = PrivateBetaCodeStoreFixture(storedCode: storedCode)
+        _recorder = StateObject(wrappedValue: recorder)
+        _codeStore = StateObject(wrappedValue: codeStore)
+    }
+
+    var body: some View {
+        ZStack {
+            if showsEntry {
+                NavigationStack {
+                    PrivateBetaEntryView(
+                        preflighter: PrivateBetaPreflightFixture(
+                            mode: mode,
+                            recorder: recorder
+                        ),
+                        codeStore: codeStore,
+                        onBack: { showsEntry = false }
+                    )
+                }
+            } else {
+                Color.clear
+                    .accessibilityIdentifier("private-beta.fixture-host")
+            }
+        }
+        .overlay(alignment: .topLeading) {
+            VStack(spacing: 0) {
+                fixtureAnchor(
+                    codeStore.storedCode ?? "<empty>",
+                    identifier: "private-beta.fixture.saved-code"
+                )
+                fixtureAnchor(
+                    String(recorder.callCount),
+                    identifier: "private-beta.fixture.call-count"
+                )
+            }
+            .allowsHitTesting(false)
+        }
+    }
+
+    private func fixtureAnchor(
+        _ value: String,
+        identifier: String
+    ) -> some View {
+        Text(value)
+            .font(.system(size: 1))
+            .foregroundStyle(.white.opacity(0.01))
+            .frame(width: 1, height: 1)
+            .accessibilityIdentifier(identifier)
+    }
+}
+
 @MainActor
 private struct NativeOnboardingFixtureScreen: View {
     @StateObject private var tipStore: ContextualGuideTipStore

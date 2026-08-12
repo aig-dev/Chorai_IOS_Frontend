@@ -138,6 +138,26 @@ final class IOSAccessSourceTests: XCTestCase {
         XCTAssertTrue(signup.contains("KeychainStore.shared.load()"))
     }
 
+    func testPrivateBetaEntryPersistsOnlyAfterCurrentSuccessfulPreflight() throws {
+        let gate = try source("ArcNote/AccessGateView.swift")
+        let app = try source("ArcNote/ArcNoteApp.swift")
+
+        XCTAssertTrue(gate.contains("preflighter: any AccessCodePreflighting"))
+        XCTAssertTrue(gate.contains("codeStore: any CodeStoring"))
+        XCTAssertTrue(gate.contains("guard isChecking == false else { return }"))
+        XCTAssertTrue(gate.contains("let result = try await preflighter.preflight"))
+        XCTAssertTrue(gate.contains("guard !Task.isCancelled, requestID == id else { return }"))
+        XCTAssertTrue(gate.contains("codeStore.save(candidate)"))
+        XCTAssertTrue(gate.contains("codeStore.load()?.trimmingCharacters"))
+        XCTAssertTrue(gate.contains("storedCode == candidate"))
+        XCTAssertTrue(gate.contains("codeStore.clear()"))
+        XCTAssertTrue(gate.contains(".disabled(isChecking)"))
+        XCTAssertTrue(gate.contains("checkTask?.cancel()"))
+        XCTAssertTrue(app.contains("CHORAI_PRIVATE_BETA_PREFLIGHT_FIXTURE"))
+        XCTAssertTrue(app.contains("PrivateBetaPreflightFixture"))
+        XCTAssertTrue(app.contains("PrivateBetaCodeStoreFixture"))
+    }
+
     func testNativeContextualTipsHaveNoAcknowledgementControls() throws {
         let guide = try source("ArcNote/CoreFlow/OnboardingGuideLine.swift")
 

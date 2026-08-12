@@ -150,9 +150,26 @@ struct AccessGateView: View {
 @MainActor
 struct PrivateBetaEntryView: View {
     @Environment(\.dismiss) private var dismiss
+    private let preflighter: any AccessCodePreflighting
+    private let codeStore: any CodeStoring
+    private let onBack: (() -> Void)?
+
     @State private var code = ""
     @State private var validationMessage: String?
     @State private var showSignUp = false
+    @State private var isChecking = false
+    @State private var requestID: UUID?
+    @State private var checkTask: Task<Void, Never>?
+
+    init(
+        preflighter: any AccessCodePreflighting = NetworkAccess.shared,
+        codeStore: any CodeStoring = KeychainStore.shared,
+        onBack: (() -> Void)? = nil
+    ) {
+        self.preflighter = preflighter
+        self.codeStore = codeStore
+        self.onBack = onBack
+    }
 
     var body: some View {
         ZStack {
@@ -164,7 +181,7 @@ struct PrivateBetaEntryView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
                     HStack {
-                        Button(action: dismiss.callAsFunction) {
+                        Button(action: cancelAndGoBack) {
                             Image(systemName: "arrow.left")
                                 .font(.title3.weight(.semibold))
                                 .foregroundStyle(.white)
@@ -172,6 +189,7 @@ struct PrivateBetaEntryView: View {
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("Back")
+                        .accessibilityIdentifier("private-beta.back")
 
                         Spacer()
                     }
@@ -217,10 +235,20 @@ struct PrivateBetaEntryView: View {
                             )
                             .accessibilityLabel("Product Access Code")
                             .accessibilityIdentifier("private-beta.code")
+                            .disabled(isChecking)
 
                         Button(action: continueToAccountEntry) {
-                            Text("Continue")
-                                .font(.headline)
+                            HStack(spacing: 10) {
+                                if isChecking {
+                                    ProgressView()
+                                        .tint(.white)
+                                        .accessibilityIdentifier(
+                                            "private-beta.checking"
+                                        )
+                                }
+                                Text(isChecking ? "Checking…" : "Continue")
+                                    .font(.headline)
+                            }
                                 .frame(maxWidth: .infinity)
                                 .frame(height: 56)
                                 .foregroundStyle(.white)
@@ -245,6 +273,7 @@ struct PrivateBetaEntryView: View {
                                 )
                         }
                         .buttonStyle(.plain)
+                        .disabled(isChecking)
                         .accessibilityIdentifier("private-beta.continue")
 
                         if let validationMessage {
@@ -266,6 +295,7 @@ struct PrivateBetaEntryView: View {
                             .frame(minHeight: 44)
                     }
                     .buttonStyle(.plain)
+                    .disabled(isChecking)
                     .accessibilityIdentifier("private-beta.sign-in")
                 }
                 .padding(.horizontal, 28)
@@ -280,19 +310,98 @@ struct PrivateBetaEntryView: View {
             SignUpView()
         }
         .onAppear {
-            code = KeychainStore.shared.load() ?? ""
+            code = codeStore.load() ?? ""
+        }
+        .onDisappear {
+            cancelCheck()
         }
     }
 
     private func continueToAccountEntry() {
+        guard isChecking == false else { return }
         let trimmedCode = code.trimmingCharacters(in: .whitespacesAndNewlines)
         guard (9...64).contains(trimmedCode.count) else {
             validationMessage = "Enter a valid Product Access Code."
             return
         }
 
-        KeychainStore.shared.save(trimmedCode)
+        let candidate = trimmedCode
+        let id = UUID()
+        requestID = id
+        isChecking = true
         validationMessage = nil
-        showSignUp = true
+        checkTask?.cancel()
+        checkTask = Task {
+            do {
+                let result = try await preflighter.preflight(
+                    accessCode: candidate
+                )
+                guard !Task.isCancelled, requestID == id else { return }
+                finishCheck()
+                guard result.available else {
+                    applyPreflightError(.invalid, candidate: candidate)
+                    return
+                }
+                codeStore.save(candidate)
+                showSignUp = true
+            } catch {
+                guard !Task.isCancelled, requestID == id else { return }
+                finishCheck()
+                applyPreflightError(
+                    error as? AccessCodePreflightError
+                        ?? .temporarilyUnavailable,
+                    candidate: candidate
+                )
+            }
+        }
+    }
+
+    private func finishCheck() {
+        requestID = nil
+        isChecking = false
+        checkTask = nil
+    }
+
+    private func applyPreflightError(
+        _ error: AccessCodePreflightError,
+        candidate: String
+    ) {
+        switch error {
+        case .invalid:
+            let storedCode = codeStore.load()?.trimmingCharacters(
+                in: .whitespacesAndNewlines
+            )
+            if storedCode == candidate {
+                codeStore.clear()
+            }
+            validationMessage =
+                "This Product Access Code is invalid or no longer available."
+        case .rateLimited(let retryAfterSeconds):
+            if let retryAfterSeconds {
+                validationMessage =
+                    "Too many checks. Try again in \(retryAfterSeconds) seconds."
+            } else {
+                validationMessage = "Too many checks. Try again shortly."
+            }
+        case .temporarilyUnavailable:
+            validationMessage =
+                "Code verification is temporarily unavailable. Try again."
+        }
+    }
+
+    private func cancelAndGoBack() {
+        cancelCheck()
+        if let onBack {
+            onBack()
+        } else {
+            dismiss()
+        }
+    }
+
+    private func cancelCheck() {
+        checkTask?.cancel()
+        checkTask = nil
+        requestID = nil
+        isChecking = false
     }
 }

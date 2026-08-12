@@ -106,8 +106,7 @@ final class ArcNoteUITests: XCTestCase {
     }
 
     func testPrivateBetaEntryUsesTheCurrentSignupSystemWithoutDuplicateCode() {
-        app.launchArguments.append("--ui-test-private-beta-entry")
-        app.launch()
+        launchPrivateBetaEntry(fixture: "available")
 
         replaceShortFixtureText("private-beta.code", with: "CRAI-7KQ9")
         waitForButton("private-beta.continue", timeout: 3).tap()
@@ -121,8 +120,7 @@ final class ArcNoteUITests: XCTestCase {
     }
 
     func testPrivateBetaEntryRejectsMalformedCodeBeforeRegistration() {
-        app.launchArguments.append("--ui-test-private-beta-entry")
-        app.launch()
+        launchPrivateBetaEntry(fixture: "available")
 
         replaceShortFixtureText("private-beta.code", with: "SHORT")
         waitForButton("private-beta.continue", timeout: 3).tap()
@@ -130,6 +128,96 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertEqual(
             waitFor("private-beta.message", timeout: 3).label,
             "Enter a valid Product Access Code."
+        )
+        XCTAssertFalse(app.descendants(matching: .any)["signup.create-account"].exists)
+    }
+
+    func testPrivateBetaEntryRejectsAuthoritativelyInvalidCodeBeforeSignup() {
+        launchPrivateBetaEntry(
+            fixture: "invalid",
+            storedCode: "CRAI-BR8K"
+        )
+
+        replaceShortFixtureText("private-beta.code", with: "CRAI-BR8K")
+        waitForButton("private-beta.continue", timeout: 3).tap()
+
+        XCTAssertEqual(
+            waitFor("private-beta.message", timeout: 3).label,
+            "This Product Access Code is invalid or no longer available."
+        )
+        XCTAssertEqual(
+            waitFor("private-beta.fixture.saved-code", timeout: 3).label,
+            "<empty>"
+        )
+        XCTAssertFalse(app.descendants(matching: .any)["signup.create-account"].exists)
+    }
+
+    func testPrivateBetaEntryShowsRateLimitWithoutClearingPendingCode() {
+        launchPrivateBetaEntry(
+            fixture: "rate_limited",
+            storedCode: "CRAI-7KQ9"
+        )
+
+        waitForButton("private-beta.continue", timeout: 3).tap()
+
+        XCTAssertEqual(
+            waitFor("private-beta.message", timeout: 3).label,
+            "Too many checks. Try again in 37 seconds."
+        )
+        XCTAssertEqual(
+            waitFor("private-beta.fixture.saved-code", timeout: 3).label,
+            "CRAI-7KQ9"
+        )
+    }
+
+    func testPrivateBetaEntryShowsTemporaryFailureWithoutClearingPendingCode() {
+        launchPrivateBetaEntry(
+            fixture: "unavailable",
+            storedCode: "CRAI-7KQ9"
+        )
+
+        waitForButton("private-beta.continue", timeout: 3).tap()
+
+        XCTAssertEqual(
+            waitFor("private-beta.message", timeout: 3).label,
+            "Code verification is temporarily unavailable. Try again."
+        )
+        XCTAssertEqual(
+            waitFor("private-beta.fixture.saved-code", timeout: 3).label,
+            "CRAI-7KQ9"
+        )
+    }
+
+    func testPrivateBetaEntryDisablesDuplicateSubmissionWhileChecking() {
+        launchPrivateBetaEntry(fixture: "delayed_available")
+        replaceShortFixtureText("private-beta.code", with: "CRAI-7KQ9")
+
+        let button = waitForButton("private-beta.continue", timeout: 3)
+        button.tap()
+
+        waitFor("private-beta.checking", timeout: 3)
+        XCTAssertFalse(button.isEnabled)
+        waitForLabel(
+            "private-beta.fixture.call-count",
+            expected: "1",
+            timeout: 3
+        )
+        waitFor("signup.create-account", timeout: 7)
+    }
+
+    func testPrivateBetaEntryCancellationDoesNotPersistOrNavigateAfterLateSuccess() {
+        launchPrivateBetaEntry(fixture: "delayed_available")
+        replaceShortFixtureText("private-beta.code", with: "CRAI-7KQ9")
+        waitForButton("private-beta.continue", timeout: 3).tap()
+        waitFor("private-beta.checking", timeout: 3)
+
+        waitForButton("private-beta.back", timeout: 3).tap()
+        waitFor("private-beta.fixture-host", timeout: 3)
+        RunLoop.current.run(until: Date().addingTimeInterval(4.5))
+
+        XCTAssertEqual(
+            waitFor("private-beta.fixture.saved-code", timeout: 3).label,
+            "<empty>"
         )
         XCTAssertFalse(app.descendants(matching: .any)["signup.create-account"].exists)
     }
@@ -6661,6 +6749,22 @@ final class ArcNoteUITests: XCTestCase {
         )
         field.typeText(text)
         XCTAssertEqual(field.value as? String, text)
+    }
+
+    private func launchPrivateBetaEntry(
+        fixture: String,
+        storedCode: String? = nil
+    ) {
+        app.launchArguments.append("--ui-test-private-beta-entry")
+        app.launchEnvironment[
+            "CHORAI_PRIVATE_BETA_PREFLIGHT_FIXTURE"
+        ] = fixture
+        if let storedCode {
+            app.launchEnvironment[
+                "CHORAI_PRIVATE_BETA_STORED_CODE"
+            ] = storedCode
+        }
+        app.launch()
     }
 
     @discardableResult
