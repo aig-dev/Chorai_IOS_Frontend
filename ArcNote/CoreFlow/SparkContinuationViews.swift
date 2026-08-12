@@ -352,7 +352,7 @@ struct SparkContinuationView: View {
                         onToggleFavorite: {
                             contextualTipStore?.complete(
                                 .sparkFavorite,
-                                onboardingState: onboardingStore?.session?.state,
+                                onboardingState: onboardingStore?.contextualTipState,
                                 targetIsVisible: !result.card.isOwner
                             )
                             store.toggleFavoriteCurrent { assetID in
@@ -383,7 +383,7 @@ struct SparkContinuationView: View {
                             dismissSparkFavoriteTipIfVisible()
                             openMenu(result.card)
                         },
-                        onboardingState: onboardingStore?.session?.state,
+                        onboardingState: onboardingStore?.contextualTipState,
                         contextualTipStore: contextualTipStore
                     )
                     .id(result.id)
@@ -408,14 +408,14 @@ struct SparkContinuationView: View {
         } ?? false
         guard contextualTipStore?.isVisible(
             .sparkFavorite,
-            onboardingState: onboardingStore?.session?.state,
+            onboardingState: onboardingStore?.contextualTipState,
             targetIsVisible: targetIsVisible
         ) == true else {
             return
         }
         contextualTipStore?.dismiss(
             .sparkFavorite,
-            onboardingState: onboardingStore?.session?.state,
+            onboardingState: onboardingStore?.contextualTipState,
             targetIsVisible: targetIsVisible
         )
     }
@@ -830,6 +830,7 @@ private struct SparkResultCard: View {
                             onboardingState: onboardingState,
                             targetIsVisible: !result.card.isOwner
                         )
+                        .frame(width: 220, alignment: .leading)
                         .offset(y: -58)
                     }
                 }

@@ -198,10 +198,19 @@ struct FlowCardView: View {
     let onToggleLike: () -> Void
     var onboardingState: String?
     var contextualTipStore: ContextualGuideTipStore?
+    var sparkResumeTargetIsVisible: Bool
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var dragOffset: CGSize = .zero
     @State private var isResolvingSwipe = false
+
+    private var isFlowCardTipVisible: Bool {
+        contextualTipStore?.isVisible(
+            .flowCard,
+            onboardingState: onboardingState,
+            targetIsVisible: true
+        ) ?? false
+    }
 
     private var isFlowSparkTipVisible: Bool {
         contextualTipStore?.isVisible(
@@ -211,20 +220,49 @@ struct FlowCardView: View {
         ) ?? false
     }
 
-    private func dismissFlowSparkTipIfVisible() {
-        guard isFlowSparkTipVisible else { return }
-        contextualTipStore?.dismiss(
-            .flowSpark,
+    private var isSparkResumeTipVisible: Bool {
+        contextualTipStore?.isVisible(
+            .sparkResume,
             onboardingState: onboardingState,
-            targetIsVisible: true
-        )
+            targetIsVisible: sparkResumeTargetIsVisible
+        ) ?? false
+    }
+
+    private var activeSparkTip: ContextualGuideTipID? {
+        if isFlowSparkTipVisible { return .flowSpark }
+        if isSparkResumeTipVisible { return .sparkResume }
+        return nil
+    }
+
+    private func dismissVisibleTips() {
+        for tip in [
+            ContextualGuideTipID.flowCard,
+            .flowSpark,
+            .sparkResume,
+        ] {
+            let targetIsVisible = tip == .sparkResume
+                ? sparkResumeTargetIsVisible
+                : true
+            guard contextualTipStore?.isVisible(
+                tip,
+                onboardingState: onboardingState,
+                targetIsVisible: targetIsVisible
+            ) == true else {
+                continue
+            }
+            contextualTipStore?.dismiss(
+                tip,
+                onboardingState: onboardingState,
+                targetIsVisible: targetIsVisible
+            )
+        }
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack(spacing: 12) {
                 Button {
-                    dismissFlowSparkTipIfVisible()
+                    dismissVisibleTips()
                     onOpenAuthor()
                 } label: {
                     HStack(spacing: 8) {
@@ -244,7 +282,7 @@ struct FlowCardView: View {
 
                 HStack(spacing: 2) {
                     Button {
-                        dismissFlowSparkTipIfVisible()
+                        dismissVisibleTips()
                         onOpenMenu()
                     } label: {
                         Image(systemName: "ellipsis")
@@ -257,11 +295,15 @@ struct FlowCardView: View {
                     .accessibilityIdentifier("flow.menu.\(card.id)")
 
                     Button {
-                        contextualTipStore?.complete(
-                            .flowSpark,
-                            onboardingState: onboardingState,
-                            targetIsVisible: true
-                        )
+                        if let activeSparkTip {
+                            contextualTipStore?.complete(
+                                activeSparkTip,
+                                onboardingState: onboardingState,
+                                targetIsVisible: true
+                            )
+                        } else {
+                            dismissVisibleTips()
+                        }
                         onSpark()
                     } label: {
                         Image("menu_spark")
@@ -276,22 +318,31 @@ struct FlowCardView: View {
                     .accessibilityIdentifier("flow.spark.\(card.id)")
                     .overlay {
                         ContextualGuideTargetHalo(
-                            isVisible: isFlowSparkTipVisible
+                            isVisible: activeSparkTip != nil
                         )
                     }
                 }
             }
 
-            if isFlowSparkTipVisible, let contextualTipStore {
+            if let activeSparkTip, let contextualTipStore {
                 HStack {
                     Spacer(minLength: 0)
                     ContextualGuideCallout(
                         store: contextualTipStore,
-                        tip: .flowSpark,
+                        tip: activeSparkTip,
                         onboardingState: onboardingState,
                         targetIsVisible: true
                     )
                 }
+            }
+
+            if isFlowCardTipVisible, let contextualTipStore {
+                ContextualGuideCallout(
+                    store: contextualTipStore,
+                    tip: .flowCard,
+                    onboardingState: onboardingState,
+                    targetIsVisible: true
+                )
             }
 
             Text(FlowTextPreview.make(card.content))
@@ -301,7 +352,7 @@ struct FlowCardView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
                 .onTapGesture {
-                    dismissFlowSparkTipIfVisible()
+                    dismissVisibleTips()
                     onOpenDetail()
                 }
                 .gesture(cardDragGesture)
@@ -310,7 +361,7 @@ struct FlowCardView: View {
                 .accessibilityAddTraits(.isButton)
                 .accessibilityIdentifier("flow.card.\(card.id)")
                 .accessibilityAction {
-                    dismissFlowSparkTipIfVisible()
+                    dismissVisibleTips()
                     onOpenDetail()
                 }
 
@@ -332,7 +383,9 @@ struct FlowCardView: View {
             HStack(spacing: 10) {
                 if !card.isOwner {
                     Button {
-                        dismissFlowSparkTipIfVisible()
+                        if !isFlowCardTipVisible {
+                            dismissVisibleTips()
+                        }
                         onToggleFavorite()
                     } label: {
                         engagementMetric(
@@ -350,7 +403,7 @@ struct FlowCardView: View {
                 Spacer(minLength: 16)
 
                 Button {
-                    dismissFlowSparkTipIfVisible()
+                    dismissVisibleTips()
                     onToggleLike()
                 } label: {
                     engagementMetric(
@@ -373,7 +426,7 @@ struct FlowCardView: View {
                     .accessibilityIdentifier("flow.comment.\(card.id)")
                     .simultaneousGesture(
                         TapGesture().onEnded { _ in
-                            dismissFlowSparkTipIfVisible()
+                            dismissVisibleTips()
                         }
                     )
             }
@@ -392,6 +445,12 @@ struct FlowCardView: View {
         .foregroundStyle(.white)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(cardBackground)
+        .overlay {
+            ContextualGuideRoundedTargetHalo(
+                isVisible: isFlowCardTipVisible,
+                cornerRadius: ZenVisualTokens.cardRadius
+            )
+        }
         .contentShape(RoundedRectangle(cornerRadius: ZenVisualTokens.cardRadius, style: .continuous))
         .offset(x: dragOffset.width)
         .rotationEffect(reduceMotion ? .zero : .degrees(Double(dragOffset.width / 34)))
@@ -500,7 +559,14 @@ struct FlowCardView: View {
         guard !reduceMotion else {
             dragOffset = .zero
             isResolvingSwipe = false
-            dismissFlowSparkTipIfVisible()
+            contextualTipStore?.complete(
+                .flowCard,
+                onboardingState: onboardingState,
+                targetIsVisible: true
+            )
+            if activeSparkTip != nil {
+                dismissVisibleTips()
+            }
             onDismiss()
             return
         }
@@ -511,7 +577,14 @@ struct FlowCardView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + ZenVisualTokens.transitionDuration) {
             dragOffset = .zero
             isResolvingSwipe = false
-            dismissFlowSparkTipIfVisible()
+            contextualTipStore?.complete(
+                .flowCard,
+                onboardingState: onboardingState,
+                targetIsVisible: true
+            )
+            if activeSparkTip != nil {
+                dismissVisibleTips()
+            }
             onDismiss()
         }
     }
@@ -533,6 +606,7 @@ struct FlowDeckView: View {
     let onCardDismissed: (String) -> Void
     var onboardingStore: OnboardingGuideStore?
     var contextualTipStore: ContextualGuideTipStore?
+    var sparkResumeRootSourceAssetID: String?
 
     private var backplateDepths: [Int] {
         let count = min(2, max(0, store.cards.count - 1))
@@ -609,6 +683,13 @@ struct FlowDeckView: View {
                 onCardVisible(card)
             }
         }
+        .onChange(of: onboardingStore?.session?.state) { state in
+            guard state == "product_curator_intro",
+                  let card = store.currentCard else {
+                return
+            }
+            onCardVisible(card)
+        }
         .onReceive(CardEngagementCenter.shared.likes) { state in
             store.applyLikeState(state)
             likeStore.applyCommitted(state)
@@ -633,7 +714,14 @@ struct FlowDeckView: View {
                     onOpenMenu: { onOpenMenu(card) },
                     onToggleFavorite: {
                         store.toggleFavoriteCurrent(
-                            onFavoriteSucceeded: onCardSaved
+                            onFavoriteSucceeded: { assetID in
+                                contextualTipStore?.complete(
+                                    .flowCard,
+                                    onboardingState: onboardingStore?.contextualTipState,
+                                    targetIsVisible: true
+                                )
+                                onCardSaved(assetID)
+                            }
                         )
                     },
                     onSpark: { onSpark(card) },
@@ -643,8 +731,13 @@ struct FlowDeckView: View {
                         onCardDismissed(assetID)
                     },
                     onToggleLike: likeStore.toggle,
-                    onboardingState: onboardingStore?.session?.state,
-                    contextualTipStore: contextualTipStore
+                    onboardingState: onboardingStore?.contextualTipState,
+                    contextualTipStore: contextualTipStore,
+                    sparkResumeTargetIsVisible:
+                        OnboardingSparkContinuationPolicy.shouldShowResumeTip(
+                            onboardingState: onboardingStore?.contextualTipState,
+                            resumeRootSourceAssetID: sparkResumeRootSourceAssetID
+                        )
                 )
                 .id(card.id)
             }

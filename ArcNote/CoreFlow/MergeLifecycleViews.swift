@@ -125,6 +125,7 @@ final class MergeCandidateStore: ObservableObject {
                     self?.anchorError = nil
                     self?.anchorCard = MergeCard(
                         id: response.data.id,
+                        versionID: response.data.noteDocumentVersionID,
                         date: Self.relativeDate(response.data.createdAt),
                         content: response.data.content,
                         tags: response.data.tags,
@@ -177,6 +178,7 @@ final class MergeCandidateStore: ObservableObject {
             guard seen.insert(card.id).inserted else { return nil }
             return MergeCard(
                 id: card.id,
+                versionID: card.noteDocumentVersionID,
                 date: relativeDate(card.createdAt),
                 content: card.content,
                 tags: card.tags,
@@ -251,7 +253,7 @@ private struct MergeLifecycleView: View {
     private var isMergeTipVisible: Bool {
         contextualTipStore?.isVisible(
             .mergeAction,
-            onboardingState: onboardingStore?.session?.state,
+            onboardingState: onboardingStore?.contextualTipState,
             targetIsVisible: store.canCreate
         ) ?? false
     }
@@ -260,7 +262,7 @@ private struct MergeLifecycleView: View {
         guard isMergeTipVisible else { return }
         contextualTipStore?.dismiss(
             .mergeAction,
-            onboardingState: onboardingStore?.session?.state,
+            onboardingState: onboardingStore?.contextualTipState,
             targetIsVisible: store.canCreate
         )
     }
@@ -320,6 +322,11 @@ private struct MergeLifecycleView: View {
             committedCardID = assetID
             showCommittedDetail = !isCompletingGuidedMerge
             store.acknowledgeCompletion()
+            if isCompletingGuidedMerge {
+                DispatchQueue.main.async {
+                    onBack()
+                }
+            }
         }
         .navigationDestination(isPresented: $showCommittedDetail) {
             if let cardID = committedCardID {
@@ -535,7 +542,7 @@ private struct MergeLifecycleView: View {
         Button {
             contextualTipStore?.complete(
                 .mergeAction,
-                onboardingState: onboardingStore?.session?.state,
+                onboardingState: onboardingStore?.contextualTipState,
                 targetIsVisible: store.canCreate
             )
             store.create()
@@ -569,7 +576,7 @@ private struct MergeLifecycleView: View {
                 ContextualGuideCallout(
                     store: contextualTipStore,
                     tip: .mergeAction,
-                    onboardingState: onboardingStore?.session?.state,
+                    onboardingState: onboardingStore?.contextualTipState,
                     targetIsVisible: store.canCreate
                 )
                 .offset(y: -58)
@@ -1116,7 +1123,7 @@ private extension MergeCard {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return MergeSource(
             assetID: id,
-            versionID: nil,
+            versionID: versionID,
             preview: String(rawPreview.prefix(140))
         )
     }

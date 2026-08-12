@@ -8,8 +8,11 @@ struct HomeView: View {
     let refreshID: UUID
     var onboardingStore: OnboardingGuideStore?
     var contextualTipStore: ContextualGuideTipStore?
+    let isOnboardingLibrarySurfaceActive: Bool
     let onNoteCreated: (String, String) -> Void
     let onCardRouteDismissed: (CardNavigationDismissal) -> Void
+    let onCardRoutePresentationChanged: (Bool) -> Void
+    let onLibrarySurfaceVisibilityChanged: (Bool) -> Void
     @State private var selectedSegment = 0 // 0: Notes, 1: AI
 
     @State private var showPopupMenu = false
@@ -39,8 +42,11 @@ struct HomeView: View {
         refreshID: UUID,
         onboardingStore: OnboardingGuideStore? = nil,
         contextualTipStore: ContextualGuideTipStore? = nil,
+        isOnboardingLibrarySurfaceActive: Bool = false,
         onNoteCreated: @escaping (String, String) -> Void = { _, _ in },
         onCardRouteDismissed: @escaping (CardNavigationDismissal) -> Void = { _ in },
+        onCardRoutePresentationChanged: @escaping (Bool) -> Void = { _ in },
+        onLibrarySurfaceVisibilityChanged: @escaping (Bool) -> Void = { _ in },
         librarySearchManager: LibrarySearchManager = LibrarySearchManager()
     ) {
         _showSideMenu = showSideMenu
@@ -50,8 +56,12 @@ struct HomeView: View {
         self.refreshID = refreshID
         self.onboardingStore = onboardingStore
         self.contextualTipStore = contextualTipStore
+        self.isOnboardingLibrarySurfaceActive =
+            isOnboardingLibrarySurfaceActive
         self.onNoteCreated = onNoteCreated
         self.onCardRouteDismissed = onCardRouteDismissed
+        self.onCardRoutePresentationChanged = onCardRoutePresentationChanged
+        self.onLibrarySurfaceVisibilityChanged = onLibrarySurfaceVisibilityChanged
     }
 
     // MARK: - 分段控制器背景
@@ -107,19 +117,41 @@ struct HomeView: View {
     private var isLibraryTipVisible: Bool {
         contextualTipStore?.isVisible(
             .libraryCreate,
-            onboardingState: onboardingStore?.session?.state,
+            onboardingState: onboardingStore?.contextualTipState,
             targetIsVisible: selectedSegment == 0
                 && librarySearchSession.submittedQuery == nil
         ) ?? false
     }
 
+    private var isOnboardingLibrarySurfacePresented: Bool {
+        isOnboardingLibrarySurfaceActive
+            && !showPopupMenu
+            && !showFilterTags
+            && !showDeleteConfirmation
+            && !navigateToDetail
+            && !navigateToEdit
+            && !navigateToUserProfile
+    }
+
     private func dismissLibraryTipIfVisible() {
-        guard isLibraryTipVisible else { return }
-        contextualTipStore?.dismiss(
-            .libraryCreate,
-            onboardingState: onboardingStore?.session?.state,
-            targetIsVisible: true
-        )
+        if isLibraryTipVisible {
+            contextualTipStore?.dismiss(
+                .libraryCreate,
+                onboardingState: onboardingStore?.contextualTipState,
+                targetIsVisible: true
+            )
+        }
+        if contextualTipStore?.isVisible(
+            .libraryMergeEntry,
+            onboardingState: onboardingStore?.contextualTipState,
+            targetIsVisible: !cardsManager.cards.isEmpty
+        ) == true {
+            contextualTipStore?.dismiss(
+                .libraryMergeEntry,
+                onboardingState: onboardingStore?.contextualTipState,
+                targetIsVisible: true
+            )
+        }
     }
 
     private var librarySearchQuery: Binding<String> {
@@ -482,6 +514,7 @@ struct HomeView: View {
                         "deepen_signal",
                         "elicit_signal",
                         "product_merge_intro",
+                        "product_merge_preview",
                         "product_library_intro",
                         "build_ignite"
                     ]
@@ -635,6 +668,15 @@ struct HomeView: View {
         .scrollDismissesKeyboard(.interactively)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("screen.home.content")
+        .overlay(alignment: .topLeading) {
+            if isOnboardingLibrarySurfacePresented {
+                LibraryOnboardingSurfacePresentationReporter(
+                    onVisibilityChanged:
+                        onLibrarySurfaceVisibilityChanged
+                )
+                .id(onboardingStore?.session?.sessionID ?? "no-session")
+            }
+        }
         .popupMenu(
             isPresented: $showPopupMenu,
             layout: popupMenuLayout,
@@ -643,11 +685,15 @@ struct HomeView: View {
                 : currentMenuCardData,
             isOwnCard: librarySearchSession.scope == .notes
                 || (!librarySearchSession.isActive && selectedSegment == 0),
-            onRouteDismissed: onCardRouteDismissed
+            onRouteDismissed: onCardRouteDismissed,
+            onRoutePresentationChanged: onCardRoutePresentationChanged
         )
         .onAppear {
             // 使用默认排序（Latest Edited）
             cardsManager.loadUserCards(refresh: true, sortBy: "updated_at", sortOrder: "desc")
+        }
+        .onDisappear {
+            onLibrarySurfaceVisibilityChanged(false)
         }
         .onChange(of: refreshID) { _ in
             cardsManager.loadUserCards(refresh: true, sortBy: "updated_at", sortOrder: "desc")
@@ -960,6 +1006,25 @@ struct HomeView: View {
     }
 }
 
+private struct LibraryOnboardingSurfacePresentationReporter: View {
+    let onVisibilityChanged: (Bool) -> Void
+
+    var body: some View {
+        Color.clear
+            .frame(width: 1, height: 1)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+            .task {
+                await Task.yield()
+                guard !Task.isCancelled else { return }
+                onVisibilityChanged(true)
+            }
+            .onDisappear {
+                onVisibilityChanged(false)
+            }
+    }
+}
+
 // MARK: - Notes 列表视图
 struct NotesListView: View {
     @ObservedObject var cardsManager: HomeCardsManager
@@ -976,18 +1041,33 @@ struct NotesListView: View {
     private var isLibraryTipVisible: Bool {
         contextualTipStore?.isVisible(
             .libraryCreate,
-            onboardingState: onboardingStore?.session?.state,
+            onboardingState: onboardingStore?.contextualTipState,
             targetIsVisible: true
         ) ?? false
     }
 
     private func dismissLibraryTipIfVisible() {
-        guard isLibraryTipVisible else { return }
+        if isLibraryTipVisible {
+            contextualTipStore?.dismiss(
+                .libraryCreate,
+                onboardingState: onboardingStore?.contextualTipState,
+                targetIsVisible: true
+            )
+        }
         contextualTipStore?.dismiss(
-            .libraryCreate,
-            onboardingState: onboardingStore?.session?.state,
-            targetIsVisible: true
+            .libraryMergeEntry,
+            onboardingState: onboardingStore?.contextualTipState,
+            targetIsVisible: !cardsManager.cards.isEmpty
         )
+    }
+
+    private func handleCreatedNote(cardID: String, content: String) {
+        let shouldRevealNextOnboardingStep =
+            onboardingStore?.contextualTipState == "elicit_signal"
+        onNoteCreated(cardID, content)
+        if shouldRevealNextOnboardingStep {
+            navigateToCreate = false
+        }
     }
     
     var body: some View {
@@ -1030,6 +1110,9 @@ struct NotesListView: View {
                                     onShowMenu(cardData)
                                 },
                                 cardsManager: cardsManager,
+                                showMergeGuide: index == 0,
+                                onboardingState: onboardingStore?.contextualTipState,
+                                contextualTipStore: contextualTipStore,
                                 onCardTap: { cardId in
                                     print("收到卡片点击回调: cardId=\(cardId)")
                                     selectedCardId = cardId
@@ -1048,6 +1131,9 @@ struct NotesListView: View {
                                             onShowMenu(cardData)
                                         },
                                         cardsManager: cardsManager,
+                                        showMergeGuide: index == 0,
+                                        onboardingState: onboardingStore?.contextualTipState,
+                                        contextualTipStore: contextualTipStore,
                                         onCardTap: { cardId in
                                             print("收到卡片点击回调: cardId=\(cardId)")
                                             selectedCardId = cardId
@@ -1083,6 +1169,7 @@ struct NotesListView: View {
                     .padding(.bottom, 100)
                 }
                 .refreshable {
+                    dismissLibraryTipIfVisible()
                     cardsManager.refreshCards()
                 }
                 .onTapGesture {
@@ -1098,7 +1185,7 @@ struct NotesListView: View {
                             ContextualGuideCallout(
                                 store: contextualTipStore,
                                 tip: .libraryCreate,
-                                onboardingState: onboardingStore?.session?.state,
+                                onboardingState: onboardingStore?.contextualTipState,
                                 targetIsVisible: true
                             )
                         }
@@ -1107,9 +1194,10 @@ struct NotesListView: View {
                             Button {
                                 contextualTipStore?.complete(
                                     .libraryCreate,
-                                    onboardingState: onboardingStore?.session?.state,
+                                    onboardingState: onboardingStore?.contextualTipState,
                                     targetIsVisible: true
                                 )
+                                dismissLibraryTipIfVisible()
                                 navigateToCreate = true
                             } label: {
                                 ZStack {
@@ -1139,7 +1227,7 @@ struct NotesListView: View {
             }
         }
         .navigationDestination(isPresented: $navigateToCreate) {
-            NewNoteView(onCreated: onNoteCreated)
+            NewNoteView(onCreated: handleCreatedNote)
         }
         .onDisappear {
             dismissLibraryTipIfVisible()
@@ -1465,12 +1553,61 @@ struct NotesCard: View {
     let onShowMenu: (UserCard) -> Void
     let onCardTap: ((String) -> Void)?
     @ObservedObject var cardsManager: HomeCardsManager
+    let showMergeGuide: Bool
+    let onboardingState: String?
+    let contextualTipStore: ContextualGuideTipStore?
     
-    init(card: UserCard, onShowMenu: @escaping (UserCard) -> Void, cardsManager: HomeCardsManager, onCardTap: ((String) -> Void)? = nil) {
+    init(
+        card: UserCard,
+        onShowMenu: @escaping (UserCard) -> Void,
+        cardsManager: HomeCardsManager,
+        showMergeGuide: Bool = false,
+        onboardingState: String? = nil,
+        contextualTipStore: ContextualGuideTipStore? = nil,
+        onCardTap: ((String) -> Void)? = nil
+    ) {
         self.card = card
         self.onShowMenu = onShowMenu
         self.cardsManager = cardsManager
+        self.showMergeGuide = showMergeGuide
+        self.onboardingState = onboardingState
+        self.contextualTipStore = contextualTipStore
         self.onCardTap = onCardTap
+    }
+
+    private var isMergeEntryTipVisible: Bool {
+        showMergeGuide
+            && (contextualTipStore?.isVisible(
+                .libraryMergeEntry,
+                onboardingState: onboardingState,
+                targetIsVisible: true
+            ) ?? false)
+    }
+
+    private func openMenu() {
+        if showMergeGuide {
+            contextualTipStore?.complete(
+                .libraryMergeEntry,
+                onboardingState: onboardingState,
+                targetIsVisible: true
+            )
+        } else {
+            contextualTipStore?.dismiss(
+                .libraryMergeEntry,
+                onboardingState: onboardingState,
+                targetIsVisible: true
+            )
+        }
+        onShowMenu(card)
+    }
+
+    private func openCard() {
+        contextualTipStore?.dismiss(
+            .libraryMergeEntry,
+            onboardingState: onboardingState,
+            targetIsVisible: true
+        )
+        onCardTap?(card.id)
     }
     
     var body: some View {
@@ -1501,16 +1638,33 @@ struct NotesCard: View {
                 
                 Spacer()
                 
-                Button(action: {
-                    // 菜单按钮
-                    onShowMenu(card)
-                }) {
+                Button(action: openMenu) {
                     Image(systemName: "ellipsis")
                         .font(.title3)
                         .foregroundColor(.white)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
                 .accessibilityLabel("Card menu")
                 .accessibilityIdentifier("home.card.menu.\(card.id)")
+                .overlay {
+                    ContextualGuideTargetHalo(
+                        isVisible: isMergeEntryTipVisible
+                    )
+                }
+            }
+
+            if isMergeEntryTipVisible, let contextualTipStore {
+                HStack {
+                    Spacer(minLength: 0)
+                    ContextualGuideCallout(
+                        store: contextualTipStore,
+                        tip: .libraryMergeEntry,
+                        onboardingState: onboardingState,
+                        targetIsVisible: true
+                    )
+                }
             }
             
             // 内容文本
@@ -1519,7 +1673,7 @@ struct NotesCard: View {
                     content: card.content,
                     contentJSON: card.contentJSON,
                     cardID: card.id,
-                    onTap: { onCardTap?(card.id) }
+                    onTap: openCard
                 )
             }
             
@@ -2442,12 +2596,61 @@ struct NotesColorCard: View {
     let onShowMenu: (UserCard) -> Void
     let onCardTap: ((String) -> Void)?
     @ObservedObject var cardsManager: HomeCardsManager
+    let showMergeGuide: Bool
+    let onboardingState: String?
+    let contextualTipStore: ContextualGuideTipStore?
     
-    init(card: UserCard, onShowMenu: @escaping (UserCard) -> Void, cardsManager: HomeCardsManager, onCardTap: ((String) -> Void)? = nil) {
+    init(
+        card: UserCard,
+        onShowMenu: @escaping (UserCard) -> Void,
+        cardsManager: HomeCardsManager,
+        showMergeGuide: Bool = false,
+        onboardingState: String? = nil,
+        contextualTipStore: ContextualGuideTipStore? = nil,
+        onCardTap: ((String) -> Void)? = nil
+    ) {
         self.card = card
         self.onShowMenu = onShowMenu
         self.cardsManager = cardsManager
+        self.showMergeGuide = showMergeGuide
+        self.onboardingState = onboardingState
+        self.contextualTipStore = contextualTipStore
         self.onCardTap = onCardTap
+    }
+
+    private var isMergeEntryTipVisible: Bool {
+        showMergeGuide
+            && (contextualTipStore?.isVisible(
+                .libraryMergeEntry,
+                onboardingState: onboardingState,
+                targetIsVisible: true
+            ) ?? false)
+    }
+
+    private func openMenu() {
+        if showMergeGuide {
+            contextualTipStore?.complete(
+                .libraryMergeEntry,
+                onboardingState: onboardingState,
+                targetIsVisible: true
+            )
+        } else {
+            contextualTipStore?.dismiss(
+                .libraryMergeEntry,
+                onboardingState: onboardingState,
+                targetIsVisible: true
+            )
+        }
+        onShowMenu(card)
+    }
+
+    private func openCard() {
+        contextualTipStore?.dismiss(
+            .libraryMergeEntry,
+            onboardingState: onboardingState,
+            targetIsVisible: true
+        )
+        onCardTap?(card.id)
     }
     
     var body: some View {
@@ -2478,16 +2681,33 @@ struct NotesColorCard: View {
                 
                 Spacer()
                 
-                Button(action: {
-                    // 菜单按钮
-                    onShowMenu(card)
-                }) {
+                Button(action: openMenu) {
                     Image(systemName: "ellipsis")
                         .font(.title3)
                         .foregroundColor(.white)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
                 .accessibilityLabel("Card menu")
                 .accessibilityIdentifier("home.card.menu.\(card.id)")
+                .overlay {
+                    ContextualGuideTargetHalo(
+                        isVisible: isMergeEntryTipVisible
+                    )
+                }
+            }
+
+            if isMergeEntryTipVisible, let contextualTipStore {
+                HStack {
+                    Spacer(minLength: 0)
+                    ContextualGuideCallout(
+                        store: contextualTipStore,
+                        tip: .libraryMergeEntry,
+                        onboardingState: onboardingState,
+                        targetIsVisible: true
+                    )
+                }
             }
             
             // 内容文本
@@ -2496,7 +2716,7 @@ struct NotesColorCard: View {
                     content: card.content,
                     contentJSON: card.contentJSON,
                     cardID: card.id,
-                    onTap: { onCardTap?(card.id) }
+                    onTap: openCard
                 )
             }
             

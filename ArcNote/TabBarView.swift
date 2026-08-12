@@ -4,11 +4,6 @@ import CoreFlow
 import WebKit
 
 struct TabBarView: View {
-    private struct PendingLibraryReturn: Equatable {
-        let actorID: String
-        let sessionID: String
-    }
-
     @StateObject private var authManager = AuthManager.shared
     @StateObject private var coordinator = CoreFlowCoordinator()
     @StateObject private var keyboardLayout = KeyboardLayoutObserver()
@@ -29,7 +24,8 @@ struct TabBarView: View {
     @State private var selectedMergeCardId: String? = nil
     @State private var mergeResumeMetadata: MergeResumeMetadata?
     @State private var hasRoutedInitialOnboardingState = false
-    @State private var pendingLibraryReturn: PendingLibraryReturn?
+    @State private var libraryCardRouteCoverageDepth = 0
+    @State private var isLibrarySurfaceVisible = false
     @State private var shareRoute: ShareRoute?
     @State private var reportRoute: ReportRoute?
     @State private var lastSelectedTab: CoreTab = .flow
@@ -68,6 +64,32 @@ struct TabBarView: View {
         )
     }
 
+    private var onboardingSparkResumePersistence:
+        UserDefaultsOnboardingSparkResumeStore
+    {
+        let scope = ProcessInfo.processInfo.environment[
+            "CHORAI_UI_TEST_SPARK_SESSION_SCOPE"
+        ]
+        let keyPrefix = scope.map {
+            "chorai.onboarding.spark.resume.\($0)"
+        } ?? "chorai.onboarding.spark.resume"
+        return UserDefaultsOnboardingSparkResumeStore(keyPrefix: keyPrefix)
+    }
+
+    private var sparkResumeRootSourceAssetID: String? {
+        guard onboardingStore.phase == .active,
+              let actorID = authManager.currentUser?.id,
+              let session = onboardingStore.session,
+              session.flowVersion
+                == OnboardingGuideStore.canonicalFlowVersion else {
+            return nil
+        }
+        return onboardingSparkResumePersistence.metadata(
+            actorID: actorID,
+            sessionID: session.sessionID
+        )?.rootSourceAssetID
+    }
+
     private func loadOnboardingIfVerified() {
         #if DEBUG
         let environment = ProcessInfo.processInfo.environment
@@ -81,17 +103,74 @@ struct TabBarView: View {
             contextualTipStore.reset()
             return
         }
+        contextualTipStore.reset()
         onboardingStore.load(actorID: actorID)
-        contextualTipStore.load(actorID: actorID)
+    }
+
+    private func syncContextualTipsWithOnboardingSession() {
+        guard authManager.sessionPhase == .verified,
+              let actorID = authManager.currentUser?.id,
+              onboardingStore.phase == .active,
+              let session = onboardingStore.session,
+              session.flowVersion
+                == OnboardingGuideStore.canonicalFlowVersion else {
+            contextualTipStore.reset()
+            return
+        }
+        guard contextualTipStore.actorID != actorID
+                || contextualTipStore.sessionID != session.sessionID else {
+            return
+        }
+        contextualTipStore.load(
+            actorID: actorID,
+            sessionID: session.sessionID
+        )
     }
 
     private func dismissContextualTipWhenLeaving(_ tab: CoreTab) {
-        switch (tab, onboardingStore.session?.state) {
+        let onboardingState = onboardingStore.contextualTipState
+        switch (tab, onboardingState) {
         case (.library, "elicit_signal"):
             contextualTipStore.dismiss(
                 .libraryCreate,
-                onboardingState: onboardingStore.session?.state,
+                onboardingState: onboardingState,
                 targetIsVisible: true
+            )
+        case (.flow, "product_curator_intro"),
+             (.flow, "product_explore_card"):
+            contextualTipStore.dismiss(
+                .flowCard,
+                onboardingState: onboardingState,
+                targetIsVisible: true
+            )
+        case (.flow, "product_spark_intro"):
+            contextualTipStore.dismiss(
+                .flowSpark,
+                onboardingState: onboardingState,
+                targetIsVisible: true
+            )
+        case (.flow, "product_spark_results"),
+             (.flow, "product_save_material"):
+            contextualTipStore.dismiss(
+                .sparkResume,
+                onboardingState: onboardingState,
+                targetIsVisible:
+                    OnboardingSparkContinuationPolicy.shouldShowResumeTip(
+                        onboardingState: onboardingState,
+                        resumeRootSourceAssetID: sparkResumeRootSourceAssetID
+                    )
+            )
+        case (.library, "product_merge_intro"):
+            contextualTipStore.dismiss(
+                .libraryMergeEntry,
+                onboardingState: onboardingState,
+                targetIsVisible: true
+            )
+        case (.library, "product_merge_preview"):
+            contextualTipStore.dismiss(
+                .mergeResume,
+                onboardingState: onboardingState,
+                targetIsVisible: mergeResumeMetadata != nil
             )
         default:
             break
@@ -129,31 +208,43 @@ struct TabBarView: View {
         }
     }
 
+    private func handleResumeMerge() {
+        contextualTipStore.complete(
+            .mergeResume,
+            onboardingState: onboardingStore.contextualTipState,
+            targetIsVisible: mergeResumeMetadata != nil
+        )
+        resumeMerge()
+    }
+
     private func routeInitialOnboardingState(_ state: String?) {
         guard !hasRoutedInitialOnboardingState,
               let state,
-              let destination = OnboardingGuidePrimaryTabDestination.forState(
+              OnboardingGuideNavigationDirective.forState(state) != nil else {
+            return
+        }
+        hasRoutedInitialOnboardingState = true
+        applyOnboardingNavigation(for: state)
+    }
+
+    private func applyOnboardingNavigation(for state: String?) {
+        guard onboardingStore.phase == .active,
+              let state,
+              let directive = OnboardingGuideNavigationDirective.forState(
                 state
               ) else {
             return
         }
-        hasRoutedInitialOnboardingState = true
-
         DispatchQueue.main.async {
-            switch destination {
+            if directive.clearsNavigationPath, !navigationPath.isEmpty {
+                navigationPath.removeLast(navigationPath.count)
+            }
+
+            switch directive.destination {
             case .library:
                 coordinator.selectedTab = .library
             case .flow:
                 coordinator.selectedTab = .flow
-            }
-
-            guard state == "product_library_intro" else { return }
-            DispatchQueue.main.async {
-                guard onboardingStore.session?.state
-                        == "product_library_intro" else {
-                    return
-                }
-                onboardingStore.receive(.libraryViewed)
             }
         }
     }
@@ -308,45 +399,106 @@ struct TabBarView: View {
         )
     }
 
-    private func handleLibraryCardRouteDismissed(
-        _ dismissal: CardNavigationDismissal
-    ) {
-        guard dismissal.didCommit,
-              case .merge = dismissal.route,
-              onboardingStore.phase == .active,
+    private func handleSparkRequested(proposedCardID: String) {
+        let onboardingState = onboardingStore.contextualTipState
+        let existingResumeRoot = sparkResumeRootSourceAssetID
+        guard let rootSourceAssetID = OnboardingSparkContinuationPolicy
+            .requestedRootSourceAssetID(
+                onboardingState: onboardingState,
+                proposedCardID: proposedCardID,
+                resumeRootSourceAssetID: existingResumeRoot
+            ) else {
+            return
+        }
+
+        if onboardingState == "product_spark_intro",
+           existingResumeRoot == nil,
+           let actorID = authManager.currentUser?.id,
+           let session = onboardingStore.session {
+            onboardingSparkResumePersistence.save(
+                OnboardingSparkResumeMetadata(
+                    actorID: actorID,
+                    sessionID: session.sessionID,
+                    rootSourceAssetID: rootSourceAssetID
+                )
+            )
+        }
+
+        navigationPath.append(TabRoute.spark(rootSourceAssetID))
+    }
+
+    private func pruneSparkResumeMetadataIfNeeded(for state: String?) {
+        guard let state,
+              ![
+                "product_spark_intro",
+                "product_spark_results",
+                "product_save_material",
+              ].contains(state),
               let actorID = authManager.currentUser?.id,
               let session = onboardingStore.session,
               session.flowVersion
-                == OnboardingGuideStore.canonicalFlowVersion,
-              [
-                "product_merge_intro",
-                "product_merge_preview",
-                "product_library_intro"
-              ]
-                .contains(session.state) else {
+                == OnboardingGuideStore.canonicalFlowVersion else {
             return
         }
-        pendingLibraryReturn = PendingLibraryReturn(
+        onboardingSparkResumePersistence.remove(
             actorID: actorID,
             sessionID: session.sessionID
         )
-        recordReturnedLibraryIfReady()
     }
 
-    private func recordReturnedLibraryIfReady() {
-        guard let pendingLibraryReturn else { return }
-        guard onboardingStore.phase == .active,
-              authManager.currentUser?.id == pendingLibraryReturn.actorID,
-              let session = onboardingStore.session,
-              session.sessionID == pendingLibraryReturn.sessionID else {
-            self.pendingLibraryReturn = nil
+    private func handleLibraryCardRouteDismissed(
+        _: CardNavigationDismissal
+    ) {}
+
+    private func handleLibraryCardRoutePresentationChanged(
+        _ isPresented: Bool
+    ) {
+        isLibrarySurfaceVisible = false
+        if isPresented {
+            libraryCardRouteCoverageDepth += 1
+        } else {
+            libraryCardRouteCoverageDepth = max(
+                0,
+                libraryCardRouteCoverageDepth - 1
+            )
+        }
+    }
+
+    private func handleLibrarySurfaceVisibilityChanged(_ isVisible: Bool) {
+        isLibrarySurfaceVisible = isVisible
+        if isVisible {
+            recordLibraryViewedIfVisible()
+        }
+    }
+
+    private func handleTopLevelMergeCommitted(_ cardID: String) {
+        coordinator.mergeCompleted(cardID: cardID)
+    }
+
+    private var isLibraryCovered: Bool {
+        navigateToMerge
+            || libraryCardRouteCoverageDepth > 0
+            || showSideMenu
+            || shareRoute != nil
+            || reportRoute != nil
+    }
+
+    private var isOnboardingLibrarySurfaceActive: Bool {
+        onboardingStore.contextualTipState == "product_library_intro"
+            && coordinator.selectedTab == .library
+            && !isLibraryCovered
+    }
+
+    private func recordLibraryViewedIfVisible() {
+        guard OnboardingGuideLibraryVisibilityPolicy
+            .shouldRecordLibraryViewed(
+                onboardingState: onboardingStore.contextualTipState,
+                isLibrarySelected: coordinator.selectedTab == .library,
+                isLibrarySurfaceVisible: isLibrarySurfaceVisible,
+                isLibraryCovered: isLibraryCovered
+            ) else {
             return
         }
-        guard coordinator.selectedTab == .library,
-              session.state == "product_library_intro" else {
-            return
-        }
-        self.pendingLibraryReturn = nil
         onboardingStore.receive(.libraryViewed)
     }
     
@@ -370,7 +522,7 @@ struct TabBarView: View {
                     showFilterTags: $showFilterTags,
                     showSideMenu: $showSideMenu,
                     onSpark: { cardId in
-                        navigationPath.append(TabRoute.spark(cardId))
+                        handleSparkRequested(proposedCardID: cardId)
                     },
                     onFlowCardVisible: { assetID in
                         onboardingStore.receive(.flowViewed)
@@ -382,7 +534,8 @@ struct TabBarView: View {
                         onboardingStore.receive(.flowCardDismissed(assetID: assetID))
                     },
                     onboardingStore: onboardingStore,
-                    contextualTipStore: contextualTipStore
+                    contextualTipStore: contextualTipStore,
+                    sparkResumeRootSourceAssetID: sparkResumeRootSourceAssetID
                 )
                 .tag(CoreTab.flow)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -402,8 +555,14 @@ struct TabBarView: View {
                     refreshID: coordinator.libraryRefreshID,
                     onboardingStore: onboardingStore,
                     contextualTipStore: contextualTipStore,
+                    isOnboardingLibrarySurfaceActive:
+                        isOnboardingLibrarySurfaceActive,
                     onNoteCreated: handleNoteCreated,
-                    onCardRouteDismissed: handleLibraryCardRouteDismissed
+                    onCardRouteDismissed: handleLibraryCardRouteDismissed,
+                    onCardRoutePresentationChanged:
+                        handleLibraryCardRoutePresentationChanged,
+                    onLibrarySurfaceVisibilityChanged:
+                        handleLibrarySurfaceVisibilityChanged
                 )
                     .tag(CoreTab.library)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -454,14 +613,9 @@ struct TabBarView: View {
                     dismissContextualTipWhenLeaving(lastSelectedTab)
                     lastSelectedTab = selectedTab
                 }
+                isLibrarySurfaceVisible = false
                 // 切换 tab 时关闭所有 popup
                 closeAllPopups()
-                if coordinator.selectedTab == .library,
-                   onboardingStore.session?.state
-                    == "product_library_intro" {
-                    pendingLibraryReturn = nil
-                    onboardingStore.receive(.libraryViewed)
-                }
             }
 
             #if DEBUG
@@ -481,6 +635,25 @@ struct TabBarView: View {
             .frame(width: 1, height: 1)
             if coordinator.selectedTab == .flow {
                 VStack(alignment: .leading, spacing: 4) {
+                    if let proposedCardID = ProcessInfo.processInfo.environment[
+                        "CHORAI_UI_TEST_ONBOARDING_SPARK_RESUME_PROPOSED_CARD_ID"
+                    ], !proposedCardID.isEmpty {
+                        Button(action: {
+                            handleSparkRequested(
+                                proposedCardID: proposedCardID
+                            )
+                        }) {
+                            Color.white.opacity(0.01)
+                                .frame(width: 44, height: 44)
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel("Resume onboarding Spark")
+                        .accessibilityIdentifier(
+                            "onboarding.spark.resume.test-hook"
+                        )
+                    }
+
                     Button(action: {
                         submitExploreSearchSmoke()
                     }) {
@@ -606,19 +779,37 @@ struct TabBarView: View {
                 if mergeResumeMetadata != nil {
                     HStack {
                         Spacer()
-                        Button(action: resumeMerge) {
-                            Image("menu_merge")
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 21, height: 21)
-                                .frame(width: 44, height: 36)
-                                .background(
-                                    Capsule().fill(Color.white.opacity(0.12))
+                        VStack(alignment: .trailing, spacing: 10) {
+                            ContextualGuideCallout(
+                                store: contextualTipStore,
+                                tip: .mergeResume,
+                                onboardingState: onboardingStore.contextualTipState,
+                                targetIsVisible: mergeResumeMetadata != nil
+                            )
+
+                            Button(action: handleResumeMerge) {
+                                Image("menu_merge")
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: 21, height: 21)
+                                    .frame(width: 44, height: 36)
+                                    .background(
+                                        Capsule().fill(Color.white.opacity(0.12))
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Resume Merge")
+                            .accessibilityIdentifier("merge.resume")
+                            .overlay {
+                                ContextualGuideTargetHalo(
+                                    isVisible: contextualTipStore.isVisible(
+                                        .mergeResume,
+                                        onboardingState: onboardingStore.contextualTipState,
+                                        targetIsVisible: mergeResumeMetadata != nil
+                                    )
                                 )
+                            }
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Resume Merge")
-                        .accessibilityIdentifier("merge.resume")
                     }
                     .padding(.trailing, 20)
                 }
@@ -630,6 +821,10 @@ struct TabBarView: View {
         .environment(\.cardNavigationOnboardingStore, onboardingStore)
         .environment(\.cardNavigationContextualTipStore, contextualTipStore)
         .environment(\.cardNavigationMergeCompleted, coordinator.mergeCompleted)
+        .environment(
+            \.cardNavigationRoutePresentationChanged,
+            handleLibraryCardRoutePresentationChanged
+        )
         .navigationBarHidden(true)
         .navigationBarBackButtonHidden(true)
         .navigationDestination(isPresented: $navigateToMerge) {
@@ -637,7 +832,7 @@ struct TabBarView: View {
                 cardId: selectedMergeCardId ?? "",
                 onboardingStore: onboardingStore,
                 contextualTipStore: contextualTipStore,
-                onCommitted: coordinator.mergeCompleted
+                onCommitted: handleTopLevelMergeCommitted
             )
         }
         #if DEBUG
@@ -699,7 +894,8 @@ struct TabBarView: View {
         }
         .onChange(of: authManager.currentUser?.id) { _ in
             hasRoutedInitialOnboardingState = false
-            pendingLibraryReturn = nil
+            libraryCardRouteCoverageDepth = 0
+            isLibrarySurfaceVisible = false
             contextualTipStore.reset()
             refreshMergeResumeMetadata()
             loadOnboardingIfVerified()
@@ -712,23 +908,34 @@ struct TabBarView: View {
             }
         }
         .onChange(of: onboardingStore.phase) { phase in
-            switch phase {
-            case .active:
+            syncContextualTipsWithOnboardingSession()
+            if phase == .active {
                 routeInitialOnboardingState(onboardingStore.session?.state)
-            default:
-                pendingLibraryReturn = nil
             }
         }
-        .onChange(of: onboardingStore.session?.state) { _ in
-            recordReturnedLibraryIfReady()
+        .onChange(of: onboardingStore.session?.state) { state in
+            isLibrarySurfaceVisible = false
+            pruneSparkResumeMetadataIfNeeded(for: state)
+            applyOnboardingNavigation(for: state)
         }
         .onChange(of: onboardingStore.session?.sessionID) { _ in
-            recordReturnedLibraryIfReady()
+            isLibrarySurfaceVisible = false
+            syncContextualTipsWithOnboardingSession()
+        }
+        .onChange(of: navigateToMerge) { _ in
+            isLibrarySurfaceVisible = false
         }
         .onChange(of: showSideMenu) { isPresented in
+            isLibrarySurfaceVisible = false
             if isPresented {
                 dismissContextualTipWhenLeaving(coordinator.selectedTab)
             }
+        }
+        .onChange(of: shareRoute?.id) { _ in
+            isLibrarySurfaceVisible = false
+        }
+        .onChange(of: reportRoute?.id) { _ in
+            isLibrarySurfaceVisible = false
         }
         .onAppear {
             lastSelectedTab = coordinator.selectedTab

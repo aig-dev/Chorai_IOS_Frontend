@@ -141,7 +141,7 @@ final class FlowCardPresentationSourceContractTests: XCTestCase {
     private func flowAuthorButtonSource() throws -> String {
         let source = try flowCardSource()
         guard let start = source.range(
-            of: "Button {\n                    dismissFlowSparkTipIfVisible()\n                    onOpenAuthor()"
+            of: "Button {\n                    dismissVisibleTips()\n                    onOpenAuthor()"
         ),
               let end = source.range(
                 of: "Spacer()",

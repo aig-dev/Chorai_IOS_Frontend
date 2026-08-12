@@ -212,6 +212,52 @@ final class MergeSessionStoreCommitTests: XCTestCase {
         XCTAssertEqual(store.job?.jobID, "job_new")
     }
 
+    func testGenericRetryReplacesDurablyFailedGeneration() async {
+        let service = MockCoreMergeService()
+        let persistence = InMemoryMergeSessionPersistence()
+        let original = makeMergeSnapshot(
+            jobID: "job_failed",
+            status: .failed,
+            createKey: "create-old"
+        )
+        persistence.seed(original)
+        await service.enqueueJob(
+            .success(makeMergeJob(id: "job_failed", status: .failed))
+        )
+        await service.enqueueCreate(
+            .success(
+                makeMergeJob(
+                    id: "job_new",
+                    status: .artifactReady,
+                    artifactID: "artifact_new"
+                )
+            )
+        )
+        await service.enqueueArtifact(
+            .success(
+                makeMergeArtifact(
+                    jobID: "job_new",
+                    artifactID: "artifact_new"
+                )
+            )
+        )
+        let store = makeStore(
+            service: service,
+            persistence: persistence,
+            keys: ["create-new"]
+        )
+        store.start()
+        await waitForMergeStore { store.phase == .failed(.server(code: nil)) }
+
+        store.retry()
+        await waitForMergeStore { store.phase == .ready }
+
+        let calls = await service.createCalls
+        XCTAssertEqual(calls.map(\.idempotencyKey), ["create-new"])
+        XCTAssertEqual(calls.first?.sources, original.createRequest.sources)
+        XCTAssertEqual(store.job?.jobID, "job_new")
+    }
+
     private func readyStore(
         service: MockCoreMergeService,
         persistence: InMemoryMergeSessionPersistence,

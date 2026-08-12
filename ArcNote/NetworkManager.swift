@@ -2164,13 +2164,22 @@ extension NetworkManager {
         )
     }
 
-    func cancelMergeJob(jobId: String) -> AnyPublisher<MergeJobResponse, NetworkError> {
-        self.request(
-            endpoint: "/api/merge/jobs/\(jobId)/cancel",
-            method: .post,
-            responseType: MergeJobResponse.self,
-            presentsError: false
-        )
+    func cancelMergeJob(
+        jobId: String,
+        request: CancelMergeJobRequest
+    ) -> AnyPublisher<MergeJobResponse, NetworkError> {
+        do {
+            return self.request(
+                endpoint: "/api/merge/jobs/\(jobId)/cancel",
+                method: .post,
+                parameters: try encodedParameters(request),
+                responseType: MergeJobResponse.self,
+                presentsError: false
+            )
+        } catch {
+            return Fail(error: NetworkError.encodingError)
+                .eraseToAnyPublisher()
+        }
     }
 
     func listMergeCapabilities() -> AnyPublisher<MergeCapabilitiesResponse, NetworkError> {
@@ -2242,10 +2251,11 @@ extension NetworkManager {
                 }
 
                 switch job.status {
-                case "ARTIFACT_READY", "COMMITTING", "COMMITTED_CARD", "COMMITTED_BLOCK":
+                case "ARTIFACT_READY", "COMMITTING", "COMMITTED":
                     return self.getMergeArtifact(jobId: jobId)
                 case "FAILED", "CANCELLED":
-                    return Fail(error: .serverError(409, job.errorCode ?? job.status)).eraseToAnyPublisher()
+                    return Fail(error: .serverError(409, job.status))
+                        .eraseToAnyPublisher()
                 default:
                     guard attempt < 30 else {
                         return Fail(error: .timeout).eraseToAnyPublisher()
@@ -2421,13 +2431,25 @@ extension NetworkManager {
         jobId: String,
         titleOverride: String?
     ) -> AnyPublisher<MergeCommitResponse, NetworkError> {
-        commitMergeJob(
-            jobId: jobId,
-            request: CommitMergeJobRequest(
-                idemKey: "ios-legacy-merge-commit-\(jobId)",
-                target: NewCardCommitTarget(titleOverride: titleOverride)
-            )
-        )
+        // The current commit contract seals the latest artifact revision.
+        // titleOverride is retained only for source compatibility with the
+        // legacy preview screen; the server no longer accepts it here.
+        getMergeArtifact(jobId: jobId)
+            .flatMap { [weak self] artifact
+                -> AnyPublisher<MergeCommitResponse, NetworkError> in
+                guard let self else {
+                    return Fail(error: .unknown).eraseToAnyPublisher()
+                }
+                return self.commitMergeJob(
+                    jobId: jobId,
+                    request: CommitMergeJobRequest(
+                        revision: artifact.latestRevision,
+                        artifactHash: artifact.latestHash,
+                        idemKey: "ios-legacy-merge-commit-\(jobId)"
+                    )
+                )
+            }
+            .eraseToAnyPublisher()
     }
 
     func getOnboardingStatus(

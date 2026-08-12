@@ -302,6 +302,7 @@ private final class NativeOnboardingTipFixturePersistence:
 
     func outcome(
         actorID: String,
+        sessionID: String?,
         tip: ContextualGuideTipID
     ) -> ContextualGuideTipOutcome? {
         outcomes[tip]
@@ -310,6 +311,7 @@ private final class NativeOnboardingTipFixturePersistence:
     func save(
         _ outcome: ContextualGuideTipOutcome,
         actorID: String,
+        sessionID: String?,
         tip: ContextualGuideTipID
     ) {
         outcomes[tip] = outcome
@@ -704,6 +706,7 @@ private struct LibraryFixtureScreen: View {
     ) -> UserAllCard {
         UserAllCard(
             id: id,
+            noteDocumentVersionID: nil,
             title: "Design Library result",
             content: content,
             contentJSON: nil,

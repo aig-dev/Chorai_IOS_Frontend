@@ -25,6 +25,7 @@ struct UserAllCardsData: Codable {
 
 struct UserAllCard: Codable, Identifiable {
     let id: String
+    let noteDocumentVersionID: String?
     let title: String?
     let content: String
     let contentJSON: String?
@@ -49,6 +50,7 @@ struct UserAllCard: Codable, Identifiable {
     
     enum CodingKeys: String, CodingKey {
         case id, title, content, rate
+        case noteDocumentVersionID = "note_document_version_id"
         case contentJSON = "content_json"
         case backgroundMediaRef = "background_media_ref"
         case contentHash = "content_hash"

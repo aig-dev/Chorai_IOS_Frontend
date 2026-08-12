@@ -3,12 +3,13 @@ import XCTest
 
 final class CoreMergeModelsTests: XCTestCase {
     func testJobStatusClassifiesEveryCanonicalStateAndPreservesUnknown() throws {
-        let running = ["CREATED", "SNAPSHOT_READY", "PLANNED", "GENERATING"]
+        let running = ["CREATED", "PREPARING", "SNAPSHOT_READY", "PLANNED", "GENERATING"]
 
         XCTAssertTrue(running.allSatisfy { MergeJobStatus(serverValue: $0).isRunning })
         XCTAssertTrue(MergeJobStatus.artifactReady.isReady)
         XCTAssertTrue(MergeJobStatus.committing.isCommitting)
         XCTAssertTrue(MergeJobStatus.committedCard.isTerminal)
+        XCTAssertEqual(MergeJobStatus(serverValue: "COMMITTED"), .committedCard)
         XCTAssertTrue(MergeJobStatus.committedBlock.isTerminal)
         XCTAssertTrue(MergeJobStatus.failed.isTerminal)
         XCTAssertTrue(MergeJobStatus.cancelled.isTerminal)

@@ -532,6 +532,7 @@ struct UserCard: Codable, Identifiable {
 // MARK: - 创建卡片响应数据模型
 struct CreateCardData: Codable {
     let id: String
+    let noteDocumentVersionID: String?
     let title: String?
     let content: String
     let contentJSON: String?
@@ -547,6 +548,7 @@ struct CreateCardData: Codable {
 
     enum CodingKeys: String, CodingKey {
         case id, title, content, tags
+        case noteDocumentVersionID = "note_document_version_id"
         case contentJSON = "content_json"
         case editorAtmosphere = "editor_atmosphere"
         case contentHash = "content_hash"

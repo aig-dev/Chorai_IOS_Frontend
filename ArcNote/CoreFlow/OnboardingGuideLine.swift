@@ -223,3 +223,43 @@ struct ContextualGuideTargetHalo: View {
         }
     }
 }
+
+struct ContextualGuideRoundedTargetHalo: View {
+    let isVisible: Bool
+    let cornerRadius: CGFloat
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isPulsing = false
+
+    var body: some View {
+        if isVisible {
+            RoundedRectangle(
+                cornerRadius: cornerRadius,
+                style: .continuous
+            )
+            .stroke(ZenVisualTokens.accent.opacity(0.88), lineWidth: 1.5)
+            .scaleEffect(reduceMotion ? 0.99 : (isPulsing ? 1 : 0.985))
+            .opacity(reduceMotion ? 0.94 : (isPulsing ? 0.52 : 0.94))
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+            .onAppear(perform: updatePulse)
+            .onChange(of: reduceMotion) { _ in
+                updatePulse()
+            }
+        }
+    }
+
+    private func updatePulse() {
+        guard !reduceMotion else {
+            isPulsing = false
+            return
+        }
+
+        withAnimation(
+            .easeInOut(duration: 0.9)
+                .repeatForever(autoreverses: true)
+        ) {
+            isPulsing = true
+        }
+    }
+}

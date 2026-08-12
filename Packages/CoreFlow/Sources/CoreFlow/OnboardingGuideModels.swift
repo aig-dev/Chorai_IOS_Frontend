@@ -225,13 +225,111 @@ public enum OnboardingGuidePrimaryTabDestination: Equatable, Sendable {
     case library
 
     public static func forState(_ state: String) -> Self? {
+        OnboardingGuideNavigationDirective.forState(state)?.destination
+    }
+}
+
+public struct OnboardingGuideNavigationDirective: Equatable, Sendable {
+    public let destination: OnboardingGuidePrimaryTabDestination
+    public let clearsNavigationPath: Bool
+    public let recordsLibraryViewedOnInitialLoad: Bool
+
+    public init(
+        destination: OnboardingGuidePrimaryTabDestination,
+        clearsNavigationPath: Bool = false,
+        recordsLibraryViewedOnInitialLoad: Bool = false
+    ) {
+        self.destination = destination
+        self.clearsNavigationPath = clearsNavigationPath
+        self.recordsLibraryViewedOnInitialLoad = recordsLibraryViewedOnInitialLoad
+    }
+
+    public static func forState(_ state: String) -> Self? {
         switch state {
-        case "elicit_signal", "product_merge_intro", "product_library_intro":
-            return .library
-        case "product_curator_intro", "product_explore_card":
-            return .flow
+        case "elicit_signal":
+            return Self(destination: .library)
+        case "product_curator_intro",
+             "product_explore_card",
+             "product_spark_intro",
+             "product_spark_results",
+             "product_save_material":
+            return Self(destination: .flow)
+        case "product_merge_intro":
+            return Self(destination: .library, clearsNavigationPath: true)
+        case "product_merge_preview":
+            return Self(destination: .library)
+        case "product_library_intro":
+            return Self(
+                destination: .library,
+                recordsLibraryViewedOnInitialLoad: true
+            )
         default:
             return nil
         }
+    }
+}
+
+public enum OnboardingGuideLibraryVisibilityPolicy {
+    public static func shouldRecordLibraryViewed(
+        onboardingState: String?,
+        isLibrarySelected: Bool,
+        isLibrarySurfaceVisible: Bool,
+        isLibraryCovered: Bool
+    ) -> Bool {
+        onboardingState == "product_library_intro"
+            && isLibrarySelected
+            && isLibrarySurfaceVisible
+            && !isLibraryCovered
+    }
+}
+
+public enum OnboardingGuideMergeExitPolicy {
+    private static let guidedMergeStates = Set([
+        "product_merge_intro",
+        "product_merge_preview",
+    ])
+
+    public static func shouldDismissOwningCardRoute(
+        onboardingIsActive: Bool,
+        onboardingState: String?
+    ) -> Bool {
+        onboardingIsActive
+            && guidedMergeStates.contains(onboardingState ?? "")
+    }
+}
+
+public enum OnboardingSparkContinuationPolicy {
+    private static let resumeStates = Set([
+        "product_spark_results",
+        "product_save_material",
+    ])
+
+    public static func requestedRootSourceAssetID(
+        onboardingState: String?,
+        proposedCardID: String,
+        resumeRootSourceAssetID: String?
+    ) -> String? {
+        if resumeStates.contains(onboardingState ?? "") {
+            return normalized(resumeRootSourceAssetID)
+        }
+        if onboardingState == "product_spark_intro",
+           let resumeRootSourceAssetID = normalized(resumeRootSourceAssetID) {
+            return resumeRootSourceAssetID
+        }
+        return normalized(proposedCardID)
+    }
+
+    public static func shouldShowResumeTip(
+        onboardingState: String?,
+        resumeRootSourceAssetID: String?
+    ) -> Bool {
+        resumeStates.contains(onboardingState ?? "")
+            && normalized(resumeRootSourceAssetID) != nil
+    }
+
+    private static func normalized(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 }

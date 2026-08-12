@@ -2,12 +2,12 @@ import Foundation
 import XCTest
 
 final class NavigationOriginSourceContractTests: XCTestCase {
-    func testOnboardingOnlySelectsItsInitialTab() throws {
+    func testOnboardingRoutesEachCanonicalTransitionThroughSharedDirective() throws {
         let tabBar = try source(at: "ArcNote/TabBarView.swift")
 
         XCTAssertTrue(
             tabBar.contains("routeInitialOnboardingState"),
-            "Onboarding may select its resume tab once, but later state changes must not reroute behind a presented screen"
+            "Initial resume must use the canonical onboarding router"
         )
         let initialRoute = try XCTUnwrap(
             slice(
@@ -16,7 +16,17 @@ final class NavigationOriginSourceContractTests: XCTestCase {
                 through: "private var activeScreenAutomationAnchor"
             )
         )
-        XCTAssertFalse(initialRoute.contains("navigationPath.removeLast"))
+        XCTAssertTrue(initialRoute.contains("applyOnboardingNavigation"))
+        let stateObserver = try XCTUnwrap(
+            slice(
+                tabBar,
+                from: ".onChange(of: onboardingStore.session?.state) { state in",
+                through: ".onChange(of: onboardingStore.session?.sessionID)"
+            )
+        )
+        XCTAssertTrue(stateObserver.contains("isLibrarySurfaceVisible = false"))
+        XCTAssertTrue(stateObserver.contains("pruneSparkResumeMetadataIfNeeded(for: state)"))
+        XCTAssertTrue(stateObserver.contains("applyOnboardingNavigation(for: state)"))
         XCTAssertFalse(initialRoute.contains("navigateToMerge = false"))
     }
 
@@ -132,6 +142,13 @@ final class NavigationOriginSourceContractTests: XCTestCase {
 
     func testOriginPresenterCarriesWorkflowDependenciesIntoDestination() throws {
         let popup = try source(at: "ArcNote/PopupMenuView.swift")
+        let destination = try XCTUnwrap(
+            slice(
+                popup,
+                from: "private struct CardNavigationDestination",
+                through: "private struct CardNavigationHostModifier"
+            )
+        )
         let host = try XCTUnwrap(
             slice(
                 popup,
@@ -160,13 +177,31 @@ final class NavigationOriginSourceContractTests: XCTestCase {
             )
             XCTAssertTrue(presenter.contains("onboardingStore: onboardingStore"))
         }
-        XCTAssertTrue(host.contains("mergeCompleted: mergeCompleted"))
+        XCTAssertTrue(
+            host.contains("mergeCompleted: handlePresentedMergeCompleted")
+        )
         XCTAssertTrue(
             menu.contains("mergeCompleted: handlePresentedMergeCompleted")
         )
+        XCTAssertTrue(destination.contains("let routePresentationChanged:"))
+        XCTAssertTrue(
+            destination.contains(
+                ".environment(\\.cardNavigationOnboardingStore, onboardingStore)"
+            )
+        )
+        XCTAssertTrue(
+            destination.contains(
+                ".environment(\\.cardNavigationContextualTipStore, contextualTipStore)"
+            )
+        )
+        XCTAssertTrue(
+            destination.contains(
+                ".environment(\\.cardNavigationRoutePresentationChanged, routePresentationChanged)"
+            )
+        )
     }
 
-    func testReturningToLibraryRecordsTheLibraryViewWithoutRerouting() throws {
+    func testReturningToLibraryRecordsOnlyAfterHomeReportsPresentation() throws {
         let home = try source(at: "ArcNote/HomeView.swift")
         let popup = try source(at: "ArcNote/PopupMenuView.swift")
         let tabBar = try source(at: "ArcNote/TabBarView.swift")
@@ -187,24 +222,57 @@ final class NavigationOriginSourceContractTests: XCTestCase {
         XCTAssertTrue(
             popup.contains("didCommit: didCommitPresentedMerge")
         )
-        XCTAssertTrue(home.contains("let onCardRouteDismissed:"))
+        XCTAssertTrue(home.contains("let onCardRoutePresentationChanged:"))
         XCTAssertTrue(
-            home.contains("onRouteDismissed: onCardRouteDismissed")
+            home.contains(
+                "onRoutePresentationChanged: onCardRoutePresentationChanged"
+            )
         )
         XCTAssertTrue(
-            tabBar.contains("handleLibraryCardRouteDismissed")
+            popup.contains("onRoutePresentationChanged(true)")
         )
         XCTAssertTrue(
-            tabBar.contains("guard dismissal.didCommit")
+            popup.contains("onRoutePresentationChanged(false)")
         )
-        XCTAssertTrue(tabBar.contains("\"product_merge_intro\""))
-        XCTAssertTrue(tabBar.contains("struct PendingLibraryReturn"))
-        XCTAssertTrue(tabBar.contains("actorID: actorID"))
-        XCTAssertTrue(tabBar.contains("sessionID: session.sessionID"))
-        XCTAssertTrue(tabBar.contains("recordReturnedLibraryIfReady()"))
-        XCTAssertTrue(stateObserver.contains("recordReturnedLibraryIfReady()"))
+        XCTAssertTrue(home.contains("let isOnboardingLibrarySurfaceActive:"))
+        XCTAssertTrue(
+            home.contains("LibraryOnboardingSurfacePresentationReporter")
+        )
+        XCTAssertTrue(
+            home.contains("if isOnboardingLibrarySurfacePresented")
+        )
+        XCTAssertTrue(
+            home.contains(".id(onboardingStore?.session?.sessionID")
+        )
+        XCTAssertTrue(home.contains("onVisibilityChanged(true)"))
+        XCTAssertTrue(home.contains("onVisibilityChanged(false)"))
+        XCTAssertTrue(tabBar.contains("isLibrarySurfaceVisible"))
+        XCTAssertTrue(tabBar.contains("libraryCardRouteCoverageDepth"))
+        XCTAssertTrue(tabBar.contains("recordLibraryViewedIfVisible()"))
+        XCTAssertFalse(stateObserver.contains("recordLibraryViewedIfVisible()"))
+        XCTAssertFalse(tabBar.contains("PendingLibraryReturn"))
         XCTAssertFalse(stateObserver.contains("selectedTab ="))
         XCTAssertFalse(stateObserver.contains("navigationPath"))
+    }
+
+    func testGuidedMergeFromEditorReturnsToTheLibrarySurface() throws {
+        let popup = try source(at: "ArcNote/PopupMenuView.swift")
+        let host = try XCTUnwrap(
+            slice(
+                popup,
+                from: "private struct CardNavigationHostModifier",
+                through: "// MARK: - Custom Scale Transition"
+            )
+        )
+
+        XCTAssertTrue(host.contains("@Environment(\\.dismiss)"))
+        XCTAssertTrue(host.contains("shouldDismissHostAfterPresentedRoute"))
+        XCTAssertTrue(host.contains("handlePresentedMergeCompleted"))
+        XCTAssertTrue(host.contains("dismissHost()"))
+        XCTAssertTrue(
+            host.contains("routePresentationChanged(false)"),
+            "The nested Merge route must release its Library coverage"
+        )
     }
 
     private func source(at path: String) throws -> String {

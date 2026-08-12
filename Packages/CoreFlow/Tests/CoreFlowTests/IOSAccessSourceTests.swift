@@ -136,7 +136,9 @@ final class IOSAccessSourceTests: XCTestCase {
         let merge = try source("ArcNote/CoreFlow/MergeLifecycleViews.swift")
 
         XCTAssertTrue(tabBar.contains("ContextualGuideTipStore"))
-        XCTAssertTrue(tabBar.contains("contextualTipStore.load(actorID: actorID)"))
+        XCTAssertTrue(tabBar.contains("contextualTipStore.load("))
+        XCTAssertTrue(tabBar.contains("actorID: actorID"))
+        XCTAssertTrue(tabBar.contains("sessionID: session.sessionID"))
         XCTAssertTrue(tabBar.contains("contextualTipStore: contextualTipStore"))
         XCTAssertFalse(tabBar.contains("First loop complete"))
         XCTAssertFalse(tabBar.contains("showOnboardingCompletionAcknowledgement"))
@@ -147,8 +149,9 @@ final class IOSAccessSourceTests: XCTestCase {
         XCTAssertTrue(home.contains("ContextualGuideTargetHalo"))
 
         XCTAssertTrue(flow.contains("flow.spark.\\(card.id)"))
-        assertSource(flow, matches: #"complete\(\s*\.flowSpark,"#)
-        assertSource(flow, matches: #"dismiss\(\s*\.flowSpark,"#)
+        XCTAssertTrue(flow.contains("if isFlowSparkTipVisible { return .flowSpark }"))
+        assertSource(flow, matches: #"complete\(\s*activeSparkTip,"#)
+        assertSource(flow, matches: #"dismiss\(\s*tip,"#)
         assertSource(spark, matches: #"complete\(\s*\.sparkFavorite,"#)
         assertSource(spark, matches: #"dismiss\(\s*\.sparkFavorite,"#)
         assertSource(merge, matches: #"complete\(\s*\.mergeAction,"#)

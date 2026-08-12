@@ -10,37 +10,36 @@ struct NetworkCoreMergeService: CoreMergeServing, @unchecked Sendable {
     }
 
     func capabilities() async throws -> [MergeCapability] {
-        do {
-            let response = try await firstValue(network.listMergeCapabilities())
-            return response.capabilities.map {
-                MergeCapability(
-                    capabilityID: $0.capabilityId,
-                    displayName: $0.displayName ?? $0.capabilityId,
-                    outputKind: MergeCapabilityOutputKind(
-                        serverValue: $0.outputKind
-                    ),
-                    blockExport: $0.blockExport,
-                    slotCommit: $0.slotCommit,
-                    isEnabled: $0.enabled,
-                    rolloutStage: $0.rolloutStage ?? ""
-                )
-            }
-        } catch {
-            throw Self.mapError(error)
-        }
+        [
+            MergeCapability(
+                capabilityID: "auto",
+                displayName: "Merge",
+                outputKind: .document,
+                blockExport: false,
+                slotCommit: false,
+                isEnabled: true,
+                rolloutStage: "server-job-contract"
+            )
+        ]
     }
 
     func createJob(_ request: MergeCreateRequest) async throws -> MergeJob {
-        let wireRequest = MergeCardsRequest(
-            sources: request.sources.map {
-                MergeSourceRef(
-                    assetId: $0.assetID,
-                    versionId: $0.versionID
+        let sources = try request.sources.map {
+            guard let versionID = $0.versionID?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+                !versionID.isEmpty else {
+                throw CoreMergeError.validation(
+                    code: "source_version_required"
                 )
-            },
-            capability: request.capability,
-            idemKey: request.idempotencyKey,
-            context: request.context
+            }
+            return MergeSourceRef(
+                assetId: $0.assetID,
+                versionId: versionID
+            )
+        }
+        let wireRequest = MergeCardsRequest(
+            sources: sources,
+            idemKey: request.idempotencyKey
         )
 
         do {
@@ -75,7 +74,14 @@ struct NetworkCoreMergeService: CoreMergeServing, @unchecked Sendable {
     func cancel(jobID: String) async throws -> MergeJob {
         do {
             return Self.mapJob(
-                try await firstValue(network.cancelMergeJob(jobId: jobID))
+                try await firstValue(
+                    network.cancelMergeJob(
+                        jobId: jobID,
+                        request: CancelMergeJobRequest(
+                            idemKey: "ios-merge-cancel-\(jobID)"
+                        )
+                    )
+                )
             )
         } catch {
             throw Self.mapError(error)
@@ -90,15 +96,17 @@ struct NetworkCoreMergeService: CoreMergeServing, @unchecked Sendable {
             throw CoreMergeError.validation(code: "unsupported_commit_target")
         }
 
-        let wireRequest = CommitMergeJobRequest(
-            idemKey: request.idempotencyKey,
-            target: NewCardCommitTarget(
-                spaceId: request.target.spaceID,
-                titleOverride: request.target.titleOverride
-            )
-        )
-
         do {
+            // The vNext API commits an immutable artifact revision. It does not
+            // accept client-side title or space overrides at this boundary.
+            let artifact = try await firstValue(
+                network.getMergeArtifact(jobId: jobID)
+            )
+            let wireRequest = CommitMergeJobRequest(
+                revision: artifact.latestRevision,
+                artifactHash: artifact.latestHash,
+                idemKey: request.idempotencyKey
+            )
             let response = try await firstValue(
                 network.commitMergeJob(
                     jobId: jobID,
@@ -107,14 +115,14 @@ struct NetworkCoreMergeService: CoreMergeServing, @unchecked Sendable {
             )
             return MergeCommitResult(
                 commitID: response.commitId,
-                status: response.status,
-                targetType: response.targetType,
-                assetID: response.assetId,
-                versionID: response.versionId,
+                status: "COMMITTED",
+                targetType: "new_card",
+                assetID: response.noteAssetId,
+                versionID: response.assetVersionId,
                 activityID: response.activityId,
-                logID: response.logId,
-                errorCode: response.errorCode,
-                backgroundMediaReference: response.backgroundMediaRef
+                logID: response.actionLogId,
+                errorCode: nil,
+                backgroundMediaReference: nil
             )
         } catch {
             throw Self.mapError(error)
@@ -135,20 +143,14 @@ struct NetworkCoreMergeService: CoreMergeServing, @unchecked Sendable {
         MergeJob(
             jobID: response.jobId,
             status: MergeJobStatus(serverValue: response.status),
-            capability: response.capability,
-            selectedCapability: response.selectedCap,
-            planScore: response.planScore,
-            artifactID: response.artifactId,
-            latestCommit: response.latestCommit.map {
-                MergeCommitSummary(
-                    commitID: $0.commitId,
-                    status: $0.status,
-                    targetType: $0.targetType
-                )
-            },
-            failureStage: response.failStage,
-            errorCode: response.errorCode,
-            failureReason: response.failureReason
+            capability: "auto",
+            selectedCapability: response.route.isEmpty ? nil : response.route,
+            planScore: nil,
+            artifactID: response.artifactId.isEmpty ? nil : response.artifactId,
+            latestCommit: nil,
+            failureStage: nil,
+            errorCode: nil,
+            failureReason: nil
         )
     }
 
@@ -158,27 +160,25 @@ struct NetworkCoreMergeService: CoreMergeServing, @unchecked Sendable {
         MergeArtifact(
             artifactID: response.artifactId,
             jobID: response.jobId,
-            capabilityID: response.capabilityId,
-            outputKind: MergeCapabilityOutputKind(
-                serverValue: response.outputKind
-            ),
+            capabilityID: response.route,
+            outputKind: .document,
             document: MergeDocument(
-                schemaVersion: response.doc.schemaVersion,
-                title: response.doc.title,
-                subtitle: response.doc.subtitle,
-                blocks: response.doc.blocks.map(mapBlock),
-                metadata: response.doc.meta ?? [:]
+                schemaVersion: response.document.schemaVersion,
+                title: nil,
+                subtitle: nil,
+                blocks: response.document.blocks.map(mapBlock),
+                metadata: response.document.meta
             ),
-            fragments: (response.fragments ?? []).map {
-                MergeFragment(
-                    fragmentID: $0.fragmentId,
-                    schemaVersion: $0.schemaVersion,
-                    blocks: $0.blocks.map(mapBlock),
-                    insertMode: $0.insertMode,
-                    metadata: $0.meta ?? [:]
-                )
-            },
-            metadata: response.meta ?? [:]
+            fragments: [],
+            metadata: [
+                "route": .string(response.route),
+                "surpriseKind": .string(response.surpriseKind),
+                "sourceSnapshotHash": .string(response.sourceSnapshotHash),
+                "latestRevision": .number(Double(response.latestRevision)),
+                "latestHash": .string(response.latestHash),
+                "sourceTray": .object(response.sourceTray),
+                "alignment": .object(response.alignment)
+            ]
         )
     }
 

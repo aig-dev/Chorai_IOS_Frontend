@@ -12,6 +12,7 @@ struct ExploreView: View {
     var onFlowCardDismissed: (String) -> Void = { _ in }
     var onboardingStore: OnboardingGuideStore? = nil
     var contextualTipStore: ContextualGuideTipStore? = nil
+    var sparkResumeRootSourceAssetID: String? = nil
     @State private var isSearchMode = false
     @State private var searchText = ""
     @FocusState private var isSearchFocused: Bool
@@ -34,21 +35,39 @@ struct ExploreView: View {
     @State private var currentSearchIndex = 0
     @State private var hasSubmittedSearch = false
 
-    private var isFlowSparkTipVisible: Bool {
-        contextualTipStore?.isVisible(
-            .flowSpark,
-            onboardingState: onboardingStore?.session?.state,
-            targetIsVisible: !isSearchMode && flowStore.currentCard != nil
-        ) ?? false
+    private func targetIsVisible(for tip: ContextualGuideTipID) -> Bool {
+        guard !isSearchMode, flowStore.currentCard != nil else {
+            return false
+        }
+        if tip == .sparkResume {
+            return OnboardingSparkContinuationPolicy.shouldShowResumeTip(
+                onboardingState: onboardingStore?.contextualTipState,
+                resumeRootSourceAssetID: sparkResumeRootSourceAssetID
+            )
+        }
+        return true
     }
 
-    private func dismissFlowSparkTipIfVisible() {
-        guard isFlowSparkTipVisible else { return }
-        contextualTipStore?.dismiss(
+    private func dismissVisibleFlowTip() {
+        for tip in [
+            ContextualGuideTipID.flowCard,
             .flowSpark,
-            onboardingState: onboardingStore?.session?.state,
-            targetIsVisible: true
-        )
+            .sparkResume,
+        ] {
+            let targetIsVisible = targetIsVisible(for: tip)
+            guard contextualTipStore?.isVisible(
+                tip,
+                onboardingState: onboardingStore?.contextualTipState,
+                targetIsVisible: targetIsVisible
+            ) == true else {
+                continue
+            }
+            contextualTipStore?.dismiss(
+                tip,
+                onboardingState: onboardingStore?.contextualTipState,
+                targetIsVisible: targetIsVisible
+            )
+        }
     }
     
     // MARK: - 计算属性
@@ -358,7 +377,7 @@ struct ExploreView: View {
                 } else {
                     // 正常模式
                     Button(action: {
-                        dismissFlowSparkTipIfVisible()
+                        dismissVisibleFlowTip()
                         withAnimation(.easeInOut(duration: 0.3)) {
                             showSideMenu = true
                         }
@@ -379,7 +398,7 @@ struct ExploreView: View {
                     Spacer()
                     
                     Button(action: {
-                        dismissFlowSparkTipIfVisible()
+                        dismissVisibleFlowTip()
                         withAnimation(.easeInOut(duration: 0.3)) {
                             isSearchMode = true
                         }
@@ -553,7 +572,8 @@ struct ExploreView: View {
                         onCardSaved: onFlowCardSaved,
                         onCardDismissed: onFlowCardDismissed,
                         onboardingStore: onboardingStore,
-                        contextualTipStore: contextualTipStore
+                        contextualTipStore: contextualTipStore,
+                        sparkResumeRootSourceAssetID: sparkResumeRootSourceAssetID
                     )
                 }
             }
@@ -572,6 +592,7 @@ struct ExploreView: View {
         .overlay(alignment: .topTrailing) {
             if isUITestSession && !isSearchMode {
                 Button(action: {
+                    dismissVisibleFlowTip()
                     withAnimation(.easeInOut(duration: 0.3)) {
                         isSearchMode = true
                     }
@@ -614,11 +635,8 @@ struct ExploreView: View {
         }
         .onChange(of: showFilterTags) { isPresented in
             if isPresented {
-                dismissFlowSparkTipIfVisible()
+                dismissVisibleFlowTip()
             }
-        }
-        .onDisappear {
-            dismissFlowSparkTipIfVisible()
         }
         .popupMenu(isPresented: $showExplorePopupMenu, layout: .grid2x2, cardData: currentExploreCardData, isOwnCard: isCurrentExploreCardOwned)
         .navigationDestination(isPresented: $navigateToUserProfile) {

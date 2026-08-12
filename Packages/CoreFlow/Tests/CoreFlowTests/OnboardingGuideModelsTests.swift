@@ -3,6 +3,190 @@ import XCTest
 @testable import CoreFlow
 
 final class OnboardingGuideModelsTests: XCTestCase {
+    func testLibraryViewedRequiresCanonicalStateVisibleLibrary() {
+        XCTAssertTrue(
+            OnboardingGuideLibraryVisibilityPolicy.shouldRecordLibraryViewed(
+                onboardingState: "product_library_intro",
+                isLibrarySelected: true,
+                isLibrarySurfaceVisible: true,
+                isLibraryCovered: false
+            )
+        )
+    }
+
+    func testLibraryViewedIsBlockedUntilLibraryIsActuallyVisible() {
+        let cases: [(String?, Bool, Bool, Bool)] = [
+            ("product_merge_preview", true, true, false),
+            ("product_library_intro", false, true, false),
+            ("product_library_intro", true, false, false),
+            ("product_library_intro", true, true, true),
+            (nil, true, true, false),
+        ]
+
+        for (state, isSelected, isSurfaceVisible, isCovered) in cases {
+            XCTAssertFalse(
+                OnboardingGuideLibraryVisibilityPolicy
+                    .shouldRecordLibraryViewed(
+                        onboardingState: state,
+                        isLibrarySelected: isSelected,
+                        isLibrarySurfaceVisible: isSurfaceVisible,
+                        isLibraryCovered: isCovered
+                    )
+            )
+        }
+    }
+
+    func testGuidedMergeDismissesTheOwningCardRoute() {
+        for state in ["product_merge_intro", "product_merge_preview"] {
+            XCTAssertTrue(
+                OnboardingGuideMergeExitPolicy
+                    .shouldDismissOwningCardRoute(
+                        onboardingIsActive: true,
+                        onboardingState: state
+                    )
+            )
+        }
+
+        XCTAssertFalse(
+            OnboardingGuideMergeExitPolicy.shouldDismissOwningCardRoute(
+                onboardingIsActive: false,
+                onboardingState: "product_merge_preview"
+            )
+        )
+        XCTAssertFalse(
+            OnboardingGuideMergeExitPolicy.shouldDismissOwningCardRoute(
+                onboardingIsActive: true,
+                onboardingState: "product_library_intro"
+            )
+        )
+    }
+
+    func testSparkContinuationUsesPersistedRootWhenResuming() {
+        XCTAssertEqual(
+            OnboardingSparkContinuationPolicy.requestedRootSourceAssetID(
+                onboardingState: "product_spark_results",
+                proposedCardID: "ast_new_flow_card",
+                resumeRootSourceAssetID: "ast_original_root"
+            ),
+            "ast_original_root"
+        )
+        XCTAssertEqual(
+            OnboardingSparkContinuationPolicy.requestedRootSourceAssetID(
+                onboardingState: "product_save_material",
+                proposedCardID: "ast_new_flow_card",
+                resumeRootSourceAssetID: "ast_original_root"
+            ),
+            "ast_original_root"
+        )
+    }
+
+    func testSparkContinuationDoesNotStartAnotherRootWhenResumeIsMissing() {
+        XCTAssertNil(
+            OnboardingSparkContinuationPolicy.requestedRootSourceAssetID(
+                onboardingState: "product_spark_results",
+                proposedCardID: "ast_new_flow_card",
+                resumeRootSourceAssetID: nil
+            )
+        )
+        XCTAssertFalse(
+            OnboardingSparkContinuationPolicy.shouldShowResumeTip(
+                onboardingState: "product_save_material",
+                resumeRootSourceAssetID: nil
+            )
+        )
+    }
+
+    func testSparkContinuationStartsProposedRootBeforeResultsExist() {
+        XCTAssertEqual(
+            OnboardingSparkContinuationPolicy.requestedRootSourceAssetID(
+                onboardingState: "product_spark_intro",
+                proposedCardID: "ast_flow_card",
+                resumeRootSourceAssetID: nil
+            ),
+            "ast_flow_card"
+        )
+        XCTAssertFalse(
+            OnboardingSparkContinuationPolicy.shouldShowResumeTip(
+                onboardingState: "product_spark_intro",
+                resumeRootSourceAssetID: "ast_original_root"
+            )
+        )
+        XCTAssertTrue(
+            OnboardingSparkContinuationPolicy.shouldShowResumeTip(
+                onboardingState: "product_spark_results",
+                resumeRootSourceAssetID: "ast_original_root"
+            )
+        )
+    }
+
+    func testSparkIntroReusesRootSavedBeforeAnInterruptedLaunch() {
+        XCTAssertEqual(
+            OnboardingSparkContinuationPolicy.requestedRootSourceAssetID(
+                onboardingState: "product_spark_intro",
+                proposedCardID: "ast_new_flow_card",
+                resumeRootSourceAssetID: "ast_original_root"
+            ),
+            "ast_original_root"
+        )
+    }
+
+    func testNavigationDirectiveRoutesEveryActionOwningV1State() {
+        let cases: [
+            (
+                state: String,
+                destination: OnboardingGuidePrimaryTabDestination,
+                clearsNavigationPath: Bool,
+                recordsLibraryViewedOnInitialLoad: Bool
+            )
+        ] = [
+            ("elicit_signal", .library, false, false),
+            ("product_curator_intro", .flow, false, false),
+            ("product_explore_card", .flow, false, false),
+            ("product_spark_intro", .flow, false, false),
+            ("product_spark_results", .flow, false, false),
+            ("product_save_material", .flow, false, false),
+            ("product_merge_intro", .library, true, false),
+            ("product_merge_preview", .library, false, false),
+            ("product_library_intro", .library, false, true),
+        ]
+
+        for item in cases {
+            let directive = OnboardingGuideNavigationDirective.forState(
+                item.state
+            )
+
+            XCTAssertEqual(
+                directive?.destination,
+                item.destination,
+                "Wrong primary route for \(item.state)"
+            )
+            XCTAssertEqual(
+                directive?.clearsNavigationPath,
+                item.clearsNavigationPath,
+                "Wrong navigation reset for \(item.state)"
+            )
+            XCTAssertEqual(
+                directive?.recordsLibraryViewedOnInitialLoad,
+                item.recordsLibraryViewedOnInitialLoad,
+                "Wrong initial Library evidence rule for \(item.state)"
+            )
+        }
+    }
+
+    func testNavigationDirectiveLeavesInPlaceStatesToTheirOwningViews() {
+        for state in [
+            "deepen_signal",
+            "build_ignite",
+            "completed",
+            "unknown_state",
+        ] {
+            XCTAssertNil(
+                OnboardingGuideNavigationDirective.forState(state),
+                "\(state) must not force a primary-tab route"
+            )
+        }
+    }
+
     func testPrimaryTabDestinationOnlyRoutesStatesThatOwnAPrimaryTab() {
         XCTAssertEqual(
             OnboardingGuidePrimaryTabDestination.forState("elicit_signal"),
@@ -20,15 +204,17 @@ final class OnboardingGuideModelsTests: XCTestCase {
             ),
             .library
         )
-        XCTAssertNil(
+        XCTAssertEqual(
             OnboardingGuidePrimaryTabDestination.forState(
                 "product_spark_intro"
-            )
+            ),
+            .flow
         )
-        XCTAssertNil(
+        XCTAssertEqual(
             OnboardingGuidePrimaryTabDestination.forState(
                 "product_merge_preview"
-            )
+            ),
+            .library
         )
     }
 

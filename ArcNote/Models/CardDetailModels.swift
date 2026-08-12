@@ -4,6 +4,7 @@ import Combine
 // MARK: 卡片详细信息模型
 struct CardDetail: Codable {
     let id: String
+    let noteDocumentVersionID: String?
     let title: String?
     let content: String
     let contentJSON: String?
@@ -28,6 +29,7 @@ struct CardDetail: Codable {
     
     enum CodingKeys: String, CodingKey {
         case id, title, content, tags, rate
+        case noteDocumentVersionID = "note_document_version_id"
         case contentJSON = "content_json"
         case editorAtmosphere = "editor_atmosphere"
         case contentHash = "content_hash"
@@ -50,6 +52,10 @@ struct CardDetail: Codable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(String.self, forKey: .id)
+        noteDocumentVersionID = try container.decodeIfPresent(
+            String.self,
+            forKey: .noteDocumentVersionID
+        )
         title = try container.decodeIfPresent(String.self, forKey: .title)
         content = try container.decode(String.self, forKey: .content)
         contentJSON = try container.decodeIfPresent(String.self, forKey: .contentJSON)

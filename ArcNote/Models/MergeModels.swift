@@ -5,69 +5,49 @@ import CoreFlow
 // MARK: 选择的卡片模型
 struct SelectedCard {
     let id: String
+    let versionID: String
     let content: String
 }
 
 // MARK: Go merge API DTOs
 struct MergeSourceRef: Codable {
     let assetId: String
-    let versionId: String?
+    let versionId: String
 }
 
 struct MergeCardsRequest: Codable {
     let sources: [MergeSourceRef]
-    let capability: String
     let idemKey: String
-    let context: [String: MergeJSONValue]
 
     init(selectedCards: [SelectedCard]) {
-        self.sources = selectedCards.map { MergeSourceRef(assetId: $0.id, versionId: nil) }
-        self.capability = "auto"
+        self.sources = selectedCards.map {
+            MergeSourceRef(assetId: $0.id, versionId: $0.versionID)
+        }
         self.idemKey = "ios-merge-\(UUID().uuidString)"
-        self.context = [
-            "client": .string("ios"),
-            "surface": .string("merge_preview")
-        ]
     }
 
     init(
         sources: [MergeSourceRef],
-        capability: String,
-        idemKey: String,
-        context: [String: MergeJSONValue]
+        idemKey: String
     ) {
         self.sources = sources
-        self.capability = capability
         self.idemKey = idemKey
-        self.context = context
     }
 }
 
-struct MergeCommitSummaryDTO: Codable {
-    let commitId: String
-    let status: String
-    let targetType: String
-}
-
 struct MergeJobResponse: Codable {
+    let schemaVersion: String
     let jobId: String
     let status: String
-    let capability: String
-    let selectedCap: String?
-    let planScore: Double?
-    let artifactId: String?
-    let latestCommit: MergeCommitSummaryDTO?
-    let failStage: String?
-    let errorCode: String?
-    let failureReason: String?
+    let route: String
+    let surpriseKind: String
+    let artifactId: String
 }
 
 struct MergeCardDocumentDTO: Codable {
     let schemaVersion: String
-    let title: String?
-    let subtitle: String?
     let blocks: [MergeBlockNodeDTO]
-    let meta: [String: MergeJSONValue]?
+    let meta: [String: MergeJSONValue]
 }
 
 struct MergeBlockNodeDTO: Codable {
@@ -78,51 +58,44 @@ struct MergeBlockNodeDTO: Codable {
     let children: [MergeBlockNodeDTO]?
 }
 
-struct MergeBlockFragmentDTO: Codable {
-    let fragmentId: String
-    let schemaVersion: String
-    let blocks: [MergeBlockNodeDTO]
-    let insertMode: String?
-    let meta: [String: MergeJSONValue]?
-}
-
 struct MergeArtifactResponse: Codable {
+    let schemaVersion: String
     let artifactId: String
     let jobId: String
-    let capabilityId: String
-    let outputKind: String
-    let doc: MergeCardDocumentDTO
-    let fragments: [MergeBlockFragmentDTO]?
-    let meta: [String: MergeJSONValue]?
+    let route: String
+    let surpriseKind: String
+    let sourceSnapshotHash: String
+    let latestRevision: Int
+    let latestHash: String
+    let document: MergeCardDocumentDTO
+    let sourceTray: [String: MergeJSONValue]
+    let alignment: [String: MergeJSONValue]
 }
 
 struct CommitMergeJobRequest: Codable {
+    let revision: Int
+    let artifactHash: String
     let idemKey: String
-    let target: NewCardCommitTarget
 }
 
-struct NewCardCommitTarget: Codable {
-    let targetType: String
-    let spaceId: String?
-    let titleOverride: String?
-
-    init(spaceId: String? = nil, titleOverride: String?) {
-        self.targetType = "new_card"
-        self.spaceId = spaceId
-        self.titleOverride = titleOverride
-    }
+struct CancelMergeJobRequest: Codable {
+    let idemKey: String
 }
 
 struct MergeCommitResponse: Codable {
+    let schemaVersion: String
     let commitId: String
-    let status: String
-    let targetType: String
-    let assetId: String?
-    let versionId: String?
-    let activityId: String?
-    let logId: String?
-    let errorCode: String?
-    let backgroundMediaRef: String?
+    let jobId: String
+    let artifactId: String
+    let revision: Int
+    let artifactHash: String
+    let projectionContract: String
+    let noteAssetId: String
+    let assetVersionId: String
+    let noteDocumentVersionId: String
+    let noteDocHash: String
+    let activityId: String
+    let actionLogId: String
 }
 
 struct MergeCapabilityDTO: Codable {
@@ -142,11 +115,10 @@ struct MergeCapabilitiesResponse: Codable {
 extension MergeArtifactResponse {
     func toPreviewResponse() -> MergePreviewResponse {
         let now = ISO8601DateFormatter().string(from: Date())
-        let plainText = doc.plainText()
-        let title = doc.title?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let plainText = document.plainText()
         let newCard = NewCard(
             id: artifactId,
-            title: title?.isEmpty == false ? title! : "Merged Insight",
+            title: "Merged Insight",
             content: plainText.isEmpty ? "Merged insight is ready." : plainText,
             contentHash: "",
             isPublic: false,

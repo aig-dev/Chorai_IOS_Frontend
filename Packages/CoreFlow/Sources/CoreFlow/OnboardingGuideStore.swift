@@ -21,6 +21,14 @@ public final class OnboardingGuideStore: ObservableObject {
         return session?.scene
     }
 
+    public var contextualTipState: String? {
+        guard phase == .active,
+              session?.flowVersion == Self.canonicalFlowVersion else {
+            return nil
+        }
+        return session?.state
+    }
+
     private enum State {
         static let elicitSignal = "elicit_signal"
         static let deepenSignal = "deepen_signal"

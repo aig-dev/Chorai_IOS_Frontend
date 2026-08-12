@@ -543,6 +543,7 @@ private struct LegacyMergeView: View {
         
         return MergeCard(
             id: cardDetail.id,
+            versionID: cardDetail.noteDocumentVersionID,
             date: displayDate,
             content: cardDetail.content,
             tags: cardDetail.tags,
@@ -568,17 +569,39 @@ private struct LegacyMergeView: View {
             print("头部卡片数据未加载")
             return
         }
+        guard let anchorVersionID = cardDetail.noteDocumentVersionID,
+              !anchorVersionID.isEmpty else {
+            mergeErrorMessage = "Card version unavailable"
+            return
+        }
         
         // 构建选择的卡片列表，包含头部卡片
         var selectedCardsList: [SelectedCard] = []
         
         // 添加头部卡片（当前卡片）
-        selectedCardsList.append(SelectedCard(id: cardDetail.id, content: cardDetail.content))
+        selectedCardsList.append(
+            SelectedCard(
+                id: cardDetail.id,
+                versionID: anchorVersionID,
+                content: cardDetail.content
+            )
+        )
         
         // 添加选中的链接卡片
         for cardId in selectedCards {
             if let linkedCard = allCards.first(where: { $0.id == cardId }) {
-                selectedCardsList.append(SelectedCard(id: linkedCard.id, content: linkedCard.content))
+                guard let versionID = linkedCard.versionID,
+                      !versionID.isEmpty else {
+                    mergeErrorMessage = "Card version unavailable"
+                    return
+                }
+                selectedCardsList.append(
+                    SelectedCard(
+                        id: linkedCard.id,
+                        versionID: versionID,
+                        content: linkedCard.content
+                    )
+                )
             }
         }
         
@@ -664,15 +687,35 @@ private struct LegacyMergeView: View {
         guard let cardDetail = cardDetailManager.cardDetail else {
             return []
         }
+        guard let anchorVersionID = cardDetail.noteDocumentVersionID,
+              !anchorVersionID.isEmpty else {
+            return []
+        }
         
         var selectedCardsList: [SelectedCard] = []
         
-        selectedCardsList.append(SelectedCard(id: cardDetail.id, content: cardDetail.content))
+        selectedCardsList.append(
+            SelectedCard(
+                id: cardDetail.id,
+                versionID: anchorVersionID,
+                content: cardDetail.content
+            )
+        )
         
         // 添加选中的链接卡片
         for cardId in selectedCards {
             if let linkedCard = allCards.first(where: { $0.id == cardId }) {
-                selectedCardsList.append(SelectedCard(id: linkedCard.id, content: linkedCard.content))
+                guard let versionID = linkedCard.versionID,
+                      !versionID.isEmpty else {
+                    return []
+                }
+                selectedCardsList.append(
+                    SelectedCard(
+                        id: linkedCard.id,
+                        versionID: versionID,
+                        content: linkedCard.content
+                    )
+                )
             }
         }
         
@@ -718,6 +761,7 @@ private struct LegacyMergeView: View {
         
         return MergeCard(
             id: searchCard.id,
+            versionID: searchCard.noteDocumentVersionID,
             date: displayDate,
             content: searchCard.content,
             tags: searchCard.tags,
@@ -754,6 +798,7 @@ private struct LegacyMergeView: View {
         
         return MergeCard(
             id: userAllCard.id,
+            versionID: userAllCard.noteDocumentVersionID,
             date: displayDate,
             content: userAllCard.content,
             tags: userAllCard.tags,
@@ -769,6 +814,7 @@ private struct LegacyMergeView: View {
 // MARK: - Merge Card Data Model
 struct MergeCard: Identifiable {
     let id: String
+    let versionID: String?
     let date: String
     let content: String
     let tags: [String]
@@ -778,8 +824,9 @@ struct MergeCard: Identifiable {
     let favoriteCount: Int
     let rate: Int
     
-    init(id: String, date: String, content: String, tags: [String], isUserCard: Bool, userName: String? = nil, avatarUrl: String? = nil, favoriteCount: Int = 0, rate: Int = 0) {
+    init(id: String, versionID: String? = nil, date: String, content: String, tags: [String], isUserCard: Bool, userName: String? = nil, avatarUrl: String? = nil, favoriteCount: Int = 0, rate: Int = 0) {
         self.id = id
+        self.versionID = versionID
         self.date = date
         self.content = content
         self.tags = tags

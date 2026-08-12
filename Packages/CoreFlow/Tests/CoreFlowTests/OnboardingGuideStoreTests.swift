@@ -18,6 +18,7 @@ final class OnboardingGuideStoreTests: XCTestCase {
         XCTAssertEqual(store.session?.state, "elicit_signal")
         XCTAssertTrue(store.shouldGuideLibraryCreation)
         XCTAssertNotNil(store.guideScene)
+        XCTAssertEqual(store.contextualTipState, "elicit_signal")
     }
 
     @MainActor
@@ -47,7 +48,13 @@ final class OnboardingGuideStoreTests: XCTestCase {
             .success(status(needs: true, activeSessionID: "onb_web"))
         ]
         service.currentResults = [
-            .success(session(id: "onb_web", version: 2, state: "opening_statement"))
+            .success(
+                session(
+                    id: "onb_web",
+                    version: 2,
+                    state: "product_spark_intro"
+                )
+            )
         ]
         let store = makeStore(service: service)
 
@@ -56,6 +63,7 @@ final class OnboardingGuideStoreTests: XCTestCase {
 
         XCTAssertEqual(store.phase, .deferred(flowVersion: 2))
         XCTAssertNil(store.guideScene)
+        XCTAssertNil(store.contextualTipState)
         XCTAssertTrue(service.startFlowVersions.isEmpty)
         XCTAssertTrue(service.responses.isEmpty)
         XCTAssertTrue(service.skippedSessionIDs.isEmpty)

@@ -3121,13 +3121,7 @@ final class ArcNoteUITests: XCTestCase {
         typeInCardEditorBody(signal)
         closeNewNoteEditor()
 
-        waitFor("screen.home.content", timeout: 15)
-        XCTAssertFalse(
-            exists("screen.flow.content", timeout: 1),
-            "Closing the onboarding editor must leave Library selected"
-        )
-        tap("tab.flow")
-
+        waitFor("screen.flow.content", timeout: 30)
         waitForOnboardingAnchor(
             "onboarding.state",
             value: "product_explore_card",
@@ -3137,9 +3131,19 @@ final class ArcNoteUITests: XCTestCase {
             .label
             .trimmingCharacters(in: .whitespacesAndNewlines)
         XCTAssertFalse(visibleCardID.isEmpty)
+        waitFor("onboarding.tip.flow-card", timeout: 15)
         captureVisual("onboarding-flow-card")
 
+        tap("explore.search.open.test-hook")
+        waitForMissing("onboarding.tip.flow-card", timeout: 10)
+        tap("explore.search.back")
+        XCTAssertFalse(
+            exists("onboarding.tip.flow-card", timeout: 2),
+            "A non-target search action must dismiss the Flow tip"
+        )
+
         waitFor("flow.card.\(visibleCardID)").swipeLeft()
+        waitForMissing("onboarding.tip.flow-card", timeout: 15)
         waitForOnboardingAnchor(
             "onboarding.state",
             value: "product_spark_intro",
@@ -3190,6 +3194,8 @@ final class ArcNoteUITests: XCTestCase {
     }
 
     func testCanonicalOnboardingCompletesRealGoFirstLoop() throws {
+        let deliberateSparkResumeMismatch =
+            "ast_deliberate_resume_mismatch"
         let smoke = try requireFreshSmokeSession()
         let started = try restartSmokeOnboarding(
             token: smoke.token,
@@ -3205,6 +3211,9 @@ final class ArcNoteUITests: XCTestCase {
         app.launchEnvironment[
             "CHORAI_UI_TEST_MERGE_SESSION_SCOPE"
         ] = sparkSessionScope
+        app.launchEnvironment[
+            "CHORAI_UI_TEST_ONBOARDING_SPARK_RESUME_PROPOSED_CARD_ID"
+        ] = deliberateSparkResumeMismatch
         launchAuthenticatedApp()
 
         var noteCardID: String?
@@ -3229,18 +3238,13 @@ final class ArcNoteUITests: XCTestCase {
         let signal = "iOS complete loop \(Int(Date().timeIntervalSince1970))"
         tap("note.create")
         typeInCardEditorBody(signal)
-        closeNewNoteEditor()
-        waitFor("screen.home.content", timeout: 15)
-        XCTAssertFalse(
-            exists("screen.flow.content", timeout: 1),
-            "Closing the onboarding editor must leave Library selected"
-        )
+        saveCardEditorAndExpectDismissal()
         noteCardID = waitFor("note.created-card-id", timeout: 30)
             .label
             .trimmingCharacters(in: .whitespacesAndNewlines)
         XCTAssertFalse(noteCardID?.isEmpty ?? true)
 
-        tap("tab.flow")
+        waitFor("screen.flow.content", timeout: 30)
         waitForOnboardingAnchor(
             "onboarding.state",
             value: "product_explore_card",
@@ -3249,7 +3253,9 @@ final class ArcNoteUITests: XCTestCase {
         let firstFlowCardID = waitFor("flow.visible-card.id", timeout: 30)
             .label
             .trimmingCharacters(in: .whitespacesAndNewlines)
+        waitFor("onboarding.tip.flow-card", timeout: 15)
         waitFor("flow.card.\(firstFlowCardID)").swipeLeft()
+        waitForMissing("onboarding.tip.flow-card", timeout: 15)
         waitForOnboardingAnchor(
             "onboarding.state",
             value: "product_spark_intro",
@@ -3267,16 +3273,42 @@ final class ArcNoteUITests: XCTestCase {
             token: smoke.token,
             timeout: 30
         )
-        captureVisual("onboarding-spark-save")
-
-        let sparkResultID = try waitForCompactUnfavoritedSparkResult(
-            token: smoke.token
-        )
-        waitFor("onboarding.tip.spark-favorite", timeout: 15)
+        let sparkResultID = waitFor(
+            "spark.visible-card.id",
+            timeout: 30
+        ).label.trimmingCharacters(in: .whitespacesAndNewlines)
+        deleteFavorite(id: sparkResultID, token: smoke.token)
+        savedSparkCardID = sparkResultID
         let mergeSearchQuery = mergeCandidateSearchQuery(
             for: try fetchSmokeCard(id: sparkResultID, token: smoke.token)
         )
-        savedSparkCardID = sparkResultID
+
+        app.terminate()
+        app.launch()
+        waitForSessionPhase("verified", timeout: 30)
+        waitForOnboardingAnchor(
+            "onboarding.state",
+            value: "product_save_material",
+            timeout: 30
+        )
+        waitFor("screen.flow.content", timeout: 30)
+        waitFor("onboarding.tip.spark-resume", timeout: 15)
+        XCTAssertNotEqual(deliberateSparkResumeMismatch, sparkSourceID)
+        tap("onboarding.spark.resume.test-hook")
+        XCTAssertEqual(
+            waitFor("spark.source.card-id", timeout: 30).label
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+            sparkSourceID,
+            "Resume must reopen the persisted Spark root, not the new Flow card"
+        )
+        XCTAssertEqual(
+            waitFor("spark.visible-card.id", timeout: 30).label
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+            sparkResultID,
+            "Relaunch must restore the same Spark result before the save step"
+        )
+        waitFor("onboarding.tip.spark-favorite", timeout: 15)
+        captureVisual("onboarding-spark-save")
         waitForButton("spark.favorite.\(sparkResultID)").tap()
         waitForMissing("onboarding.tip.spark-favorite", timeout: 15)
         waitForAssetStatus(
@@ -3291,9 +3323,6 @@ final class ArcNoteUITests: XCTestCase {
             token: smoke.token,
             timeout: 30
         )
-        tap("spark.back")
-        waitFor("screen.flow.content", timeout: 30)
-        tap("tab.library")
         waitFor("screen.home.content", timeout: 30)
         waitForOnboardingAnchor(
             "onboarding.state",
@@ -3307,28 +3336,21 @@ final class ArcNoteUITests: XCTestCase {
             return
         }
         waitFor("card.home.\(noteCardID)", timeout: 30)
+        waitFor("onboarding.tip.library-merge-entry", timeout: 15)
         tap("home.card.menu.\(noteCardID)")
-        tap("popup-menu.item.merge")
-        waitFor("screen.merge.loaded", timeout: 30)
-        tap("merge.back")
-        waitForMissing("screen.merge.loaded", timeout: 20)
-        waitFor("screen.home.content", timeout: 30)
-        waitForSmokeOnboardingState(
-            "product_merge_intro",
-            token: smoke.token,
-            timeout: 15
-        )
-
-        tap("home.card.menu.\(noteCardID)")
-        tap("popup-menu.item.merge")
+        waitForMissing("onboarding.tip.library-merge-entry", timeout: 15)
+        tap("popup-menu.item.edit")
+        waitFor("cardEditorContent", timeout: 20)
+        openEditorCardActions()
+        waitForEditorCardAction("cardEditorActionMerge").tap()
         waitFor("screen.merge.loaded", timeout: 30)
         waitForMergeCardsLoaded()
-        let mergeSearchInput = waitFor("merge.search.input", timeout: 10)
+        let mergeSearchInput = waitForMergeSelectionReady(timeout: 45)
         mergeSearchInput.tap()
         mergeSearchInput.typeText(mergeSearchQuery)
         waitFor("merge.card.\(sparkResultID)", timeout: 30)
-        tap("merge.card.\(sparkResultID)")
         dismissKeyboard()
+        tap("merge.card.\(sparkResultID)")
         waitFor("onboarding.tip.merge", timeout: 15)
         tap("merge.action")
         waitForMissing("onboarding.tip.merge", timeout: 15)
@@ -3343,32 +3365,12 @@ final class ArcNoteUITests: XCTestCase {
         captureVisual("onboarding-merge-preview")
         tap("merge.commit")
 
-        committedCardID = waitFor("merge.completed.asset-id", timeout: 90)
+        waitForMissing("screen.merge.loaded", timeout: 20)
+        waitFor("screen.home.content", timeout: 30)
+        committedCardID = waitFor("merge.committed-card-id", timeout: 30)
             .label
             .trimmingCharacters(in: .whitespacesAndNewlines)
         XCTAssertNotEqual(committedCardID, noteCardID)
-        waitForSmokeOnboardingState(
-            "product_library_intro",
-            token: smoke.token,
-            timeout: 30
-        )
-        let beforeLibraryReturn = try fetchSmokeOnboardingStatus(
-            token: smoke.token
-        )
-        XCTAssertFalse(
-            beforeLibraryReturn.completed,
-            "An uncommitted Merge dismissal must not complete onboarding while the next Merge is still presented"
-        )
-        tap("merge.back")
-        waitForMissing("screen.merge.loaded", timeout: 20)
-        waitFor("screen.home.content", timeout: 30)
-        XCTAssertEqual(
-            waitFor("merge.committed-card-id", timeout: 10)
-                .label
-                .trimmingCharacters(in: .whitespacesAndNewlines),
-            committedCardID,
-            "The Library presenter must receive the committed Merge card ID"
-        )
         waitForOnboardingAnchor(
             "onboarding.phase",
             value: "completed",
@@ -3378,6 +3380,10 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertFalse(
             exists("screen.flow.content", timeout: 1),
             "Closing a Library-owned Merge must reveal Library"
+        )
+        XCTAssertFalse(
+            exists("cardEditorContent", timeout: 1),
+            "Guided Merge must also close its owning Card Editor"
         )
 
         let status = try fetchSmokeOnboardingStatus(token: smoke.token)
@@ -3412,6 +3418,18 @@ final class ArcNoteUITests: XCTestCase {
         )
         XCTAssertFalse(exists("record.open", timeout: 2))
         XCTAssertFalse(exists("onboarding.guide", timeout: 2))
+        for tip in [
+            "onboarding.tip.library",
+            "onboarding.tip.flow-card",
+            "onboarding.tip.flow-spark",
+            "onboarding.tip.spark-resume",
+            "onboarding.tip.spark-favorite",
+            "onboarding.tip.library-merge-entry",
+            "onboarding.tip.merge",
+            "onboarding.tip.merge-resume",
+        ] {
+            XCTAssertFalse(exists(tip, timeout: 0.2), "Unexpected v1 tip: \(tip)")
+        }
 
         let unchanged = try fetchCurrentSmokeOnboarding(token: smoke.token)
         XCTAssertEqual(unchanged.sessionID, started.sessionID)
@@ -7598,6 +7616,30 @@ final class ArcNoteUITests: XCTestCase {
         )
     }
 
+    private func saveCardEditorAndExpectDismissal(
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let leading = waitForButton(
+            "cardEditorLeadingAction",
+            file: file,
+            line: line
+        )
+        XCTAssertTrue(
+            ["Save note", "Retry saving note"].contains(leading.label),
+            "Expected a commit action, got \(leading.label)",
+            file: file,
+            line: line
+        )
+        leading.tap()
+        waitForMissing(
+            "cardEditorContent",
+            timeout: 30,
+            file: file,
+            line: line
+        )
+    }
+
     private func closeNewNoteEditor(
         file: StaticString = #filePath,
         line: UInt = #line
@@ -8130,11 +8172,12 @@ final class ArcNoteUITests: XCTestCase {
         file: StaticString = #filePath,
         line: UInt = #line
     ) {
-        let deadline = Date().addingTimeInterval(timeout)
+        var deadline = Date().addingTimeInterval(timeout)
         let ready = app.descendants(matching: .any)["merge.artifact.ready"]
         let paused = app.descendants(matching: .any)["merge.phase.paused"]
         let failed = app.descendants(matching: .any)["merge.phase.failed"]
         let retry = app.descendants(matching: .any)["merge.retry"]
+        let jobID = app.descendants(matching: .any)["merge.job.id"]
         var retryCount = 0
         var lastStatus = "missing"
 
@@ -8142,22 +8185,56 @@ final class ArcNoteUITests: XCTestCase {
             if ready.exists {
                 return
             }
-            if paused.exists {
+            if paused.exists || failed.exists {
                 if retryCount < 2, retry.waitForExistence(timeout: 3) {
+                    let previousJobID = jobID.exists
+                        ? jobID.label.trimmingCharacters(
+                            in: .whitespacesAndNewlines
+                        )
+                        : ""
                     retry.tap()
                     retryCount += 1
-                    RunLoop.current.run(until: Date().addingTimeInterval(0.5))
+                    let transitionDeadline = Date().addingTimeInterval(10)
+                    var didBeginRetry = false
+                    while Date() < transitionDeadline {
+                        if ready.exists {
+                            return
+                        }
+                        let currentJobID = jobID.exists
+                            ? jobID.label.trimmingCharacters(
+                                in: .whitespacesAndNewlines
+                            )
+                            : ""
+                        if !paused.exists && !failed.exists {
+                            didBeginRetry = true
+                            break
+                        }
+                        if !previousJobID.isEmpty,
+                           !currentJobID.isEmpty,
+                           currentJobID != previousJobID {
+                            didBeginRetry = true
+                            break
+                        }
+                        RunLoop.current.run(
+                            until: Date().addingTimeInterval(0.25)
+                        )
+                    }
+                    guard didBeginRetry else {
+                        XCTFail(
+                            "Merge retry did not leave its recoverable state",
+                            file: file,
+                            line: line
+                        )
+                        return
+                    }
+                    deadline = Date().addingTimeInterval(timeout)
                     continue
                 }
                 XCTFail(
-                    "Merge remained paused after \(retryCount) retries",
+                    "Merge remained recoverable after \(retryCount) retries",
                     file: file,
                     line: line
                 )
-                return
-            }
-            if failed.exists {
-                XCTFail("Merge failed before artifact became ready", file: file, line: line)
                 return
             }
             let status = app.descendants(matching: .any)["merge.job.status"]
@@ -8270,6 +8347,48 @@ final class ArcNoteUITests: XCTestCase {
         }
 
         XCTFail("Timed out waiting for merge candidate cards to load", file: file, line: line)
+    }
+
+    @discardableResult
+    private func waitForMergeSelectionReady(
+        timeout: TimeInterval = 45,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) -> XCUIElement {
+        let deadline = Date().addingTimeInterval(timeout)
+        let search = app.descendants(matching: .any)["merge.search.input"]
+        let paused = app.descendants(matching: .any)["merge.phase.paused"]
+        let failed = app.descendants(matching: .any)["merge.phase.failed"]
+        let retry = app.descendants(matching: .any)["merge.retry"]
+        var retryCount = 0
+
+        while Date() < deadline {
+            if search.exists {
+                return search
+            }
+            if paused.exists, retryCount < 3, retry.waitForExistence(timeout: 2) {
+                retry.tap()
+                retryCount += 1
+                RunLoop.current.run(until: Date().addingTimeInterval(0.5))
+                continue
+            }
+            if failed.exists {
+                XCTFail(
+                    "Merge failed before selection became ready",
+                    file: file,
+                    line: line
+                )
+                return search
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.3))
+        }
+
+        XCTFail(
+            "Merge selection did not become ready after \(retryCount) retries",
+            file: file,
+            line: line
+        )
+        return search
     }
 
     private func waitForEditProfileAvatarUploadStatus(_ expectedStatus: String, timeout: TimeInterval = 30, file: StaticString = #filePath, line: UInt = #line) {
@@ -8861,7 +8980,8 @@ final class ArcNoteUITests: XCTestCase {
         file: StaticString = #filePath,
         line: UInt = #line
     ) throws -> SmokeSession {
-        if let session = fetchFreshSmokeSession() {
+        if let session = fetchFreshSmokeSession()
+            ?? fetchLocalPhoneSmokeSession() {
             return session
         }
         XCTFail(
@@ -10515,14 +10635,25 @@ final class ArcNoteUITests: XCTestCase {
             return session
         }
 
+        var registrationBody = [
+            "phone": phone,
+            "password": password,
+        ]
+        if let accessCode = environment["CHORAI_UI_TEST_ACCESS_CODE"],
+           !accessCode.isEmpty {
+            registrationBody["access_code"] = accessCode
+            registrationBody["idempotency_key"] = environment[
+                "CHORAI_UI_TEST_ACCESS_IDEMPOTENCY_KEY"
+            ] ?? "ios-phone-register-\(phone.filter(\.isNumber))"
+        } else {
+            registrationBody["invite_code"] = environment[
+                "CHORAI_UI_TEST_INVITE_CODE"
+            ] ?? "LOCAL-OK"
+        }
+
         return request(
             path: "/api/auth/phone/register",
-            body: [
-                "phone": phone,
-                "password": password,
-                "invite_code": environment["CHORAI_UI_TEST_INVITE_CODE"]
-                    ?? "LOCAL-OK"
-            ]
+            body: registrationBody
         )
     }
 

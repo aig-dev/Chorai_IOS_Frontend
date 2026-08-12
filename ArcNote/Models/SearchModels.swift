@@ -37,6 +37,7 @@ struct SearchAuthor: Codable {
 // MARK: 搜索结果卡片模型
 struct SearchCard: Codable, Identifiable {
     let id: String
+    let noteDocumentVersionID: String?
     let title: String?
     let content: String
     let contentJSON: String?
@@ -62,6 +63,7 @@ struct SearchCard: Codable, Identifiable {
 
     enum CodingKeys: String, CodingKey {
         case id
+        case noteDocumentVersionID = "note_document_version_id"
         case title
         case content
         case contentJSON = "content_json"
@@ -89,6 +91,10 @@ struct SearchCard: Codable, Identifiable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(String.self, forKey: .id)
+        noteDocumentVersionID = try container.decodeIfPresent(
+            String.self,
+            forKey: .noteDocumentVersionID
+        )
         title = try container.decodeIfPresent(String.self, forKey: .title)
         content = try container.decode(String.self, forKey: .content)
         contentJSON = try container.decodeIfPresent(String.self, forKey: .contentJSON)
@@ -118,6 +124,10 @@ struct SearchCard: Codable, Identifiable {
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(id, forKey: .id)
+        try container.encodeIfPresent(
+            noteDocumentVersionID,
+            forKey: .noteDocumentVersionID
+        )
         try container.encodeIfPresent(title, forKey: .title)
         try container.encode(content, forKey: .content)
         try container.encodeIfPresent(contentJSON, forKey: .contentJSON)

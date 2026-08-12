@@ -164,6 +164,16 @@ final class SparkContinuationSourceContractTests: XCTestCase {
         )
     }
 
+    func testSparkFavoriteCalloutKeepsReadableMobileWidth() throws {
+        let card = try sparkResultCardSource()
+
+        XCTAssertTrue(card.contains("tip: .sparkFavorite"))
+        XCTAssertTrue(
+            card.contains(".frame(width: 220, alignment: .leading)"),
+            "The callout is hosted by a 44-point footer button, so it needs an explicit readable width"
+        )
+    }
+
     func testSparkFooterLikeAndCommentsAreInteractive() throws {
         let continuation = try source(
             at: "ArcNote/CoreFlow/SparkContinuationViews.swift"

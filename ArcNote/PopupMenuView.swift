@@ -30,6 +30,10 @@ private struct CardNavigationMergeCompletedKey: EnvironmentKey {
     static let defaultValue: (String) -> Void = { _ in }
 }
 
+private struct CardNavigationRoutePresentationChangedKey: EnvironmentKey {
+    static let defaultValue: (Bool) -> Void = { _ in }
+}
+
 extension EnvironmentValues {
     var navigateCard: (CardNavigationRoute) -> Void {
         get { self[NavigateCardActionKey.self] }
@@ -50,6 +54,11 @@ extension EnvironmentValues {
         get { self[CardNavigationMergeCompletedKey.self] }
         set { self[CardNavigationMergeCompletedKey.self] = newValue }
     }
+
+    var cardNavigationRoutePresentationChanged: (Bool) -> Void {
+        get { self[CardNavigationRoutePresentationChangedKey.self] }
+        set { self[CardNavigationRoutePresentationChangedKey.self] = newValue }
+    }
 }
 
 private struct CardNavigationDestination: View {
@@ -57,9 +66,18 @@ private struct CardNavigationDestination: View {
     let onboardingStore: OnboardingGuideStore?
     let contextualTipStore: ContextualGuideTipStore?
     let mergeCompleted: (String) -> Void
+    let routePresentationChanged: (Bool) -> Void
+
+    var body: some View {
+        destination
+            .environment(\.cardNavigationOnboardingStore, onboardingStore)
+            .environment(\.cardNavigationContextualTipStore, contextualTipStore)
+            .environment(\.cardNavigationMergeCompleted, mergeCompleted)
+            .environment(\.cardNavigationRoutePresentationChanged, routePresentationChanged)
+    }
 
     @ViewBuilder
-    var body: some View {
+    private var destination: some View {
         switch route {
         case .detail(let cardID):
             DetailView(cardId: cardID)
@@ -90,17 +108,33 @@ private struct CardNavigationDestination: View {
 }
 
 private struct CardNavigationHostModifier: ViewModifier {
+    @Environment(\.dismiss) private var dismissHost
     @Environment(\.cardNavigationOnboardingStore) private var onboardingStore
     @Environment(\.cardNavigationContextualTipStore) private var contextualTipStore
     @Environment(\.cardNavigationMergeCompleted) private var mergeCompleted
+    @Environment(\.cardNavigationRoutePresentationChanged)
+    private var routePresentationChanged
     @State private var presentedRoute: CardNavigationRoute?
+    @State private var shouldDismissHostAfterPresentedRoute = false
 
     private var isPresentingRoute: Binding<Bool> {
         Binding(
             get: { presentedRoute != nil },
             set: { isPresented in
                 if !isPresented {
+                    let wasPresentingRoute = presentedRoute != nil
+                    let shouldDismissHost =
+                        shouldDismissHostAfterPresentedRoute
                     presentedRoute = nil
+                    shouldDismissHostAfterPresentedRoute = false
+                    if wasPresentingRoute {
+                        routePresentationChanged(false)
+                    }
+                    if shouldDismissHost {
+                        DispatchQueue.main.async {
+                            dismissHost()
+                        }
+                    }
                 }
             }
         )
@@ -115,14 +149,30 @@ private struct CardNavigationHostModifier: ViewModifier {
                         route: presentedRoute,
                         onboardingStore: onboardingStore,
                         contextualTipStore: contextualTipStore,
-                        mergeCompleted: mergeCompleted
+                        mergeCompleted: handlePresentedMergeCompleted,
+                        routePresentationChanged: routePresentationChanged
                     )
                 }
             }
     }
 
     private func present(_ route: CardNavigationRoute) {
+        if presentedRoute == nil {
+            routePresentationChanged(true)
+        }
         presentedRoute = route
+    }
+
+    private func handlePresentedMergeCompleted(_ cardID: String) {
+        if case .merge = presentedRoute {
+            shouldDismissHostAfterPresentedRoute =
+                OnboardingGuideMergeExitPolicy
+                    .shouldDismissOwningCardRoute(
+                        onboardingIsActive: onboardingStore?.phase == .active,
+                        onboardingState: onboardingStore?.contextualTipState
+                    )
+        }
+        mergeCompleted(cardID)
     }
 }
 
@@ -174,12 +224,14 @@ struct PopupMenuModifier: ViewModifier {
     let isSparkEnabled: Bool
     let onSpark: (() -> Void)?
     let onRouteDismissed: (CardNavigationDismissal) -> Void
+    let onRoutePresentationChanged: (Bool) -> Void
 
     private var isPresentingRoute: Binding<Bool> {
         Binding(
             get: { presentedRoute != nil },
             set: { isPresented in
                 if !isPresented {
+                    let wasPresentingRoute = presentedRoute != nil
                     let dismissal = presentedRoute.map {
                         CardNavigationDismissal(
                             route: $0,
@@ -188,6 +240,9 @@ struct PopupMenuModifier: ViewModifier {
                     }
                     presentedRoute = nil
                     didCommitPresentedMerge = false
+                    if wasPresentingRoute {
+                        onRoutePresentationChanged(false)
+                    }
                     if let dismissal {
                         onRouteDismissed(dismissal)
                     }
@@ -220,7 +275,9 @@ struct PopupMenuModifier: ViewModifier {
                         route: presentedRoute,
                         onboardingStore: onboardingStore,
                         contextualTipStore: contextualTipStore,
-                        mergeCompleted: handlePresentedMergeCompleted
+                        mergeCompleted: handlePresentedMergeCompleted,
+                        routePresentationChanged:
+                            onRoutePresentationChanged
                     )
                 }
             }
@@ -229,6 +286,7 @@ struct PopupMenuModifier: ViewModifier {
     private func present(_ route: CardNavigationRoute) {
         didCommitPresentedMerge = false
         presentedRoute = route
+        onRoutePresentationChanged(true)
     }
 
     private func handlePresentedMergeCompleted(_ cardID: String) {
@@ -586,7 +644,8 @@ extension View {
         isOwnCard: Bool = false,
         isSparkEnabled: Bool = true,
         onSpark: (() -> Void)? = nil,
-        onRouteDismissed: @escaping (CardNavigationDismissal) -> Void = { _ in }
+        onRouteDismissed: @escaping (CardNavigationDismissal) -> Void = { _ in },
+        onRoutePresentationChanged: @escaping (Bool) -> Void = { _ in }
     ) -> some View {
         self.modifier(
             PopupMenuModifier(
@@ -596,7 +655,8 @@ extension View {
                 isOwnCard: isOwnCard,
                 isSparkEnabled: isSparkEnabled,
                 onSpark: onSpark,
-                onRouteDismissed: onRouteDismissed
+                onRouteDismissed: onRouteDismissed,
+                onRoutePresentationChanged: onRoutePresentationChanged
             )
         )
     }
