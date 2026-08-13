@@ -959,10 +959,25 @@ struct MergeCardView: View {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .stroke(
                     isSelected
-                        ? Color(red: 198 / 255, green: 89 / 255, blue: 231 / 255)
+                        ? Color.white.opacity(0.70)
                         : Color.clear,
-                    lineWidth: 2
+                    lineWidth: 1.5
                 )
+        }
+        .overlay(alignment: .topTrailing) {
+            if isSelectable, isSelected {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 26, height: 26)
+                    .background(.black.opacity(0.42), in: Circle())
+                    .overlay {
+                        Circle()
+                            .stroke(Color.white.opacity(0.40), lineWidth: 1)
+                    }
+                    .padding(12)
+                    .accessibilityHidden(true)
+            }
         }
         .contentShape(Rectangle())
         .adaptiveContentGutter()
@@ -972,8 +987,10 @@ struct MergeCardView: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("merge.card.\(card.id)")
-        .accessibilityValue(isSelected ? "selected" : "unselected")
-        .accessibilityAddTraits(.isButton)
+        .accessibilityValue(
+            isSelectable ? (isSelected ? "selected" : "unselected") : ""
+        )
+        .accessibilityAddTraits(isSelectable ? .isButton : [])
         .accessibilityAction {
             guard isSelectable else { return }
             onToggleSelection()

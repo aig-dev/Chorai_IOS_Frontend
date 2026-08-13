@@ -1478,12 +1478,12 @@ struct LibraryCardBackgroundSurface<Fallback: View>: View {
     }
 
     private var rateGlowOpacity: Double {
-        if reduceTransparency { return 0.18 }
-        return contrast == .increased ? 0.30 : 0.34
+        if reduceTransparency { return 0.14 }
+        return contrast == .increased ? 0.24 : 0.22
     }
 
     private var rateBorderOpacity: Double {
-        contrast == .increased ? 0.58 : 0.38
+        contrast == .increased ? 0.52 : 0.32
     }
 
     @ViewBuilder

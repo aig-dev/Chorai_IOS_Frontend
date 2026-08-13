@@ -276,28 +276,35 @@ private struct MergeLifecycleView: View {
     var body: some View {
         KeyboardStableViewport(isFocused: isTextInputFocused) { _ in
             ZStack {
-            atmosphere
+                atmosphere
 
-            VStack(spacing: 0) {
-                header
-                if let onboardingStore {
-                    OnboardingGuideLine(
-                        store: onboardingStore,
-                        allowedStates: [
-                            "product_merge_intro",
-                            "product_merge_preview"
-                        ]
-                    )
-                    .adaptiveContentGutter()
-                    .padding(.bottom, 10)
+                VStack(spacing: 0) {
+                    header
+                    if let onboardingStore {
+                        OnboardingGuideLine(
+                            store: onboardingStore,
+                            allowedStates: [
+                                "product_merge_intro",
+                                "product_merge_preview"
+                            ]
+                        )
+                        .adaptiveContentGutter()
+                        .padding(.bottom, 10)
+                    }
+                    phaseContent
                 }
-                phaseContent
-            }
+                .frame(
+                    maxWidth: .infinity,
+                    maxHeight: .infinity,
+                    alignment: .top
+                )
 
-            automationAnchors
-        }
+            }
         }
         .foregroundStyle(.white)
+        .overlay(alignment: .topLeading) {
+            automationAnchors
+        }
         .navigationBarHidden(true)
         .navigationBarBackButtonHidden(true)
         .preferredColorScheme(.dark)
@@ -407,14 +414,8 @@ private struct MergeLifecycleView: View {
 
             Spacer()
 
-            HStack(spacing: 8) {
-                Image("menu_merge")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 28, height: 28)
-                Text("Merge")
-                    .font(.system(size: 20, weight: .semibold))
-            }
+            Text("Merge")
+                .font(.system(size: 20, weight: .semibold))
 
             Spacer()
             Color.clear.frame(width: 44, height: 44)
@@ -518,12 +519,13 @@ private struct MergeLifecycleView: View {
                     }
                 }
                 .padding(.top, 18)
-                .padding(.bottom, 104)
+                .padding(.bottom, 18)
             }
             .scrollDismissesKeyboard(.interactively)
-            .overlay(alignment: .bottom) {
-                selectionAction
-            }
+        }
+        .frame(maxHeight: .infinity, alignment: .top)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            selectionAction
         }
     }
 
@@ -545,33 +547,17 @@ private struct MergeLifecycleView: View {
     }
 
     private var selectionAction: some View {
-        Button {
+        MergeSelectionPrimaryAction(
+            count: store.selectedSources.count,
+            isEnabled: store.canCreate
+        ) {
             contextualTipStore?.complete(
                 .mergeAction,
                 onboardingState: onboardingStore?.contextualTipState,
                 targetIsVisible: store.canCreate
             )
             store.create()
-        } label: {
-            HStack(spacing: 10) {
-                Image("menu_merge")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 22, height: 22)
-                Text("\(store.selectedSources.count)")
-                    .font(.system(size: 16, weight: .semibold))
-            }
-            .foregroundStyle(store.canCreate ? .white : .white.opacity(0.5))
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 16)
-            .background(
-                RoundedRectangle(cornerRadius: 25)
-                    .fill(Color.gray.opacity(0.3))
-            )
         }
-        .disabled(!store.canCreate)
-        .accessibilityLabel("Merge \(store.selectedSources.count) cards")
-        .accessibilityIdentifier("merge.action")
         .overlay {
             ContextualGuideTargetHalo(
                 isVisible: isMergeTipVisible
@@ -588,8 +574,6 @@ private struct MergeLifecycleView: View {
                 .offset(y: -58)
             }
         }
-        .adaptiveContentGutter()
-        .padding(.bottom, 18)
     }
 
     private var artifactContent: some View {
@@ -854,6 +838,193 @@ private struct MergeLifecycleView: View {
         return assetID
     }
 }
+
+private struct MergeSelectionPrimaryAction: View {
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    let count: Int
+    let isEnabled: Bool
+    let action: () -> Void
+
+    private var label: String {
+        count == 1 ? "Merge 1 card" : "Merge \(count) cards"
+    }
+
+    var body: some View {
+        Button(action: action) {
+            Text(label)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(isEnabled ? Color.white : Color.white.opacity(0.46))
+                .frame(maxWidth: .infinity, minHeight: 56)
+                .background {
+                    Capsule()
+                        .fill(
+                            isEnabled
+                                ? LinearGradient(
+                                    colors: [
+                                        Color(red: 0.58, green: 0.28, blue: 0.68),
+                                        Color(red: 0.32, green: 0.22, blue: 0.56),
+                                    ],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                                : LinearGradient(
+                                    colors: [
+                                        Color.white.opacity(0.10),
+                                        Color.white.opacity(0.07),
+                                    ],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                        )
+                        .overlay {
+                            Capsule()
+                                .stroke(
+                                    Color.white.opacity(isEnabled ? 0.22 : 0.10),
+                                    lineWidth: 1
+                                )
+                        }
+                }
+            }
+        .buttonStyle(.plain)
+        .disabled(!isEnabled)
+        .accessibilityLabel(label)
+        .accessibilityIdentifier("merge.action")
+        .adaptiveContentGutter()
+        .padding(.top, 10)
+        .padding(.bottom, 10)
+        .background(
+            (reduceTransparency ? Color(red: 0.055, green: 0.035, blue: 0.09) : Color.black.opacity(0.22))
+                .ignoresSafeArea(edges: .bottom)
+        )
+    }
+}
+
+#if DEBUG
+@MainActor
+struct MergeSelectionVisualFixtureScreen: View {
+    @State private var isCandidateSelected = true
+    @State private var didMerge = false
+
+    private let anchorCard = MergeCard(
+        id: "merge-fixture-anchor",
+        versionID: "ver_merge_fixture_anchor",
+        date: "Today",
+        content: "A small thought worth connecting to another note.",
+        tags: ["Ideas", "Writing"],
+        isUserCard: false,
+        rate: 2
+    )
+    private let candidateCard = MergeCard(
+        id: "merge-fixture-candidate",
+        versionID: "ver_merge_fixture_candidate",
+        date: "2 days ago",
+        content: "Good interfaces make related thinking feel close without making the screen feel crowded.",
+        tags: ["Design", "Product"],
+        isUserCard: true,
+        userName: "Mira",
+        favoriteCount: 12,
+        rate: 4
+    )
+
+    private var selectedCount: Int {
+        isCandidateSelected ? 2 : 1
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 18, weight: .semibold))
+                    .frame(width: 44, height: 44)
+                Spacer()
+                Text("Merge")
+                    .font(.system(size: 20, weight: .semibold))
+                Spacer()
+                Color.clear.frame(width: 44, height: 44)
+            }
+            .foregroundStyle(.white)
+            .adaptiveContentGutter()
+            .padding(.top, 4)
+
+            FixedMergeCardView(card: anchorCard)
+                .padding(.top, 12)
+                .accessibilityIdentifier("merge.anchor.card")
+
+            Rectangle()
+                .fill(Color.white.opacity(0.18))
+                .frame(height: 1)
+                .adaptiveContentGutter()
+                .padding(.vertical, 16)
+
+            HStack(spacing: 10) {
+                Image(systemName: "magnifyingglass")
+                Text("Search")
+            }
+            .font(.system(size: 16))
+            .foregroundStyle(.white.opacity(0.7))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(MergeSearchSurface())
+            .adaptiveContentGutter()
+
+            ScrollView {
+                LazyVStack(spacing: 16) {
+                    MergeCardView(
+                        card: candidateCard,
+                        isSelected: isCandidateSelected,
+                        onToggleSelection: {
+                            isCandidateSelected.toggle()
+                        }
+                    )
+
+                    MergeCardView(
+                        card: MergeCard(
+                            id: "merge-fixture-secondary",
+                            versionID: "ver_merge_fixture_secondary",
+                            date: "Last week",
+                            content: "A second candidate keeps the scrolling surface representative.",
+                            tags: ["Research"],
+                            isUserCard: false,
+                            rate: 6
+                        ),
+                        isSelected: false,
+                        onToggleSelection: {}
+                    )
+                }
+                .padding(.top, 18)
+                .padding(.bottom, 24)
+            }
+        }
+        .frame(
+            maxWidth: .infinity,
+            maxHeight: .infinity,
+            alignment: .top
+        )
+        .background {
+            Image("home_bg")
+                .resizable()
+                .scaledToFill()
+                .clipped()
+                .ignoresSafeArea()
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            MergeSelectionPrimaryAction(
+                count: selectedCount,
+                isEnabled: isCandidateSelected
+            ) {
+                didMerge = true
+            }
+            .accessibilityValue(didMerge ? "merged" : "ready")
+        }
+        .background(
+            Color(red: 0.055, green: 0.035, blue: 0.09)
+                .ignoresSafeArea()
+        )
+    }
+
+}
+#endif
 
 private struct MergeArtifactBlockView: View {
     let block: MergeBlock

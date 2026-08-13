@@ -59,6 +59,37 @@ final class ArcNoteUITests: XCTestCase {
         captureVisual("adaptive-layout-fixture")
     }
 
+    func testMergeSelectionFixtureUsesOneFullWidthSafeAreaAction() {
+        app.launchArguments.append("--ui-test-merge-selection")
+        app.launch()
+
+        let window = app.windows.firstMatch
+        XCTAssertTrue(window.waitForExistence(timeout: 10))
+        let candidate = waitFor("merge.card.merge-fixture-candidate")
+        let anyAction = app.descendants(matching: .any)["merge.action"]
+        XCTAssertTrue(
+            anyAction.waitForExistence(timeout: 3),
+            "Missing merge.action in hierarchy:\n\(app.debugDescription)"
+        )
+        XCTAssertEqual(
+            anyAction.elementType,
+            .button,
+            "merge.action has wrong element type:\n\(app.debugDescription)"
+        )
+        let action = waitForButton("merge.action")
+
+        XCTAssertGreaterThan(action.frame.minY, window.frame.midY)
+        XCTAssertLessThanOrEqual(action.frame.maxY, window.frame.maxY)
+        XCTAssertLessThan(candidate.frame.minY, action.frame.minY)
+        XCTAssertGreaterThan(action.frame.width, window.frame.width * 0.82)
+        XCTAssertEqual(action.label, "Merge 2 cards")
+        XCTAssertFalse(app.staticTexts["Selected notes"].exists)
+
+        action.tap()
+        waitForAccessibilityValue("merge.action", expected: "merged")
+        captureMergeVisual("selection-zen-action")
+    }
+
     func testNativeOnboardingFixtureCompletesLibraryTipFromItsRealTarget() {
         app.launchArguments.append("--ui-test-native-onboarding")
         app.launch()

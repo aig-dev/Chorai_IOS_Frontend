@@ -65,6 +65,8 @@ struct ArcNoteApp: App {
         .contains("--ui-test-card-editor-shell")
     private let isAdaptiveLayoutUITestRoute = ProcessInfo.processInfo.arguments
         .contains("--ui-test-adaptive-layout")
+    private let isMergeSelectionUITestRoute = ProcessInfo.processInfo.arguments
+        .contains("--ui-test-merge-selection")
     private let isNativeOnboardingUITestRoute = ProcessInfo.processInfo.arguments
         .contains("--ui-test-native-onboarding")
     private let isPrivateBetaEntryUITestRoute = ProcessInfo.processInfo.arguments
@@ -118,6 +120,8 @@ struct ArcNoteApp: App {
                     Color.clear
                 } else if isAdaptiveLayoutUITestRoute {
                     AdaptiveLayoutFixtureScreen()
+                } else if isMergeSelectionUITestRoute {
+                    MergeSelectionVisualFixtureScreen()
                 } else if isNativeOnboardingUITestRoute {
                     NativeOnboardingFixtureScreen()
                 } else if isPrivateBetaEntryUITestRoute {
