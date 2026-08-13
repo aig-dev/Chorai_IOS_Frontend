@@ -4,6 +4,17 @@ import Combine
 import CoreFlow
 import UIKit
 
+private final class LockedChatEventParser: @unchecked Sendable {
+    private let lock = NSLock()
+    private var parser = ChatServerSentEventParser()
+
+    func append(_ data: Data) -> [ChatConversationEvent] {
+        lock.lock()
+        defer { lock.unlock() }
+        return parser.append(data)
+    }
+}
+
 // MARK: 网络管理器
 class NetworkManager: ObservableObject {
     static let shared = NetworkManager()
@@ -1035,6 +1046,71 @@ extension NetworkManager {
             headers: ["Idempotency-Key": UUID().uuidString],
             responseType: SendMessageResponse.self
         )
+    }
+
+    // MARK: - 订阅会话事件
+    func streamConversationEvents(
+        conversationId: String,
+        lastEventID: String?
+    ) -> AnyPublisher<ChatConversationEvent, NetworkError> {
+        Deferred { [weak self] () -> AnyPublisher<ChatConversationEvent, NetworkError> in
+            guard let self else {
+                return Fail(error: NetworkError.unknown).eraseToAnyPublisher()
+            }
+
+            let subject = PassthroughSubject<ChatConversationEvent, NetworkError>()
+            let parser = LockedChatEventParser()
+            var headers = self.authorizedHeaders(
+                extra: ["Accept": "text/event-stream"]
+            )
+            if let lastEventID = lastEventID?.trimmingCharacters(
+                in: .whitespacesAndNewlines
+            ), !lastEventID.isEmpty {
+                headers.update(
+                    HTTPHeader(name: "Last-Event-ID", value: lastEventID)
+                )
+            }
+
+            let request = self.session.streamRequest(
+                "\(self.baseURL)/api/chats/conversations/\(conversationId)/events",
+                method: .get,
+                headers: headers
+            )
+            .validate()
+
+            request.responseStream(on: .main) { [weak self] stream in
+                guard let self else {
+                    stream.cancel()
+                    return
+                }
+
+                switch stream.event {
+                case .stream(.success(let data)):
+                    parser.append(data).forEach(subject.send)
+                case .stream(.failure):
+                    break
+                case .complete(let completion):
+                    if let error = completion.error,
+                       !error.isExplicitlyCancelledError {
+                        subject.send(
+                            completion: .failure(
+                                self.handleError(
+                                    error,
+                                    response: completion.response
+                                )
+                            )
+                        )
+                    } else {
+                        subject.send(completion: .finished)
+                    }
+                }
+            }
+
+            return subject
+                .handleEvents(receiveCancel: { request.cancel() })
+                .eraseToAnyPublisher()
+        }
+        .eraseToAnyPublisher()
     }
 
     // MARK: - 获取兴趣类别

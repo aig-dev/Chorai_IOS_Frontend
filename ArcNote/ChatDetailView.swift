@@ -289,6 +289,36 @@ struct ChatDetailView: View {
                 }
                 .padding(.bottom, 16)
             }
+
+            switch chatDetailManager.agentDeliveryState {
+            case .idle:
+                EmptyView()
+            case .thinking:
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .progressViewStyle(
+                            CircularProgressViewStyle(tint: .white.opacity(0.8))
+                        )
+                    Text("Chora is thinking…")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(.white.opacity(0.72))
+                    Spacer()
+                }
+                .adaptiveContentGutter()
+                .padding(.bottom, 8)
+                .accessibilityIdentifier("chat.agent.thinking")
+            case .failed(message: let message):
+                HStack {
+                    Image(systemName: "exclamationmark.circle")
+                    Text(message)
+                        .font(.system(size: 13, weight: .medium))
+                    Spacer()
+                }
+                .foregroundColor(.orange)
+                .adaptiveContentGutter()
+                .padding(.bottom, 8)
+                .accessibilityIdentifier("chat.agent.failed")
+            }
             
             // 底部输入栏
             HStack(spacing: 12) {
@@ -381,6 +411,9 @@ struct ChatDetailView: View {
             chatDetailManager.bindVisibility(chatHistoryDependency)
             chatDetailManager.loadConversationDetail(conversationId: conversationId)
             // loadMessages会在对话详情加载完成后自动调用
+        }
+        .onDisappear {
+            chatDetailManager.stopConversationEvents()
         }
     }
     

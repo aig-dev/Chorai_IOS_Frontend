@@ -1366,6 +1366,14 @@ private final class ChatVisibilityFixtureService:
             .eraseToAnyPublisher()
     }
 
+    func streamConversationEvents(
+        conversationId: String,
+        lastEventID: String?
+    ) -> AnyPublisher<ChatConversationEvent, NetworkError> {
+        Empty<ChatConversationEvent, NetworkError>(completeImmediately: false)
+            .eraseToAnyPublisher()
+    }
+
     func getReferencedNote(
         cardId: String
     ) -> AnyPublisher<NoteCard, NetworkError> {

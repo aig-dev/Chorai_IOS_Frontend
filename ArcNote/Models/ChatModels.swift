@@ -21,6 +21,10 @@ protocol ChatDetailFetching {
         conversationId: String,
         request: SendMessageRequest
     ) -> AnyPublisher<SendMessageResponse, NetworkError>
+    func streamConversationEvents(
+        conversationId: String,
+        lastEventID: String?
+    ) -> AnyPublisher<ChatConversationEvent, NetworkError>
     func getReferencedNote(
         cardId: String
     ) -> AnyPublisher<NoteCard, NetworkError>
@@ -232,6 +236,17 @@ struct SendMessageResponse: Codable {
 
 struct SendMessageData: Codable {
     let message: APIChatMessage
+    let eventId: UInt64?
+
+    enum CodingKeys: String, CodingKey {
+        case message
+        case eventId = "event_id"
+    }
+
+    init(message: APIChatMessage, eventId: UInt64? = nil) {
+        self.message = message
+        self.eventId = eventId
+    }
 }
 
 // MARK: 聊天消息模型
@@ -292,6 +307,7 @@ class ChatDetailManager: ObservableObject {
     @Published var messages: [APIChatMessage] = []
     @Published var isLoading = false
     @Published var error: String?
+    @Published private(set) var agentDeliveryState: ChatAgentDeliveryState = .idle
     
     private let fetcher: any ChatDetailFetching
     private let humanActorID: String
@@ -300,6 +316,10 @@ class ChatDetailManager: ObservableObject {
     private var canonicalMessages: [APIChatMessage] = []
     private weak var visibilityDependency: ChatHistoryVisibilityDependency?
     private var visibilityCancellable: AnyCancellable?
+    private var eventCancellable: AnyCancellable?
+    private var eventReconnectTask: Task<Void, Never>?
+    private var eventConversationID: String?
+    private var eventCursor = ChatConversationEventCursor()
     private var cancellables = Set<AnyCancellable>()
     
     // 从AuthManager获取当前用户ID
@@ -328,6 +348,7 @@ class ChatDetailManager: ObservableObject {
     }
     
     func loadConversationDetail(conversationId: String) {
+        startConversationEvents(conversationId: conversationId)
         isLoading = true
         error = nil
         
@@ -351,6 +372,29 @@ class ChatDetailManager: ObservableObject {
                 }
             )
             .store(in: &cancellables)
+    }
+
+    func startConversationEvents(conversationId: String) {
+        guard eventConversationID != conversationId else {
+            if eventCancellable == nil {
+                connectConversationEvents(conversationId: conversationId)
+            }
+            return
+        }
+
+        stopConversationEvents()
+        eventConversationID = conversationId
+        connectConversationEvents(conversationId: conversationId)
+    }
+
+    func stopConversationEvents() {
+        eventConversationID = nil
+        eventCursor = ChatConversationEventCursor()
+        eventReconnectTask?.cancel()
+        eventReconnectTask = nil
+        eventCancellable?.cancel()
+        eventCancellable = nil
+        agentDeliveryState = .idle
     }
     
     func loadMessages(conversationId: String) {
@@ -412,6 +456,7 @@ class ChatDetailManager: ObservableObject {
     func sendMessage(conversationId: String, content: String, attachedNotes: [NoteCard]) {
         let attachedCardId = attachedNotes.first?.id
         print("发送消息conversationId: \(conversationId), contentLength: \(content.count), attachedCardId: \(attachedCardId ?? "")")
+        agentDeliveryState = .idle
         
         let request = SendMessageRequest(content: content, attachedCardId: attachedCardId)
         
@@ -426,6 +471,12 @@ class ChatDetailManager: ObservableObject {
                 },
                 receiveValue: { [weak self] response in
                     guard let self else { return }
+                    if let eventID = response.data.eventId {
+                        self.eventCursor.advance(to: eventID)
+                        self.connectConversationEvents(
+                            conversationId: conversationId
+                        )
+                    }
                     var message = response.message
                     message.referencedAssetId = message.referencedAssetId ?? attachedCardId
                     message.attachedCards = attachedNotes
@@ -437,6 +488,68 @@ class ChatDetailManager: ObservableObject {
                 }
             )
             .store(in: &cancellables)
+    }
+
+    private func connectConversationEvents(conversationId: String) {
+        guard eventConversationID == conversationId else { return }
+
+        eventReconnectTask?.cancel()
+        eventReconnectTask = nil
+        eventCancellable?.cancel()
+        eventCancellable = fetcher.streamConversationEvents(
+            conversationId: conversationId,
+            lastEventID: eventCursor.lastEventID
+        )
+        .receive(on: DispatchQueue.main)
+        .sink(
+            receiveCompletion: { [weak self] completion in
+                guard let self,
+                      self.eventConversationID == conversationId else { return }
+                self.eventCancellable = nil
+                if case .failure(let error) = completion {
+                    switch error {
+                    case .unauthorized, .forbidden, .notFound:
+                        self.agentDeliveryState = .failed(
+                            message: "Chat updates are unavailable. Please reopen this conversation."
+                        )
+                        return
+                    default:
+                        break
+                    }
+                }
+                self.scheduleEventReconnect(conversationId: conversationId)
+            },
+            receiveValue: { [weak self] event in
+                guard let self,
+                      self.eventConversationID == conversationId else { return }
+                if let eventID = event.id?.trimmingCharacters(
+                    in: .whitespacesAndNewlines
+                ), !eventID.isEmpty {
+                    self.eventCursor.advance(to: eventID)
+                }
+                guard let update = ChatAgentDeliveryReducer.reduce(
+                    event: event
+                ) else { return }
+
+                self.agentDeliveryState = update.state
+                if update.shouldRefreshMessages {
+                    self.loadMessages(conversationId: conversationId)
+                }
+            }
+        )
+    }
+
+    private func scheduleEventReconnect(conversationId: String) {
+        eventReconnectTask?.cancel()
+        eventReconnectTask = Task { [weak self] in
+            do {
+                try await Task.sleep(nanoseconds: 1_000_000_000)
+            } catch {
+                return
+            }
+            guard !Task.isCancelled else { return }
+            self?.connectConversationEvents(conversationId: conversationId)
+        }
     }
     
     func convertToChatMessages() -> [ChatMessage] {
