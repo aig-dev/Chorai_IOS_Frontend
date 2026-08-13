@@ -284,21 +284,12 @@ struct LibrarySearchResultsView: View {
     private func resultCard(_ result: LibrarySearchCard) -> some View {
         switch scope {
         case .notes:
-            if result.card.rate < 3 {
-                NotesCard(
-                    card: result.card,
-                    onShowMenu: { _ in onShowMenu(result) },
-                    cardsManager: cardsManager,
-                    onCardTap: onCardTap
-                )
-            } else {
-                NotesColorCard(
-                    card: result.card,
-                    onShowMenu: { _ in onShowMenu(result) },
-                    cardsManager: cardsManager,
-                    onCardTap: onCardTap
-                )
-            }
+            NotesCard(
+                card: result.card,
+                onShowMenu: { _ in onShowMenu(result) },
+                cardsManager: cardsManager,
+                onCardTap: onCardTap
+            )
 
         case .collect:
             HomePostCard(

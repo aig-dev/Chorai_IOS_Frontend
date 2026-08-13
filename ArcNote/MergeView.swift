@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import CoreFlow
 
 private struct LegacyMergeView: View {
     @Environment(\.dismiss) private var dismiss
@@ -546,6 +547,8 @@ private struct LegacyMergeView: View {
             versionID: cardDetail.noteDocumentVersionID,
             date: displayDate,
             content: cardDetail.content,
+            contentJSON: cardDetail.contentJSON,
+            backgroundMediaRef: cardDetail.backgroundMediaRef,
             tags: cardDetail.tags,
             isUserCard: true,
             userName: cardDetail.author?.userName ?? "Unknown",
@@ -764,6 +767,8 @@ private struct LegacyMergeView: View {
             versionID: searchCard.noteDocumentVersionID,
             date: displayDate,
             content: searchCard.content,
+            contentJSON: searchCard.contentJSON,
+            backgroundMediaRef: searchCard.backgroundMediaRef,
             tags: searchCard.tags,
             isUserCard: true,
             userName: searchCard.author.username,
@@ -801,6 +806,8 @@ private struct LegacyMergeView: View {
             versionID: userAllCard.noteDocumentVersionID,
             date: displayDate,
             content: userAllCard.content,
+            contentJSON: userAllCard.contentJSON,
+            backgroundMediaRef: userAllCard.backgroundMediaRef,
             tags: userAllCard.tags,
             isUserCard: isOwnCard,
             userName: isOwnCard ? userAllCard.author?.username : nil,
@@ -817,6 +824,8 @@ struct MergeCard: Identifiable {
     let versionID: String?
     let date: String
     let content: String
+    let contentJSON: String?
+    let backgroundMediaRef: String?
     let tags: [String]
     let isUserCard: Bool
     let userName: String?
@@ -824,11 +833,26 @@ struct MergeCard: Identifiable {
     let favoriteCount: Int
     let rate: Int
     
-    init(id: String, versionID: String? = nil, date: String, content: String, tags: [String], isUserCard: Bool, userName: String? = nil, avatarUrl: String? = nil, favoriteCount: Int = 0, rate: Int = 0) {
+    init(
+        id: String,
+        versionID: String? = nil,
+        date: String,
+        content: String,
+        contentJSON: String? = nil,
+        backgroundMediaRef: String? = nil,
+        tags: [String],
+        isUserCard: Bool,
+        userName: String? = nil,
+        avatarUrl: String? = nil,
+        favoriteCount: Int = 0,
+        rate: Int = 1
+    ) {
         self.id = id
         self.versionID = versionID
         self.date = date
         self.content = content
+        self.contentJSON = contentJSON
+        self.backgroundMediaRef = backgroundMediaRef
         self.tags = tags
         self.isUserCard = isUserCard
         self.userName = userName
@@ -843,27 +867,28 @@ struct MergeCardView: View {
     let card: MergeCard
     let isSelected: Bool
     let onToggleSelection: () -> Void
+    let isSelectable: Bool
+
+    init(
+        card: MergeCard,
+        isSelected: Bool,
+        onToggleSelection: @escaping () -> Void,
+        isSelectable: Bool = true
+    ) {
+        self.card = card
+        self.isSelected = isSelected
+        self.onToggleSelection = onToggleSelection
+        self.isSelectable = isSelectable
+    }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            // 头部信息
             HStack {
                 if card.isUserCard {
-                    // 用户卡片头像
-                    AsyncImage(url: URL(string: card.avatarUrl ?? "")) { image in
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                    } placeholder: {
-                        Image("avatar")
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                    }
-                    .frame(width: 40, height: 40)
-                    .clipShape(Circle())
+                    mergeCardAvatar
                     
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(card.userName ?? "")
+                        Text(card.userName ?? "Chorai")
                             .font(.system(size: 16, weight: .semibold))
                             .foregroundColor(.white)
                         
@@ -881,36 +906,29 @@ struct MergeCardView: View {
                 Spacer()
             }
             
-            // 内容文本
-            HTMLTextRenderer(htmlContent: card.content, maxLines: 3)
-                .font(.system(size: 14, weight: .regular))
-                .foregroundColor(.white.opacity(0.9))
+            LibraryCardContentPreview(
+                content: card.content,
+                contentJSON: card.contentJSON,
+                cardID: card.id,
+                textFont: .system(size: 14, weight: .regular)
+            )
             
-            // 底部标签和交互
             VStack(spacing: 12) {
-                // 标签 - 横向滚动
                 ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(card.tags, id: \.self) { tag in
-                        Text(tag)
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(
-                                RoundedRectangle(cornerRadius: 20)
-                                    .fill(Color.white.opacity(0.2))
-                                    .overlay(mergeCardTagTopLeftHighlight)
-                                    .overlay(mergeCardTagBottomRightHighlight)
-                                    .overlay(mergeCardTagTopEdgeHighlight)
-                                    .overlay(mergeCardTagBottomEdgeHighlight)
-                            )
+                    HStack(spacing: 8) {
+                        ForEach(card.tags, id: \.self) { tag in
+                            Text(tag)
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(mergeCardTagBackground)
+                                .lineLimit(1)
+                        }
                     }
-                    }
-                    .padding(.horizontal, 1) // 添加一点内边距确保滚动效果
+                    .padding(.horizontal, 1)
                 }
                 
-                // 交互统计（如果需要）
                 if card.isUserCard {
                     HStack {
                         Spacer()
@@ -928,30 +946,28 @@ struct MergeCardView: View {
             }
         }
         .padding(20)
-        .background(
-            ZStack {
-                // 根据 rate 值显示不同的背景
-                backgroundImageForRate(card.rate)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .clipped()
-                    .allowsHitTesting(false)
-
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(Color.black.opacity(0.28))
-                    .allowsHitTesting(false)
-                
-            RoundedRectangle(cornerRadius: 16)
-                    .stroke(Color.white.opacity(0.1), lineWidth: 1)
+        .background {
+            LibraryCardBackgroundSurface(
+                backgroundMediaRef: card.backgroundMediaRef,
+                rate: card.rate
+            ) {
+                mergeCardBackground
             }
-            .clipShape(RoundedRectangle(cornerRadius: 16))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(isSelected ? Color(red: 198/255, green: 89/255, blue: 231/255) : Color.clear, lineWidth: 2)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(
+                    isSelected
+                        ? Color(red: 198 / 255, green: 89 / 255, blue: 231 / 255)
+                        : Color.clear,
+                    lineWidth: 2
                 )
-        )
+        }
         .contentShape(Rectangle())
         .adaptiveContentGutter()
         .onTapGesture {
+            guard isSelectable else { return }
             onToggleSelection()
         }
         .accessibilityElement(children: .combine)
@@ -959,53 +975,78 @@ struct MergeCardView: View {
         .accessibilityValue(isSelected ? "selected" : "unselected")
         .accessibilityAddTraits(.isButton)
         .accessibilityAction {
+            guard isSelectable else { return }
             onToggleSelection()
         }
     }
-    
-    // MARK: 根据 rate 值返回背景图片
-    private func backgroundImageForRate(_ rate: Int) -> some View {
+
+    private var mergeCardAvatar: some View {
         Group {
-            if rate < 3{
-                // 默认样式（毛玻璃效果）
-                RoundedRectangle(cornerRadius: 16)
-                    .background(.ultraThinMaterial.opacity(0.55))
-                    .cornerRadius(16)
-                    .overlay(topLeftHighlight)
-                    .overlay(bottomRightHighlight)
-                    .overlay(topEdgeHighlight)
-                    .overlay(bottomEdgeHighlight)
-            } else if rate >= 3 && rate <= 8 {
-                // note_bg_green
-                Image("note_bg_green")
-                    .resizable()
-            } else if rate >= 9 && rate <= 26 {
-                // note_bg_blue
-                Image("note_bg_blue")
-                    .resizable()
-            } else if rate >= 27 && rate <= 80 {
-                // note_bg_purple
-                Image("note_bg_purple")
-                    .resizable()
-            } else if rate >= 81 && rate <= 242 {
-                // note_bg_yellow
-                Image("note_bg_yellow")
-                    .resizable()
-            } else if rate > 242 {
-                // note_bg_red
-                Image("note_bg_red")
-                    .resizable()
+            if let avatarURL = avatarURL {
+                AsyncImage(url: avatarURL) { image in
+                    image
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                } placeholder: {
+                    Image("avatar")
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                }
             } else {
-                // 默认样式
-                RoundedRectangle(cornerRadius: 16)
-                    .background(.ultraThinMaterial.opacity(0.55))
-                    .cornerRadius(16)
-                    .overlay(topLeftHighlight)
-                    .overlay(bottomRightHighlight)
-                    .overlay(topEdgeHighlight)
-                    .overlay(bottomEdgeHighlight)
+                Image("avatar")
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
             }
         }
+        .frame(width: 40, height: 40)
+        .clipShape(Circle())
+    }
+
+    private var avatarURL: URL? {
+        guard let avatarURL = card.avatarUrl?.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        ), !avatarURL.isEmpty else {
+            return nil
+        }
+        if avatarURL.hasPrefix("http://") || avatarURL.hasPrefix("https://") {
+            return URL(string: avatarURL)
+        }
+        return URL(string: APIConfiguration.resourceURLString(avatarURL))
+    }
+
+    private var hasCustomBackground: Bool {
+        guard let backgroundMediaRef = card.backgroundMediaRef else {
+            return false
+        }
+        return !backgroundMediaRef.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        ).isEmpty
+    }
+
+    private var mergeCardTagBackground: some View {
+        RoundedRectangle(cornerRadius: 20)
+            .fill(
+                (hasCustomBackground ? Color.black : Color.white)
+                    .opacity(
+                        LibraryCardReadabilityPolicy.tagSurfaceOpacity(
+                            hasBackground: hasCustomBackground
+                        )
+                    )
+            )
+            .overlay(mergeCardTagTopLeftHighlight)
+            .overlay(mergeCardTagBottomRightHighlight)
+            .overlay(mergeCardTagTopEdgeHighlight)
+            .overlay(mergeCardTagBottomEdgeHighlight)
+    }
+
+    private var mergeCardBackground: some View {
+        RoundedRectangle(cornerRadius: 16, style: .continuous)
+            .background(.ultraThinMaterial.opacity(0.55))
+            .cornerRadius(16)
+            .overlay(topLeftHighlight)
+            .overlay(bottomRightHighlight)
+            .overlay(topEdgeHighlight)
+            .overlay(bottomEdgeHighlight)
     }
     
     // MARK: 标签高光效果
@@ -1148,251 +1189,12 @@ struct FixedMergeCardView: View {
     let card: MergeCard
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            // 头部信息
-            HStack {
-                Text(card.date)
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(.white.opacity(0.8))
-                
-                Spacer()
-            }
-            
-            // 内容文本
-            HTMLTextRenderer(htmlContent: card.content, maxLines: 3)
-                .font(.system(size: 14, weight: .regular))
-                .foregroundColor(.white.opacity(0.9))
-            
-            // 底部标签 横向滚动
-            ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(card.tags, id: \.self) { tag in
-                    Text(tag)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(
-                            RoundedRectangle(cornerRadius: 20)
-                                .fill(Color.white.opacity(0.2))
-                                .overlay(fixedCardTagTopLeftHighlight)
-                                .overlay(fixedCardTagBottomRightHighlight)
-                                .overlay(fixedCardTagTopEdgeHighlight)
-                                .overlay(fixedCardTagBottomEdgeHighlight)
-                        )
-                }
-                }
-                .padding(.horizontal, 1) // 添加一点内边距，避免标签贴边
-            }
-        }
-        .padding(20)
-        .background(
-            ZStack {
-                // 根据 rate 值显示不同的背景
-                backgroundImageForRate(card.rate)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .clipped()
-                    .allowsHitTesting(false)
-
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(Color.black.opacity(0.28))
-                    .allowsHitTesting(false)
-                
-                // 毛玻璃效果覆盖层
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(.ultraThinMaterial.opacity(0.3))
-            }
+        MergeCardView(
+            card: card,
+            isSelected: false,
+            onToggleSelection: {},
+            isSelectable: false
         )
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(Color.white.opacity(0.2), lineWidth: 1)
-        )
-        .contentShape(Rectangle())
-        .adaptiveContentGutter()
-        .onTapGesture {
-            // 固定卡片
-        }
-    }
-    
-    // MARK: 固定卡片标签高光效果
-    private var fixedCardTagTopLeftHighlight: some View {
-        RoundedRectangle(cornerRadius: 20)
-            .stroke(Color.white, lineWidth: 1)
-            .offset(x: 0, y: -1)
-            .mask(
-                RoundedRectangle(cornerRadius: 20)
-                    .fill(
-                        RadialGradient(
-                            colors: [Color.white, Color.clear],
-                            center: .topLeading,
-                            startRadius: 5,
-                            endRadius: 15
-                        )
-                    )
-            )
-    }
-    
-    private var fixedCardTagBottomRightHighlight: some View {
-        RoundedRectangle(cornerRadius: 20)
-            .stroke(Color.white, lineWidth: 1)
-            .offset(x: 0, y: 0)
-            .mask(
-                RoundedRectangle(cornerRadius: 20)
-                    .fill(
-                        RadialGradient(
-                            colors: [Color.white, Color.clear],
-                            center: .bottomTrailing,
-                            startRadius: 5,
-                            endRadius: 15
-                        )
-                    )
-            )
-    }
-    
-    private var fixedCardTagTopEdgeHighlight: some View {
-        RoundedRectangle(cornerRadius: 20)
-            .stroke(Color.white, lineWidth: 1)
-            .offset(x: 0, y: -1)
-            .mask(
-                RoundedRectangle(cornerRadius: 20)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.white, Color.clear],
-                            startPoint: .top,
-                            endPoint: UnitPoint(x: 0, y: 0.05)
-                        )
-                    )
-            )
-    }
-    
-    private var fixedCardTagBottomEdgeHighlight: some View {
-        RoundedRectangle(cornerRadius: 20)
-            .stroke(Color.white, lineWidth: 1)
-            .offset(x: 0, y: 1)
-            .mask(
-                RoundedRectangle(cornerRadius: 20)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.white, Color.clear],
-                            startPoint: .bottom,
-                            endPoint: UnitPoint(x: 1, y: 0.05)
-                        )
-                    )
-            )
-    }
-    
-    // MARK: - 根据 rate 值返回背景图片
-    private func backgroundImageForRate(_ rate: Int) -> some View {
-        Group {
-            
-            if rate < 3{
-                // 默认样式（毛玻璃效果）
-                RoundedRectangle(cornerRadius: 16)
-                    .background(.ultraThinMaterial.opacity(0.55))
-                    .cornerRadius(16)
-                    .overlay(topLeftHighlight)
-                    .overlay(bottomRightHighlight)
-                    .overlay(topEdgeHighlight)
-                    .overlay(bottomEdgeHighlight)
-            } else if rate >= 3 && rate <= 8 {
-                // note_bg_green
-                Image("note_bg_green")
-                    .resizable()
-            } else if rate >= 9 && rate <= 26 {
-                // note_bg_blue
-                Image("note_bg_blue")
-                    .resizable()
-            } else if rate >= 27 && rate <= 80 {
-                // note_bg_purple
-                Image("note_bg_purple")
-                    .resizable()
-            } else if rate >= 81 && rate <= 242 {
-                // note_bg_yellow
-                Image("note_bg_yellow")
-                    .resizable()
-            } else if rate > 242 {
-                // note_bg_red
-                Image("note_bg_red")
-                    .resizable()
-            } else {
-                // 默认样式
-                RoundedRectangle(cornerRadius: 16)
-                    .background(.ultraThinMaterial.opacity(0.55))
-                    .cornerRadius(16)
-                    .overlay(topLeftHighlight)
-                    .overlay(bottomRightHighlight)
-                    .overlay(topEdgeHighlight)
-                    .overlay(bottomEdgeHighlight)
-            }
-        }
-    }
-    
-    // MARK: - 固定卡片高光效果
-    private var topLeftHighlight: some View {
-        RoundedRectangle(cornerRadius: 16)
-            .stroke(Color.white, lineWidth: 1)
-            .offset(x: 0, y: -1)
-            .mask(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(
-                        RadialGradient(
-                            colors: [Color.white, Color.clear],
-                            center: .topLeading,
-                            startRadius: 5,
-                            endRadius: 15
-                        )
-                    )
-            )
-    }
-    
-    private var bottomRightHighlight: some View {
-        RoundedRectangle(cornerRadius: 16)
-            .stroke(Color.white, lineWidth: 1)
-            .offset(x: 0, y: 1)
-            .mask(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(
-                        RadialGradient(
-                            colors: [Color.white, Color.clear],
-                            center: .bottomTrailing,
-                            startRadius: 5,
-                            endRadius: 15
-                        )
-                    )
-            )
-    }
-    
-    private var topEdgeHighlight: some View {
-        RoundedRectangle(cornerRadius: 16)
-            .stroke(Color.white, lineWidth: 1)
-            .offset(x: 0, y: -1)
-            .mask(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.white, Color.clear],
-                            startPoint: UnitPoint(x: 0, y: 0),
-                            endPoint: UnitPoint(x: 1, y: 0.05)
-                        )
-                    )
-            )
-    }
-    
-    private var bottomEdgeHighlight: some View {
-        RoundedRectangle(cornerRadius: 16)
-            .stroke(Color.white, lineWidth: 1)
-            .offset(x: 0, y: 1)
-            .mask(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.white, Color.clear],
-                            startPoint: UnitPoint(x: 0, y: 0.95),
-                            endPoint: UnitPoint(x: 1, y: 1)
-                        )
-                    )
-            )
     }
 }
 

@@ -327,7 +327,10 @@ private struct DiscoveryPathCardView: View {
         .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background {
-            LibraryCardBackgroundSurface(backgroundMediaRef: nil) {
+            LibraryCardBackgroundSurface(
+                backgroundMediaRef: nil,
+                rate: card.rate
+            ) {
                 cardBackground
             }
         }
@@ -389,53 +392,13 @@ private struct DiscoveryPathCardView: View {
             .lineLimit(1)
     }
 
-    @ViewBuilder
     private var cardBackground: some View {
-        if card.rate < 3 {
-            RoundedRectangle(cornerRadius: 16)
-                .fill(.ultraThinMaterial.opacity(0.55))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color.white.opacity(0.1), lineWidth: 1)
-                )
-        } else {
-            ZStack {
-                backgroundImageForRate(card.rate)
+        RoundedRectangle(cornerRadius: 16)
+            .fill(.ultraThinMaterial.opacity(0.55))
+            .overlay(
                 RoundedRectangle(cornerRadius: 16)
                     .stroke(Color.white.opacity(0.1), lineWidth: 1)
-            }
-        }
-    }
-
-    private func backgroundImageForRate(_ rate: Int) -> some View {
-        Group {
-            if rate >= 3 && rate <= 8 {
-                Image("note_bg_green")
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .clipped()
-            } else if rate >= 9 && rate <= 26 {
-                Image("note_bg_blue")
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .clipped()
-            } else if rate >= 27 && rate <= 80 {
-                Image("note_bg_purple")
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .clipped()
-            } else if rate >= 81 && rate <= 242 {
-                Image("note_bg_yellow")
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .clipped()
-            } else {
-                Image("note_bg_red")
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .clipped()
-            }
-        }
+            )
     }
 
     private static func formattedDate(_ raw: String) -> String {

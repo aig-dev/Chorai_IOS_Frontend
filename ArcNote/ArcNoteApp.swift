@@ -1013,15 +1013,8 @@ private struct LibraryCardPreviewFixtureScreen: View {
                             authorId: nil,
                             onShowMenu: { _ in }
                         )
-                    } else if card.rate < 3 {
-                        NotesCard(
-                            card: card,
-                            onShowMenu: { _ in },
-                            cardsManager: cardsManager,
-                            onCardTap: { _ in }
-                        )
                     } else {
-                        NotesColorCard(
+                        NotesCard(
                             card: card,
                             onShowMenu: { _ in },
                             cardsManager: cardsManager,

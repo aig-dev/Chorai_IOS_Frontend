@@ -641,7 +641,7 @@ struct HomeView: View {
                             pinnedAt: favorite.pinnedAt,
                             isFavorited: true,
                                 favoriteCount: favorite.favoriteCount ?? 0,
-                                rate: 0 // 收藏卡片默认 rate 为 0
+                                rate: favorite.rate
                         )
                         // 设置当前卡片数据并显示菜单
                         currentCardId = cardId
@@ -1100,8 +1100,6 @@ struct NotesListView: View {
             } else {
                         ForEach(Array(cardsManager.cards.enumerated()), id: \.element.id) { index, entry in
                             let card = entry
-                            Group {
-                                if card.rate < 3 {
                             NotesCard(
                                 card: card,
                                 onShowMenu: { cardData in
@@ -1117,34 +1115,11 @@ struct NotesListView: View {
                                     print("收到卡片点击回调: cardId=\(cardId)")
                                     selectedCardId = cardId
                                     DispatchQueue.main.async {
-                                                navigateToEdit = true
-                                                print("navigateToEdit: \(navigateToEdit)")
-                                            }
-                                        }
-                                    )
-                                } else {
-                                    NotesColorCard(
-                                        card: card,
-                                        onShowMenu: { cardData in
-                                            currentCardId = cardData.id
-                                            print("设置当前卡片ID: \(cardData.id)")
-                                            onShowMenu(cardData)
-                                        },
-                                        cardsManager: cardsManager,
-                                        showMergeGuide: index == 0,
-                                        onboardingState: onboardingStore?.contextualTipState,
-                                        contextualTipStore: contextualTipStore,
-                                        onCardTap: { cardId in
-                                            print("收到卡片点击回调: cardId=\(cardId)")
-                                            selectedCardId = cardId
-                                            DispatchQueue.main.async {
-                                                navigateToEdit = true
-                                                print("设置 navigateToEdit: \(navigateToEdit)")
+                                        navigateToEdit = true
+                                        print("navigateToEdit: \(navigateToEdit)")
                                     }
                                 }
                             )
-                        }
-                            }
                             .onAppear {
                                 if index == cardsManager.cards.count - 1,
                                    cardsManager.hasMoreData,
@@ -1442,13 +1417,16 @@ struct LibraryCardBackgroundSurface<Fallback: View>: View {
     @Environment(\.colorSchemeContrast) private var contrast
 
     let backgroundMediaRef: String?
+    let rate: Int
     @ViewBuilder let fallback: () -> Fallback
 
     init(
         backgroundMediaRef: String?,
+        rate: Int = 1,
         @ViewBuilder fallback: @escaping () -> Fallback
     ) {
         self.backgroundMediaRef = backgroundMediaRef
+        self.rate = rate
         self.fallback = fallback
     }
 
@@ -1480,6 +1458,59 @@ struct LibraryCardBackgroundSurface<Fallback: View>: View {
 
     private var bottomShadeOpacity: Double {
         reduceTransparency || contrast == .increased ? 0.30 : 0.22
+    }
+
+    private var rateAccent: Color? {
+        switch LibraryCardRateStyle(rate: rate) {
+        case .neutral:
+            return nil
+        case .green:
+            return Color(red: 0, green: 1, blue: 102 / 255)
+        case .blue:
+            return Color(red: 3 / 255, green: 113 / 255, blue: 1)
+        case .purple:
+            return Color(red: 150 / 255, green: 39 / 255, blue: 210 / 255)
+        case .amber:
+            return Color(red: 217 / 255, green: 120 / 255, blue: 0)
+        case .orangeRed:
+            return Color(red: 1, green: 94 / 255, blue: 0)
+        }
+    }
+
+    private var rateGlowOpacity: Double {
+        if reduceTransparency { return 0.18 }
+        return contrast == .increased ? 0.30 : 0.34
+    }
+
+    private var rateBorderOpacity: Double {
+        contrast == .increased ? 0.58 : 0.38
+    }
+
+    @ViewBuilder
+    private var rateTreatment: some View {
+        if let rateAccent {
+            GeometryReader { geometry in
+                RadialGradient(
+                    colors: [
+                        rateAccent.opacity(rateGlowOpacity),
+                        rateAccent.opacity(rateGlowOpacity * 0.32),
+                        Color.clear,
+                    ],
+                    center: .top,
+                    startRadius: 1,
+                    endRadius: max(
+                        geometry.size.width,
+                        geometry.size.height
+                    ) * 0.86
+                )
+            }
+
+            shape
+                .stroke(
+                    rateAccent.opacity(rateBorderOpacity),
+                    lineWidth: contrast == .increased ? 1.5 : 1
+                )
+        }
     }
 
     var body: some View {
@@ -1539,6 +1570,8 @@ struct LibraryCardBackgroundSurface<Fallback: View>: View {
                     }
                 }
             }
+
+            rateTreatment
         }
         .clipShape(shape)
         .accessibilityHidden(true)
@@ -1697,7 +1730,8 @@ struct NotesCard: View {
         .padding(20)
         .background {
             LibraryCardBackgroundSurface(
-                backgroundMediaRef: card.backgroundMediaRef
+                backgroundMediaRef: card.backgroundMediaRef,
+                rate: card.rate
             ) {
                 notesCardBackground
             }
@@ -1935,7 +1969,7 @@ struct HomePostCard: View {
     let onUnfavorite: ((String) -> Void)?
     let onAvatarTap: ((String) -> Void)?
     
-    init(profileImage: String, name: String, time: String, content: String, contentJSON: String? = nil, backgroundMediaRef: String? = nil, tags: [String], showSpark: Bool, favoriteCount: Int, cardId: String, rate: Int = 0, authorId: String? = nil, onShowMenu: @escaping (String) -> Void, onCardTap: ((String) -> Void)? = nil, onUnfavorite: ((String) -> Void)? = nil, onAvatarTap: ((String) -> Void)? = nil) {
+    init(profileImage: String, name: String, time: String, content: String, contentJSON: String? = nil, backgroundMediaRef: String? = nil, tags: [String], showSpark: Bool, favoriteCount: Int, cardId: String, rate: Int = 1, authorId: String? = nil, onShowMenu: @escaping (String) -> Void, onCardTap: ((String) -> Void)? = nil, onUnfavorite: ((String) -> Void)? = nil, onAvatarTap: ((String) -> Void)? = nil) {
         self.profileImage = profileImage
         self.name = name
         self.time = time
@@ -2077,19 +2111,10 @@ struct HomePostCard: View {
         .padding(20)
         .background {
             LibraryCardBackgroundSurface(
-                backgroundMediaRef: backgroundMediaRef
+                backgroundMediaRef: backgroundMediaRef,
+                rate: rate
             ) {
-                Group {
-                    if rate < 3 {
-                        homePostCardBackground
-                    } else {
-                        ZStack {
-                            backgroundImageForRate(rate)
-                            RoundedRectangle(cornerRadius: 16)
-                                .stroke(Color.white.opacity(0.1), lineWidth: 1)
-                        }
-                    }
-                }
+                homePostCardBackground
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: 16))
@@ -2144,40 +2169,6 @@ struct HomePostCard: View {
             .overlay(bottomRightHighlight)
             .overlay(topEdgeHighlight)
             .overlay(bottomEdgeHighlight)
-    }
-    
-    // MARK: - 根据 rate 值返回背景图片（与 NotesColorCard 保持一致）
-    private func backgroundImageForRate(_ rate: Int) -> some View {
-        Group {
-            if rate >= 3 && rate <= 8 {
-                Image("note_bg_green")
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .clipped()
-            } else if rate >= 9 && rate <= 26 {
-                Image("note_bg_blue")
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .clipped()
-            } else if rate >= 27 && rate <= 80 {
-                Image("note_bg_purple")
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .clipped()
-            } else if rate >= 81 && rate <= 242 {
-                Image("note_bg_yellow")
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .clipped()
-            } else if rate > 242 {
-                Image("note_bg_red")
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .clipped()
-            } else {
-                Color(red: 0.2, green: 0.1, blue: 0.3).opacity(0.8)
-            }
-        }
     }
     
     // MARK: 标签高光效果
@@ -2588,342 +2579,3 @@ struct HomeFilterTag: View {
             )
     }
 } 
-
-// MARK: - Notes 彩色卡片组件
-struct NotesColorCard: View {
-    @Environment(\.colorSchemeContrast) private var contrast
-    let card: UserCard
-    let onShowMenu: (UserCard) -> Void
-    let onCardTap: ((String) -> Void)?
-    @ObservedObject var cardsManager: HomeCardsManager
-    let showMergeGuide: Bool
-    let onboardingState: String?
-    let contextualTipStore: ContextualGuideTipStore?
-    
-    init(
-        card: UserCard,
-        onShowMenu: @escaping (UserCard) -> Void,
-        cardsManager: HomeCardsManager,
-        showMergeGuide: Bool = false,
-        onboardingState: String? = nil,
-        contextualTipStore: ContextualGuideTipStore? = nil,
-        onCardTap: ((String) -> Void)? = nil
-    ) {
-        self.card = card
-        self.onShowMenu = onShowMenu
-        self.cardsManager = cardsManager
-        self.showMergeGuide = showMergeGuide
-        self.onboardingState = onboardingState
-        self.contextualTipStore = contextualTipStore
-        self.onCardTap = onCardTap
-    }
-
-    private var isMergeEntryTipVisible: Bool {
-        showMergeGuide
-            && (contextualTipStore?.isVisible(
-                .libraryMergeEntry,
-                onboardingState: onboardingState,
-                targetIsVisible: true
-            ) ?? false)
-    }
-
-    private func openMenu() {
-        if showMergeGuide {
-            contextualTipStore?.complete(
-                .libraryMergeEntry,
-                onboardingState: onboardingState,
-                targetIsVisible: true
-            )
-        } else {
-            contextualTipStore?.dismiss(
-                .libraryMergeEntry,
-                onboardingState: onboardingState,
-                targetIsVisible: true
-            )
-        }
-        onShowMenu(card)
-    }
-
-    private func openCard() {
-        contextualTipStore?.dismiss(
-            .libraryMergeEntry,
-            onboardingState: onboardingState,
-            targetIsVisible: true
-        )
-        onCardTap?(card.id)
-    }
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            // 头部信息 - 左上角：open图标 + 时间 + pin图标
-            HStack {
-                HStack(spacing: 6) {
-                    // 只有当卡片是公开状态时才显示open图标
-                    if card.isPublic {
-                        Image("open")
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 15, height: 15)
-                    }
-                    
-                    Text(formatDate(card.updatedAt))
-                        .font(.system(size: 12, weight: .regular))
-                        .foregroundColor(.white.opacity(metadataOpacity))
-                    
-                    // 只有当卡片是置顶状态时才显示pin图标
-                    if card.isPinned {
-                        Image("pin")
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 15, height: 15)
-                    }
-                }
-                
-                Spacer()
-                
-                Button(action: openMenu) {
-                    Image(systemName: "ellipsis")
-                        .font(.title3)
-                        .foregroundColor(.white)
-                        .frame(width: 44, height: 44)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Card menu")
-                .accessibilityIdentifier("home.card.menu.\(card.id)")
-                .overlay {
-                    ContextualGuideTargetHalo(
-                        isVisible: isMergeEntryTipVisible
-                    )
-                }
-            }
-
-            if isMergeEntryTipVisible, let contextualTipStore {
-                HStack {
-                    Spacer(minLength: 0)
-                    ContextualGuideCallout(
-                        store: contextualTipStore,
-                        tip: .libraryMergeEntry,
-                        onboardingState: onboardingState,
-                        targetIsVisible: true
-                    )
-                }
-            }
-            
-            // 内容文本
-            VStack(alignment: .leading, spacing: 8) {
-                LibraryCardContentPreview(
-                    content: card.content,
-                    contentJSON: card.contentJSON,
-                    cardID: card.id,
-                    onTap: openCard
-                )
-            }
-            
-            // 底部标签 - 横向滚动视图
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(card.tags, id: \.self) { tag in
-                        Text(tag)
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(notesCardTagBackground)
-                            .lineLimit(1)
-                    }
-                }
-                .padding(.horizontal, 1) // 添加一点内边距，避免标签贴边
-            }
-            
-        }
-        .padding(20)
-        .background {
-            LibraryCardBackgroundSurface(
-                backgroundMediaRef: card.backgroundMediaRef
-            ) {
-                ZStack {
-                    // 根据 rate 值显示不同的背景
-                    backgroundImageForRate(card.rate)
-
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color.white.opacity(0.1), lineWidth: 1)
-                }
-            }
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("card.home.\(card.id)")
-    }
-    
-    // MARK: 根据 rate 值返回背景图片
-    private var hasCustomBackground: Bool {
-        guard let backgroundMediaRef = card.backgroundMediaRef else {
-            return false
-        }
-        return !backgroundMediaRef.trimmingCharacters(
-            in: .whitespacesAndNewlines
-        ).isEmpty
-    }
-
-    private var metadataOpacity: Double {
-        LibraryCardReadabilityPolicy.metadataOpacity(
-            hasBackground: hasCustomBackground,
-            increasedContrast: contrast == .increased
-        )
-    }
-
-    private func backgroundImageForRate(_ rate: Int) -> some View {
-        Group {
-            if rate >= 3 && rate <= 8 {
-                // note_bg_green
-                Image("note_bg_green")
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .clipped()
-            } else if rate >= 9 && rate <= 26 {
-                // note_bg_blue
-                Image("note_bg_blue")
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .clipped()
-            } else if rate >= 27 && rate <= 80 {
-                // note_bg_purple
-                Image("note_bg_purple")
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .clipped()
-            } else if rate >= 81 && rate <= 242 {
-                // note_bg_yellow
-                Image("note_bg_yellow")
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .clipped()
-            } else if rate > 242 {
-                // note_bg_red
-                Image("note_bg_red")
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .clipped()
-            } else {
-                // 默认样式（不应该到达这里，因为 rate < 9 使用 NotesCard）
-                Color(red: 0.2, green: 0.1, blue: 0.3).opacity(0.8)
-            }
-        }
-    }
-    
-    // MARK: - Background Views
-    
-    private var notesCardTagBackground: some View {
-        RoundedRectangle(cornerRadius: 15)
-            .fill(
-                (hasCustomBackground ? Color.black : Color.white)
-                    .opacity(
-                        LibraryCardReadabilityPolicy.tagSurfaceOpacity(
-                            hasBackground: hasCustomBackground
-                        )
-                    )
-            )
-            .overlay(tagTopLeftHighlight)
-            .overlay(tagBottomRightHighlight)
-            .overlay(tagTopEdgeHighlight)
-            .overlay(tagBottomEdgeHighlight)
-    }
-    
-    // MARK: - 标签高光效果
-    private var tagTopLeftHighlight: some View {
-        RoundedRectangle(cornerRadius: 15)
-            .stroke(Color.white, lineWidth: 1)
-            .offset(x: 0, y: -1)
-            .mask(
-                RoundedRectangle(cornerRadius: 15)
-                    .fill(
-                        RadialGradient(
-                            colors: [Color.white, Color.clear],
-                            center: .topLeading,
-                            startRadius: 5,
-                            endRadius: 20
-                        )
-                    )
-            )
-    }
-    
-    private var tagBottomRightHighlight: some View {
-        RoundedRectangle(cornerRadius: 15)
-            .stroke(Color.white, lineWidth: 1)
-            .offset(x: 0, y: 0)
-            .mask(
-                RoundedRectangle(cornerRadius: 15)
-                    .fill(
-                        RadialGradient(
-                            colors: [Color.white, Color.clear],
-                            center: .bottomTrailing,
-                            startRadius: 5,
-                            endRadius: 20
-                        )
-                    )
-            )
-    }
-    
-    private var tagTopEdgeHighlight: some View {
-        RoundedRectangle(cornerRadius: 15)
-            .stroke(Color.white, lineWidth: 1)
-            .offset(x: 0, y: -1)
-            .mask(
-                RoundedRectangle(cornerRadius: 15)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.white, Color.clear],
-                            startPoint: .top,
-                            endPoint: UnitPoint(x: 0, y: 0.05)
-                        )
-                    )
-            )
-    }
-    
-    private var tagBottomEdgeHighlight: some View {
-        RoundedRectangle(cornerRadius: 15)
-            .stroke(Color.white, lineWidth: 1)
-            .offset(x: 0, y: 1)
-            .mask(
-                RoundedRectangle(cornerRadius: 15)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.white, Color.clear],
-                            startPoint: .bottom,
-                            endPoint: UnitPoint(x: 1, y: 0.05)
-                        )
-                    )
-            )
-    }
-    
-    // MARK: - 日期格式化方法
-    private func formatDate(_ dateString: String) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
-        
-        if let date = formatter.date(from: dateString) {
-            let now = Date()
-            let timeInterval = now.timeIntervalSince(date)
-            
-            if timeInterval < 60 {
-                return "just now"
-            } else if timeInterval < 3600 {
-                let minutes = Int(timeInterval / 60)
-                return "\(minutes) minutes ago"
-            } else if timeInterval < 86400 {
-                let hours = Int(timeInterval / 3600)
-                return "\(hours) hours ago"
-            } else if timeInterval < 604800 {
-                let days = Int(timeInterval / 86400)
-                return "\(days) days ago"
-            } else {
-                let displayFormatter = DateFormatter()
-                displayFormatter.dateFormat = "MM-dd"
-                return displayFormatter.string(from: date)
-            }
-        }
-        
-        return dateString
-    }
-}

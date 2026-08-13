@@ -9,7 +9,7 @@ final class LibraryCardPreviewSourceContractTests: XCTestCase {
             home.components(
                 separatedBy: "LibraryCardContentPreview("
             ).count - 1,
-            3
+            2
         )
         XCTAssertTrue(home.contains("CardEditingMediaURLResolver.resolve("))
         XCTAssertTrue(home.contains("image.resizable()"))
@@ -28,7 +28,7 @@ final class LibraryCardPreviewSourceContractTests: XCTestCase {
             home.components(
                 separatedBy: "LibraryCardBackgroundSurface("
             ).count - 1,
-            3
+            2
         )
         XCTAssertGreaterThanOrEqual(
             home.components(
@@ -54,6 +54,56 @@ final class LibraryCardPreviewSourceContractTests: XCTestCase {
         XCTAssertTrue(surface.contains(".accessibilityHidden(true)"))
         XCTAssertTrue(surface.contains("@Environment(\\.colorSchemeContrast)"))
         XCTAssertTrue(surface.contains("@Environment(\\.accessibilityReduceTransparency)"))
+    }
+
+    func testEveryLibrarySurfaceConsumesCanonicalRateStyle() throws {
+        let home = try source(at: "ArcNote/HomeView.swift")
+        let merge = try source(at: "ArcNote/MergeView.swift")
+        let discoveryPath = try source(at: "ArcNote/RootView.swift")
+
+        XCTAssertEqual(
+            home.components(
+                separatedBy: "LibraryCardBackgroundSurface("
+            ).count - 1,
+            2
+        )
+        XCTAssertTrue(home.contains("LibraryCardRateStyle(rate: rate)"))
+        XCTAssertTrue(
+            home.contains(
+                "backgroundMediaRef: card.backgroundMediaRef,\n"
+                    + "                rate: card.rate"
+            )
+        )
+        XCTAssertTrue(
+            home.contains(
+                "backgroundMediaRef: backgroundMediaRef,\n"
+                    + "                rate: rate"
+            )
+        )
+        XCTAssertTrue(
+            merge.contains(
+                "backgroundMediaRef: card.backgroundMediaRef,\n"
+                    + "                rate: card.rate"
+            )
+        )
+        XCTAssertTrue(home.contains("rate: favorite.rate"))
+        XCTAssertTrue(discoveryPath.contains("rate: card.rate"))
+        XCTAssertFalse(home.contains("rate: 0 // 收藏卡片"))
+        XCTAssertFalse(home.contains("backgroundImageForRate"))
+        XCTAssertFalse(merge.contains("backgroundImageForRate"))
+        XCTAssertFalse(discoveryPath.contains("backgroundImageForRate"))
+
+        for legacyRange in [
+            "rate >= 3 && rate <= 8",
+            "rate >= 9 && rate <= 26",
+            "rate >= 27 && rate <= 80",
+            "rate >= 81 && rate <= 242",
+            "rate > 242",
+        ] {
+            XCTAssertFalse(home.contains(legacyRange))
+            XCTAssertFalse(merge.contains(legacyRange))
+            XCTAssertFalse(discoveryPath.contains(legacyRange))
+        }
     }
 
     func testImageBearingLibraryListsAreLazyAndPreserveCanonicalContent() throws {
