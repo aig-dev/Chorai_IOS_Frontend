@@ -24,6 +24,7 @@ public final class MergeSessionStore: ObservableObject {
     @Published public private(set) var capabilities: [MergeCapability] = []
     @Published public private(set) var job: MergeJob?
     @Published public private(set) var artifact: MergeArtifact?
+    @Published public private(set) var artifactActionError: CoreMergeError?
     @Published public private(set) var phase: MergeSessionPhase = .idle
     @Published public var titleOverride = ""
     @Published public private(set) var isOperationInFlight = false
@@ -238,6 +239,25 @@ public final class MergeSessionStore: ObservableObject {
         }
     }
 
+    public func discardArtifact() {
+        guard
+            !isOperationInFlight,
+            phase == .ready,
+            artifact != nil,
+            let job,
+            job.status.canCancel,
+            snapshot != nil
+        else {
+            return
+        }
+
+        artifactActionError = nil
+        phase = .cancelling
+        launch { store in
+            await store.submitArtifactDiscard(jobID: job.jobID)
+        }
+    }
+
     public func commit() {
         guard
             !isOperationInFlight,
@@ -248,6 +268,8 @@ public final class MergeSessionStore: ObservableObject {
         else {
             return
         }
+
+        artifactActionError = nil
 
         let request: MergeCommitRequest
         if let existing = value.commitRequest {
@@ -307,6 +329,7 @@ public final class MergeSessionStore: ObservableObject {
         selectedSources = request.sources
         job = nil
         artifact = nil
+        artifactActionError = nil
         titleOverride = ""
         phase = .creating
         launch { store in
@@ -410,6 +433,44 @@ public final class MergeSessionStore: ObservableObject {
         }
     }
 
+    private func submitArtifactDiscard(jobID: String) async {
+        do {
+            let cancelled = try await service.cancel(jobID: jobID)
+            guard !Task.isCancelled else { return }
+            if cancelled.status == .cancelled {
+                resetToSelectionAfterDiscard()
+            } else {
+                await driveLifecycle(from: cancelled)
+            }
+        } catch {
+            guard !Task.isCancelled else { return }
+            let discardError = coreError(from: error)
+            do {
+                let current = try await service.job(id: jobID)
+                guard !Task.isCancelled else { return }
+                await driveLifecycle(from: current)
+                if phase == .ready {
+                    artifactActionError = discardError
+                }
+            } catch {
+                guard !Task.isCancelled else { return }
+                artifactActionError = discardError
+                phase = .ready
+            }
+        }
+    }
+
+    private func resetToSelectionAfterDiscard() {
+        persistence.remove(actorID: actorID)
+        snapshot = nil
+        job = nil
+        artifact = nil
+        artifactActionError = nil
+        selectedSources = [anchor]
+        titleOverride = ""
+        phase = .selection
+    }
+
     private func submitCommit(
         jobID: String,
         request: MergeCommitRequest,
@@ -433,7 +494,12 @@ public final class MergeSessionStore: ObservableObject {
             if case .conflict = mapped, reconcileConflict {
                 await reconcile(jobID: jobID)
             } else {
-                phase = .paused(mapped)
+                if artifact != nil {
+                    artifactActionError = mapped
+                    phase = .ready
+                } else {
+                    phase = .paused(mapped)
+                }
             }
         }
     }
@@ -514,6 +580,7 @@ public final class MergeSessionStore: ObservableObject {
                 return
             }
             artifact = loaded
+            artifactActionError = nil
             // Merge vNext documents are titleless and the wire commit seals only
             // the artifact revision/hash. Do not revive legacy title overrides.
             titleOverride = ""
@@ -539,9 +606,15 @@ public final class MergeSessionStore: ObservableObject {
             !assetID.isEmpty,
             var value = snapshot
         else {
-            phase = .paused(
-                .server(code: result.errorCode ?? "commit_result_incomplete")
+            let error = CoreMergeError.server(
+                code: result.errorCode ?? "commit_result_incomplete"
             )
+            if artifact != nil {
+                artifactActionError = error
+                phase = .ready
+            } else {
+                phase = .paused(error)
+            }
             return
         }
 

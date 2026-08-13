@@ -67,6 +67,10 @@ struct ArcNoteApp: App {
         .contains("--ui-test-adaptive-layout")
     private let isMergeSelectionUITestRoute = ProcessInfo.processInfo.arguments
         .contains("--ui-test-merge-selection")
+    private let isMergeArtifactUITestRoute = ProcessInfo.processInfo.arguments
+        .contains("--ui-test-merge-artifact")
+    private let isMergeLongArtifactUITestRoute = ProcessInfo.processInfo.arguments
+        .contains("--ui-test-merge-artifact-long")
     private let isNativeOnboardingUITestRoute = ProcessInfo.processInfo.arguments
         .contains("--ui-test-native-onboarding")
     private let isPrivateBetaEntryUITestRoute = ProcessInfo.processInfo.arguments
@@ -122,6 +126,10 @@ struct ArcNoteApp: App {
                     AdaptiveLayoutFixtureScreen()
                 } else if isMergeSelectionUITestRoute {
                     MergeSelectionVisualFixtureScreen()
+                } else if isMergeArtifactUITestRoute || isMergeLongArtifactUITestRoute {
+                    MergeArtifactVisualFixtureScreen(
+                        usesLongDocument: isMergeLongArtifactUITestRoute
+                    )
                 } else if isNativeOnboardingUITestRoute {
                     NativeOnboardingFixtureScreen()
                 } else if isPrivateBetaEntryUITestRoute {

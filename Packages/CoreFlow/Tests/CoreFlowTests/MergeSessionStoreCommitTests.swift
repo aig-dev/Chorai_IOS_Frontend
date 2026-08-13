@@ -85,9 +85,15 @@ final class MergeSessionStoreCommitTests: XCTestCase {
         )
         await service.enqueueCommit(.failure(.offline))
         await service.enqueueCommit(.success(makeMergeCommitResult()))
+        let expectedArtifact = store.artifact
         store.commit()
-        await waitForMergeStore { store.phase == .paused(.offline) }
-        store.retry()
+        await waitForMergeStore { store.artifactActionError == .offline }
+
+        XCTAssertEqual(store.phase, .ready)
+        XCTAssertEqual(store.artifact, expectedArtifact)
+        XCTAssertNotNil(store.activeSnapshot?.commitRequest)
+
+        store.commit()
         await waitForMergeStore {
             store.phase == .completed(assetID: "ast_committed")
         }
@@ -97,6 +103,35 @@ final class MergeSessionStoreCommitTests: XCTestCase {
         XCTAssertEqual(calls[0].request, calls[1].request)
         XCTAssertEqual(calls[1].request.idempotencyKey, "commit-stable")
         XCTAssertNil(calls[1].request.target.titleOverride)
+    }
+
+    func testIncompleteCommitResultKeepsArtifactVisibleAndRetryable() async {
+        let service = MockCoreMergeService()
+        let persistence = InMemoryMergeSessionPersistence()
+        let store = await readyStore(
+            service: service,
+            persistence: persistence,
+            keys: ["commit-stable"]
+        )
+        let expectedArtifact = store.artifact
+        await service.enqueueCommit(
+            .success(
+                makeMergeCommitResult(
+                    assetID: nil,
+                    errorCode: "commit_result_incomplete"
+                )
+            )
+        )
+
+        store.commit()
+        await waitForMergeStore {
+            store.artifactActionError
+                == .server(code: "commit_result_incomplete")
+        }
+
+        XCTAssertEqual(store.phase, .ready)
+        XCTAssertEqual(store.artifact, expectedArtifact)
+        XCTAssertNotNil(store.activeSnapshot?.commitRequest)
     }
 
     func testCommitConflictReconcilesReadyAndKeepsSameRequestForRetry() async {

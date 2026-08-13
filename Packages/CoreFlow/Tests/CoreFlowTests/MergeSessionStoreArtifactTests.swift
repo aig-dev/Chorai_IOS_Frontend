@@ -33,6 +33,40 @@ final class MergeSessionStoreArtifactTests: XCTestCase {
         XCTAssertTrue(persistence.removals.isEmpty)
     }
 
+    func testDiscardReadyArtifactReturnsDirectlyToFreshSelection() async {
+        let service = MockCoreMergeService()
+        let persistence = InMemoryMergeSessionPersistence()
+        let store = await readyStore(service: service, persistence: persistence)
+        await service.enqueueCancel(.success(makeMergeJob(status: .cancelled)))
+
+        store.discardArtifact()
+        await waitForMergeStore { store.phase == .selection }
+
+        XCTAssertNil(persistence.snapshot(actorID: "actor_1"))
+        XCTAssertNil(store.job)
+        XCTAssertNil(store.artifact)
+        XCTAssertEqual(store.selectedSources.map(\.assetID), ["ast_anchor"])
+    }
+
+    func testDiscardFailureKeepsArtifactVisibleWithInlineError() async {
+        let service = MockCoreMergeService()
+        let persistence = InMemoryMergeSessionPersistence()
+        let store = await readyStore(service: service, persistence: persistence)
+        let expectedArtifact = store.artifact
+        await service.enqueueCancel(.failure(.offline))
+        await service.enqueueJob(
+            .success(makeMergeJob(status: .artifactReady, artifactID: "artifact_1"))
+        )
+        await service.enqueueArtifact(.success(makeMergeArtifact()))
+
+        store.discardArtifact()
+        await waitForMergeStore { store.artifactActionError == .offline }
+
+        XCTAssertEqual(store.phase, .ready)
+        XCTAssertEqual(store.artifact, expectedArtifact)
+        XCTAssertNotNil(persistence.snapshot(actorID: "actor_1"))
+    }
+
     func testCancelRemovesSnapshotOnlyAfterCanonicalCancelledResponse() async {
         let service = MockCoreMergeService()
         let persistence = InMemoryMergeSessionPersistence()

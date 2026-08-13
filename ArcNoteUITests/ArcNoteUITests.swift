@@ -90,6 +90,56 @@ final class ArcNoteUITests: XCTestCase {
         captureMergeVisual("selection-zen-action")
     }
 
+    func testMergeArtifactFixtureUsesCenteredTwoActionPreview() {
+        app.launchArguments.append("--ui-test-merge-artifact")
+        app.launch()
+
+        let window = app.windows.firstMatch
+        XCTAssertTrue(window.waitForExistence(timeout: 10))
+        let panel = waitFor("merge.artifact.panel")
+        let discard = waitForButton("merge.discard")
+        let save = waitForButton("merge.commit")
+
+        XCTAssertEqual(panel.label, "Merge preview")
+        XCTAssertTrue(waitFor("merge.artifact.body").exists)
+        XCTAssertEqual(app.buttons.matching(identifier: "merge.discard").count, 1)
+        XCTAssertEqual(app.buttons.matching(identifier: "merge.commit").count, 1)
+        XCTAssertGreaterThan(panel.frame.minY, window.frame.minY + 80)
+        XCTAssertLessThan(panel.frame.maxY, window.frame.maxY - 30)
+        XCTAssertTrue(discard.isHittable)
+        XCTAssertTrue(save.isHittable)
+
+        for forbidden in ["New Insight", "Uncommon", "Add tag"] {
+            XCTAssertFalse(
+                app.descendants(matching: .any)[forbidden].exists,
+                "Unexpected legacy artifact control: \(forbidden)"
+            )
+        }
+        XCTAssertFalse(
+            app.buttons["Close"].exists,
+            "Artifact review must not add a redundant Close action"
+        )
+        captureMergeVisual("artifact-centered")
+    }
+
+    func testMergeLongArtifactKeepsActionsReachable() {
+        app.launchArguments.append("--ui-test-merge-artifact-long")
+        app.launch()
+
+        let window = app.windows.firstMatch
+        XCTAssertTrue(window.waitForExistence(timeout: 10))
+        XCTAssertTrue(waitFor("merge.artifact.body").exists)
+
+        for action in [
+            waitForButton("merge.discard"),
+            waitForButton("merge.commit"),
+        ] {
+            XCTAssertTrue(action.isHittable)
+            XCTAssertLessThanOrEqual(action.frame.maxY, window.frame.maxY)
+        }
+        captureMergeVisual("artifact-long")
+    }
+
     func testNativeOnboardingFixtureCompletesLibraryTipFromItsRealTarget() {
         app.launchArguments.append("--ui-test-native-onboarding")
         app.launch()
@@ -2999,12 +3049,9 @@ final class ArcNoteUITests: XCTestCase {
         RunLoop.current.run(until: Date().addingTimeInterval(0.35))
         captureMergeVisual("artifact-ready")
 
-        tap("merge.cancel")
-        let cancel = app.sheets.buttons["Cancel Merge"].firstMatch
-        XCTAssertTrue(cancel.waitForExistence(timeout: 10))
-        cancel.tap()
-        waitFor("merge.phase.cancelled", timeout: 30)
-        captureMergeVisual("cancelled")
+        tap("merge.discard")
+        waitFor("merge.search.input", timeout: 30)
+        captureMergeVisual("discarded-selection")
         XCTAssertEqual(
             try fetchSmokeMergeJob(jobID: jobID, token: session.token).status,
             "CANCELLED"

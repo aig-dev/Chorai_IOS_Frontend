@@ -216,7 +216,6 @@ final class MergeCandidateStore: ObservableObject {
 private struct MergeLifecycleView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-    @Environment(\.colorSchemeContrast) private var contrast
     @ObservedObject var candidates: MergeCandidateStore
     @StateObject private var store: MergeSessionStore
     @State private var searchText = ""
@@ -440,9 +439,13 @@ private struct MergeLifecycleView: View {
         case .ready:
             artifactContent
         case .committing:
-            quietState(label: "Saving", identifier: "merge.phase.committing")
+            artifactContent
         case .cancelling:
-            quietState(label: "Cancelling", identifier: "merge.phase.cancelling")
+            if store.artifact != nil {
+                artifactContent
+            } else {
+                quietState(label: "Cancelling", identifier: "merge.phase.cancelling")
+            }
         case .paused:
             recoverableContent(label: "Paused", identifier: "merge.phase.paused")
         case .failed:
@@ -577,114 +580,45 @@ private struct MergeLifecycleView: View {
     }
 
     private var artifactContent: some View {
-        VStack(spacing: 0) {
-            sourceStrip
+        ZStack {
+            selectionContent
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
 
-            ScrollView {
-                if let artifact = store.artifact {
-                    VStack(alignment: .leading, spacing: 0) {
-                        if let subtitle = artifact.document.subtitle,
-                           !subtitle.isEmpty {
-                            Text(subtitle)
-                                .font(.system(size: 14))
-                                .foregroundStyle(.white.opacity(0.65))
-                                .padding(.bottom, 16)
-                        }
+            Color.black.opacity(reduceTransparency ? 0.72 : 0.58)
+                .ignoresSafeArea()
+                .accessibilityHidden(true)
 
-                        VStack(alignment: .leading, spacing: 12) {
-                            ForEach(
-                                Array(artifact.document.blocks.enumerated()),
-                                id: \.offset
-                            ) { _, block in
-                                MergeArtifactBlockView(block: block, depth: 0)
-                            }
-
-                            if artifact.document.blocks.isEmpty {
-                                Text("No body")
-                                    .font(.system(size: 14))
-                                    .foregroundStyle(.white.opacity(0.55))
-                            }
-                        }
-                        .accessibilityElement(children: .contain)
-                        .accessibilityIdentifier("merge.artifact.body")
-                    }
-                    .padding(20)
-                    .background(
-                        RoundedRectangle(cornerRadius: 20)
-                            .fill(
-                                reduceTransparency
-                                    ? Color(red: 0.11, green: 0.075, blue: 0.16)
-                                    : Color.black.opacity(0.30)
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 20)
-                                    .stroke(
-                                        Color.white.opacity(contrast == .increased ? 0.34 : 0.18),
-                                        lineWidth: 1
-                                    )
-                            )
+            if let artifact = store.artifact {
+                MergeArtifactReviewPanel(
+                    artifact: artifact,
+                    sourceCount: store.selectedSources.count,
+                    error: store.artifactActionError,
+                    operation: artifactOperation,
+                    onDiscard: store.discardArtifact,
+                    onSave: store.commit
+                )
+                .adaptiveContentGutter()
+                .padding(.vertical, 24)
+                .overlay(alignment: .topLeading) {
+                    automationText(
+                        "ready",
+                        identifier: "merge.artifact.ready"
                     )
-                    .adaptiveContentGutter()
-                    .padding(.top, 18)
-                    .padding(.bottom, 110)
-                    .overlay(alignment: .topLeading) {
-                        automationText(
-                            "ready",
-                            identifier: "merge.artifact.ready"
-                        )
-                    }
                 }
             }
-            .scrollDismissesKeyboard(.interactively)
-            .overlay(alignment: .bottom) {
-                artifactActions
-            }
         }
     }
 
-    private var sourceStrip: some View {
-        HStack(spacing: 8) {
-            Image("menu_merge")
-                .resizable()
-                .scaledToFit()
-                .frame(width: 18, height: 18)
-            Text(store.anchor.preview)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(.white.opacity(0.72))
-                .lineLimit(1)
-            Spacer()
-            Text("\(store.selectedSources.count)")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.58))
+    private var artifactOperation: MergeArtifactOperation {
+        switch store.phase {
+        case .committing:
+            return .saving
+        case .cancelling:
+            return .discarding
+        default:
+            return .idle
         }
-        .adaptiveContentGutter()
-        .padding(.vertical, 10)
-    }
-
-    private var artifactActions: some View {
-        HStack(spacing: 16) {
-            MergeLifecycleAction(
-                systemImage: "xmark",
-                assetImage: nil,
-                isFilled: false,
-                accessibilityLabel: "Cancel Merge",
-                accessibilityIdentifier: "merge.cancel"
-            ) {
-                showCancelConfirmation = true
-            }
-
-            MergeLifecycleAction(
-                systemImage: "checkmark",
-                assetImage: nil,
-                isFilled: true,
-                accessibilityLabel: "Save merged card",
-                accessibilityIdentifier: "merge.commit"
-            ) {
-                store.commit()
-            }
-        }
-        .adaptiveContentGutter()
-        .padding(.bottom, 18)
     }
 
     private func quietState(
@@ -899,6 +833,230 @@ private struct MergeSelectionPrimaryAction: View {
     }
 }
 
+private enum MergeArtifactOperation: Equatable {
+    case idle
+    case discarding
+    case saving
+}
+
+private struct MergeArtifactReviewPanel: View {
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorSchemeContrast) private var contrast
+
+    let artifact: MergeArtifact
+    let sourceCount: Int
+    let error: CoreMergeError?
+    let operation: MergeArtifactOperation
+    let onDiscard: () -> Void
+    let onSave: () -> Void
+
+    private var isBusy: Bool { operation != .idle }
+
+    private var estimatedBodyHeight: CGFloat {
+        let estimatedLines = artifact.document.blocks.reduce(into: 0) {
+            partialResult, block in
+            let textLength = max(
+                1,
+                block.plainTextLines.joined(separator: " ").count
+            )
+            partialResult += max(1, Int(ceil(Double(textLength) / 38)))
+        }
+        let interBlockSpacing = max(0, artifact.document.blocks.count - 1) * 12
+        return CGFloat(estimatedLines) * 22
+            + CGFloat(interBlockSpacing)
+            + 40
+    }
+
+    private func panelHeight(in availableHeight: CGFloat) -> CGFloat {
+        let chromeHeight: CGFloat = error == nil ? 178 : 212
+        let idealHeight = chromeHeight + estimatedBodyHeight
+        return min(max(390, idealHeight), min(620, availableHeight * 0.68))
+    }
+
+    var body: some View {
+        GeometryReader { geometry in
+            VStack(spacing: 0) {
+                VStack(spacing: 6) {
+                    Text("Merge preview")
+                        .font(.system(size: 18, weight: .semibold))
+
+                    Text("\(sourceCount) sources → 1 card")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.54))
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 20)
+                .padding(.top, 22)
+                .padding(.bottom, 18)
+
+                Divider()
+                    .overlay(Color.white.opacity(0.12))
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 12) {
+                        if let subtitle = artifact.document.subtitle,
+                           !subtitle.trimmingCharacters(
+                                in: .whitespacesAndNewlines
+                           ).isEmpty {
+                            Text(subtitle)
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(.white.opacity(0.58))
+                                .padding(.bottom, 2)
+                        }
+
+                        ForEach(
+                            Array(artifact.document.blocks.enumerated()),
+                            id: \.offset
+                        ) { _, block in
+                            MergeArtifactBlockView(block: block, depth: 0)
+                        }
+
+                        if artifact.document.blocks.isEmpty {
+                            Text("No body")
+                                .font(.system(size: 14))
+                                .foregroundStyle(.white.opacity(0.55))
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(20)
+                    .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier("merge.artifact.body")
+                }
+                .scrollIndicators(.hidden)
+
+                if error != nil {
+                    Text("Couldn’t complete that action. Try again.")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(Color(red: 1, green: 0.70, blue: 0.70))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, 10)
+                        .accessibilityIdentifier("merge.artifact.error")
+                }
+
+                Divider()
+                    .overlay(Color.white.opacity(0.12))
+
+                HStack(spacing: 12) {
+                    MergeArtifactTextAction(
+                        title: operation == .discarding ? "Discarding…" : "Discard",
+                        systemImage: "xmark",
+                        isFilled: false,
+                        isBusy: operation == .discarding,
+                        isEnabled: !isBusy,
+                        identifier: "merge.discard",
+                        action: onDiscard
+                    )
+
+                    MergeArtifactTextAction(
+                        title: operation == .saving ? "Saving…" : "Save",
+                        systemImage: "checkmark",
+                        isFilled: true,
+                        isBusy: operation == .saving,
+                        isEnabled: !isBusy,
+                        identifier: "merge.commit",
+                        action: onSave
+                    )
+                }
+                .padding(16)
+            }
+            .frame(
+                width: geometry.size.width,
+                height: panelHeight(in: geometry.size.height),
+                alignment: .top
+            )
+            .background {
+                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    .fill(
+                        reduceTransparency
+                            ? Color(red: 0.10, green: 0.065, blue: 0.15)
+                            : Color(red: 0.09, green: 0.055, blue: 0.14)
+                                .opacity(0.94)
+                    )
+                    .overlay {
+                        LinearGradient(
+                            colors: [
+                                Color(red: 0.58, green: 0.20, blue: 0.72)
+                                    .opacity(0.24),
+                                Color.clear,
+                                Color(red: 0.18, green: 0.42, blue: 0.68)
+                                    .opacity(0.16),
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                        .clipShape(
+                            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                        )
+                    }
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 28, style: .continuous)
+                            .stroke(
+                                Color.white.opacity(
+                                    contrast == .increased ? 0.42 : 0.20
+                                ),
+                                lineWidth: contrast == .increased ? 1.5 : 1
+                            )
+                    }
+            }
+            .shadow(color: Color.black.opacity(0.34), radius: 26, y: 14)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Merge preview")
+        .accessibilityIdentifier("merge.artifact.panel")
+    }
+}
+
+private struct MergeArtifactTextAction: View {
+    let title: String
+    let systemImage: String
+    let isFilled: Bool
+    let isBusy: Bool
+    let isEnabled: Bool
+    let identifier: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                if isBusy {
+                    ProgressView()
+                        .tint(.white)
+                        .controlSize(.small)
+                } else {
+                    Image(systemName: systemImage)
+                        .font(.system(size: 14, weight: .semibold))
+                }
+
+                Text(title)
+                    .font(.system(size: 15, weight: .semibold))
+            }
+            .foregroundStyle(.white.opacity(isEnabled || isBusy ? 0.94 : 0.42))
+            .frame(maxWidth: .infinity, minHeight: 48)
+            .background {
+                Capsule()
+                    .fill(
+                        isFilled
+                            ? Color.white.opacity(isEnabled ? 0.18 : 0.08)
+                            : Color.clear
+                    )
+                    .overlay {
+                        Capsule()
+                            .stroke(
+                                Color.white.opacity(isEnabled ? 0.24 : 0.10),
+                                lineWidth: 1
+                            )
+                    }
+            }
+        }
+        .buttonStyle(.plain)
+        .disabled(!isEnabled)
+        .accessibilityLabel(title)
+        .accessibilityIdentifier(identifier)
+    }
+}
+
 #if DEBUG
 @MainActor
 struct MergeSelectionVisualFixtureScreen: View {
@@ -1023,6 +1181,102 @@ struct MergeSelectionVisualFixtureScreen: View {
         )
     }
 
+}
+
+@MainActor
+struct MergeArtifactVisualFixtureScreen: View {
+    let usesLongDocument: Bool
+    @State private var operation: MergeArtifactOperation = .idle
+
+    private var blocks: [MergeBlock] {
+        let copy = [
+            "Clarity comes from keeping the relationship between ideas visible.",
+            "A quiet interface can preserve context without asking for another decision.",
+            "The resulting card should feel complete, but still belong to the same library.",
+            "Rate color is ambient metadata, never the primary content.",
+            "Direct actions make the review state easy to understand and easy to leave.",
+            "Long artifacts scroll inside the panel while their actions remain reachable.",
+            "The exact server document is what Save commits.",
+            "No title, tags, or route controls are invented by the client.",
+        ]
+        let values = usesLongDocument
+            ? copy + copy + copy
+            : Array(copy.prefix(3))
+        return values.enumerated().map { index, text in
+            MergeBlock(
+                id: "fixture-block-\(index)",
+                type: index == 0 ? "heading_2" : "paragraph",
+                content: [
+                    MergeInline(type: "text", text: text, properties: [:])
+                ],
+                properties: [:],
+                children: []
+            )
+        }
+    }
+
+    private var artifact: MergeArtifact {
+        MergeArtifact(
+            artifactID: "fixture-artifact",
+            jobID: "fixture-job",
+            capabilityID: "structured_text",
+            outputKind: .document,
+            document: MergeDocument(
+                schemaVersion: "card_doc.v1",
+                title: nil,
+                subtitle: nil,
+                blocks: blocks,
+                metadata: [:]
+            ),
+            fragments: [],
+            metadata: [:]
+        )
+    }
+
+    var body: some View {
+        ZStack {
+            Image("home_bg")
+                .resizable()
+                .scaledToFill()
+                .ignoresSafeArea()
+
+            VStack(spacing: 18) {
+                Text("Merge")
+                    .font(.system(size: 20, weight: .semibold))
+
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(Color.white.opacity(0.08))
+                    .frame(height: 180)
+                    .adaptiveContentGutter()
+
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(Color.white.opacity(0.06))
+                    .frame(height: 250)
+                    .adaptiveContentGutter()
+            }
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .padding(.top, 54)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+
+            Color.black.opacity(0.58)
+                .ignoresSafeArea()
+                .accessibilityHidden(true)
+
+            MergeArtifactReviewPanel(
+                artifact: artifact,
+                sourceCount: 3,
+                error: nil,
+                operation: operation,
+                onDiscard: { operation = .discarding },
+                onSave: { operation = .saving }
+            )
+            .adaptiveContentGutter()
+            .padding(.vertical, 24)
+        }
+        .preferredColorScheme(.dark)
+    }
 }
 #endif
 
