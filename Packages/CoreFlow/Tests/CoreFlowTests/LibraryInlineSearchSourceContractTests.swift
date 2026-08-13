@@ -70,13 +70,13 @@ final class LibraryInlineSearchSourceContractTests: XCTestCase {
         XCTAssertFalse(search.contains(#"Text("Time")"#))
     }
 
-    func testResultsReuseBothExistingLibraryCardPresentations() throws {
+    func testResultsReuseBothSharedLibraryCardPresentations() throws {
         let search = try source(at: "ArcNote/SearchView.swift")
         let models = try source(at: "ArcNote/Models/UserAllCardsModels.swift")
 
         XCTAssertTrue(search.contains("struct LibrarySearchResultsView: View"))
         XCTAssertTrue(search.contains("NotesCard("))
-        XCTAssertTrue(search.contains("NotesColorCard("))
+        XCTAssertFalse(search.contains("NotesColorCard("))
         XCTAssertTrue(search.contains("HomePostCard("))
         XCTAssertTrue(search.contains(#".accessibilityIdentifier("home.search.results")"#))
         XCTAssertTrue(models.contains("let contentJSON: String?"))

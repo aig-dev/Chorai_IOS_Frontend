@@ -12,12 +12,25 @@ final class MergeSelectionPresentationSourceContractTests: XCTestCase {
         XCTAssertTrue(lifecycle.contains("\"Merge \\(count) cards\""))
         XCTAssertTrue(lifecycle.contains(".frame(maxWidth: .infinity, minHeight: 56)"))
         XCTAssertTrue(lifecycle.contains(".accessibilityIdentifier(\"merge.action\")"))
+        XCTAssertTrue(lifecycle.contains("MergeSelectionActionDockSurface()"))
+        XCTAssertFalse(lifecycle.contains("Color.black.opacity(0.22)"))
         XCTAssertFalse(lifecycle.contains("MergeSelectionActionBar"))
         XCTAssertFalse(lifecycle.contains("Text(\"Selected notes\")"))
         XCTAssertTrue(cards.contains("struct MergeCardView: View"))
         XCTAssertTrue(cards.contains("LibraryCardBackgroundSurface("))
         XCTAssertTrue(cards.contains("LibraryCardContentPreview("))
         XCTAssertTrue(cards.contains("Image(systemName: \"checkmark\")"))
+    }
+
+    func testVisualFixtureCanRenderARealCustomBackground() throws {
+        let lifecycle = try source(at: "ArcNote/CoreFlow/MergeLifecycleViews.swift")
+
+        XCTAssertTrue(
+            lifecycle.contains("CHORAI_UI_TEST_MERGE_BACKGROUND_URL")
+        )
+        XCTAssertTrue(
+            lifecycle.contains("backgroundMediaRef: customBackgroundMediaRef")
+        )
     }
 
     private func source(at path: String) throws -> String {

@@ -278,17 +278,19 @@ private struct MergeLifecycleView: View {
                 atmosphere
 
                 VStack(spacing: 0) {
-                    header
-                    if let onboardingStore {
-                        OnboardingGuideLine(
-                            store: onboardingStore,
-                            allowedStates: [
-                                "product_merge_intro",
-                                "product_merge_preview"
-                            ]
-                        )
-                        .adaptiveContentGutter()
-                        .padding(.bottom, 10)
+                    if !isArtifactPresentation {
+                        header
+                        if let onboardingStore {
+                            OnboardingGuideLine(
+                                store: onboardingStore,
+                                allowedStates: [
+                                    "product_merge_intro",
+                                    "product_merge_preview"
+                                ]
+                            )
+                            .adaptiveContentGutter()
+                            .padding(.bottom, 10)
+                        }
                     }
                     phaseContent
                 }
@@ -767,6 +769,16 @@ private struct MergeLifecycleView: View {
         }
     }
 
+    private var isArtifactPresentation: Bool {
+        guard store.artifact != nil else { return false }
+        switch store.phase {
+        case .ready, .committing, .cancelling:
+            return true
+        default:
+            return false
+        }
+    }
+
     private var completedAssetID: String? {
         guard case .completed(let assetID) = store.phase else { return nil }
         return assetID
@@ -826,10 +838,31 @@ private struct MergeSelectionPrimaryAction: View {
         .adaptiveContentGutter()
         .padding(.top, 10)
         .padding(.bottom, 10)
-        .background(
-            (reduceTransparency ? Color(red: 0.055, green: 0.035, blue: 0.09) : Color.black.opacity(0.22))
-                .ignoresSafeArea(edges: .bottom)
-        )
+        .background(MergeSelectionActionDockSurface())
+    }
+}
+
+private struct MergeSelectionActionDockSurface: View {
+    @Environment(\.accessibilityReduceTransparency)
+    private var reduceTransparency
+
+    var body: some View {
+        ZStack {
+            if reduceTransparency {
+                Color(red: 0.055, green: 0.035, blue: 0.09)
+            } else {
+                Rectangle()
+                    .fill(.ultraThinMaterial)
+                Color(red: 0.055, green: 0.035, blue: 0.09)
+                    .opacity(0.84)
+            }
+        }
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(Color.white.opacity(0.08))
+                .frame(height: 1)
+        }
+        .ignoresSafeArea(edges: .bottom)
     }
 }
 
@@ -1063,6 +1096,13 @@ struct MergeSelectionVisualFixtureScreen: View {
     @State private var isCandidateSelected = true
     @State private var didMerge = false
 
+    private let customBackgroundMediaRef: String? = {
+        let value = ProcessInfo.processInfo.environment[
+            "CHORAI_UI_TEST_MERGE_BACKGROUND_URL"
+        ]?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return value?.isEmpty == false ? value : nil
+    }()
+
     private let anchorCard = MergeCard(
         id: "merge-fixture-anchor",
         versionID: "ver_merge_fixture_anchor",
@@ -1072,17 +1112,20 @@ struct MergeSelectionVisualFixtureScreen: View {
         isUserCard: false,
         rate: 2
     )
-    private let candidateCard = MergeCard(
-        id: "merge-fixture-candidate",
-        versionID: "ver_merge_fixture_candidate",
-        date: "2 days ago",
-        content: "Good interfaces make related thinking feel close without making the screen feel crowded.",
-        tags: ["Design", "Product"],
-        isUserCard: true,
-        userName: "Mira",
-        favoriteCount: 12,
-        rate: 4
-    )
+    private var candidateCard: MergeCard {
+        MergeCard(
+            id: "merge-fixture-candidate",
+            versionID: "ver_merge_fixture_candidate",
+            date: "2 days ago",
+            content: "Good interfaces make related thinking feel close without making the screen feel crowded.",
+            backgroundMediaRef: customBackgroundMediaRef,
+            tags: ["Design", "Product"],
+            isUserCard: true,
+            userName: "Mira",
+            favoriteCount: 12,
+            rate: 4
+        )
+    }
 
     private var selectedCount: Int {
         isCandidateSelected ? 2 : 1
@@ -1241,9 +1284,6 @@ struct MergeArtifactVisualFixtureScreen: View {
                 .ignoresSafeArea()
 
             VStack(spacing: 18) {
-                Text("Merge")
-                    .font(.system(size: 20, weight: .semibold))
-
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
                     .fill(Color.white.opacity(0.08))
                     .frame(height: 180)
