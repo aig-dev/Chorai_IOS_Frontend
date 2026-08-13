@@ -128,10 +128,14 @@ final class MergeCandidateStore: ObservableObject {
                         versionID: response.data.noteDocumentVersionID,
                         date: Self.relativeDate(response.data.createdAt),
                         content: response.data.content,
+                        contentJSON: response.data.contentJSON,
+                        backgroundMediaRef: response.data.backgroundMediaRef,
                         tags: response.data.tags,
-                        isUserCard: false,
-                        favoriteCount: 0,
-                        rate: 0
+                        isUserCard: response.data.author != nil,
+                        userName: response.data.author?.username,
+                        avatarUrl: response.data.author?.avatar,
+                        favoriteCount: response.data.favoriteCount,
+                        rate: response.data.rate
                     )
                 }
             )
@@ -181,6 +185,8 @@ final class MergeCandidateStore: ObservableObject {
                 versionID: card.noteDocumentVersionID,
                 date: relativeDate(card.createdAt),
                 content: card.content,
+                contentJSON: card.contentJSON,
+                backgroundMediaRef: card.backgroundMediaRef,
                 tags: card.tags,
                 isUserCard: card.author != nil,
                 userName: card.author?.username,

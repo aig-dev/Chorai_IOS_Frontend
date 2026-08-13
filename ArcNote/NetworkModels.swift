@@ -544,43 +544,8 @@ struct UserCard: Codable, Identifiable {
 }
 
 // MARK: - 创建卡片响应数据模型
-struct CreateCardData: Codable {
-    let id: String
-    let noteDocumentVersionID: String?
-    let title: String?
-    let content: String
-    let contentJSON: String?
-    let editorAtmosphere: String?
-    let contentHash: String
-    let isPublic: Bool
-    let tags: [String]
-    let createdAt: String
-    let updatedAt: String
-    let likeCount: Int
-    let isLiked: Bool
-    let backgroundMediaRef: String?
-
-    enum CodingKeys: String, CodingKey {
-        case id, title, content, tags
-        case noteDocumentVersionID = "note_document_version_id"
-        case contentJSON = "content_json"
-        case editorAtmosphere = "editor_atmosphere"
-        case contentHash = "content_hash"
-        case isPublic = "is_public"
-        case createdAt = "created_at"
-        case updatedAt = "updated_at"
-        case likeCount = "like_count"
-        case isLiked = "is_liked"
-        case backgroundMediaRef = "background_media_ref"
-    }
-}
-
-// MARK: 卡片响应模型
-struct CardResponse: Codable {
-    let success: Bool
-    let message: String?
-    let data: CreateCardData
-}
+typealias CreateCardData = CardResponseData
+typealias CardResponse = CardResponseEnvelope
 
 struct CardMessageData: Codable {
     let message: String?
