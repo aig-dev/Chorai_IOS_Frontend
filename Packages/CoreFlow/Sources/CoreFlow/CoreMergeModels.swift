@@ -190,12 +190,12 @@ public enum MergeJobStatus: Codable, Equatable, Sendable {
     public var serverValue: String {
         switch self {
         case .created: return "CREATED"
-        case .snapshotReady: return "SNAPSHOT_READY"
+        case .snapshotReady: return "PREPARING"
         case .planned: return "PLANNED"
         case .generating: return "GENERATING"
         case .artifactReady: return "ARTIFACT_READY"
         case .committing: return "COMMITTING"
-        case .committedCard: return "COMMITTED_CARD"
+        case .committedCard: return "COMMITTED"
         case .committedBlock: return "COMMITTED_BLOCK"
         case .failed: return "FAILED"
         case .cancelled: return "CANCELLED"

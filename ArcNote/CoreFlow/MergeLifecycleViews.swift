@@ -593,19 +593,6 @@ private struct MergeLifecycleView: View {
             ScrollView {
                 if let artifact = store.artifact {
                     VStack(alignment: .leading, spacing: 0) {
-                        TextField(
-                            artifact.document.title ?? "Merged Insight",
-                            text: $store.titleOverride
-                        )
-                        .font(.system(size: 21, weight: .semibold))
-                        .textFieldStyle(.plain)
-                        .foregroundStyle(.white)
-                        .focused($isTextInputFocused)
-                        .disabled(store.isTitleOverrideLocked)
-                        .accessibilityLabel("Merged card title")
-                        .accessibilityIdentifier("merge.artifact.title")
-                        .padding(.bottom, 14)
-
                         if let subtitle = artifact.document.subtitle,
                            !subtitle.isEmpty {
                             Text(subtitle)

@@ -2957,12 +2957,10 @@ final class ArcNoteUITests: XCTestCase {
             "ARTIFACT_READY"
         )
 
-        let title = waitFor("merge.artifact.title")
-        XCTAssertEqual(title.elementType, .textField)
         XCTAssertFalse(
-            (title.value as? String ?? "")
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-                .isEmpty
+            app.descendants(matching: .any)["merge.artifact.title"]
+                .waitForExistence(timeout: 1),
+            "Merge vNext artifacts are titleless"
         )
         let body = waitFor("merge.artifact.body")
         XCTAssertNotEqual(body.elementType, .textField)
@@ -2989,7 +2987,6 @@ final class ArcNoteUITests: XCTestCase {
         let uniqueSuffix = Int(Date().timeIntervalSince1970)
         let sourceToken = "merge-resume-source-\(uniqueSuffix)"
         let targetToken = "merge-resume-target-\(uniqueSuffix)"
-        let committedTitle = "iOS resumed merge \(uniqueSuffix)"
         let sourceCardID = try createPublicSmokeCard(
             token: session.token,
             searchToken: sourceToken
@@ -3047,8 +3044,6 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertEqual(mergeAnchorValue("merge.job.id"), originalJobID)
         XCTAssertEqual(mergeAnchorValue("merge.job.status"), "ARTIFACT_READY")
 
-        replaceText("merge.artifact.title", with: committedTitle)
-        dismissKeyboard()
         tap("merge.commit")
         committedCardID = waitForCommittedMergeCard(
             excluding: sourceCardID,
@@ -3064,13 +3059,12 @@ final class ArcNoteUITests: XCTestCase {
                 jobID: originalJobID,
                 token: session.token
             ).status,
-            "COMMITTED_CARD"
+            "COMMITTED"
         )
         let committedCard = try fetchSmokeCard(
             id: committedCardID,
             token: session.token
         )
-        XCTAssertEqual(committedCard.title, committedTitle)
         XCTAssertFalse(
             committedCard.content
                 .trimmingCharacters(in: .whitespacesAndNewlines)

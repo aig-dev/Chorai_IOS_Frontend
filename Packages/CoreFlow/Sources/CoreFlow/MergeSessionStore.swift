@@ -253,13 +253,11 @@ public final class MergeSessionStore: ObservableObject {
         if let existing = value.commitRequest {
             request = existing
         } else {
-            let trimmedTitle = titleOverride
-                .trimmingCharacters(in: .whitespacesAndNewlines)
             request = MergeCommitRequest(
                 idempotencyKey: idempotencyKey(),
                 target: .newCard(
                     spaceID: nil,
-                    titleOverride: trimmedTitle.isEmpty ? nil : trimmedTitle
+                    titleOverride: nil
                 )
             )
             value.commitRequest = request
@@ -516,9 +514,9 @@ public final class MergeSessionStore: ObservableObject {
                 return
             }
             artifact = loaded
-            titleOverride = snapshot?.commitRequest?.target.titleOverride
-                ?? loaded.document.title
-                ?? ""
+            // Merge vNext documents are titleless and the wire commit seals only
+            // the artifact revision/hash. Do not revive legacy title overrides.
+            titleOverride = ""
             if var value = snapshot {
                 value.artifactID = loaded.artifactID
                 snapshot = value

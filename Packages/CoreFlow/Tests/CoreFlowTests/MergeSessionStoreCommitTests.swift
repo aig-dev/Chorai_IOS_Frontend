@@ -26,7 +26,7 @@ final class MergeSessionStoreCommitTests: XCTestCase {
         XCTAssertEqual(persistence.removals, ["actor_1"])
     }
 
-    func testCommitPersistsTrimmedStableRequestBeforeOneServiceCall() async {
+    func testCommitPersistsStableTitlelessRequestBeforeOneServiceCall() async {
         let service = MockCoreMergeService()
         let persistence = InMemoryMergeSessionPersistence()
         let events = LockedMergeEventLog()
@@ -39,8 +39,6 @@ final class MergeSessionStoreCommitTests: XCTestCase {
         )
         events.removeAll()
         await service.enqueueCommit(.success(makeMergeCommitResult()))
-        store.titleOverride = "  A focused title  "
-
         store.commit()
         store.commit()
         await waitForMergeStore {
@@ -50,7 +48,7 @@ final class MergeSessionStoreCommitTests: XCTestCase {
         let calls = await service.commitCalls
         XCTAssertEqual(calls.count, 1)
         XCTAssertEqual(calls[0].request.idempotencyKey, "commit-stable")
-        XCTAssertEqual(calls[0].request.target.titleOverride, "A focused title")
+        XCTAssertNil(calls[0].request.target.titleOverride)
         XCTAssertEqual(events.events.first, "save")
         XCTAssertEqual(events.events.filter { $0 == "commit" }.count, 1)
         XCTAssertEqual(
@@ -59,7 +57,7 @@ final class MergeSessionStoreCommitTests: XCTestCase {
         )
     }
 
-    func testWhitespaceTitleOverrideBecomesNil() async {
+    func testCommitAlwaysUsesTitlelessVNextTarget() async {
         let service = MockCoreMergeService()
         let persistence = InMemoryMergeSessionPersistence()
         let store = await readyStore(
@@ -68,8 +66,6 @@ final class MergeSessionStoreCommitTests: XCTestCase {
             keys: ["commit-stable"]
         )
         await service.enqueueCommit(.success(makeMergeCommitResult()))
-        store.titleOverride = "   \n "
-
         store.commit()
         await waitForMergeStore {
             store.phase == .completed(assetID: "ast_committed")
@@ -89,12 +85,8 @@ final class MergeSessionStoreCommitTests: XCTestCase {
         )
         await service.enqueueCommit(.failure(.offline))
         await service.enqueueCommit(.success(makeMergeCommitResult()))
-        store.titleOverride = "First title"
-
         store.commit()
         await waitForMergeStore { store.phase == .paused(.offline) }
-        XCTAssertTrue(store.isTitleOverrideLocked)
-        store.titleOverride = "Changed after failure"
         store.retry()
         await waitForMergeStore {
             store.phase == .completed(assetID: "ast_committed")
@@ -104,7 +96,7 @@ final class MergeSessionStoreCommitTests: XCTestCase {
         XCTAssertEqual(calls.count, 2)
         XCTAssertEqual(calls[0].request, calls[1].request)
         XCTAssertEqual(calls[1].request.idempotencyKey, "commit-stable")
-        XCTAssertEqual(calls[1].request.target.titleOverride, "First title")
+        XCTAssertNil(calls[1].request.target.titleOverride)
     }
 
     func testCommitConflictReconcilesReadyAndKeepsSameRequestForRetry() async {
@@ -121,12 +113,8 @@ final class MergeSessionStoreCommitTests: XCTestCase {
         )
         await service.enqueueArtifact(.success(makeMergeArtifact()))
         await service.enqueueCommit(.success(makeMergeCommitResult()))
-        store.titleOverride = "Stable title"
-
         store.commit()
         await waitForMergeStore { store.phase == .ready }
-        XCTAssertEqual(store.titleOverride, "Stable title")
-        XCTAssertTrue(store.isTitleOverrideLocked)
         store.retry()
         await waitForMergeStore {
             store.phase == .completed(assetID: "ast_committed")

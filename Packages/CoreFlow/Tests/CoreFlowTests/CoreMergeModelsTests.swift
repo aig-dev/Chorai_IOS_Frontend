@@ -20,6 +20,8 @@ final class CoreMergeModelsTests: XCTestCase {
         )
         XCTAssertFalse(MergeJobStatus.unknown("FUTURE_STATE").canCancel)
         XCTAssertFalse(MergeJobStatus.unknown("FUTURE_STATE").canCommit)
+        XCTAssertEqual(MergeJobStatus.snapshotReady.serverValue, "PREPARING")
+        XCTAssertEqual(MergeJobStatus.committedCard.serverValue, "COMMITTED")
 
         let encoded = try JSONEncoder().encode(MergeJobStatus.unknown("FUTURE_STATE"))
         XCTAssertEqual(
