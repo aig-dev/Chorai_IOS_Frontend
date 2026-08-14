@@ -18,6 +18,28 @@ final class AccessModelsTests: XCTestCase {
         )
     }
 
+    func testAllowedPrivateBetaFullAccessMapsToProMembership() {
+        let state = AccessState(
+            mode: "private_beta",
+            status: "allowed",
+            scope: "product_full",
+            reasonCode: nil
+        )
+
+        XCTAssertEqual(state.membershipTier, .pro)
+    }
+
+    func testNonPrivateBetaAccessDoesNotReceiveProMembership() {
+        let state = AccessState(
+            mode: "public_beta",
+            status: "allowed",
+            scope: "product_full",
+            reasonCode: nil
+        )
+
+        XCTAssertEqual(state.membershipTier, .free)
+    }
+
     func testClaimInputEncodesExplicitSnakeCaseKeys() throws {
         let data = try JSONEncoder().encode(
             ClaimInput(accessCode: "CRAI-7KQ9", idempotencyKey: "ios-attempt-1")

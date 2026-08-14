@@ -1,5 +1,10 @@
 import Foundation
 
+public enum MembershipTier: String, Equatable, Sendable {
+    case free = "Free"
+    case pro = "Pro"
+}
+
 public struct AccessState: Codable, Equatable, Sendable {
     public let mode: String
     public let status: String
@@ -25,6 +30,13 @@ public struct AccessState: Codable, Equatable, Sendable {
         let knownScope = scope == nil || scope == "product_full"
         let validUnavailable = mode != "unavailable" || status == "required"
         return knownMode && knownStatus && knownScope && validUnavailable
+    }
+
+    public var membershipTier: MembershipTier {
+        guard mode == "private_beta", status == "allowed", scope == "product_full" else {
+            return .free
+        }
+        return .pro
     }
 
     enum CodingKeys: String, CodingKey {

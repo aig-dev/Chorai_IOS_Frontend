@@ -349,6 +349,10 @@ extension AuthManager {
             accessState?.isValid == true &&
             accessState?.status == "allowed"
     }
+
+    var membershipDisplayName: String {
+        accessState?.membershipTier.rawValue ?? MembershipTier.free.rawValue
+    }
     
     var userDisplayName: String {
         return currentUser?.username ?? "未知用户"

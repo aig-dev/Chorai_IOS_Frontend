@@ -46,6 +46,14 @@ struct AccountPrivacyView: View {
                                 label: "Email",
                                 value: profileManager.userProfile?.email ?? "—"
                             )
+
+                            Divider().background(Color.white.opacity(0.2))
+
+                            profileValue(
+                                label: "Membership",
+                                value: authManager.membershipDisplayName
+                            )
+                            .accessibilityIdentifier("account-privacy.membership")
                         }
 
                         ChoraSectionSurface(
