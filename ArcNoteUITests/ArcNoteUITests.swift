@@ -1,3 +1,4 @@
+import CoreImage
 import XCTest
 
 enum UITestAPIConfiguration {
@@ -65,6 +66,7 @@ final class ArcNoteUITests: XCTestCase {
 
         let window = app.windows.firstMatch
         XCTAssertTrue(window.waitForExistence(timeout: 10))
+        let anchor = waitFor("merge.anchor.card")
         let candidate = waitFor("merge.card.merge-fixture-candidate")
         let anyAction = app.descendants(matching: .any)["merge.action"]
         XCTAssertTrue(
@@ -84,6 +86,11 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertGreaterThan(action.frame.width, window.frame.width * 0.82)
         XCTAssertEqual(action.label, "Merge 2 cards")
         XCTAssertFalse(app.staticTexts["Selected notes"].exists)
+        XCTAssertLessThan(
+            averageLuminance(of: anchor),
+            0.72,
+            "The neutral Merge card became an unreadable white surface under the screen's white foreground style"
+        )
 
         action.tap()
         waitForAccessibilityValue("merge.action", expected: "merged")
@@ -7286,6 +7293,44 @@ final class ArcNoteUITests: XCTestCase {
         attachment.name = "merge-\(name)"
         attachment.lifetime = .keepAlways
         add(attachment)
+    }
+
+    private func averageLuminance(
+        of element: XCUIElement,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) -> CGFloat {
+        guard let inputImage = CIImage(
+            data: element.screenshot().pngRepresentation
+        ) else {
+            XCTFail("Could not decode the element screenshot", file: file, line: line)
+            return 1
+        }
+        guard let filter = CIFilter(
+            name: "CIAreaAverage",
+            parameters: [
+                kCIInputImageKey: inputImage,
+                kCIInputExtentKey: CIVector(cgRect: inputImage.extent),
+            ]
+        ), let outputImage = filter.outputImage else {
+            XCTFail("Could not average the element screenshot", file: file, line: line)
+            return 1
+        }
+
+        var rgba = [UInt8](repeating: 0, count: 4)
+        CIContext(options: [.workingColorSpace: NSNull()]).render(
+            outputImage,
+            toBitmap: &rgba,
+            rowBytes: 4,
+            bounds: CGRect(x: 0, y: 0, width: 1, height: 1),
+            format: .RGBA8,
+            colorSpace: CGColorSpace(name: CGColorSpace.sRGB)
+        )
+
+        let red = CGFloat(rgba[0]) / 255
+        let green = CGFloat(rgba[1]) / 255
+        let blue = CGFloat(rgba[2]) / 255
+        return (0.2126 * red) + (0.7152 * green) + (0.0722 * blue)
     }
 
     private func captureShareVisual(_ name: String) {

@@ -1058,6 +1058,7 @@ struct MergeCardView: View {
 
     private var mergeCardBackground: some View {
         RoundedRectangle(cornerRadius: 16, style: .continuous)
+            .fill(Color.clear)
             .background(.ultraThinMaterial.opacity(0.55))
             .cornerRadius(16)
             .overlay(topLeftHighlight)

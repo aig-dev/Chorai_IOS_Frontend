@@ -1110,7 +1110,7 @@ struct MergeSelectionVisualFixtureScreen: View {
         content: "A small thought worth connecting to another note.",
         tags: ["Ideas", "Writing"],
         isUserCard: false,
-        rate: 2
+        rate: 1
     )
     private var candidateCard: MergeCard {
         MergeCard(
@@ -1202,6 +1202,7 @@ struct MergeSelectionVisualFixtureScreen: View {
             maxHeight: .infinity,
             alignment: .top
         )
+        .foregroundStyle(.white)
         .background {
             Image("home_bg")
                 .resizable()
