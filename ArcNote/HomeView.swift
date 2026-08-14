@@ -2335,6 +2335,16 @@ struct LibraryCardContentPreview: View {
     }
 
     var body: some View {
+        if let onTap {
+            previewContent
+                .contentShape(Rectangle())
+                .onTapGesture(perform: onTap)
+        } else {
+            previewContent
+        }
+    }
+
+    private var previewContent: some View {
         VStack(alignment: .leading, spacing: 10) {
             if let imageURL {
                 libraryImage(url: imageURL)
@@ -2349,8 +2359,6 @@ struct LibraryCardContentPreview: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .contentShape(Rectangle())
-        .onTapGesture { onTap?() }
     }
 
     private var imageURL: URL? {

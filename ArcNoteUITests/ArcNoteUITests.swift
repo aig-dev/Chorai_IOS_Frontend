@@ -97,6 +97,29 @@ final class ArcNoteUITests: XCTestCase {
         captureMergeVisual("selection-zen-action")
     }
 
+    func testMergeSelectionFixtureSelectsWhenTappingCardContent() {
+        app.launchArguments.append("--ui-test-merge-selection")
+        app.launch()
+
+        let candidate = waitFor("merge.card.merge-fixture-candidate")
+
+        candidate.coordinate(
+            withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)
+        ).tap()
+        waitForAccessibilityValue(
+            "merge.card.merge-fixture-candidate",
+            expected: "unselected"
+        )
+
+        candidate.coordinate(
+            withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)
+        ).tap()
+        waitForAccessibilityValue(
+            "merge.card.merge-fixture-candidate",
+            expected: "selected"
+        )
+    }
+
     func testMergeArtifactFixtureUsesCenteredTwoActionPreview() {
         app.launchArguments.append("--ui-test-merge-artifact")
         app.launch()

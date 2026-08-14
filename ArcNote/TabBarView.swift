@@ -748,7 +748,7 @@ struct TabBarView: View {
             CommentPopupView()
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            if !keyboardLayout.isVisible {
+            if !keyboardLayout.isVisible && !isLibraryCovered {
                 CoreTabBar(selectedTab: $coordinator.selectedTab)
                     .adaptiveContentGutter()
                     .padding(.bottom, 6)

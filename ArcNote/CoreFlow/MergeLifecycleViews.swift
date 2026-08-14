@@ -302,6 +302,11 @@ private struct MergeLifecycleView: View {
 
             }
         }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if case .selection = store.phase {
+                selectionAction
+            }
+        }
         .foregroundStyle(.white)
         .overlay(alignment: .topLeading) {
             automationAnchors
@@ -529,9 +534,6 @@ private struct MergeLifecycleView: View {
             .scrollDismissesKeyboard(.interactively)
         }
         .frame(maxHeight: .infinity, alignment: .top)
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            selectionAction
-        }
     }
 
     private var searchBar: some View {
