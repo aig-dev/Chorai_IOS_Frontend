@@ -2,17 +2,22 @@ import XCTest
 @testable import CoreFlow
 
 final class LibraryCardRateStyleTests: XCTestCase {
-    func testCanonicalBackendRatesMapToLibraryAccents() {
+    func testRatesAdvanceAtPowersOfThree() {
         let cases: [(Int, LibraryCardRateStyle, String?)] = [
-            (1, .neutral, nil),
-            (2, .green, "#00FF66"),
-            (3, .blue, "#0371FF"),
-            (4, .purple, "#9627D2"),
-            (5, .amber, "#D97800"),
-            (6, .orangeRed, "#FF5E00"),
+            (-1, .neutral, nil),
             (0, .neutral, nil),
-            (7, .neutral, nil),
-            (243, .neutral, nil),
+            (1, .neutral, nil),
+            (2, .neutral, nil),
+            (3, .green, "#00FF66"),
+            (8, .green, "#00FF66"),
+            (9, .blue, "#0371FF"),
+            (26, .blue, "#0371FF"),
+            (27, .purple, "#9627D2"),
+            (80, .purple, "#9627D2"),
+            (81, .amber, "#D97800"),
+            (242, .amber, "#D97800"),
+            (243, .orangeRed, "#FF5E00"),
+            (729, .orangeRed, "#FF5E00"),
         ]
 
         for (rate, expectedStyle, expectedAccent) in cases {

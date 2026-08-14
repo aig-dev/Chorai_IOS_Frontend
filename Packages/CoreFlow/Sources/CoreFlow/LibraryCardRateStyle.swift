@@ -8,12 +8,12 @@ public enum LibraryCardRateStyle: Equatable, Sendable {
 
     public init(rate: Int) {
         switch rate {
-        case 2: self = .green
-        case 3: self = .blue
-        case 4: self = .purple
-        case 5: self = .amber
-        case 6: self = .orangeRed
-        default: self = .neutral
+        case ..<3: self = .neutral
+        case 3..<9: self = .green
+        case 9..<27: self = .blue
+        case 27..<81: self = .purple
+        case 81..<243: self = .amber
+        default: self = .orangeRed
         }
     }
 
