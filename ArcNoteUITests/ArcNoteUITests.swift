@@ -3015,6 +3015,11 @@ final class ArcNoteUITests: XCTestCase {
         let sourceToken = "merge-source-\(uniqueSuffix)"
         let targetToken = "merge-target-\(uniqueSuffix)"
         let sourceCardId = try createPublicSmokeCard(token: session.token, searchToken: sourceToken)
+        try updateSmokeCardToMultiBlock(
+            id: sourceCardId,
+            token: session.token,
+            searchToken: sourceToken
+        )
         let targetCardId = try createPublicSmokeCard(token: session.token, searchToken: targetToken)
         defer {
             deleteSmokeCard(id: sourceCardId, token: session.token)
@@ -3048,17 +3053,24 @@ final class ArcNoteUITests: XCTestCase {
         searchInput.tap()
         searchInput.typeText(targetToken)
 
-        waitFor("merge.card.\(targetCardId)", timeout: 30)
-        tap("merge.card.\(targetCardId)")
-        XCTAssertEqual(app.descendants(matching: .any)["merge.card.\(targetCardId)"].value as? String, "selected")
+        let targetCard = waitFor("merge.card.\(targetCardId)", timeout: 30)
         dismissKeyboard()
+        if (targetCard.value as? String) != "selected" {
+            targetCard.coordinate(
+                withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)
+            ).tap()
+        }
+        waitForAccessibilityValue(
+            "merge.card.\(targetCardId)",
+            expected: "selected"
+        )
         captureMergeVisual("selection")
 
         tap("merge.action")
         waitFor("merge.job.id", timeout: 30)
         captureMergeVisual("processing")
 
-        waitForMergeArtifactReady(timeout: 90)
+        waitForMergeArtifactReady(timeout: 360, maxRetries: 0)
 
         let jobID = mergeAnchorValue("merge.job.id")
         XCTAssertFalse(jobID.isEmpty)
@@ -3099,6 +3111,11 @@ final class ArcNoteUITests: XCTestCase {
             token: session.token,
             searchToken: sourceToken
         )
+        try updateSmokeCardToMultiBlock(
+            id: sourceCardID,
+            token: session.token,
+            searchToken: sourceToken
+        )
         let targetCardID = try createPublicSmokeCard(
             token: session.token,
             searchToken: targetToken
@@ -3128,11 +3145,19 @@ final class ArcNoteUITests: XCTestCase {
         let searchInput = waitFor("merge.search.input", timeout: 20)
         searchInput.tap()
         searchInput.typeText(targetToken)
-        waitFor("merge.card.\(targetCardID)", timeout: 30)
-        tap("merge.card.\(targetCardID)")
+        let targetCard = waitFor("merge.card.\(targetCardID)", timeout: 30)
         dismissKeyboard()
+        if (targetCard.value as? String) != "selected" {
+            targetCard.coordinate(
+                withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)
+            ).tap()
+        }
+        waitForAccessibilityValue(
+            "merge.card.\(targetCardID)",
+            expected: "selected"
+        )
         tap("merge.action")
-        waitForMergeArtifactReady(timeout: 90)
+        waitForMergeArtifactReady(timeout: 360, maxRetries: 0)
         let originalJobID = mergeAnchorValue("merge.job.id")
         XCTAssertEqual(mergeAnchorValue("merge.job.status"), "ARTIFACT_READY")
 
@@ -8417,6 +8442,7 @@ final class ArcNoteUITests: XCTestCase {
 
     private func waitForMergeArtifactReady(
         timeout: TimeInterval = 90,
+        maxRetries: Int = 2,
         file: StaticString = #filePath,
         line: UInt = #line
     ) {
@@ -8434,7 +8460,8 @@ final class ArcNoteUITests: XCTestCase {
                 return
             }
             if paused.exists || failed.exists {
-                if retryCount < 2, retry.waitForExistence(timeout: 3) {
+                if retryCount < maxRetries,
+                   retry.waitForExistence(timeout: 3) {
                     let previousJobID = jobID.exists
                         ? jobID.label.trimmingCharacters(
                             in: .whitespacesAndNewlines
@@ -9561,6 +9588,67 @@ final class ArcNoteUITests: XCTestCase {
 
         let response = try sendRequest(request, responseType: SmokeCardResponse.self)
         return response.data.id
+    }
+
+    private func updateSmokeCardToMultiBlock(
+        id: String,
+        token: String,
+        searchToken: String
+    ) throws {
+        let baseURL = UITestAPIConfiguration.baseURL
+        guard let url = URL(string: "\(baseURL)/api/cards/\(id)") else {
+            throw NSError(
+                domain: "ArcNoteUITests",
+                code: 41,
+                userInfo: [
+                    NSLocalizedDescriptionKey: "Invalid Go card update URL"
+                ]
+            )
+        }
+        let authoredBlocks = [
+            "iOS multi-block merge source \(searchToken)",
+            "The second authored block must remain in document order.",
+            "The third authored block verifies the complete iOS-to-Go path."
+        ]
+        let blocks: [[String: Any]] = authoredBlocks.enumerated().map { index, text in
+            [
+                "children": [],
+                "content": [[
+                    "styles": [:],
+                    "text": text,
+                    "type": "text"
+                ]],
+                "id": "ios-merge-text-\(index + 1)",
+                "props": [:],
+                "type": "paragraph"
+            ]
+        }
+        let documentData = try JSONSerialization.data(withJSONObject: [
+            "blocks": blocks,
+            "editor_kind": "blocknote",
+            "schema_version": 1
+        ])
+        guard let document = String(data: documentData, encoding: .utf8) else {
+            throw NSError(
+                domain: "ArcNoteUITests",
+                code: 42,
+                userInfo: [
+                    NSLocalizedDescriptionKey: "Unable to encode BlockNote fixture"
+                ]
+            )
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "PUT"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: [
+            "title": "iOS multi-block merge UI \(searchToken)",
+            "content": authoredBlocks.joined(separator: "\n"),
+            "content_json": document,
+            "tags": ["ios-ui-smoke", searchToken]
+        ])
+        _ = try sendRequest(request, responseType: SmokeCardResponse.self)
     }
 
     private func deleteSmokeCard(id: String, token: String) {

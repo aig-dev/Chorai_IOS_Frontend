@@ -78,7 +78,9 @@ public final class MergeSessionStore: ObservableObject {
             1_500_000_000,
             2_000_000_000
         ],
-        maxPollAttempts: Int = 30
+        // About 356 seconds with the default backoff: enough for the frozen
+        // three-provider Merge routes when every provider uses its 90s bound.
+        maxPollAttempts: Int = 180
     ) {
         self.actorID = actorID
         self.anchor = anchor

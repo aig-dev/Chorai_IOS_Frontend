@@ -55,6 +55,44 @@ final class MergeSessionStoreResumeTests: XCTestCase {
         XCTAssertEqual(store.artifact?.artifactID, "artifact_1")
     }
 
+    func testDefaultPollBudgetCoversLongestThreeProviderRoute() async {
+        let service = MockCoreMergeService()
+        let persistence = InMemoryMergeSessionPersistence()
+        persistence.seed(
+            makeMergeSnapshot(jobID: "job_1", status: .generating)
+        )
+        for _ in 0..<160 {
+            await service.enqueueJob(
+                .success(makeMergeJob(status: .generating))
+            )
+        }
+        await service.enqueueJob(
+            .success(
+                makeMergeJob(
+                    status: .artifactReady,
+                    artifactID: "artifact_1"
+                )
+            )
+        )
+        await service.enqueueArtifact(.success(makeMergeArtifact()))
+        let store = MergeSessionStore(
+            actorID: "actor_1",
+            anchor: makeMergeSource("ast_anchor", preview: "Anchor"),
+            service: service,
+            persistence: persistence,
+            sleeper: ImmediateMergeSleeper(),
+            idempotencyKey: { "must-not-create-a-new-key" },
+            pollDelaysNanoseconds: [0]
+        )
+
+        store.start()
+        await waitForMergeStore { store.phase == .ready }
+
+        let jobCalls = await service.jobCalls
+        XCTAssertEqual(jobCalls.count, 161)
+        XCTAssertEqual(store.artifact?.artifactID, "artifact_1")
+    }
+
     func testPollBudgetPausesWithoutChangingCanonicalJobToFailed() async {
         let service = MockCoreMergeService()
         let persistence = InMemoryMergeSessionPersistence()
