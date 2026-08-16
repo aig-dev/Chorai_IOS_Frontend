@@ -40,11 +40,16 @@ final class MergePollingGateTests: XCTestCase {
     }
 
     func testCancelledWaiterReturnsItsPermitWithoutRunningOperation() async throws {
-        let gate = MergePollingGate(maxConcurrentRequests: 1)
+        let resumedWaiters = LockedPollingGateSequenceLog()
+        let gate = MergePollingGate(
+            maxConcurrentRequests: 1,
+            waiterDidResume: { resumedWaiters.append($0) }
+        )
         let blocker = PollingGateBlocker()
-        let execution = PollingGateExecutionFlag()
+        let execution = PollingGateExecutionLog()
         let first = Task {
             try await gate.perform {
+                await execution.append("first")
                 await blocker.wait()
                 return true
             }
@@ -53,15 +58,22 @@ final class MergePollingGateTests: XCTestCase {
 
         let cancelled = Task {
             try await gate.perform {
-                await execution.markExecuted()
+                await execution.append("cancelled")
                 return true
             }
         }
-        for _ in 0..<10 { await Task.yield() }
+        await waitForGateWaiters(gate, count: 1)
         cancelled.cancel()
         let third = Task {
-            try await gate.perform { true }
+            try await gate.perform {
+                await execution.append("third")
+                return true
+            }
         }
+        await waitForGateWaiters(gate, count: 2)
+
+        let eventsBeforeRelease = await execution.events
+        XCTAssertEqual(eventsBeforeRelease, ["first"])
 
         await blocker.resume()
         _ = try await first.value
@@ -72,14 +84,32 @@ final class MergePollingGateTests: XCTestCase {
             // Expected after this FIFO waiter acquires its permit.
         }
         let thirdValue = try await third.value
-        let didExecute = await execution.didExecute
+        let finalEvents = await execution.events
         XCTAssertTrue(thirdValue)
-        XCTAssertFalse(didExecute)
+        XCTAssertEqual(finalEvents, ["first", "third"])
+        XCTAssertEqual(resumedWaiters.values, [0, 1])
     }
 }
 
 private enum PollingGateTestError: Error {
     case expected
+}
+
+private final class LockedPollingGateSequenceLog: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: [Int] = []
+
+    var values: [Int] {
+        lock.lock()
+        defer { lock.unlock() }
+        return storage
+    }
+
+    func append(_ value: Int) {
+        lock.lock()
+        storage.append(value)
+        lock.unlock()
+    }
 }
 
 private actor ConcurrentRequestTracker {
@@ -119,10 +149,22 @@ private actor PollingGateBlocker {
     }
 }
 
-private actor PollingGateExecutionFlag {
-    private(set) var didExecute = false
+private actor PollingGateExecutionLog {
+    private(set) var events: [String] = []
 
-    func markExecuted() {
-        didExecute = true
+    func append(_ event: String) {
+        events.append(event)
     }
+}
+
+private func waitForGateWaiters(
+    _ gate: MergePollingGate,
+    count: Int,
+    timeoutIterations: Int = 500
+) async {
+    for _ in 0..<timeoutIterations {
+        if await gate.waitingRequestCount == count { return }
+        await Task.yield()
+    }
+    XCTFail("Timed out waiting for \(count) queued polling requests")
 }

@@ -237,17 +237,78 @@ final class MergeSessionStoreResumeTests: XCTestCase {
             id: "job_1",
             .success(makeMergeJob(id: "job_1", status: .generating))
         )
+        await service.enqueueArtifact(
+            jobID: "job_1",
+            .success(
+                makeMergeArtifact(
+                    jobID: "job_1",
+                    artifactID: "stale_artifact"
+                )
+            )
+        )
         store.resume()
         await waitForMergeStore { store.phase == .weaving(.generating) }
+        XCTAssertEqual(store.statusResponseCount, 1)
 
         await stale.resume()
-        for _ in 0..<20 { await Task.yield() }
+        await waitForMergeStore {
+            store.cancelledStatusResponseDiscardCount == 1
+        }
 
+        XCTAssertEqual(store.statusResponseCount, 2)
         XCTAssertEqual(store.phase, .weaving(.generating))
         XCTAssertEqual(
             persistence.snapshot(actorID: "actor_1")?.lastStatus,
             .generating
         )
+        store.suspend(reason: nil)
+        await sleeper.resumeNext()
+    }
+
+    func testPollDelayJitterPreservesZeroAtUpperFactor() {
+        XCTAssertEqual(
+            MergePollDelayJitter.applying(to: 0, factor: 1.15),
+            0
+        )
+    }
+
+    func testPollDelayJitterAppliesExactProductionFactorBounds() {
+        XCTAssertEqual(
+            MergePollDelayJitter.applying(to: 1_000, factor: 0.85),
+            850
+        )
+        XCTAssertEqual(
+            MergePollDelayJitter.applying(to: 1_000, factor: 1.15),
+            1_150
+        )
+    }
+
+    func testInjectedPollDelayJitterReachesSleeper() async {
+        let service = MockCoreMergeService()
+        let persistence = InMemoryMergeSessionPersistence()
+        persistence.seed(makeMergeSnapshot(jobID: "job_1", status: .generating))
+        await service.enqueueJob(
+            id: "job_1",
+            .success(makeMergeJob(id: "job_1", status: .generating))
+        )
+        let sleeper = ControlledMergeSleeper()
+        let store = MergeSessionStore(
+            actorID: "actor_1",
+            anchor: makeMergeSource("ast_anchor", preview: "Anchor"),
+            service: service,
+            persistence: persistence,
+            sleeper: sleeper,
+            idempotencyKey: { "must-not-create-a-new-key" },
+            pollDelaysNanoseconds: [1_000],
+            pollDelayJitter: { $0 + 137 },
+            maxPollAttempts: 1
+        )
+
+        store.start()
+        await waitForPendingSleep(sleeper)
+
+        let sleepCalls = await sleeper.calls
+        XCTAssertEqual(sleepCalls, [1_137])
         store.suspend(reason: nil)
         await sleeper.resumeNext()
     }
@@ -270,4 +331,15 @@ final class MergeSessionStoreResumeTests: XCTestCase {
             maxPollAttempts: maxPollAttempts
         )
     }
+}
+
+private func waitForPendingSleep(
+    _ sleeper: ControlledMergeSleeper,
+    timeoutIterations: Int = 500
+) async {
+    for _ in 0..<timeoutIterations {
+        if await sleeper.pendingCount > 0 { return }
+        await Task.yield()
+    }
+    XCTFail("Timed out waiting for Merge poll sleep")
 }

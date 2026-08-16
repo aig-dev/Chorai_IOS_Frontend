@@ -1,6 +1,19 @@
 import Combine
 import Foundation
 
+@usableFromInline
+enum MergePollDelayJitter {
+    @usableFromInline
+    static let productionFactorRange = 0.85...1.15
+
+    @usableFromInline
+    static func applying(to delay: UInt64, factor: Double) -> UInt64 {
+        precondition(productionFactorRange.contains(factor))
+        guard delay > 0 else { return 0 }
+        return UInt64((Double(delay) * factor).rounded())
+    }
+}
+
 public enum MergeSessionPhase: Equatable, Sendable {
     case idle
     case checkingAvailability
@@ -28,6 +41,9 @@ public final class MergeSessionStore: ObservableObject {
     @Published public private(set) var phase: MergeSessionPhase = .idle
     @Published public var titleOverride = ""
     @Published public private(set) var isOperationInFlight = false
+    private(set) var createResponseCount = 0
+    private(set) var statusResponseCount = 0
+    private(set) var cancelledStatusResponseDiscardCount = 0
 
     public var canCreate: Bool {
         phase == .selection
@@ -84,8 +100,12 @@ public final class MergeSessionStore: ObservableObject {
             2_000_000_000
         ],
         pollDelayJitter: @escaping (UInt64) -> UInt64 = { delay in
-            guard delay > 0 else { return 0 }
-            return UInt64(Double(delay) * Double.random(in: 0.85...1.15))
+            MergePollDelayJitter.applying(
+                to: delay,
+                factor: Double.random(
+                    in: MergePollDelayJitter.productionFactorRange
+                )
+            )
         },
         // About 356 seconds with the default backoff: enough for the frozen
         // three-provider Merge routes when every provider uses its 90s bound.
@@ -421,6 +441,7 @@ public final class MergeSessionStore: ObservableObject {
     private func submitCreate(_ request: MergeCreateRequest) async {
         do {
             let created = try await service.createJob(request)
+            createResponseCount += 1
             guard !Task.isCancelled else { return }
             await driveLifecycle(from: created)
         } catch {
@@ -432,7 +453,10 @@ public final class MergeSessionStore: ObservableObject {
     private func reconcile(jobID: String) async {
         do {
             let current = try await fetchJob(id: jobID)
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled else {
+                cancelledStatusResponseDiscardCount += 1
+                return
+            }
             await driveLifecycle(from: current)
         } catch {
             guard !Task.isCancelled else { return }
@@ -668,12 +692,17 @@ public final class MergeSessionStore: ObservableObject {
     }
 
     private func fetchJob(id: String) async throws -> MergeJob {
+        let result: MergeJob
         guard let pollingGate else {
-            return try await service.job(id: id)
+            result = try await service.job(id: id)
+            statusResponseCount += 1
+            return result
         }
-        return try await pollingGate.perform { [service] in
+        result = try await pollingGate.perform { [service] in
             try await service.job(id: id)
         }
+        statusResponseCount += 1
+        return result
     }
 
     private func coreError(from error: Error) -> CoreMergeError {

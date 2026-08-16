@@ -20,6 +20,7 @@ actor MockCoreMergeService: CoreMergeServing {
     private var artifactResultsByJobID: [String: [Result<MergeArtifact, CoreMergeError>]] = [:]
     private var cancelResultsByJobID: [String: [Result<MergeJob, CoreMergeError>]] = [:]
     private var commitResultsByJobID: [String: [Result<MergeCommitResult, CoreMergeError>]] = [:]
+    private var controlledCreatesByKey: [String: [ControlledMergeCreateResponse]] = [:]
     private var controlledJobsByID: [String: [ControlledMergeJobResponse]] = [:]
     private var createObserver: (@Sendable (MergeCreateRequest) -> Void)?
     private var cancelObserver: (@Sendable (String) -> Void)?
@@ -47,6 +48,15 @@ actor MockCoreMergeService: CoreMergeServing {
 
     func enqueueCreate(_ result: Result<MergeJob, CoreMergeError>) {
         createResults.append(result)
+    }
+
+    func enqueueControlledCreate(
+        idempotencyKey: String,
+        _ result: Result<MergeJob, CoreMergeError>
+    ) -> ControlledMergeCreateResponse {
+        let response = ControlledMergeCreateResponse(result: result)
+        controlledCreatesByKey[idempotencyKey, default: []].append(response)
+        return response
     }
 
     func enqueueJob(_ result: Result<MergeJob, CoreMergeError>) {
@@ -110,6 +120,12 @@ actor MockCoreMergeService: CoreMergeServing {
     func createJob(_ request: MergeCreateRequest) async throws -> MergeJob {
         createCalls.append(request)
         createObserver?(request)
+        if var responses = controlledCreatesByKey[request.idempotencyKey],
+           !responses.isEmpty {
+            let response = responses.removeFirst()
+            controlledCreatesByKey[request.idempotencyKey] = responses
+            return try await response.resolve()
+        }
         return try dequeue(&createResults).get()
     }
 
@@ -170,6 +186,29 @@ actor MockCoreMergeService: CoreMergeServing {
     ) -> Result<Value, CoreMergeError> {
         precondition(!values.isEmpty, "A mock Merge result must be enqueued")
         return values.removeFirst()
+    }
+}
+
+actor ControlledMergeCreateResponse {
+    private let result: Result<MergeJob, CoreMergeError>
+    private var continuation: CheckedContinuation<Void, Never>?
+    private(set) var isWaiting = false
+
+    init(result: Result<MergeJob, CoreMergeError>) {
+        self.result = result
+    }
+
+    func resolve() async throws -> MergeJob {
+        isWaiting = true
+        await withCheckedContinuation { continuation in
+            self.continuation = continuation
+        }
+        return try result.get()
+    }
+
+    func resume() {
+        continuation?.resume()
+        continuation = nil
     }
 }
 
@@ -449,6 +488,17 @@ func waitForControlledJob(
         await Task.yield()
     }
     XCTFail("Timed out waiting for controlled Merge GET")
+}
+
+func waitForControlledCreate(
+    _ response: ControlledMergeCreateResponse,
+    timeoutIterations: Int = 500
+) async {
+    for _ in 0..<timeoutIterations {
+        if await response.isWaiting { return }
+        await Task.yield()
+    }
+    XCTFail("Timed out waiting for controlled Merge create")
 }
 
 @MainActor

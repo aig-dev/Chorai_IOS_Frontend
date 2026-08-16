@@ -335,6 +335,78 @@ final class MergeTaskCoordinatorTests: XCTestCase {
 
         XCTAssertNil(fixture.coordinator.completionEventJobID)
     }
+
+    func testSameActorReactivationInvalidatesStaleDraftOwnership() async {
+        let fixture = makeCoordinatorFixture(keys: ["create-1"])
+        fixture.coordinator.activate(actorID: "actor_1")
+        await fixture.service.enqueueCapabilities(.success([makeMergeCapability()]))
+        let draft = fixture.coordinator.makeDraft(anchor: makeMergeSource("ast_1"))
+        draft.store.start()
+        await waitForMergeStore { draft.store.phase == .selection }
+        draft.store.toggleSelection(makeMergeSource("ast_companion"))
+        let staleCreate = await fixture.service.enqueueControlledCreate(
+            idempotencyKey: "create-1",
+            .success(makeMergeJob(id: "job_stale", status: .generating))
+        )
+        draft.store.create()
+        await waitForControlledCreate(staleCreate)
+
+        let restoredCreate = await fixture.service.enqueueControlledCreate(
+            idempotencyKey: "create-1",
+            .success(makeMergeJob(id: "job_current", status: .failed))
+        )
+        fixture.coordinator.activate(actorID: "actor_1")
+        await waitForControlledCreate(restoredCreate)
+        await restoredCreate.resume()
+        await waitForMergeCoordinator {
+            fixture.coordinator.summary(jobID: "job_current")?.visualState == .failed
+        }
+
+        await staleCreate.resume()
+        await waitForMergeStore { draft.store.createResponseCount == 1 }
+
+        XCTAssertNil(fixture.coordinator.adopt(draft))
+        XCTAssertNil(draft.store.activeSnapshot?.jobID)
+        XCTAssertEqual(
+            Set(fixture.persistence.collection(actorID: "actor_1").tasks.keys),
+            Set(["job_current"])
+        )
+        let currentSession = fixture.coordinator.session(jobID: "job_current")
+        XCTAssertNotNil(currentSession)
+        XCTAssertFalse(currentSession === draft.store)
+
+        draft.store.suspend(reason: nil)
+        await fixture.sleeper.resumeNext()
+    }
+
+    func testEmptyCommittedAssetIDIsVisibleFailedAndRemovable() async {
+        var snapshot = makeMergeSnapshot(
+            jobID: "job_1",
+            status: .committedCard
+        )
+        snapshot.committedAssetID = ""
+        var collection = MergeTaskCollection.empty(actorID: "actor_1")
+        collection.tasks["job_1"] = MergeTaskRecord(
+            operationID: "op_1",
+            snapshot: snapshot,
+            createdAt: Date(timeIntervalSince1970: 100),
+            updatedAt: Date(timeIntervalSince1970: 100),
+            replacesJobID: nil
+        )
+        let fixture = makeCoordinatorFixture(keys: [], collection: collection)
+
+        fixture.coordinator.activate(actorID: "actor_1")
+        await waitForMergeCoordinator {
+            fixture.coordinator.summary(jobID: "job_1")?.visualState == .failed
+        }
+
+        XCTAssertNil(fixture.coordinator.committedCardIntent)
+        fixture.coordinator.removeFailed(jobID: "job_1")
+        XCTAssertTrue(fixture.coordinator.summaries.isEmpty)
+        XCTAssertNil(
+            fixture.persistence.collection(actorID: "actor_1").tasks["job_1"]
+        )
+    }
 }
 
 @MainActor

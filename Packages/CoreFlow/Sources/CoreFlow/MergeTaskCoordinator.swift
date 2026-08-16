@@ -41,6 +41,7 @@ public struct MergeDraftSession {
     public let operationID: String
     public let store: MergeSessionStore
     let persistence: MergeTaskSessionPersistence
+    let generation: Int
 }
 
 @MainActor
@@ -56,6 +57,13 @@ public final class MergeTaskCoordinator: ObservableObject {
         let persistence: MergeTaskSessionPersistence
     }
 
+    private struct DraftOwnership {
+        let actorID: String
+        let generation: Int
+        let store: MergeSessionStore
+        let persistence: MergeTaskSessionPersistence
+    }
+
     private let service: any CoreMergeServing
     private let persistence: any MergeTaskCollectionPersisting
     private let sleeper: any MergeSleeping
@@ -65,6 +73,7 @@ public final class MergeTaskCoordinator: ObservableObject {
     private let now: () -> Date
 
     private var actorID: String?
+    private var draftsByOperationID: [String: DraftOwnership] = [:]
     private var runtimesByOperationID: [String: Runtime] = [:]
     private var jobToOperationID: [String: String] = [:]
     private var subscriptionsByOperationID: [String: Set<AnyCancellable>] = [:]
@@ -163,6 +172,11 @@ public final class MergeTaskCoordinator: ObservableObject {
         }
         let operationID = operationID()
         precondition(!operationID.isEmpty, "Merge operation IDs must not be empty")
+        precondition(
+            draftsByOperationID[operationID] == nil
+                && runtimesByOperationID[operationID] == nil,
+            "Merge operation IDs must be unique within an activation"
+        )
         let scopedPersistence = MergeTaskSessionPersistence(
             actorID: actorID,
             operationID: operationID,
@@ -175,18 +189,33 @@ public final class MergeTaskCoordinator: ObservableObject {
             persistence: scopedPersistence,
             resumePersistedSession: false
         )
-        return MergeDraftSession(
-            operationID: operationID,
+        draftsByOperationID[operationID] = DraftOwnership(
+            actorID: actorID,
+            generation: generation,
             store: store,
             persistence: scopedPersistence
         )
+        let draft = MergeDraftSession(
+            operationID: operationID,
+            store: store,
+            persistence: scopedPersistence,
+            generation: generation
+        )
+        return draft
     }
 
     @discardableResult
     public func adopt(_ draft: MergeDraftSession) -> String? {
         guard
             let actorID,
+            draft.generation == generation,
             draft.persistence.actorID == actorID,
+            let ownership = draftsByOperationID[draft.operationID],
+            ownership.actorID == actorID,
+            ownership.generation == generation,
+            ownership.store === draft.store,
+            ownership.persistence === draft.persistence,
+            runtimesByOperationID[draft.operationID] == nil,
             let snapshot = draft.store.activeSnapshot,
             let jobID = snapshot.jobID?.nonEmpty
         else {
@@ -203,13 +232,12 @@ public final class MergeTaskCoordinator: ObservableObject {
             return nil
         }
 
-        if runtimesByOperationID[draft.operationID] == nil {
-            register(
-                operationID: draft.operationID,
-                store: draft.store,
-                persistence: draft.persistence
-            )
-        }
+        draftsByOperationID[draft.operationID] = nil
+        register(
+            operationID: draft.operationID,
+            store: draft.store,
+            persistence: draft.persistence
+        )
         jobToOperationID[jobID] = draft.operationID
         suspendIfNeeded(draft.store)
         return jobID
@@ -518,11 +546,13 @@ public final class MergeTaskCoordinator: ObservableObject {
             return .complete
         case .committing:
             return .committing
-        case .paused(.notFound), .failed, .completed(assetID: nil):
+        case .paused(.notFound), .failed:
             return .failed
+        case .completed(let assetID):
+            return assetID?.nonEmpty == nil ? .failed : nil
         case .paused:
             return .recovering
-        case .cancelled, .completed:
+        case .cancelled:
             return nil
         case .idle, .checkingAvailability, .selection, .creating,
              .weaving, .loadingArtifact, .cancelling:
@@ -562,9 +592,13 @@ public final class MergeTaskCoordinator: ObservableObject {
     }
 
     private func clearRuntimeState() {
+        for draft in draftsByOperationID.values {
+            draft.store.suspend(reason: nil)
+        }
         for runtime in runtimesByOperationID.values {
             runtime.store.suspend(reason: nil)
         }
+        draftsByOperationID.removeAll()
         subscriptionsByOperationID.removeAll()
         runtimesByOperationID.removeAll()
         jobToOperationID.removeAll()

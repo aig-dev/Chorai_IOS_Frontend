@@ -1,10 +1,28 @@
 public actor MergePollingGate {
+    private struct Waiter {
+        let sequence: Int
+        let continuation: CheckedContinuation<Void, Never>
+    }
+
     private var availablePermits: Int
-    private var waiters: [CheckedContinuation<Void, Never>] = []
+    private var waiters: [Waiter] = []
+    private var nextWaiterSequence = 0
+    private let waiterDidResume: (@Sendable (Int) -> Void)?
+    var waitingRequestCount: Int { waiters.count }
 
     public init(maxConcurrentRequests: Int = 4) {
         precondition(maxConcurrentRequests > 0)
         availablePermits = maxConcurrentRequests
+        waiterDidResume = nil
+    }
+
+    init(
+        maxConcurrentRequests: Int,
+        waiterDidResume: @escaping @Sendable (Int) -> Void
+    ) {
+        precondition(maxConcurrentRequests > 0)
+        availablePermits = maxConcurrentRequests
+        self.waiterDidResume = waiterDidResume
     }
 
     public func perform<Value: Sendable>(
@@ -22,7 +40,13 @@ public actor MergePollingGate {
             return
         }
         await withCheckedContinuation { continuation in
-            waiters.append(continuation)
+            waiters.append(
+                Waiter(
+                    sequence: nextWaiterSequence,
+                    continuation: continuation
+                )
+            )
+            nextWaiterSequence += 1
         }
     }
 
@@ -30,7 +54,9 @@ public actor MergePollingGate {
         if waiters.isEmpty {
             availablePermits += 1
         } else {
-            waiters.removeFirst().resume()
+            let waiter = waiters.removeFirst()
+            waiterDidResume?(waiter.sequence)
+            waiter.continuation.resume()
         }
     }
 }
