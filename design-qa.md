@@ -1,123 +1,82 @@
-# Card Editor design QA
+# Background multi-merge rail design QA
 
 ## Comparison target
 
-- Source visual truth:
-  - Reported bottom-overlap and Close-icon mismatch: `/Users/luffylu/.codex/attachments/b67cdfbd-5205-4787-8538-d54c40f0b059/image-1.png`
-  - Requested mainstream Action Box alignment: `/var/folders/68/tx0676vs5rzgc9tfrkp_5ccc0000gn/T/codex-clipboard-2702f55f-cc5d-4122-8ad8-d00ecbe57b45.png`
-  - View Card metadata styling: `/var/folders/68/tx0676vs5rzgc9tfrkp_5ccc0000gn/T/codex-clipboard-39c2fe64-c184-436a-a5a6-3547b7c6ae3f.png`
-  - Previous literal-HTML failure: `/var/folders/68/tx0676vs5rzgc9tfrkp_5ccc0000gn/T/codex-clipboard-5ceed2ac-45e2-45b1-86de-fd5c75f0daef.png`
-- Final live implementation:
-  - Mainstream View Card Action Box: `/tmp/ChoraiActionBoxFinalLiveAttachments-1622/718AD5E7-E7B7-4724-BA6C-06180FFEFCB3.png`
-  - Editor Action Box, default text: `/tmp/ChoraiActionBoxFinalLiveAttachments-1622/6E42A10B-C040-4DFF-BAAB-0931E5834C9E.png`
-  - Editor Action Box, Accessibility XXXL: `/tmp/ChoraiActionBoxFinalLiveAttachments-1622/9BAA80AF-A36A-4E20-A0F3-69284112820C.png`
-  - Background replacement staged: `/tmp/ChoraiActionBoxLiveReviewFixFinalAttachments/9532A3E4-47D7-48E3-AE49-63BD1A69FF8A.png`
-  - Compact 375-point viewport: `/tmp/ChoraiActionBoxCompact375Attachments/9C7ABE68-A730-48D7-9076-8121E60F4A9D.png`
-  - Short 350-point safe-area fixture: `/tmp/ChoraiActionBoxShortViewport5Attachments/6B12667A-2AF9-445C-A26F-D0B3BD5A7C33.png`
-- Primary viewport: iPhone 17, 402 x 874 points, 1206 x 2622 pixels, iOS 26.2 Simulator.
-- Responsive viewport: iPhone SE (3rd generation), 375 x 667 points, 750 x 1334 pixels.
-- State: dark theme; real Go-backed cards; default and Accessibility XXXL text sizes.
+- Source visual truth: `docs/qa/assets/ios-background-multi-merge/source-right-edge-rail.png` (durable copy of `/var/folders/68/tx0676vs5rzgc9tfrkp_5ccc0000gn/T/codex-clipboard-a2ce44f1-32b4-4efb-bbe9-e96f05e48568.png`).
+- Context only, not fidelity targets:
+  - `docs/qa/assets/ios-background-multi-merge/source-legacy-weaving-context.png`
+  - `docs/qa/assets/ios-background-multi-merge/source-legacy-empty-error-context.png`
+- Primary implementation: `docs/qa/assets/ios-background-multi-merge/iphone17pro-final-working-normal-frame-a.png`.
+- Responsive implementation: `docs/qa/assets/ios-background-multi-merge/iphonese3-final-expanded-numbered-3.png`.
+- Primary viewport: iPhone 17 Pro, iOS 26.2 (23C54), 402 x 874 points, 1206 x 2622 pixels, 3x density, dark appearance.
+- Short viewport: iPhone SE (3rd generation), iOS 26.2, 375 x 667 points, 750 x 1334 pixels, 2x density, dark appearance.
+- State: a global right-edge Merge task rail over ordinary app content; Working, Complete, Failed, Recovering, collapsed count 3, expanded numbered 3, Preview open/closed, Reduce Motion, and Reduce Transparency were reviewed.
 
-## Combined comparison evidence
+## Normalization and combined evidence
 
-`docs/qa/card-editor-action-box-comparison.png` places the reference and final implementation in one visual input, in this order:
+- Source pixels: 90 x 72. The source crop has no trustworthy point-density metadata.
+- Focused implementation pixels: 225 x 180, cropped from the original 1206 x 2622 screenshot at the native 3x simulator density.
+- Normalized implementation pixels: 90 x 72, downsampled from 225 x 180 with Lanczos filtering (0.4 scale). This aligns the visible 44-point shell and `menu_merge` mark to the source crop without claiming that the source itself was captured at a known density.
+- Full-view plus focused comparison: `docs/qa/assets/ios-background-multi-merge/comparison-source-vs-final.png` (1040 x 1080). Top left is the 90 x 72 source crop; top right is the 90 x 72 normalized implementation; bottom left is the complete iPhone 17 Pro viewport; bottom right is the native focused crop.
+- Focused originals:
+  - `docs/qa/assets/ios-background-multi-merge/iphone17pro-final-working-focused-225x180.png`
+  - `docs/qa/assets/ios-background-multi-merge/iphone17pro-final-working-focused-normalized-90x72.png`
+- Implementation contact sheet: `docs/qa/assets/ios-background-multi-merge/implementation-state-contact-sheet.png` (1200 x 1600). Row-major order: Working A/B, Complete A/B; Failed, Recovering, collapsed 3, expanded 3; Reduce Motion A/B, Reduce Transparency, Preview open; Preview closed, SE collapsed, SE expanded, focused Working detail.
+- P2 comparison history: `docs/qa/assets/ios-background-multi-merge/comparison-p2-before-after.png` (1080 x 1360). Left to right: original misplaced rail, right-edge-aligned rail with displaced expanded glyphs, final aligned rail with centered glyphs.
 
-1. top left: the reported bottom overlap and Close-icon mismatch;
-2. top right: the corrected mainstream View Card 3 x 3 Action Box;
-3. bottom left: the corrected editor Action Box at default text size;
-4. bottom right: the corrected editor Action Box at Accessibility XXXL.
-
-The live captures use the same device and shared Action Box surface, with 90 x 90 point standard tiles, symbols, color treatment, corner radius, and backdrop-dismiss behavior. The editor substitutes `Background` for `Edit`, fills rows from the leading edge as 3 + 3 + 2, and keeps privacy as a direct control beside More.
+All source, implementation, combined-comparison, contact-sheet, and history images above were opened at original resolution before this decision. The source-to-final combined image was itself opened and judged; separate screenshots were not treated as a side-by-side comparison.
 
 ## Findings
 
-No actionable P0, P1, or P2 visual or interaction mismatch remains.
+No actionable P0, P1, or P2 finding remains.
 
-- Action Box structure: the editor uses the shared square/glass 3 x 3 Action Box instead of a native vertical confirmation dialog.
-- Fixed editor placement:
-  - row 1: `Background`, `Spark`, `Merge`;
-  - row 2: `Share`, `Link`, `Root`;
-  - row 3: `Remove`, `Pin` or `Unpin`, left aligned.
-- Shared bottom inset: three-row Action Boxes reserve at least 16 points above and below the grid, so the final row no longer touches the rounded border.
-- Dismissal: the visual Close button is removed from mainstream and editor Action Boxes; tapping outside the surface dismisses the menu, while VoiceOver Escape remains available.
-- Background copy and behavior: exactly one `Background` action is shown for both add and replace. There is no `Remove Background` action.
-- Privacy placement: `Make Public` / `Make Private` remains a direct 44-point control immediately beside More and is not duplicated in Card Actions.
-- Link behavior: related links remain display-only in editor metadata. New links are initiated by Card Actions or the existing `@` shortcut, which continue into the same link flow.
-- Standard geometry: the 402-point View Card and editor captures both retain the mainstream 90 x 90 point tile metric.
-- Compact geometry: tile size adapts only when the available width or safe-area height cannot contain the top/bottom inset, three rows, and two 15-point gaps. The 375-point portrait fixture and a 350-point short-height fixture keep all actions inside the surface without overlap; label scaling keeps `Background` complete instead of truncated.
-- Keyboard geometry: opening editor Card Actions dismisses the body keyboard first, while the shared overlay ignores the transient keyboard safe area and resigns first responder as a fallback. The physical viewport therefore remains available to the three-row grid throughout presentation.
-- Shared two-row geometry: 2 x 2 menus retain vertically centered four-tile bounds in the square after Close removal.
-- Accessibility: the shared overlay declares `.isModal`, supports the accessibility Escape action, posts `.screenChanged` when entering and leaving, and keeps underlying controls non-hittable while visible. Editor and mainstream backdrop-dismiss -> reopen journeys both pass.
-- Accessibility XXXL: all eight actions remain enabled, hittable, separated, and inside the surface without turning into a vertical sheet or requiring scrolling.
-- Rendering and metadata: literal `<p>` markup stays out of the editor, and tag/link presentation continues to reuse the View Card components.
+- Fonts and typography: the rail has no visible semantic words. The only visible copy is the numeric collapsed count and newest-first `1`, `2`, `3` markers, rendered in compact system rounded bold styles. At 3x and 2x they remain crisp, centered, and untruncated. Semantic state text remains in accessibility values rather than leaking into the visual rail.
+- Spacing and layout: the single-task control is 44 x 44 points. The automated frame assertion places its trailing edge at 25 +/- 2 points on both the iPhone 17 Pro and the short iPhone SE. Expanded controls use 8-point vertical spacing and cap the visible list at four 44-point rows before scrolling. The final SE captures have no clipping, safe-area collision, overlap, or unusable control.
+- Colors and tokens: the shell retains the product's dark violet glass treatment and subtle border/elevation. Working uses the violet activity ring, Complete a green static check, Failed a red warning, and Recovering an amber warning. Failure wins the aggregate collapsed state. Actual Reduce Transparency produces an opaque high-contrast shell without losing the asset or status mark.
+- Image and icon asset fidelity: the implementation uses the existing `menu_merge` asset from `ArcNote/Assets.xcassets/pop/menu_merge.imageset/merge.png`. The source and normalized implementation show the same stepped white mark and yellow accent. No custom SVG, CSS drawing, emoji, or text-glyph substitute was introduced.
+- Copy and content: the rail remains numeric-only in every visible state. `Weaving`, `Preview`, and status words do not appear as rail copy. The underlying QA fixture labels are route anchors, not rail content.
+- States and interaction: Working and Committing rotate; Complete is static; Failed and Recovering use static warning shapes. Collapsed count 3 expands to newest-first numbered controls. Preview open has no duplicate rail, while closing Preview retains one Complete rail. The live journey then commits, removes the rail, and opens the canonical Card.
+- Animation: focused Working A/B crops differ (`PSNR 21.695092`, `mse_avg 440.12`), proving rotation. Complete A/B and actual Reduce Motion Working A/B are pixel-identical in the same crop (`PSNR inf`, `mse_avg 0.00`).
+- Accessibility: the collapsed button exposes `Merge task` or `Merge tasks`, value `count, state`, and a destination-specific hint. Expanded tasks expose number, source count, semantic state, and destination hint. UI tests verify exactly one accessible rail, button semantics, hit testing, and at least 44 x 44-point frames. Complete uses a check; Failed/Recovering use warning shapes in addition to color. Actual Reduce Motion and Reduce Transparency settings were changed at the simulator system level, the app was relaunched, and both settings were restored and read back.
+- Responsive behavior: all three expanded items remain fully visible on the 375 x 667-point SE viewport, with badges top-trailing and state glyphs centered. No persistent app control is pushed offscreen.
 
-## Interaction and persistence evidence
+## Intentional adaptation
 
-- Final completion gate: `/tmp/ChoraiActionBoxFinalVerification-20260716-1630.xcresult` — 8 tests passed, 0 failed in 265.071 seconds across standard, adaptive, short-height, keyboard, backdrop hit testing, shared 2 x 2, real mainstream 3 x 3, and Accessibility XXXL states.
-- Latest focused live result bundle: `/tmp/ChoraiActionBoxFinalLive-20260716-1621.xcresult` — 3 tests passed, 0 failed in 145.914 seconds. It covers mainstream 3 x 3 bottom clearance and backdrop dismissal, editor 3 + 3 + 2 ordering, and Accessibility XXXL.
-- Latest deterministic geometry bundles:
-  - `/tmp/ChoraiActionBoxInteractionGreen-20260716-1606.xcresult` — editor ordering and backdrop dismissal passed, 2 tests;
-  - `/tmp/ChoraiActionBoxGeometryGreen-20260716-1607.xcresult` — standard, compact, keyboard, short-height, and shared 2 x 2 geometry passed, 4 tests.
-- Current CoreFlow package regression: 373 tests passed, 0 failed.
-- Final live result bundle: `/tmp/ChoraiActionBoxLiveReviewFixFinal.xcresult` — 6 tests passed, 0 failed in 279.164 seconds.
-- Responsive fixtures:
-  - `/tmp/ChoraiActionBoxCompact375.xcresult` — compact 375-point portrait passed;
-  - `/tmp/ChoraiActionBoxShortViewport5.xcresult` — short-height safe-area fixture passed;
-  - `/tmp/ChoraiActionBoxDeterministicFinal0ba0c9a.xcresult` — historical pre-dismissal-change coverage for standard, compact 375-point, and short-height containment.
-- Review-fix fixtures:
-  - `/tmp/ChoraiActionBoxReviewFixesFocusedUI.xcresult` — keyboard-open editor presentation and frozen 2 x 2 centering passed, 2 tests with 0 failures;
-  - `/tmp/ChoraiActionBoxBackgroundReplacementStrict.xcresult` — Go-backed Background add then replace passed with the persisted replacement ref required to differ from the first ref;
-  - `/tmp/ChoraiActionBoxLegacyHTMLStrict.xcresult` — legacy paragraph and strong markup hydrate without exposing literal tags;
-  - `/tmp/ChoraiActionBoxKeyboardStandard90.xcresult` — keyboard-open presentation restores the standard 90 x 90 point tiles before interaction;
-  - `/tmp/ChoraiActionBoxFinalLiveRegression.xcresult` — new-draft Card Actions remains lazy and mainstream public/private plus Pin/Unpin behavior remains intact, 2 tests with 0 failures.
-- Focused source contracts: 31 tests passed, 0 failed.
-- BlockNote bridge/resources: 40 tests passed, 0 failed, including the bundled `@` trigger-to-native-link wiring.
-- Covered journeys:
-  - default eight-button 3 + 3 + 2 grid, exact descendants, leading alignment, single Background, and no Remove Background;
-  - Accessibility XXXL geometry and hit targets;
-  - Background upload, staged state, save, reload, replacement route, and a distinct persisted Go replacement ref;
-  - opening Card Actions on a new draft without creating a server card;
-  - staging Background plus public state before the first save;
-  - mainstream backdrop-dismiss -> reopen, public/private, and Pin/Unpin mutations.
+The source crop is a tightly clipped, edge-anchored rectangular context, while the approved iOS design uses a 44-point circular floating control with a 25-point trailing inset. This is an intentional platform and hit-target adaptation, not a pixel clone. Fidelity is judged on the real `menu_merge` asset, dark-violet shell language, right-side hierarchy, state semantics, and compact numeric presentation.
 
 ## Comparison history
 
-1. Raw `<p>` and `</p>` markup appeared in editor content.
-   - Fix: recognize legacy HTML when canonical JSON is absent and hydrate it through the BlockNote parser.
-2. Make Public and Add Background both lived inside Card Actions.
-   - Fix: keep privacy beside More and move the one stable Background action into Card Actions.
-3. Editor tags and related links did not align with View Card.
-   - Fix: reuse the View Card capsule and related-row components.
-4. Editor Card Actions used a tall native list instead of the product's mainstream Action Box.
-   - Fix: share the Action Box surface and render the accepted fixed editor grid.
-5. The first shared-grid pass reduced every product tile to 84 points and still risked Close overlap on compact widths.
-   - Fix: restore 90-point standard tiles, reserve a 60-point header, and adapt only below the available width/height threshold.
-6. Stateful accessibility hiding could leave controls unavailable after Close.
-   - Fix: put modal semantics on the stable shared overlay and refresh accessibility focus with `.screenChanged`.
-7. The shared three-row header could shift legacy 2 x 2 menus down by 30 points.
-   - Fix: reserve the header only for three-row layouts and keep 2 x 2 content centered beneath an independent Close layer.
-8. A visible keyboard could temporarily reduce three-row layout height below its 44-point hit-target floor.
-   - Fix: dismiss the editor keyboard before presentation and make shared overlay geometry independent of the keyboard safe area.
-9. The three-row surface spent its vertical budget on a Close header, leaving the last row against the border.
-   - Fix: remove the visual Close control and budget explicit 16-point top and bottom content insets.
-10. The editor inserted an empty tile before `Share`, producing a centered 3 + 2 + 3 arrangement instead of natural row filling.
-   - Fix: remove the placeholder and render `Background/Spark/Merge`, `Share/Link/Root`, then left-aligned `Remove/Pin`.
+1. P2 — the first iPhone 17 Pro capture placed the rail 95.5 points from the right edge and vertically near the fixture content.
+   - Before evidence: `iphone17pro-working-normal-frame-a.png` and `iphone17pro-expanded-numbered-3.png`.
+   - Regression first: `testMergeTaskRailPinsSingleControlToRightEdge` failed with a 95.5-point measured trailing gap against 25 +/- 2 points.
+   - Fix: align `MergeTaskRailShellOverlay` to `.topTrailing` within its full-size portal.
+   - Post-fix evidence: `iphone17pro-after-working-normal-frame-a.png`; the frame test passed on iPhone 17 Pro and iPhone SE.
+2. P2 — after the placement fix, expanded Complete and Failed glyphs inherited the badge's top-trailing alignment and were visibly displaced.
+   - Before evidence: `iphone17pro-after-expanded-numbered-3.png`.
+   - Regression first: centered-pixel checks failed with Complete center 0 and Failed center 91 while badges remained present.
+   - Fix: give `MergeTaskStateGlyph` an explicit 44 x 44 centered frame; badge alignment remained top-trailing.
+   - Post-fix evidence: `iphone17pro-final-expanded-numbered-3.png`; final counts were Complete center 406, Failed center 1028, Complete badge 1211, Failed badge 1381.
+3. Final comparison — placement, glyph centering, count badges, state colors, source asset, motion, accessibility settings, Preview ownership, and SE resilience all passed. No later visual fix was made after the final comparison.
+
+## Verification note
+
+The live relaunch test exposed a stale immediate assertion while capturing Preview evidence: two clean runs probed `screen.merge.loaded` only 0.451-0.472 seconds after tapping Merge, before the asynchronous dismissal completed. Both jobs progressed without backend errors. The existing two-phase product behavior (`adopt`, yield, dismiss) predated this task, and the same exact test had already passed once. The test-only contract now waits up to five seconds for dismissal; the focused green run observed the rail at 0.819 seconds and the first synchronized missing-screen probe at 0.835 seconds, then completed relaunch, Preview, commit, and canonical-card navigation. Production lifecycle code was not changed for this synchronization correction.
+
+## Open questions and follow-up polish
+
+- P3: simulator PNG evidence validates sRGB screenshot output, but wide-color P3 gamut and physical OLED appearance were not independently hardware-verified. This does not block the approved dark-violet and semantic-state treatment.
 
 ## Implementation checklist
 
-- [x] Remove literal legacy HTML markup while preserving rich-text semantics.
-- [x] Place privacy directly beside More.
-- [x] Keep editor links display-only and initiate creation from Card Actions or `@`.
-- [x] Reuse View Card tag/link presentation.
-- [x] Match the mainstream 3 x 3 Action Box surface and 90-point standard geometry.
-- [x] Show one stable `Background` action with no removal action.
-- [x] Verify default and Accessibility XXXL states against the mainstream reference in one combined comparison.
-- [x] Verify 375-point width and short safe-area height without overlap or truncation.
-- [x] Verify editor and mainstream backdrop-dismiss -> reopen accessibility/touch recovery.
-- [x] Verify Background add/replace routing and new-draft lazy-save behavior against Go.
-- [x] Preserve centered 2 x 2 mainstream menus after removing the shared Close control.
-- [x] Keep at least 16 points of visible bottom clearance on three-row Action Boxes.
-- [x] Fill editor actions from the leading edge as 3 + 3 + 2.
-- [x] Verify keyboard-open Card Actions restores full-height geometry before interaction.
+- [x] Reuse the real `menu_merge` asset.
+- [x] Keep visible rail copy numeric-only and semantic state text accessibility-only.
+- [x] Verify one 44 x 44-point control for one task and numbered expansion for multiple tasks.
+- [x] Verify at most four visible task controls before scrolling.
+- [x] Verify Working motion, Complete static treatment, warning states, and failure precedence.
+- [x] Verify actual Reduce Motion and Reduce Transparency behavior and restore both settings.
+- [x] Verify VoiceOver labels, values, hints, semantic shapes, and hit targets.
+- [x] Verify a single global owner, Preview suppression, Preview-close retention, discard removal, and commit navigation.
+- [x] Verify iPhone 17 Pro and short iPhone SE layouts.
+- [x] Open and judge normalized, full-view, contact-sheet, and before/after comparison evidence.
 
 final result: passed
