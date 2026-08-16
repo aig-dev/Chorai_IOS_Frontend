@@ -9,7 +9,6 @@ struct MergeTaskRail: View {
     let summaries: [MergeTaskSummary]
     @Binding var isExpanded: Bool
     let onSelect: (String) -> Void
-    @State private var catchesOutsideTaps = false
 
     private var hasActiveTask: Bool {
         summaries.contains {
@@ -39,17 +38,6 @@ struct MergeTaskRail: View {
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
-            if isExpanded, catchesOutsideTaps {
-                Color.clear
-                    .contentShape(Rectangle())
-                    .ignoresSafeArea()
-                    .onTapGesture {
-                        catchesOutsideTaps = false
-                        isExpanded = false
-                    }
-                    .accessibilityHidden(true)
-            }
-
             VStack(alignment: .trailing, spacing: 8) {
                 collapsedControl
 
@@ -72,19 +60,7 @@ struct MergeTaskRail: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
         .onChange(of: summaries.count) { count in
             if count < 2 {
-                catchesOutsideTaps = false
                 isExpanded = false
-            }
-        }
-        .onChange(of: isExpanded) { expanded in
-            guard expanded else {
-                catchesOutsideTaps = false
-                return
-            }
-            DispatchQueue.main.async {
-                if isExpanded {
-                    catchesOutsideTaps = true
-                }
             }
         }
     }
@@ -201,7 +177,6 @@ struct MergeTaskRail: View {
         number: Int
     ) -> some View {
         Button {
-            catchesOutsideTaps = false
             isExpanded = false
             onSelect(summary.jobID)
         } label: {
@@ -275,6 +250,84 @@ struct MergeTaskRail: View {
         case .working, .committing, .recovering:
             return "Opens Merge progress"
         }
+    }
+}
+
+struct MergeTaskRailShellOverlay<Callout: View>: View {
+    let summaries: [MergeTaskSummary]
+    @Binding var isExpanded: Bool
+    let onSelect: (String) -> Void
+    let isHaloVisible: Bool
+    private let callout: Callout
+
+    @State private var catchesOutsideTaps = false
+
+    init(
+        summaries: [MergeTaskSummary],
+        isExpanded: Binding<Bool>,
+        onSelect: @escaping (String) -> Void,
+        isHaloVisible: Bool,
+        @ViewBuilder callout: () -> Callout
+    ) {
+        self.summaries = summaries
+        _isExpanded = isExpanded
+        self.onSelect = onSelect
+        self.isHaloVisible = isHaloVisible
+        self.callout = callout()
+    }
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            if isExpanded, catchesOutsideTaps {
+                Color.clear
+                    .contentShape(Rectangle())
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        catchesOutsideTaps = false
+                        isExpanded = false
+                    }
+                    .accessibilityHidden(true)
+            }
+
+            VStack(alignment: .trailing, spacing: 10) {
+                callout
+
+                MergeTaskRail(
+                    summaries: summaries,
+                    isExpanded: $isExpanded,
+                    onSelect: onSelect
+                )
+                .frame(
+                    width: 49,
+                    height: railHeight,
+                    alignment: .topTrailing
+                )
+                .overlay(alignment: .topTrailing) {
+                    ContextualGuideTargetHalo(isVisible: isHaloVisible)
+                        .offset(x: 2, y: -2)
+                }
+            }
+            .padding(.top, 112)
+            .padding(.trailing, 20)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onChange(of: isExpanded) { expanded in
+            guard expanded else {
+                catchesOutsideTaps = false
+                return
+            }
+            DispatchQueue.main.async {
+                if isExpanded {
+                    catchesOutsideTaps = true
+                }
+            }
+        }
+    }
+
+    private var railHeight: CGFloat {
+        guard isExpanded, summaries.count > 1 else { return 49 }
+        let visibleCount = min(summaries.count, 4)
+        return CGFloat(visibleCount * 52 + 49)
     }
 }
 
@@ -383,13 +436,16 @@ struct MergeTaskRailFixtureScreen: View {
         ZStack {
             ZenVisualTokens.background.ignoresSafeArea()
 
-            MergeTaskRail(
+            MergeTaskRailShellOverlay(
                 summaries: summaries,
                 isExpanded: $isExpanded,
-                onSelect: { _ in }
-            )
-            .padding(.top, 112)
-            .padding(.trailing, 20)
+                onSelect: { _ in },
+                isHaloVisible: false
+            ) {
+                Color.clear
+                    .frame(width: 240, height: 44)
+                    .accessibilityHidden(true)
+            }
         }
     }
 }

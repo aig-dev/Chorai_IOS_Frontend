@@ -804,43 +804,31 @@ struct TabBarView: View {
                 }
                 #endif
 
-                if libraryCardRouteCoverageDepth == 0,
-                   !mergeTaskCoordinator.summaries.isEmpty,
-                   mergeTaskCoordinator.presentation == nil {
-                    HStack {
-                        Spacer()
-                        VStack(alignment: .trailing, spacing: 10) {
-                            ContextualGuideCallout(
-                                store: contextualTipStore,
-                                tip: .mergeResume,
-                                onboardingState:
-                                    onboardingStore.contextualTipState,
-                                targetIsVisible: true
-                            )
-
-                            MergeTaskRail(
-                                summaries: mergeTaskCoordinator.summaries,
-                                isExpanded: $isMergeTaskRailExpanded,
-                                onSelect: selectMergeTask
-                            )
-                            .overlay(alignment: .topTrailing) {
-                                ContextualGuideTargetHalo(
-                                    isVisible: contextualTipStore.isVisible(
-                                        .mergeResume,
-                                        onboardingState:
-                                            onboardingStore.contextualTipState,
-                                        targetIsVisible: true
-                                    )
-                                )
-                                .offset(x: 2, y: -2)
-                            }
-                        }
-                    }
-                    .padding(.trailing, 20)
-                }
-
             }
             .padding(.top, 112)
+        }
+        .overlay {
+            if libraryCardRouteCoverageDepth == 0,
+               !mergeTaskCoordinator.summaries.isEmpty,
+               mergeTaskCoordinator.presentation == nil {
+                MergeTaskRailShellOverlay(
+                    summaries: mergeTaskCoordinator.summaries,
+                    isExpanded: $isMergeTaskRailExpanded,
+                    onSelect: selectMergeTask,
+                    isHaloVisible: contextualTipStore.isVisible(
+                        .mergeResume,
+                        onboardingState: onboardingStore.contextualTipState,
+                        targetIsVisible: true
+                    )
+                ) {
+                    ContextualGuideCallout(
+                        store: contextualTipStore,
+                        tip: .mergeResume,
+                        onboardingState: onboardingStore.contextualTipState,
+                        targetIsVisible: true
+                    )
+                }
+            }
         }
         .popupMenu(isPresented: $showPopupMenu, layout: .grid2x2, cardData: currentMenuCardData)
         .linkPopup()

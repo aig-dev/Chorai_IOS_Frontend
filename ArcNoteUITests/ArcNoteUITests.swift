@@ -72,6 +72,15 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertTrue(
             waitForButton("merge.task.1").label.contains("3 sources")
         )
+
+        let window = app.windows.firstMatch
+        XCTAssertTrue(window.waitForExistence(timeout: 3))
+        window.coordinate(
+            withNormalizedOffset: CGVector(dx: 0.15, dy: 0.78)
+        ).tap()
+
+        waitForMissing("merge.task.1", timeout: 3)
+        XCTAssertTrue(rail.exists)
     }
 
     func testAdaptiveLayoutFixtureKeepsSurfaceInsideWindowGutters() {
