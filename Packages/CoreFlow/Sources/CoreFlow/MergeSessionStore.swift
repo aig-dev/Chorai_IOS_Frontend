@@ -343,13 +343,23 @@ public final class MergeSessionStore: ObservableObject {
         }
     }
 
-    public func stop() {
+    public func suspend(reason: CoreMergeError? = nil) {
         operationTask?.cancel()
         operationTask = nil
         isOperationInFlight = false
-        if snapshot != nil, !isTerminalPresentation {
-            phase = .paused(.interrupted)
+        if let reason, snapshot != nil, !isTerminalPresentation {
+            phase = .paused(reason)
         }
+    }
+
+    public func resume() {
+        guard snapshot != nil, !isOperationInFlight else { return }
+        retry()
+    }
+
+    @available(*, deprecated, message: "Use suspend(reason:) for presentation suspension.")
+    public func stop() {
+        suspend(reason: .interrupted)
     }
 
     public func acknowledgeCompletion() {
@@ -444,7 +454,7 @@ public final class MergeSessionStore: ObservableObject {
             let cancelled = try await service.cancel(jobID: jobID)
             guard !Task.isCancelled else { return }
             if cancelled.status == .cancelled {
-                resetToSelectionAfterDiscard()
+                finishArtifactDiscard()
             } else {
                 await driveLifecycle(from: cancelled)
             }
@@ -466,15 +476,13 @@ public final class MergeSessionStore: ObservableObject {
         }
     }
 
-    private func resetToSelectionAfterDiscard() {
+    private func finishArtifactDiscard() {
         persistence.remove(actorID: actorID)
         snapshot = nil
         job = nil
         artifact = nil
         artifactActionError = nil
-        selectedSources = [anchor]
-        titleOverride = ""
-        phase = .selection
+        phase = .cancelled
     }
 
     private func submitCommit(

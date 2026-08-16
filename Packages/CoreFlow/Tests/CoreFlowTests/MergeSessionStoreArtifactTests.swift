@@ -33,19 +33,17 @@ final class MergeSessionStoreArtifactTests: XCTestCase {
         XCTAssertTrue(persistence.removals.isEmpty)
     }
 
-    func testDiscardReadyArtifactReturnsDirectlyToFreshSelection() async {
+    func testDiscardReadyArtifactEndsOnlyThatTask() async {
         let service = MockCoreMergeService()
         let persistence = InMemoryMergeSessionPersistence()
         let store = await readyStore(service: service, persistence: persistence)
         await service.enqueueCancel(.success(makeMergeJob(status: .cancelled)))
 
         store.discardArtifact()
-        await waitForMergeStore { store.phase == .selection }
+        await waitForMergeStore { store.phase == .cancelled }
 
         XCTAssertNil(persistence.snapshot(actorID: "actor_1"))
-        XCTAssertNil(store.job)
         XCTAssertNil(store.artifact)
-        XCTAssertEqual(store.selectedSources.map(\.assetID), ["ast_anchor"])
     }
 
     func testDiscardFailureKeepsArtifactVisibleWithInlineError() async {
@@ -130,7 +128,7 @@ final class MergeSessionStoreArtifactTests: XCTestCase {
 
         let cancelCalls = await service.cancelCalls
         XCTAssertTrue(cancelCalls.isEmpty)
-        store.stop()
+        store.suspend(reason: .interrupted)
         await sleeper.resumeNext()
     }
 

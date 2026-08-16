@@ -177,7 +177,7 @@ final class MergeSessionStoreResumeTests: XCTestCase {
         XCTAssertEqual(persistence.snapshot(actorID: "actor_1")?.jobID, "job_1")
     }
 
-    func testStopCancelsFuturePollWithoutClearingSnapshot() async {
+    func testSuspendCancelsFuturePollWithoutRewritingCanonicalPhase() async {
         let service = MockCoreMergeService()
         let persistence = InMemoryMergeSessionPersistence()
         persistence.seed(makeMergeSnapshot(jobID: "job_1", status: .created))
@@ -195,14 +195,16 @@ final class MergeSessionStoreResumeTests: XCTestCase {
         }
         let pendingCount = await sleeper.pendingCount
         XCTAssertEqual(pendingCount, 1)
+        XCTAssertEqual(store.phase, .weaving(.generating))
 
-        store.stop()
+        store.suspend(reason: nil)
         await sleeper.resumeNext()
-        await waitForMergeStore { store.phase == .paused(.interrupted) }
+        await Task.yield()
 
+        XCTAssertEqual(store.phase, .weaving(.generating))
+        XCTAssertEqual(persistence.snapshot(actorID: "actor_1")?.jobID, "job_1")
         let jobCalls = await service.jobCalls
         XCTAssertEqual(jobCalls, ["job_1"])
-        XCTAssertNotNil(persistence.snapshot(actorID: "actor_1"))
     }
 
     private func makeStore(
