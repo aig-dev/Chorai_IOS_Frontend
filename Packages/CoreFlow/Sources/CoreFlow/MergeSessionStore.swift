@@ -69,6 +69,10 @@ public final class MergeSessionStore: ObservableObject {
         snapshot
     }
 
+    public var canCancelCanonicalJob: Bool {
+        canonicalJobIDForCancellation != nil
+    }
+
     public var isTitleOverrideLocked: Bool {
         snapshot?.commitRequest != nil
     }
@@ -274,17 +278,15 @@ public final class MergeSessionStore: ObservableObject {
     public func cancel() {
         guard
             !isLifetimeInvalidated,
-            !isOperationInFlight,
-            let job,
-            job.status.canCancel,
-            snapshot != nil
+            let jobID = canonicalJobIDForCancellation
         else {
             return
         }
 
+        notFoundResource = nil
         phase = .cancelling
         launch { store in
-            await store.submitCancel(jobID: job.jobID)
+            await store.submitCancel(jobID: jobID)
         }
     }
 
@@ -448,6 +450,27 @@ public final class MergeSessionStore: ObservableObject {
             return true
         default:
             return false
+        }
+    }
+
+    private var canonicalJobIDForCancellation: String? {
+        guard
+            let snapshot,
+            let jobID = snapshot.jobID,
+            !jobID.isEmpty,
+            snapshot.lastStatus?.canCancel == true,
+            notFoundResource != .jobStatus
+        else {
+            return nil
+        }
+
+        switch phase {
+        case .paused(.offline):
+            return nil
+        case .weaving, .loadingArtifact, .ready, .paused, .failed:
+            return jobID
+        default:
+            return nil
         }
     }
 

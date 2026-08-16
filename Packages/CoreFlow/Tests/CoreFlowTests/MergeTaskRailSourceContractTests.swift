@@ -60,6 +60,38 @@ final class MergeTaskRailSourceContractTests: XCTestCase {
         XCTAssertFalse(source.contains("else if store.job?.status.canCancel"))
     }
 
+    func testRootPortalOwnsMergeLifecycleAndTabBarDoesNot() throws {
+        let rail = try source(at: "ArcNote/CoreFlow/MergeTaskRail.swift")
+        let tabBar = try source(at: "ArcNote/TabBarView.swift")
+
+        XCTAssertTrue(rail.contains("@Environment(\\.scenePhase)"))
+        XCTAssertTrue(rail.contains("@StateObject private var authManager"))
+        XCTAssertTrue(rail.contains("coordinator.synchronizeLifecycle("))
+        XCTAssertTrue(rail.contains("NetworkManager.shared.$isConnected"))
+        XCTAssertTrue(rail.contains("onboardingStore.reset()"))
+        XCTAssertTrue(rail.contains("contextualTipStore.reset()"))
+        XCTAssertFalse(tabBar.contains("synchronizeMergeActor"))
+        XCTAssertFalse(tabBar.contains("synchronizeMergeRuntimeInputs"))
+        XCTAssertFalse(tabBar.contains("mergeTaskCoordinator.activate("))
+        XCTAssertFalse(tabBar.contains("mergeTaskCoordinator.deactivate()"))
+        XCTAssertFalse(tabBar.contains("mergeTaskCoordinator.setNetworkAvailable"))
+        XCTAssertFalse(tabBar.contains("mergeTaskCoordinator.setApplicationActive"))
+    }
+
+    func testWorkingAndFailedCancellationHaveDistinctNonOptionalActions() throws {
+        let source = try source(
+            at: "ArcNote/CoreFlow/MergeLifecycleViews.swift"
+        )
+
+        XCTAssertTrue(source.contains("enum MergeCancellationIntent"))
+        XCTAssertTrue(source.contains("case working"))
+        XCTAssertTrue(source.contains("case failure"))
+        XCTAssertTrue(source.contains("case .working:\n                    store.cancel()"))
+        XCTAssertTrue(source.contains("case .failure:\n                    onCancelFailure()"))
+        XCTAssertFalse(source.contains("onCancelFailure: (() -> Void)?"))
+        XCTAssertFalse(source.contains("onCancelFailure?()"))
+    }
+
     func testRailIsIconOnlyAccessibleAndReduceMotionAware() throws {
         let source = try source(at: "ArcNote/CoreFlow/MergeTaskRail.swift")
         XCTAssertTrue(source.contains("accessibilityReduceMotion"))

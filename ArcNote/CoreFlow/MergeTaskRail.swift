@@ -1,4 +1,5 @@
 import CoreFlow
+import Combine
 import SwiftUI
 
 struct MergeTaskRail: View {
@@ -380,6 +381,8 @@ extension View {
 }
 
 struct GlobalMergeTaskPortalModifier: ViewModifier {
+    @Environment(\.scenePhase) private var scenePhase
+    @StateObject private var authManager = AuthManager.shared
     @StateObject private var onboardingStore = OnboardingGuideStore(
         service: NetworkCoreOnboardingService(),
         persistence: UserDefaultsOnboardingGuidePersistence()
@@ -397,6 +400,33 @@ struct GlobalMergeTaskPortalModifier: ViewModifier {
         )
     )
     @State private var isExpanded = false
+
+    private var verifiedActorID: String? {
+        authManager.sessionPhase == .verified
+            ? authManager.currentUser?.id
+            : nil
+    }
+
+    private func synchronizeLifecycle() {
+        let actorDidChange = coordinator.synchronizeLifecycle(
+            verifiedActorID: verifiedActorID,
+            isApplicationActive: scenePhase == .active,
+            isNetworkAvailable: NetworkManager.shared.isConnected
+        )
+        guard actorDidChange else { return }
+
+        onboardingStore.reset()
+        contextualTipStore.reset()
+        guard let verifiedActorID else { return }
+        #if DEBUG
+        let environment = ProcessInfo.processInfo.environment
+        if environment["CHORAI_UI_TEST"] == "1",
+           environment["CHORAI_UI_TEST_ONBOARDING"] != "1" {
+            return
+        }
+        #endif
+        onboardingStore.load(actorID: verifiedActorID)
+    }
 
     private var presentation: Binding<Bool> {
         Binding(
@@ -459,6 +489,21 @@ struct GlobalMergeTaskPortalModifier: ViewModifier {
                 } else {
                     EmptyView()
                 }
+            }
+            .onAppear(perform: synchronizeLifecycle)
+            .onChange(of: authManager.currentUser?.id) { _ in
+                synchronizeLifecycle()
+            }
+            .onChange(of: authManager.sessionPhase) { _ in
+                synchronizeLifecycle()
+            }
+            .onChange(of: scenePhase) { _ in
+                synchronizeLifecycle()
+            }
+            .onReceive(
+                NetworkManager.shared.$isConnected.removeDuplicates()
+            ) { _ in
+                synchronizeLifecycle()
             }
     }
 }

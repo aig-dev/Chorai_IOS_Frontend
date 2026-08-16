@@ -112,6 +112,24 @@ public final class MergeTaskCoordinator: ObservableObject {
         self.now = now
     }
 
+    @discardableResult
+    public func synchronizeLifecycle(
+        verifiedActorID: String?,
+        isApplicationActive: Bool,
+        isNetworkAvailable: Bool
+    ) -> Bool {
+        setApplicationActive(isApplicationActive)
+        setNetworkAvailable(isNetworkAvailable)
+
+        guard actorID != verifiedActorID else { return false }
+        if let verifiedActorID {
+            activate(actorID: verifiedActorID)
+        } else {
+            deactivate()
+        }
+        return true
+    }
+
     public func activate(actorID: String) {
         clearRuntimeState()
         generation += 1
@@ -346,7 +364,7 @@ public final class MergeTaskCoordinator: ObservableObject {
             if case .paused(.offline) = store.phase {
                 return [.retry]
             }
-            return store.job?.status.canCancel == true
+            return store.canCancelCanonicalJob
                 ? [.retry, .cancel]
                 : [.retry]
         case .removeOnly:

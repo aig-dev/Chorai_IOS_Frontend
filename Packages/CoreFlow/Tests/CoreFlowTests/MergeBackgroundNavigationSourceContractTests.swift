@@ -17,10 +17,10 @@ final class MergeBackgroundNavigationSourceContractTests: XCTestCase {
         )
     }
 
-    func testTabBarOwnsCoordinatorAndCommittedCardNavigation() throws {
+    func testTabBarConsumesRootCoordinatorAndOwnsCommittedCardNavigation() throws {
         let source = try source(at: "ArcNote/TabBarView.swift")
         XCTAssertTrue(
-            source.contains("@StateObject private var mergeTaskCoordinator")
+            source.contains("@EnvironmentObject private var mergeTaskCoordinator")
         )
         XCTAssertTrue(source.contains("case detail(String)"))
         XCTAssertTrue(
@@ -32,20 +32,22 @@ final class MergeBackgroundNavigationSourceContractTests: XCTestCase {
         XCTAssertFalse(source.contains("mergeResumeMetadata"))
     }
 
-    func testTabBarSynchronizesMergeRuntimeBeforeActorActivation() throws {
-        let source = try source(at: "ArcNote/TabBarView.swift")
+    func testAppRootSynchronizesMergeRuntimeBeforeActorActivation() throws {
+        let source = try source(at: "ArcNote/CoreFlow/MergeTaskRail.swift")
 
         XCTAssertTrue(source.contains("@Environment(\\.scenePhase)"))
         XCTAssertTrue(
             source.contains(
-                "@State private var synchronizedMergeActorID: String?"
+                "let actorDidChange = coordinator.synchronizeLifecycle("
             )
         )
         XCTAssertTrue(
-            source.contains("mergeTaskCoordinator.setApplicationActive")
+            source.contains("isApplicationActive: scenePhase == .active")
         )
         XCTAssertTrue(
-            source.contains("mergeTaskCoordinator.setNetworkAvailable")
+            source.contains(
+                "isNetworkAvailable: NetworkManager.shared.isConnected"
+            )
         )
         XCTAssertTrue(
             source.contains("NetworkManager.shared.$isConnected")
@@ -53,20 +55,7 @@ final class MergeBackgroundNavigationSourceContractTests: XCTestCase {
         XCTAssertTrue(source.contains(".removeDuplicates()"))
         XCTAssertTrue(
             source.contains(
-                "mergeTaskCoordinator.activate(actorID: actorID)"
-            )
-        )
-        XCTAssertTrue(source.contains("mergeTaskCoordinator.deactivate()"))
-        XCTAssertTrue(
-            source.contains(
-                "guard synchronizedMergeActorID != actorID else { return }"
-            )
-        )
-        XCTAssertTrue(
-            source.contains(
-                "lastSelectedTab = coordinator.selectedTab\n" +
-                    "            synchronizeMergeRuntimeInputs()\n" +
-                    "            synchronizeMergeActor()"
+                "verifiedActorID: verifiedActorID"
             ),
             "Activity and network inputs must be installed before actor activation"
         )

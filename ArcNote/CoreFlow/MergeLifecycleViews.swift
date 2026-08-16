@@ -144,7 +144,10 @@ private struct NewMergeSessionDraftHost: View {
             candidates: candidates,
             onBack: onBack,
             onJobAccepted: adopt,
+            failureCancellationIntent: .working,
+            canCancelFailure: store.canCancelCanonicalJob,
             onRetryFailure: nil,
+            onCancelFailure: store.cancel,
             onRemoveFailure: nil,
             onboardingStore: onboardingStore,
             contextualTipStore: contextualTipStore
@@ -274,6 +277,7 @@ private struct ExistingMergeTaskSessionHost: View {
             candidates: candidates,
             onBack: onBack,
             onJobAccepted: nil,
+            failureCancellationIntent: .failure,
             canRetryFailure: canRetryFailure,
             canCancelFailure: canCancelFailure,
             canRemoveFailure: canRemoveFailure,
@@ -440,6 +444,11 @@ final class MergeCandidateStore: ObservableObject {
     }
 }
 
+private enum MergeCancellationIntent {
+    case working
+    case failure
+}
+
 private struct MergeLifecycleView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
@@ -447,16 +456,17 @@ private struct MergeLifecycleView: View {
     @ObservedObject var candidates: MergeCandidateStore
     @State private var searchText = ""
     @FocusState private var isTextInputFocused: Bool
-    @State private var showCancelConfirmation = false
+    @State private var pendingCancellationIntent: MergeCancellationIntent?
     @State private var showDiscardConfirmation = false
 
     private let onBack: () -> Void
     private let onJobAccepted: ((String) -> Void)?
+    private let failureCancellationIntent: MergeCancellationIntent
     private let canRetryFailure: Bool
     private let canCancelFailure: Bool
     private let canRemoveFailure: Bool
     private let onRetryFailure: (() -> Void)?
-    private let onCancelFailure: (() -> Void)?
+    private let onCancelFailure: () -> Void
     private let onRemoveFailure: (() -> Void)?
     private let onboardingStore: OnboardingGuideStore?
     private let contextualTipStore: ContextualGuideTipStore?
@@ -466,11 +476,12 @@ private struct MergeLifecycleView: View {
         candidates: MergeCandidateStore,
         onBack: @escaping () -> Void,
         onJobAccepted: ((String) -> Void)?,
+        failureCancellationIntent: MergeCancellationIntent,
         canRetryFailure: Bool = true,
         canCancelFailure: Bool = false,
         canRemoveFailure: Bool = false,
         onRetryFailure: (() -> Void)?,
-        onCancelFailure: (() -> Void)? = nil,
+        onCancelFailure: @escaping () -> Void,
         onRemoveFailure: (() -> Void)?,
         onboardingStore: OnboardingGuideStore?,
         contextualTipStore: ContextualGuideTipStore?
@@ -479,6 +490,7 @@ private struct MergeLifecycleView: View {
         self.candidates = candidates
         self.onBack = onBack
         self.onJobAccepted = onJobAccepted
+        self.failureCancellationIntent = failureCancellationIntent
         self.canRetryFailure = canRetryFailure
         self.canCancelFailure = canCancelFailure
         self.canRemoveFailure = canRemoveFailure
@@ -549,11 +561,20 @@ private struct MergeLifecycleView: View {
         .preferredColorScheme(.dark)
         .confirmationDialog(
             "Cancel Merge?",
-            isPresented: $showCancelConfirmation,
+            isPresented: cancelConfirmation,
             titleVisibility: .visible
         ) {
             Button("Cancel Merge", role: .destructive) {
-                onCancelFailure?()
+                let intent = pendingCancellationIntent
+                pendingCancellationIntent = nil
+                switch intent {
+                case .working:
+                    store.cancel()
+                case .failure:
+                    onCancelFailure()
+                case nil:
+                    break
+                }
             }
             Button("Keep", role: .cancel) {}
         }
@@ -594,6 +615,17 @@ private struct MergeLifecycleView: View {
         .animation(
             reduceMotion ? nil : .easeInOut(duration: 0.22),
             value: phaseIdentity
+        )
+    }
+
+    private var cancelConfirmation: Binding<Bool> {
+        Binding(
+            get: { pendingCancellationIntent != nil },
+            set: { isPresented in
+                if !isPresented {
+                    pendingCancellationIntent = nil
+                }
+            }
         )
     }
 
@@ -858,6 +890,20 @@ private struct MergeLifecycleView: View {
                 .font(.system(size: 15, weight: .medium))
                 .foregroundStyle(.white.opacity(0.72))
             Spacer()
+
+            if store.canCancelCanonicalJob {
+                MergeLifecycleAction(
+                    systemImage: "xmark",
+                    assetImage: nil,
+                    isFilled: false,
+                    accessibilityLabel: "Cancel Merge",
+                    accessibilityIdentifier: "merge.cancel"
+                ) {
+                    pendingCancellationIntent = .working
+                }
+                .adaptiveContentGutter()
+                .padding(.bottom, 18)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .overlay(alignment: .topLeading) {
@@ -900,7 +946,7 @@ private struct MergeLifecycleView: View {
                         accessibilityLabel: "Cancel Merge",
                         accessibilityIdentifier: "merge.cancel"
                     ) {
-                        showCancelConfirmation = true
+                        pendingCancellationIntent = failureCancellationIntent
                     }
                 }
 
