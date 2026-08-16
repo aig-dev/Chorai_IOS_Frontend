@@ -23,6 +23,11 @@ final class MergeTaskCoordinatorTests: XCTestCase {
         await waitForMergeCoordinator {
             fixture.coordinator.summary(jobID: "job_1")?.visualState == .working
         }
+        fixture.coordinator.present(jobID: "job_1")
+        XCTAssertEqual(
+            fixture.coordinator.presentation,
+            .progress(jobID: "job_1")
+        )
 
         XCTAssertTrue(
             fixture.coordinator.synchronizeLifecycle(
@@ -655,6 +660,105 @@ final class MergeTaskCoordinatorTests: XCTestCase {
         let cancelCalls = await fixture.service.cancelCalls
         let createCalls = await fixture.service.createCalls
         XCTAssertEqual(cancelCalls, ["job_1"])
+        XCTAssertTrue(createCalls.isEmpty)
+    }
+
+    func testNilStatusRestoredCanonicalJobCancelsWithoutReplacementAndIsolatesSibling() async {
+        var collection = restoredCollection([("job_2", .created, 200)])
+        collection.tasks["job_1"] = MergeTaskRecord(
+            operationID: "op_job_1",
+            snapshot: makeMergeSnapshot(
+                jobID: "job_1",
+                status: nil,
+                createKey: "create_job_1"
+            ),
+            createdAt: Date(timeIntervalSince1970: 100),
+            updatedAt: Date(timeIntervalSince1970: 100),
+            replacesJobID: nil
+        )
+        let fixture = makeCoordinatorFixture(keys: [], collection: collection)
+        await fixture.service.enqueueJob(id: "job_1", .failure(.timeout))
+        await fixture.service.enqueueJob(
+            id: "job_2",
+            .success(makeMergeJob(id: "job_2", status: .generating))
+        )
+
+        fixture.coordinator.activate(actorID: "actor_1")
+        await waitForMergeCoordinator {
+            fixture.coordinator.summary(jobID: "job_1")?.visualState
+                == .recovering
+                && fixture.coordinator.summary(jobID: "job_2")?.visualState
+                    == .working
+        }
+        let target = fixture.coordinator.session(jobID: "job_1")
+        XCTAssertNil(target?.job)
+        XCTAssertEqual(target?.activeSnapshot?.jobID, "job_1")
+        XCTAssertNil(target?.activeSnapshot?.lastStatus)
+        XCTAssertEqual(
+            fixture.coordinator.failureActions(jobID: "job_1"),
+            [.retry, .cancel]
+        )
+        fixture.coordinator.present(jobID: "job_1")
+        XCTAssertEqual(
+            fixture.coordinator.presentation,
+            .progress(jobID: "job_1")
+        )
+
+        await fixture.service.enqueueCancel(
+            jobID: "job_1",
+            .failure(.server(code: "cancel_failed"))
+        )
+        await fixture.service.enqueueJob(id: "job_1", .failure(.timeout))
+        fixture.coordinator.cancelFailed(jobID: "job_1")
+        await waitForMergeStore {
+            fixture.coordinator.session(jobID: "job_1")?.phase
+                == .paused(.timeout)
+        }
+
+        XCTAssertEqual(
+            fixture.coordinator.session(jobID: "job_1")?
+                .activeSnapshot?.jobID,
+            "job_1"
+        )
+        XCTAssertNotNil(
+            fixture.persistence.collection(actorID: "actor_1").tasks["job_1"]
+        )
+        XCTAssertNotNil(
+            fixture.persistence.collection(actorID: "actor_1").tasks["job_2"]
+        )
+        XCTAssertEqual(
+            fixture.coordinator.presentation,
+            .progress(jobID: "job_1")
+        )
+        let cancelCallsAfterFailure = await fixture.service.cancelCalls
+        let createCallsAfterFailure = await fixture.service.createCalls
+        XCTAssertEqual(cancelCallsAfterFailure, ["job_1"])
+        XCTAssertTrue(createCallsAfterFailure.isEmpty)
+
+        await fixture.service.enqueueCancel(
+            jobID: "job_1",
+            .success(makeMergeJob(id: "job_1", status: .cancelled))
+        )
+        fixture.coordinator.cancelFailed(jobID: "job_1")
+        await waitForMergeCoordinator {
+            fixture.coordinator.summary(jobID: "job_1") == nil
+        }
+
+        XCTAssertNil(fixture.coordinator.session(jobID: "job_1"))
+        XCTAssertNil(fixture.coordinator.presentation)
+        XCTAssertNil(
+            fixture.persistence.collection(actorID: "actor_1").tasks["job_1"]
+        )
+        XCTAssertNotNil(
+            fixture.persistence.collection(actorID: "actor_1").tasks["job_2"]
+        )
+        XCTAssertEqual(
+            fixture.coordinator.summary(jobID: "job_2")?.visualState,
+            .working
+        )
+        let cancelCalls = await fixture.service.cancelCalls
+        let createCalls = await fixture.service.createCalls
+        XCTAssertEqual(cancelCalls, ["job_1", "job_1"])
         XCTAssertTrue(createCalls.isEmpty)
     }
 

@@ -97,6 +97,109 @@ final class ArcNoteUITests: XCTestCase {
         }
     }
 
+    func testWorkingMergeCancelConfirmsCanonicalCallAndCleanupDuringActivePoll() {
+        app.launchArguments.append("--ui-test-merge-task-rail")
+        app.launchEnvironment["CHORAI_UI_TEST_MERGE_TASK_FIXTURE"] =
+            "working-cancel"
+        app.launch()
+
+        XCTAssertEqual(
+            waitFor("merge.fixture.persisted-job-id").label,
+            "fixture-working-job"
+        )
+        XCTAssertEqual(
+            waitFor("merge.fixture.poll-state").label,
+            "active"
+        )
+        XCTAssertEqual(
+            waitFor("merge.job.id").label,
+            "fixture-working-job"
+        )
+        XCTAssertEqual(waitFor("merge.job.status").label, "GENERATING")
+        XCTAssertTrue(waitFor("merge.phase.weaving").exists)
+
+        waitForButton("merge.cancel").tap()
+        let confirmation = app.buttons.matching(
+            NSPredicate(
+                format: "label == %@ AND identifier != %@",
+                "Cancel Merge",
+                "merge.cancel"
+            )
+        ).firstMatch
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 3))
+        confirmation.tap()
+
+        XCTAssertEqual(
+            waitFor("merge.fixture.cancel-calls").label,
+            "fixture-working-job"
+        )
+        XCTAssertEqual(
+            waitFor("merge.fixture.target-state").label,
+            "removed"
+        )
+        waitForMissing("merge.cancel", timeout: 3)
+    }
+
+    func testRootLifecycleLogoutClearsPresentedTaskAndRejectsStaleActorLoad() {
+        app.launchArguments.append("--ui-test-merge-task-rail")
+        app.launchEnvironment["CHORAI_UI_TEST_MERGE_TASK_FIXTURE"] =
+            "root-lifecycle"
+        app.launch()
+
+        XCTAssertEqual(
+            waitFor("merge.lifecycle.presentation").label,
+            "fixture-actor-1-job"
+        )
+        XCTAssertEqual(waitFor("merge.lifecycle.summary-count").label, "1")
+        XCTAssertEqual(
+            waitFor("merge.lifecycle.actor-1-durable").label,
+            "retained"
+        )
+        XCTAssertEqual(
+            waitFor("merge.lifecycle.onboarding-phase").label,
+            "loading"
+        )
+        XCTAssertEqual(
+            waitFor("merge.lifecycle.contextual-actor").label,
+            "actor_1"
+        )
+
+        waitForButton("merge.lifecycle.logout").tap()
+        XCTAssertEqual(waitFor("merge.lifecycle.presentation").label, "none")
+        XCTAssertEqual(waitFor("merge.lifecycle.summary-count").label, "0")
+        XCTAssertEqual(
+            waitFor("merge.lifecycle.actor-1-durable").label,
+            "retained"
+        )
+        XCTAssertEqual(
+            waitFor("merge.lifecycle.onboarding-phase").label,
+            "idle"
+        )
+        XCTAssertEqual(waitFor("merge.lifecycle.contextual-actor").label, "none")
+
+        waitForButton("merge.lifecycle.activate-actor-2").tap()
+        waitForButton("merge.lifecycle.resolve-actor-2").tap()
+        XCTAssertEqual(
+            waitFor("merge.lifecycle.onboarding-session").label,
+            "fixture-actor-2-session"
+        )
+        XCTAssertEqual(
+            waitFor("merge.lifecycle.contextual-actor").label,
+            "actor_2"
+        )
+
+        waitForButton("merge.lifecycle.resolve-stale-actor-1").tap()
+        XCTAssertEqual(
+            waitFor("merge.lifecycle.onboarding-session").label,
+            "fixture-actor-2-session"
+        )
+        XCTAssertEqual(
+            waitFor("merge.lifecycle.contextual-actor").label,
+            "actor_2"
+        )
+        XCTAssertEqual(waitFor("merge.lifecycle.presentation").label, "none")
+    }
+
     private func assertExactlyOneAccessibleMergeRail(
         file: StaticString = #filePath,
         line: UInt = #line

@@ -458,9 +458,11 @@ public final class MergeSessionStore: ObservableObject {
             let snapshot,
             let jobID = snapshot.jobID,
             !jobID.isEmpty,
-            snapshot.lastStatus?.canCancel == true,
             notFoundResource != .jobStatus
         else {
+            return nil
+        }
+        if let lastStatus = snapshot.lastStatus, !lastStatus.canCancel {
             return nil
         }
 
