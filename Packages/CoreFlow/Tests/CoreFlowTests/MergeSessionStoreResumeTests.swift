@@ -82,7 +82,8 @@ final class MergeSessionStoreResumeTests: XCTestCase {
             persistence: persistence,
             sleeper: ImmediateMergeSleeper(),
             idempotencyKey: { "must-not-create-a-new-key" },
-            pollDelaysNanoseconds: [0]
+            pollDelaysNanoseconds: [0],
+            pollDelayJitter: { $0 }
         )
 
         store.start()
@@ -113,7 +114,8 @@ final class MergeSessionStoreResumeTests: XCTestCase {
             persistence: persistence,
             sleeper: ImmediateMergeSleeper(),
             resumePersistedSession: false,
-            pollDelaysNanoseconds: [0]
+            pollDelaysNanoseconds: [0],
+            pollDelayJitter: { $0 }
         )
 
         store.start()
@@ -207,6 +209,49 @@ final class MergeSessionStoreResumeTests: XCTestCase {
         XCTAssertEqual(jobCalls, ["job_1"])
     }
 
+    func testCancelledStaleJobResponseCannotOverwriteNewerReconcile() async {
+        let service = MockCoreMergeService()
+        let persistence = InMemoryMergeSessionPersistence()
+        persistence.seed(makeMergeSnapshot(jobID: "job_1", status: .created))
+        let stale = await service.enqueueControlledJob(
+            id: "job_1",
+            .success(
+                makeMergeJob(
+                    id: "job_1",
+                    status: .artifactReady,
+                    artifactID: "stale_artifact"
+                )
+            )
+        )
+        let sleeper = ControlledMergeSleeper()
+        let store = makeStore(
+            service: service,
+            persistence: persistence,
+            sleeper: sleeper
+        )
+        store.start()
+        await waitForControlledJob(stale)
+
+        store.suspend(reason: nil)
+        await service.enqueueJob(
+            id: "job_1",
+            .success(makeMergeJob(id: "job_1", status: .generating))
+        )
+        store.resume()
+        await waitForMergeStore { store.phase == .weaving(.generating) }
+
+        await stale.resume()
+        for _ in 0..<20 { await Task.yield() }
+
+        XCTAssertEqual(store.phase, .weaving(.generating))
+        XCTAssertEqual(
+            persistence.snapshot(actorID: "actor_1")?.lastStatus,
+            .generating
+        )
+        store.suspend(reason: nil)
+        await sleeper.resumeNext()
+    }
+
     private func makeStore(
         service: MockCoreMergeService,
         persistence: InMemoryMergeSessionPersistence,
@@ -221,6 +266,7 @@ final class MergeSessionStoreResumeTests: XCTestCase {
             sleeper: sleeper,
             idempotencyKey: { "must-not-create-a-new-key" },
             pollDelaysNanoseconds: [0],
+            pollDelayJitter: { $0 },
             maxPollAttempts: maxPollAttempts
         )
     }

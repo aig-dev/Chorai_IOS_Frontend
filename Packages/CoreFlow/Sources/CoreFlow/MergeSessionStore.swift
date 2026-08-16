@@ -54,9 +54,11 @@ public final class MergeSessionStore: ObservableObject {
     private let service: any CoreMergeServing
     private let persistence: any MergeSessionPersisting
     private let sleeper: any MergeSleeping
+    private let pollingGate: MergePollingGate?
     private let resumePersistedSession: Bool
     private let idempotencyKey: () -> String
     private let pollDelaysNanoseconds: [UInt64]
+    private let pollDelayJitter: (UInt64) -> UInt64
     private let maxPollAttempts: Int
 
     private var snapshot: MergeSessionSnapshot?
@@ -69,6 +71,7 @@ public final class MergeSessionStore: ObservableObject {
         service: any CoreMergeServing,
         persistence: any MergeSessionPersisting,
         sleeper: any MergeSleeping = SystemMergeSleeper(),
+        pollingGate: MergePollingGate? = nil,
         resumePersistedSession: Bool = true,
         idempotencyKey: @escaping () -> String = {
             "ios-merge-\(UUID().uuidString)"
@@ -80,6 +83,10 @@ public final class MergeSessionStore: ObservableObject {
             1_500_000_000,
             2_000_000_000
         ],
+        pollDelayJitter: @escaping (UInt64) -> UInt64 = { delay in
+            guard delay > 0 else { return 0 }
+            return UInt64(Double(delay) * Double.random(in: 0.85...1.15))
+        },
         // About 356 seconds with the default backoff: enough for the frozen
         // three-provider Merge routes when every provider uses its 90s bound.
         maxPollAttempts: Int = 180
@@ -90,9 +97,11 @@ public final class MergeSessionStore: ObservableObject {
         self.service = service
         self.persistence = persistence
         self.sleeper = sleeper
+        self.pollingGate = pollingGate
         self.resumePersistedSession = resumePersistedSession
         self.idempotencyKey = idempotencyKey
         self.pollDelaysNanoseconds = pollDelaysNanoseconds
+        self.pollDelayJitter = pollDelayJitter
         self.maxPollAttempts = max(0, maxPollAttempts)
     }
 
@@ -422,7 +431,7 @@ public final class MergeSessionStore: ObservableObject {
 
     private func reconcile(jobID: String) async {
         do {
-            let current = try await service.job(id: jobID)
+            let current = try await fetchJob(id: jobID)
             guard !Task.isCancelled else { return }
             await driveLifecycle(from: current)
         } catch {
@@ -439,7 +448,7 @@ public final class MergeSessionStore: ObservableObject {
         } catch {
             guard !Task.isCancelled else { return }
             do {
-                let current = try await service.job(id: jobID)
+                let current = try await fetchJob(id: jobID)
                 guard !Task.isCancelled else { return }
                 await driveLifecycle(from: current)
             } catch {
@@ -462,7 +471,7 @@ public final class MergeSessionStore: ObservableObject {
             guard !Task.isCancelled else { return }
             let discardError = coreError(from: error)
             do {
-                let current = try await service.job(id: jobID)
+                let current = try await fetchJob(id: jobID)
                 guard !Task.isCancelled else { return }
                 await driveLifecycle(from: current)
                 if phase == .ready {
@@ -572,7 +581,7 @@ public final class MergeSessionStore: ObservableObject {
                     nanoseconds: pollDelay(at: pollCount)
                 )
                 try Task.checkCancellation()
-                current = try await service.job(id: current.jobID)
+                current = try await fetchJob(id: current.jobID)
                 pollCount += 1
             } catch is CancellationError {
                 return
@@ -652,7 +661,19 @@ public final class MergeSessionStore: ObservableObject {
 
     private func pollDelay(at index: Int) -> UInt64 {
         guard !pollDelaysNanoseconds.isEmpty else { return 0 }
-        return pollDelaysNanoseconds[min(index, pollDelaysNanoseconds.count - 1)]
+        let delay = pollDelaysNanoseconds[
+            min(index, pollDelaysNanoseconds.count - 1)
+        ]
+        return pollDelayJitter(delay)
+    }
+
+    private func fetchJob(id: String) async throws -> MergeJob {
+        guard let pollingGate else {
+            return try await service.job(id: id)
+        }
+        return try await pollingGate.perform { [service] in
+            try await service.job(id: id)
+        }
     }
 
     private func coreError(from error: Error) -> CoreMergeError {

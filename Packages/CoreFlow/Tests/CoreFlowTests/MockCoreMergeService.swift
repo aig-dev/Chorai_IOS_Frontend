@@ -16,6 +16,11 @@ actor MockCoreMergeService: CoreMergeServing {
     private var artifactResults: [Result<MergeArtifact, CoreMergeError>] = []
     private var cancelResults: [Result<MergeJob, CoreMergeError>] = []
     private var commitResults: [Result<MergeCommitResult, CoreMergeError>] = []
+    private var jobResultsByID: [String: [Result<MergeJob, CoreMergeError>]] = [:]
+    private var artifactResultsByJobID: [String: [Result<MergeArtifact, CoreMergeError>]] = [:]
+    private var cancelResultsByJobID: [String: [Result<MergeJob, CoreMergeError>]] = [:]
+    private var commitResultsByJobID: [String: [Result<MergeCommitResult, CoreMergeError>]] = [:]
+    private var controlledJobsByID: [String: [ControlledMergeJobResponse]] = [:]
     private var createObserver: (@Sendable (MergeCreateRequest) -> Void)?
     private var cancelObserver: (@Sendable (String) -> Void)?
     private var commitObserver: (@Sendable (String, MergeCommitRequest) -> Void)?
@@ -48,16 +53,53 @@ actor MockCoreMergeService: CoreMergeServing {
         jobResults.append(result)
     }
 
+    func enqueueJob(
+        id: String,
+        _ result: Result<MergeJob, CoreMergeError>
+    ) {
+        jobResultsByID[id, default: []].append(result)
+    }
+
     func enqueueArtifact(_ result: Result<MergeArtifact, CoreMergeError>) {
         artifactResults.append(result)
+    }
+
+    func enqueueArtifact(
+        jobID: String,
+        _ result: Result<MergeArtifact, CoreMergeError>
+    ) {
+        artifactResultsByJobID[jobID, default: []].append(result)
     }
 
     func enqueueCancel(_ result: Result<MergeJob, CoreMergeError>) {
         cancelResults.append(result)
     }
 
+    func enqueueCancel(
+        jobID: String,
+        _ result: Result<MergeJob, CoreMergeError>
+    ) {
+        cancelResultsByJobID[jobID, default: []].append(result)
+    }
+
     func enqueueCommit(_ result: Result<MergeCommitResult, CoreMergeError>) {
         commitResults.append(result)
+    }
+
+    func enqueueCommit(
+        jobID: String,
+        _ result: Result<MergeCommitResult, CoreMergeError>
+    ) {
+        commitResultsByJobID[jobID, default: []].append(result)
+    }
+
+    func enqueueControlledJob(
+        id: String,
+        _ result: Result<MergeJob, CoreMergeError>
+    ) -> ControlledMergeJobResponse {
+        let response = ControlledMergeJobResponse(result: result)
+        controlledJobsByID[id, default: []].append(response)
+        return response
     }
 
     func capabilities() async throws -> [MergeCapability] {
@@ -73,17 +115,31 @@ actor MockCoreMergeService: CoreMergeServing {
 
     func job(id: String) async throws -> MergeJob {
         jobCalls.append(id)
+        if var responses = controlledJobsByID[id], !responses.isEmpty {
+            let response = responses.removeFirst()
+            controlledJobsByID[id] = responses
+            return try await response.resolve()
+        }
+        if let result = dequeue(id: id, from: &jobResultsByID) {
+            return try result.get()
+        }
         return try dequeue(&jobResults).get()
     }
 
     func artifact(jobID: String) async throws -> MergeArtifact {
         artifactCalls.append(jobID)
+        if let result = dequeue(id: jobID, from: &artifactResultsByJobID) {
+            return try result.get()
+        }
         return try dequeue(&artifactResults).get()
     }
 
     func cancel(jobID: String) async throws -> MergeJob {
         cancelCalls.append(jobID)
         cancelObserver?(jobID)
+        if let result = dequeue(id: jobID, from: &cancelResultsByJobID) {
+            return try result.get()
+        }
         return try dequeue(&cancelResults).get()
     }
 
@@ -93,7 +149,20 @@ actor MockCoreMergeService: CoreMergeServing {
     ) async throws -> MergeCommitResult {
         commitCalls.append((jobID, request))
         commitObserver?(jobID, request)
+        if let result = dequeue(id: jobID, from: &commitResultsByJobID) {
+            return try result.get()
+        }
         return try dequeue(&commitResults).get()
+    }
+
+    private func dequeue<Value>(
+        id: String,
+        from values: inout [String: [Result<Value, CoreMergeError>]]
+    ) -> Result<Value, CoreMergeError>? {
+        guard var queue = values[id], !queue.isEmpty else { return nil }
+        let result = queue.removeFirst()
+        values[id] = queue
+        return result
     }
 
     private func dequeue<Value>(
@@ -101,6 +170,29 @@ actor MockCoreMergeService: CoreMergeServing {
     ) -> Result<Value, CoreMergeError> {
         precondition(!values.isEmpty, "A mock Merge result must be enqueued")
         return values.removeFirst()
+    }
+}
+
+actor ControlledMergeJobResponse {
+    private let result: Result<MergeJob, CoreMergeError>
+    private var continuation: CheckedContinuation<Void, Never>?
+    private(set) var isWaiting = false
+
+    init(result: Result<MergeJob, CoreMergeError>) {
+        self.result = result
+    }
+
+    func resolve() async throws -> MergeJob {
+        isWaiting = true
+        await withCheckedContinuation { continuation in
+            self.continuation = continuation
+        }
+        return try result.get()
+    }
+
+    func resume() {
+        continuation?.resume()
+        continuation = nil
     }
 }
 
@@ -327,6 +419,36 @@ func makeMergeSnapshot(
         commitRequest: nil,
         committedAssetID: nil
     )
+}
+
+func makeMergeTaskRecord(
+    jobID: String,
+    status: MergeJobStatus,
+    operationID: String? = nil,
+    createdAt: TimeInterval = 100
+) -> MergeTaskRecord {
+    MergeTaskRecord(
+        operationID: operationID ?? "op_\(jobID)",
+        snapshot: makeMergeSnapshot(
+            jobID: jobID,
+            status: status,
+            createKey: "create_\(jobID)"
+        ),
+        createdAt: Date(timeIntervalSince1970: createdAt),
+        updatedAt: Date(timeIntervalSince1970: createdAt),
+        replacesJobID: nil
+    )
+}
+
+func waitForControlledJob(
+    _ response: ControlledMergeJobResponse,
+    timeoutIterations: Int = 500
+) async {
+    for _ in 0..<timeoutIterations {
+        if await response.isWaiting { return }
+        await Task.yield()
+    }
+    XCTFail("Timed out waiting for controlled Merge GET")
 }
 
 @MainActor
