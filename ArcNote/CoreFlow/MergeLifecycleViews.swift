@@ -82,20 +82,33 @@ private struct NewMergeSessionHost: View {
                 NewMergeSessionDraftHost(
                     draft: draft,
                     candidates: candidates,
-                    onBack: onBack,
+                    onBack: abandonDraftAndDismiss,
                     onboardingStore: onboardingStore,
                     contextualTipStore: contextualTipStore
                 )
             } else {
-                MergeEntryLoadingView(onBack: onBack)
+                MergeEntryLoadingView(onBack: abandonDraftAndDismiss)
                     .task {
                         guard draft == nil else { return }
                         draft = mergeCoordinator.makeDraft(
                             anchor: anchor.coreMergeSource
                         )
-                    }
+                }
             }
         }
+        .onDisappear {
+            abandonDraftIfNeeded()
+        }
+    }
+
+    private func abandonDraftAndDismiss() {
+        abandonDraftIfNeeded()
+        onBack()
+    }
+
+    private func abandonDraftIfNeeded() {
+        guard let draft else { return }
+        mergeCoordinator.abandon(draft)
     }
 }
 

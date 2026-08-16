@@ -243,6 +243,27 @@ public final class MergeTaskCoordinator: ObservableObject {
         return jobID
     }
 
+    public func abandon(_ draft: MergeDraftSession) {
+        guard
+            let actorID,
+            draft.generation == generation,
+            draft.persistence.actorID == actorID,
+            let ownership = draftsByOperationID[draft.operationID],
+            ownership.actorID == actorID,
+            ownership.generation == generation,
+            ownership.store === draft.store,
+            ownership.persistence === draft.persistence,
+            runtimesByOperationID[draft.operationID] == nil
+        else {
+            return
+        }
+
+        draftsByOperationID[draft.operationID] = nil
+        draft.store.invalidateLifetime()
+        draft.persistence.remove(actorID: actorID)
+        refreshState()
+    }
+
     public func session(jobID: String) -> MergeSessionStore? {
         guard let operationID = jobToOperationID[jobID] else { return nil }
         return runtimesByOperationID[operationID]?.store

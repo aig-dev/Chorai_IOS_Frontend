@@ -4,6 +4,7 @@ import CoreFlow
 import WebKit
 
 struct TabBarView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @StateObject private var authManager = AuthManager.shared
     @StateObject private var coordinator = CoreFlowCoordinator()
     @StateObject private var keyboardLayout = KeyboardLayoutObserver()
@@ -35,6 +36,8 @@ struct TabBarView: View {
     @State private var shareRoute: ShareRoute?
     @State private var reportRoute: ReportRoute?
     @State private var lastSelectedTab: CoreTab = .flow
+    @State private var synchronizedMergeActorID: String?
+    @State private var hasSynchronizedMergeRuntimeInputs = false
 
     #if DEBUG
     @State private var lastCreatedNoteID: String?
@@ -106,6 +109,28 @@ struct TabBarView: View {
         }
         contextualTipStore.reset()
         onboardingStore.load(actorID: actorID)
+    }
+
+    private func synchronizeMergeRuntimeInputs() {
+        mergeTaskCoordinator.setApplicationActive(scenePhase == .active)
+        mergeTaskCoordinator.setNetworkAvailable(
+            NetworkManager.shared.isConnected
+        )
+        hasSynchronizedMergeRuntimeInputs = true
+    }
+
+    private func synchronizeMergeActor() {
+        guard hasSynchronizedMergeRuntimeInputs else { return }
+        let actorID = authManager.sessionPhase == .verified
+            ? authManager.currentUser?.id
+            : nil
+        guard synchronizedMergeActorID != actorID else { return }
+        synchronizedMergeActorID = actorID
+        if let actorID {
+            mergeTaskCoordinator.activate(actorID: actorID)
+        } else {
+            mergeTaskCoordinator.deactivate()
+        }
     }
 
     private func syncContextualTipsWithOnboardingSession() {
@@ -839,6 +864,7 @@ struct TabBarView: View {
             reportRoute = ReportRoute(cardID: cardID)
         }
         .onChange(of: authManager.currentUser?.id) { _ in
+            synchronizeMergeActor()
             hasRoutedInitialOnboardingState = false
             libraryCardRouteCoverageDepth = 0
             isLibrarySurfaceVisible = false
@@ -846,11 +872,20 @@ struct TabBarView: View {
             loadOnboardingIfVerified()
         }
         .onChange(of: authManager.sessionPhase) { phase in
+            synchronizeMergeActor()
             if phase == .verified {
                 loadOnboardingIfVerified()
             } else {
                 contextualTipStore.reset()
             }
+        }
+        .onChange(of: scenePhase) { phase in
+            mergeTaskCoordinator.setApplicationActive(phase == .active)
+        }
+        .onReceive(
+            NetworkManager.shared.$isConnected.removeDuplicates()
+        ) { isConnected in
+            mergeTaskCoordinator.setNetworkAvailable(isConnected)
         }
         .onChange(of: onboardingStore.phase) { phase in
             syncContextualTipsWithOnboardingSession()
@@ -894,6 +929,8 @@ struct TabBarView: View {
         }
         .onAppear {
             lastSelectedTab = coordinator.selectedTab
+            synchronizeMergeRuntimeInputs()
+            synchronizeMergeActor()
             loadOnboardingIfVerified()
         }
         #if DEBUG

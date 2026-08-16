@@ -477,6 +477,97 @@ final class MergeTaskCoordinatorTests: XCTestCase {
             fixture.persistence.collection(actorID: "actor_1").tasks["job_1"]
         )
     }
+
+    func testAbandonRevokesOnlyExactCurrentUnadoptedDraft() async {
+        let fixture = makeCoordinatorFixture(keys: ["create-adopted"])
+        fixture.coordinator.activate(actorID: "actor_1")
+
+        let pending = fixture.coordinator.makeDraft(
+            anchor: makeMergeSource("ast_pending")
+        )
+        pending.persistence.save(
+            makeMergeSnapshot(jobID: nil, createKey: "pending-key")
+        )
+        let canonical = fixture.coordinator.makeDraft(
+            anchor: makeMergeSource("ast_canonical")
+        )
+        canonical.persistence.save(
+            makeMergeSnapshot(
+                jobID: "job_canonical",
+                status: .generating,
+                createKey: "canonical-key"
+            )
+        )
+        let sibling = fixture.coordinator.makeDraft(
+            anchor: makeMergeSource("ast_sibling")
+        )
+        sibling.persistence.save(
+            makeMergeSnapshot(
+                jobID: "job_sibling",
+                status: .generating,
+                createKey: "sibling-key"
+            )
+        )
+        let adopted = await acceptDraft(
+            coordinator: fixture.coordinator,
+            service: fixture.service,
+            anchorID: "ast_adopted",
+            companionID: "ast_adopted_companion",
+            jobID: "job_adopted",
+            status: .generating
+        )
+
+        fixture.coordinator.abandon(pending)
+        var collection = fixture.persistence.collection(actorID: "actor_1")
+        XCTAssertNil(collection.pendingCreations[pending.operationID])
+        XCTAssertNotNil(collection.tasks["job_canonical"])
+        XCTAssertNotNil(collection.tasks["job_sibling"])
+        XCTAssertNotNil(collection.tasks["job_adopted"])
+
+        fixture.coordinator.abandon(canonical)
+        collection = fixture.persistence.collection(actorID: "actor_1")
+        XCTAssertNil(collection.tasks["job_canonical"])
+        XCTAssertNotNil(collection.tasks["job_sibling"])
+        XCTAssertNotNil(collection.tasks["job_adopted"])
+
+        let capabilityCallsBeforeReuse =
+            await fixture.service.capabilityCallCount
+        pending.store.start()
+        canonical.store.start()
+        await Task.yield()
+        let capabilityCallsAfterReuse =
+            await fixture.service.capabilityCallCount
+        XCTAssertEqual(
+            capabilityCallsAfterReuse,
+            capabilityCallsBeforeReuse
+        )
+        XCTAssertEqual(pending.store.phase, .idle)
+        XCTAssertEqual(canonical.store.phase, .idle)
+
+        fixture.coordinator.abandon(adopted)
+        XCTAssertTrue(
+            fixture.coordinator.session(jobID: "job_adopted")
+                === adopted.store
+        )
+        XCTAssertNotNil(
+            fixture.persistence.collection(actorID: "actor_1")
+                .tasks["job_adopted"]
+        )
+
+        let stale = fixture.coordinator.makeDraft(
+            anchor: makeMergeSource("ast_stale")
+        )
+        stale.persistence.save(
+            makeMergeSnapshot(jobID: nil, createKey: "stale-key")
+        )
+        fixture.coordinator.activate(actorID: "actor_2")
+        fixture.coordinator.abandon(stale)
+
+        collection = fixture.persistence.collection(actorID: "actor_1")
+        XCTAssertNotNil(collection.pendingCreations[stale.operationID])
+        XCTAssertNotNil(collection.tasks["job_sibling"])
+        XCTAssertNotNil(collection.tasks["job_adopted"])
+    }
 }
 
 @MainActor
