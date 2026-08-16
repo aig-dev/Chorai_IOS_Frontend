@@ -37,7 +37,7 @@ The generated UI runner was built into isolated DerivedData:
 ```sh
 xcodebuild build-for-testing -quiet \
   -project ArcNote.xcodeproj \
-  -scheme ArcNote \
+  -scheme ArcNoteUITests \
   -configuration Debug \
   -destination 'platform=iOS Simulator,id=43E6164C-1F4B-47E4-9B65-D154C7281A56' \
   -derivedDataPath /tmp/chorai-task8-deriveddata.qWB8uC \
@@ -46,7 +46,7 @@ xcodebuild build-for-testing -quiet \
 
 - Generated runner: `/tmp/chorai-task8-deriveddata.qWB8uC/Build/Products/ArcNoteUITests_iphonesimulator26.2-arm64.xctestrun`.
 - Live runner: `/tmp/chorai-task8-deriveddata.qWB8uC/Build/Products/ArcNoteUITests_task8_live.xctestrun`.
-- The live runner was copied from the generated runner and populated with the existing local `CHORAI_UI_TEST_PHONE` credential using `plutil`; the value was never printed or written to this report. `plutil -lint` passed and a value-free structural check confirmed the key was present.
+- The generated runner was copied to the live-runner path; only `CHORAI_UI_TEST_PHONE` was then populated from the existing local credential using `plutil`. The value was never printed or written to this report. `plutil -lint` passed and a value-free structural check confirmed the key was present.
 - `xcodebuild test-without-building` was the route that genuinely executed the selected tests and preserved deterministic result bundles.
 
 ## CoreFlow verification
@@ -185,7 +185,7 @@ xcodebuild -quiet \
 - Result: exit 0 in 34.75s.
 - Log: `/tmp/chorai-task8-build-production-release-gate.log`.
 
-Both final logs were empty: no warnings or errors.
+Both final logs contained only `/usr/bin/time` timing output (`real`, `user`, and `sys`); `xcodebuild` emitted no warnings or errors.
 
 ## Visual evidence matrix
 
