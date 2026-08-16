@@ -43,6 +43,7 @@ final class MergeSessionStoreArtifactTests: XCTestCase {
         await waitForMergeStore { store.phase == .cancelled }
 
         XCTAssertNil(persistence.snapshot(actorID: "actor_1"))
+        XCTAssertNil(store.job)
         XCTAssertNil(store.artifact)
     }
 
