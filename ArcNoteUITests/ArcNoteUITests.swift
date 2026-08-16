@@ -83,6 +83,47 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertTrue(rail.exists)
     }
 
+    func testMergeTaskRailScrollsToAndSelectsFifthTask() {
+        app.launchArguments.append("--ui-test-merge-task-rail")
+        app.launchEnvironment["CHORAI_UI_TEST_MERGE_TASK_COUNT"] = "5"
+        app.launch()
+
+        let rail = waitForButton("merge.task-rail")
+        XCTAssertEqual(waitFor("merge.task-count").label, "5")
+        XCTAssertEqual(rail.value as? String, "5, failed")
+        rail.tap()
+
+        for number in 1...5 {
+            let task = waitForButton("merge.task.\(number)")
+            XCTAssertGreaterThanOrEqual(task.frame.width, 44)
+            XCTAssertGreaterThanOrEqual(task.frame.height, 44)
+        }
+        for number in 1...4 {
+            XCTAssertTrue(
+                waitForButton("merge.task.\(number)").isHittable,
+                "Expected task \(number) inside the four-row viewport"
+            )
+        }
+        let fifth = waitForButton("merge.task.5")
+        XCTAssertFalse(
+            fifth.isHittable,
+            "Task 5 must begin below the four-row viewport"
+        )
+
+        let taskList = waitFor("merge.task-list")
+        taskList.swipeUp()
+        XCTAssertTrue(fifth.waitForExistence(timeout: 3))
+        XCTAssertTrue(fifth.isHittable)
+        fifth.tap()
+
+        XCTAssertEqual(
+            waitFor("merge.fixture.selected-job").label,
+            "fixture-fifth"
+        )
+        XCTAssertEqual(waitFor("merge.task-count").label, "5")
+        waitForMissing("merge.task.5", timeout: 3)
+    }
+
     func testMergeTaskRailVisualStateFixturePublishesRequestedSingleState() {
         app.launchArguments.append("--ui-test-merge-task-rail")
         app.launchEnvironment["CHORAI_UI_TEST_MERGE_TASK_VISUAL_STATE"] =

@@ -148,6 +148,10 @@ public final class MergeSessionStore: ObservableObject {
                 phase = .completed(assetID: committedAssetID)
                 return
             }
+            if restored.lastStatus == .failed {
+                phase = .failed(.server(code: nil))
+                return
+            }
             if let jobID = restored.jobID {
                 phase = restored.lastStatus == .committing
                     ? .committing

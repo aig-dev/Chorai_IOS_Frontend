@@ -54,6 +54,7 @@ struct MergeTaskRail: View {
                         }
                     }
                     .frame(height: expandedListHeight)
+                    .accessibilityIdentifier("merge.task-list")
                     .transition(.move(edge: .top).combined(with: .opacity))
                 }
             }
@@ -649,14 +650,19 @@ private struct MergeTaskRailRouteFixtureScreen: View {
 
     @State private var isExpanded: Bool
     @State private var path: [Route] = []
+    @State private var selectedJobID: String?
 
     private let visualState: MergeTaskVisualState?
+    private let taskCount: Int
 
     init() {
         let environment = ProcessInfo.processInfo.environment
         visualState = environment[
             "CHORAI_UI_TEST_MERGE_TASK_VISUAL_STATE"
         ].flatMap(MergeTaskVisualState.init(rawValue:))
+        taskCount = Int(
+            environment["CHORAI_UI_TEST_MERGE_TASK_COUNT"] ?? "3"
+        ) ?? 3
         _isExpanded = State(
             initialValue: environment[
                 "CHORAI_UI_TEST_MERGE_TASK_EXPANDED"
@@ -675,7 +681,7 @@ private struct MergeTaskRailRouteFixtureScreen: View {
                 )
             ]
         }
-        return [
+        let standard = [
             MergeTaskSummary(
                 jobID: "fixture-complete",
                 sourceCount: 3,
@@ -694,7 +700,20 @@ private struct MergeTaskRailRouteFixtureScreen: View {
                 createdAt: Date(timeIntervalSince1970: 1),
                 visualState: .failed
             ),
+            MergeTaskSummary(
+                jobID: "fixture-recovering",
+                sourceCount: 2,
+                createdAt: Date(timeIntervalSince1970: 0),
+                visualState: .recovering
+            ),
+            MergeTaskSummary(
+                jobID: "fixture-fifth",
+                sourceCount: 5,
+                createdAt: Date(timeIntervalSince1970: -1),
+                visualState: .complete
+            ),
         ]
+        return Array(standard.prefix(max(1, min(taskCount, standard.count))))
     }
 
     var body: some View {
@@ -717,6 +736,12 @@ private struct MergeTaskRailRouteFixtureScreen: View {
                             "merge.portal.route.\(route.rawValue)"
                         )
                     }
+                    Text(selectedJobID ?? "none")
+                        .font(.system(size: 1))
+                        .foregroundStyle(Color.clear)
+                        .frame(width: 1, height: 1)
+                        .accessibilityLabel(selectedJobID ?? "none")
+                        .accessibilityIdentifier("merge.fixture.selected-job")
                 }
             }
             .navigationDestination(for: Route.self) { route in
@@ -740,7 +765,7 @@ private struct MergeTaskRailRouteFixtureScreen: View {
             summaries: summaries,
             isExpanded: $isExpanded,
             isHidden: false,
-            onSelect: { _ in },
+            onSelect: { selectedJobID = $0 },
             isHaloVisible: false
         ) {
             Color.clear

@@ -76,6 +76,13 @@ Final release gate:
 
 ## UI verification
 
+### Final fix-round five-task behavior
+
+The deterministic DEBUG fixture was extended to five tasks without changing release behavior. `testMergeTaskRailScrollsToAndSelectsFifthTask` verifies that exactly four task buttons are visible before scrolling, every task target is at least 44 x 44 points, task 5 can be scrolled into view and selected by its exact canonical job ID, and the collapsed numeric count remains `5` afterward.
+
+- iPhone 17 Pro: passed 1/1 at `/tmp/chorai-final-fix-five-task-17pro-green.xcresult`; the final rail batch passed 3/3 at `/tmp/chorai-final-fix-rail-17pro.xcresult`.
+- iPhone SE 3: passed 1/1 at `/tmp/chorai-final-fix-five-task-se-green.xcresult`.
+
 ### Final required same-clean batch
 
 Exact command:

@@ -287,6 +287,22 @@ public final class MergeTaskCoordinator: ObservableObject {
         }
 
         draftsByOperationID[draft.operationID] = nil
+        if let snapshot = draft.store.activeSnapshot {
+            register(
+                operationID: draft.operationID,
+                store: draft.store,
+                persistence: draft.persistence
+            )
+            if let jobID = snapshot.jobID?.nonEmpty {
+                jobToOperationID[jobID] = draft.operationID
+            }
+            suspendIfNeeded(draft.store)
+            refreshState(
+                prioritizedOperationID: draft.operationID,
+                shouldObserveEvents: true
+            )
+            return
+        }
         draft.store.invalidateLifetime()
         draft.persistence.remove(actorID: actorID)
         refreshState()
@@ -315,6 +331,10 @@ public final class MergeTaskCoordinator: ObservableObject {
         guard isNetworkAvailable != isAvailable else { return }
         isNetworkAvailable = isAvailable
         for runtime in runtimesByOperationID.values {
+            if recoveryStrategy(for: runtime.store) == .replacement {
+                runtime.store.suspend(reason: nil)
+                continue
+            }
             if isAvailable, isApplicationActive {
                 runtime.store.resume()
             } else if !isAvailable {
@@ -328,6 +348,10 @@ public final class MergeTaskCoordinator: ObservableObject {
         guard isApplicationActive != isActive else { return }
         isApplicationActive = isActive
         for runtime in runtimesByOperationID.values {
+            if recoveryStrategy(for: runtime.store) == .replacement {
+                runtime.store.suspend(reason: nil)
+                continue
+            }
             if isActive, isNetworkAvailable {
                 runtime.store.resume()
             } else if !isActive {
@@ -360,6 +384,8 @@ public final class MergeTaskCoordinator: ObservableObject {
         switch recoveryStrategy(for: store) {
         case .replacement:
             return [.retry, .remove]
+        case .pendingCreation:
+            return [.retry, .remove]
         case .sameOperation:
             if case .paused(.offline) = store.phase {
                 return [.retry]
@@ -385,7 +411,7 @@ public final class MergeTaskCoordinator: ObservableObject {
         switch recoveryStrategy(for: store) {
         case .replacement:
             store.retryGeneration()
-        case .sameOperation:
+        case .pendingCreation, .sameOperation:
             store.retry()
         case .removeOnly, .none:
             return
@@ -413,6 +439,7 @@ public final class MergeTaskCoordinator: ObservableObject {
 
     private enum RecoveryStrategy {
         case replacement
+        case pendingCreation
         case sameOperation
         case removeOnly
         case none
@@ -421,6 +448,13 @@ public final class MergeTaskCoordinator: ObservableObject {
     private func recoveryStrategy(
         for store: MergeSessionStore
     ) -> RecoveryStrategy {
+        if let snapshot = store.activeSnapshot,
+           snapshot.jobID?.nonEmpty == nil {
+            return .pendingCreation
+        }
+        if store.activeSnapshot?.lastStatus == .failed {
+            return .replacement
+        }
         switch store.phase {
         case .paused(.notFound)
             where store.notFoundResource == .jobStatus:
