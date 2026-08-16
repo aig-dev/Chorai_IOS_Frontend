@@ -365,6 +365,22 @@ final class MergeTaskCoordinatorTests: XCTestCase {
         await staleCreate.resume()
         await waitForMergeStore { draft.store.createResponseCount == 1 }
 
+        let staleReuse = await fixture.service.enqueueControlledCreate(
+            idempotencyKey: "create-1",
+            .success(makeMergeJob(id: "job_reused", status: .failed))
+        )
+        let createCallCountBeforeReuse = await fixture.service.createCalls.count
+        draft.store.resume()
+        let didAttemptReuse = draft.store.isOperationInFlight
+        XCTAssertFalse(didAttemptReuse)
+        if didAttemptReuse {
+            await waitForControlledCreate(staleReuse)
+            await staleReuse.resume()
+            await waitForMergeStore { draft.store.createResponseCount == 2 }
+        }
+
+        let createCallCountAfterReuse = await fixture.service.createCalls.count
+        XCTAssertEqual(createCallCountAfterReuse, createCallCountBeforeReuse)
         XCTAssertNil(fixture.coordinator.adopt(draft))
         XCTAssertNil(draft.store.activeSnapshot?.jobID)
         XCTAssertEqual(
@@ -377,6 +393,60 @@ final class MergeTaskCoordinatorTests: XCTestCase {
 
         draft.store.suspend(reason: nil)
         await fixture.sleeper.resumeNext()
+    }
+
+    func testSameActorReactivationInvalidatesRetainedAcceptedRuntime() async {
+        var collection = MergeTaskCollection.empty(actorID: "actor_1")
+        collection.tasks["job_1"] = makeMergeTaskRecord(
+            jobID: "job_1",
+            status: .failed,
+            operationID: "op_1"
+        )
+        let fixture = makeCoordinatorFixture(
+            keys: ["stale-retry"],
+            collection: collection
+        )
+        await fixture.service.enqueueJob(
+            id: "job_1",
+            .success(makeMergeJob(id: "job_1", status: .failed))
+        )
+        fixture.coordinator.activate(actorID: "actor_1")
+        await waitForMergeCoordinator {
+            fixture.coordinator.summary(jobID: "job_1")?.visualState == .failed
+        }
+        let retainedStore = fixture.coordinator.session(jobID: "job_1")!
+
+        await fixture.service.enqueueJob(
+            id: "job_1",
+            .success(makeMergeJob(id: "job_1", status: .failed))
+        )
+        fixture.coordinator.activate(actorID: "actor_1")
+        await waitForMergeCoordinator {
+            fixture.coordinator.summary(jobID: "job_1")?.visualState == .failed
+        }
+        let staleReuse = await fixture.service.enqueueControlledCreate(
+            idempotencyKey: "stale-retry",
+            .success(makeMergeJob(id: "job_reused", status: .failed))
+        )
+        let createCallCountBeforeReuse = await fixture.service.createCalls.count
+
+        retainedStore.retryGeneration()
+        let didAttemptReuse = retainedStore.isOperationInFlight
+        XCTAssertFalse(didAttemptReuse)
+        if didAttemptReuse {
+            await waitForControlledCreate(staleReuse)
+            await staleReuse.resume()
+            await waitForMergeStore { retainedStore.createResponseCount == 1 }
+        }
+
+        let createCallCountAfterReuse = await fixture.service.createCalls.count
+        XCTAssertEqual(createCallCountAfterReuse, createCallCountBeforeReuse)
+        let persisted = fixture.persistence.collection(actorID: "actor_1")
+        XCTAssertEqual(Set(persisted.tasks.keys), Set(["job_1"]))
+        XCTAssertTrue(persisted.pendingCreations.isEmpty)
+        XCTAssertFalse(
+            fixture.coordinator.session(jobID: "job_1") === retainedStore
+        )
     }
 
     func testEmptyCommittedAssetIDIsVisibleFailedAndRemovable() async {

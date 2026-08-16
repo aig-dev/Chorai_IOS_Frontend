@@ -386,6 +386,7 @@ public final class MergeTaskCoordinator: ObservableObject {
 
     private func unregister(operationID: String) {
         subscriptionsByOperationID[operationID] = nil
+        runtimesByOperationID[operationID]?.store.invalidateLifetime()
         runtimesByOperationID[operationID] = nil
         jobToOperationID = jobToOperationID.filter { $0.value != operationID }
     }
@@ -593,10 +594,10 @@ public final class MergeTaskCoordinator: ObservableObject {
 
     private func clearRuntimeState() {
         for draft in draftsByOperationID.values {
-            draft.store.suspend(reason: nil)
+            draft.store.invalidateLifetime()
         }
         for runtime in runtimesByOperationID.values {
-            runtime.store.suspend(reason: nil)
+            runtime.store.invalidateLifetime()
         }
         draftsByOperationID.removeAll()
         subscriptionsByOperationID.removeAll()

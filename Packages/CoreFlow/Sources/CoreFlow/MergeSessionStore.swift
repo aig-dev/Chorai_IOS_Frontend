@@ -46,7 +46,8 @@ public final class MergeSessionStore: ObservableObject {
     private(set) var cancelledStatusResponseDiscardCount = 0
 
     public var canCreate: Bool {
-        phase == .selection
+        !isLifetimeInvalidated
+            && phase == .selection
             && isMergeAvailable
             && selectedSources.count >= 2
             && !isOperationInFlight
@@ -80,6 +81,7 @@ public final class MergeSessionStore: ObservableObject {
     private var snapshot: MergeSessionSnapshot?
     private var operationTask: Task<Void, Never>?
     private var hasStarted = false
+    private var isLifetimeInvalidated = false
 
     public init(
         actorID: String,
@@ -126,7 +128,7 @@ public final class MergeSessionStore: ObservableObject {
     }
 
     public func start() {
-        guard !hasStarted else { return }
+        guard !isLifetimeInvalidated, !hasStarted else { return }
         hasStarted = true
 
         if resumePersistedSession,
@@ -159,7 +161,11 @@ public final class MergeSessionStore: ObservableObject {
     }
 
     public func toggleSelection(_ source: MergeSource) {
-        guard phase == .selection, source.assetID != anchor.assetID else {
+        guard
+            !isLifetimeInvalidated,
+            phase == .selection,
+            source.assetID != anchor.assetID
+        else {
             return
         }
 
@@ -214,7 +220,7 @@ public final class MergeSessionStore: ObservableObject {
     }
 
     public func retry() {
-        guard !isOperationInFlight else { return }
+        guard !isLifetimeInvalidated, !isOperationInFlight else { return }
 
         guard let snapshot else {
             phase = .checkingAvailability
@@ -260,6 +266,7 @@ public final class MergeSessionStore: ObservableObject {
 
     public func cancel() {
         guard
+            !isLifetimeInvalidated,
             !isOperationInFlight,
             let job,
             job.status.canCancel,
@@ -276,6 +283,7 @@ public final class MergeSessionStore: ObservableObject {
 
     public func discardArtifact() {
         guard
+            !isLifetimeInvalidated,
             !isOperationInFlight,
             phase == .ready,
             artifact != nil,
@@ -295,6 +303,7 @@ public final class MergeSessionStore: ObservableObject {
 
     public func commit() {
         guard
+            !isLifetimeInvalidated,
             !isOperationInFlight,
             phase == .ready,
             let job,
@@ -334,6 +343,7 @@ public final class MergeSessionStore: ObservableObject {
 
     public func retryGeneration() {
         guard
+            !isLifetimeInvalidated,
             !isOperationInFlight,
             let current = snapshot,
             current.lastStatus == .failed
@@ -382,7 +392,13 @@ public final class MergeSessionStore: ObservableObject {
     }
 
     public func resume() {
-        guard snapshot != nil, !isOperationInFlight else { return }
+        guard
+            !isLifetimeInvalidated,
+            snapshot != nil,
+            !isOperationInFlight
+        else {
+            return
+        }
         retry()
     }
 
@@ -392,9 +408,23 @@ public final class MergeSessionStore: ObservableObject {
     }
 
     public func acknowledgeCompletion() {
-        guard case .completed = phase, snapshot != nil else { return }
+        guard
+            !isLifetimeInvalidated,
+            case .completed = phase,
+            snapshot != nil
+        else {
+            return
+        }
         persistence.remove(actorID: actorID)
         snapshot = nil
+    }
+
+    func invalidateLifetime() {
+        guard !isLifetimeInvalidated else { return }
+        isLifetimeInvalidated = true
+        operationTask?.cancel()
+        operationTask = nil
+        isOperationInFlight = false
     }
 
     private var isTerminalPresentation: Bool {
@@ -404,6 +434,10 @@ public final class MergeSessionStore: ObservableObject {
         default:
             return false
         }
+    }
+
+    private var shouldAcceptAsyncResult: Bool {
+        !isLifetimeInvalidated && !Task.isCancelled
     }
 
     private func restore(_ restored: MergeSessionSnapshot) {
@@ -425,7 +459,7 @@ public final class MergeSessionStore: ObservableObject {
     private func checkAvailability() async {
         do {
             let result = try await service.capabilities()
-            guard !Task.isCancelled else { return }
+            guard shouldAcceptAsyncResult else { return }
             capabilities = result
             if isMergeAvailable {
                 phase = .selection
@@ -433,7 +467,7 @@ public final class MergeSessionStore: ObservableObject {
                 phase = .failed(.unavailable(code: "merge_disabled"))
             }
         } catch {
-            guard !Task.isCancelled else { return }
+            guard shouldAcceptAsyncResult else { return }
             phase = .paused(coreError(from: error))
         }
     }
@@ -442,10 +476,10 @@ public final class MergeSessionStore: ObservableObject {
         do {
             let created = try await service.createJob(request)
             createResponseCount += 1
-            guard !Task.isCancelled else { return }
+            guard shouldAcceptAsyncResult else { return }
             await driveLifecycle(from: created)
         } catch {
-            guard !Task.isCancelled else { return }
+            guard shouldAcceptAsyncResult else { return }
             phase = .paused(coreError(from: error))
         }
     }
@@ -453,13 +487,13 @@ public final class MergeSessionStore: ObservableObject {
     private func reconcile(jobID: String) async {
         do {
             let current = try await fetchJob(id: jobID)
-            guard !Task.isCancelled else {
+            guard shouldAcceptAsyncResult else {
                 cancelledStatusResponseDiscardCount += 1
                 return
             }
             await driveLifecycle(from: current)
         } catch {
-            guard !Task.isCancelled else { return }
+            guard shouldAcceptAsyncResult else { return }
             phase = .paused(coreError(from: error))
         }
     }
@@ -467,16 +501,16 @@ public final class MergeSessionStore: ObservableObject {
     private func submitCancel(jobID: String) async {
         do {
             let cancelled = try await service.cancel(jobID: jobID)
-            guard !Task.isCancelled else { return }
+            guard shouldAcceptAsyncResult else { return }
             await driveLifecycle(from: cancelled)
         } catch {
-            guard !Task.isCancelled else { return }
+            guard shouldAcceptAsyncResult else { return }
             do {
                 let current = try await fetchJob(id: jobID)
-                guard !Task.isCancelled else { return }
+                guard shouldAcceptAsyncResult else { return }
                 await driveLifecycle(from: current)
             } catch {
-                guard !Task.isCancelled else { return }
+                guard shouldAcceptAsyncResult else { return }
                 phase = .paused(coreError(from: error))
             }
         }
@@ -485,24 +519,24 @@ public final class MergeSessionStore: ObservableObject {
     private func submitArtifactDiscard(jobID: String) async {
         do {
             let cancelled = try await service.cancel(jobID: jobID)
-            guard !Task.isCancelled else { return }
+            guard shouldAcceptAsyncResult else { return }
             if cancelled.status == .cancelled {
                 finishArtifactDiscard()
             } else {
                 await driveLifecycle(from: cancelled)
             }
         } catch {
-            guard !Task.isCancelled else { return }
+            guard shouldAcceptAsyncResult else { return }
             let discardError = coreError(from: error)
             do {
                 let current = try await fetchJob(id: jobID)
-                guard !Task.isCancelled else { return }
+                guard shouldAcceptAsyncResult else { return }
                 await driveLifecycle(from: current)
                 if phase == .ready {
                     artifactActionError = discardError
                 }
             } catch {
-                guard !Task.isCancelled else { return }
+                guard shouldAcceptAsyncResult else { return }
                 artifactActionError = discardError
                 phase = .ready
             }
@@ -533,10 +567,10 @@ public final class MergeSessionStore: ObservableObject {
                 jobID: jobID,
                 request: request
             )
-            guard !Task.isCancelled else { return }
+            guard shouldAcceptAsyncResult else { return }
             recordCommitResult(result)
         } catch {
-            guard !Task.isCancelled else { return }
+            guard shouldAcceptAsyncResult else { return }
             let mapped = coreError(from: error)
             if case .conflict = mapped, reconcileConflict {
                 await reconcile(jobID: jobID)
@@ -555,7 +589,7 @@ public final class MergeSessionStore: ObservableObject {
         var current = initialJob
         var pollCount = 0
 
-        while !Task.isCancelled {
+        while shouldAcceptAsyncResult {
             record(current)
 
             switch current.status {
@@ -610,7 +644,7 @@ public final class MergeSessionStore: ObservableObject {
             } catch is CancellationError {
                 return
             } catch {
-                guard !Task.isCancelled else { return }
+                guard shouldAcceptAsyncResult else { return }
                 phase = .paused(coreError(from: error))
                 return
             }
@@ -621,7 +655,7 @@ public final class MergeSessionStore: ObservableObject {
         phase = .loadingArtifact
         do {
             let loaded = try await service.artifact(jobID: jobID)
-            guard !Task.isCancelled else { return }
+            guard shouldAcceptAsyncResult else { return }
             guard loaded.jobID == jobID else {
                 phase = .failed(.decoding)
                 return
@@ -638,7 +672,7 @@ public final class MergeSessionStore: ObservableObject {
             }
             phase = .ready
         } catch {
-            guard !Task.isCancelled else { return }
+            guard shouldAcceptAsyncResult else { return }
             let mapped = coreError(from: error)
             phase = mapped == .decoding
                 ? .failed(mapped)
@@ -718,12 +752,13 @@ public final class MergeSessionStore: ObservableObject {
     private func launch(
         _ operation: @escaping @MainActor (MergeSessionStore) async -> Void
     ) {
+        guard !isLifetimeInvalidated else { return }
         operationTask?.cancel()
         isOperationInFlight = true
         operationTask = Task { [weak self] in
-            guard let self else { return }
+            guard let self, !self.isLifetimeInvalidated else { return }
             await operation(self)
-            if !Task.isCancelled {
+            if self.shouldAcceptAsyncResult {
                 self.isOperationInFlight = false
             }
         }
