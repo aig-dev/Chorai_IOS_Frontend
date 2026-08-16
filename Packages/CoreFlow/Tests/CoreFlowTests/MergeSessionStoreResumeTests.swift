@@ -93,6 +93,36 @@ final class MergeSessionStoreResumeTests: XCTestCase {
         XCTAssertEqual(store.artifact?.artifactID, "artifact_1")
     }
 
+    func testFreshEntryStartsSelectionInsteadOfRestoringFailedSession() async {
+        let service = MockCoreMergeService()
+        let persistence = InMemoryMergeSessionPersistence()
+        persistence.seed(
+            makeMergeSnapshot(jobID: "job_failed", status: .failed)
+        )
+        await service.enqueueCapabilities(
+            .success([makeMergeCapability()])
+        )
+        let incomingAnchor = makeMergeSource(
+            "ast_anchor",
+            preview: "Current anchor"
+        )
+        let store = MergeSessionStore(
+            actorID: "actor_1",
+            anchor: incomingAnchor,
+            service: service,
+            persistence: persistence,
+            sleeper: ImmediateMergeSleeper(),
+            resumePersistedSession: false,
+            pollDelaysNanoseconds: [0]
+        )
+
+        store.start()
+        await waitForMergeStore { store.phase == .selection }
+
+        XCTAssertEqual(store.selectedSources, [incomingAnchor])
+        XCTAssertNil(store.activeSnapshot)
+    }
+
     func testPollBudgetPausesWithoutChangingCanonicalJobToFailed() async {
         let service = MockCoreMergeService()
         let persistence = InMemoryMergeSessionPersistence()

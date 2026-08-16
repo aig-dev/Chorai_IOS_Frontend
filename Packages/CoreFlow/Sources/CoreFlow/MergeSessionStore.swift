@@ -54,6 +54,7 @@ public final class MergeSessionStore: ObservableObject {
     private let service: any CoreMergeServing
     private let persistence: any MergeSessionPersisting
     private let sleeper: any MergeSleeping
+    private let resumePersistedSession: Bool
     private let idempotencyKey: () -> String
     private let pollDelaysNanoseconds: [UInt64]
     private let maxPollAttempts: Int
@@ -68,6 +69,7 @@ public final class MergeSessionStore: ObservableObject {
         service: any CoreMergeServing,
         persistence: any MergeSessionPersisting,
         sleeper: any MergeSleeping = SystemMergeSleeper(),
+        resumePersistedSession: Bool = true,
         idempotencyKey: @escaping () -> String = {
             "ios-merge-\(UUID().uuidString)"
         },
@@ -88,6 +90,7 @@ public final class MergeSessionStore: ObservableObject {
         self.service = service
         self.persistence = persistence
         self.sleeper = sleeper
+        self.resumePersistedSession = resumePersistedSession
         self.idempotencyKey = idempotencyKey
         self.pollDelaysNanoseconds = pollDelaysNanoseconds
         self.maxPollAttempts = max(0, maxPollAttempts)
@@ -97,7 +100,8 @@ public final class MergeSessionStore: ObservableObject {
         guard !hasStarted else { return }
         hasStarted = true
 
-        if let restored = persistence.snapshot(actorID: actorID) {
+        if resumePersistedSession,
+           let restored = persistence.snapshot(actorID: actorID) {
             restore(restored)
             if let committedAssetID = restored.committedAssetID {
                 phase = .completed(assetID: committedAssetID)

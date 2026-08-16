@@ -830,6 +830,7 @@ struct TabBarView: View {
         .navigationDestination(isPresented: $navigateToMerge) {
             MergeView(
                 cardId: selectedMergeCardId ?? "",
+                resumePersistedSession: true,
                 onboardingStore: onboardingStore,
                 contextualTipStore: contextualTipStore,
                 onCommitted: handleTopLevelMergeCommitted

@@ -15,16 +15,19 @@ struct MergeView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var authManager = AuthManager.shared
     @StateObject private var candidates: MergeCandidateStore
+    private let resumePersistedSession: Bool
     private let onCommitted: (String) -> Void
     private let onboardingStore: OnboardingGuideStore?
     private let contextualTipStore: ContextualGuideTipStore?
 
     init(
         cardId: String,
+        resumePersistedSession: Bool = false,
         onboardingStore: OnboardingGuideStore? = nil,
         contextualTipStore: ContextualGuideTipStore? = nil,
         onCommitted: @escaping (String) -> Void = { _ in }
     ) {
+        self.resumePersistedSession = resumePersistedSession
         self.onboardingStore = onboardingStore
         self.contextualTipStore = contextualTipStore
         self.onCommitted = onCommitted
@@ -41,6 +44,7 @@ struct MergeView: View {
                     actorID: actorID,
                     anchor: anchor,
                     candidates: candidates,
+                    resumePersistedSession: resumePersistedSession,
                     onBack: dismiss.callAsFunction,
                     onboardingStore: onboardingStore,
                     contextualTipStore: contextualTipStore,
@@ -233,6 +237,7 @@ private struct MergeLifecycleView: View {
         actorID: String,
         anchor: MergeCard,
         candidates: MergeCandidateStore,
+        resumePersistedSession: Bool,
         onBack: @escaping () -> Void,
         onboardingStore: OnboardingGuideStore?,
         contextualTipStore: ContextualGuideTipStore?,
@@ -250,7 +255,8 @@ private struct MergeLifecycleView: View {
                 service: NetworkCoreMergeService(),
                 persistence: UserDefaultsMergeSessionStore(
                     keyPrefix: MergeSessionStorageConfiguration.keyPrefix
-                )
+                ),
+                resumePersistedSession: resumePersistedSession
             )
         )
     }
