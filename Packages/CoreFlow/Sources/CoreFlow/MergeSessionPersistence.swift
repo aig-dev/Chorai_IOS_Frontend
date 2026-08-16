@@ -81,6 +81,12 @@ public extension Notification.Name {
     static let mergeSessionDidChange = Notification.Name(
         "CoreFlow.MergeSessionDidChange"
     )
+    static let mergeTaskCollectionDidChange = Notification.Name(
+        "CoreFlow.MergeTaskCollectionDidChange"
+    )
+    static let mergeTaskRecordDidQuarantine = Notification.Name(
+        "CoreFlow.MergeTaskRecordDidQuarantine"
+    )
 }
 
 public final class UserDefaultsMergeSessionStore: MergeSessionPersisting {
