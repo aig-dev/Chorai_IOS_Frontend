@@ -501,6 +501,16 @@ struct TabBarView: View {
             || reportRoute != nil
     }
 
+    private var isPushedCardDestinationVisible: Bool {
+        #if DEBUG
+        return navigateToDetailSmoke
+            || !navigationPath.isEmpty
+            || libraryCardRouteCoverageDepth > 0
+        #else
+        return !navigationPath.isEmpty || libraryCardRouteCoverageDepth > 0
+        #endif
+    }
+
     private var isOnboardingLibrarySurfaceActive: Bool {
         onboardingStore.contextualTipState == "product_library_intro"
             && coordinator.selectedTab == .library
@@ -822,11 +832,15 @@ struct TabBarView: View {
             if let cardId = selectedDetailSmokeCardId {
                 DetailView(cardId: cardId)
                     .environmentObject(mergeTaskCoordinator)
-                    .environment(\.isCardNavigationDestination, true)
                     .environment(
                         \.cardNavigationMergeCoordinator,
                         mergeTaskCoordinator
                     )
+                    .overlay {
+                        CardNavigationDestinationRail(
+                            coordinator: mergeTaskCoordinator
+                        )
+                    }
             } else {
                 EmptyView()
             }
@@ -848,11 +862,15 @@ struct TabBarView: View {
             case .detail(let cardId):
                 DetailView(cardId: cardId)
                     .environmentObject(mergeTaskCoordinator)
-                    .environment(\.isCardNavigationDestination, true)
                     .environment(
                         \.cardNavigationMergeCoordinator,
                         mergeTaskCoordinator
                     )
+                    .overlay {
+                        CardNavigationDestinationRail(
+                            coordinator: mergeTaskCoordinator
+                        )
+                    }
             }
         }
         .sheet(item: $shareRoute) { route in
@@ -980,7 +998,8 @@ struct TabBarView: View {
             mergeTaskCoordinator
         )
         .overlay {
-            if !mergeTaskCoordinator.summaries.isEmpty,
+            if !isPushedCardDestinationVisible,
+               !mergeTaskCoordinator.summaries.isEmpty,
                mergeTaskCoordinator.presentation == nil {
                 MergeTaskRailShellOverlay(
                     summaries: mergeTaskCoordinator.summaries,

@@ -204,8 +204,11 @@ struct ExistingMergeTaskHost: View {
 
     var body: some View {
         if let store = mergeCoordinator.session(jobID: jobID) {
+            let failureActions = mergeCoordinator.failureActions(jobID: jobID)
             ExistingMergeTaskSessionHost(
                 store: store,
+                canRetryFailure: failureActions.contains(.retry),
+                canRemoveFailure: failureActions.contains(.remove),
                 onBack: mergeCoordinator.minimize,
                 onRetryFailure: {
                     mergeCoordinator.retryFailed(jobID: jobID)
@@ -228,17 +231,23 @@ struct ExistingMergeTaskHost: View {
 private struct ExistingMergeTaskSessionHost: View {
     @ObservedObject var store: MergeSessionStore
     @StateObject private var candidates: MergeCandidateStore
+    let canRetryFailure: Bool
+    let canRemoveFailure: Bool
     let onBack: () -> Void
     let onRetryFailure: () -> Void
     let onRemoveFailure: () -> Void
 
     init(
         store: MergeSessionStore,
+        canRetryFailure: Bool,
+        canRemoveFailure: Bool,
         onBack: @escaping () -> Void,
         onRetryFailure: @escaping () -> Void,
         onRemoveFailure: @escaping () -> Void
     ) {
         self.store = store
+        self.canRetryFailure = canRetryFailure
+        self.canRemoveFailure = canRemoveFailure
         self.onBack = onBack
         self.onRetryFailure = onRetryFailure
         self.onRemoveFailure = onRemoveFailure
@@ -255,6 +264,8 @@ private struct ExistingMergeTaskSessionHost: View {
             candidates: candidates,
             onBack: onBack,
             onJobAccepted: nil,
+            canRetryFailure: canRetryFailure,
+            canRemoveFailure: canRemoveFailure,
             onRetryFailure: onRetryFailure,
             onRemoveFailure: onRemoveFailure,
             onboardingStore: nil,
@@ -429,6 +440,8 @@ private struct MergeLifecycleView: View {
 
     private let onBack: () -> Void
     private let onJobAccepted: ((String) -> Void)?
+    private let canRetryFailure: Bool
+    private let canRemoveFailure: Bool
     private let onRetryFailure: (() -> Void)?
     private let onRemoveFailure: (() -> Void)?
     private let onboardingStore: OnboardingGuideStore?
@@ -439,6 +452,8 @@ private struct MergeLifecycleView: View {
         candidates: MergeCandidateStore,
         onBack: @escaping () -> Void,
         onJobAccepted: ((String) -> Void)?,
+        canRetryFailure: Bool = true,
+        canRemoveFailure: Bool = false,
         onRetryFailure: (() -> Void)?,
         onRemoveFailure: (() -> Void)?,
         onboardingStore: OnboardingGuideStore?,
@@ -448,6 +463,8 @@ private struct MergeLifecycleView: View {
         self.candidates = candidates
         self.onBack = onBack
         self.onJobAccepted = onJobAccepted
+        self.canRetryFailure = canRetryFailure
+        self.canRemoveFailure = canRemoveFailure
         self.onRetryFailure = onRetryFailure
         self.onRemoveFailure = onRemoveFailure
         self.onboardingStore = onboardingStore
@@ -846,7 +863,7 @@ private struct MergeLifecycleView: View {
             Spacer()
 
             HStack(spacing: 16) {
-                if isAcceptedTaskFailure, let onRemoveFailure {
+                if canRemoveFailure, let onRemoveFailure {
                     MergeLifecycleAction(
                         systemImage: "xmark",
                         assetImage: nil,
@@ -867,17 +884,19 @@ private struct MergeLifecycleView: View {
                     }
                 }
 
-                MergeLifecycleAction(
-                    systemImage: nil,
-                    assetImage: "menu_merge",
-                    isFilled: true,
-                    accessibilityLabel: "Retry Merge",
-                    accessibilityIdentifier: "merge.retry"
-                ) {
-                    if let onRetryFailure {
-                        onRetryFailure()
-                    } else {
-                        store.retry()
+                if canRetryFailure {
+                    MergeLifecycleAction(
+                        systemImage: nil,
+                        assetImage: "menu_merge",
+                        isFilled: true,
+                        accessibilityLabel: "Retry Merge",
+                        accessibilityIdentifier: "merge.retry"
+                    ) {
+                        if let onRetryFailure {
+                            onRetryFailure()
+                        } else {
+                            store.retry()
+                        }
                     }
                 }
             }
@@ -887,16 +906,6 @@ private struct MergeLifecycleView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .overlay(alignment: .topLeading) {
             automationText(label, identifier: identifier)
-        }
-    }
-
-    private var isAcceptedTaskFailure: Bool {
-        guard onRemoveFailure != nil else { return false }
-        switch store.phase {
-        case .paused(.notFound), .failed, .completed(nil):
-            return true
-        default:
-            return false
         }
     }
 

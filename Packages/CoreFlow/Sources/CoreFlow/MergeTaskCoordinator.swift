@@ -31,6 +31,11 @@ public enum MergeTaskPresentation: Equatable, Sendable {
     case failure(jobID: String)
 }
 
+public enum MergeTaskFailureAction: Hashable, Sendable {
+    case retry
+    case remove
+}
+
 public struct MergeCommittedCardIntent: Equatable, Sendable {
     public let jobID: String
     public let assetID: String
@@ -315,7 +320,7 @@ public final class MergeTaskCoordinator: ObservableObject {
 
     public func removeFailed(jobID: String) {
         guard
-            summary(jobID: jobID)?.visualState == .failed,
+            failureActions(jobID: jobID).contains(.remove),
             let operationID = jobToOperationID[jobID],
             let runtime = runtimesByOperationID[operationID],
             let actorID
@@ -331,21 +336,32 @@ public final class MergeTaskCoordinator: ObservableObject {
         refreshState()
     }
 
+    public func failureActions(jobID: String) -> Set<MergeTaskFailureAction> {
+        guard let store = session(jobID: jobID) else { return [] }
+        switch recoveryStrategy(for: store) {
+        case .replacement, .sameOperation:
+            return [.retry, .remove]
+        case .removeOnly:
+            return [.remove]
+        case .none:
+            return []
+        }
+    }
+
     public func retryFailed(jobID: String) {
         guard
-            let visualState = summary(jobID: jobID)?.visualState,
-            visualState == .failed || visualState == .recovering,
+            failureActions(jobID: jobID).contains(.retry),
             let store = session(jobID: jobID)
         else {
             return
         }
 
-        switch store.phase {
-        case .paused(.notFound), .failed:
+        switch recoveryStrategy(for: store) {
+        case .replacement:
             store.retryGeneration()
-        case .paused(.offline), .paused(.timeout), .paused(.unavailable):
-            store.resume()
-        default:
+        case .sameOperation:
+            store.retry()
+        case .removeOnly, .none:
             return
         }
 
@@ -353,6 +369,30 @@ public final class MergeTaskCoordinator: ObservableObject {
             presentation = .progress(jobID: jobID)
         }
         refreshState()
+    }
+
+    private enum RecoveryStrategy {
+        case replacement
+        case sameOperation
+        case removeOnly
+        case none
+    }
+
+    private func recoveryStrategy(
+        for store: MergeSessionStore
+    ) -> RecoveryStrategy {
+        switch store.phase {
+        case .paused(.notFound):
+            return .replacement
+        case .failed where store.activeSnapshot?.lastStatus == .failed:
+            return .replacement
+        case .paused, .failed:
+            return .sameOperation
+        case .completed(let assetID) where assetID?.nonEmpty == nil:
+            return .removeOnly
+        default:
+            return .none
+        }
     }
 
     public func acknowledgeCommittedCardIntent(jobID: String) {

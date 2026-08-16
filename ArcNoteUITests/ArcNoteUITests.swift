@@ -3104,15 +3104,15 @@ final class ArcNoteUITests: XCTestCase {
         captureMergeVisual("selection")
 
         tap("merge.action")
-        let rail = waitForButton("merge.task-rail", timeout: 30)
+        let rail = waitForExactlyOneMergeTaskRail(timeout: 30)
+        XCTAssertEqual(rail.value as? String, "1, working")
         XCTAssertFalse(
             app.descendants(matching: .any)["screen.merge.loaded"].exists
         )
         captureMergeVisual("processing")
         rail.tap()
         waitForButton("merge.back").tap()
-        XCTAssertTrue(waitForButton("merge.task-rail").exists)
-        waitForButton("merge.task-rail").tap()
+        waitForExactlyOneMergeTaskRail().tap()
 
         waitForMergeArtifactReady(timeout: 360, maxRetries: 0)
 
@@ -3202,7 +3202,8 @@ final class ArcNoteUITests: XCTestCase {
             expected: "selected"
         )
         tap("merge.action")
-        let rail = waitForButton("merge.task-rail", timeout: 30)
+        let rail = waitForExactlyOneMergeTaskRail(timeout: 30)
+        XCTAssertEqual(rail.value as? String, "1, working")
         XCTAssertFalse(
             app.descendants(matching: .any)["screen.merge.loaded"].exists
         )
@@ -3210,7 +3211,7 @@ final class ArcNoteUITests: XCTestCase {
         waitFor("merge.job.id", timeout: 30)
         let originalJobID = mergeAnchorValue("merge.job.id")
         waitForButton("merge.back").tap()
-        XCTAssertTrue(waitForButton("merge.task-rail").exists)
+        _ = waitForExactlyOneMergeTaskRail()
 
         app.terminate()
         app.launchArguments.removeAll {
@@ -3219,7 +3220,7 @@ final class ArcNoteUITests: XCTestCase {
         launchAuthenticatedApp()
 
         waitFor("screen.flow.content", timeout: 30)
-        waitForButton("merge.task-rail", timeout: 20).tap()
+        waitForExactlyOneMergeTaskRail(timeout: 20).tap()
         captureMergeVisual("resume-affordance")
 
         waitFor("screen.merge.loaded", timeout: 30)
@@ -3228,8 +3229,7 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertEqual(mergeAnchorValue("merge.job.status"), "ARTIFACT_READY")
 
         waitForButton("merge.back").tap()
-        XCTAssertTrue(waitForButton("merge.task-rail").exists)
-        waitForButton("merge.task-rail").tap()
+        waitForExactlyOneMergeTaskRail().tap()
         waitForMergeArtifactReady(timeout: 30)
 
         tap("merge.commit")
@@ -6976,6 +6976,27 @@ final class ArcNoteUITests: XCTestCase {
             line: line
         )
         return button
+    }
+
+    @discardableResult
+    private func waitForExactlyOneMergeTaskRail(
+        timeout: TimeInterval = 10,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) -> XCUIElement {
+        let rails = app.buttons.matching(identifier: "merge.task-rail")
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline, rails.count != 1 {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        }
+        XCTAssertEqual(
+            rails.count,
+            1,
+            "Expected exactly one visible Merge task rail",
+            file: file,
+            line: line
+        )
+        return rails.element(boundBy: 0)
     }
 
     @discardableResult
