@@ -46,6 +46,34 @@ final class ArcNoteUITests: XCTestCase {
         sparkSessionScope = "\(name).\(UUID().uuidString)"
     }
 
+    func testMergeTaskRailShowsCountAndNumberedStatesWithoutText() {
+        app.launchArguments.append("--ui-test-merge-task-rail")
+        app.launch()
+
+        let rail = waitForButton("merge.task-rail")
+        XCTAssertGreaterThanOrEqual(rail.frame.width, 44)
+        XCTAssertGreaterThanOrEqual(rail.frame.height, 44)
+        XCTAssertEqual(waitFor("merge.task-count").label, "3")
+        XCTAssertFalse(app.staticTexts["Weaving"].exists)
+        XCTAssertFalse(app.staticTexts["Preview"].exists)
+
+        rail.tap()
+        for number in 1...3 {
+            XCTAssertTrue(waitForButton("merge.task.\(number)").exists)
+        }
+        XCTAssertEqual(
+            waitForButton("merge.task.1").value as? String,
+            "complete"
+        )
+        XCTAssertEqual(
+            waitForButton("merge.task.2").value as? String,
+            "working"
+        )
+        XCTAssertTrue(
+            waitForButton("merge.task.1").label.contains("3 sources")
+        )
+    }
+
     func testAdaptiveLayoutFixtureKeepsSurfaceInsideWindowGutters() {
         app.launchArguments.append("--ui-test-adaptive-layout")
         app.launch()

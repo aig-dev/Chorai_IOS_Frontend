@@ -29,6 +29,7 @@
 		C0DEF1022F60000100000005 /* SparkContinuationViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1022F60000100000004 /* SparkContinuationViews.swift */; };
 		C0DEF1032F60000100000003 /* NetworkCoreMergeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1032F60000100000002 /* NetworkCoreMergeService.swift */; };
 		C0DEF1042F60000100000003 /* MergeLifecycleViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1042F60000100000002 /* MergeLifecycleViews.swift */; };
+		C0DEF1422F60000100000003 /* MergeTaskRail.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1422F60000100000002 /* MergeTaskRail.swift */; };
 		C0DEF1052F60000100000003 /* NetworkCoreOnboardingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1052F60000100000002 /* NetworkCoreOnboardingService.swift */; };
 		C0DEF1062F60000100000003 /* OnboardingGuideLine.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1062F60000100000002 /* OnboardingGuideLine.swift */; };
 		C0DEF1072F60000100000003 /* NetworkCoreShareService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1072F60000100000002 /* NetworkCoreShareService.swift */; };
@@ -152,6 +153,7 @@
 		C0DEF1022F60000100000004 /* SparkContinuationViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SparkContinuationViews.swift; sourceTree = "<group>"; };
 		C0DEF1032F60000100000002 /* NetworkCoreMergeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkCoreMergeService.swift; sourceTree = "<group>"; };
 		C0DEF1042F60000100000002 /* MergeLifecycleViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MergeLifecycleViews.swift; sourceTree = "<group>"; };
+		C0DEF1422F60000100000002 /* MergeTaskRail.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MergeTaskRail.swift; sourceTree = "<group>"; };
 		C0DEF1052F60000100000002 /* NetworkCoreOnboardingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkCoreOnboardingService.swift; sourceTree = "<group>"; };
 		C0DEF1062F60000100000002 /* OnboardingGuideLine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingGuideLine.swift; sourceTree = "<group>"; };
 		C0DEF1072F60000100000002 /* NetworkCoreShareService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkCoreShareService.swift; sourceTree = "<group>"; };
@@ -321,6 +323,7 @@
 				C0DEF1022F60000100000004 /* SparkContinuationViews.swift */,
 				C0DEF1032F60000100000002 /* NetworkCoreMergeService.swift */,
 				C0DEF1042F60000100000002 /* MergeLifecycleViews.swift */,
+				C0DEF1422F60000100000002 /* MergeTaskRail.swift */,
 				C0DEF1052F60000100000002 /* NetworkCoreOnboardingService.swift */,
 				C0DEF1062F60000100000002 /* OnboardingGuideLine.swift */,
 				C0DEF1072F60000100000002 /* NetworkCoreShareService.swift */,
@@ -638,6 +641,7 @@
 				C0DEF1022F60000100000005 /* SparkContinuationViews.swift in Sources */,
 				C0DEF1032F60000100000003 /* NetworkCoreMergeService.swift in Sources */,
 				C0DEF1042F60000100000003 /* MergeLifecycleViews.swift in Sources */,
+				C0DEF1422F60000100000003 /* MergeTaskRail.swift in Sources */,
 				C0DEF1052F60000100000003 /* NetworkCoreOnboardingService.swift in Sources */,
 				C0DEF1062F60000100000003 /* OnboardingGuideLine.swift in Sources */,
 				C0DEF1072F60000100000003 /* NetworkCoreShareService.swift in Sources */,

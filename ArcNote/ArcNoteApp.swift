@@ -71,6 +71,8 @@ struct ArcNoteApp: App {
         .contains("--ui-test-merge-artifact")
     private let isMergeLongArtifactUITestRoute = ProcessInfo.processInfo.arguments
         .contains("--ui-test-merge-artifact-long")
+    private let isMergeTaskRailUITestRoute = ProcessInfo.processInfo.arguments
+        .contains("--ui-test-merge-task-rail")
     private let isNativeOnboardingUITestRoute = ProcessInfo.processInfo.arguments
         .contains("--ui-test-native-onboarding")
     private let isPrivateBetaEntryUITestRoute = ProcessInfo.processInfo.arguments
@@ -130,6 +132,8 @@ struct ArcNoteApp: App {
                     MergeArtifactVisualFixtureScreen(
                         usesLongDocument: isMergeLongArtifactUITestRoute
                     )
+                } else if isMergeTaskRailUITestRoute {
+                    MergeTaskRailFixtureScreen()
                 } else if isNativeOnboardingUITestRoute {
                     NativeOnboardingFixtureScreen()
                 } else if isPrivateBetaEntryUITestRoute {

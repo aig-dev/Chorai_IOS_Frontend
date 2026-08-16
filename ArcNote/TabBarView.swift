@@ -1,6 +1,7 @@
 import SwiftUI
 import Combine
 import CoreFlow
+import UIKit
 import WebKit
 
 struct TabBarView: View {
@@ -38,6 +39,7 @@ struct TabBarView: View {
     @State private var lastSelectedTab: CoreTab = .flow
     @State private var synchronizedMergeActorID: String?
     @State private var hasSynchronizedMergeRuntimeInputs = false
+    @State private var isMergeTaskRailExpanded = false
 
     #if DEBUG
     @State private var lastCreatedNoteID: String?
@@ -517,6 +519,16 @@ struct TabBarView: View {
         }
         onboardingStore.receive(.libraryViewed)
     }
+
+    private func selectMergeTask(jobID: String) {
+        isMergeTaskRailExpanded = false
+        contextualTipStore.complete(
+            .mergeResume,
+            onboardingState: onboardingStore.contextualTipState,
+            targetIsVisible: !mergeTaskCoordinator.summaries.isEmpty
+        )
+        mergeTaskCoordinator.present(jobID: jobID)
+    }
     
     var body: some View {
         NavigationStack(path: $navigationPath) {
@@ -792,6 +804,41 @@ struct TabBarView: View {
                 }
                 #endif
 
+                if libraryCardRouteCoverageDepth == 0,
+                   !mergeTaskCoordinator.summaries.isEmpty,
+                   mergeTaskCoordinator.presentation == nil {
+                    HStack {
+                        Spacer()
+                        VStack(alignment: .trailing, spacing: 10) {
+                            ContextualGuideCallout(
+                                store: contextualTipStore,
+                                tip: .mergeResume,
+                                onboardingState:
+                                    onboardingStore.contextualTipState,
+                                targetIsVisible: true
+                            )
+
+                            MergeTaskRail(
+                                summaries: mergeTaskCoordinator.summaries,
+                                isExpanded: $isMergeTaskRailExpanded,
+                                onSelect: selectMergeTask
+                            )
+                            .overlay(alignment: .topTrailing) {
+                                ContextualGuideTargetHalo(
+                                    isVisible: contextualTipStore.isVisible(
+                                        .mergeResume,
+                                        onboardingState:
+                                            onboardingStore.contextualTipState,
+                                        targetIsVisible: true
+                                    )
+                                )
+                                .offset(x: 2, y: -2)
+                            }
+                        }
+                    }
+                    .padding(.trailing, 20)
+                }
+
             }
             .padding(.top, 112)
         }
@@ -904,6 +951,11 @@ struct TabBarView: View {
         }
         .onChange(of: mergeTaskCoordinator.presentation) { _ in
             isLibrarySurfaceVisible = false
+            isMergeTaskRailExpanded = false
+        }
+        .onChange(of: mergeTaskCoordinator.completionEventJobID) { jobID in
+            guard jobID != nil, scenePhase == .active else { return }
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
         }
         .onChange(of: mergeTaskCoordinator.committedCardIntent) { intent in
             guard let intent else { return }
