@@ -6,25 +6,12 @@ import WebKit
 
 struct TabBarView: View {
     @Environment(\.scenePhase) private var scenePhase
+    @EnvironmentObject private var mergeTaskCoordinator: MergeTaskCoordinator
+    @EnvironmentObject private var onboardingStore: OnboardingGuideStore
+    @EnvironmentObject private var contextualTipStore: ContextualGuideTipStore
     @StateObject private var authManager = AuthManager.shared
     @StateObject private var coordinator = CoreFlowCoordinator()
     @StateObject private var keyboardLayout = KeyboardLayoutObserver()
-    @StateObject private var onboardingStore = OnboardingGuideStore(
-        service: NetworkCoreOnboardingService(),
-        persistence: UserDefaultsOnboardingGuidePersistence()
-    )
-    @StateObject private var contextualTipStore = ContextualGuideTipStore(
-        persistence: UserDefaultsContextualGuideTipPersistence()
-    )
-    @StateObject private var mergeTaskCoordinator = MergeTaskCoordinator(
-        service: NetworkCoreMergeService(),
-        persistence: UserDefaultsMergeTaskStore(
-            keyPrefix: MergeTaskStorageConfiguration.keyPrefix,
-            legacy: UserDefaultsMergeSessionStore(
-                keyPrefix: MergeSessionStorageConfiguration.keyPrefix
-            )
-        )
-    )
     @State private var showPopupMenu = false
     @State private var selectedFilter = "All"
     @State private var showFilterTags = false
@@ -39,7 +26,6 @@ struct TabBarView: View {
     @State private var lastSelectedTab: CoreTab = .flow
     @State private var synchronizedMergeActorID: String?
     @State private var hasSynchronizedMergeRuntimeInputs = false
-    @State private var isMergeTaskRailExpanded = false
 
     #if DEBUG
     @State private var lastCreatedNoteID: String?
@@ -473,42 +459,12 @@ struct TabBarView: View {
         }
     }
 
-    private var mergeTaskPresentation: Binding<Bool> {
-        Binding(
-            get: { mergeTaskCoordinator.presentation != nil },
-            set: { isPresented in
-                if !isPresented {
-                    mergeTaskCoordinator.minimize()
-                }
-            }
-        )
-    }
-
-    private var presentedMergeJobID: String? {
-        switch mergeTaskCoordinator.presentation {
-        case .progress(let jobID), .preview(let jobID), .failure(let jobID):
-            return jobID
-        case nil:
-            return nil
-        }
-    }
-
     private var isLibraryCovered: Bool {
         mergeTaskCoordinator.presentation != nil
             || libraryCardRouteCoverageDepth > 0
             || showSideMenu
             || shareRoute != nil
             || reportRoute != nil
-    }
-
-    private var isPushedCardDestinationVisible: Bool {
-        #if DEBUG
-        return navigateToDetailSmoke
-            || !navigationPath.isEmpty
-            || libraryCardRouteCoverageDepth > 0
-        #else
-        return !navigationPath.isEmpty || libraryCardRouteCoverageDepth > 0
-        #endif
     }
 
     private var isOnboardingLibrarySurfaceActive: Bool {
@@ -530,16 +486,6 @@ struct TabBarView: View {
         onboardingStore.receive(.libraryViewed)
     }
 
-    private func selectMergeTask(jobID: String) {
-        isMergeTaskRailExpanded = false
-        contextualTipStore.complete(
-            .mergeResume,
-            onboardingState: onboardingStore.contextualTipState,
-            targetIsVisible: !mergeTaskCoordinator.summaries.isEmpty
-        )
-        mergeTaskCoordinator.present(jobID: jobID)
-    }
-    
     var body: some View {
         NavigationStack(path: $navigationPath) {
             ZStack {
@@ -836,11 +782,6 @@ struct TabBarView: View {
                         \.cardNavigationMergeCoordinator,
                         mergeTaskCoordinator
                     )
-                    .overlay {
-                        CardNavigationDestinationRail(
-                            coordinator: mergeTaskCoordinator
-                        )
-                    }
             } else {
                 EmptyView()
             }
@@ -866,11 +807,6 @@ struct TabBarView: View {
                         \.cardNavigationMergeCoordinator,
                         mergeTaskCoordinator
                     )
-                    .overlay {
-                        CardNavigationDestinationRail(
-                            coordinator: mergeTaskCoordinator
-                        )
-                    }
             }
         }
         .sheet(item: $shareRoute) { route in
@@ -938,7 +874,6 @@ struct TabBarView: View {
         }
         .onChange(of: mergeTaskCoordinator.presentation) { _ in
             isLibrarySurfaceVisible = false
-            isMergeTaskRailExpanded = false
         }
         .onChange(of: mergeTaskCoordinator.completionEventJobID) { jobID in
             guard jobID != nil, scenePhase == .active else { return }
@@ -997,37 +932,6 @@ struct TabBarView: View {
             \.cardNavigationMergeCoordinator,
             mergeTaskCoordinator
         )
-        .overlay {
-            if !isPushedCardDestinationVisible,
-               !mergeTaskCoordinator.summaries.isEmpty,
-               mergeTaskCoordinator.presentation == nil {
-                MergeTaskRailShellOverlay(
-                    summaries: mergeTaskCoordinator.summaries,
-                    isExpanded: $isMergeTaskRailExpanded,
-                    onSelect: selectMergeTask,
-                    isHaloVisible: contextualTipStore.isVisible(
-                        .mergeResume,
-                        onboardingState: onboardingStore.contextualTipState,
-                        targetIsVisible: true
-                    )
-                ) {
-                    ContextualGuideCallout(
-                        store: contextualTipStore,
-                        tip: .mergeResume,
-                        onboardingState: onboardingStore.contextualTipState,
-                        targetIsVisible: true
-                    )
-                }
-            }
-        }
-        .fullScreenCover(isPresented: mergeTaskPresentation) {
-            if let jobID = presentedMergeJobID {
-                ExistingMergeTaskHost(jobID: jobID)
-                    .environmentObject(mergeTaskCoordinator)
-            } else {
-                EmptyView()
-            }
-        }
     }
 }
 
@@ -1409,6 +1313,7 @@ struct TagView: View {
 
 #Preview {
     TabBarView()
+        .globalMergeTaskPortal()
 }
 
 

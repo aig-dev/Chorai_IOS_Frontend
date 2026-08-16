@@ -331,6 +331,144 @@ struct MergeTaskRailShellOverlay<Callout: View>: View {
     }
 }
 
+struct MergeTaskRailPortalModifier<Callout: View>: ViewModifier {
+    let summaries: [MergeTaskSummary]
+    @Binding var isExpanded: Bool
+    let isHidden: Bool
+    let onSelect: (String) -> Void
+    let isHaloVisible: Bool
+    let callout: Callout
+
+    func body(content: Content) -> some View {
+        ZStack {
+            content
+            if !isHidden, !summaries.isEmpty {
+                MergeTaskRailShellOverlay(
+                    summaries: summaries,
+                    isExpanded: $isExpanded,
+                    onSelect: onSelect,
+                    isHaloVisible: isHaloVisible
+                ) {
+                    callout
+                }
+                .zIndex(1)
+            }
+        }
+    }
+}
+
+extension View {
+    func mergeTaskRailPortal<Callout: View>(
+        summaries: [MergeTaskSummary],
+        isExpanded: Binding<Bool>,
+        isHidden: Bool,
+        onSelect: @escaping (String) -> Void,
+        isHaloVisible: Bool,
+        @ViewBuilder callout: () -> Callout
+    ) -> some View {
+        modifier(
+            MergeTaskRailPortalModifier(
+                summaries: summaries,
+                isExpanded: isExpanded,
+                isHidden: isHidden,
+                onSelect: onSelect,
+                isHaloVisible: isHaloVisible,
+                callout: callout()
+            )
+        )
+    }
+}
+
+struct GlobalMergeTaskPortalModifier: ViewModifier {
+    @StateObject private var onboardingStore = OnboardingGuideStore(
+        service: NetworkCoreOnboardingService(),
+        persistence: UserDefaultsOnboardingGuidePersistence()
+    )
+    @StateObject private var contextualTipStore = ContextualGuideTipStore(
+        persistence: UserDefaultsContextualGuideTipPersistence()
+    )
+    @StateObject private var coordinator = MergeTaskCoordinator(
+        service: NetworkCoreMergeService(),
+        persistence: UserDefaultsMergeTaskStore(
+            keyPrefix: MergeTaskStorageConfiguration.keyPrefix,
+            legacy: UserDefaultsMergeSessionStore(
+                keyPrefix: MergeSessionStorageConfiguration.keyPrefix
+            )
+        )
+    )
+    @State private var isExpanded = false
+
+    private var presentation: Binding<Bool> {
+        Binding(
+            get: { coordinator.presentation != nil },
+            set: { isPresented in
+                if !isPresented {
+                    coordinator.minimize()
+                }
+            }
+        )
+    }
+
+    private var presentedJobID: String? {
+        switch coordinator.presentation {
+        case .progress(let jobID), .preview(let jobID), .failure(let jobID):
+            return jobID
+        case nil:
+            return nil
+        }
+    }
+
+    private func select(jobID: String) {
+        isExpanded = false
+        contextualTipStore.complete(
+            .mergeResume,
+            onboardingState: onboardingStore.contextualTipState,
+            targetIsVisible: !coordinator.summaries.isEmpty
+        )
+        coordinator.present(jobID: jobID)
+    }
+
+    func body(content: Content) -> some View {
+        content
+            .environmentObject(onboardingStore)
+            .environmentObject(contextualTipStore)
+            .environmentObject(coordinator)
+            .environment(\.cardNavigationMergeCoordinator, coordinator)
+            .mergeTaskRailPortal(
+                summaries: coordinator.summaries,
+                isExpanded: $isExpanded,
+                isHidden: coordinator.presentation != nil,
+                onSelect: select,
+                isHaloVisible: contextualTipStore.isVisible(
+                    .mergeResume,
+                    onboardingState: onboardingStore.contextualTipState,
+                    targetIsVisible: true
+                )
+            ) {
+                ContextualGuideCallout(
+                    store: contextualTipStore,
+                    tip: .mergeResume,
+                    onboardingState: onboardingStore.contextualTipState,
+                    targetIsVisible: true
+                )
+            }
+            .fullScreenCover(isPresented: presentation) {
+                if let jobID = presentedJobID {
+                    ExistingMergeTaskHost(jobID: jobID)
+                        .environmentObject(coordinator)
+                } else {
+                    EmptyView()
+                }
+            }
+    }
+}
+
+extension View {
+    func globalMergeTaskPortal() -> some View {
+        modifier(GlobalMergeTaskPortalModifier())
+    }
+}
+
 private struct MergeTaskActivityRing: View {
     let isActive: Bool
     let reduceMotion: Bool
@@ -409,7 +547,14 @@ private struct MergeTaskStateGlyph: View {
 
 #if DEBUG
 struct MergeTaskRailFixtureScreen: View {
+    private enum Route: String, Hashable {
+        case spark
+        case homeDetail = "home-detail"
+        case exploreDetail = "explore-detail"
+    }
+
     @State private var isExpanded = false
+    @State private var path: [Route] = []
 
     private let summaries = [
         MergeTaskSummary(
@@ -433,19 +578,54 @@ struct MergeTaskRailFixtureScreen: View {
     ]
 
     var body: some View {
-        ZStack {
-            ZenVisualTokens.background.ignoresSafeArea()
-
-            MergeTaskRailShellOverlay(
-                summaries: summaries,
-                isExpanded: $isExpanded,
-                onSelect: { _ in },
-                isHaloVisible: false
-            ) {
-                Color.clear
-                    .frame(width: 240, height: 44)
-                    .accessibilityHidden(true)
+        NavigationStack(path: $path) {
+            ZStack {
+                ZenVisualTokens.background.ignoresSafeArea()
+                VStack(spacing: 14) {
+                    Color.clear
+                        .frame(width: 1, height: 1)
+                        .accessibilityIdentifier("merge.portal.destination.root")
+                    ForEach(
+                        [Route.spark, .homeDetail, .exploreDetail],
+                        id: \.self
+                    ) { route in
+                        Button(route.rawValue) {
+                            path.append(route)
+                        }
+                        .frame(minWidth: 44, minHeight: 44)
+                        .accessibilityIdentifier(
+                            "merge.portal.route.\(route.rawValue)"
+                        )
+                    }
+                }
             }
+            .navigationDestination(for: Route.self) { route in
+                ZStack {
+                    ZenVisualTokens.background.ignoresSafeArea()
+                    VStack(spacing: 18) {
+                        Text(route.rawValue)
+                            .accessibilityIdentifier(
+                                "merge.portal.destination.\(route.rawValue)"
+                            )
+                        Button("Back") {
+                            path.removeAll()
+                        }
+                        .frame(minWidth: 44, minHeight: 44)
+                        .accessibilityIdentifier("merge.portal.route.back")
+                    }
+                }
+            }
+        }
+        .mergeTaskRailPortal(
+            summaries: summaries,
+            isExpanded: $isExpanded,
+            isHidden: false,
+            onSelect: { _ in },
+            isHaloVisible: false
+        ) {
+            Color.clear
+                .frame(width: 240, height: 44)
+                .accessibilityHidden(true)
         }
     }
 }

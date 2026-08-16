@@ -208,10 +208,14 @@ struct ExistingMergeTaskHost: View {
             ExistingMergeTaskSessionHost(
                 store: store,
                 canRetryFailure: failureActions.contains(.retry),
+                canCancelFailure: failureActions.contains(.cancel),
                 canRemoveFailure: failureActions.contains(.remove),
                 onBack: mergeCoordinator.minimize,
                 onRetryFailure: {
                     mergeCoordinator.retryFailed(jobID: jobID)
+                },
+                onCancelFailure: {
+                    mergeCoordinator.cancelFailed(jobID: jobID)
                 },
                 onRemoveFailure: {
                     mergeCoordinator.removeFailed(jobID: jobID)
@@ -232,24 +236,30 @@ private struct ExistingMergeTaskSessionHost: View {
     @ObservedObject var store: MergeSessionStore
     @StateObject private var candidates: MergeCandidateStore
     let canRetryFailure: Bool
+    let canCancelFailure: Bool
     let canRemoveFailure: Bool
     let onBack: () -> Void
     let onRetryFailure: () -> Void
+    let onCancelFailure: () -> Void
     let onRemoveFailure: () -> Void
 
     init(
         store: MergeSessionStore,
         canRetryFailure: Bool,
+        canCancelFailure: Bool,
         canRemoveFailure: Bool,
         onBack: @escaping () -> Void,
         onRetryFailure: @escaping () -> Void,
+        onCancelFailure: @escaping () -> Void,
         onRemoveFailure: @escaping () -> Void
     ) {
         self.store = store
         self.canRetryFailure = canRetryFailure
+        self.canCancelFailure = canCancelFailure
         self.canRemoveFailure = canRemoveFailure
         self.onBack = onBack
         self.onRetryFailure = onRetryFailure
+        self.onCancelFailure = onCancelFailure
         self.onRemoveFailure = onRemoveFailure
         _candidates = StateObject(
             wrappedValue: MergeCandidateStore(
@@ -265,8 +275,10 @@ private struct ExistingMergeTaskSessionHost: View {
             onBack: onBack,
             onJobAccepted: nil,
             canRetryFailure: canRetryFailure,
+            canCancelFailure: canCancelFailure,
             canRemoveFailure: canRemoveFailure,
             onRetryFailure: onRetryFailure,
+            onCancelFailure: onCancelFailure,
             onRemoveFailure: onRemoveFailure,
             onboardingStore: nil,
             contextualTipStore: nil
@@ -441,8 +453,10 @@ private struct MergeLifecycleView: View {
     private let onBack: () -> Void
     private let onJobAccepted: ((String) -> Void)?
     private let canRetryFailure: Bool
+    private let canCancelFailure: Bool
     private let canRemoveFailure: Bool
     private let onRetryFailure: (() -> Void)?
+    private let onCancelFailure: (() -> Void)?
     private let onRemoveFailure: (() -> Void)?
     private let onboardingStore: OnboardingGuideStore?
     private let contextualTipStore: ContextualGuideTipStore?
@@ -453,8 +467,10 @@ private struct MergeLifecycleView: View {
         onBack: @escaping () -> Void,
         onJobAccepted: ((String) -> Void)?,
         canRetryFailure: Bool = true,
+        canCancelFailure: Bool = false,
         canRemoveFailure: Bool = false,
         onRetryFailure: (() -> Void)?,
+        onCancelFailure: (() -> Void)? = nil,
         onRemoveFailure: (() -> Void)?,
         onboardingStore: OnboardingGuideStore?,
         contextualTipStore: ContextualGuideTipStore?
@@ -464,8 +480,10 @@ private struct MergeLifecycleView: View {
         self.onBack = onBack
         self.onJobAccepted = onJobAccepted
         self.canRetryFailure = canRetryFailure
+        self.canCancelFailure = canCancelFailure
         self.canRemoveFailure = canRemoveFailure
         self.onRetryFailure = onRetryFailure
+        self.onCancelFailure = onCancelFailure
         self.onRemoveFailure = onRemoveFailure
         self.onboardingStore = onboardingStore
         self.contextualTipStore = contextualTipStore
@@ -535,7 +553,7 @@ private struct MergeLifecycleView: View {
             titleVisibility: .visible
         ) {
             Button("Cancel Merge", role: .destructive) {
-                store.cancel()
+                onCancelFailure?()
             }
             Button("Keep", role: .cancel) {}
         }
@@ -872,7 +890,9 @@ private struct MergeLifecycleView: View {
                         accessibilityIdentifier: "merge.remove",
                         action: onRemoveFailure
                     )
-                } else if store.job?.status.canCancel == true {
+                }
+
+                if canCancelFailure {
                     MergeLifecycleAction(
                         systemImage: "xmark",
                         assetImage: nil,

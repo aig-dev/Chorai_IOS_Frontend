@@ -222,6 +222,7 @@ struct ArcNoteApp: App {
                 #endif
                 }
                 .environmentObject(chatHistoryDependency)
+                .globalMergeTaskPortal()
             }
         }
     }

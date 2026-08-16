@@ -79,30 +79,7 @@ private struct ForwardMergeCoordinatorModifier: ViewModifier {
     }
 }
 
-struct CardNavigationDestinationRail: View {
-    @ObservedObject var coordinator: MergeTaskCoordinator
-    @State private var isExpanded = false
-
-    var body: some View {
-        Group {
-            if !coordinator.summaries.isEmpty,
-               coordinator.presentation == nil {
-                MergeTaskRailShellOverlay(
-                    summaries: coordinator.summaries,
-                    isExpanded: $isExpanded,
-                    onSelect: coordinator.present,
-                    isHaloVisible: false
-                ) {
-                    EmptyView()
-                }
-            }
-        }
-    }
-}
-
 private struct CardNavigationDestination: View {
-    @Environment(\.cardNavigationMergeCoordinator)
-    private var mergeCoordinator
     let route: CardNavigationRoute
     let onboardingStore: OnboardingGuideStore?
     let contextualTipStore: ContextualGuideTipStore?
@@ -113,11 +90,6 @@ private struct CardNavigationDestination: View {
             .environment(\.cardNavigationOnboardingStore, onboardingStore)
             .environment(\.cardNavigationContextualTipStore, contextualTipStore)
             .environment(\.cardNavigationRoutePresentationChanged, routePresentationChanged)
-            .overlay {
-                if let coordinator = mergeCoordinator {
-                    CardNavigationDestinationRail(coordinator: coordinator)
-                }
-            }
     }
 
     @ViewBuilder

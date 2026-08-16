@@ -83,6 +83,32 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertTrue(rail.exists)
     }
 
+    func testMergeTaskRailPortalStaysSingleAcrossNavigationRoutes() {
+        app.launchArguments.append("--ui-test-merge-task-rail")
+        app.launch()
+
+        assertExactlyOneAccessibleMergeRail()
+        for route in ["spark", "home-detail", "explore-detail"] {
+            waitForButton("merge.portal.route.\(route)").tap()
+            waitFor("merge.portal.destination.\(route)")
+            assertExactlyOneAccessibleMergeRail()
+            waitForButton("merge.portal.route.back").tap()
+            waitFor("merge.portal.destination.root")
+        }
+    }
+
+    private func assertExactlyOneAccessibleMergeRail(
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let rail = waitForExactlyOneMergeTaskRail(file: file, line: line)
+        XCTAssertEqual(rail.elementType, .button, file: file, line: line)
+        XCTAssertFalse(rail.label.isEmpty, file: file, line: line)
+        XCTAssertTrue(rail.isHittable, file: file, line: line)
+        XCTAssertGreaterThanOrEqual(rail.frame.width, 44, file: file, line: line)
+        XCTAssertGreaterThanOrEqual(rail.frame.height, 44, file: file, line: line)
+    }
+
     func testAdaptiveLayoutFixtureKeepsSurfaceInsideWindowGutters() {
         app.launchArguments.append("--ui-test-adaptive-layout")
         app.launch()

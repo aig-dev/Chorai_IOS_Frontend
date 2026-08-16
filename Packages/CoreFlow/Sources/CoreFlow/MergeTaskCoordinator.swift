@@ -33,6 +33,7 @@ public enum MergeTaskPresentation: Equatable, Sendable {
 
 public enum MergeTaskFailureAction: Hashable, Sendable {
     case retry
+    case cancel
     case remove
 }
 
@@ -339,8 +340,15 @@ public final class MergeTaskCoordinator: ObservableObject {
     public func failureActions(jobID: String) -> Set<MergeTaskFailureAction> {
         guard let store = session(jobID: jobID) else { return [] }
         switch recoveryStrategy(for: store) {
-        case .replacement, .sameOperation:
+        case .replacement:
             return [.retry, .remove]
+        case .sameOperation:
+            if case .paused(.offline) = store.phase {
+                return [.retry]
+            }
+            return store.job?.status.canCancel == true
+                ? [.retry, .cancel]
+                : [.retry]
         case .removeOnly:
             return [.remove]
         case .none:
@@ -371,6 +379,20 @@ public final class MergeTaskCoordinator: ObservableObject {
         refreshState()
     }
 
+    public func cancelFailed(jobID: String) {
+        guard
+            failureActions(jobID: jobID).contains(.cancel),
+            let store = session(jobID: jobID)
+        else {
+            return
+        }
+        store.cancel()
+        if presentation?.jobID == jobID {
+            presentation = .progress(jobID: jobID)
+        }
+        refreshState()
+    }
+
     private enum RecoveryStrategy {
         case replacement
         case sameOperation
@@ -382,7 +404,8 @@ public final class MergeTaskCoordinator: ObservableObject {
         for store: MergeSessionStore
     ) -> RecoveryStrategy {
         switch store.phase {
-        case .paused(.notFound):
+        case .paused(.notFound)
+            where store.notFoundResource == .jobStatus:
             return .replacement
         case .failed where store.activeSnapshot?.lastStatus == .failed:
             return .replacement

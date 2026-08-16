@@ -30,6 +30,11 @@ public enum MergeSessionPhase: Equatable, Sendable {
     case completed(assetID: String?)
 }
 
+public enum MergeNotFoundResource: Equatable, Sendable {
+    case jobStatus
+    case artifact
+}
+
 @MainActor
 public final class MergeSessionStore: ObservableObject {
     @Published public private(set) var anchor: MergeSource
@@ -38,6 +43,7 @@ public final class MergeSessionStore: ObservableObject {
     @Published public private(set) var job: MergeJob?
     @Published public private(set) var artifact: MergeArtifact?
     @Published public private(set) var artifactActionError: CoreMergeError?
+    @Published public private(set) var notFoundResource: MergeNotFoundResource?
     @Published public private(set) var phase: MergeSessionPhase = .idle
     @Published public var titleOverride = ""
     @Published public private(set) var isOperationInFlight = false
@@ -221,6 +227,7 @@ public final class MergeSessionStore: ObservableObject {
 
     public func retry() {
         guard !isLifetimeInvalidated, !isOperationInFlight else { return }
+        notFoundResource = nil
 
         guard let snapshot else {
             phase = .checkingAvailability
@@ -343,7 +350,8 @@ public final class MergeSessionStore: ObservableObject {
 
     public func retryGeneration() {
         let canReplaceMissingJob: Bool
-        if case .paused(.notFound) = phase {
+        if case .paused(.notFound) = phase,
+           notFoundResource == .jobStatus {
             canReplaceMissingJob = true
         } else {
             canReplaceMissingJob = false
@@ -381,6 +389,7 @@ public final class MergeSessionStore: ObservableObject {
         job = nil
         artifact = nil
         artifactActionError = nil
+        notFoundResource = nil
         titleOverride = ""
         phase = .creating
         launch { store in
@@ -474,6 +483,7 @@ public final class MergeSessionStore: ObservableObject {
             }
         } catch {
             guard shouldAcceptAsyncResult else { return }
+            notFoundResource = nil
             phase = .paused(coreError(from: error))
         }
     }
@@ -486,6 +496,7 @@ public final class MergeSessionStore: ObservableObject {
             await driveLifecycle(from: created)
         } catch {
             guard shouldAcceptAsyncResult else { return }
+            notFoundResource = nil
             phase = .paused(coreError(from: error))
         }
     }
@@ -500,7 +511,9 @@ public final class MergeSessionStore: ObservableObject {
             await driveLifecycle(from: current)
         } catch {
             guard shouldAcceptAsyncResult else { return }
-            phase = .paused(coreError(from: error))
+            let mapped = coreError(from: error)
+            notFoundResource = mapped == .notFound ? .jobStatus : nil
+            phase = .paused(mapped)
         }
     }
 
@@ -517,7 +530,9 @@ public final class MergeSessionStore: ObservableObject {
                 await driveLifecycle(from: current)
             } catch {
                 guard shouldAcceptAsyncResult else { return }
-                phase = .paused(coreError(from: error))
+                let mapped = coreError(from: error)
+                notFoundResource = mapped == .notFound ? .jobStatus : nil
+                phase = .paused(mapped)
             }
         }
     }
@@ -543,6 +558,7 @@ public final class MergeSessionStore: ObservableObject {
                 }
             } catch {
                 guard shouldAcceptAsyncResult else { return }
+                notFoundResource = nil
                 artifactActionError = discardError
                 phase = .ready
             }
@@ -585,6 +601,7 @@ public final class MergeSessionStore: ObservableObject {
                     artifactActionError = mapped
                     phase = .ready
                 } else {
+                    notFoundResource = nil
                     phase = .paused(mapped)
                 }
             }
@@ -616,6 +633,7 @@ public final class MergeSessionStore: ObservableObject {
                         reconcileConflict: false
                     )
                 } else {
+                    notFoundResource = nil
                     phase = .paused(.decoding)
                 }
                 return
@@ -623,6 +641,7 @@ public final class MergeSessionStore: ObservableObject {
                 phase = .completed(assetID: nil)
                 return
             case .failed:
+                notFoundResource = nil
                 phase = .failed(.server(code: current.errorCode))
                 return
             case .cancelled:
@@ -631,11 +650,13 @@ public final class MergeSessionStore: ObservableObject {
                 phase = .cancelled
                 return
             case .unknown(let value):
+                notFoundResource = nil
                 phase = .paused(.unknown(code: value))
                 return
             }
 
             guard pollCount < maxPollAttempts else {
+                notFoundResource = nil
                 phase = .paused(.timeout)
                 return
             }
@@ -651,7 +672,9 @@ public final class MergeSessionStore: ObservableObject {
                 return
             } catch {
                 guard shouldAcceptAsyncResult else { return }
-                phase = .paused(coreError(from: error))
+                let mapped = coreError(from: error)
+                notFoundResource = mapped == .notFound ? .jobStatus : nil
+                phase = .paused(mapped)
                 return
             }
         }
@@ -663,6 +686,7 @@ public final class MergeSessionStore: ObservableObject {
             let loaded = try await service.artifact(jobID: jobID)
             guard shouldAcceptAsyncResult else { return }
             guard loaded.jobID == jobID else {
+                notFoundResource = nil
                 phase = .failed(.decoding)
                 return
             }
@@ -680,6 +704,7 @@ public final class MergeSessionStore: ObservableObject {
         } catch {
             guard shouldAcceptAsyncResult else { return }
             let mapped = coreError(from: error)
+            notFoundResource = mapped == .notFound ? .artifact : nil
             phase = mapped == .decoding
                 ? .failed(mapped)
                 : .paused(mapped)
@@ -700,6 +725,7 @@ public final class MergeSessionStore: ObservableObject {
                 artifactActionError = error
                 phase = .ready
             } else {
+                notFoundResource = nil
                 phase = .paused(error)
             }
             return
@@ -713,6 +739,7 @@ public final class MergeSessionStore: ObservableObject {
     }
 
     private func record(_ current: MergeJob) {
+        notFoundResource = nil
         job = current
         guard var value = snapshot else { return }
         value.jobID = current.jobID
