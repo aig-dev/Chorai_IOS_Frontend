@@ -83,6 +83,87 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertTrue(rail.exists)
     }
 
+    func testMergeTaskRailVisualStateFixturePublishesRequestedSingleState() {
+        app.launchArguments.append("--ui-test-merge-task-rail")
+        app.launchEnvironment["CHORAI_UI_TEST_MERGE_TASK_VISUAL_STATE"] =
+            "working"
+        app.launch()
+
+        XCTAssertEqual(
+            waitForButton("merge.task-rail").value as? String,
+            "1, working"
+        )
+    }
+
+    func testMergeTaskRailPinsSingleControlToRightEdge() {
+        app.launchArguments.append("--ui-test-merge-task-rail")
+        app.launchEnvironment["CHORAI_UI_TEST_MERGE_TASK_VISUAL_STATE"] =
+            "working"
+        app.launch()
+
+        let rail = waitForButton("merge.task-rail")
+        let window = app.windows.firstMatch
+        XCTAssertTrue(window.waitForExistence(timeout: 3))
+        XCTAssertEqual(
+            window.frame.maxX - rail.frame.maxX,
+            25,
+            accuracy: 2,
+            "The 44-point Merge control must remain at the right-edge slot"
+        )
+    }
+
+    func testExpandedMergeStateShapesStayCenteredClearOfNumberBadges() {
+        app.launchArguments.append("--ui-test-merge-task-rail")
+        app.launchEnvironment["CHORAI_UI_TEST_MERGE_TASK_EXPANDED"] = "1"
+        app.launch()
+
+        let complete = waitForButton("merge.task.1")
+        let failed = waitForButton("merge.task.3")
+        let center = CGRect(x: 0.34, y: 0.34, width: 0.32, height: 0.32)
+        let topTrailing = CGRect(x: 0.65, y: 0, width: 0.35, height: 0.35)
+
+        let completeCenter = matchingPixelCount(
+            in: complete,
+            normalizedRect: center
+        ) { red, green, blue, _ in
+            red > 220 && green > 220 && blue > 220
+        }
+        let failedCenter = matchingPixelCount(
+            in: failed,
+            normalizedRect: center
+        ) { red, green, blue, _ in
+            red > 190 && green < 150 && blue < 170
+        }
+        let completeBadge = matchingPixelCount(
+            in: complete,
+            normalizedRect: topTrailing
+        ) { red, green, blue, _ in
+            red > 100 && green < 190 && blue > 180
+        }
+        let failedBadge = matchingPixelCount(
+            in: failed,
+            normalizedRect: topTrailing
+        ) { red, green, blue, _ in
+            red > 100 && green < 190 && blue > 180
+        }
+
+        let metrics = "completeCenter=\(completeCenter), "
+            + "failedCenter=\(failedCenter), "
+            + "completeBadge=\(completeBadge), "
+            + "failedBadge=\(failedBadge)"
+        let attachment = XCTAttachment(string: metrics)
+        attachment.name = "merge-expanded-state-pixel-counts"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+
+        XCTAssertTrue(
+            completeCenter > 8 && failedCenter > 150
+                && completeBadge > 40 && failedBadge > 40,
+            "Expected centered state shapes and separate top-trailing badges; "
+                + metrics
+        )
+    }
+
     func testMergeTaskRailPortalStaysSingleAcrossNavigationRoutes() {
         app.launchArguments.append("--ui-test-merge-task-rail")
         app.launch()
@@ -3235,9 +3316,7 @@ final class ArcNoteUITests: XCTestCase {
         tap("merge.action")
         let rail = waitForExactlyOneMergeTaskRail(timeout: 30)
         XCTAssertEqual(rail.value as? String, "1, working")
-        XCTAssertFalse(
-            app.descendants(matching: .any)["screen.merge.loaded"].exists
-        )
+        waitForMissing("screen.merge.loaded", timeout: 5)
         captureMergeVisual("processing")
         rail.tap()
         waitForButton("merge.back").tap()
@@ -3333,9 +3412,7 @@ final class ArcNoteUITests: XCTestCase {
         tap("merge.action")
         let rail = waitForExactlyOneMergeTaskRail(timeout: 30)
         XCTAssertEqual(rail.value as? String, "1, working")
-        XCTAssertFalse(
-            app.descendants(matching: .any)["screen.merge.loaded"].exists
-        )
+        waitForMissing("screen.merge.loaded", timeout: 5)
         rail.tap()
         waitFor("merge.job.id", timeout: 30)
         let originalJobID = mergeAnchorValue("merge.job.id")
@@ -3356,8 +3433,10 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertEqual(mergeAnchorValue("merge.job.id"), originalJobID)
         waitForMergeArtifactReady(timeout: 360, maxRetries: 0)
         XCTAssertEqual(mergeAnchorValue("merge.job.status"), "ARTIFACT_READY")
+        captureMergeVisual("preview-open-no-rail")
 
         waitForButton("merge.back").tap()
+        captureMergeVisual("preview-closed-complete-rail")
         waitForExactlyOneMergeTaskRail().tap()
         waitForMergeArtifactReady(timeout: 30)
 
@@ -7547,6 +7626,53 @@ final class ArcNoteUITests: XCTestCase {
         attachment.name = "merge-\(name)"
         attachment.lifetime = .keepAlways
         add(attachment)
+    }
+
+    private func matchingPixelCount(
+        in element: XCUIElement,
+        normalizedRect: CGRect,
+        matching predicate: (UInt8, UInt8, UInt8, UInt8) -> Bool,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) -> Int {
+        guard let inputImage = CIImage(
+            data: element.screenshot().pngRepresentation
+        ) else {
+            XCTFail("Could not decode the element screenshot", file: file, line: line)
+            return 0
+        }
+
+        let extent = inputImage.extent
+        let crop = CGRect(
+            x: extent.minX + normalizedRect.minX * extent.width,
+            y: extent.minY + (1 - normalizedRect.maxY) * extent.height,
+            width: normalizedRect.width * extent.width,
+            height: normalizedRect.height * extent.height
+        ).integral
+        let width = Int(crop.width)
+        let height = Int(crop.height)
+        var rgba = [UInt8](repeating: 0, count: width * height * 4)
+        CIContext(options: [.workingColorSpace: NSNull()]).render(
+            inputImage,
+            toBitmap: &rgba,
+            rowBytes: width * 4,
+            bounds: crop,
+            format: .RGBA8,
+            colorSpace: CGColorSpace(name: CGColorSpace.sRGB)
+        )
+
+        var count = 0
+        for offset in stride(from: 0, to: rgba.count, by: 4) {
+            if predicate(
+                rgba[offset],
+                rgba[offset + 1],
+                rgba[offset + 2],
+                rgba[offset + 3]
+            ) {
+                count += 1
+            }
+        }
+        return count
     }
 
     private func averageLuminance(

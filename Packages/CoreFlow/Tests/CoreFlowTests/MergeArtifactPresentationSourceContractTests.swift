@@ -2,15 +2,12 @@ import Foundation
 import XCTest
 
 final class MergeArtifactPresentationSourceContractTests: XCTestCase {
-    func testArtifactReviewOwnsTheOnlyInteractiveActions() throws {
+    func testArtifactReviewOwnsMutationActionsWithoutDuplicateClose() throws {
         let lifecycle = try source(
             at: "ArcNote/CoreFlow/MergeLifecycleViews.swift"
         )
 
         XCTAssertTrue(lifecycle.contains("private var isArtifactPresentation"))
-        XCTAssertTrue(
-            lifecycle.contains("if !isArtifactPresentation {")
-        )
         XCTAssertFalse(
             lifecycle.contains(".opacity(isArtifactPresentation ? 0 : 1)")
         )

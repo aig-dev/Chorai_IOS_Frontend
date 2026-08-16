@@ -203,6 +203,7 @@ struct MergeTaskRail: View {
                     number: number,
                     reduceMotion: reduceMotion
                 )
+                .frame(width: 44, height: 44, alignment: .center)
 
                 if summary.visualState != .working,
                    summary.visualState != .committing {
@@ -311,7 +312,11 @@ struct MergeTaskRailShellOverlay<Callout: View>: View {
             .padding(.top, 112)
             .padding(.trailing, 20)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(
+            maxWidth: .infinity,
+            maxHeight: .infinity,
+            alignment: .topTrailing
+        )
         .onChange(of: isExpanded) { expanded in
             guard expanded else {
                 catchesOutsideTaps = false
@@ -642,29 +647,55 @@ private struct MergeTaskRailRouteFixtureScreen: View {
         case exploreDetail = "explore-detail"
     }
 
-    @State private var isExpanded = false
+    @State private var isExpanded: Bool
     @State private var path: [Route] = []
 
-    private let summaries = [
-        MergeTaskSummary(
-            jobID: "fixture-complete",
-            sourceCount: 3,
-            createdAt: Date(timeIntervalSince1970: 3),
-            visualState: .complete
-        ),
-        MergeTaskSummary(
-            jobID: "fixture-working",
-            sourceCount: 2,
-            createdAt: Date(timeIntervalSince1970: 2),
-            visualState: .working
-        ),
-        MergeTaskSummary(
-            jobID: "fixture-failed",
-            sourceCount: 4,
-            createdAt: Date(timeIntervalSince1970: 1),
-            visualState: .failed
-        ),
-    ]
+    private let visualState: MergeTaskVisualState?
+
+    init() {
+        let environment = ProcessInfo.processInfo.environment
+        visualState = environment[
+            "CHORAI_UI_TEST_MERGE_TASK_VISUAL_STATE"
+        ].flatMap(MergeTaskVisualState.init(rawValue:))
+        _isExpanded = State(
+            initialValue: environment[
+                "CHORAI_UI_TEST_MERGE_TASK_EXPANDED"
+            ] == "1"
+        )
+    }
+
+    private var summaries: [MergeTaskSummary] {
+        if let visualState {
+            return [
+                MergeTaskSummary(
+                    jobID: "fixture-\(visualState.rawValue)",
+                    sourceCount: 2,
+                    createdAt: Date(timeIntervalSince1970: 1),
+                    visualState: visualState
+                )
+            ]
+        }
+        return [
+            MergeTaskSummary(
+                jobID: "fixture-complete",
+                sourceCount: 3,
+                createdAt: Date(timeIntervalSince1970: 3),
+                visualState: .complete
+            ),
+            MergeTaskSummary(
+                jobID: "fixture-working",
+                sourceCount: 2,
+                createdAt: Date(timeIntervalSince1970: 2),
+                visualState: .working
+            ),
+            MergeTaskSummary(
+                jobID: "fixture-failed",
+                sourceCount: 4,
+                createdAt: Date(timeIntervalSince1970: 1),
+                visualState: .failed
+            ),
+        ]
+    }
 
     var body: some View {
         NavigationStack(path: $path) {
