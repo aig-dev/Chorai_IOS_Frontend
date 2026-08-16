@@ -170,18 +170,17 @@ final class NavigationOriginSourceContractTests: XCTestCase {
                     "@Environment(\\.cardNavigationOnboardingStore)"
                 )
             )
-            XCTAssertTrue(
+            XCTAssertTrue(presenter.contains("onboardingStore: onboardingStore"))
+            XCTAssertFalse(
                 presenter.contains(
                     "@Environment(\\.cardNavigationMergeCompleted)"
                 )
             )
-            XCTAssertTrue(presenter.contains("onboardingStore: onboardingStore"))
+            XCTAssertFalse(presenter.contains("handlePresentedMergeCompleted"))
         }
-        XCTAssertTrue(
-            host.contains("mergeCompleted: handlePresentedMergeCompleted")
-        )
-        XCTAssertTrue(
-            menu.contains("mergeCompleted: handlePresentedMergeCompleted")
+        XCTAssertFalse(destination.contains("let mergeCompleted:"))
+        XCTAssertFalse(
+            destination.contains("cardNavigationMergeCompleted")
         )
         XCTAssertTrue(destination.contains("let routePresentationChanged:"))
         XCTAssertTrue(
@@ -209,19 +208,13 @@ final class NavigationOriginSourceContractTests: XCTestCase {
             slice(
                 tabBar,
                 from: ".onChange(of: onboardingStore.session?.state)",
-                through: ".onAppear"
+                through: ".onChange(of: onboardingStore.session?.sessionID)"
             )
         )
 
-        XCTAssertTrue(
-            popup.contains(
-                "@State private var didCommitPresentedMerge = false"
-            )
-        )
-        XCTAssertTrue(popup.contains("handlePresentedMergeCompleted"))
-        XCTAssertTrue(
-            popup.contains("didCommit: didCommitPresentedMerge")
-        )
+        XCTAssertFalse(popup.contains("didCommitPresentedMerge"))
+        XCTAssertFalse(popup.contains("handlePresentedMergeCompleted"))
+        XCTAssertFalse(popup.contains("cardNavigationMergeCompleted"))
         XCTAssertTrue(home.contains("let onCardRoutePresentationChanged:"))
         XCTAssertTrue(
             home.contains(
@@ -255,7 +248,7 @@ final class NavigationOriginSourceContractTests: XCTestCase {
         XCTAssertFalse(stateObserver.contains("navigationPath"))
     }
 
-    func testGuidedMergeFromEditorReturnsToTheLibrarySurface() throws {
+    func testMinimizedMergeReleasesLibraryRouteCoverage() throws {
         let popup = try source(at: "ArcNote/PopupMenuView.swift")
         let host = try XCTUnwrap(
             slice(
@@ -265,10 +258,8 @@ final class NavigationOriginSourceContractTests: XCTestCase {
             )
         )
 
-        XCTAssertTrue(host.contains("@Environment(\\.dismiss)"))
-        XCTAssertTrue(host.contains("shouldDismissHostAfterPresentedRoute"))
-        XCTAssertTrue(host.contains("handlePresentedMergeCompleted"))
-        XCTAssertTrue(host.contains("dismissHost()"))
+        XCTAssertFalse(host.contains("shouldDismissHostAfterPresentedRoute"))
+        XCTAssertFalse(host.contains("handlePresentedMergeCompleted"))
         XCTAssertTrue(
             host.contains("routePresentationChanged(false)"),
             "The nested Merge route must release its Library coverage"

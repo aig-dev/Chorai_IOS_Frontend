@@ -14,15 +14,21 @@ struct TabBarView: View {
     @StateObject private var contextualTipStore = ContextualGuideTipStore(
         persistence: UserDefaultsContextualGuideTipPersistence()
     )
+    @StateObject private var mergeTaskCoordinator = MergeTaskCoordinator(
+        service: NetworkCoreMergeService(),
+        persistence: UserDefaultsMergeTaskStore(
+            keyPrefix: MergeTaskStorageConfiguration.keyPrefix,
+            legacy: UserDefaultsMergeSessionStore(
+                keyPrefix: MergeSessionStorageConfiguration.keyPrefix
+            )
+        )
+    )
     @State private var showPopupMenu = false
     @State private var selectedFilter = "All"
     @State private var showFilterTags = false
     @State private var showSideMenu = false
     @State private var currentMenuCardData: UserCard? = nil
     @State private var navigationPath = NavigationPath()
-    @State private var navigateToMerge = false
-    @State private var selectedMergeCardId: String? = nil
-    @State private var mergeResumeMetadata: MergeResumeMetadata?
     @State private var hasRoutedInitialOnboardingState = false
     @State private var libraryCardRouteCoverageDepth = 0
     @State private var isLibrarySurfaceVisible = false
@@ -46,6 +52,7 @@ struct TabBarView: View {
 
     private enum TabRoute: Hashable {
         case spark(String)
+        case detail(String)
     }
 
     private struct ShareRoute: Identifiable {
@@ -56,12 +63,6 @@ struct TabBarView: View {
     private struct ReportRoute: Identifiable {
         let cardID: String
         var id: String { cardID }
-    }
-
-    private var mergePersistence: UserDefaultsMergeSessionStore {
-        UserDefaultsMergeSessionStore(
-            keyPrefix: MergeSessionStorageConfiguration.keyPrefix
-        )
     }
 
     private var onboardingSparkResumePersistence:
@@ -170,7 +171,7 @@ struct TabBarView: View {
             contextualTipStore.dismiss(
                 .mergeResume,
                 onboardingState: onboardingState,
-                targetIsVisible: mergeResumeMetadata != nil
+                targetIsVisible: !mergeTaskCoordinator.summaries.isEmpty
             )
         default:
             break
@@ -190,32 +191,6 @@ struct TabBarView: View {
         }
     }
     #endif
-
-    private func refreshMergeResumeMetadata() {
-        guard let actorID = authManager.currentUser?.id else {
-            mergeResumeMetadata = nil
-            return
-        }
-        mergeResumeMetadata = mergePersistence.resumeMetadata(actorID: actorID)
-    }
-
-    private func resumeMerge() {
-        guard let metadata = mergeResumeMetadata else { return }
-        selectedMergeCardId = metadata.anchorAssetID
-        navigateToMerge = false
-        DispatchQueue.main.async {
-            navigateToMerge = true
-        }
-    }
-
-    private func handleResumeMerge() {
-        contextualTipStore.complete(
-            .mergeResume,
-            onboardingState: onboardingStore.contextualTipState,
-            targetIsVisible: mergeResumeMetadata != nil
-        )
-        resumeMerge()
-    }
 
     private func routeInitialOnboardingState(_ state: String?) {
         guard !hasRoutedInitialOnboardingState,
@@ -471,12 +446,28 @@ struct TabBarView: View {
         }
     }
 
-    private func handleTopLevelMergeCommitted(_ cardID: String) {
-        coordinator.mergeCompleted(cardID: cardID)
+    private var mergeTaskPresentation: Binding<Bool> {
+        Binding(
+            get: { mergeTaskCoordinator.presentation != nil },
+            set: { isPresented in
+                if !isPresented {
+                    mergeTaskCoordinator.minimize()
+                }
+            }
+        )
+    }
+
+    private var presentedMergeJobID: String? {
+        switch mergeTaskCoordinator.presentation {
+        case .progress(let jobID), .preview(let jobID), .failure(let jobID):
+            return jobID
+        case nil:
+            return nil
+        }
     }
 
     private var isLibraryCovered: Bool {
-        navigateToMerge
+        mergeTaskCoordinator.presentation != nil
             || libraryCardRouteCoverageDepth > 0
             || showSideMenu
             || shareRoute != nil
@@ -776,65 +767,26 @@ struct TabBarView: View {
                 }
                 #endif
 
-                if mergeResumeMetadata != nil {
-                    HStack {
-                        Spacer()
-                        VStack(alignment: .trailing, spacing: 10) {
-                            ContextualGuideCallout(
-                                store: contextualTipStore,
-                                tip: .mergeResume,
-                                onboardingState: onboardingStore.contextualTipState,
-                                targetIsVisible: mergeResumeMetadata != nil
-                            )
-
-                            Button(action: handleResumeMerge) {
-                                Image("menu_merge")
-                                    .resizable()
-                                    .scaledToFit()
-                                    .frame(width: 21, height: 21)
-                                    .frame(width: 44, height: 36)
-                                    .background(
-                                        Capsule().fill(Color.white.opacity(0.12))
-                                    )
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel("Resume Merge")
-                            .accessibilityIdentifier("merge.resume")
-                            .overlay {
-                                ContextualGuideTargetHalo(
-                                    isVisible: contextualTipStore.isVisible(
-                                        .mergeResume,
-                                        onboardingState: onboardingStore.contextualTipState,
-                                        targetIsVisible: mergeResumeMetadata != nil
-                                    )
-                                )
-                            }
-                        }
-                    }
-                    .padding(.trailing, 20)
-                }
             }
             .padding(.top, 112)
         }
         .popupMenu(isPresented: $showPopupMenu, layout: .grid2x2, cardData: currentMenuCardData)
         .linkPopup()
+        .environmentObject(mergeTaskCoordinator)
         .environment(\.cardNavigationOnboardingStore, onboardingStore)
         .environment(\.cardNavigationContextualTipStore, contextualTipStore)
-        .environment(\.cardNavigationMergeCompleted, coordinator.mergeCompleted)
         .environment(
             \.cardNavigationRoutePresentationChanged,
             handleLibraryCardRoutePresentationChanged
         )
         .navigationBarHidden(true)
         .navigationBarBackButtonHidden(true)
-        .navigationDestination(isPresented: $navigateToMerge) {
-            MergeView(
-                cardId: selectedMergeCardId ?? "",
-                resumePersistedSession: true,
-                onboardingStore: onboardingStore,
-                contextualTipStore: contextualTipStore,
-                onCommitted: handleTopLevelMergeCommitted
-            )
+        .navigationDestination(isPresented: mergeTaskPresentation) {
+            if let jobID = presentedMergeJobID {
+                ExistingMergeTaskHost(jobID: jobID)
+            } else {
+                EmptyView()
+            }
         }
         #if DEBUG
         .navigationDestination(isPresented: $navigateToDetailSmoke) {
@@ -858,6 +810,8 @@ struct TabBarView: View {
                 } else {
                     EmptyView()
                 }
+            case .detail(let cardId):
+                DetailView(cardId: cardId)
             }
         }
         .sheet(item: $shareRoute) { route in
@@ -884,21 +838,11 @@ struct TabBarView: View {
                   !cardID.isEmpty else { return }
             reportRoute = ReportRoute(cardID: cardID)
         }
-        .onReceive(
-            NotificationCenter.default.publisher(for: .mergeSessionDidChange)
-        ) { notification in
-            guard let actorID = authManager.currentUser?.id,
-                  notification.userInfo?["actorID"] as? String == actorID else {
-                return
-            }
-            refreshMergeResumeMetadata()
-        }
         .onChange(of: authManager.currentUser?.id) { _ in
             hasRoutedInitialOnboardingState = false
             libraryCardRouteCoverageDepth = 0
             isLibrarySurfaceVisible = false
             contextualTipStore.reset()
-            refreshMergeResumeMetadata()
             loadOnboardingIfVerified()
         }
         .onChange(of: authManager.sessionPhase) { phase in
@@ -923,8 +867,18 @@ struct TabBarView: View {
             isLibrarySurfaceVisible = false
             syncContextualTipsWithOnboardingSession()
         }
-        .onChange(of: navigateToMerge) { _ in
+        .onChange(of: mergeTaskCoordinator.presentation) { _ in
             isLibrarySurfaceVisible = false
+        }
+        .onChange(of: mergeTaskCoordinator.committedCardIntent) { intent in
+            guard let intent else { return }
+            mergeTaskCoordinator.minimize()
+            onboardingStore.receive(.mergeCommitted(assetID: intent.assetID))
+            coordinator.mergeCompleted(cardID: intent.assetID)
+            navigationPath.append(TabRoute.detail(intent.assetID))
+            mergeTaskCoordinator.acknowledgeCommittedCardIntent(
+                jobID: intent.jobID
+            )
         }
         .onChange(of: showSideMenu) { isPresented in
             isLibrarySurfaceVisible = false
@@ -940,7 +894,6 @@ struct TabBarView: View {
         }
         .onAppear {
             lastSelectedTab = coordinator.selectedTab
-            refreshMergeResumeMetadata()
             loadOnboardingIfVerified()
         }
         #if DEBUG

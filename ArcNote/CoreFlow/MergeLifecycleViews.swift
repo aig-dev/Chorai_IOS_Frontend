@@ -11,26 +11,29 @@ enum MergeSessionStorageConfiguration {
     }
 }
 
+enum MergeTaskStorageConfiguration {
+    static var keyPrefix: String {
+        ProcessInfo.processInfo.environment[
+            "CHORAI_UI_TEST_MERGE_SESSION_SCOPE"
+        ].map { "chorai.merge.tasks.\($0)" }
+            ?? "chorai.merge.tasks"
+    }
+}
+
 struct MergeView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var authManager = AuthManager.shared
     @StateObject private var candidates: MergeCandidateStore
-    private let resumePersistedSession: Bool
-    private let onCommitted: (String) -> Void
     private let onboardingStore: OnboardingGuideStore?
     private let contextualTipStore: ContextualGuideTipStore?
 
     init(
         cardId: String,
-        resumePersistedSession: Bool = false,
         onboardingStore: OnboardingGuideStore? = nil,
-        contextualTipStore: ContextualGuideTipStore? = nil,
-        onCommitted: @escaping (String) -> Void = { _ in }
+        contextualTipStore: ContextualGuideTipStore? = nil
     ) {
-        self.resumePersistedSession = resumePersistedSession
         self.onboardingStore = onboardingStore
         self.contextualTipStore = contextualTipStore
-        self.onCommitted = onCommitted
         _candidates = StateObject(
             wrappedValue: MergeCandidateStore(anchorCardID: cardId)
         )
@@ -38,17 +41,14 @@ struct MergeView: View {
 
     var body: some View {
         Group {
-            if let actorID = authManager.currentUser?.id,
+            if authManager.currentUser?.id != nil,
                let anchor = candidates.anchorCard {
-                MergeLifecycleView(
-                    actorID: actorID,
+                NewMergeSessionHost(
                     anchor: anchor,
                     candidates: candidates,
-                    resumePersistedSession: resumePersistedSession,
                     onBack: dismiss.callAsFunction,
                     onboardingStore: onboardingStore,
-                    contextualTipStore: contextualTipStore,
-                    onCommitted: onCommitted
+                    contextualTipStore: contextualTipStore
                 )
             } else if let error = candidates.anchorError {
                 MergeEntryFailureView(
@@ -60,6 +60,177 @@ struct MergeView: View {
                 MergeEntryLoadingView(onBack: dismiss.callAsFunction)
             }
         }
+        .task {
+            candidates.load()
+        }
+    }
+}
+
+private struct NewMergeSessionHost: View {
+    @EnvironmentObject private var mergeCoordinator: MergeTaskCoordinator
+    @State private var draft: MergeDraftSession?
+
+    let anchor: MergeCard
+    @ObservedObject var candidates: MergeCandidateStore
+    let onBack: () -> Void
+    let onboardingStore: OnboardingGuideStore?
+    let contextualTipStore: ContextualGuideTipStore?
+
+    var body: some View {
+        Group {
+            if let draft {
+                NewMergeSessionDraftHost(
+                    draft: draft,
+                    candidates: candidates,
+                    onBack: onBack,
+                    onboardingStore: onboardingStore,
+                    contextualTipStore: contextualTipStore
+                )
+            } else {
+                MergeEntryLoadingView(onBack: onBack)
+                    .task {
+                        guard draft == nil else { return }
+                        draft = mergeCoordinator.makeDraft(
+                            anchor: anchor.coreMergeSource
+                        )
+                    }
+            }
+        }
+    }
+}
+
+private struct NewMergeSessionDraftHost: View {
+    @EnvironmentObject private var mergeCoordinator: MergeTaskCoordinator
+    @StateObject private var store: MergeSessionStore
+    @State private var adoptionRetryJobID: String?
+
+    let draft: MergeDraftSession
+    @ObservedObject var candidates: MergeCandidateStore
+    let onBack: () -> Void
+    let onboardingStore: OnboardingGuideStore?
+    let contextualTipStore: ContextualGuideTipStore?
+
+    init(
+        draft: MergeDraftSession,
+        candidates: MergeCandidateStore,
+        onBack: @escaping () -> Void,
+        onboardingStore: OnboardingGuideStore?,
+        contextualTipStore: ContextualGuideTipStore?
+    ) {
+        self.draft = draft
+        self.candidates = candidates
+        self.onBack = onBack
+        self.onboardingStore = onboardingStore
+        self.contextualTipStore = contextualTipStore
+        _store = StateObject(wrappedValue: draft.store)
+    }
+
+    var body: some View {
+        MergeLifecycleView(
+            store: store,
+            candidates: candidates,
+            onBack: onBack,
+            onJobAccepted: adopt,
+            onboardingStore: onboardingStore,
+            contextualTipStore: contextualTipStore
+        )
+        .task {
+            store.start()
+        }
+        .alert(
+            "Couldn’t Keep Merge Running",
+            isPresented: adoptionRetryBinding
+        ) {
+            Button("Retry") {
+                retryAdoption()
+            }
+        } message: {
+            Text("Keep this screen open and retry saving the merge.")
+        }
+    }
+
+    private var adoptionRetryBinding: Binding<Bool> {
+        Binding(
+            get: { adoptionRetryJobID != nil },
+            set: { isPresented in
+                if !isPresented {
+                    adoptionRetryJobID = nil
+                }
+            }
+        )
+    }
+
+    private func retryAdoption() {
+        guard let jobID = adoptionRetryJobID else { return }
+        adoptionRetryJobID = nil
+        Task { @MainActor in
+            await Task.yield()
+            adopt(jobID)
+        }
+    }
+
+    private func adopt(_ jobID: String) {
+        guard mergeCoordinator.adopt(draft) == jobID else {
+            adoptionRetryJobID = jobID
+            return
+        }
+        adoptionRetryJobID = nil
+        onboardingStore?.receive(.mergeStarted(jobID: jobID))
+        Task { @MainActor in
+            await Task.yield()
+            onBack()
+        }
+    }
+}
+
+struct ExistingMergeTaskHost: View {
+    @EnvironmentObject private var mergeCoordinator: MergeTaskCoordinator
+    let jobID: String
+
+    var body: some View {
+        if let store = mergeCoordinator.session(jobID: jobID) {
+            ExistingMergeTaskSessionHost(
+                store: store,
+                onBack: mergeCoordinator.minimize
+            )
+            .id(jobID)
+        } else {
+            MergeEntryFailureView(
+                message: "Merge unavailable",
+                onBack: mergeCoordinator.minimize,
+                onRetry: { mergeCoordinator.present(jobID: jobID) }
+            )
+        }
+    }
+}
+
+private struct ExistingMergeTaskSessionHost: View {
+    @ObservedObject var store: MergeSessionStore
+    @StateObject private var candidates: MergeCandidateStore
+    let onBack: () -> Void
+
+    init(
+        store: MergeSessionStore,
+        onBack: @escaping () -> Void
+    ) {
+        self.store = store
+        self.onBack = onBack
+        _candidates = StateObject(
+            wrappedValue: MergeCandidateStore(
+                anchorCardID: store.anchor.assetID
+            )
+        )
+    }
+
+    var body: some View {
+        MergeLifecycleView(
+            store: store,
+            candidates: candidates,
+            onBack: onBack,
+            onJobAccepted: nil,
+            onboardingStore: nil,
+            contextualTipStore: nil
+        )
         .task {
             candidates.load()
         }
@@ -220,45 +391,32 @@ final class MergeCandidateStore: ObservableObject {
 private struct MergeLifecycleView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @ObservedObject var store: MergeSessionStore
     @ObservedObject var candidates: MergeCandidateStore
-    @StateObject private var store: MergeSessionStore
     @State private var searchText = ""
     @FocusState private var isTextInputFocused: Bool
     @State private var showCancelConfirmation = false
-    @State private var committedCardID: String?
-    @State private var showCommittedDetail = false
+    @State private var showDiscardConfirmation = false
 
     private let onBack: () -> Void
+    private let onJobAccepted: ((String) -> Void)?
     private let onboardingStore: OnboardingGuideStore?
     private let contextualTipStore: ContextualGuideTipStore?
-    private let onCommitted: (String) -> Void
 
     init(
-        actorID: String,
-        anchor: MergeCard,
+        store: MergeSessionStore,
         candidates: MergeCandidateStore,
-        resumePersistedSession: Bool,
         onBack: @escaping () -> Void,
+        onJobAccepted: ((String) -> Void)?,
         onboardingStore: OnboardingGuideStore?,
-        contextualTipStore: ContextualGuideTipStore?,
-        onCommitted: @escaping (String) -> Void
+        contextualTipStore: ContextualGuideTipStore?
     ) {
+        self.store = store
         self.candidates = candidates
         self.onBack = onBack
+        self.onJobAccepted = onJobAccepted
         self.onboardingStore = onboardingStore
         self.contextualTipStore = contextualTipStore
-        self.onCommitted = onCommitted
-        _store = StateObject(
-            wrappedValue: MergeSessionStore(
-                actorID: actorID,
-                anchor: anchor.coreMergeSource,
-                service: NetworkCoreMergeService(),
-                persistence: UserDefaultsMergeSessionStore(
-                    keyPrefix: MergeSessionStorageConfiguration.keyPrefix
-                ),
-                resumePersistedSession: resumePersistedSession
-            )
-        )
     }
 
     private var isMergeTipVisible: Bool {
@@ -330,36 +488,15 @@ private struct MergeLifecycleView: View {
             }
             Button("Keep", role: .cancel) {}
         }
-        .task {
-            store.start()
-        }
-        .task(id: completedAssetID) {
-            guard let assetID = completedAssetID else { return }
-            let onboardingState = onboardingStore?.session?.state
-            let isGuidedState = onboardingState.map {
-                ["product_merge_intro", "product_merge_preview"]
-                    .contains($0)
-            } ?? false
-            let isCompletingGuidedMerge = onboardingStore?.phase == .active
-                && isGuidedState
-            onboardingStore?.receive(.mergeCommitted(assetID: assetID))
-            onCommitted(assetID)
-            committedCardID = assetID
-            showCommittedDetail = !isCompletingGuidedMerge
-            store.acknowledgeCompletion()
-            if isCompletingGuidedMerge {
-                DispatchQueue.main.async {
-                    onBack()
-                }
+        .confirmationDialog(
+            "Discard Merge?",
+            isPresented: $showDiscardConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Discard", role: .destructive) {
+                store.discardArtifact()
             }
-        }
-        .navigationDestination(isPresented: $showCommittedDetail) {
-            if let cardID = committedCardID {
-                DetailView(cardId: cardID)
-            }
-        }
-        .onDisappear {
-            store.stop()
+            Button("Keep", role: .cancel) {}
         }
         .onChange(of: searchText) { query in
             dismissMergeTipIfVisible()
@@ -372,7 +509,7 @@ private struct MergeLifecycleView: View {
         }
         .onChange(of: store.job?.jobID) { jobID in
             guard let jobID, !jobID.isEmpty else { return }
-            onboardingStore?.receive(.mergeStarted(jobID: jobID))
+            onJobAccepted?(jobID)
         }
         .gesture(
             DragGesture()
@@ -605,7 +742,7 @@ private struct MergeLifecycleView: View {
                     sourceCount: store.selectedSources.count,
                     error: store.artifactActionError,
                     operation: artifactOperation,
-                    onDiscard: store.discardArtifact,
+                    onDiscard: { showDiscardConfirmation = true },
                     onSave: store.commit
                 )
                 .adaptiveContentGutter()
@@ -787,10 +924,6 @@ private struct MergeLifecycleView: View {
         }
     }
 
-    private var completedAssetID: String? {
-        guard case .completed(let assetID) = store.phase else { return nil }
-        return assetID
-    }
 }
 
 private struct MergeSelectionPrimaryAction: View {

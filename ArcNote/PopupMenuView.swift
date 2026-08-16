@@ -11,7 +11,6 @@ enum CardNavigationRoute {
 
 struct CardNavigationDismissal {
     let route: CardNavigationRoute
-    let didCommit: Bool
 }
 
 private struct NavigateCardActionKey: EnvironmentKey {
@@ -24,10 +23,6 @@ private struct CardNavigationOnboardingStoreKey: EnvironmentKey {
 
 private struct CardNavigationContextualTipStoreKey: EnvironmentKey {
     static let defaultValue: ContextualGuideTipStore? = nil
-}
-
-private struct CardNavigationMergeCompletedKey: EnvironmentKey {
-    static let defaultValue: (String) -> Void = { _ in }
 }
 
 private struct CardNavigationRoutePresentationChangedKey: EnvironmentKey {
@@ -50,11 +45,6 @@ extension EnvironmentValues {
         set { self[CardNavigationContextualTipStoreKey.self] = newValue }
     }
 
-    var cardNavigationMergeCompleted: (String) -> Void {
-        get { self[CardNavigationMergeCompletedKey.self] }
-        set { self[CardNavigationMergeCompletedKey.self] = newValue }
-    }
-
     var cardNavigationRoutePresentationChanged: (Bool) -> Void {
         get { self[CardNavigationRoutePresentationChangedKey.self] }
         set { self[CardNavigationRoutePresentationChangedKey.self] = newValue }
@@ -65,14 +55,12 @@ private struct CardNavigationDestination: View {
     let route: CardNavigationRoute
     let onboardingStore: OnboardingGuideStore?
     let contextualTipStore: ContextualGuideTipStore?
-    let mergeCompleted: (String) -> Void
     let routePresentationChanged: (Bool) -> Void
 
     var body: some View {
         destination
             .environment(\.cardNavigationOnboardingStore, onboardingStore)
             .environment(\.cardNavigationContextualTipStore, contextualTipStore)
-            .environment(\.cardNavigationMergeCompleted, mergeCompleted)
             .environment(\.cardNavigationRoutePresentationChanged, routePresentationChanged)
     }
 
@@ -98,8 +86,7 @@ private struct CardNavigationDestination: View {
             MergeView(
                 cardId: cardID,
                 onboardingStore: onboardingStore,
-                contextualTipStore: contextualTipStore,
-                onCommitted: mergeCompleted
+                contextualTipStore: contextualTipStore
             )
         case .root(let cardID, let type):
             RootView(cardId: cardID, type: type)
@@ -108,14 +95,11 @@ private struct CardNavigationDestination: View {
 }
 
 private struct CardNavigationHostModifier: ViewModifier {
-    @Environment(\.dismiss) private var dismissHost
     @Environment(\.cardNavigationOnboardingStore) private var onboardingStore
     @Environment(\.cardNavigationContextualTipStore) private var contextualTipStore
-    @Environment(\.cardNavigationMergeCompleted) private var mergeCompleted
     @Environment(\.cardNavigationRoutePresentationChanged)
     private var routePresentationChanged
     @State private var presentedRoute: CardNavigationRoute?
-    @State private var shouldDismissHostAfterPresentedRoute = false
 
     private var isPresentingRoute: Binding<Bool> {
         Binding(
@@ -123,17 +107,9 @@ private struct CardNavigationHostModifier: ViewModifier {
             set: { isPresented in
                 if !isPresented {
                     let wasPresentingRoute = presentedRoute != nil
-                    let shouldDismissHost =
-                        shouldDismissHostAfterPresentedRoute
                     presentedRoute = nil
-                    shouldDismissHostAfterPresentedRoute = false
                     if wasPresentingRoute {
                         routePresentationChanged(false)
-                    }
-                    if shouldDismissHost {
-                        DispatchQueue.main.async {
-                            dismissHost()
-                        }
                     }
                 }
             }
@@ -149,7 +125,6 @@ private struct CardNavigationHostModifier: ViewModifier {
                         route: presentedRoute,
                         onboardingStore: onboardingStore,
                         contextualTipStore: contextualTipStore,
-                        mergeCompleted: handlePresentedMergeCompleted,
                         routePresentationChanged: routePresentationChanged
                     )
                 }
@@ -161,18 +136,6 @@ private struct CardNavigationHostModifier: ViewModifier {
             routePresentationChanged(true)
         }
         presentedRoute = route
-    }
-
-    private func handlePresentedMergeCompleted(_ cardID: String) {
-        if case .merge = presentedRoute {
-            shouldDismissHostAfterPresentedRoute =
-                OnboardingGuideMergeExitPolicy
-                    .shouldDismissOwningCardRoute(
-                        onboardingIsActive: onboardingStore?.phase == .active,
-                        onboardingState: onboardingStore?.contextualTipState
-                    )
-        }
-        mergeCompleted(cardID)
     }
 }
 
@@ -214,9 +177,7 @@ enum PopupMenuLayout {
 struct PopupMenuModifier: ViewModifier {
     @Environment(\.cardNavigationOnboardingStore) private var onboardingStore
     @Environment(\.cardNavigationContextualTipStore) private var contextualTipStore
-    @Environment(\.cardNavigationMergeCompleted) private var mergeCompleted
     @State private var presentedRoute: CardNavigationRoute?
-    @State private var didCommitPresentedMerge = false
     @Binding var isPresented: Bool
     let layout: PopupMenuLayout
     let cardData: UserCard?
@@ -233,13 +194,9 @@ struct PopupMenuModifier: ViewModifier {
                 if !isPresented {
                     let wasPresentingRoute = presentedRoute != nil
                     let dismissal = presentedRoute.map {
-                        CardNavigationDismissal(
-                            route: $0,
-                            didCommit: didCommitPresentedMerge
-                        )
+                        CardNavigationDismissal(route: $0)
                     }
                     presentedRoute = nil
-                    didCommitPresentedMerge = false
                     if wasPresentingRoute {
                         onRoutePresentationChanged(false)
                     }
@@ -275,7 +232,6 @@ struct PopupMenuModifier: ViewModifier {
                         route: presentedRoute,
                         onboardingStore: onboardingStore,
                         contextualTipStore: contextualTipStore,
-                        mergeCompleted: handlePresentedMergeCompleted,
                         routePresentationChanged:
                             onRoutePresentationChanged
                     )
@@ -284,16 +240,8 @@ struct PopupMenuModifier: ViewModifier {
     }
 
     private func present(_ route: CardNavigationRoute) {
-        didCommitPresentedMerge = false
         presentedRoute = route
         onRoutePresentationChanged(true)
-    }
-
-    private func handlePresentedMergeCompleted(_ cardID: String) {
-        if case .merge = presentedRoute {
-            didCommitPresentedMerge = true
-        }
-        mergeCompleted(cardID)
     }
 }
 
