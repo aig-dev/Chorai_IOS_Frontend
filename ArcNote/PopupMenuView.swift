@@ -29,6 +29,14 @@ private struct CardNavigationRoutePresentationChangedKey: EnvironmentKey {
     static let defaultValue: (Bool) -> Void = { _ in }
 }
 
+private struct CardNavigationMergeCoordinatorKey: EnvironmentKey {
+    static let defaultValue: MergeTaskCoordinator? = nil
+}
+
+private struct IsCardNavigationDestinationKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
 extension EnvironmentValues {
     var navigateCard: (CardNavigationRoute) -> Void {
         get { self[NavigateCardActionKey.self] }
@@ -48,6 +56,56 @@ extension EnvironmentValues {
     var cardNavigationRoutePresentationChanged: (Bool) -> Void {
         get { self[CardNavigationRoutePresentationChangedKey.self] }
         set { self[CardNavigationRoutePresentationChangedKey.self] = newValue }
+    }
+
+    var cardNavigationMergeCoordinator: MergeTaskCoordinator? {
+        get { self[CardNavigationMergeCoordinatorKey.self] }
+        set { self[CardNavigationMergeCoordinatorKey.self] = newValue }
+    }
+
+    var isCardNavigationDestination: Bool {
+        get { self[IsCardNavigationDestinationKey.self] }
+        set { self[IsCardNavigationDestinationKey.self] = newValue }
+    }
+}
+
+private struct ForwardMergeCoordinatorModifier: ViewModifier {
+    let coordinator: MergeTaskCoordinator?
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if let coordinator {
+            content
+                .environmentObject(coordinator)
+                .environment(
+                    \.cardNavigationMergeCoordinator,
+                    coordinator
+                )
+                .environment(\.isCardNavigationDestination, true)
+        } else {
+            content
+        }
+    }
+}
+
+private struct CardNavigationMergeRail: View {
+    @ObservedObject var coordinator: MergeTaskCoordinator
+    @State private var isExpanded = false
+
+    var body: some View {
+        Group {
+            if !coordinator.summaries.isEmpty,
+               coordinator.presentation == nil {
+                MergeTaskRailShellOverlay(
+                    summaries: coordinator.summaries,
+                    isExpanded: $isExpanded,
+                    onSelect: coordinator.present,
+                    isHaloVisible: false
+                ) {
+                    EmptyView()
+                }
+            }
+        }
     }
 }
 
@@ -99,6 +157,8 @@ private struct CardNavigationHostModifier: ViewModifier {
     @Environment(\.cardNavigationContextualTipStore) private var contextualTipStore
     @Environment(\.cardNavigationRoutePresentationChanged)
     private var routePresentationChanged
+    @Environment(\.cardNavigationMergeCoordinator)
+    private var mergeCoordinator
     @State private var presentedRoute: CardNavigationRoute?
 
     private var isPresentingRoute: Binding<Bool> {
@@ -126,6 +186,11 @@ private struct CardNavigationHostModifier: ViewModifier {
                         onboardingStore: onboardingStore,
                         contextualTipStore: contextualTipStore,
                         routePresentationChanged: routePresentationChanged
+                    )
+                    .modifier(
+                        ForwardMergeCoordinatorModifier(
+                            coordinator: mergeCoordinator
+                        )
                     )
                 }
             }
@@ -187,6 +252,11 @@ struct PopupMenuModifier: ViewModifier {
     let onRouteDismissed: (CardNavigationDismissal) -> Void
     let onRoutePresentationChanged: (Bool) -> Void
 
+    @Environment(\.cardNavigationMergeCoordinator)
+    private var mergeCoordinator
+    @Environment(\.isCardNavigationDestination)
+    private var isCardNavigationDestination
+
     private var isPresentingRoute: Binding<Bool> {
         Binding(
             get: { presentedRoute != nil },
@@ -226,6 +296,12 @@ struct PopupMenuModifier: ViewModifier {
                 }
             )
             .environment(\.navigateCard, present)
+            .overlay {
+                if isCardNavigationDestination,
+                   let mergeCoordinator {
+                    CardNavigationMergeRail(coordinator: mergeCoordinator)
+                }
+            }
             .navigationDestination(isPresented: isPresentingRoute) {
                 if let presentedRoute {
                     CardNavigationDestination(
@@ -234,6 +310,11 @@ struct PopupMenuModifier: ViewModifier {
                         contextualTipStore: contextualTipStore,
                         routePresentationChanged:
                             onRoutePresentationChanged
+                    )
+                    .modifier(
+                        ForwardMergeCoordinatorModifier(
+                            coordinator: mergeCoordinator
+                        )
                     )
                 }
             }

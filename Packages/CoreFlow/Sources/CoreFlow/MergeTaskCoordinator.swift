@@ -240,6 +240,10 @@ public final class MergeTaskCoordinator: ObservableObject {
         )
         jobToOperationID[jobID] = draft.operationID
         suspendIfNeeded(draft.store)
+        refreshState(
+            prioritizedOperationID: draft.operationID,
+            shouldObserveEvents: true
+        )
         return jobID
     }
 
@@ -329,12 +333,25 @@ public final class MergeTaskCoordinator: ObservableObject {
 
     public func retryFailed(jobID: String) {
         guard
-            summary(jobID: jobID)?.visualState == .failed,
+            let visualState = summary(jobID: jobID)?.visualState,
+            visualState == .failed || visualState == .recovering,
             let store = session(jobID: jobID)
         else {
             return
         }
-        store.retry()
+
+        switch store.phase {
+        case .paused(.notFound), .failed:
+            store.retryGeneration()
+        case .paused(.offline), .paused(.timeout), .paused(.unavailable):
+            store.resume()
+        default:
+            return
+        }
+
+        if presentation?.jobID == jobID {
+            presentation = .progress(jobID: jobID)
+        }
         refreshState()
     }
 

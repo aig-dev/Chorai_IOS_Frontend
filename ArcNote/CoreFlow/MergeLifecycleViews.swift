@@ -144,6 +144,8 @@ private struct NewMergeSessionDraftHost: View {
             candidates: candidates,
             onBack: onBack,
             onJobAccepted: adopt,
+            onRetryFailure: nil,
+            onRemoveFailure: nil,
             onboardingStore: onboardingStore,
             contextualTipStore: contextualTipStore
         )
@@ -204,7 +206,13 @@ struct ExistingMergeTaskHost: View {
         if let store = mergeCoordinator.session(jobID: jobID) {
             ExistingMergeTaskSessionHost(
                 store: store,
-                onBack: mergeCoordinator.minimize
+                onBack: mergeCoordinator.minimize,
+                onRetryFailure: {
+                    mergeCoordinator.retryFailed(jobID: jobID)
+                },
+                onRemoveFailure: {
+                    mergeCoordinator.removeFailed(jobID: jobID)
+                }
             )
             .id(jobID)
         } else {
@@ -221,13 +229,19 @@ private struct ExistingMergeTaskSessionHost: View {
     @ObservedObject var store: MergeSessionStore
     @StateObject private var candidates: MergeCandidateStore
     let onBack: () -> Void
+    let onRetryFailure: () -> Void
+    let onRemoveFailure: () -> Void
 
     init(
         store: MergeSessionStore,
-        onBack: @escaping () -> Void
+        onBack: @escaping () -> Void,
+        onRetryFailure: @escaping () -> Void,
+        onRemoveFailure: @escaping () -> Void
     ) {
         self.store = store
         self.onBack = onBack
+        self.onRetryFailure = onRetryFailure
+        self.onRemoveFailure = onRemoveFailure
         _candidates = StateObject(
             wrappedValue: MergeCandidateStore(
                 anchorCardID: store.anchor.assetID
@@ -241,6 +255,8 @@ private struct ExistingMergeTaskSessionHost: View {
             candidates: candidates,
             onBack: onBack,
             onJobAccepted: nil,
+            onRetryFailure: onRetryFailure,
+            onRemoveFailure: onRemoveFailure,
             onboardingStore: nil,
             contextualTipStore: nil
         )
@@ -413,6 +429,8 @@ private struct MergeLifecycleView: View {
 
     private let onBack: () -> Void
     private let onJobAccepted: ((String) -> Void)?
+    private let onRetryFailure: (() -> Void)?
+    private let onRemoveFailure: (() -> Void)?
     private let onboardingStore: OnboardingGuideStore?
     private let contextualTipStore: ContextualGuideTipStore?
 
@@ -421,6 +439,8 @@ private struct MergeLifecycleView: View {
         candidates: MergeCandidateStore,
         onBack: @escaping () -> Void,
         onJobAccepted: ((String) -> Void)?,
+        onRetryFailure: (() -> Void)?,
+        onRemoveFailure: (() -> Void)?,
         onboardingStore: OnboardingGuideStore?,
         contextualTipStore: ContextualGuideTipStore?
     ) {
@@ -428,6 +448,8 @@ private struct MergeLifecycleView: View {
         self.candidates = candidates
         self.onBack = onBack
         self.onJobAccepted = onJobAccepted
+        self.onRetryFailure = onRetryFailure
+        self.onRemoveFailure = onRemoveFailure
         self.onboardingStore = onboardingStore
         self.contextualTipStore = contextualTipStore
     }
@@ -455,19 +477,18 @@ private struct MergeLifecycleView: View {
                 atmosphere
 
                 VStack(spacing: 0) {
-                    if !isArtifactPresentation {
-                        header
-                        if let onboardingStore {
-                            OnboardingGuideLine(
-                                store: onboardingStore,
-                                allowedStates: [
-                                    "product_merge_intro",
-                                    "product_merge_preview"
-                                ]
-                            )
-                            .adaptiveContentGutter()
-                            .padding(.bottom, 10)
-                        }
+                    header
+                    if !isArtifactPresentation,
+                       let onboardingStore {
+                        OnboardingGuideLine(
+                            store: onboardingStore,
+                            allowedStates: [
+                                "product_merge_intro",
+                                "product_merge_preview"
+                            ]
+                        )
+                        .adaptiveContentGutter()
+                        .padding(.bottom, 10)
                     }
                     phaseContent
                 }
@@ -616,15 +637,22 @@ private struct MergeLifecycleView: View {
         case .cancelled:
             terminalContent(label: "Cancelled", identifier: "merge.phase.cancelled")
         case .completed(let assetID):
-            terminalContent(label: "Saved", identifier: "merge.phase.completed")
-                .overlay(alignment: .topLeading) {
-                    if let assetID {
-                        automationText(
-                            assetID,
-                            identifier: "merge.completed.asset-id"
-                        )
+            if assetID == nil, onRemoveFailure != nil {
+                recoverableContent(
+                    label: "Couldn’t open card",
+                    identifier: "merge.phase.failed"
+                )
+            } else {
+                terminalContent(label: "Saved", identifier: "merge.phase.completed")
+                    .overlay(alignment: .topLeading) {
+                        if let assetID {
+                            automationText(
+                                assetID,
+                                identifier: "merge.completed.asset-id"
+                            )
+                        }
                     }
-                }
+            }
         }
     }
 
@@ -818,7 +846,16 @@ private struct MergeLifecycleView: View {
             Spacer()
 
             HStack(spacing: 16) {
-                if store.job?.status.canCancel == true {
+                if isAcceptedTaskFailure, let onRemoveFailure {
+                    MergeLifecycleAction(
+                        systemImage: "xmark",
+                        assetImage: nil,
+                        isFilled: false,
+                        accessibilityLabel: "Remove Merge",
+                        accessibilityIdentifier: "merge.remove",
+                        action: onRemoveFailure
+                    )
+                } else if store.job?.status.canCancel == true {
                     MergeLifecycleAction(
                         systemImage: "xmark",
                         assetImage: nil,
@@ -837,7 +874,11 @@ private struct MergeLifecycleView: View {
                     accessibilityLabel: "Retry Merge",
                     accessibilityIdentifier: "merge.retry"
                 ) {
-                    store.retry()
+                    if let onRetryFailure {
+                        onRetryFailure()
+                    } else {
+                        store.retry()
+                    }
                 }
             }
             .adaptiveContentGutter()
@@ -846,6 +887,16 @@ private struct MergeLifecycleView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .overlay(alignment: .topLeading) {
             automationText(label, identifier: identifier)
+        }
+    }
+
+    private var isAcceptedTaskFailure: Bool {
+        guard onRemoveFailure != nil else { return false }
+        switch store.phase {
+        case .paused(.notFound), .failed, .completed(nil):
+            return true
+        default:
+            return false
         }
     }
 

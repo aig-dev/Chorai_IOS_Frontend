@@ -342,11 +342,17 @@ public final class MergeSessionStore: ObservableObject {
     }
 
     public func retryGeneration() {
+        let canReplaceMissingJob: Bool
+        if case .paused(.notFound) = phase {
+            canReplaceMissingJob = true
+        } else {
+            canReplaceMissingJob = false
+        }
         guard
             !isLifetimeInvalidated,
             !isOperationInFlight,
             let current = snapshot,
-            current.lastStatus == .failed
+            current.lastStatus == .failed || canReplaceMissingJob
         else {
             return
         }

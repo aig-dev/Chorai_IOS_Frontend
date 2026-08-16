@@ -3104,8 +3104,15 @@ final class ArcNoteUITests: XCTestCase {
         captureMergeVisual("selection")
 
         tap("merge.action")
-        waitFor("merge.job.id", timeout: 30)
+        let rail = waitForButton("merge.task-rail", timeout: 30)
+        XCTAssertFalse(
+            app.descendants(matching: .any)["screen.merge.loaded"].exists
+        )
         captureMergeVisual("processing")
+        rail.tap()
+        waitForButton("merge.back").tap()
+        XCTAssertTrue(waitForButton("merge.task-rail").exists)
+        waitForButton("merge.task-rail").tap()
 
         waitForMergeArtifactReady(timeout: 360, maxRetries: 0)
 
@@ -3129,8 +3136,9 @@ final class ArcNoteUITests: XCTestCase {
         captureMergeVisual("artifact-ready")
 
         tap("merge.discard")
-        waitFor("merge.search.input", timeout: 30)
-        captureMergeVisual("discarded-selection")
+        tapFirstHittableButton(label: "Discard")
+        waitForMissing("merge.task-rail", timeout: 30)
+        captureMergeVisual("discarded-detail")
         XCTAssertEqual(
             try fetchSmokeMergeJob(jobID: jobID, token: session.token).status,
             "CANCELLED"
@@ -3194,9 +3202,15 @@ final class ArcNoteUITests: XCTestCase {
             expected: "selected"
         )
         tap("merge.action")
-        waitForMergeArtifactReady(timeout: 360, maxRetries: 0)
+        let rail = waitForButton("merge.task-rail", timeout: 30)
+        XCTAssertFalse(
+            app.descendants(matching: .any)["screen.merge.loaded"].exists
+        )
+        rail.tap()
+        waitFor("merge.job.id", timeout: 30)
         let originalJobID = mergeAnchorValue("merge.job.id")
-        XCTAssertEqual(mergeAnchorValue("merge.job.status"), "ARTIFACT_READY")
+        waitForButton("merge.back").tap()
+        XCTAssertTrue(waitForButton("merge.task-rail").exists)
 
         app.terminate()
         app.launchArguments.removeAll {
@@ -3205,14 +3219,18 @@ final class ArcNoteUITests: XCTestCase {
         launchAuthenticatedApp()
 
         waitFor("screen.flow.content", timeout: 30)
-        waitFor("merge.resume", timeout: 20)
+        waitForButton("merge.task-rail", timeout: 20).tap()
         captureMergeVisual("resume-affordance")
-        tap("merge.resume")
 
         waitFor("screen.merge.loaded", timeout: 30)
-        waitForMergeArtifactReady(timeout: 30)
         XCTAssertEqual(mergeAnchorValue("merge.job.id"), originalJobID)
+        waitForMergeArtifactReady(timeout: 360, maxRetries: 0)
         XCTAssertEqual(mergeAnchorValue("merge.job.status"), "ARTIFACT_READY")
+
+        waitForButton("merge.back").tap()
+        XCTAssertTrue(waitForButton("merge.task-rail").exists)
+        waitForButton("merge.task-rail").tap()
+        waitForMergeArtifactReady(timeout: 30)
 
         tap("merge.commit")
         committedCardID = waitForCommittedMergeCard(
@@ -3241,6 +3259,7 @@ final class ArcNoteUITests: XCTestCase {
                 .isEmpty
         )
         waitForLoadedDetailCard(committedCardID, timeout: 30)
+        waitForMissing("merge.task-rail", timeout: 30)
         RunLoop.current.run(until: Date().addingTimeInterval(1))
         captureMergeVisual("committed-detail")
 
@@ -3248,7 +3267,7 @@ final class ArcNoteUITests: XCTestCase {
         launchAuthenticatedApp()
         waitFor("screen.flow.content", timeout: 30)
         XCTAssertFalse(
-            app.descendants(matching: .any)["merge.resume"]
+            app.descendants(matching: .any)["merge.task-rail"]
                 .waitForExistence(timeout: 3),
             "Completed Merge recovery should be cleared after opening detail"
         )

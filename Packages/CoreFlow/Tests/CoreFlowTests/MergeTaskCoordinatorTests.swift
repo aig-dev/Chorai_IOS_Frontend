@@ -3,6 +3,26 @@ import XCTest
 
 @MainActor
 final class MergeTaskCoordinatorTests: XCTestCase {
+    func testAdoptingWorkingDraftPublishesSummaryImmediately() async {
+        let fixture = makeCoordinatorFixture(keys: ["create-1"])
+        fixture.coordinator.activate(actorID: "actor_1")
+
+        _ = await acceptDraft(
+            coordinator: fixture.coordinator,
+            service: fixture.service,
+            anchorID: "ast_1",
+            companionID: "ast_1_companion",
+            jobID: "job_1",
+            status: .generating
+        )
+
+        XCTAssertEqual(
+            fixture.coordinator.summary(jobID: "job_1")?.visualState,
+            .working
+        )
+        XCTAssertEqual(fixture.coordinator.summaries.map(\.jobID), ["job_1"])
+    }
+
     func testTwoAdoptedJobsPublishIndependentNewestFirstSummaries() async {
         let fixture = makeCoordinatorFixture(keys: ["create-1", "create-2"])
         fixture.coordinator.activate(actorID: "actor_1")
@@ -24,7 +44,8 @@ final class MergeTaskCoordinatorTests: XCTestCase {
             status: .artifactReady
         )
         await waitForMergeCoordinator {
-            fixture.coordinator.summaries.count == 2
+            fixture.coordinator.summaries.map(\.visualState)
+                == [.complete, .working]
         }
 
         XCTAssertEqual(fixture.coordinator.summaries.map(\.jobID), ["job_2", "job_1"])
@@ -336,6 +357,248 @@ final class MergeTaskCoordinatorTests: XCTestCase {
         XCTAssertNil(fixture.coordinator.completionEventJobID)
     }
 
+    func testDeactivateHidesTasksWithoutDeletingActorCollection() async {
+        let fixture = makeCoordinatorFixture(
+            keys: [],
+            collection: restoredCollection([
+                ("job_1", .created, 100),
+                ("job_2", .generating, 200),
+            ])
+        )
+        await fixture.service.enqueueJob(
+            id: "job_1",
+            .success(makeMergeJob(id: "job_1", status: .generating))
+        )
+        await fixture.service.enqueueJob(
+            id: "job_2",
+            .success(makeMergeJob(id: "job_2", status: .generating))
+        )
+        fixture.coordinator.activate(actorID: "actor_1")
+        await waitForMergeCoordinator {
+            fixture.coordinator.summaries.count == 2
+        }
+
+        fixture.coordinator.deactivate()
+
+        XCTAssertTrue(fixture.coordinator.summaries.isEmpty)
+        XCTAssertEqual(
+            fixture.persistence.collection(actorID: "actor_1").tasks.count,
+            2
+        )
+
+        await fixture.service.enqueueJob(
+            id: "job_1",
+            .success(makeMergeJob(id: "job_1", status: .generating))
+        )
+        await fixture.service.enqueueJob(
+            id: "job_2",
+            .success(makeMergeJob(id: "job_2", status: .generating))
+        )
+        fixture.coordinator.activate(actorID: "actor_1")
+        await waitForMergeCoordinator {
+            fixture.coordinator.summaries.count == 2
+        }
+    }
+
+    func testNotFoundFailsOnlyTheMatchingJob() async {
+        let fixture = makeCoordinatorFixture(
+            keys: [],
+            collection: restoredCollection([
+                ("job_1", .created, 100),
+                ("job_2", .created, 200),
+            ])
+        )
+        await fixture.service.enqueueJob(id: "job_1", .failure(.notFound))
+        await fixture.service.enqueueJob(
+            id: "job_2",
+            .success(makeMergeJob(id: "job_2", status: .generating))
+        )
+        fixture.coordinator.activate(actorID: "actor_1")
+        await waitForMergeCoordinator {
+            fixture.coordinator.summary(jobID: "job_1")?.visualState == .failed
+                && fixture.coordinator.summary(jobID: "job_2")?.visualState == .working
+        }
+
+        XCTAssertEqual(
+            fixture.coordinator.summary(jobID: "job_2")?.visualState,
+            .working
+        )
+        XCTAssertEqual(
+            fixture.persistence.collection(actorID: "actor_1").tasks.count,
+            2
+        )
+
+        fixture.coordinator.removeFailed(jobID: "job_1")
+
+        XCTAssertNil(fixture.coordinator.summary(jobID: "job_1"))
+        XCTAssertNotNil(
+            fixture.persistence.collection(actorID: "actor_1").tasks["job_2"]
+        )
+    }
+
+    func testNetworkRecoveryResumesSameJobWithoutNewCreate() async {
+        let fixture = makeCoordinatorFixture(
+            keys: [],
+            collection: restoredCollection([("job_1", .created, 100)])
+        )
+        fixture.coordinator.setNetworkAvailable(false)
+        fixture.coordinator.activate(actorID: "actor_1")
+        await waitForMergeCoordinator {
+            fixture.coordinator.summary(jobID: "job_1")?.visualState == .recovering
+        }
+        await fixture.service.enqueueJob(
+            id: "job_1",
+            .success(
+                makeMergeJob(
+                    id: "job_1",
+                    status: .artifactReady,
+                    artifactID: "artifact_1"
+                )
+            )
+        )
+        await fixture.service.enqueueArtifact(
+            jobID: "job_1",
+            .success(makeMergeArtifact(jobID: "job_1", artifactID: "artifact_1"))
+        )
+
+        fixture.coordinator.setNetworkAvailable(true)
+        await waitForMergeCoordinator {
+            fixture.coordinator.summary(jobID: "job_1")?.visualState == .complete
+        }
+
+        let createCalls = await fixture.service.createCalls
+        XCTAssertTrue(createCalls.isEmpty)
+    }
+
+    func testPendingCreationRelaunchReplaysExactRequestAndPromotesOnce() async {
+        let pendingSnapshot = makeMergeSnapshot(
+            jobID: nil,
+            createKey: "create-stable"
+        )
+        var collection = MergeTaskCollection.empty(actorID: "actor_1")
+        collection.pendingCreations["op_pending"] = MergeTaskRecord(
+            operationID: "op_pending",
+            snapshot: pendingSnapshot,
+            createdAt: Date(timeIntervalSince1970: 100),
+            updatedAt: Date(timeIntervalSince1970: 100),
+            replacesJobID: nil
+        )
+        let fixture = makeCoordinatorFixture(keys: [], collection: collection)
+        await fixture.service.enqueueCreate(
+            .success(makeMergeJob(id: "job_restored", status: .generating))
+        )
+
+        fixture.coordinator.activate(actorID: "actor_1")
+        await waitForMergeCoordinator {
+            fixture.coordinator.summary(jobID: "job_restored") != nil
+        }
+
+        let createCalls = await fixture.service.createCalls
+        XCTAssertEqual(createCalls, [pendingSnapshot.createRequest])
+        let restored = fixture.persistence.collection(actorID: "actor_1")
+        XCTAssertTrue(restored.pendingCreations.isEmpty)
+        XCTAssertEqual(restored.tasks["job_restored"]?.operationID, "op_pending")
+    }
+
+    func testNotFoundReplacementReusesOneKeyAndRekeysPresentation() async {
+        let fixture = makeCoordinatorFixture(
+            keys: ["create-replacement"],
+            collection: restoredCollection([("job_old", .created, 100)])
+        )
+        await fixture.service.enqueueJob(id: "job_old", .failure(.notFound))
+        fixture.coordinator.activate(actorID: "actor_1")
+        await waitForMergeCoordinator {
+            fixture.coordinator.summary(jobID: "job_old")?.visualState == .failed
+        }
+        fixture.coordinator.present(jobID: "job_old")
+        await fixture.service.enqueueCreate(.failure(.offline))
+
+        fixture.coordinator.retryFailed(jobID: "job_old")
+        await waitForMergeCoordinator {
+            fixture.coordinator.summary(jobID: "job_old")?.visualState == .recovering
+        }
+        await waitForMergeStore {
+            fixture.coordinator.session(jobID: "job_old")?.phase
+                == .paused(.offline)
+        }
+
+        var persisted = fixture.persistence.collection(actorID: "actor_1")
+        XCTAssertNotNil(persisted.tasks["job_old"])
+        XCTAssertEqual(
+            persisted.pendingCreations.values.first?
+                .snapshot.createRequest.idempotencyKey,
+            "create-replacement"
+        )
+        await fixture.service.enqueueCreate(
+            .success(makeMergeJob(id: "job_new", status: .generating))
+        )
+
+        fixture.coordinator.retryFailed(jobID: "job_old")
+        await waitForMergeCoordinator {
+            fixture.coordinator.summary(jobID: "job_new")?.visualState == .working
+        }
+
+        let createCalls = await fixture.service.createCalls
+        XCTAssertEqual(createCalls.count, 2)
+        XCTAssertEqual(createCalls.first, createCalls.last)
+        persisted = fixture.persistence.collection(actorID: "actor_1")
+        XCTAssertNil(persisted.tasks["job_old"])
+        XCTAssertNotNil(persisted.tasks["job_new"])
+        XCTAssertEqual(
+            fixture.coordinator.presentation,
+            .progress(jobID: "job_new")
+        )
+    }
+
+    func testRestoredCompleteDoesNotEmitCompletionHapticEvent() async {
+        let fixture = makeCoordinatorFixture(
+            keys: [],
+            collection: restoredCollection([("job_1", .artifactReady, 100)])
+        )
+        await fixture.service.enqueueJob(
+            id: "job_1",
+            .success(
+                makeMergeJob(
+                    id: "job_1",
+                    status: .artifactReady,
+                    artifactID: "artifact_1"
+                )
+            )
+        )
+        await fixture.service.enqueueArtifact(
+            jobID: "job_1",
+            .success(makeMergeArtifact(jobID: "job_1", artifactID: "artifact_1"))
+        )
+
+        fixture.coordinator.activate(actorID: "actor_1")
+        await waitForMergeCoordinator {
+            fixture.coordinator.summary(jobID: "job_1")?.visualState == .complete
+        }
+
+        XCTAssertNil(fixture.coordinator.completionEventJobID)
+    }
+
+    func testCommittedBlockStaysExplicitlyRemovableWithoutCardIntent() async {
+        let fixture = makeCoordinatorFixture(
+            keys: [],
+            collection: restoredCollection([("job_1", .committing, 100)])
+        )
+        await fixture.service.enqueueJob(
+            id: "job_1",
+            .success(makeMergeJob(id: "job_1", status: .committedBlock))
+        )
+
+        fixture.coordinator.activate(actorID: "actor_1")
+        await waitForMergeCoordinator {
+            fixture.coordinator.summary(jobID: "job_1")?.visualState == .failed
+        }
+
+        XCTAssertNil(fixture.coordinator.committedCardIntent)
+        XCTAssertNotNil(
+            fixture.persistence.collection(actorID: "actor_1").tasks["job_1"]
+        )
+    }
+
     func testSameActorReactivationInvalidatesStaleDraftOwnership() async {
         let fixture = makeCoordinatorFixture(keys: ["create-1"])
         fixture.coordinator.activate(actorID: "actor_1")
@@ -568,6 +831,20 @@ final class MergeTaskCoordinatorTests: XCTestCase {
         XCTAssertNotNil(collection.tasks["job_sibling"])
         XCTAssertNotNil(collection.tasks["job_adopted"])
     }
+}
+
+private func restoredCollection(
+    _ jobs: [(id: String, status: MergeJobStatus, createdAt: TimeInterval)]
+) -> MergeTaskCollection {
+    var value = MergeTaskCollection.empty(actorID: "actor_1")
+    for job in jobs {
+        value.tasks[job.id] = makeMergeTaskRecord(
+            jobID: job.id,
+            status: job.status,
+            createdAt: job.createdAt
+        )
+    }
+    return value
 }
 
 @MainActor

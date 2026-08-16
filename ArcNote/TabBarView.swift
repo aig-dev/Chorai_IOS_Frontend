@@ -807,32 +807,8 @@ struct TabBarView: View {
             }
             .padding(.top, 112)
         }
-        .overlay {
-            if libraryCardRouteCoverageDepth == 0,
-               !mergeTaskCoordinator.summaries.isEmpty,
-               mergeTaskCoordinator.presentation == nil {
-                MergeTaskRailShellOverlay(
-                    summaries: mergeTaskCoordinator.summaries,
-                    isExpanded: $isMergeTaskRailExpanded,
-                    onSelect: selectMergeTask,
-                    isHaloVisible: contextualTipStore.isVisible(
-                        .mergeResume,
-                        onboardingState: onboardingStore.contextualTipState,
-                        targetIsVisible: true
-                    )
-                ) {
-                    ContextualGuideCallout(
-                        store: contextualTipStore,
-                        tip: .mergeResume,
-                        onboardingState: onboardingStore.contextualTipState,
-                        targetIsVisible: true
-                    )
-                }
-            }
-        }
         .popupMenu(isPresented: $showPopupMenu, layout: .grid2x2, cardData: currentMenuCardData)
         .linkPopup()
-        .environmentObject(mergeTaskCoordinator)
         .environment(\.cardNavigationOnboardingStore, onboardingStore)
         .environment(\.cardNavigationContextualTipStore, contextualTipStore)
         .environment(
@@ -841,17 +817,16 @@ struct TabBarView: View {
         )
         .navigationBarHidden(true)
         .navigationBarBackButtonHidden(true)
-        .navigationDestination(isPresented: mergeTaskPresentation) {
-            if let jobID = presentedMergeJobID {
-                ExistingMergeTaskHost(jobID: jobID)
-            } else {
-                EmptyView()
-            }
-        }
         #if DEBUG
         .navigationDestination(isPresented: $navigateToDetailSmoke) {
             if let cardId = selectedDetailSmokeCardId {
                 DetailView(cardId: cardId)
+                    .environmentObject(mergeTaskCoordinator)
+                    .environment(\.isCardNavigationDestination, true)
+                    .environment(
+                        \.cardNavigationMergeCoordinator,
+                        mergeTaskCoordinator
+                    )
             } else {
                 EmptyView()
             }
@@ -872,6 +847,12 @@ struct TabBarView: View {
                 }
             case .detail(let cardId):
                 DetailView(cardId: cardId)
+                    .environmentObject(mergeTaskCoordinator)
+                    .environment(\.isCardNavigationDestination, true)
+                    .environment(
+                        \.cardNavigationMergeCoordinator,
+                        mergeTaskCoordinator
+                    )
             }
         }
         .sheet(item: $shareRoute) { route in
@@ -992,6 +973,41 @@ struct TabBarView: View {
             // 关闭所有 popup
             closeAllPopups()
         }
+        }
+        .environmentObject(mergeTaskCoordinator)
+        .environment(
+            \.cardNavigationMergeCoordinator,
+            mergeTaskCoordinator
+        )
+        .overlay {
+            if !mergeTaskCoordinator.summaries.isEmpty,
+               mergeTaskCoordinator.presentation == nil {
+                MergeTaskRailShellOverlay(
+                    summaries: mergeTaskCoordinator.summaries,
+                    isExpanded: $isMergeTaskRailExpanded,
+                    onSelect: selectMergeTask,
+                    isHaloVisible: contextualTipStore.isVisible(
+                        .mergeResume,
+                        onboardingState: onboardingStore.contextualTipState,
+                        targetIsVisible: true
+                    )
+                ) {
+                    ContextualGuideCallout(
+                        store: contextualTipStore,
+                        tip: .mergeResume,
+                        onboardingState: onboardingStore.contextualTipState,
+                        targetIsVisible: true
+                    )
+                }
+            }
+        }
+        .fullScreenCover(isPresented: mergeTaskPresentation) {
+            if let jobID = presentedMergeJobID {
+                ExistingMergeTaskHost(jobID: jobID)
+                    .environmentObject(mergeTaskCoordinator)
+            } else {
+                EmptyView()
+            }
         }
     }
 }
