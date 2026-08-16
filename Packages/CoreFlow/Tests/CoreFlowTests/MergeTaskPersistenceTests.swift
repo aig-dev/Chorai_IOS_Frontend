@@ -117,6 +117,69 @@ final class MergeTaskPersistenceTests: XCTestCase {
         )
     }
 
+    func testLegacySnapshotWithMoreThanEightSourcesRemainsAvailable() {
+        let legacy = makeLegacyStore()
+        var snapshot = makeMergeSnapshot()
+        snapshot.createRequest = MergeCreateRequest(
+            sources: (0..<9).map {
+                MergeSource(
+                    assetID: "ast_\($0)",
+                    versionID: "ver_\($0)",
+                    preview: "Source \($0)"
+                )
+            },
+            capability: "auto",
+            idempotencyKey: "create-too-many",
+            context: ["client": .string("ios")]
+        )
+        legacy.save(snapshot)
+
+        let migrated = makeTaskStore(legacy: legacy).collection(actorID: "actor_1")
+
+        XCTAssertEqual(migrated, .empty(actorID: "actor_1"))
+        XCTAssertEqual(legacy.snapshot(actorID: "actor_1"), snapshot)
+    }
+
+    func testLegacySnapshotWithDuplicateSourceAssetsRemainsAvailable() {
+        let legacy = makeLegacyStore()
+        var snapshot = makeMergeSnapshot()
+        snapshot.createRequest = MergeCreateRequest(
+            sources: [
+                MergeSource(assetID: "ast_duplicate", versionID: "ver_1", preview: "One"),
+                MergeSource(assetID: "ast_duplicate", versionID: "ver_2", preview: "Two"),
+            ],
+            capability: "auto",
+            idempotencyKey: "create-duplicate",
+            context: ["client": .string("ios")]
+        )
+        legacy.save(snapshot)
+
+        let migrated = makeTaskStore(legacy: legacy).collection(actorID: "actor_1")
+
+        XCTAssertEqual(migrated, .empty(actorID: "actor_1"))
+        XCTAssertEqual(legacy.snapshot(actorID: "actor_1"), snapshot)
+    }
+
+    func testLegacySnapshotWithEmptySourceAssetIDRemainsAvailable() {
+        let legacy = makeLegacyStore()
+        var snapshot = makeMergeSnapshot()
+        snapshot.createRequest = MergeCreateRequest(
+            sources: [
+                MergeSource(assetID: "ast_anchor", versionID: nil, preview: "Anchor"),
+                MergeSource(assetID: "", versionID: "ver_empty", preview: "Empty"),
+            ],
+            capability: "auto",
+            idempotencyKey: "create-empty-asset",
+            context: ["client": .string("ios")]
+        )
+        legacy.save(snapshot)
+
+        let migrated = makeTaskStore(legacy: legacy).collection(actorID: "actor_1")
+
+        XCTAssertEqual(migrated, .empty(actorID: "actor_1"))
+        XCTAssertEqual(legacy.snapshot(actorID: "actor_1"), snapshot)
+    }
+
     private func record(
         operationID: String,
         actorID: String,

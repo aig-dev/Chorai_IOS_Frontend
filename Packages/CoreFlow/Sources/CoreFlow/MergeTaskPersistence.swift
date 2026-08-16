@@ -103,6 +103,10 @@ public final class UserDefaultsMergeTaskStore: MergeTaskCollectionPersisting {
             return .empty(actorID: actorID)
         }
         let migrated = migratedCollection(from: snapshot, now: now())
+        guard isValid(migrated) else {
+            logRejectedLegacyMigration(actorID: actorID)
+            return .empty(actorID: actorID)
+        }
         save(migrated)
         guard decodeCollection(actorID: actorID) == migrated else {
             return migrated
@@ -344,5 +348,9 @@ public final class UserDefaultsMergeTaskStore: MergeTaskCollectionPersisting {
 
     private func logQuarantine(actorID: String, recordKey: String) {
         NSLog("Merge task record quarantined actorID=%@ recordKey=%@", actorID, recordKey)
+    }
+
+    private func logRejectedLegacyMigration(actorID: String) {
+        NSLog("Merge task legacy migration rejected actorID=%@", actorID)
     }
 }
