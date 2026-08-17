@@ -6,7 +6,7 @@
 
 **Scope:** iOS presentation and lifecycle integration, plus the minimum additive Go Merge artifact contract required for atomic WYSIWYG persistence
 
-![Approved Merge WYSIWYG visual](assets/2026-08-17-ios-merge-wysiwyg-preview-approved.png)
+![Approved Merge WYSIWYG visual](assets/2026-08-17-ios-merge-wysiwyg-preview-approved-v2.png)
 
 The approved crop is authoritative for the card material, level treatment, content editor, tags, and mutation actions. App-level Back navigation and the task rail are intentionally specified in text because they sit outside this cropped card surface.
 
@@ -30,7 +30,7 @@ The feature must preserve the existing background multi-Merge guarantees: multip
 - The completed artifact is one WYSIWYG reading/editing surface. Scrolling is preview; tapping the content focuses the editor in place.
 - Tags reuse the existing Card Editor capsule language. They have no colored dots.
 - The numeric `rate` is never displayed. The UI shows only the semantic level and its card material.
-- A result rate of `3` is `Uncommon` and uses the approved deep-green glass treatment.
+- A result rate of `3` is `Notable` and uses the approved deep-green glass treatment.
 - The card boundary is a continuous restrained level-colored edge. Purple may remain in the distant page ambience, but never appears as an isolated right-side card stroke.
 
 ## 3. Relationship to the previous Merge design
@@ -106,14 +106,16 @@ The server owns the result `rate`; the iOS client never edits or recomputes it. 
 
 | Canonical rate | Level label | Material accent |
 | --- | --- | --- |
-| `< 3` | `Common` | neutral glass |
-| `3...8` | `Uncommon` | emerald green `#00FF66` |
-| `9...26` | `Rare` | blue `#0371FF` |
-| `27...80` | `Epic` | purple `#9627D2` |
-| `81...242` | `Legendary` | amber `#D97800` |
-| `>= 243` | `Mythic` | orange-red `#FF5E00` |
+| `< 3` | `Basic` | neutral deep-violet glass |
+| `3...8` | `Notable` | emerald green `#00FF66` |
+| `9...26` | `Valuable` | blue `#0371FF` |
+| `27...80` | `Significant` | purple `#9627D2` |
+| `81...242` | `Exceptional` | amber `#D97800` |
+| `>= 243` | `Definitive` | orange-red `#FF5E00` |
 
-The level label is visible; the number is not. A rate of `3` therefore presents `Uncommon` with a premium deep-green card body, subtle emerald edge, and restrained green corner ambience.
+The level label is visible; the number is not. A rate of `3` therefore presents `Notable` with a premium deep-green card body, subtle emerald edge, and restrained green corner ambience. `Exceptional` is intentionally used instead of `Critical`: the tier communicates positive knowledge value rather than an error or severity state.
+
+Every tier uses one coherent accent family across its card body, continuous edge, and restrained corner ambience. A green or amber card never inherits a blue outline from another tier. The shared style must use the existing `merge_bg_basic`, `merge_bg_green`, `merge_bg_blue`, `merge_bg_purple`, `merge_bg_yellow`, and `merge_bg_red` material assets as the visual baseline.
 
 The approved green material follows these rules:
 
@@ -161,7 +163,7 @@ The initial presentation companion is derived once from the frozen source set:
 
 - Each source contributes its canonical source rate. Missing or non-positive legacy values normalize to `1`.
 - The result rate is the overflow-safe sum of those normalized source rates.
-- Example: three rate-`1` sources produce result rate `3`, level `Uncommon`, and the green material.
+- Example: three rate-`1` sources produce result rate `3`, level `Notable`, and the green material.
 - Source rates used by this calculation are frozen with the Merge source snapshot; later Card mutations cannot change an in-flight artifact's result level.
 - Initial tags are the stable, normalized union of source tags in source-selection order and then source-tag order.
 - Tags are trimmed, empty values are removed, exact duplicates are removed while preserving the first occurrence, and the existing ten-tag limit is applied.
@@ -296,7 +298,7 @@ One app-shell layout guide connects the New Note button slot to the single globa
 - Completed artifact opens, minimizes, reopens the same job, and retains local edits.
 - Scrolling reads the artifact; tapping the body edits in place with no tab or layout jump.
 - Tags visually match Card Editor and contain no colored dots.
-- Rate `3` shows `Uncommon`, never `3`, and uses the approved continuous green edge with no purple right border.
+- Rate `3` shows `Notable`, never `3`, and uses the approved continuous green edge with no purple or blue right border.
 - Long content, Dynamic Type, Reduce Motion, Reduce Transparency, and increased contrast remain usable.
 - Accept opens the canonical Card with the edited body, edited tags, and matching level material.
 
@@ -319,7 +321,7 @@ The feature is complete when all of the following are true:
 3. Complete opens one full-content WYSIWYG artifact surface with no Preview/Edit tabs.
 4. The user can edit the body and tags in place; closing and reopening preserves the same draft and job.
 5. Tags exactly match Card Editor styling and contain no colored dots.
-6. The UI hides numeric rate and maps canonical rate `3` to `Uncommon` with the approved green material and continuous green edge.
+6. The UI hides numeric rate and maps canonical rate `3` to `Notable` with the approved green material and continuous green edge; every other threshold uses the approved `Basic`, `Valuable`, `Significant`, `Exceptional`, and `Definitive` mapping.
 7. Accept atomically commits the latest body, tags, and server-owned rate, then removes the task and opens the canonical Card.
 8. Discard removes only the selected task; Back/minimize removes nothing.
 9. Offline, timeout, conflict, relaunch, and actor-change paths retain the existing lifecycle safety guarantees.
