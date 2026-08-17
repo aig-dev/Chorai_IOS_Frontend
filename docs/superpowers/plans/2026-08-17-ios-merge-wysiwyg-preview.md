@@ -164,6 +164,9 @@ git commit -m "feat(merge): define artifact presentation contract"
 - Modify: internal/merge/vnext/domain/artifact_validation_test.go
 - Modify: internal/merge/vnext/domain/note_projection.go
 - Modify: internal/merge/vnext/domain/note_projection_test.go
+- Modify: internal/merge/vnext/domain/text_composition.go
+- Modify: internal/merge/vnext/domain/surprise_regeneration.go
+- Modify: internal/merge/vnext/domain/surprise_regeneration_test.go
 
 **Interfaces:**
 
@@ -200,7 +203,7 @@ type CardBlock struct {
 
 - Preserve the existing wire bytes for old blocks when new fields are absent.
 - Add checklist as a closed CardBlockType.
-- Permit heading levels 2 and 3, text styles bold/italic/underline/strike, https/mailto links, and recursive children up to depth 8 while retaining the existing total 96-block and 24,000-rune limits.
+- Permit heading levels 2 and 3, text styles bold/italic/underline/strike, the governed NOTE contract's http/https links, and recursive children up to depth 8 while retaining the existing total 96-block and 24,000-rune limits.
 - Continue to reconstruct trusted image origin server-side. A client cannot forge source/fused provenance.
 - Unsupported server-owned image, quote, code, and divider blocks remain round-trippable. Unknown block types remain rejected rather than silently discarded.
 
@@ -231,7 +234,7 @@ Expected: rich fixture decoding fails because the current decoder permits one pl
 
 - [ ] **Step 4: Implement recursive strict decode and canonical encode**
 
-Keep one closed decoder per union member. Count runes and blocks across the complete tree, not per parent. Clone nested slices and inline content at every value boundary. Reuse the same validators for client candidates, trusted documents, and note projection so accepted editor data cannot later fail commit.
+Keep one closed decoder per union member. Count runes and blocks across the complete tree, not per parent. Clone nested slices and inline content at every value boundary. Reuse the same validators for client candidates, trusted documents, note projection, and surprise regeneration so accepted editor data cannot later fail commit or use a flat provenance index against a recursive document.
 
 - [ ] **Step 5: Verify compatibility and GREEN**
 
@@ -247,7 +250,7 @@ Expected: old canonical fixtures and new rich fixtures all PASS.
 - [ ] **Step 6: Commit Task 2**
 
 ~~~bash
-git add internal/merge/vnext/domain/vision_composition.go internal/merge/vnext/domain/artifact_revision.go internal/merge/vnext/domain/artifact_revision_test.go internal/merge/vnext/domain/artifact_validation.go internal/merge/vnext/domain/artifact_validation_test.go internal/merge/vnext/domain/note_projection.go internal/merge/vnext/domain/note_projection_test.go
+git add internal/merge/vnext/domain/vision_composition.go internal/merge/vnext/domain/artifact_revision.go internal/merge/vnext/domain/artifact_revision_test.go internal/merge/vnext/domain/artifact_validation.go internal/merge/vnext/domain/artifact_validation_test.go internal/merge/vnext/domain/note_projection.go internal/merge/vnext/domain/note_projection_test.go internal/merge/vnext/domain/text_composition.go internal/merge/vnext/domain/surprise_regeneration.go internal/merge/vnext/domain/surprise_regeneration_test.go
 git diff --cached --check
 git commit -m "feat(merge): accept rich artifact document edits"
 ~~~
