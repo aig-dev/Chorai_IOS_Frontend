@@ -270,6 +270,15 @@ public final class ChoraProfileStore: ObservableObject {
             )
         }
         identity = resolvedIdentity
+        if snapshot.fields.contains(.avatar),
+           mutationErrors[.avatar] == nil,
+           let uploadedAvatarURL,
+           let avatarUpdate = ChoraAvatarUpdate(
+               actorID: resolvedIdentity.agentActorID,
+               avatarURL: uploadedAvatarURL
+           ) {
+            avatarUpdate.post()
+        }
         if snapshot.fields.contains(.displayName),
            displayNameDraft == snapshot.displayName,
            mutationErrors[.displayName] == nil {

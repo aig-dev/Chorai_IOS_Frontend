@@ -687,6 +687,48 @@ final class ChoraProfileStoreTests: XCTestCase {
         )
     }
 
+    func testAvatarSaveNotifiesChatConsumersOfTheLatestAvatar() async {
+        let updateNotification = expectation(
+            description: "avatar update is published for chat consumers"
+        )
+        let observer = NotificationCenter.default.addObserver(
+            forName: .init("com.chorai.chora-profile.avatar-updated"),
+            object: nil,
+            queue: .main
+        ) { notification in
+            XCTAssertEqual(notification.userInfo?["actor_id"] as? String, "act_chora")
+            XCTAssertEqual(
+                notification.userInfo?["avatar_url"] as? String,
+                "/avatars/latest.png"
+            )
+            updateNotification.fulfill()
+        }
+        defer { NotificationCenter.default.removeObserver(observer) }
+
+        let service = ChoraProfileServiceSpy(
+            identities: [
+                .init(result: .success(.fixture(avatarURL: "/avatars/old.png"))),
+                .init(result: .success(.fixture(avatarURL: "/avatars/old.png")))
+            ],
+            growth: [.init(result: .success(nil))],
+            avatarResults: [.success("/avatars/latest.png")]
+        )
+        let store = ChoraProfileStore(service: service)
+
+        await store.load(humanActorID: "act_human")
+        store.setAvatarDraft(
+            .init(
+                data: Data([0x01, 0x02]),
+                filename: "latest.jpg",
+                mimeType: "image/jpeg"
+            )
+        )
+        store.save()
+        await waitUntil { !store.isSaving }
+
+        await fulfillment(of: [updateNotification], timeout: 1)
+    }
+
     func testRetryGrowthKeepsIdentityDraftsAndDoesNotReloadIdentity() async {
         let service = ChoraProfileServiceSpy(
             identities: [.init(result: .success(.fixture()))],

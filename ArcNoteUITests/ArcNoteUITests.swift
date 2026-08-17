@@ -2362,7 +2362,7 @@ final class ArcNoteUITests: XCTestCase {
         waitFor("screen.invitation-credits")
     }
 
-    func testSidebarAndMyProfileShareSingleCreditBalanceFixture() throws {
+    func testSidebarShowsCreditWhileMyProfileOmitsIt() throws {
         app.launchArguments.append("--ui-test-profile-credit-surfaces")
         app.launch()
 
@@ -2380,9 +2380,13 @@ final class ArcNoteUITests: XCTestCase {
         )
 
         tap("side-menu.profile")
+        waitFor("profile.primary-surface")
+        XCTAssertFalse(exists("my-profile.credit-balance", timeout: 2))
         XCTAssertEqual(
-            waitFor("my-profile.credit-balance").label,
-            "230 Credits"
+            app.staticTexts.matching(
+                NSPredicate(format: "label == %@", "Credits")
+            ).count,
+            0
         )
         XCTAssertFalse(app.staticTexts["SYN"].exists)
         XCTAssertEqual(
@@ -2390,6 +2394,50 @@ final class ArcNoteUITests: XCTestCase {
                 NSPredicate(format: "label CONTAINS[c] %@", "Premium Credit")
             ).count,
             0
+        )
+    }
+
+    func testMyProfileHeaderExposesChatShortcutWhileCardsKeepHomeActions() {
+        let cardID = "my-profile-actions-fixture"
+        app.launchArguments.append("--ui-test-my-profile-actions")
+        app.launch()
+
+        waitFor("profile.primary-surface")
+
+        let chat = waitForButton("my-profile.chat")
+        XCTAssertGreaterThanOrEqual(chat.frame.width, 44)
+        XCTAssertGreaterThanOrEqual(chat.frame.height, 44)
+        XCTAssertFalse(exists("profile.chat.\(cardID)", timeout: 2))
+
+        let menu = waitForButton("profile.card.menu.\(cardID)")
+        XCTAssertGreaterThanOrEqual(menu.frame.width, 44)
+        XCTAssertGreaterThanOrEqual(menu.frame.height, 44)
+        menu.tap()
+
+        waitFor("popup-menu.overlay")
+        for action in [
+            "edit", "spark", "merge", "private", "share", "link", "root",
+            "remove", "pin",
+        ] {
+            let actionButton = app.buttons["popup-menu.item.\(action)"]
+            XCTAssertTrue(
+                actionButton.exists,
+                "My Profile action is missing: \(action)"
+            )
+            XCTAssertTrue(
+                actionButton.isHittable,
+                "My Profile action is not reachable: \(action)"
+            )
+        }
+        dismissActionBoxFromBackdrop(
+            surfaceIdentifier: "popup-menu.overlay.surface",
+            overlayIdentifier: "popup-menu.overlay"
+        )
+
+        chat.tap()
+        XCTAssertEqual(
+            waitFor("chat.detail.conversation-id", timeout: 10).label,
+            "conversation_with_act_agent_fixture"
         )
     }
 

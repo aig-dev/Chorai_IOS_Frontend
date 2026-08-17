@@ -605,7 +605,12 @@ struct UserPostCard: View {
                     Image(systemName: "ellipsis")
                         .font(.title2)
                         .foregroundColor(.white)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel("More note actions")
+                .accessibilityIdentifier("profile.card.menu.\(card.id)")
             }
             
             // 内容文本
@@ -684,7 +689,12 @@ struct UserPostCard: View {
                             .resizable()
                             .aspectRatio(contentMode: .fit)
                             .frame(width: 24, height: 24)
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
                     }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Chat about this note")
+                    .accessibilityIdentifier("profile.chat.\(card.id)")
                 }
             }
 

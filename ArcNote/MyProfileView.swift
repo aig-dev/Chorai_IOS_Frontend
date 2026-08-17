@@ -1,18 +1,126 @@
 import SwiftUI
+import Combine
 import CoreFlow
+
+struct MyCompanionChatDestination: Equatable {
+    let humanActorID: String
+    let conversationID: String
+    let companionName: String
+    let companionAvatarURL: String?
+}
+
+protocol MyCompanionConversationCreating {
+    func createConversation(
+        participantActorID: String
+    ) async throws -> CreateConversationData
+}
+
+protocol MyCompanionChatRouting {
+    func openConversation(
+        humanActorID: String
+    ) async throws -> MyCompanionChatDestination
+}
+
+struct NetworkMyCompanionConversationCreator:
+    MyCompanionConversationCreating
+{
+    func createConversation(
+        participantActorID: String
+    ) async throws -> CreateConversationData {
+        var iterator = NetworkManager.shared.createConversation(
+            request: CreateConversationRequest(
+                participantId: participantActorID
+            )
+        )
+        .values
+        .makeAsyncIterator()
+
+        guard let response = try await iterator.next() else {
+            throw NetworkError.noData
+        }
+        guard response.success else {
+            throw ChoraProfileError.requestFailed
+        }
+        return response.conversation
+    }
+}
+
+struct NetworkMyCompanionChatRouter: MyCompanionChatRouting {
+    private let profileService: any CoreChoraProfileServing
+    private let conversationCreator: any MyCompanionConversationCreating
+
+    init(
+        profileService: any CoreChoraProfileServing =
+            NetworkChoraProfileService(),
+        conversationCreator: any MyCompanionConversationCreating =
+            NetworkMyCompanionConversationCreator()
+    ) {
+        self.profileService = profileService
+        self.conversationCreator = conversationCreator
+    }
+
+    func openConversation(
+        humanActorID rawHumanActorID: String
+    ) async throws -> MyCompanionChatDestination {
+        let humanActorID = rawHumanActorID.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        guard !humanActorID.isEmpty else {
+            throw ChoraProfileError.invalidHumanActor
+        }
+
+        let identity = try await profileService.identity(
+            humanActorID: humanActorID
+        )
+        guard identity.humanActorID == humanActorID else {
+            throw ChoraProfileError.humanActorMismatch
+        }
+        guard !identity.agentActorID.isEmpty,
+              identity.agentActorID != humanActorID else {
+            throw ChoraProfileError.humanActorUsedAsAgent
+        }
+
+        let conversation = try await conversationCreator.createConversation(
+            participantActorID: identity.agentActorID
+        )
+        guard conversation.participant.id == identity.agentActorID else {
+            throw ChoraProfileError.agentActorChanged
+        }
+
+        return MyCompanionChatDestination(
+            humanActorID: humanActorID,
+            conversationID: conversation.id,
+            companionName: identity.displayName,
+            companionAvatarURL: identity.avatarURL
+        )
+    }
+}
 
 struct MyProfileView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.adaptiveLayoutMetrics) private var adaptiveLayout
     @State private var showPopupMenu = false
-    @StateObject private var cardsManager = HomeCardsManager()
+    @StateObject private var cardsManager: HomeCardsManager
     @ObservedObject private var userProfileManager: UserProfileManager
     private let loadsDataOnAppear: Bool
-    
+    private let companionChatRouter: any MyCompanionChatRouting
+    private let chatDetailFetcher: any ChatDetailFetching
+
+    // 聊天相关状态
+    @State private var navigateToChat = false
+    @State private var chatDestination: MyCompanionChatDestination?
+    @State private var isCreatingConversation = false
+
     // 菜单相关状态
     @State private var popupMenuLayout: PopupMenuLayout = .grid2x2
     @State private var currentMenuCardData: UserCard? = nil
-    
+
+    // 自己卡片的菜单动作状态
+    @State private var cardPendingDeletion: UserCard? = nil
+    @State private var showDeleteConfirmation = false
+    @State private var isDeletingCard = false
+    @State private var deleteErrorMessage: String? = nil
+
     // 导航状态
     @State private var navigateToDetail = false
     @State private var selectedCardId: String? = nil
@@ -21,12 +129,19 @@ struct MyProfileView: View {
 
     init(
         userProfileManager: UserProfileManager = .shared,
-        loadsDataOnAppear: Bool = true
+        cardsManager: HomeCardsManager = HomeCardsManager(),
+        loadsDataOnAppear: Bool = true,
+        companionChatRouter: any MyCompanionChatRouting =
+            NetworkMyCompanionChatRouter(),
+        chatDetailFetcher: any ChatDetailFetching = NetworkManager.shared
     ) {
+        _cardsManager = StateObject(wrappedValue: cardsManager)
         _userProfileManager = ObservedObject(
             wrappedValue: userProfileManager
         )
         self.loadsDataOnAppear = loadsDataOnAppear
+        self.companionChatRouter = companionChatRouter
+        self.chatDetailFetcher = chatDetailFetcher
     }
     
     var body: some View {
@@ -89,6 +204,18 @@ struct MyProfileView: View {
                                     }
                                     
                                     Spacer()
+
+                                    Button(action: createConversation) {
+                                        Image("send_chat")
+                                            .resizable()
+                                            .aspectRatio(contentMode: .fit)
+                                            .frame(width: 24, height: 24)
+                                            .frame(width: 44, height: 44)
+                                            .contentShape(Rectangle())
+                                    }
+                                    .buttonStyle(.plain)
+                                    .accessibilityLabel("Chat")
+                                    .accessibilityIdentifier("my-profile.chat")
                                 }
                                 
                                 // 第二行：统计数据
@@ -138,30 +265,6 @@ struct MyProfileView: View {
                                     .buttonStyle(.plain)
                                     .accessibilityIdentifier("my-profile.followers-count")
                                     
-                                    Spacer()
-                                    HStack(spacing: 4) {
-                                        if userProfileManager.isCreditLoading {
-                                            Text("--")
-                                                .font(.system(size: 19, weight: .bold))
-                                                .foregroundColor(.white.opacity(0.7))
-                                        } else {
-                                            Text("\(userProfileManager.creditTotal)")
-                                                .font(.system(size: 19, weight: .bold))
-                                                .foregroundColor(.white)
-                                        }
-                                        Text("Credits")
-                                            .font(.system(size: 17, weight: .regular))
-                                            .foregroundColor(.white.opacity(0.7))
-                                    }
-                                    .accessibilityElement(children: .ignore)
-                                    .accessibilityLabel(
-                                        userProfileManager.isCreditLoading
-                                            ? "Loading Credits"
-                                            : "\(userProfileManager.creditTotal) Credits"
-                                    )
-                                    .accessibilityIdentifier(
-                                        "my-profile.credit-balance"
-                                    )
                                 }
                             }
                             .padding(.horizontal, 20)
@@ -190,7 +293,7 @@ struct MyProfileView: View {
                                             onShowMenu: { cardData in
                                                 // 设置当前卡片数据
                                                 currentMenuCardData = cardData
-                                                popupMenuLayout = .grid2x2
+                                                popupMenuLayout = .grid3x3
                                                 showPopupMenu = true
                                             },
                                             onCardTap: { cardId in
@@ -301,7 +404,55 @@ struct MyProfileView: View {
                 EmptyView()
             }
         }
-        .popupMenu(isPresented: $showPopupMenu, layout: popupMenuLayout, cardData: currentMenuCardData, isOwnCard: true)
+        .navigationDestination(isPresented: $navigateToChat) {
+            if let chatDestination {
+                ChatDetailView(
+                    conversationId: chatDestination.conversationID,
+                    contactName: chatDestination.companionName,
+                    contactStatus: "Online",
+                    contactAvatar: chatDestination.companionAvatarURL,
+                    humanActorID: chatDestination.humanActorID,
+                    fetcher: chatDetailFetcher
+                )
+            } else {
+                EmptyView()
+            }
+        }
+        .popupMenu(
+            isPresented: $showPopupMenu,
+            layout: popupMenuLayout,
+            cardData: currentMenuCardData,
+            isOwnCard: true,
+            onDelete: requestCardDeletion,
+            onToggleVisibility: toggleCardVisibility,
+            onTogglePin: toggleCardPin
+        )
+        .confirmationDialog(
+            "Remove this note?",
+            isPresented: $showDeleteConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Cancel", role: .cancel) {
+                cardPendingDeletion = nil
+            }
+            Button("Remove", role: .destructive) {
+                confirmCardDeletion()
+            }
+            .disabled(isDeletingCard)
+            .accessibilityIdentifier("my-profile.delete.confirm")
+        } message: {
+            Text("This moves the note to Trash.")
+        }
+        .alert(
+            "Couldn’t complete this action",
+            isPresented: deleteErrorPresented
+        ) {
+            Button("OK", role: .cancel) {
+                deleteErrorMessage = nil
+            }
+        } message: {
+            Text(deleteErrorMessage ?? "Please try again.")
+        }
         .sheet(isPresented: $showFollowList) {
             FollowListView(
                 actorID: userProfileManager.userProfile?.id
@@ -313,6 +464,100 @@ struct MyProfileView: View {
             )
         }
         .linkPopup()
+    }
+
+    private var deleteErrorPresented: Binding<Bool> {
+        Binding(
+            get: { deleteErrorMessage != nil },
+            set: { isPresented in
+                if !isPresented {
+                    deleteErrorMessage = nil
+                }
+            }
+        )
+    }
+
+    private func requestCardDeletion() {
+        guard let card = currentMenuCardData else { return }
+        cardPendingDeletion = card
+        showDeleteConfirmation = true
+    }
+
+    private func confirmCardDeletion() {
+        guard let card = cardPendingDeletion, !isDeletingCard else { return }
+
+        isDeletingCard = true
+        cardsManager.deleteCard(cardId: card.id) { result in
+            isDeletingCard = false
+            switch result {
+            case .success:
+                cardPendingDeletion = nil
+            case .failure:
+                deleteErrorMessage = "Please try again."
+            }
+        }
+    }
+
+    private func toggleCardVisibility(_ card: UserCard) {
+        cardsManager.toggleCardVisibility(
+            cardId: card.id,
+            fallbackCard: card
+        ) { result in
+            if case .failure = result {
+                deleteErrorMessage = "Couldn’t update this note. Please try again."
+            }
+        }
+    }
+
+    private func toggleCardPin(_ card: UserCard) {
+        cardsManager.toggleCardPin(
+            cardId: card.id,
+            fallbackCard: card
+        ) { result in
+            if case .failure = result {
+                deleteErrorMessage = "Couldn’t update this note. Please try again."
+            }
+        }
+    }
+
+    private func createConversation() {
+        guard !isCreatingConversation else { return }
+        guard let humanActorID = currentHumanActorID else {
+            return
+        }
+
+        isCreatingConversation = true
+
+        Task { @MainActor in
+            defer { isCreatingConversation = false }
+
+            do {
+                let destination = try await companionChatRouter.openConversation(
+                    humanActorID: humanActorID
+                )
+                guard !Task.isCancelled else { return }
+                chatDestination = destination
+                navigateToChat = true
+            } catch {
+                guard !Task.isCancelled else { return }
+                if let error = error as? NetworkError,
+                   case .unauthorized = error {
+                    NotificationCenter.default.post(
+                        name: NSNotification.Name("UnauthorizedError"),
+                        object: nil
+                    )
+                }
+            }
+        }
+    }
+
+    private var currentHumanActorID: String? {
+        let value = userProfileManager.userProfile?.id
+            ?? AuthManager.shared.currentUser?.id
+        let normalized = value?.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        return normalized?.isEmpty == false ? normalized : nil
     }
 }
 

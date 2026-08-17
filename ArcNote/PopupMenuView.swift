@@ -219,6 +219,9 @@ struct PopupMenuModifier: ViewModifier {
     let isOwnCard: Bool
     let isSparkEnabled: Bool
     let onSpark: (() -> Void)?
+    let onDelete: (() -> Void)?
+    let onToggleVisibility: ((UserCard) -> Void)?
+    let onTogglePin: ((UserCard) -> Void)?
     let onRouteDismissed: (CardNavigationDismissal) -> Void
     let onRoutePresentationChanged: (Bool) -> Void
 
@@ -258,6 +261,9 @@ struct PopupMenuModifier: ViewModifier {
                             isOwnCard: isOwnCard,
                             isSparkEnabled: isSparkEnabled,
                             onSpark: onSpark,
+                            onDelete: onDelete,
+                            onToggleVisibility: onToggleVisibility,
+                            onTogglePin: onTogglePin,
                             onNavigate: present
                         )
                     }
@@ -296,6 +302,9 @@ struct PopupMenuOverlay: View {
     let isOwnCard: Bool
     let isSparkEnabled: Bool
     let onSpark: (() -> Void)?
+    let onDelete: (() -> Void)?
+    let onToggleVisibility: ((UserCard) -> Void)?
+    let onTogglePin: ((UserCard) -> Void)?
     let onNavigate: (CardNavigationRoute) -> Void
 
     init(
@@ -305,6 +314,9 @@ struct PopupMenuOverlay: View {
         isOwnCard: Bool,
         isSparkEnabled: Bool = true,
         onSpark: (() -> Void)? = nil,
+        onDelete: (() -> Void)? = nil,
+        onToggleVisibility: ((UserCard) -> Void)? = nil,
+        onTogglePin: ((UserCard) -> Void)? = nil,
         onNavigate: @escaping (CardNavigationRoute) -> Void = { _ in }
     ) {
         _isPresented = isPresented
@@ -313,6 +325,9 @@ struct PopupMenuOverlay: View {
         self.isOwnCard = isOwnCard
         self.isSparkEnabled = isSparkEnabled
         self.onSpark = onSpark
+        self.onDelete = onDelete
+        self.onToggleVisibility = onToggleVisibility
+        self.onTogglePin = onTogglePin
         self.onNavigate = onNavigate
     }
     
@@ -329,10 +344,14 @@ struct PopupMenuOverlay: View {
     
     // MARK: - 删除卡片功能
     private func deleteCard() {
-        NotificationCenter.default.post(
-            name: NSNotification.Name("DeleteCard"),
-            object: nil
-        )
+        if let onDelete {
+            onDelete()
+        } else {
+            NotificationCenter.default.post(
+                name: NSNotification.Name("DeleteCard"),
+                object: nil
+            )
+        }
         
         isPresented = false
     }
@@ -340,13 +359,17 @@ struct PopupMenuOverlay: View {
     // MARK: - 切换卡片可见性
     private func toggleCardVisibility() {
         guard let card = cardData else { return }
-        
-        // 通过通知通知HomeView切换卡片可见性
-        NotificationCenter.default.post(
-            name: NSNotification.Name("ToggleCardVisibility"),
-            object: nil,
-            userInfo: ["cardId": card.id, "isPublic": card.isPublic]
-        )
+
+        if let onToggleVisibility {
+            onToggleVisibility(card)
+        } else {
+            // 通过通知通知HomeView切换卡片可见性
+            NotificationCenter.default.post(
+                name: NSNotification.Name("ToggleCardVisibility"),
+                object: nil,
+                userInfo: ["cardId": card.id, "isPublic": card.isPublic]
+            )
+        }
         
         // 关闭菜单
         isPresented = false
@@ -355,14 +378,17 @@ struct PopupMenuOverlay: View {
     // MARK: 切换卡片Pin状态
     private func toggleCardPin() {
         guard let card = cardData else { return }
-        
-        
-        // 切换卡片Pin状态
-        NotificationCenter.default.post(
-            name: NSNotification.Name("ToggleCardPin"),
-            object: nil,
-            userInfo: ["cardId": card.id, "isPinned": card.isPinned]
-        )
+
+        if let onTogglePin {
+            onTogglePin(card)
+        } else {
+            // 切换卡片Pin状态
+            NotificationCenter.default.post(
+                name: NSNotification.Name("ToggleCardPin"),
+                object: nil,
+                userInfo: ["cardId": card.id, "isPinned": card.isPinned]
+            )
+        }
         
         // 关闭菜单
         isPresented = false
@@ -635,6 +661,9 @@ extension View {
         isOwnCard: Bool = false,
         isSparkEnabled: Bool = true,
         onSpark: (() -> Void)? = nil,
+        onDelete: (() -> Void)? = nil,
+        onToggleVisibility: ((UserCard) -> Void)? = nil,
+        onTogglePin: ((UserCard) -> Void)? = nil,
         onRouteDismissed: @escaping (CardNavigationDismissal) -> Void = { _ in },
         onRoutePresentationChanged: @escaping (Bool) -> Void = { _ in }
     ) -> some View {
@@ -646,6 +675,9 @@ extension View {
                 isOwnCard: isOwnCard,
                 isSparkEnabled: isSparkEnabled,
                 onSpark: onSpark,
+                onDelete: onDelete,
+                onToggleVisibility: onToggleVisibility,
+                onTogglePin: onTogglePin,
                 onRouteDismissed: onRouteDismissed,
                 onRoutePresentationChanged: onRoutePresentationChanged
             )

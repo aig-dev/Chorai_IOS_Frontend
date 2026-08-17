@@ -316,6 +316,7 @@ class ChatDetailManager: ObservableObject {
     private var canonicalMessages: [APIChatMessage] = []
     private weak var visibilityDependency: ChatHistoryVisibilityDependency?
     private var visibilityCancellable: AnyCancellable?
+    private var avatarUpdateCancellable: AnyCancellable?
     private var eventCancellable: AnyCancellable?
     private var eventReconnectTask: Task<Void, Never>?
     private var eventConversationID: String?
@@ -337,6 +338,14 @@ class ChatDetailManager: ObservableObject {
         self.currentUserAvatarURL = currentUserAvatarURL
         self.participantAvatarURL = participantAvatarURL
         self.fetcher = fetcher
+        avatarUpdateCancellable = NotificationCenter.default.publisher(
+            for: ChoraAvatarUpdate.notification
+        )
+        .compactMap(ChoraAvatarUpdate.init(notification:))
+        .receive(on: DispatchQueue.main)
+        .sink { [weak self] update in
+            self?.applyAvatarUpdate(update)
+        }
     }
 
     func bindVisibility(_ dependency: ChatHistoryVisibilityDependency) {
@@ -578,6 +587,23 @@ class ChatDetailManager: ObservableObject {
         }
     }
 
+    private func applyAvatarUpdate(_ update: ChoraAvatarUpdate) {
+        guard let conversation,
+              conversation.partner.id == update.actorID else {
+            return
+        }
+        self.conversation = ChatDetailConversation(
+            id: conversation.id,
+            partner: ChatPartner(
+                id: conversation.partner.id,
+                username: conversation.partner.username,
+                avatarUrl: update.avatarURL
+            ),
+            createdAt: conversation.createdAt,
+            lastMessageTime: conversation.lastMessageTime
+        )
+    }
+
     private func publishVisibleMessages() {
         guard let visibilityDependency else {
             messages = canonicalMessages
@@ -693,6 +719,7 @@ class ChatManager: ObservableObject {
     private var canonicalConversations: [Conversation] = []
     private weak var visibilityDependency: ChatHistoryVisibilityDependency?
     private var visibilityCancellable: AnyCancellable?
+    private var avatarUpdateCancellable: AnyCancellable?
     private var cancellables = Set<AnyCancellable>()
 
     init(
@@ -701,6 +728,14 @@ class ChatManager: ObservableObject {
     ) {
         self.humanActorID = humanActorID
         self.fetcher = fetcher
+        avatarUpdateCancellable = NotificationCenter.default.publisher(
+            for: ChoraAvatarUpdate.notification
+        )
+        .compactMap(ChoraAvatarUpdate.init(notification:))
+        .receive(on: DispatchQueue.main)
+        .sink { [weak self] update in
+            self?.applyAvatarUpdate(update)
+        }
     }
 
     func bindVisibility(_ dependency: ChatHistoryVisibilityDependency) {
@@ -749,6 +784,29 @@ class ChatManager: ObservableObject {
                 actorID: humanActorID
             )
         }
+    }
+
+    private func applyAvatarUpdate(_ update: ChoraAvatarUpdate) {
+        var didUpdate = false
+        canonicalConversations = canonicalConversations.map { conversation in
+            guard conversation.partner.id == update.actorID else {
+                return conversation
+            }
+            didUpdate = true
+            return Conversation(
+                id: conversation.id,
+                partner: ChatPartner(
+                    id: conversation.partner.id,
+                    username: conversation.partner.username,
+                    avatarUrl: update.avatarURL
+                ),
+                lastMessage: conversation.lastMessage,
+                unreadCount: conversation.unreadCount,
+                createdAt: conversation.createdAt
+            )
+        }
+        guard didUpdate else { return }
+        publishVisibleConversations()
     }
 }
 

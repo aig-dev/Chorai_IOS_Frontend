@@ -44,6 +44,8 @@ struct ArcNoteApp: App {
         .contains("--ui-test-invitation-credits")
     private let isProfileCreditSurfaceUITestRoute = ProcessInfo.processInfo.arguments
         .contains("--ui-test-profile-credit-surfaces")
+    private let isMyProfileActionsUITestRoute = ProcessInfo.processInfo.arguments
+        .contains("--ui-test-my-profile-actions")
     private let isSignupInvitationUITestRoute = ProcessInfo.processInfo.arguments
         .contains("--ui-test-signup-invitation")
     private let isChoraProfileUITestRoute = ProcessInfo.processInfo.arguments
@@ -153,6 +155,10 @@ struct ArcNoteApp: App {
                         ProfileCreditSurfaceFixtureScreen(
                             userProfileManager: .shared
                         )
+                    }
+                } else if isMyProfileActionsUITestRoute {
+                    NavigationStack {
+                        MyProfileActionsFixtureScreen()
                     }
                 } else if isSettingsUITestRoute {
                     NavigationStack {
@@ -519,6 +525,93 @@ private struct ProfileCreditSurfaceFixtureScreen: View {
             isPresented: $isSideMenuPresented,
             userProfileManager: userProfileManager,
             loadsDataOnAppear: false
+        )
+    }
+}
+
+private enum MyProfileActionsFixtureIdentity {
+    static let humanActorID = "act_my_profile_fixture"
+    static let companionActorID = "act_agent_fixture"
+}
+
+@MainActor
+private struct MyProfileActionsFixtureScreen: View {
+    private let cardsManager: HomeCardsManager
+    private let companionChatRouter: NetworkMyCompanionChatRouter
+    private let chatDetailService: ChatVisibilityFixtureService
+
+    init() {
+        AuthManager.shared.installUITestSession(
+            token: "my-profile-fixture-token",
+            actorID: MyProfileActionsFixtureIdentity.humanActorID,
+            email: "my-profile-fixture@example.com",
+            username: "Fixture Human",
+            createdAt: "2026-08-15T00:00:00Z"
+        )
+        UserProfileManager.shared.userProfile = nil
+
+        let conversationCreator = MyProfileFixtureConversationCreator()
+        companionChatRouter = NetworkMyCompanionChatRouter(
+            profileService: ChoraProfileFixtureService(mode: .loaded),
+            conversationCreator: conversationCreator
+        )
+        chatDetailService = ChatVisibilityFixtureService(
+            humanActorID: MyProfileActionsFixtureIdentity.humanActorID,
+            conversationID: "conversation_with_\(MyProfileActionsFixtureIdentity.companionActorID)",
+            partnerAvatarURL: "/fixture-companion-avatar.png"
+        )
+
+        let cardsManager = HomeCardsManager()
+        cardsManager.cards = [
+            UserCard(
+                id: "my-profile-actions-fixture",
+                title: "My Profile fixture",
+                content: "A fixture note used to verify My Profile actions.",
+                contentHash: "my-profile-actions-fixture",
+                isPublic: true,
+                tags: ["Fixture"],
+                createdAt: "2026-08-14T00:00:00Z",
+                updatedAt: "2026-08-14T00:00:00Z",
+                likeCount: 0,
+                commentCount: 0,
+                isLiked: false,
+                isPinned: false,
+                pinnedAt: nil,
+                isFavorited: false,
+                favoriteCount: 0,
+                rate: 0,
+                ownerActorId: MyProfileActionsFixtureIdentity.humanActorID,
+                isOwner: true
+            )
+        ]
+        self.cardsManager = cardsManager
+    }
+
+    var body: some View {
+        MyProfileView(
+            cardsManager: cardsManager,
+            loadsDataOnAppear: false,
+            companionChatRouter: companionChatRouter,
+            chatDetailFetcher: chatDetailService
+        )
+    }
+}
+
+private struct MyProfileFixtureConversationCreator:
+    MyCompanionConversationCreating
+{
+    func createConversation(
+        participantActorID: String
+    ) async throws -> CreateConversationData {
+        CreateConversationData(
+            id: "conversation_with_\(participantActorID)",
+            createdAt: "2026-08-15T00:00:00Z",
+            lastMessageTime: nil,
+            participant: CreateConversationParticipant(
+                id: participantActorID,
+                username: "Fixture Companion",
+                avatarUrl: "/fixture-companion-avatar.png"
+            )
         )
     }
 }
