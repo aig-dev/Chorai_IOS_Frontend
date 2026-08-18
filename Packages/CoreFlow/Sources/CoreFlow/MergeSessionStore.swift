@@ -994,10 +994,13 @@ public final class MergeSessionStore: ObservableObject {
                 )
             }
             if case .validation(let code) = mapped {
-                recordValidationRejection(
+                let hasCorrectedReplacement = recordValidationRejection(
                     pending: pending,
                     code: code
                 )
+                if hasCorrectedReplacement, let acknowledged = artifact {
+                    return acknowledged
+                }
             }
             artifactDraftSyncState = .unsynced(draftFailure(from: mapped))
             throw mapped
@@ -1109,6 +1112,14 @@ public final class MergeSessionStore: ObservableObject {
             return latest
         } catch {
             let mapped = coreError(from: error)
+            guard shouldAcceptDraftResult(
+                jobID: jobID,
+                pending: pending,
+                saveToken: saveToken,
+                generation: generation
+            ) else {
+                throw CoreMergeError.interrupted
+            }
             if case .conflict = artifactDraftSyncState {
                 throw mapped
             }
@@ -1173,9 +1184,9 @@ public final class MergeSessionStore: ObservableObject {
     private func recordValidationRejection(
         pending: MergePendingArtifactSave,
         code: String?
-    ) {
+    ) -> Bool {
         guard let current = artifactDraft,
-              current.pendingSave == pending else { return }
+              current.pendingSave == pending else { return false }
         let rejected = MergeArtifactDraftSnapshot(
             baseRevision: current.baseRevision,
             baseDocumentHash: current.baseDocumentHash,
@@ -1189,7 +1200,44 @@ public final class MergeSessionStore: ObservableObject {
                 code: code
             )
         )
+        if let replacement = correctedReplacement(for: rejected) {
+            pendingSaveWasAttempted = false
+            artifactDraftSyncState = isNetworkAvailable
+                ? .dirty
+                : .unsynced(.offline)
+            persistArtifactDraft(replacement)
+            return true
+        }
         persistArtifactDraft(rejected)
+        return false
+    }
+
+    private func correctedReplacement(
+        for draft: MergeArtifactDraftSnapshot
+    ) -> MergeArtifactDraftSnapshot? {
+        guard
+            let pending = draft.pendingSave,
+            validationRejection(in: draft) != nil,
+            draft.documentJSON != pending.documentJSON
+                || draft.tags != pending.tags
+        else {
+            return nil
+        }
+        return MergeArtifactDraftSnapshot(
+            baseRevision: draft.baseRevision,
+            baseDocumentHash: draft.baseDocumentHash,
+            documentJSON: draft.documentJSON,
+            tags: draft.tags,
+            rate: draft.rate,
+            preservationManifest: draft.preservationManifest,
+            pendingSave: MergePendingArtifactSave(
+                idempotencyKey: idempotencyKey(),
+                baseRevision: pending.baseRevision,
+                baseDocumentHash: pending.baseDocumentHash,
+                documentJSON: draft.documentJSON,
+                tags: draft.tags
+            )
+        )
     }
 
     private func draftFailure(from error: CoreMergeError) -> MergeDraftFailure {
@@ -1481,13 +1529,25 @@ public final class MergeSessionStore: ObservableObject {
                 let restoredDraft = value.artifactDraft
                 if let restoredDraft,
                    restoredDraft.pendingSave != nil {
-                    artifactDraft = restoredDraft
-                    pendingSaveWasAttempted = true
-                    if let rejection = validationRejection(in: restoredDraft) {
+                    if let replacement = correctedReplacement(
+                        for: restoredDraft
+                    ) {
+                        artifactDraft = replacement
+                        pendingSaveWasAttempted = false
+                        artifactDraftSyncState = isNetworkAvailable
+                            ? .dirty
+                            : .unsynced(.offline)
+                    } else if let rejection = validationRejection(
+                        in: restoredDraft
+                    ) {
+                        artifactDraft = restoredDraft
+                        pendingSaveWasAttempted = true
                         artifactDraftSyncState = .unsynced(
                             .validation(code: rejection.code)
                         )
                     } else {
+                        artifactDraft = restoredDraft
+                        pendingSaveWasAttempted = true
                         artifactDraftSyncState = isNetworkAvailable
                             ? .dirty
                             : .unsynced(.offline)
