@@ -1,6 +1,39 @@
 import CoreFlow
 import SwiftUI
 
+extension CardLevelStyle {
+    var materialAccentColor: Color? {
+        guard let accentComponents else { return nil }
+
+        return Color(
+            red: accentComponents.red,
+            green: accentComponents.green,
+            blue: accentComponents.blue
+        )
+    }
+
+    fileprivate var accentComponents: (
+        red: Double,
+        green: Double,
+        blue: Double
+    )? {
+        guard
+            let hex = accentHex,
+            hex.count == 7,
+            hex.first == "#",
+            let value = Int(hex.dropFirst(), radix: 16)
+        else {
+            return nil
+        }
+
+        return (
+            Double((value >> 16) & 0xFF) / 255,
+            Double((value >> 8) & 0xFF) / 255,
+            Double(value & 0xFF) / 255
+        )
+    }
+}
+
 struct CardLevelMaterial<SurfaceShape: Shape>: View {
     @Environment(\.accessibilityReduceTransparency)
     private var reduceTransparency
@@ -83,36 +116,19 @@ struct CardLevelMaterial<SurfaceShape: Shape>: View {
     }
 
     private var accentColor: Color {
-        Color(
-            red: accentComponents.red,
-            green: accentComponents.green,
-            blue: accentComponents.blue
+        style.materialAccentColor ?? Color(
+            red: 0.72,
+            green: 0.74,
+            blue: 0.78
         )
     }
 
     private var opaqueSurfaceColor: Color {
-        let accent = accentComponents
+        let accent = style.accentComponents ?? (0.72, 0.74, 0.78)
         return Color(
             red: 0.018 + accent.red * 0.09,
             green: 0.018 + accent.green * 0.09,
             blue: 0.022 + accent.blue * 0.09
-        )
-    }
-
-    private var accentComponents: (red: Double, green: Double, blue: Double) {
-        guard
-            let hex = style.accentHex,
-            hex.count == 7,
-            hex.first == "#",
-            let value = Int(hex.dropFirst(), radix: 16)
-        else {
-            return (0.72, 0.74, 0.78)
-        }
-
-        return (
-            Double((value >> 16) & 0xFF) / 255,
-            Double((value >> 8) & 0xFF) / 255,
-            Double(value & 0xFF) / 255
         )
     }
 }

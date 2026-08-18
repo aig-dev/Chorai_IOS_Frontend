@@ -64,12 +64,16 @@ struct NewInsightView: View {
                     
                     Text(levelStyle.label)
                         .font(.subheadline.weight(.medium))
-                        .foregroundColor(.white)
+                        .foregroundStyle(
+                            levelStyle.materialAccentColor ?? .white
+                        )
                         .padding(.horizontal, 16)
                         .padding(.vertical, 6)
                         .background(
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(Color(red: 0.3, green: 0.2, blue: 0.1).opacity(0.8))
+                            CardLevelMaterial(
+                                style: levelStyle,
+                                shape: RoundedRectangle(cornerRadius: 12)
+                            )
                         )
                         .accessibilityLabel(levelStyle.label)
                 }

@@ -145,6 +145,37 @@ final class LibraryCardPreviewSourceContractTests: XCTestCase {
         XCTAssertFalse(panel.contains(".accessibilityValue"))
     }
 
+    func testNewInsightBadgeUsesSharedTierAccentMaterial() throws {
+        let newInsight = try source(at: "ArcNote/NewInsightView.swift")
+        let badgeStart = try XCTUnwrap(
+            newInsight.range(of: "Text(levelStyle.label)")
+        )
+        let badgeEnd = try XCTUnwrap(
+            newInsight.range(
+                of: ".accessibilityLabel(levelStyle.label)",
+                range: badgeStart.upperBound..<newInsight.endIndex
+            )
+        )
+        let badge = String(
+            newInsight[badgeStart.lowerBound..<badgeEnd.upperBound]
+        )
+        let compactBadge = badge.components(
+            separatedBy: .whitespacesAndNewlines
+        ).joined()
+
+        XCTAssertTrue(
+            compactBadge.contains(
+                ".foregroundStyle(levelStyle.materialAccentColor??.white)"
+            )
+        )
+        XCTAssertTrue(compactBadge.contains("CardLevelMaterial("))
+        XCTAssertTrue(compactBadge.contains("style:levelStyle"))
+        XCTAssertFalse(
+            badge.contains("Color(red: 0.3, green: 0.2, blue: 0.1)")
+        )
+        XCTAssertFalse(badge.contains(".foregroundColor(.white)"))
+    }
+
     func testImageBearingLibraryListsAreLazyAndPreserveCanonicalContent() throws {
         let home = try source(at: "ArcNote/HomeView.swift")
 
