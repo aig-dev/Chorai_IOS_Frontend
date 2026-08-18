@@ -129,14 +129,30 @@ final class MergeSessionStoreCommitTests: XCTestCase {
         await service.enqueueSave(.failure(.timeout))
         await service.enqueueSave(.failure(.timeout))
         store.updateArtifactTags(["Unsynced"])
-        await waitForMergeStore {
-            store.artifactDraftSyncState == .unsynced(.timeout)
+        do {
+            _ = try await store.flushArtifactDraft()
+            XCTFail("Expected the initial draft save to time out")
+        } catch {
+            XCTAssertEqual(error as? CoreMergeError, .timeout)
         }
+        XCTAssertEqual(store.artifactDraftSyncState, .unsynced(.timeout))
         let pendingBeforeAccept = store.artifactDraft?.pendingSave
 
         store.commit()
-        await waitForMergeStore {
-            store.artifactActionError == .timeout && !store.isOperationInFlight
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: .seconds(2))
+        while true {
+            let saveCallCount = await service.saveCalls.count
+            if saveCallCount >= 2,
+               store.artifactActionError == .timeout,
+               !store.isOperationInFlight {
+                break
+            }
+            guard clock.now < deadline else {
+                XCTFail("Timed out waiting for the commit-triggered draft retry")
+                return
+            }
+            try? await Task.sleep(for: .milliseconds(10))
         }
 
         XCTAssertEqual(store.phase, .ready)
@@ -146,6 +162,7 @@ final class MergeSessionStoreCommitTests: XCTestCase {
         XCTAssertEqual(store.artifactDraft?.pendingSave, pendingBeforeAccept)
         let saveCalls = await service.saveCalls
         XCTAssertEqual(saveCalls.count, 2)
+        guard saveCalls.count == 2 else { return }
         XCTAssertEqual(saveCalls[0].request, saveCalls[1].request)
     }
 
