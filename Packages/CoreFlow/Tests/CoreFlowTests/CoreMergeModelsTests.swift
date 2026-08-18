@@ -189,6 +189,118 @@ final class CoreMergeModelsTests: XCTestCase {
         }
     }
 
+    func testArtifactResponseDTORejectsUnknownExtensionBeyondRawScanDepthBudget() {
+        let nestingDepth = RawTopLevelJSON.defaultMaximumNestingDepth + 1
+        let futureExtension = String(repeating: "[", count: nestingDepth)
+            + "null"
+            + String(repeating: "]", count: nestingDepth)
+        let responseData = artifactResponseData(
+            futureExtensionJSON: futureExtension
+        )
+
+        XCTAssertThrowsError(
+            try MergeArtifactResponseDTO.decode(responseData: responseData)
+        ) { error in
+            XCTAssertEqual(
+                error as? MergeArtifactResponseDTOError,
+                .invalidResponse
+            )
+        }
+    }
+
+    func testArtifactResponseDTOAcceptsUnknownNestedExtensionAndPreservesRawDocument() throws {
+        let response = try MergeArtifactResponseDTO.decode(
+            responseData: artifactResponseData(
+                futureExtensionJSON: #"{"nested":[null,{"escaped":"line\nquote\""}]}"#
+            )
+        )
+
+        XCTAssertEqual(
+            response.documentJSON,
+            Data(
+                #"{"blocks":[],"meta":{"exactInteger":9007199254740993},"schemaVersion":"card_doc.v1"}"#
+                    .utf8
+            )
+        )
+    }
+
+    func testArtifactResponseDTORejectsTwentyThousandLevelUnknownExtensionWithoutCrashing() {
+        let nestingDepth = 20_000
+        let futureExtension = String(repeating: "[", count: nestingDepth)
+            + "null"
+            + String(repeating: "]", count: nestingDepth)
+
+        XCTAssertThrowsError(
+            try MergeArtifactResponseDTO.decode(
+                responseData: artifactResponseData(
+                    futureExtensionJSON: futureExtension
+                )
+            )
+        ) { error in
+            XCTAssertEqual(
+                error as? MergeArtifactResponseDTOError,
+                .invalidResponse
+            )
+        }
+    }
+
+    func testRawTopLevelJSONDepthBudgetStopsTwentyThousandLevels() {
+        let nestingDepth = 20_000
+        let data = Data(
+            (
+                #"{"futureExtension":"#
+                    + String(repeating: "[", count: nestingDepth)
+                    + "null"
+                    + String(repeating: "]", count: nestingDepth)
+                    + "}"
+            ).utf8
+        )
+
+        XCTAssertThrowsError(
+            try RawTopLevelJSON.members(
+                in: data,
+                maximumNestingDepth: RawTopLevelJSON.defaultMaximumNestingDepth
+            )
+        ) { error in
+            XCTAssertEqual(
+                error as? MergeArtifactResponseDTOError,
+                .invalidResponse
+            )
+        }
+    }
+
+    func testRawTopLevelJSONAcceptsNestedEscapedAndNullMembersWithinBudget() throws {
+        let data = Data(
+            #"{"normal":{"array":[{"escaped":"line\nquote\""}]},"nullable":null}"#.utf8
+        )
+
+        let members = try RawTopLevelJSON.members(
+            in: data,
+            maximumNestingDepth: RawTopLevelJSON.defaultMaximumNestingDepth
+        )
+
+        XCTAssertEqual(members["nullable"], Data("null".utf8))
+        XCTAssertEqual(
+            members["normal"],
+            Data(#"{"array":[{"escaped":"line\nquote\""}]}"#.utf8)
+        )
+    }
+
+    func testArtifactResponseDTORejectsEscapedDuplicateTopLevelKey() {
+        let responseData = Data(
+            #"{"schemaVersion":"merge_artifact.v2","artifactId":"mart_duplicate","jobId":"mjob_duplicate","route":"text_fusion","surpriseKind":"none","sourceSnapshotHash":"sha256:source","latestRevision":1,"latestHash":"sha256:document","document":{"blocks":[],"meta":{},"schemaVersion":"card_doc.v1"},"sourceTray":{},"alignment":{},"presentation":{"schemaVersion":"merge_artifact_presentation.v1","tags":[],"rate":1},"presentationHash":"sha256:presentation","futureExtension":null,"future\u0045xtension":{"value":2}}"#.utf8
+        )
+
+        XCTAssertThrowsError(
+            try MergeArtifactResponseDTO.decode(responseData: responseData)
+        ) { error in
+            XCTAssertEqual(
+                error as? MergeArtifactResponseDTOError,
+                .invalidResponse
+            )
+        }
+    }
+
     func testArtifactSaveContractCarriesDocumentAndTagsButNoEditableRate() {
         let document = Data(#"{"blocks":[],"meta":{},"schemaVersion":"card_doc.v1"}"#.utf8)
         let request = MergeArtifactSaveRequest(
@@ -297,6 +409,14 @@ final class CoreMergeModelsTests: XCTestCase {
 
     private func source(_ id: String, preview: String) -> MergeSource {
         MergeSource(assetID: id, versionID: nil, preview: preview)
+    }
+
+    private func artifactResponseData(futureExtensionJSON: String) -> Data {
+        Data(
+            """
+            {"schemaVersion":"merge_artifact.v2","artifactId":"mart_future","jobId":"mjob_future","route":"text_fusion","surpriseKind":"none","sourceSnapshotHash":"sha256:source","latestRevision":1,"latestHash":"sha256:document","document":{"blocks":[],"meta":{"exactInteger":9007199254740993},"schemaVersion":"card_doc.v1"},"sourceTray":{},"alignment":{},"presentation":{"schemaVersion":"merge_artifact_presentation.v1","tags":[],"rate":3},"presentationHash":"sha256:presentation","futureExtension":\(futureExtensionJSON)}
+            """.utf8
+        )
     }
 
     private func block(type: String, text: String) -> MergeBlock {

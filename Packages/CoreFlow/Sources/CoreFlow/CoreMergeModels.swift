@@ -559,8 +559,8 @@ public struct MergeArtifactResponseDTO: Equatable, Sendable {
         let documentJSON: Data
         let topLevelMembers: [String: Data]
         do {
-            topLevelMembers = try RawTopLevelJSON.members(in: responseData)
             wire = try JSONDecoder().decode(Wire.self, from: responseData)
+            topLevelMembers = try RawTopLevelJSON.members(in: responseData)
             guard let rawDocument = topLevelMembers["document"] else {
                 throw MergeArtifactResponseDTOError.invalidResponse
             }
@@ -646,12 +646,24 @@ public struct MergeArtifactResponseDTO: Equatable, Sendable {
     }
 }
 
-private struct RawTopLevelJSON {
+struct RawTopLevelJSON {
+    static let defaultMaximumNestingDepth = 64
+
     private let bytes: [UInt8]
+    private let maximumNestingDepth: Int
     private var index = 0
 
-    static func members(in data: Data) throws -> [String: Data] {
-        var scanner = RawTopLevelJSON(bytes: Array(data))
+    static func members(
+        in data: Data,
+        maximumNestingDepth: Int = Self.defaultMaximumNestingDepth
+    ) throws -> [String: Data] {
+        guard maximumNestingDepth >= 0 else {
+            throw MergeArtifactResponseDTOError.invalidResponse
+        }
+        var scanner = RawTopLevelJSON(
+            bytes: Array(data),
+            maximumNestingDepth: maximumNestingDepth
+        )
         return try scanner.members()
     }
 
@@ -679,7 +691,7 @@ private struct RawTopLevelJSON {
             try consume(0x3A)
             skipWhitespace()
             let valueStart = index
-            try skipValue()
+            try skipValue(depth: 0)
             let valueEnd = index
 
             result[key] = Data(bytes[valueStart..<valueEnd])
@@ -697,7 +709,7 @@ private struct RawTopLevelJSON {
         return result
     }
 
-    private mutating func skipValue() throws {
+    private mutating func skipValue(depth: Int) throws {
         guard index < bytes.count else {
             throw MergeArtifactResponseDTOError.invalidResponse
         }
@@ -705,9 +717,15 @@ private struct RawTopLevelJSON {
         case 0x22:
             try skipString()
         case 0x7B:
-            try skipObject()
+            guard depth < maximumNestingDepth else {
+                throw MergeArtifactResponseDTOError.invalidResponse
+            }
+            try skipObject(childDepth: depth + 1)
         case 0x5B:
-            try skipArray()
+            guard depth < maximumNestingDepth else {
+                throw MergeArtifactResponseDTOError.invalidResponse
+            }
+            try skipArray(childDepth: depth + 1)
         default:
             let start = index
             while index < bytes.count,
@@ -720,7 +738,7 @@ private struct RawTopLevelJSON {
         }
     }
 
-    private mutating func skipObject() throws {
+    private mutating func skipObject(childDepth: Int) throws {
         try consume(0x7B)
         skipWhitespace()
         if consumeIfPresent(0x7D) { return }
@@ -730,20 +748,20 @@ private struct RawTopLevelJSON {
             skipWhitespace()
             try consume(0x3A)
             skipWhitespace()
-            try skipValue()
+            try skipValue(depth: childDepth)
             skipWhitespace()
             if consumeIfPresent(0x7D) { return }
             try consume(0x2C)
         }
     }
 
-    private mutating func skipArray() throws {
+    private mutating func skipArray(childDepth: Int) throws {
         try consume(0x5B)
         skipWhitespace()
         if consumeIfPresent(0x5D) { return }
         while true {
             skipWhitespace()
-            try skipValue()
+            try skipValue(depth: childDepth)
             skipWhitespace()
             if consumeIfPresent(0x5D) { return }
             try consume(0x2C)
