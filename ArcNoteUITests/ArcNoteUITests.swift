@@ -270,6 +270,91 @@ final class ArcNoteUITests: XCTestCase {
         }
     }
 
+    func testMergeTaskRailRemapsCachedSlotAcrossPushedRouteRotation() {
+        XCUIDevice.shared.orientation = .portrait
+        addTeardownBlock {
+            XCUIDevice.shared.orientation = .portrait
+        }
+
+        app.launchArguments.append("--ui-test-merge-task-rail")
+        app.launch()
+
+        let window = app.windows.firstMatch
+        XCTAssertTrue(window.waitForExistence(timeout: 3))
+        let portraitRail = waitForExactlyOneMergeTaskRail()
+        let portraitFrame = portraitRail.frame
+        let portraitCorner = waitFor("merge.fixture.layout-corner").frame
+        let trailingInset = portraitCorner.maxX - portraitFrame.maxX
+        let bottomInset = portraitCorner.maxY - portraitFrame.maxY
+
+        waitForButton("merge.portal.route.home-detail").tap()
+        waitFor("merge.portal.destination.home-detail")
+        assertExactlyOneAccessibleMergeRail()
+
+        XCUIDevice.shared.orientation = .landscapeLeft
+        let landscapeExpectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in
+                window.frame.width > window.frame.height
+            },
+            object: window
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [landscapeExpectation], timeout: 5),
+            .completed
+        )
+
+        let landscapeWindow = window.frame
+        let landscapeCorner = waitFor("merge.fixture.layout-corner").frame
+        let landscapeRail = waitForExactlyOneMergeTaskRail()
+        assertExactlyOneAccessibleMergeRail()
+        XCTAssertTrue(landscapeRail.isHittable)
+        XCTAssertGreaterThanOrEqual(
+            landscapeRail.frame.minX,
+            landscapeWindow.minX
+        )
+        XCTAssertLessThanOrEqual(
+            landscapeRail.frame.maxX,
+            landscapeWindow.maxX
+        )
+        XCTAssertGreaterThanOrEqual(
+            landscapeRail.frame.minY,
+            landscapeWindow.minY
+        )
+        XCTAssertLessThanOrEqual(
+            landscapeRail.frame.maxY,
+            landscapeWindow.maxY
+        )
+        XCTAssertEqual(
+            landscapeCorner.maxX - landscapeRail.frame.maxX,
+            trailingInset,
+            accuracy: 2,
+            "The cached rail must preserve its safe-area trailing slot"
+        )
+        XCTAssertEqual(
+            landscapeCorner.maxY - landscapeRail.frame.maxY,
+            bottomInset,
+            accuracy: 2,
+            "The cached rail must preserve its safe-area bottom slot"
+        )
+
+        XCUIDevice.shared.orientation = .portrait
+        let portraitExpectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in
+                window.frame.height > window.frame.width
+            },
+            object: window
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [portraitExpectation], timeout: 5),
+            .completed
+        )
+
+        let restoredRail = waitForExactlyOneMergeTaskRail()
+        assertExactlyOneAccessibleMergeRail()
+        XCTAssertEqual(restoredRail.frame.midX, portraitFrame.midX, accuracy: 2)
+        XCTAssertEqual(restoredRail.frame.maxY, portraitFrame.maxY, accuracy: 2)
+    }
+
     func testWorkingMergeCancelConfirmsCanonicalCallAndCleanupDuringActivePoll() {
         app.launchArguments.append("--ui-test-merge-task-rail")
         app.launchEnvironment["CHORAI_UI_TEST_MERGE_TASK_FIXTURE"] =

@@ -372,7 +372,8 @@ struct MergeTaskRailPortalModifier<Callout: View>: ViewModifier {
         ) { preference in
             GeometryReader { proxy in
                 anchorOverlay(
-                    measuredNewNoteFrame: preference.map { proxy[$0] }
+                    measuredNewNoteFrame: preference.map { proxy[$0] },
+                    containerSize: proxy.size
                 )
             }
         }
@@ -380,18 +381,20 @@ struct MergeTaskRailPortalModifier<Callout: View>: ViewModifier {
 
     @ViewBuilder
     private func anchorOverlay(
-        measuredNewNoteFrame: CGRect?
+        measuredNewNoteFrame: CGRect?,
+        containerSize: CGSize
     ) -> some View {
         ZStack(alignment: .topLeading) {
             MergeTaskRailAnchorStoreUpdater(
                 store: anchorStore,
-                newNoteFrame: measuredNewNoteFrame
+                newNoteFrame: measuredNewNoteFrame,
+                containerSize: containerSize
             )
 
             if !isHidden,
                !summaries.isEmpty,
                let newNoteFrame = measuredNewNoteFrame
-                    ?? anchorStore.newNoteFrame {
+                    ?? anchorStore.newNoteFrame(in: containerSize) {
                 MergeTaskRailShellOverlay(
                     summaries: summaries,
                     isExpanded: $isExpanded,
@@ -410,22 +413,35 @@ struct MergeTaskRailPortalModifier<Callout: View>: ViewModifier {
 private struct MergeTaskRailAnchorStoreUpdater: View {
     @ObservedObject var store: MergeTaskRailAnchorStore
     let newNoteFrame: CGRect?
+    let containerSize: CGSize
 
     var body: some View {
         Color.clear
             .allowsHitTesting(false)
             .accessibilityHidden(true)
             .onAppear {
-                updateStore(with: newNoteFrame)
+                updateStore(
+                    with: newNoteFrame,
+                    containerSize: containerSize
+                )
             }
             .onChange(of: newNoteFrame) { frame in
-                updateStore(with: frame)
+                updateStore(with: frame, containerSize: containerSize)
+            }
+            .onChange(of: containerSize) { size in
+                updateStore(with: newNoteFrame, containerSize: size)
             }
     }
 
-    private func updateStore(with frame: CGRect?) {
+    private func updateStore(
+        with frame: CGRect?,
+        containerSize: CGSize
+    ) {
         guard let frame else { return }
-        store.update(newNoteFrame: frame)
+        store.update(
+            newNoteFrame: frame,
+            containerSize: containerSize
+        )
     }
 }
 
@@ -794,6 +810,7 @@ private struct MergeTaskRailRouteFixtureScreen: View {
         NavigationStack(path: $path) {
             ZStack {
                 ZenVisualTokens.background.ignoresSafeArea()
+                fixtureLayoutCorner
                 VStack(spacing: 14) {
                     Color.clear
                         .frame(width: 1, height: 1)
@@ -849,6 +866,7 @@ private struct MergeTaskRailRouteFixtureScreen: View {
             .navigationDestination(for: Route.self) { route in
                 ZStack {
                     ZenVisualTokens.background.ignoresSafeArea()
+                    fixtureLayoutCorner
                     VStack(spacing: 18) {
                         Text(route.rawValue)
                             .accessibilityIdentifier(
@@ -874,6 +892,22 @@ private struct MergeTaskRailRouteFixtureScreen: View {
             Color.clear
                 .frame(width: 240, height: 44)
                 .accessibilityHidden(true)
+        }
+    }
+
+    private var fixtureLayoutCorner: some View {
+        VStack {
+            Spacer()
+            HStack {
+                Spacer()
+                Color.clear
+                    .frame(width: 1, height: 1)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("Layout corner")
+                    .accessibilityIdentifier(
+                        "merge.fixture.layout-corner"
+                    )
+            }
         }
     }
 }
