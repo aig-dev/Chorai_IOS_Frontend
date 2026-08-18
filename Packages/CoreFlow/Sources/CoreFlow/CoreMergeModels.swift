@@ -557,24 +557,34 @@ public struct MergeArtifactResponseDTO: Equatable, Sendable {
     public static func decode(responseData: Data) throws -> Self {
         let wire: Wire
         let documentJSON: Data
+        let topLevelMembers: [String: Data]
         do {
+            topLevelMembers = try RawTopLevelJSON.members(in: responseData)
             wire = try JSONDecoder().decode(Wire.self, from: responseData)
-            documentJSON = try RawTopLevelJSON.value(
-                forKey: "document",
-                in: responseData
-            )
+            guard let rawDocument = topLevelMembers["document"] else {
+                throw MergeArtifactResponseDTOError.invalidResponse
+            }
+            documentJSON = rawDocument
         } catch {
             throw MergeArtifactResponseDTOError.invalidResponse
         }
 
         let projection: MergeArtifactPresentationProjection
-        switch (wire.presentation, wire.presentationHash) {
-        case let (.some(presentation), .some(hash)) where !hash.isEmpty:
+        switch (
+            topLevelMembers["presentation"] != nil,
+            topLevelMembers["presentationHash"] != nil
+        ) {
+        case (true, true):
+            guard let presentation = wire.presentation,
+                  let hash = wire.presentationHash,
+                  !hash.isEmpty else {
+                throw MergeArtifactResponseDTOError.invalidPresentationTuple
+            }
             projection = .authenticated(
                 presentation: presentation,
                 hash: hash
             )
-        case (nil, nil):
+        case (false, false):
             projection = .legacy
         default:
             throw MergeArtifactResponseDTOError.invalidPresentationTuple
@@ -640,17 +650,17 @@ private struct RawTopLevelJSON {
     private let bytes: [UInt8]
     private var index = 0
 
-    static func value(forKey key: String, in data: Data) throws -> Data {
+    static func members(in data: Data) throws -> [String: Data] {
         var scanner = RawTopLevelJSON(bytes: Array(data))
-        return try scanner.value(forKey: key)
+        return try scanner.members()
     }
 
-    private mutating func value(forKey target: String) throws -> Data {
+    private mutating func members() throws -> [String: Data] {
         skipWhitespace()
         try consume(0x7B)
         skipWhitespace()
 
-        var result: Data?
+        var result: [String: Data] = [:]
         if consumeIfPresent(0x7D) {
             throw MergeArtifactResponseDTOError.invalidResponse
         }
@@ -662,6 +672,9 @@ private struct RawTopLevelJSON {
             guard let key = try? JSONDecoder().decode(String.self, from: keyData) else {
                 throw MergeArtifactResponseDTOError.invalidResponse
             }
+            guard result[key] == nil else {
+                throw MergeArtifactResponseDTOError.invalidResponse
+            }
             skipWhitespace()
             try consume(0x3A)
             skipWhitespace()
@@ -669,12 +682,7 @@ private struct RawTopLevelJSON {
             try skipValue()
             let valueEnd = index
 
-            if key == target {
-                guard result == nil else {
-                    throw MergeArtifactResponseDTOError.invalidResponse
-                }
-                result = Data(bytes[valueStart..<valueEnd])
-            }
+            result[key] = Data(bytes[valueStart..<valueEnd])
 
             skipWhitespace()
             if consumeIfPresent(0x7D) {
@@ -683,7 +691,7 @@ private struct RawTopLevelJSON {
             try consume(0x2C)
         }
         skipWhitespace()
-        guard index == bytes.count, let result else {
+        guard index == bytes.count else {
             throw MergeArtifactResponseDTOError.invalidResponse
         }
         return result

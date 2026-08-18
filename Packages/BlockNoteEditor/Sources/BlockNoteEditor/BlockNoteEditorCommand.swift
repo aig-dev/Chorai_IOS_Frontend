@@ -12,15 +12,18 @@ public struct BlockNoteInitialDocument: Equatable, Sendable {
     public let contentJSON: String?
     public let fallbackMarkdown: String
     public let profile: BlockNoteDocumentProfile
+    public let displayURLsByMediaReference: [String: String]
 
     public init(
         contentJSON: String?,
         fallbackMarkdown: String,
-        profile: BlockNoteDocumentProfile = .standard
+        profile: BlockNoteDocumentProfile = .standard,
+        displayURLsByMediaReference: [String: String] = [:]
     ) {
         self.contentJSON = contentJSON
         self.fallbackMarkdown = fallbackMarkdown
         self.profile = profile
+        self.displayURLsByMediaReference = displayURLsByMediaReference
     }
 }
 

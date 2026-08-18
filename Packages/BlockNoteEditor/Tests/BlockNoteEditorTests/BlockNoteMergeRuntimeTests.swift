@@ -17,7 +17,10 @@ final class BlockNoteMergeRuntimeTests: XCTestCase {
             document: BlockNoteInitialDocument(
                 contentJSON: editable.blockNoteJSON,
                 fallbackMarkdown: editable.fallbackMarkdown,
-                profile: .mergeArtifact
+                profile: .mergeArtifact,
+                displayURLsByMediaReference: [
+                    "med_1111111111111111": Self.displayImageURL,
+                ]
             ),
             editable: true,
             controller: controller
@@ -41,6 +44,26 @@ final class BlockNoteMergeRuntimeTests: XCTestCase {
             return XCTFail("Merge document did not initialize losslessly: \(String(describing: terminalAvailability))")
         }
 
+        let imageStateJSON = try await evaluateJavaScriptString(
+            #"""
+            (() => {
+              const host = document.querySelector('[data-content-type="image"]');
+              const image = host ? host.querySelector('img') : null;
+              return JSON.stringify({
+                src: image ? image.getAttribute('src') : null,
+                showsAddImage: host ? host.innerText.includes('Add image') : true
+              });
+            })();
+            """#,
+            in: webView
+        )
+        let imageState = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: Data(imageStateJSON.utf8))
+                as? [String: Any]
+        )
+        XCTAssertEqual(imageState["src"] as? String, Self.displayImageURL)
+        XCTAssertEqual(imageState["showsAddImage"] as? Bool, false)
+
         let snapshot = try await controller.requestSnapshot(
             timeoutNanoseconds: 5_000_000_000
         )
@@ -51,6 +74,7 @@ final class BlockNoteMergeRuntimeTests: XCTestCase {
 
         XCTAssertEqual(encoded, cardDocument)
         XCTAssertTrue(snapshot.contentJSON.contains(#""mediaRef":"med_1111111111111111""#))
+        XCTAssertFalse(snapshot.contentJSON.contains(Self.displayImageURL))
     }
 
     func testReturnCreatesServerCompatibleBlockIDInRuntimeSnapshot() async throws {
@@ -146,6 +170,28 @@ final class BlockNoteMergeRuntimeTests: XCTestCase {
             }
         }
     }
+
+    private func evaluateJavaScriptString(
+        _ script: String,
+        in webView: WKWebView
+    ) async throws -> String {
+        try await withCheckedThrowingContinuation { continuation in
+            webView.evaluateJavaScript(script) { result, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                } else if let result = result as? String {
+                    continuation.resume(returning: result)
+                } else {
+                    continuation.resume(
+                        throwing: CocoaError(.coderInvalidValue)
+                    )
+                }
+            }
+        }
+    }
+
+    private static let displayImageURL =
+        "https://media.example.test/signed/merge-image.png?token=runtime-only"
 
     private static let richCardDocument = #"{"blocks":[{"content":[{"styles":{"bold":true},"text":"Rich heading","type":"text"}],"id":"blk_rich_heading","props":{"level":2},"type":"heading"},{"content":[{"text":"Plain ","type":"text"},{"styles":{"italic":true},"text":"italic ","type":"text"},{"content":[{"styles":{"underline":true},"text":"reference","type":"text"}],"href":"https://example.com/reference","type":"link"}],"id":"blk_rich_paragraph","type":"paragraph"},{"children":[{"content":[{"text":"Nested detail","type":"text"}],"id":"blk_rich_child","type":"paragraph"}],"content":[{"text":"Parent item","type":"text"}],"id":"blk_rich_bullet","type":"bullet_list"},{"content":[{"styles":{"strike":true},"text":"Completed","type":"text"}],"id":"blk_rich_check","props":{"checked":true},"type":"checklist"},{"id":"blk_rich_image","props":{"alignment":"center","mediaRef":"med_1111111111111111","origin":"source_image","prominence":"wide","semanticRole":"evidence"},"type":"image"},{"content":[{"text":"Preserve quote","type":"text"}],"id":"blk_rich_quote","type":"quote"},{"content":[{"text":"let exact = true","type":"text"}],"id":"blk_rich_code","type":"code"},{"content":[],"id":"blk_rich_divider","type":"divider"}],"meta":{"producer":"merge.vnext","route":"text_fusion"},"schemaVersion":"card_doc.v1"}"#
 

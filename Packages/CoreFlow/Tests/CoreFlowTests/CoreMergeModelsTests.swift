@@ -121,7 +121,72 @@ final class CoreMergeModelsTests: XCTestCase {
 
         XCTAssertThrowsError(
             try MergeArtifactResponseDTO.decode(responseData: responseData)
+        ) { error in
+            XCTAssertEqual(
+                error as? MergeArtifactResponseDTOError,
+                .invalidPresentationTuple
+            )
+        }
+    }
+
+    func testArtifactResponseDTORejectsExplicitNullPresentationTuple() {
+        let responseData = Data(
+            #"{"schemaVersion":"merge_artifact.v2","artifactId":"mart_null","jobId":"mjob_null","route":"text_fusion","surpriseKind":"none","sourceSnapshotHash":"sha256:source","latestRevision":1,"latestHash":"sha256:document","document":{"blocks":[],"meta":{},"schemaVersion":"card_doc.v1"},"sourceTray":{},"alignment":{},"presentation":null,"presentationHash":null}"#.utf8
         )
+
+        XCTAssertThrowsError(
+            try MergeArtifactResponseDTO.decode(responseData: responseData)
+        ) { error in
+            XCTAssertEqual(
+                error as? MergeArtifactResponseDTOError,
+                .invalidPresentationTuple
+            )
+        }
+    }
+
+    func testArtifactResponseDTORejectsPresentNullWithMissingPartner() {
+        let responseData = Data(
+            #"{"schemaVersion":"merge_artifact.v2","artifactId":"mart_null_mixed","jobId":"mjob_null_mixed","route":"text_fusion","surpriseKind":"none","sourceSnapshotHash":"sha256:source","latestRevision":1,"latestHash":"sha256:document","document":{"blocks":[],"meta":{},"schemaVersion":"card_doc.v1"},"sourceTray":{},"alignment":{},"presentation":null}"#.utf8
+        )
+
+        XCTAssertThrowsError(
+            try MergeArtifactResponseDTO.decode(responseData: responseData)
+        ) { error in
+            XCTAssertEqual(
+                error as? MergeArtifactResponseDTOError,
+                .invalidPresentationTuple
+            )
+        }
+    }
+
+    func testArtifactResponseDTORejectsDuplicateTopLevelKeyFromNullToValue() {
+        let responseData = Data(
+            #"{"schemaVersion":"merge_artifact.v2","artifactId":"mart_duplicate","jobId":"mjob_duplicate","route":"text_fusion","surpriseKind":"none","sourceSnapshotHash":"sha256:source","latestRevision":1,"latestHash":"sha256:document","document":{"blocks":[],"meta":{},"schemaVersion":"card_doc.v1"},"sourceTray":{},"alignment":{},"presentation":null,"presentation":{"schemaVersion":"merge_artifact_presentation.v1","tags":[],"rate":1},"presentationHash":"sha256:presentation"}"#.utf8
+        )
+
+        XCTAssertThrowsError(
+            try MergeArtifactResponseDTO.decode(responseData: responseData)
+        ) { error in
+            XCTAssertEqual(
+                error as? MergeArtifactResponseDTOError,
+                .invalidResponse
+            )
+        }
+    }
+
+    func testArtifactResponseDTORejectsDuplicateTopLevelKeyFromValueToValue() {
+        let responseData = Data(
+            #"{"schemaVersion":"merge_artifact.v2","artifactId":"mart_duplicate","jobId":"mjob_duplicate","route":"text_fusion","surpriseKind":"none","sourceSnapshotHash":"sha256:source","latestRevision":1,"latestHash":"sha256:document","document":{"blocks":[],"meta":{},"schemaVersion":"card_doc.v1"},"sourceTray":{},"alignment":{},"presentation":{"schemaVersion":"merge_artifact_presentation.v1","tags":[],"rate":1},"presentationHash":"sha256:presentation","futureExtension":{"value":1},"futureExtension":{"value":2}}"#.utf8
+        )
+
+        XCTAssertThrowsError(
+            try MergeArtifactResponseDTO.decode(responseData: responseData)
+        ) { error in
+            XCTAssertEqual(
+                error as? MergeArtifactResponseDTOError,
+                .invalidResponse
+            )
+        }
     }
 
     func testArtifactSaveContractCarriesDocumentAndTagsButNoEditableRate() {

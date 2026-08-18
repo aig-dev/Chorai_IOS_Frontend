@@ -340,7 +340,8 @@ struct BlockNoteEditorBridgeSession: Sendable {
         state.beginInitialization()
         if document.profile == .mergeArtifact {
             mergeRuntimeAdapter = try? BlockNoteMergeRuntimeAdapter(
-                contentJSON: document.contentJSON
+                contentJSON: document.contentJSON,
+                displayURLsByMediaReference: document.displayURLsByMediaReference
             )
         } else {
             mergeRuntimeAdapter = nil
@@ -444,7 +445,10 @@ private struct BlockNoteMergeRuntimeAdapter: Sendable {
     private var mappedRuntimeIDs: [String: String] = [:]
     private var usedOutputIDs: Set<String>
 
-    init(contentJSON: String?) throws {
+    init(
+        contentJSON: String?,
+        displayURLsByMediaReference: [String: String]
+    ) throws {
         guard let contentJSON,
               let data = contentJSON.data(using: .utf8) else {
             throw AdapterError.invalidDocument
@@ -457,7 +461,12 @@ private struct BlockNoteMergeRuntimeAdapter: Sendable {
         originalsByID = originals
         usedOutputIDs = Set(originals.keys)
 
-        let runtimeBlocks = try mergeBlocks.map(Self.runtimeBlock)
+        let runtimeBlocks = try mergeBlocks.map {
+            try Self.runtimeBlock(
+                $0,
+                displayURLsByMediaReference: displayURLsByMediaReference
+            )
+        }
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
         runtimeDocumentJSON = String(
@@ -547,14 +556,23 @@ private struct BlockNoteMergeRuntimeAdapter: Sendable {
         return generated
     }
 
-    private static func runtimeBlock(_ merge: RuntimeBlock) throws -> RuntimeBlock {
+    private static func runtimeBlock(
+        _ merge: RuntimeBlock,
+        displayURLsByMediaReference: [String: String]
+    ) throws -> RuntimeBlock {
         var props = runtimeDefaults(for: merge.type)
         for (key, value) in merge.props where key != "mediaRef" {
             props[key] = value
         }
         if merge.type == "image" {
-            guard case .string? = merge.props["mediaRef"] else {
+            guard case let .string(mediaReference)? = merge.props["mediaRef"],
+                  !mediaReference.isEmpty else {
                 throw AdapterError.invalidDocument
+            }
+            if let displayURL = displayURLsByMediaReference[mediaReference]?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+               !displayURL.isEmpty {
+                props["url"] = .string(displayURL)
             }
         } else if merge.props["mediaRef"] != nil {
             throw AdapterError.invalidDocument
@@ -565,7 +583,12 @@ private struct BlockNoteMergeRuntimeAdapter: Sendable {
             type: merge.type,
             props: props,
             content: merge.type == "image" ? nil : (merge.content ?? []),
-            children: try merge.children.map(runtimeBlock)
+            children: try merge.children.map {
+                try runtimeBlock(
+                    $0,
+                    displayURLsByMediaReference: displayURLsByMediaReference
+                )
+            }
         )
     }
 
