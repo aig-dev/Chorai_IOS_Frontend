@@ -428,8 +428,15 @@ public final class MergeSessionStore: ObservableObject {
         guard !isLifetimeInvalidated else { return }
         isNetworkAvailable = isAvailable
 
-        guard artifactDraft?.pendingSave != nil else { return }
+        guard let draft = artifactDraft,
+              draft.pendingSave != nil else { return }
         if isAvailable {
+            if let rejection = validationRejection(in: draft) {
+                artifactDraftSyncState = .unsynced(
+                    .validation(code: rejection.code)
+                )
+                return
+            }
             if activeDraftSaveTask == nil {
                 artifactDraftSyncState = .dirty
             }
@@ -601,10 +608,17 @@ public final class MergeSessionStore: ObservableObject {
     private func restore(_ restored: MergeSessionSnapshot) {
         snapshot = restored
         artifactDraft = restored.artifactDraft
-        if restored.artifactDraft?.pendingSave != nil {
-            artifactDraftSyncState = isNetworkAvailable
-                ? .dirty
-                : .unsynced(.offline)
+        if let draft = restored.artifactDraft,
+           draft.pendingSave != nil {
+            if let rejection = validationRejection(in: draft) {
+                artifactDraftSyncState = .unsynced(
+                    .validation(code: rejection.code)
+                )
+            } else {
+                artifactDraftSyncState = isNetworkAvailable
+                    ? .dirty
+                    : .unsynced(.offline)
+            }
             pendingSaveWasAttempted = true
         } else {
             artifactDraftSyncState = .clean
@@ -739,7 +753,20 @@ public final class MergeSessionStore: ObservableObject {
         preservationManifest: Data
     ) -> MergeArtifactDraftSnapshot {
         let pending: MergePendingArtifactSave
+        let validationRejection: MergeArtifactDraftValidationRejection?
         if let existing = current.pendingSave,
+           current.validationRejection?.idempotencyKey
+                == existing.idempotencyKey {
+            pendingSaveWasAttempted = false
+            pending = MergePendingArtifactSave(
+                idempotencyKey: idempotencyKey(),
+                baseRevision: existing.baseRevision,
+                baseDocumentHash: existing.baseDocumentHash,
+                documentJSON: documentJSON,
+                tags: tags
+            )
+            validationRejection = nil
+        } else if let existing = current.pendingSave,
            !pendingSaveWasAttempted,
            activeDraftSaveTask == nil,
            conflictServerArtifact == nil {
@@ -750,8 +777,10 @@ public final class MergeSessionStore: ObservableObject {
                 documentJSON: documentJSON,
                 tags: tags
             )
+            validationRejection = nil
         } else if let existing = current.pendingSave {
             pending = existing
+            validationRejection = current.validationRejection
         } else {
             pendingSaveWasAttempted = false
             pending = MergePendingArtifactSave(
@@ -761,6 +790,7 @@ public final class MergeSessionStore: ObservableObject {
                 documentJSON: documentJSON,
                 tags: tags
             )
+            validationRejection = nil
         }
 
         switch artifactDraftSyncState {
@@ -785,7 +815,8 @@ public final class MergeSessionStore: ObservableObject {
             tags: tags,
             rate: current.rate,
             preservationManifest: preservationManifest,
-            pendingSave: pending
+            pendingSave: pending,
+            validationRejection: validationRejection
         )
     }
 
@@ -815,7 +846,9 @@ public final class MergeSessionStore: ObservableObject {
         guard
             !isLifetimeInvalidated,
             isNetworkAvailable,
-            artifactDraft?.pendingSave != nil
+            let draft = artifactDraft,
+            draft.pendingSave != nil,
+            validationRejection(in: draft) == nil
         else {
             return
         }
@@ -853,6 +886,12 @@ public final class MergeSessionStore: ObservableObject {
             }
             guard let pending = draft.pendingSave else {
                 return currentArtifact
+            }
+            if let rejection = validationRejection(in: draft) {
+                artifactDraftSyncState = .unsynced(
+                    .validation(code: rejection.code)
+                )
+                throw CoreMergeError.validation(code: rejection.code)
             }
             guard isNetworkAvailable else {
                 artifactDraftSyncState = .unsynced(.offline)
@@ -954,6 +993,12 @@ public final class MergeSessionStore: ObservableObject {
                     generation: generation
                 )
             }
+            if case .validation(let code) = mapped {
+                recordValidationRejection(
+                    pending: pending,
+                    code: code
+                )
+            }
             artifactDraftSyncState = .unsynced(draftFailure(from: mapped))
             throw mapped
         }
@@ -1031,14 +1076,6 @@ public final class MergeSessionStore: ObservableObject {
         saveToken: UUID,
         generation: Int
     ) async throws -> MergeArtifact {
-        let hadLocalChanges: Bool
-        if let draft = artifactDraft, let acknowledged = artifact {
-            hadLocalChanges = draft.documentJSON != acknowledged.documentJSON
-                || draft.tags != CardEditingTag.normalize(acknowledged.presentation.tags)
-        } else {
-            hadLocalChanges = true
-        }
-
         do {
             let latest = try await service.artifact(jobID: jobID)
             guard latest.jobID == jobID,
@@ -1049,6 +1086,14 @@ public final class MergeSessionStore: ObservableObject {
                     generation: generation
                   ) else {
                 throw CoreMergeError.interrupted
+            }
+            let hadLocalChanges: Bool
+            if let draft = artifactDraft, let acknowledged = artifact {
+                hadLocalChanges = draft.documentJSON != acknowledged.documentJSON
+                    || draft.tags
+                        != CardEditingTag.normalize(acknowledged.presentation.tags)
+            } else {
+                hadLocalChanges = true
             }
             if hadLocalChanges {
                 conflictServerArtifact = latest
@@ -1110,6 +1155,41 @@ public final class MergeSessionStore: ObservableObject {
             && activeDraftSaveToken == saveToken
             && snapshot?.jobID == jobID
             && artifactDraft?.pendingSave == pending
+    }
+
+    private func validationRejection(
+        in draft: MergeArtifactDraftSnapshot
+    ) -> MergeArtifactDraftValidationRejection? {
+        guard
+            let pending = draft.pendingSave,
+            let rejection = draft.validationRejection,
+            rejection.idempotencyKey == pending.idempotencyKey
+        else {
+            return nil
+        }
+        return rejection
+    }
+
+    private func recordValidationRejection(
+        pending: MergePendingArtifactSave,
+        code: String?
+    ) {
+        guard let current = artifactDraft,
+              current.pendingSave == pending else { return }
+        let rejected = MergeArtifactDraftSnapshot(
+            baseRevision: current.baseRevision,
+            baseDocumentHash: current.baseDocumentHash,
+            documentJSON: current.documentJSON,
+            tags: current.tags,
+            rate: current.rate,
+            preservationManifest: current.preservationManifest,
+            pendingSave: pending,
+            validationRejection: MergeArtifactDraftValidationRejection(
+                idempotencyKey: pending.idempotencyKey,
+                code: code
+            )
+        )
+        persistArtifactDraft(rejected)
     }
 
     private func draftFailure(from error: CoreMergeError) -> MergeDraftFailure {
@@ -1403,9 +1483,15 @@ public final class MergeSessionStore: ObservableObject {
                    restoredDraft.pendingSave != nil {
                     artifactDraft = restoredDraft
                     pendingSaveWasAttempted = true
-                    artifactDraftSyncState = isNetworkAvailable
-                        ? .dirty
-                        : .unsynced(.offline)
+                    if let rejection = validationRejection(in: restoredDraft) {
+                        artifactDraftSyncState = .unsynced(
+                            .validation(code: rejection.code)
+                        )
+                    } else {
+                        artifactDraftSyncState = isNetworkAvailable
+                            ? .dirty
+                            : .unsynced(.offline)
+                    }
                 } else if let restoredDraft,
                           restoredDraft.baseRevision == loaded.latestRevision,
                           restoredDraft.baseDocumentHash == loaded.latestHash {
@@ -1422,7 +1508,10 @@ public final class MergeSessionStore: ObservableObject {
                 persistence.save(value)
             }
             phase = .ready
-            if artifactDraft?.pendingSave != nil, isNetworkAvailable {
+            if let draft = artifactDraft,
+               draft.pendingSave != nil,
+               validationRejection(in: draft) == nil,
+               isNetworkAvailable {
                 scheduleDraftSynchronization(afterDebounce: false)
             }
         } catch {

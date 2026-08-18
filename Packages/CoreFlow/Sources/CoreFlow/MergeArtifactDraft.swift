@@ -22,6 +22,16 @@ public struct MergePendingArtifactSave: Codable, Equatable, Sendable {
     }
 }
 
+public struct MergeArtifactDraftValidationRejection: Codable, Equatable, Sendable {
+    public let idempotencyKey: String
+    public let code: String?
+
+    public init(idempotencyKey: String, code: String?) {
+        self.idempotencyKey = idempotencyKey
+        self.code = code
+    }
+}
+
 public struct MergeArtifactDraftSnapshot: Codable, Equatable, Sendable {
     public let baseRevision: Int
     public let baseDocumentHash: String
@@ -30,6 +40,7 @@ public struct MergeArtifactDraftSnapshot: Codable, Equatable, Sendable {
     public let rate: Int
     public let preservationManifest: Data
     public let pendingSave: MergePendingArtifactSave?
+    public let validationRejection: MergeArtifactDraftValidationRejection?
 
     public init(
         baseRevision: Int,
@@ -38,7 +49,8 @@ public struct MergeArtifactDraftSnapshot: Codable, Equatable, Sendable {
         tags: [String],
         rate: Int,
         preservationManifest: Data,
-        pendingSave: MergePendingArtifactSave?
+        pendingSave: MergePendingArtifactSave?,
+        validationRejection: MergeArtifactDraftValidationRejection? = nil
     ) {
         self.baseRevision = baseRevision
         self.baseDocumentHash = baseDocumentHash
@@ -47,6 +59,7 @@ public struct MergeArtifactDraftSnapshot: Codable, Equatable, Sendable {
         self.rate = rate
         self.preservationManifest = preservationManifest
         self.pendingSave = pendingSave
+        self.validationRejection = validationRejection
     }
 }
 

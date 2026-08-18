@@ -199,6 +199,118 @@ final class MergeSessionStoreArtifactTests: XCTestCase {
         XCTAssertEqual(replay?.request.idempotencyKey, "save-stable")
     }
 
+    func testValidationRejectedSaveIsReplacedOnlyAfterNewMutation() async {
+        let service = MockCoreMergeService()
+        let persistence = InMemoryMergeSessionPersistence()
+        let store = await readyStore(
+            service: service,
+            persistence: persistence,
+            keys: MergeKeySequence(["save-rejected", "save-after-edit"])
+        )
+        await service.enqueueSave(
+            .failure(.validation(code: "invalid_document"))
+        )
+        let rejectedDocument = document(
+            id: "blk_rejected",
+            text: "Rejected"
+        )
+
+        store.updateArtifactDraft(
+            documentJSON: rejectedDocument,
+            preservationManifest: Data("manifest-rejected".utf8)
+        )
+        await waitForMergeStore {
+            store.artifactDraftSyncState
+                == .unsynced(.validation(code: "invalid_document"))
+        }
+        for _ in 0..<20 { await Task.yield() }
+
+        let callsWithoutMutation = await service.saveCalls
+        XCTAssertEqual(callsWithoutMutation.count, 1)
+        XCTAssertEqual(
+            callsWithoutMutation.first?.request.idempotencyKey,
+            "save-rejected"
+        )
+        XCTAssertEqual(
+            callsWithoutMutation.first?.request.documentJSON,
+            rejectedDocument
+        )
+
+        await service.enqueueSave(.success(saveResult(revision: 2)))
+        // A spare response keeps the pre-fix mutation loop observable instead
+        // of terminating the test process on the mock's empty-queue guard.
+        await service.enqueueSave(.success(saveResult(revision: 3)))
+        let correctedDocument = document(
+            id: "blk_corrected",
+            text: "Corrected"
+        )
+        store.updateArtifactDraft(
+            documentJSON: correctedDocument,
+            preservationManifest: Data("manifest-corrected".utf8)
+        )
+        store.updateArtifactTags(["Corrected"])
+        _ = try? await store.flushArtifactDraft()
+
+        let calls = await service.saveCalls
+        XCTAssertEqual(calls.count, 2)
+        XCTAssertEqual(calls[1].request.idempotencyKey, "save-after-edit")
+        XCTAssertNotEqual(
+            calls[1].request.idempotencyKey,
+            calls[0].request.idempotencyKey
+        )
+        XCTAssertEqual(
+            calls[1].request.baseRevision,
+            calls[0].request.baseRevision
+        )
+        XCTAssertEqual(calls[1].request.baseHash, calls[0].request.baseHash)
+        XCTAssertEqual(calls[1].request.documentJSON, correctedDocument)
+        XCTAssertEqual(calls[1].request.tags, ["Corrected"])
+        XCTAssertEqual(store.artifact?.latestRevision, 2)
+        XCTAssertEqual(store.artifactDraftSyncState, .clean)
+    }
+
+    func testValidationRejectedSaveDoesNotRetryWithoutNewMutation() async {
+        let service = MockCoreMergeService()
+        let persistence = InMemoryMergeSessionPersistence()
+        let store = await readyStore(
+            service: service,
+            persistence: persistence,
+            keys: MergeKeySequence(["save-rejected"])
+        )
+        await service.enqueueSave(
+            .failure(.validation(code: "invalid_document"))
+        )
+        store.updateArtifactDraft(
+            documentJSON: document(id: "blk_rejected", text: "Rejected"),
+            preservationManifest: Data("manifest-rejected".utf8)
+        )
+        await waitForMergeStore {
+            store.artifactDraftSyncState
+                == .unsynced(.validation(code: "invalid_document"))
+        }
+        await service.enqueueSave(
+            .failure(.server(code: "must_not_be_sent"))
+        )
+
+        do {
+            _ = try await store.flushArtifactDraft()
+            XCTFail("A definitively rejected draft must remain unsynced")
+        } catch {
+            XCTAssertEqual(
+                error as? CoreMergeError,
+                .validation(code: "invalid_document")
+            )
+        }
+
+        let calls = await service.saveCalls
+        XCTAssertEqual(calls.count, 1)
+        XCTAssertEqual(calls.first?.request.idempotencyKey, "save-rejected")
+        XCTAssertEqual(
+            store.artifactDraftSyncState,
+            .unsynced(.validation(code: "invalid_document"))
+        )
+    }
+
     func testTagOnlyDraftSaveAdvancesRevisionWithoutChangingLifecyclePhase() async {
         let service = MockCoreMergeService()
         let persistence = InMemoryMergeSessionPersistence()
@@ -352,6 +464,82 @@ final class MergeSessionStoreArtifactTests: XCTestCase {
         XCTAssertEqual(store.artifactDraft?.documentJSON, latest.documentJSON)
         XCTAssertEqual(store.artifactDraft?.tags, ["Latest"])
         XCTAssertNil(store.artifactDraft?.pendingSave)
+    }
+
+    func testCleanConflictDoesNotAdoptServerOverMutationDuringLatestFetch() async {
+        let original = makeMergeArtifact()
+        let persistence = InMemoryMergeSessionPersistence()
+        var snapshot = makeMergeSnapshot(jobID: "job_1", status: .artifactReady)
+        snapshot.artifactDraft = MergeArtifactDraftSnapshot(
+            baseRevision: 0,
+            baseDocumentHash: "sha256:stale",
+            documentJSON: original.documentJSON,
+            tags: original.presentation.tags,
+            rate: original.presentation.rate,
+            preservationManifest: Data("manifest-original".utf8),
+            pendingSave: MergePendingArtifactSave(
+                idempotencyKey: "save-stale-clean",
+                baseRevision: 0,
+                baseDocumentHash: "sha256:stale",
+                documentJSON: original.documentJSON,
+                tags: original.presentation.tags
+            )
+        )
+        persistence.seed(snapshot)
+        let service = ControlledDraftMergeService(initialArtifact: original)
+        let staleSave = ControlledDraftSaveResponse(
+            result: .failure(.conflict(code: "stale_base"))
+        )
+        await service.enqueueSave(staleSave)
+        let store = makeStore(
+            service: service,
+            persistence: persistence,
+            keys: MergeKeySequence(["must-not-be-used"])
+        )
+        store.start()
+        await waitForMergeStore { store.phase == .ready }
+        await waitForControlledDraftSave(staleSave)
+
+        let latest = draftArtifact(
+            revision: 2,
+            documentJSON: document(id: "blk_server", text: "Server latest"),
+            tags: ["Server"]
+        )
+        let latestFetch = ControlledDraftArtifactResponse(artifact: latest)
+        await service.enqueueArtifact(latestFetch)
+        await staleSave.resume()
+        await waitForControlledDraftArtifact(latestFetch)
+
+        let localDocument = document(id: "blk_local", text: "Local edit")
+        store.updateArtifactDraft(
+            documentJSON: localDocument,
+            preservationManifest: Data("manifest-local".utf8)
+        )
+        store.updateArtifactTags(["Local"])
+        await latestFetch.resume()
+        await waitForMergeStore {
+            if case .conflict = store.artifactDraftSyncState { return true }
+            return store.artifactDraftSyncState == .clean
+                && store.artifact?.latestRevision == 2
+        }
+
+        XCTAssertEqual(
+            store.artifactDraftSyncState,
+            .conflict(
+                MergeArtifactConflict(
+                    serverRevision: 2,
+                    serverDocumentHash: "sha256:document-2"
+                )
+            )
+        )
+        XCTAssertEqual(store.artifactDraft?.documentJSON, localDocument)
+        XCTAssertEqual(store.artifactDraft?.tags, ["Local"])
+        XCTAssertNotNil(store.artifactDraft?.pendingSave)
+        XCTAssertEqual(
+            persistence.snapshot(actorID: "actor_1")?
+                .artifactDraft?.documentJSON,
+            localDocument
+        )
     }
 
     func testBackKeepsReadyPhaseAndPersistsDraftWhileDebounceContinues() async {
@@ -651,8 +839,32 @@ actor ControlledDraftSaveResponse {
     }
 }
 
+actor ControlledDraftArtifactResponse {
+    private let artifact: MergeArtifact
+    private var continuation: CheckedContinuation<Void, Never>?
+    private(set) var isWaiting = false
+
+    init(artifact: MergeArtifact) {
+        self.artifact = artifact
+    }
+
+    func resolve() async -> MergeArtifact {
+        isWaiting = true
+        await withCheckedContinuation { continuation in
+            self.continuation = continuation
+        }
+        return artifact
+    }
+
+    func resume() {
+        continuation?.resume()
+        continuation = nil
+    }
+}
+
 actor ControlledDraftMergeService: CoreMergeServing {
     private let initialArtifact: MergeArtifact
+    private var artifactResponses: [ControlledDraftArtifactResponse] = []
     private var saveResponses: [ControlledDraftSaveResponse] = []
     private(set) var saveCalls: [(jobID: String, request: MergeArtifactSaveRequest)] = []
     private(set) var commitCalls: [(jobID: String, request: MergeCommitRequest)] = []
@@ -665,6 +877,10 @@ actor ControlledDraftMergeService: CoreMergeServing {
         saveResponses.append(response)
     }
 
+    func enqueueArtifact(_ response: ControlledDraftArtifactResponse) {
+        artifactResponses.append(response)
+    }
+
     func capabilities() async throws -> [MergeCapability] { [] }
     func createJob(_ request: MergeCreateRequest) async throws -> MergeJob {
         makeMergeJob(status: .artifactReady, artifactID: initialArtifact.artifactID)
@@ -672,7 +888,10 @@ actor ControlledDraftMergeService: CoreMergeServing {
     func job(id: String) async throws -> MergeJob {
         makeMergeJob(id: id, status: .artifactReady, artifactID: initialArtifact.artifactID)
     }
-    func artifact(jobID: String) async throws -> MergeArtifact { initialArtifact }
+    func artifact(jobID: String) async throws -> MergeArtifact {
+        guard !artifactResponses.isEmpty else { return initialArtifact }
+        return await artifactResponses.removeFirst().resolve()
+    }
     func saveArtifact(
         jobID: String,
         request: MergeArtifactSaveRequest
@@ -702,6 +921,17 @@ func waitForControlledDraftSave(
         await Task.yield()
     }
     XCTFail("Timed out waiting for controlled Merge artifact save")
+}
+
+func waitForControlledDraftArtifact(
+    _ response: ControlledDraftArtifactResponse,
+    timeoutIterations: Int = 500
+) async {
+    for _ in 0..<timeoutIterations {
+        if await response.isWaiting { return }
+        await Task.yield()
+    }
+    XCTFail("Timed out waiting for controlled Merge artifact fetch")
 }
 
 private func waitForPendingDraftSleep(
