@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import CoreFlow
 
 struct NewInsightView: View {
     @Binding var isPresented: Bool
@@ -8,7 +9,6 @@ struct NewInsightView: View {
     @State private var showAddTag = false
     @State private var contentText = ""
     @State private var titleText = "New Insight"
-    @State private var badgeText = "Legendary"
     @StateObject private var publishManager = PublishNoteManager.shared
     @StateObject private var networkManager = NetworkManager.shared
     @StateObject private var authManager = AuthManager.shared
@@ -30,6 +30,10 @@ struct NewInsightView: View {
         } else {
             return 0 // 默认值
         }
+    }
+
+    private var levelStyle: CardLevelStyle {
+        CardLevelStyle(rate: currentRate)
     }
     
     init(isPresented: Binding<Bool>, mergeResult: MergeCardsData? = nil, previewData: MergePreviewResponse? = nil, selectedCards: [SelectedCard]? = nil) {
@@ -58,8 +62,8 @@ struct NewInsightView: View {
                         .font(.system(size: 24, weight: .bold))
                         .foregroundColor(.white)
                     
-                    Text(badgeText)
-                        .font(.system(size: 14, weight: .medium))
+                    Text(levelStyle.label)
+                        .font(.subheadline.weight(.medium))
                         .foregroundColor(.white)
                         .padding(.horizontal, 16)
                         .padding(.vertical, 6)
@@ -67,6 +71,7 @@ struct NewInsightView: View {
                             RoundedRectangle(cornerRadius: 12)
                                 .fill(Color(red: 0.3, green: 0.2, blue: 0.1).opacity(0.8))
                         )
+                        .accessibilityLabel(levelStyle.label)
                 }
                 
                 // 主要内容区域
@@ -224,16 +229,13 @@ struct NewInsightView: View {
             }
                 .padding(24)
                 .background(
-                    ZStack {
-                        Image(backgroundImageForRate(currentRate))
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                            .clipped()
-
-                        RoundedRectangle(cornerRadius: 20)
-                            .fill(Color.black.opacity(0.3))
-                    }
-                    .clipShape(RoundedRectangle(cornerRadius: 20))
+                    CardLevelMaterial(
+                        style: levelStyle,
+                        shape: RoundedRectangle(
+                            cornerRadius: 20,
+                            style: .continuous
+                        )
+                    )
                 )
                 .adaptiveContentGutter()
                 .padding(.vertical, 12)
@@ -327,19 +329,16 @@ struct NewInsightView: View {
             titleText = "New Insight"
             contentText = previewData.data.newCard.content
             tags = previewData.data.newCard.tags
-            badgeText = badgeTextForRate(previewData.data.newCard.rate)
         } else if let mergeResult = mergeResult {
             // 使用合并结果的数据，但保持标题为"New Insight"
             titleText = "New Insight"
             contentText = mergeResult.newCard.content
             tags = mergeResult.newCard.tags
-            badgeText = badgeTextForRate(mergeResult.newCard.rate)
         } else {
             // 使用默认数据
             titleText = "New Insight"
             contentText = "By analyzing the content of multiple cards, we have integrated modern UI design trends and user experience improvement strategies:\n\n1. **Design Trends**\nDark mode becomes standard micro interaction to enhance user experience\nIntegration of 3D elements\nThe Return of Gradient Colors"
             tags = ["Design", "Inspiration", "Nature"]
-            badgeText = "Legendary"
         }
     }
     
@@ -477,39 +476,6 @@ struct NewInsightView: View {
             )
     }
     
-    // MARK: 根据rate值返回背景图片
-    private func backgroundImageForRate(_ rate: Int) -> String {
-        if rate < 3 {
-            return "merge_bg_basic"
-        } else if rate >= 3 && rate <= 8 {
-            return "merge_bg_green"
-        } else if rate >= 9 && rate <= 26 {
-            return "merge_bg_blue"
-        } else if rate >= 27 && rate <= 80 {
-            return "merge_bg_purple"
-        } else if rate >= 81 && rate <= 242 {
-            return "merge_bg_yellow"
-        } else {
-            return "merge_bg_red"
-        }
-    }
-    
-    // MARK: 根据rate值返回徽章文本
-    private func badgeTextForRate(_ rate: Int) -> String {
-        if rate < 3 {
-            return "Basic"
-        } else if rate >= 3 && rate <= 8 {
-            return "Notable"
-        } else if rate >= 9 && rate <= 26 {
-            return "Valuable"
-        } else if rate >= 27 && rate <= 80 {
-            return "Significant"
-        } else if rate >= 81 && rate <= 242 {
-            return "Critical"
-        } else {
-            return "Definitive"
-        }
-    }
 }
 
 #Preview {

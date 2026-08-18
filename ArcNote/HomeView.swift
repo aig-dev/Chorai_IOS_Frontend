@@ -1460,57 +1460,8 @@ struct LibraryCardBackgroundSurface<Fallback: View>: View {
         reduceTransparency || contrast == .increased ? 0.30 : 0.22
     }
 
-    private var rateAccent: Color? {
-        switch LibraryCardRateStyle(rate: rate) {
-        case .neutral:
-            return nil
-        case .green:
-            return Color(red: 0, green: 1, blue: 102 / 255)
-        case .blue:
-            return Color(red: 3 / 255, green: 113 / 255, blue: 1)
-        case .purple:
-            return Color(red: 150 / 255, green: 39 / 255, blue: 210 / 255)
-        case .amber:
-            return Color(red: 217 / 255, green: 120 / 255, blue: 0)
-        case .orangeRed:
-            return Color(red: 1, green: 94 / 255, blue: 0)
-        }
-    }
-
-    private var rateGlowOpacity: Double {
-        if reduceTransparency { return 0.14 }
-        return contrast == .increased ? 0.24 : 0.22
-    }
-
-    private var rateBorderOpacity: Double {
-        contrast == .increased ? 0.52 : 0.32
-    }
-
-    @ViewBuilder
-    private var rateTreatment: some View {
-        if let rateAccent {
-            GeometryReader { geometry in
-                RadialGradient(
-                    colors: [
-                        rateAccent.opacity(rateGlowOpacity),
-                        rateAccent.opacity(rateGlowOpacity * 0.32),
-                        Color.clear,
-                    ],
-                    center: .top,
-                    startRadius: 1,
-                    endRadius: max(
-                        geometry.size.width,
-                        geometry.size.height
-                    ) * 0.86
-                )
-            }
-
-            shape
-                .stroke(
-                    rateAccent.opacity(rateBorderOpacity),
-                    lineWidth: contrast == .increased ? 1.5 : 1
-                )
-        }
+    private var levelStyle: CardLevelStyle {
+        CardLevelStyle(rate: rate)
     }
 
     var body: some View {
@@ -1571,7 +1522,11 @@ struct LibraryCardBackgroundSurface<Fallback: View>: View {
                 }
             }
 
-            rateTreatment
+            CardLevelMaterial(
+                style: levelStyle,
+                shape: shape,
+                usesAssetBase: backgroundURL == nil
+            )
         }
         .clipShape(shape)
         .accessibilityHidden(true)

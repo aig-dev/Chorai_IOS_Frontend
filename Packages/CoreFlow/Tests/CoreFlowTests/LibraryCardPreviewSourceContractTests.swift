@@ -56,9 +56,13 @@ final class LibraryCardPreviewSourceContractTests: XCTestCase {
         XCTAssertTrue(surface.contains("@Environment(\\.accessibilityReduceTransparency)"))
     }
 
-    func testEveryLibrarySurfaceConsumesCanonicalRateStyle() throws {
+    func testEveryRateSurfaceConsumesCanonicalLevelStyle() throws {
         let home = try source(at: "ArcNote/HomeView.swift")
         let merge = try source(at: "ArcNote/MergeView.swift")
+        let newInsight = try source(at: "ArcNote/NewInsightView.swift")
+        let mergeLifecycle = try source(
+            at: "ArcNote/CoreFlow/MergeLifecycleViews.swift"
+        )
         let discoveryPath = try source(at: "ArcNote/RootView.swift")
 
         XCTAssertEqual(
@@ -67,7 +71,17 @@ final class LibraryCardPreviewSourceContractTests: XCTestCase {
             ).count - 1,
             2
         )
-        XCTAssertTrue(home.contains("LibraryCardRateStyle(rate: rate)"))
+        for rateSurface in [home, newInsight, mergeLifecycle] {
+            XCTAssertTrue(rateSurface.contains("CardLevelStyle(rate:"))
+            XCTAssertFalse(rateSurface.contains("LibraryCardRateStyle"))
+            XCTAssertFalse(rateSurface.contains("Critical"))
+        }
+        XCTAssertTrue(newInsight.contains("Text(levelStyle.label)"))
+        XCTAssertTrue(
+            mergeLifecycle.contains(
+                "rate: store.artifactDraft?.rate ?? artifact.presentation.rate"
+            )
+        )
         XCTAssertTrue(
             home.contains(
                 "backgroundMediaRef: card.backgroundMediaRef,\n"
@@ -94,16 +108,41 @@ final class LibraryCardPreviewSourceContractTests: XCTestCase {
         XCTAssertFalse(discoveryPath.contains("backgroundImageForRate"))
 
         for legacyRange in [
+            "rate < 3",
             "rate >= 3 && rate <= 8",
             "rate >= 9 && rate <= 26",
             "rate >= 27 && rate <= 80",
             "rate >= 81 && rate <= 242",
             "rate > 242",
         ] {
-            XCTAssertFalse(home.contains(legacyRange))
-            XCTAssertFalse(merge.contains(legacyRange))
-            XCTAssertFalse(discoveryPath.contains(legacyRange))
+            for source in [
+                home,
+                merge,
+                newInsight,
+                mergeLifecycle,
+                discoveryPath,
+            ] {
+                XCTAssertFalse(source.contains(legacyRange))
+            }
         }
+
+        let panelStart = try XCTUnwrap(
+            mergeLifecycle.range(of: "private struct MergeArtifactReviewPanel")
+        )
+        let panelEnd = try XCTUnwrap(
+            mergeLifecycle.range(
+                of: "private struct MergeArtifactTextAction",
+                range: panelStart.upperBound..<mergeLifecycle.endIndex
+            )
+        )
+        let panel = String(
+            mergeLifecycle[panelStart.lowerBound..<panelEnd.lowerBound]
+        )
+        XCTAssertTrue(panel.contains("CardLevelStyle(rate: rate)"))
+        XCTAssertTrue(panel.contains(".accessibilityLabel(style.label)"))
+        XCTAssertFalse(panel.contains(#"\(rate)"#))
+        XCTAssertFalse(panel.contains("String(rate)"))
+        XCTAssertFalse(panel.contains(".accessibilityValue"))
     }
 
     func testImageBearingLibraryListsAreLazyAndPreserveCanonicalContent() throws {

@@ -847,6 +847,7 @@ private struct MergeLifecycleView: View {
             if let artifact = store.artifact {
                 MergeArtifactReviewPanel(
                     artifact: artifact,
+                    rate: store.artifactDraft?.rate ?? artifact.presentation.rate,
                     sourceCount: store.selectedSources.count,
                     error: store.artifactActionError,
                     operation: artifactOperation,
@@ -1153,10 +1154,8 @@ private enum MergeArtifactOperation: Equatable {
 }
 
 private struct MergeArtifactReviewPanel: View {
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-    @Environment(\.colorSchemeContrast) private var contrast
-
     let artifact: MergeArtifact
+    let rate: Int
     let sourceCount: Int
     let error: CoreMergeError?
     let operation: MergeArtifactOperation
@@ -1164,6 +1163,10 @@ private struct MergeArtifactReviewPanel: View {
     let onSave: () -> Void
 
     private var isBusy: Bool { operation != .idle }
+
+    private var style: CardLevelStyle {
+        CardLevelStyle(rate: rate)
+    }
 
     private var estimatedBodyHeight: CGFloat {
         let estimatedLines = artifact.document.blocks.reduce(into: 0) {
@@ -1191,7 +1194,12 @@ private struct MergeArtifactReviewPanel: View {
             VStack(spacing: 0) {
                 VStack(spacing: 6) {
                     Text("Merge preview")
-                        .font(.system(size: 18, weight: .semibold))
+                        .font(.headline)
+
+                    Text(style.label)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.white)
+                        .accessibilityLabel(style.label)
 
                     Text("\(sourceCount) sources → 1 card")
                         .font(.system(size: 12, weight: .medium))
@@ -1279,38 +1287,13 @@ private struct MergeArtifactReviewPanel: View {
                 alignment: .top
             )
             .background {
-                RoundedRectangle(cornerRadius: 28, style: .continuous)
-                    .fill(
-                        reduceTransparency
-                            ? Color(red: 0.10, green: 0.065, blue: 0.15)
-                            : Color(red: 0.09, green: 0.055, blue: 0.14)
-                                .opacity(0.94)
+                CardLevelMaterial(
+                    style: style,
+                    shape: RoundedRectangle(
+                        cornerRadius: 28,
+                        style: .continuous
                     )
-                    .overlay {
-                        LinearGradient(
-                            colors: [
-                                Color(red: 0.58, green: 0.20, blue: 0.72)
-                                    .opacity(0.24),
-                                Color.clear,
-                                Color(red: 0.18, green: 0.42, blue: 0.68)
-                                    .opacity(0.16),
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                        .clipShape(
-                            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                        )
-                    }
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 28, style: .continuous)
-                            .stroke(
-                                Color.white.opacity(
-                                    contrast == .increased ? 0.42 : 0.20
-                                ),
-                                lineWidth: contrast == .increased ? 1.5 : 1
-                            )
-                    }
+                )
             }
             .shadow(color: Color.black.opacity(0.34), radius: 26, y: 14)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
@@ -1587,6 +1570,7 @@ struct MergeArtifactVisualFixtureScreen: View {
 
             MergeArtifactReviewPanel(
                 artifact: artifact,
+                rate: artifact.presentation.rate,
                 sourceCount: 3,
                 error: nil,
                 operation: operation,
