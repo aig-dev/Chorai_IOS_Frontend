@@ -12,6 +12,7 @@ final class MergeArtifactDraftController: ObservableObject {
     @Published private(set) var validationMessage: String?
     @Published private(set) var unresolvedMediaReferences: [String]
     @Published private(set) var isPreparingAccept = false
+    @Published private(set) var isRetryingArtifactDraft = false
     @Published var isDiscardConfirmationPresented = false
 
     let store: MergeSessionStore
@@ -99,6 +100,24 @@ final class MergeArtifactDraftController: ObservableObject {
         }
     }
 
+    var canRetryArtifactDraft: Bool {
+        guard store.phase == .ready,
+              !store.isOperationInFlight,
+              !isPreparingAccept,
+              !isRetryingArtifactDraft else {
+            return false
+        }
+        guard case let .unsynced(failure) = store.artifactDraftSyncState else {
+            return false
+        }
+        switch failure {
+        case .timeout, .unavailable, .server, .unknown:
+            return true
+        case .offline, .validation:
+            return false
+        }
+    }
+
     var syncMessage: String {
         if let validationMessage {
             return validationMessage
@@ -108,6 +127,9 @@ final class MergeArtifactDraftController: ObservableObject {
         }
         if store.phase == .committing || isPreparingAccept {
             return "Accepting…"
+        }
+        if isRetryingArtifactDraft {
+            return "Saving…"
         }
         switch store.artifactDraftSyncState {
         case .clean:
@@ -162,7 +184,8 @@ final class MergeArtifactDraftController: ObservableObject {
 
     func back(onMinimize: @escaping () -> Void) {
         Task { @MainActor in
-            _ = await persistCurrentSnapshot()
+            guard await persistCurrentSnapshot() else { return }
+            completeTag()
             onMinimize()
         }
     }
@@ -196,6 +219,19 @@ final class MergeArtifactDraftController: ObservableObject {
             } catch {
                 // MergeSessionStore owns the retryable, persisted failure state.
                 isPreparingAccept = false
+            }
+        }
+    }
+
+    func retryArtifactDraft() {
+        guard canRetryArtifactDraft else { return }
+        isRetryingArtifactDraft = true
+        Task { @MainActor in
+            defer { isRetryingArtifactDraft = false }
+            do {
+                _ = try await store.flushArtifactDraft()
+            } catch {
+                // The store retains the exact pending operation for retry.
             }
         }
     }

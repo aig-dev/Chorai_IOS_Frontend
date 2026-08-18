@@ -29,6 +29,7 @@ final class MergeArtifactPresentationSourceContractTests: XCTestCase {
             "merge.artifact.tags",
             "merge.artifact.add-tag",
             "merge.artifact.sync-state",
+            "merge.artifact.retry-sync",
             "merge.artifact.discard",
             "merge.artifact.accept",
         ] {
@@ -133,6 +134,86 @@ final class MergeArtifactPresentationSourceContractTests: XCTestCase {
             changeStart.lowerBound..<changeEnd.lowerBound
         ]
         XCTAssertTrue(documentChange.contains("guard canEdit else { return }"))
+    }
+
+    func testBackMinimizesOnlyAfterLosslessSnapshotAndPendingTag() throws {
+        let surface = try source(
+            at: "ArcNote/CoreFlow/MergeArtifactEditorSurface.swift"
+        )
+        let controller = try source(
+            at: "ArcNote/CoreFlow/MergeArtifactDraftController.swift"
+        )
+        let backStart = try XCTUnwrap(controller.range(of: "func back("))
+        let backEnd = try XCTUnwrap(
+            controller.range(
+                of: "func discard(",
+                range: backStart.upperBound..<controller.endIndex
+            )
+        )
+        let back = controller[backStart.lowerBound..<backEnd.lowerBound]
+        let snapshot = try XCTUnwrap(
+            back.range(of: "guard await persistCurrentSnapshot() else")
+        )
+        let completeTag = try XCTUnwrap(back.range(of: "completeTag()"))
+        let minimize = try XCTUnwrap(back.range(of: "onMinimize()"))
+
+        XCTAssertLessThan(snapshot.lowerBound, completeTag.lowerBound)
+        XCTAssertLessThan(completeTag.lowerBound, minimize.lowerBound)
+
+        let actionStart = try XCTUnwrap(
+            surface.range(of: "private var backAction")
+        )
+        let actionEnd = try XCTUnwrap(
+            surface.range(
+                of: "private var levelPill",
+                range: actionStart.upperBound..<surface.endIndex
+            )
+        )
+        let backAction = surface[
+            actionStart.lowerBound..<actionEnd.lowerBound
+        ]
+        XCTAssertFalse(backAction.contains("controller.completeTag()"))
+    }
+
+    func testRetryableUnsyncedStateUsesInlineExistingFlushRetry() throws {
+        let surface = try source(
+            at: "ArcNote/CoreFlow/MergeArtifactEditorSurface.swift"
+        )
+        let controller = try source(
+            at: "ArcNote/CoreFlow/MergeArtifactDraftController.swift"
+        )
+
+        XCTAssertTrue(controller.contains("var canRetryArtifactDraft: Bool"))
+        XCTAssertTrue(controller.contains("func retryArtifactDraft()"))
+        XCTAssertTrue(controller.contains("try await store.flushArtifactDraft()"))
+        XCTAssertTrue(
+            controller.contains(
+                "case .timeout, .unavailable, .server, .unknown:"
+            )
+        )
+        XCTAssertTrue(controller.contains("case .offline, .validation:"))
+
+        let syncStart = try XCTUnwrap(
+            surface.range(of: "private var syncState")
+        )
+        let syncEnd = try XCTUnwrap(
+            surface.range(
+                of: "private var syncSymbol",
+                range: syncStart.upperBound..<surface.endIndex
+            )
+        )
+        let syncState = surface[syncStart.lowerBound..<syncEnd.lowerBound]
+        XCTAssertTrue(syncState.contains(#"Button("Retry")"#))
+        XCTAssertTrue(syncState.contains("controller.retryArtifactDraft()"))
+        XCTAssertTrue(
+            syncState.contains(#""merge.artifact.retry-sync""#)
+        )
+
+        let mutationsStart = try XCTUnwrap(
+            surface.range(of: "private var mutationActions")
+        )
+        let mutations = surface[mutationsStart.lowerBound..<surface.endIndex]
+        XCTAssertFalse(mutations.contains(#"Button("Retry")"#))
     }
 
     private func source(at path: String) throws -> String {

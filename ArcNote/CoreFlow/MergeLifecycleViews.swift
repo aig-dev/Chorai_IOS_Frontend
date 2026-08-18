@@ -1295,14 +1295,15 @@ struct MergeArtifactVisualFixtureScreen: View {
 
     init(usesLongDocument: Bool) {
         self.usesLongDocument = usesLongDocument
+        let behavior = MergeArtifactFixtureBehavior.current
         let artifact = MergeArtifactFixtureFactory.artifact(
-            usesLongDocument: usesLongDocument
+            usesLongDocument: usesLongDocument,
+            includesLossyPassthrough: behavior.includesLossyPassthrough
         )
         let persistence = MergeArtifactFixturePersistence(
             snapshot: MergeArtifactFixtureFactory.snapshot()
         )
         let operationProbe = MergeArtifactFixtureOperationProbe()
-        let behavior = MergeArtifactFixtureBehavior.current
         _operationProbe = StateObject(wrappedValue: operationProbe)
         _store = StateObject(
             wrappedValue: MergeSessionStore(
@@ -1395,10 +1396,22 @@ struct MergeArtifactVisualFixtureScreen: View {
                     .accessibilityIdentifier(
                         "fixture.merge.cancel-call-count"
                     )
+                Text(String(operationProbe.saveCallCount))
+                    .accessibilityIdentifier(
+                        "fixture.merge.save-call-count"
+                    )
+                Text(String(operationProbe.retryMatchesFirstPayload))
+                    .accessibilityIdentifier(
+                        "fixture.merge.retry-same-payload"
+                    )
+                Text(String(operationProbe.retryMatchesFirstKey))
+                    .accessibilityIdentifier(
+                        "fixture.merge.retry-same-key"
+                    )
             }
             .font(.system(size: 1))
             .foregroundStyle(.white.opacity(0.01))
-            .frame(width: 1, height: 2)
+            .frame(width: 1, height: 5)
             .accessibilityElement(children: .contain)
         }
         .task {
@@ -1447,18 +1460,24 @@ private enum MergeArtifactFixtureFactory {
         )
     }
 
-    static func artifact(usesLongDocument: Bool) -> MergeArtifact {
+    static func artifact(
+        usesLongDocument: Bool,
+        includesLossyPassthrough: Bool
+    ) -> MergeArtifact {
         let extraBlocks = usesLongDocument
             ? #",{"content":[{"text":"An additional long-fixture paragraph keeps compact phones honest.","type":"text"}],"id":"blk_fixture_extra","type":"paragraph"}"#
+            : ""
+        let passthroughBlock = includesLossyPassthrough
+            ? #",{"content":[{"text":"Preserved passthrough quote","type":"text"}],"id":"blk_fixture_quote","type":"quote"}"#
             : ""
         let baseDocument =
             #"{"blocks":[{"content":[{"styles":{"bold":true},"text":"A durable merged insight","type":"text"}],"id":"blk_fixture_heading","props":{"level":2},"type":"heading"},{"content":[{"text":"Clarity comes from keeping related ideas visible on one editable surface.","type":"text"}],"id":"blk_fixture_intro","type":"paragraph"},{"content":[{"text":"Scrolling is preview, and a tap edits the exact same document.","type":"text"}],"id":"blk_fixture_scroll","type":"paragraph"},{"content":[{"styles":{"italic":true},"text":"The card keeps its typography, frame, and material while focus changes.","type":"text"}],"id":"blk_fixture_focus","type":"paragraph"},{"content":[{"text":"Tags stay aligned with the Card Editor and never gain colored dots.","type":"text"}],"id":"blk_fixture_tags","type":"bullet_list"},{"content":[{"text":"Local snapshots survive minimizing the completed task.","type":"text"}],"id":"blk_fixture_restore","type":"paragraph"},{"content":[{"text":"Final WYSIWYG fixture paragraph.","type":"text"}],"id":"blk_fixture_final","type":"paragraph"}"#
         let documentSuffix =
             #"],"meta":{"producer":"merge.fixture","route":"text_fusion"},"schemaVersion":"card_doc.v1"}"#
         let documentJSON = Data(
-            (baseDocument + extraBlocks + documentSuffix).utf8
+            (baseDocument + passthroughBlock + extraBlocks + documentSuffix).utf8
         )
-        let legacyBlocks = [
+        var legacyBlocks = [
             "A durable merged insight",
             "Clarity comes from keeping related ideas visible on one editable surface.",
             "Scrolling is preview, and a tap edits the exact same document.",
@@ -1475,6 +1494,23 @@ private enum MergeArtifactFixtureFactory {
                 ],
                 properties: [:],
                 children: []
+            )
+        }
+        if includesLossyPassthrough {
+            legacyBlocks.append(
+                MergeBlock(
+                    id: "blk_fixture_quote",
+                    type: "quote",
+                    content: [
+                        MergeInline(
+                            type: "text",
+                            text: "Preserved passthrough quote",
+                            properties: [:]
+                        )
+                    ],
+                    properties: [:],
+                    children: []
+                )
             )
         }
         return MergeArtifact(
@@ -1562,6 +1598,10 @@ private actor MergeArtifactFixtureService: CoreMergeServing {
         jobID: String,
         request: MergeArtifactSaveRequest
     ) async throws -> MergeArtifactSaveResult {
+        let callCount = await operationProbe.recordSave(request)
+        if behavior.saveFailsOnceWithTimeout, callCount == 1 {
+            throw CoreMergeError.timeout
+        }
         revision += 1
         return MergeArtifactSaveResult(
             artifactID: initialArtifact.artifactID,
@@ -1628,6 +1668,8 @@ private actor MergeArtifactFixtureService: CoreMergeServing {
 }
 
 private struct MergeArtifactFixtureBehavior: Sendable {
+    let includesLossyPassthrough: Bool
+    let saveFailsOnceWithTimeout: Bool
     let commitDelayNanoseconds: UInt64
     let commitShouldFail: Bool
     let cancelDelayNanoseconds: UInt64
@@ -1636,6 +1678,12 @@ private struct MergeArtifactFixtureBehavior: Sendable {
     static var current: Self {
         let environment = ProcessInfo.processInfo.environment
         return Self(
+            includesLossyPassthrough: environment[
+                "CHORAI_UI_TEST_MERGE_LOSSY_PASSTHROUGH"
+            ] == "1",
+            saveFailsOnceWithTimeout: environment[
+                "CHORAI_UI_TEST_MERGE_SAVE_FAILS_ONCE_TIMEOUT"
+            ] == "1",
             commitDelayNanoseconds: UInt64(
                 environment[
                     "CHORAI_UI_TEST_MERGE_COMMIT_DELAY_NANOSECONDS"
@@ -1660,6 +1708,11 @@ private struct MergeArtifactFixtureBehavior: Sendable {
 private final class MergeArtifactFixtureOperationProbe: ObservableObject {
     @Published private(set) var commitCallCount = 0
     @Published private(set) var cancelCallCount = 0
+    @Published private(set) var saveCallCount = 0
+    @Published private(set) var retryMatchesFirstPayload = false
+    @Published private(set) var retryMatchesFirstKey = false
+
+    private var firstSaveRequest: MergeArtifactSaveRequest?
 
     func recordCommit() {
         commitCallCount += 1
@@ -1667,6 +1720,23 @@ private final class MergeArtifactFixtureOperationProbe: ObservableObject {
 
     func recordCancel() {
         cancelCallCount += 1
+    }
+
+    @discardableResult
+    func recordSave(_ request: MergeArtifactSaveRequest) -> Int {
+        saveCallCount += 1
+        if let firstSaveRequest {
+            retryMatchesFirstPayload =
+                request.baseRevision == firstSaveRequest.baseRevision
+                && request.baseHash == firstSaveRequest.baseHash
+                && request.documentJSON == firstSaveRequest.documentJSON
+                && request.tags == firstSaveRequest.tags
+            retryMatchesFirstKey = request.idempotencyKey
+                == firstSaveRequest.idempotencyKey
+        } else {
+            firstSaveRequest = request
+        }
+        return saveCallCount
     }
 }
 

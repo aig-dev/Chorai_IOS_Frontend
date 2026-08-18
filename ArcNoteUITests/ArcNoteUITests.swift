@@ -692,6 +692,126 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertEqual(cancelCount.label, "1")
     }
 
+    func testMergeArtifactBackRetainsLossyDraftAndPendingTag() {
+        app.launchArguments.append("--ui-test-merge-artifact")
+        app.launchEnvironment[
+            "CHORAI_UI_TEST_MERGE_LOSSY_PASSTHROUGH"
+        ] = "1"
+        app.launchEnvironment["CHORAI_UI_TEST_MERGE_SESSION_SCOPE"] =
+            "\(name).stable"
+        app.launch()
+
+        let editor = waitFor("merge.artifact.editor")
+        let quote = app.staticTexts["Preserved passthrough quote"]
+        XCTAssertTrue(quote.waitForExistence(timeout: 10))
+        for _ in 0..<3 where
+            quote.frame.minY < editor.frame.minY
+                || quote.frame.maxY > editor.frame.maxY {
+            editor.swipeUp()
+        }
+        XCTAssertGreaterThanOrEqual(quote.frame.minY, editor.frame.minY)
+        XCTAssertLessThanOrEqual(quote.frame.maxY, editor.frame.maxY)
+        app.coordinate(
+            withNormalizedOffset: CGVector(dx: 0, dy: 0)
+        ).withOffset(
+            CGVector(dx: quote.frame.midX, dy: quote.frame.midY)
+        ).tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+        app.typeText(" mutated")
+
+        let syncState = waitFor("merge.artifact.sync-state")
+        let rejected = XCTNSPredicateExpectation(
+            predicate: NSPredicate(
+                format: "label CONTAINS %@",
+                "without losing information"
+            ),
+            object: syncState
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [rejected], timeout: 5),
+            .completed
+        )
+
+        editor.swipeDown()
+        let keyboard = app.keyboards.firstMatch
+        let keyboardDismissed = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == false"),
+            object: keyboard
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [keyboardDismissed], timeout: 5),
+            .completed
+        )
+        waitForButton("merge.artifact.add-tag").tap()
+        let tagInput = waitFor("merge.artifact.tag-input")
+        tagInput.typeText("pending-back-tag")
+        XCTAssertEqual(tagInput.value as? String, "pending-back-tag")
+
+        waitForButton("merge.artifact.back").tap()
+
+        XCTAssertFalse(
+            app.buttons["merge.task-rail"].waitForExistence(timeout: 2),
+            "A rejected snapshot must not minimize the artifact"
+        )
+        XCTAssertTrue(waitFor("screen.merge.artifact").exists)
+        XCTAssertEqual(
+            waitFor("merge.artifact.tag-input").value as? String,
+            "pending-back-tag",
+            "A failed Back must leave the pending tag in its editable state"
+        )
+        XCTAssertTrue(
+            waitFor("merge.artifact.sync-state").label.contains(
+                "without losing information"
+            )
+        )
+    }
+
+    func testMergeArtifactRetriesTimeoutWithExactPendingOperation() {
+        app.launchArguments.append("--ui-test-merge-artifact")
+        app.launchEnvironment[
+            "CHORAI_UI_TEST_MERGE_SAVE_FAILS_ONCE_TIMEOUT"
+        ] = "1"
+        app.launchEnvironment["CHORAI_UI_TEST_MERGE_SESSION_SCOPE"] =
+            "\(name).stable"
+        app.launch()
+
+        let accept = waitForButton("merge.artifact.accept")
+        waitForEnabled(accept)
+        waitForButton("merge.artifact.tag.Design").tap()
+
+        let retry = waitForButton("merge.artifact.retry-sync", timeout: 10)
+        XCTAssertFalse(accept.isEnabled)
+        XCTAssertEqual(waitFor("fixture.merge.save-call-count").label, "1")
+        retry.tap()
+
+        let twoSaves = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label == %@", "2"),
+            object: waitFor("fixture.merge.save-call-count")
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [twoSaves], timeout: 5),
+            .completed
+        )
+        XCTAssertEqual(
+            waitFor("fixture.merge.retry-same-payload").label,
+            "true"
+        )
+        XCTAssertEqual(
+            waitFor("fixture.merge.retry-same-key").label,
+            "true"
+        )
+        let saved = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label == %@", "Saved"),
+            object: waitFor("merge.artifact.sync-state")
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [saved], timeout: 5),
+            .completed
+        )
+        waitForEnabled(accept)
+        waitForMissing("merge.artifact.retry-sync")
+    }
+
     func testNativeOnboardingFixtureCompletesLibraryTipFromItsRealTarget() {
         app.launchArguments.append("--ui-test-native-onboarding")
         app.launch()

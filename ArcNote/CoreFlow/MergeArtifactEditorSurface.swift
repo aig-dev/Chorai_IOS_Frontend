@@ -92,7 +92,6 @@ struct MergeArtifactEditorSurface: View {
     private var backAction: some View {
         HStack {
             Button {
-                controller.completeTag()
                 controller.back(onMinimize: onBack)
             } label: {
                 Image(systemName: "chevron.left")
@@ -214,30 +213,46 @@ struct MergeArtifactEditorSurface: View {
     }
 
     private var syncState: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 7) {
-            if controller.store.artifactDraftSyncState == .saving
-                || controller.isPreparingAccept {
-                ProgressView()
-                    .controlSize(.small)
-                    .tint(.white.opacity(0.78))
-                    .accessibilityHidden(true)
-            } else {
-                Image(systemName: syncSymbol)
-                    .font(.caption.weight(.semibold))
-                    .accessibilityHidden(true)
+        HStack(alignment: .center, spacing: 12) {
+            HStack(alignment: .firstTextBaseline, spacing: 7) {
+                if controller.store.artifactDraftSyncState == .saving
+                    || controller.isPreparingAccept
+                    || controller.isRetryingArtifactDraft {
+                    ProgressView()
+                        .controlSize(.small)
+                        .tint(.white.opacity(0.78))
+                        .accessibilityHidden(true)
+                } else {
+                    Image(systemName: syncSymbol)
+                        .font(.caption.weight(.semibold))
+                        .accessibilityHidden(true)
+                }
+
+                Text(controller.syncMessage)
+                    .font(.footnote.weight(.medium))
+                    .fixedSize(horizontal: false, vertical: true)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(controller.syncMessage)
+            .accessibilityIdentifier("merge.artifact.sync-state")
 
-            Text(controller.syncMessage)
-                .font(.footnote.weight(.medium))
-                .fixedSize(horizontal: false, vertical: true)
-
-            Spacer(minLength: 0)
+            if controller.canRetryArtifactDraft {
+                Button("Retry") {
+                    controller.retryArtifactDraft()
+                }
+                .buttonStyle(.plain)
+                .font(.footnote.weight(.semibold))
+                .frame(minWidth: 64, minHeight: 44)
+                .background(Color.white.opacity(0.12))
+                .clipShape(Capsule(style: .continuous))
+                .accessibilityHint("Retries the same saved Merge draft")
+                .accessibilityIdentifier("merge.artifact.retry-sync")
+            }
         }
         .foregroundStyle(syncColor)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(controller.syncMessage)
-        .accessibilityIdentifier("merge.artifact.sync-state")
+        .accessibilityElement(children: .contain)
     }
 
     private var syncSymbol: String {
