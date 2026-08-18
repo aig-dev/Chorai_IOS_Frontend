@@ -7,6 +7,7 @@ actor MockCoreMergeService: CoreMergeServing {
     private(set) var createCalls: [MergeCreateRequest] = []
     private(set) var jobCalls: [String] = []
     private(set) var artifactCalls: [String] = []
+    private(set) var saveCalls: [(jobID: String, request: MergeArtifactSaveRequest)] = []
     private(set) var cancelCalls: [String] = []
     private(set) var commitCalls: [(jobID: String, request: MergeCommitRequest)] = []
 
@@ -14,10 +15,12 @@ actor MockCoreMergeService: CoreMergeServing {
     private var createResults: [Result<MergeJob, CoreMergeError>] = []
     private var jobResults: [Result<MergeJob, CoreMergeError>] = []
     private var artifactResults: [Result<MergeArtifact, CoreMergeError>] = []
+    private var saveResults: [Result<MergeArtifactSaveResult, CoreMergeError>] = []
     private var cancelResults: [Result<MergeJob, CoreMergeError>] = []
     private var commitResults: [Result<MergeCommitResult, CoreMergeError>] = []
     private var jobResultsByID: [String: [Result<MergeJob, CoreMergeError>]] = [:]
     private var artifactResultsByJobID: [String: [Result<MergeArtifact, CoreMergeError>]] = [:]
+    private var saveResultsByJobID: [String: [Result<MergeArtifactSaveResult, CoreMergeError>]] = [:]
     private var cancelResultsByJobID: [String: [Result<MergeJob, CoreMergeError>]] = [:]
     private var commitResultsByJobID: [String: [Result<MergeCommitResult, CoreMergeError>]] = [:]
     private var controlledCreatesByKey: [String: [ControlledMergeCreateResponse]] = [:]
@@ -79,6 +82,17 @@ actor MockCoreMergeService: CoreMergeServing {
         _ result: Result<MergeArtifact, CoreMergeError>
     ) {
         artifactResultsByJobID[jobID, default: []].append(result)
+    }
+
+    func enqueueSave(_ result: Result<MergeArtifactSaveResult, CoreMergeError>) {
+        saveResults.append(result)
+    }
+
+    func enqueueSave(
+        jobID: String,
+        _ result: Result<MergeArtifactSaveResult, CoreMergeError>
+    ) {
+        saveResultsByJobID[jobID, default: []].append(result)
     }
 
     func enqueueCancel(_ result: Result<MergeJob, CoreMergeError>) {
@@ -148,6 +162,17 @@ actor MockCoreMergeService: CoreMergeServing {
             return try result.get()
         }
         return try dequeue(&artifactResults).get()
+    }
+
+    func saveArtifact(
+        jobID: String,
+        request: MergeArtifactSaveRequest
+    ) async throws -> MergeArtifactSaveResult {
+        saveCalls.append((jobID, request))
+        if let result = dequeue(id: jobID, from: &saveResultsByJobID) {
+            return try result.get()
+        }
+        return try dequeue(&saveResults).get()
     }
 
     func cancel(jobID: String) async throws -> MergeJob {
@@ -382,7 +407,10 @@ func makeMergeArtifact(
     jobID: String = "job_1",
     artifactID: String = "artifact_1"
 ) -> MergeArtifact {
-    MergeArtifact(
+    let documentJSON = Data(
+        #"{"blocks":[{"content":[{"text":"Merged body","type":"text"}],"id":"block_1","type":"paragraph"}],"meta":{},"schemaVersion":"card_doc.v1"}"#.utf8
+    )
+    return MergeArtifact(
         artifactID: artifactID,
         jobID: jobID,
         capabilityID: "structured_text",
@@ -409,7 +437,16 @@ func makeMergeArtifact(
             metadata: [:]
         ),
         fragments: [],
-        metadata: [:]
+        metadata: [:],
+        latestRevision: 1,
+        latestHash: "sha256:artifact-document-1",
+        documentJSON: documentJSON,
+        presentationHash: "sha256:artifact-presentation-1",
+        presentation: MergeArtifactPresentation(
+            schemaVersion: "merge_artifact_presentation.v1",
+            tags: [],
+            rate: 1
+        )
     )
 }
 

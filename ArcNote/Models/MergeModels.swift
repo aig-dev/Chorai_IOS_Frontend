@@ -70,6 +70,71 @@ struct MergeArtifactResponse: Codable {
     let document: MergeCardDocumentDTO
     let sourceTray: [String: MergeJSONValue]
     let alignment: [String: MergeJSONValue]
+    let presentation: MergeArtifactPresentationDTO
+    let presentationHash: String
+}
+
+struct MergeArtifactPresentationDTO: Codable {
+    let schemaVersion: String
+    let tags: [String]
+    let rate: Int
+}
+
+struct MergeArtifactSaveRequestDTO {
+    let baseRevision: Int
+    let baseHash: String
+    let idemKey: String
+    let documentJSON: Data
+    let tags: [String]
+
+    init(
+        baseRevision: Int,
+        baseHash: String,
+        idemKey: String,
+        documentJSON: Data,
+        tags: [String]
+    ) throws {
+        self.baseRevision = baseRevision
+        self.baseHash = baseHash
+        self.idemKey = idemKey
+        let editable = try MergeArtifactEditorCodec.decode(
+            cardDocumentJSON: documentJSON
+        )
+        self.documentJSON = try MergeArtifactEditorCodec.encode(
+            blockNoteJSON: editable.blockNoteJSON,
+            preserving: editable.preservationManifest
+        )
+        self.tags = tags
+    }
+
+    func canonicalBody() throws -> Data {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.withoutEscapingSlashes]
+
+        var body = Data(#"{"baseHash":"#.utf8)
+        body.append(try encoder.encode(baseHash))
+        body.append(Data(",\"baseRevision\":".utf8))
+        body.append(Data(String(baseRevision).utf8))
+        body.append(Data(",\"doc\":".utf8))
+        body.append(documentJSON)
+        body.append(Data(",\"idemKey\":".utf8))
+        body.append(try encoder.encode(idemKey))
+        body.append(Data(",\"tags\":".utf8))
+        body.append(try encoder.encode(tags))
+        body.append(Data("}".utf8))
+        return body
+    }
+}
+
+struct MergeArtifactSaveResponse: Codable {
+    let schemaVersion: String
+    let artifactId: String
+    let revision: Int
+    let docHash: String
+    let presentationHash: String
+    let presentation: MergeArtifactPresentationDTO
+    let validationStatus: String
+    let validationErrors: [String]
 }
 
 struct CommitMergeJobRequest: Codable {
@@ -122,7 +187,7 @@ extension MergeArtifactResponse {
             content: plainText.isEmpty ? "Merged insight is ready." : plainText,
             contentHash: "",
             isPublic: false,
-            tags: [],
+            tags: presentation.tags,
             createdAt: now,
             updatedAt: now,
             favoriteCount: 0,
@@ -135,7 +200,7 @@ extension MergeArtifactResponse {
             pinnedAt: nil,
             author: [:],
             linkedCards: LinkedCards(outgoing: [], incoming: []),
-            rate: 0,
+            rate: presentation.rate,
             isFollowingAuthor: false
         )
 
@@ -148,6 +213,12 @@ extension MergeArtifactResponse {
 }
 
 extension MergeCardDocumentDTO {
+    func canonicalJSON() throws -> Data {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+        return try encoder.encode(self)
+    }
+
     func plainText() -> String {
         let parts = blocks.flatMap { $0.plainTextLines() }
         return parts

@@ -63,8 +63,44 @@ struct NetworkCoreMergeService: CoreMergeServing, @unchecked Sendable {
 
     func artifact(jobID: String) async throws -> MergeArtifact {
         do {
-            return Self.mapArtifact(
+            return try Self.mapArtifact(
                 try await firstValue(network.getMergeArtifact(jobId: jobID))
+            )
+        } catch {
+            throw Self.mapError(error)
+        }
+    }
+
+    func saveArtifact(
+        jobID: String,
+        request: MergeArtifactSaveRequest
+    ) async throws -> MergeArtifactSaveResult {
+        let wireRequest: MergeArtifactSaveRequestDTO
+        do {
+            wireRequest = try MergeArtifactSaveRequestDTO(
+                baseRevision: request.baseRevision,
+                baseHash: request.baseHash,
+                idemKey: request.idempotencyKey,
+                documentJSON: request.documentJSON,
+                tags: request.tags
+            )
+        } catch {
+            throw CoreMergeError.validation(code: "invalid_artifact_document")
+        }
+
+        do {
+            let response = try await firstValue(
+                network.saveMergeArtifact(
+                    jobID: jobID,
+                    request: wireRequest
+                )
+            )
+            return MergeArtifactSaveResult(
+                artifactID: response.artifactId,
+                revision: response.revision,
+                documentHash: response.docHash,
+                presentationHash: response.presentationHash,
+                presentation: Self.mapPresentation(response.presentation)
             )
         } catch {
             throw Self.mapError(error)
@@ -156,7 +192,7 @@ struct NetworkCoreMergeService: CoreMergeServing, @unchecked Sendable {
 
     private static func mapArtifact(
         _ response: MergeArtifactResponse
-    ) -> MergeArtifact {
+    ) throws -> MergeArtifact {
         MergeArtifact(
             artifactID: response.artifactId,
             jobID: response.jobId,
@@ -178,7 +214,22 @@ struct NetworkCoreMergeService: CoreMergeServing, @unchecked Sendable {
                 "latestHash": .string(response.latestHash),
                 "sourceTray": .object(response.sourceTray),
                 "alignment": .object(response.alignment)
-            ]
+            ],
+            latestRevision: response.latestRevision,
+            latestHash: response.latestHash,
+            documentJSON: try response.document.canonicalJSON(),
+            presentationHash: response.presentationHash,
+            presentation: mapPresentation(response.presentation)
+        )
+    }
+
+    private static func mapPresentation(
+        _ presentation: MergeArtifactPresentationDTO
+    ) -> MergeArtifactPresentation {
+        MergeArtifactPresentation(
+            schemaVersion: presentation.schemaVersion,
+            tags: presentation.tags,
+            rate: presentation.rate
         )
     }
 

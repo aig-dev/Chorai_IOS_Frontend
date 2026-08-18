@@ -15,6 +15,20 @@ private final class LockedChatEventParser: @unchecked Sendable {
     }
 }
 
+private struct MergeRawJSONBodyEncoding: ParameterEncoding {
+    let body: Data
+
+    func encode(
+        _ urlRequest: URLRequestConvertible,
+        with parameters: Parameters?
+    ) throws -> URLRequest {
+        var request = try urlRequest.asURLRequest()
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = body
+        return request
+    }
+}
+
 // MARK: 网络管理器
 class NetworkManager: ObservableObject {
     static let shared = NetworkManager()
@@ -2320,6 +2334,27 @@ extension NetworkManager {
             responseType: MergeArtifactResponse.self,
             presentsError: false
         )
+    }
+
+    func saveMergeArtifact(
+        jobID: String,
+        request: MergeArtifactSaveRequestDTO
+    ) -> AnyPublisher<MergeArtifactSaveResponse, NetworkError> {
+        do {
+            return self.request(
+                endpoint: "/api/merge/jobs/\(jobID)/artifact",
+                method: .put,
+                parameters: [:],
+                encoding: MergeRawJSONBodyEncoding(
+                    body: try request.canonicalBody()
+                ),
+                responseType: MergeArtifactSaveResponse.self,
+                presentsError: false,
+                suppressesPayloadLogging: true
+            )
+        } catch {
+            return Fail(error: NetworkError.encodingError).eraseToAnyPublisher()
+        }
     }
 
     func cancelMergeJob(

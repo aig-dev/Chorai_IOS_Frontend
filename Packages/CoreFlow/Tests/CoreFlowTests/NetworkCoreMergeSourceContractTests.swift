@@ -39,11 +39,56 @@ final class NetworkCoreMergeSourceContractTests: XCTestCase {
         XCTAssertTrue(serviceSource.contains("CancelMergeJobRequest("))
     }
 
+    func testArtifactSaveUsesPutWithDocumentAndTagsAndNeverSendsRate() throws {
+        let serviceSource = try source("ArcNote/CoreFlow/NetworkCoreMergeService.swift")
+        let modelSource = try source("ArcNote/Models/MergeModels.swift")
+        let networkSource = try source("ArcNote/NetworkManager.swift")
+        let requestDeclaration = try declaration(
+            named: "struct MergeArtifactSaveRequestDTO",
+            until: "struct MergeArtifactSaveResponse",
+            in: modelSource
+        )
+
+        XCTAssertTrue(requestDeclaration.contains("let baseRevision: Int"))
+        XCTAssertTrue(requestDeclaration.contains("let baseHash: String"))
+        XCTAssertTrue(requestDeclaration.contains("let idemKey: String"))
+        XCTAssertTrue(requestDeclaration.contains("let documentJSON: Data"))
+        XCTAssertTrue(requestDeclaration.contains("let tags: [String]"))
+        XCTAssertTrue(requestDeclaration.contains("func canonicalBody() throws -> Data"))
+        XCTAssertFalse(requestDeclaration.contains("rate"))
+
+        XCTAssertTrue(networkSource.contains("func saveMergeArtifact("))
+        XCTAssertTrue(networkSource.contains("jobID: String"))
+        XCTAssertTrue(networkSource.contains("endpoint: \"/api/merge/jobs/\\(jobID)/artifact\""))
+        XCTAssertTrue(networkSource.contains("method: .put"))
+        XCTAssertTrue(networkSource.contains("responseType: MergeArtifactSaveResponse.self"))
+        XCTAssertTrue(networkSource.contains("MergeRawJSONBodyEncoding("))
+        XCTAssertTrue(networkSource.contains("body: try request.canonicalBody()"))
+        XCTAssertTrue(networkSource.contains("suppressesPayloadLogging: true"))
+
+        XCTAssertTrue(serviceSource.contains("func saveArtifact("))
+        XCTAssertTrue(serviceSource.contains("network.saveMergeArtifact("))
+        XCTAssertTrue(serviceSource.contains("documentJSON: request.documentJSON"))
+        XCTAssertTrue(serviceSource.contains("presentationHash: response.presentationHash"))
+    }
+
     private func source(_ relativePath: String) throws -> String {
         try String(
             contentsOf: Self.repositoryRoot.appendingPathComponent(relativePath),
             encoding: .utf8
         )
+    }
+
+    private func declaration(
+        named start: String,
+        until end: String,
+        in source: String
+    ) throws -> String {
+        let startRange = try XCTUnwrap(source.range(of: start))
+        let endRange = try XCTUnwrap(
+            source.range(of: end, range: startRange.upperBound..<source.endIndex)
+        )
+        return String(source[startRange.lowerBound..<endRange.lowerBound])
     }
 
     private static var repositoryRoot: URL {

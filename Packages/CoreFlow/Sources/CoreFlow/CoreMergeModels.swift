@@ -450,6 +450,62 @@ public struct MergeFragment: Codable, Equatable, Identifiable, Sendable {
     }
 }
 
+public struct MergeArtifactPresentation: Codable, Equatable, Sendable {
+    public let schemaVersion: String
+    public let tags: [String]
+    public let rate: Int
+
+    public init(schemaVersion: String, tags: [String], rate: Int) {
+        self.schemaVersion = schemaVersion
+        self.tags = tags
+        self.rate = rate
+    }
+}
+
+public struct MergeArtifactSaveRequest: Equatable, Sendable {
+    public let baseRevision: Int
+    public let baseHash: String
+    public let idempotencyKey: String
+    public let documentJSON: Data
+    public let tags: [String]
+
+    public init(
+        baseRevision: Int,
+        baseHash: String,
+        idempotencyKey: String,
+        documentJSON: Data,
+        tags: [String]
+    ) {
+        self.baseRevision = baseRevision
+        self.baseHash = baseHash
+        self.idempotencyKey = idempotencyKey
+        self.documentJSON = documentJSON
+        self.tags = tags
+    }
+}
+
+public struct MergeArtifactSaveResult: Equatable, Sendable {
+    public let artifactID: String
+    public let revision: Int
+    public let documentHash: String
+    public let presentationHash: String
+    public let presentation: MergeArtifactPresentation
+
+    public init(
+        artifactID: String,
+        revision: Int,
+        documentHash: String,
+        presentationHash: String,
+        presentation: MergeArtifactPresentation
+    ) {
+        self.artifactID = artifactID
+        self.revision = revision
+        self.documentHash = documentHash
+        self.presentationHash = presentationHash
+        self.presentation = presentation
+    }
+}
+
 public struct MergeArtifact: Codable, Equatable, Identifiable, Sendable {
     public var id: String { artifactID }
     public let artifactID: String
@@ -459,6 +515,11 @@ public struct MergeArtifact: Codable, Equatable, Identifiable, Sendable {
     public let document: MergeDocument
     public let fragments: [MergeFragment]
     public let metadata: [String: MergeJSONValue]
+    public let latestRevision: Int
+    public let latestHash: String
+    public let documentJSON: Data
+    public let presentationHash: String
+    public let presentation: MergeArtifactPresentation
 
     public init(
         artifactID: String,
@@ -467,7 +528,16 @@ public struct MergeArtifact: Codable, Equatable, Identifiable, Sendable {
         outputKind: MergeCapabilityOutputKind,
         document: MergeDocument,
         fragments: [MergeFragment],
-        metadata: [String: MergeJSONValue]
+        metadata: [String: MergeJSONValue],
+        latestRevision: Int = 1,
+        latestHash: String = "",
+        documentJSON: Data = Data(),
+        presentationHash: String = "",
+        presentation: MergeArtifactPresentation = MergeArtifactPresentation(
+            schemaVersion: "merge_artifact_presentation.v1",
+            tags: [],
+            rate: 1
+        )
     ) {
         self.artifactID = artifactID
         self.jobID = jobID
@@ -476,6 +546,11 @@ public struct MergeArtifact: Codable, Equatable, Identifiable, Sendable {
         self.document = document
         self.fragments = fragments
         self.metadata = metadata
+        self.latestRevision = latestRevision
+        self.latestHash = latestHash
+        self.documentJSON = documentJSON
+        self.presentationHash = presentationHash
+        self.presentation = presentation
     }
 }
 

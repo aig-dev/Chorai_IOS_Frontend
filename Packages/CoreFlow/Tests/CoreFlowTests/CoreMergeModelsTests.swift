@@ -46,6 +46,80 @@ final class CoreMergeModelsTests: XCTestCase {
         XCTAssertEqual(try JSONDecoder().decode(MergeJSONValue.self, from: data), value)
     }
 
+    func testArtifactCarriesTypedPresentationAndRawDocumentFromV2Envelope() throws {
+        let envelope = try JSONDecoder().decode(
+            ArtifactV2Envelope.self,
+            from: Data(
+                #"{"schemaVersion":"merge_artifact.v2","artifactId":"mart_1","jobId":"mjob_1","latestRevision":2,"latestHash":"sha256:document","document":{"blocks":[],"meta":{"producer":"merge.vnext","route":"text_fusion"},"schemaVersion":"card_doc.v1"},"presentation":{"schemaVersion":"merge_artifact_presentation.v1","tags":["Design","Nature"],"rate":3},"presentationHash":"sha256:presentation"}"#.utf8
+            )
+        )
+
+        let artifact = MergeArtifact(
+            artifactID: envelope.artifactID,
+            jobID: envelope.jobID,
+            capabilityID: "text_fusion",
+            outputKind: .document,
+            document: MergeDocument(
+                schemaVersion: "card_doc.v1",
+                title: nil,
+                subtitle: nil,
+                blocks: [],
+                metadata: [:]
+            ),
+            fragments: [],
+            metadata: [:],
+            latestRevision: envelope.latestRevision,
+            latestHash: envelope.latestHash,
+            documentJSON: envelope.documentJSON,
+            presentationHash: envelope.presentationHash,
+            presentation: envelope.presentation
+        )
+
+        XCTAssertEqual(artifact.latestRevision, 2)
+        XCTAssertEqual(artifact.latestHash, "sha256:document")
+        XCTAssertEqual(artifact.documentJSON, envelope.documentJSON)
+        XCTAssertEqual(artifact.presentationHash, "sha256:presentation")
+        XCTAssertEqual(
+            artifact.presentation,
+            MergeArtifactPresentation(
+                schemaVersion: "merge_artifact_presentation.v1",
+                tags: ["Design", "Nature"],
+                rate: 3
+            )
+        )
+    }
+
+    func testArtifactSaveContractCarriesDocumentAndTagsButNoEditableRate() {
+        let document = Data(#"{"blocks":[],"meta":{},"schemaVersion":"card_doc.v1"}"#.utf8)
+        let request = MergeArtifactSaveRequest(
+            baseRevision: 2,
+            baseHash: "sha256:document-2",
+            idempotencyKey: "save-key",
+            documentJSON: document,
+            tags: ["Edited"]
+        )
+        let result = MergeArtifactSaveResult(
+            artifactID: "mart_1",
+            revision: 3,
+            documentHash: "sha256:document-3",
+            presentationHash: "sha256:presentation-3",
+            presentation: MergeArtifactPresentation(
+                schemaVersion: "merge_artifact_presentation.v1",
+                tags: ["Edited"],
+                rate: 3
+            )
+        )
+
+        XCTAssertEqual(request.baseRevision, 2)
+        XCTAssertEqual(request.baseHash, "sha256:document-2")
+        XCTAssertEqual(request.idempotencyKey, "save-key")
+        XCTAssertEqual(request.documentJSON, document)
+        XCTAssertEqual(request.tags, ["Edited"])
+        XCTAssertEqual(result.revision, 3)
+        XCTAssertEqual(result.documentHash, "sha256:document-3")
+        XCTAssertEqual(result.presentation.rate, 3)
+    }
+
     func testOrderedSourcesKeepsAnchorAndFirstDistinctSelection() {
         let anchor = source("ast_anchor", preview: "Anchor")
         let ordered = MergeSourceOrdering.ordered(
@@ -133,5 +207,42 @@ final class CoreMergeModelsTests: XCTestCase {
             properties: [:],
             children: []
         )
+    }
+
+    private struct ArtifactV2Envelope: Decodable {
+        let artifactID: String
+        let jobID: String
+        let latestRevision: Int
+        let latestHash: String
+        let documentJSON: Data
+        let presentationHash: String
+        let presentation: MergeArtifactPresentation
+
+        private enum CodingKeys: String, CodingKey {
+            case artifactID = "artifactId"
+            case jobID = "jobId"
+            case latestRevision
+            case latestHash
+            case document
+            case presentationHash
+            case presentation
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            artifactID = try container.decode(String.self, forKey: .artifactID)
+            jobID = try container.decode(String.self, forKey: .jobID)
+            latestRevision = try container.decode(Int.self, forKey: .latestRevision)
+            latestHash = try container.decode(String.self, forKey: .latestHash)
+            presentationHash = try container.decode(String.self, forKey: .presentationHash)
+            presentation = try container.decode(
+                MergeArtifactPresentation.self,
+                forKey: .presentation
+            )
+            let document = try container.decode(MergeJSONValue.self, forKey: .document)
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+            documentJSON = try encoder.encode(document)
+        }
     }
 }

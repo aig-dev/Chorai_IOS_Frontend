@@ -5,11 +5,24 @@ public protocol CoreMergeServing: Sendable {
     func createJob(_ request: MergeCreateRequest) async throws -> MergeJob
     func job(id: String) async throws -> MergeJob
     func artifact(jobID: String) async throws -> MergeArtifact
+    func saveArtifact(
+        jobID: String,
+        request: MergeArtifactSaveRequest
+    ) async throws -> MergeArtifactSaveResult
     func cancel(jobID: String) async throws -> MergeJob
     func commit(
         jobID: String,
         request: MergeCommitRequest
     ) async throws -> MergeCommitResult
+}
+
+public extension CoreMergeServing {
+    func saveArtifact(
+        jobID: String,
+        request: MergeArtifactSaveRequest
+    ) async throws -> MergeArtifactSaveResult {
+        throw CoreMergeError.unavailable(code: "artifact_save_unavailable")
+    }
 }
 
 public protocol MergeSleeping: Sendable {
