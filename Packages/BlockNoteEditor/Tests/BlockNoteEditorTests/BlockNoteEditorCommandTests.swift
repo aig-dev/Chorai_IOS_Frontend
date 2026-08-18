@@ -13,12 +13,42 @@ final class BlockNoteEditorCommandTests: XCTestCase {
             protocolVersion: 3,
             documentJSON: nil,
             fallbackMarkdown: "Fallback",
-            editable: false
+            editable: false,
+            profile: .standard
         )
 
         XCTAssertEqual(
             String(decoding: try encoder.encode(command), as: UTF8.self),
-            #"{"documentJSON":null,"editable":false,"fallbackMarkdown":"Fallback","protocolVersion":3,"type":"initialize"}"#
+            #"{"documentJSON":null,"editable":false,"fallbackMarkdown":"Fallback","profile":"standard","protocolVersion":3,"type":"initialize"}"#
+        )
+    }
+
+    func testInitializeCarriesExplicitMergeArtifactProfileAndLegacyWireDefaultsStandard() throws {
+        let command = BlockNoteEditorCommand.initialize(
+            protocolVersion: 3,
+            documentJSON: "[]",
+            fallbackMarkdown: "",
+            editable: true,
+            profile: .mergeArtifact
+        )
+        XCTAssertEqual(
+            String(decoding: try encoder.encode(command), as: UTF8.self),
+            #"{"documentJSON":"[]","editable":true,"fallbackMarkdown":"","profile":"mergeArtifact","protocolVersion":3,"type":"initialize"}"#
+        )
+        XCTAssertEqual(
+            try JSONDecoder().decode(
+                BlockNoteEditorCommand.self,
+                from: Data(
+                    #"{"documentJSON":null,"editable":false,"fallbackMarkdown":"Legacy","protocolVersion":3,"type":"initialize"}"#.utf8
+                )
+            ),
+            .initialize(
+                protocolVersion: 3,
+                documentJSON: nil,
+                fallbackMarkdown: "Legacy",
+                editable: false,
+                profile: .standard
+            )
         )
     }
 

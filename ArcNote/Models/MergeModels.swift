@@ -44,41 +44,10 @@ struct MergeJobResponse: Codable {
     let artifactId: String
 }
 
-struct MergeCardDocumentDTO: Codable {
-    let schemaVersion: String
-    let blocks: [MergeBlockNodeDTO]
-    let meta: [String: MergeJSONValue]
-}
-
-struct MergeBlockNodeDTO: Codable {
-    let id: String?
-    let type: String
-    let content: [MergeJSONValue]?
-    let props: [String: MergeJSONValue]?
-    let children: [MergeBlockNodeDTO]?
-}
-
-struct MergeArtifactResponse: Codable {
-    let schemaVersion: String
-    let artifactId: String
-    let jobId: String
-    let route: String
-    let surpriseKind: String
-    let sourceSnapshotHash: String
-    let latestRevision: Int
-    let latestHash: String
-    let document: MergeCardDocumentDTO
-    let sourceTray: [String: MergeJSONValue]
-    let alignment: [String: MergeJSONValue]
-    let presentation: MergeArtifactPresentationDTO
-    let presentationHash: String
-}
-
-struct MergeArtifactPresentationDTO: Codable {
-    let schemaVersion: String
-    let tags: [String]
-    let rate: Int
-}
+typealias MergeCardDocumentDTO = CoreFlow.MergeCardDocumentDTO
+typealias MergeBlockNodeDTO = CoreFlow.MergeBlockNodeDTO
+typealias MergeArtifactResponse = CoreFlow.MergeArtifactResponseDTO
+typealias MergeArtifactPresentationDTO = CoreFlow.MergeArtifactPresentation
 
 struct MergeArtifactSaveRequestDTO {
     let baseRevision: Int
@@ -182,7 +151,7 @@ extension MergeArtifactResponse {
         let now = ISO8601DateFormatter().string(from: Date())
         let plainText = document.plainText()
         let newCard = NewCard(
-            id: artifactId,
+            id: artifactID,
             title: "Merged Insight",
             content: plainText.isEmpty ? "Merged insight is ready." : plainText,
             contentHash: "",
@@ -207,18 +176,12 @@ extension MergeArtifactResponse {
         return MergePreviewResponse(
             success: true,
             message: "Merge artifact ready",
-            data: MergeCardsData(newCard: newCard, remainingCredit: 0, jobId: jobId)
+            data: MergeCardsData(newCard: newCard, remainingCredit: 0, jobId: jobID)
         )
     }
 }
 
 extension MergeCardDocumentDTO {
-    func canonicalJSON() throws -> Data {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
-        return try encoder.encode(self)
-    }
-
     func plainText() -> String {
         let parts = blocks.flatMap { $0.plainTextLines() }
         return parts

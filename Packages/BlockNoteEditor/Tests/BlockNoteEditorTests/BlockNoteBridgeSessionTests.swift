@@ -15,7 +15,8 @@ final class BlockNoteBridgeSessionTests: XCTestCase {
                 protocolVersion: 3,
                 documentJSON: nil,
                 fallbackMarkdown: "Legacy",
-                editable: true
+                editable: true,
+                profile: .standard
             )]
         )
 
@@ -29,7 +30,8 @@ final class BlockNoteBridgeSessionTests: XCTestCase {
                 protocolVersion: 3,
                 documentJSON: nil,
                 fallbackMarkdown: "Legacy",
-                editable: true
+                editable: true,
+                profile: .standard
             )]
         )
         XCTAssertTrue(session.request(.blur).commands.isEmpty)
@@ -37,6 +39,28 @@ final class BlockNoteBridgeSessionTests: XCTestCase {
         let ready = session.receive(.ready(protocolVersion: 3, schemaVersion: 1))
         XCTAssertEqual(ready.commands, [.blur])
         XCTAssertTrue(session.state.isBridgeReady)
+    }
+
+    func testNavigationForwardsMergeArtifactProfileWithoutChangingStandardDefault() {
+        var session = BlockNoteEditorBridgeSession(
+            document: .init(
+                contentJSON: "[]",
+                fallbackMarkdown: "",
+                profile: .mergeArtifact
+            ),
+            editable: true
+        )
+
+        XCTAssertEqual(
+            session.navigationFinished().commands,
+            [.initialize(
+                protocolVersion: 3,
+                documentJSON: "[]",
+                fallbackMarkdown: "",
+                editable: true,
+                profile: .mergeArtifact
+            )]
+        )
     }
 
     func testReadOnlyReadyDropsQueuedMutationsButAllowsNonMutatingCommands() {

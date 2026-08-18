@@ -462,6 +462,324 @@ public struct MergeArtifactPresentation: Codable, Equatable, Sendable {
     }
 }
 
+public struct MergeCardDocumentDTO: Codable, Equatable, Sendable {
+    public let schemaVersion: String
+    public let blocks: [MergeBlockNodeDTO]
+    public let meta: [String: MergeJSONValue]
+
+    public init(
+        schemaVersion: String,
+        blocks: [MergeBlockNodeDTO],
+        meta: [String: MergeJSONValue]
+    ) {
+        self.schemaVersion = schemaVersion
+        self.blocks = blocks
+        self.meta = meta
+    }
+}
+
+public struct MergeBlockNodeDTO: Codable, Equatable, Sendable {
+    public let id: String?
+    public let type: String
+    public let content: [MergeJSONValue]?
+    public let props: [String: MergeJSONValue]?
+    public let children: [MergeBlockNodeDTO]?
+
+    public init(
+        id: String?,
+        type: String,
+        content: [MergeJSONValue]?,
+        props: [String: MergeJSONValue]?,
+        children: [MergeBlockNodeDTO]?
+    ) {
+        self.id = id
+        self.type = type
+        self.content = content
+        self.props = props
+        self.children = children
+    }
+}
+
+public enum MergeArtifactPresentationProjection: Equatable, Sendable {
+    case authenticated(
+        presentation: MergeArtifactPresentation,
+        hash: String
+    )
+    case legacy
+}
+
+public enum MergeArtifactResponseDTOError: Error, Equatable, Sendable {
+    case invalidResponse
+    case invalidPresentationTuple
+}
+
+public struct MergeArtifactResponseDTO: Equatable, Sendable {
+    public let schemaVersion: String
+    public let artifactID: String
+    public let jobID: String
+    public let route: String
+    public let surpriseKind: String
+    public let sourceSnapshotHash: String
+    public let latestRevision: Int
+    public let latestHash: String
+    public let document: MergeCardDocumentDTO
+    public let documentJSON: Data
+    public let sourceTray: [String: MergeJSONValue]
+    public let alignment: [String: MergeJSONValue]
+    public let presentationProjection: MergeArtifactPresentationProjection
+
+    public var presentation: MergeArtifactPresentation {
+        switch presentationProjection {
+        case .authenticated(let presentation, _):
+            return presentation
+        case .legacy:
+            return Self.legacyPresentation
+        }
+    }
+
+    public var presentationHash: String {
+        switch presentationProjection {
+        case .authenticated(_, let hash):
+            return hash
+        case .legacy:
+            return ""
+        }
+    }
+
+    public var projectedPresentation: MergeArtifactPresentation {
+        presentation
+    }
+
+    public var projectedPresentationHash: String {
+        presentationHash
+    }
+
+    public static func decode(responseData: Data) throws -> Self {
+        let wire: Wire
+        let documentJSON: Data
+        do {
+            wire = try JSONDecoder().decode(Wire.self, from: responseData)
+            documentJSON = try RawTopLevelJSON.value(
+                forKey: "document",
+                in: responseData
+            )
+        } catch {
+            throw MergeArtifactResponseDTOError.invalidResponse
+        }
+
+        let projection: MergeArtifactPresentationProjection
+        switch (wire.presentation, wire.presentationHash) {
+        case let (.some(presentation), .some(hash)) where !hash.isEmpty:
+            projection = .authenticated(
+                presentation: presentation,
+                hash: hash
+            )
+        case (nil, nil):
+            projection = .legacy
+        default:
+            throw MergeArtifactResponseDTOError.invalidPresentationTuple
+        }
+
+        return MergeArtifactResponseDTO(
+            schemaVersion: wire.schemaVersion,
+            artifactID: wire.artifactID,
+            jobID: wire.jobID,
+            route: wire.route,
+            surpriseKind: wire.surpriseKind,
+            sourceSnapshotHash: wire.sourceSnapshotHash,
+            latestRevision: wire.latestRevision,
+            latestHash: wire.latestHash,
+            document: wire.document,
+            documentJSON: documentJSON,
+            sourceTray: wire.sourceTray,
+            alignment: wire.alignment,
+            presentationProjection: projection
+        )
+    }
+
+    private static let legacyPresentation = MergeArtifactPresentation(
+        schemaVersion: "merge_artifact_presentation.v1",
+        tags: [],
+        rate: 1
+    )
+
+    private struct Wire: Decodable {
+        let schemaVersion: String
+        let artifactID: String
+        let jobID: String
+        let route: String
+        let surpriseKind: String
+        let sourceSnapshotHash: String
+        let latestRevision: Int
+        let latestHash: String
+        let document: MergeCardDocumentDTO
+        let sourceTray: [String: MergeJSONValue]
+        let alignment: [String: MergeJSONValue]
+        let presentation: MergeArtifactPresentation?
+        let presentationHash: String?
+
+        private enum CodingKeys: String, CodingKey {
+            case schemaVersion
+            case artifactID = "artifactId"
+            case jobID = "jobId"
+            case route
+            case surpriseKind
+            case sourceSnapshotHash
+            case latestRevision
+            case latestHash
+            case document
+            case sourceTray
+            case alignment
+            case presentation
+            case presentationHash
+        }
+    }
+}
+
+private struct RawTopLevelJSON {
+    private let bytes: [UInt8]
+    private var index = 0
+
+    static func value(forKey key: String, in data: Data) throws -> Data {
+        var scanner = RawTopLevelJSON(bytes: Array(data))
+        return try scanner.value(forKey: key)
+    }
+
+    private mutating func value(forKey target: String) throws -> Data {
+        skipWhitespace()
+        try consume(0x7B)
+        skipWhitespace()
+
+        var result: Data?
+        if consumeIfPresent(0x7D) {
+            throw MergeArtifactResponseDTOError.invalidResponse
+        }
+        while true {
+            skipWhitespace()
+            let keyStart = index
+            try skipString()
+            let keyData = Data(bytes[keyStart..<index])
+            guard let key = try? JSONDecoder().decode(String.self, from: keyData) else {
+                throw MergeArtifactResponseDTOError.invalidResponse
+            }
+            skipWhitespace()
+            try consume(0x3A)
+            skipWhitespace()
+            let valueStart = index
+            try skipValue()
+            let valueEnd = index
+
+            if key == target {
+                guard result == nil else {
+                    throw MergeArtifactResponseDTOError.invalidResponse
+                }
+                result = Data(bytes[valueStart..<valueEnd])
+            }
+
+            skipWhitespace()
+            if consumeIfPresent(0x7D) {
+                break
+            }
+            try consume(0x2C)
+        }
+        skipWhitespace()
+        guard index == bytes.count, let result else {
+            throw MergeArtifactResponseDTOError.invalidResponse
+        }
+        return result
+    }
+
+    private mutating func skipValue() throws {
+        guard index < bytes.count else {
+            throw MergeArtifactResponseDTOError.invalidResponse
+        }
+        switch bytes[index] {
+        case 0x22:
+            try skipString()
+        case 0x7B:
+            try skipObject()
+        case 0x5B:
+            try skipArray()
+        default:
+            let start = index
+            while index < bytes.count,
+                  !Self.valueDelimiters.contains(bytes[index]) {
+                index += 1
+            }
+            guard index > start else {
+                throw MergeArtifactResponseDTOError.invalidResponse
+            }
+        }
+    }
+
+    private mutating func skipObject() throws {
+        try consume(0x7B)
+        skipWhitespace()
+        if consumeIfPresent(0x7D) { return }
+        while true {
+            skipWhitespace()
+            try skipString()
+            skipWhitespace()
+            try consume(0x3A)
+            skipWhitespace()
+            try skipValue()
+            skipWhitespace()
+            if consumeIfPresent(0x7D) { return }
+            try consume(0x2C)
+        }
+    }
+
+    private mutating func skipArray() throws {
+        try consume(0x5B)
+        skipWhitespace()
+        if consumeIfPresent(0x5D) { return }
+        while true {
+            skipWhitespace()
+            try skipValue()
+            skipWhitespace()
+            if consumeIfPresent(0x5D) { return }
+            try consume(0x2C)
+        }
+    }
+
+    private mutating func skipString() throws {
+        try consume(0x22)
+        while index < bytes.count {
+            let byte = bytes[index]
+            index += 1
+            if byte == 0x22 { return }
+            if byte == 0x5C {
+                guard index < bytes.count else {
+                    throw MergeArtifactResponseDTOError.invalidResponse
+                }
+                index += 1
+            }
+        }
+        throw MergeArtifactResponseDTOError.invalidResponse
+    }
+
+    private mutating func skipWhitespace() {
+        while index < bytes.count, Self.whitespace.contains(bytes[index]) {
+            index += 1
+        }
+    }
+
+    private mutating func consume(_ byte: UInt8) throws {
+        guard consumeIfPresent(byte) else {
+            throw MergeArtifactResponseDTOError.invalidResponse
+        }
+    }
+
+    private mutating func consumeIfPresent(_ byte: UInt8) -> Bool {
+        guard index < bytes.count, bytes[index] == byte else { return false }
+        index += 1
+        return true
+    }
+
+    private static let whitespace: Set<UInt8> = [0x20, 0x09, 0x0A, 0x0D]
+    private static let valueDelimiters: Set<UInt8> = whitespace.union([0x2C, 0x5D, 0x7D])
+}
+
 public struct MergeArtifactSaveRequest: Equatable, Sendable {
     public let baseRevision: Int
     public let baseHash: String

@@ -46,17 +46,15 @@ final class CoreMergeModelsTests: XCTestCase {
         XCTAssertEqual(try JSONDecoder().decode(MergeJSONValue.self, from: data), value)
     }
 
-    func testArtifactCarriesTypedPresentationAndRawDocumentFromV2Envelope() throws {
-        let envelope = try JSONDecoder().decode(
-            ArtifactV2Envelope.self,
-            from: Data(
-                #"{"schemaVersion":"merge_artifact.v2","artifactId":"mart_1","jobId":"mjob_1","latestRevision":2,"latestHash":"sha256:document","document":{"blocks":[],"meta":{"producer":"merge.vnext","route":"text_fusion"},"schemaVersion":"card_doc.v1"},"presentation":{"schemaVersion":"merge_artifact_presentation.v1","tags":["Design","Nature"],"rate":3},"presentationHash":"sha256:presentation"}"#.utf8
-            )
+    func testArtifactResponseDTOPreservesRawDocumentNumberLexemesAndTypedPresentation() throws {
+        let responseData = Data(
+            #"{"schemaVersion":"merge_artifact.v2","artifactId":"mart_1","jobId":"mjob_1","route":"text_fusion","surpriseKind":"none","sourceSnapshotHash":"sha256:source","latestRevision":2,"latestHash":"sha256:document","document":{"blocks":[],"meta":{"exactInteger":9007199254740993,"producer":"merge.vnext","route":"text_fusion"},"schemaVersion":"card_doc.v1"},"sourceTray":{},"alignment":{},"presentation":{"schemaVersion":"merge_artifact_presentation.v1","tags":["Design","Nature"],"rate":3},"presentationHash":"sha256:presentation"}"#.utf8
         )
+        let response = try MergeArtifactResponseDTO.decode(responseData: responseData)
 
         let artifact = MergeArtifact(
-            artifactID: envelope.artifactID,
-            jobID: envelope.jobID,
+            artifactID: response.artifactID,
+            jobID: response.jobID,
             capabilityID: "text_fusion",
             outputKind: .document,
             document: MergeDocument(
@@ -68,16 +66,19 @@ final class CoreMergeModelsTests: XCTestCase {
             ),
             fragments: [],
             metadata: [:],
-            latestRevision: envelope.latestRevision,
-            latestHash: envelope.latestHash,
-            documentJSON: envelope.documentJSON,
-            presentationHash: envelope.presentationHash,
-            presentation: envelope.presentation
+            latestRevision: response.latestRevision,
+            latestHash: response.latestHash,
+            documentJSON: response.documentJSON,
+            presentationHash: response.presentationHash,
+            presentation: response.presentation
         )
 
         XCTAssertEqual(artifact.latestRevision, 2)
         XCTAssertEqual(artifact.latestHash, "sha256:document")
-        XCTAssertEqual(artifact.documentJSON, envelope.documentJSON)
+        XCTAssertEqual(
+            artifact.documentJSON,
+            Data(#"{"blocks":[],"meta":{"exactInteger":9007199254740993,"producer":"merge.vnext","route":"text_fusion"},"schemaVersion":"card_doc.v1"}"#.utf8)
+        )
         XCTAssertEqual(artifact.presentationHash, "sha256:presentation")
         XCTAssertEqual(
             artifact.presentation,
@@ -86,6 +87,40 @@ final class CoreMergeModelsTests: XCTestCase {
                 tags: ["Design", "Nature"],
                 rate: 3
             )
+        )
+        XCTAssertEqual(
+            response.presentationProjection,
+            .authenticated(
+                presentation: MergeArtifactPresentation(
+                    schemaVersion: "merge_artifact_presentation.v1",
+                    tags: ["Design", "Nature"],
+                    rate: 3
+                ),
+                hash: "sha256:presentation"
+            )
+        )
+    }
+
+    func testArtifactResponseDTOExplicitlyProjectsLegacyMissingPresentation() throws {
+        let response = try MergeArtifactResponseDTO.decode(
+            responseData: Data(
+                #"{"schemaVersion":"merge_artifact.v2","artifactId":"mart_legacy","jobId":"mjob_legacy","route":"text_fusion","surpriseKind":"none","sourceSnapshotHash":"sha256:source","latestRevision":1,"latestHash":"sha256:document","document":{"blocks":[],"meta":{},"schemaVersion":"card_doc.v1"},"sourceTray":{},"alignment":{}}"#.utf8
+            )
+        )
+
+        XCTAssertEqual(response.presentationProjection, .legacy)
+        XCTAssertEqual(response.projectedPresentation.tags, [])
+        XCTAssertEqual(response.projectedPresentation.rate, 1)
+        XCTAssertEqual(response.projectedPresentationHash, "")
+    }
+
+    func testArtifactResponseDTORejectsMixedLegacyPresentationTuple() {
+        let responseData = Data(
+            #"{"schemaVersion":"merge_artifact.v2","artifactId":"mart_mixed","jobId":"mjob_mixed","route":"text_fusion","surpriseKind":"none","sourceSnapshotHash":"sha256:source","latestRevision":1,"latestHash":"sha256:document","document":{"blocks":[],"meta":{},"schemaVersion":"card_doc.v1"},"sourceTray":{},"alignment":{},"presentationHash":"sha256:orphan"}"#.utf8
+        )
+
+        XCTAssertThrowsError(
+            try MergeArtifactResponseDTO.decode(responseData: responseData)
         )
     }
 
@@ -209,40 +244,4 @@ final class CoreMergeModelsTests: XCTestCase {
         )
     }
 
-    private struct ArtifactV2Envelope: Decodable {
-        let artifactID: String
-        let jobID: String
-        let latestRevision: Int
-        let latestHash: String
-        let documentJSON: Data
-        let presentationHash: String
-        let presentation: MergeArtifactPresentation
-
-        private enum CodingKeys: String, CodingKey {
-            case artifactID = "artifactId"
-            case jobID = "jobId"
-            case latestRevision
-            case latestHash
-            case document
-            case presentationHash
-            case presentation
-        }
-
-        init(from decoder: Decoder) throws {
-            let container = try decoder.container(keyedBy: CodingKeys.self)
-            artifactID = try container.decode(String.self, forKey: .artifactID)
-            jobID = try container.decode(String.self, forKey: .jobID)
-            latestRevision = try container.decode(Int.self, forKey: .latestRevision)
-            latestHash = try container.decode(String.self, forKey: .latestHash)
-            presentationHash = try container.decode(String.self, forKey: .presentationHash)
-            presentation = try container.decode(
-                MergeArtifactPresentation.self,
-                forKey: .presentation
-            )
-            let document = try container.decode(MergeJSONValue.self, forKey: .document)
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
-            documentJSON = try encoder.encode(document)
-        }
-    }
 }

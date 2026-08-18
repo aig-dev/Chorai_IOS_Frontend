@@ -82,6 +82,122 @@ final class MergeArtifactEditorCodecTests: XCTestCase {
         }
     }
 
+    func testGovernedLinkMatchesServerLinkHrefV1RawByteVectors() throws {
+        let valid = [
+            "http://a",
+            "https://example.com",
+            "http://a:1",
+            "https://a:65535/path?x=1#fragment",
+            "https://a/AZaz09-._~!$&'()*+,;=:@/",
+            "https://a/%2F%E2%82%AC",
+            "https://a/./../",
+        ]
+        for href in valid {
+            XCTAssertNoThrow(
+                try MergeArtifactEditorCodec.decode(
+                    cardDocumentJSON: Self.linkDocument(href)
+                ),
+                "Expected governed LinkHrefV1 acceptance for \(href)"
+            )
+        }
+
+        let invalid = [
+            "HTTP://a",
+            "https://Example.com",
+            "ftp://a",
+            "http:/a",
+            "http://",
+            "http://a..b",
+            "http://a.",
+            "http://-a",
+            "http://a-",
+            "http://" + String(repeating: "a", count: 64),
+            "http://" + String(repeating: "a", count: 254),
+            "http://user@a",
+            "http://[::1]",
+            "http://é.example",
+            "http://a:0",
+            "http://a:01",
+            "http://a:80",
+            "https://a:443",
+            "http://a:65536",
+            "http://a:notaport",
+            "http://a?",
+            "http://a#",
+            "http://a#one#two",
+            "http://a/[",
+            "http://a/space here",
+            "http://a/\t",
+            "http://a/é",
+            "http://a\\path",
+            "http://a/%",
+            "http://a/%2",
+            "http://a/%2f",
+            "http://a/%41",
+            "mailto:person@example.com",
+            "http://a/" + String(repeating: "x", count: 2040),
+        ]
+        for href in invalid {
+            XCTAssertThrowsError(
+                try MergeArtifactEditorCodec.decode(
+                    cardDocumentJSON: Self.linkDocument(href)
+                ),
+                "Expected governed LinkHrefV1 rejection for \(href)"
+            ) { error in
+                XCTAssertEqual(
+                    error as? MergeArtifactEditorCodecError,
+                    .invalidCardDocument
+                )
+            }
+        }
+    }
+
+    func testServerBlockIDGrammarIsEnforcedOnDecodeAndEncode() throws {
+        let validAtLimit = "blk_" + String(repeating: "A", count: 60)
+        XCTAssertNoThrow(
+            try MergeArtifactEditorCodec.decode(
+                cardDocumentJSON: Data(
+                    Self.document(blocks: Self.paragraph(id: validAtLimit)).utf8
+                )
+            )
+        )
+
+        let invalidIDs = [
+            "blk_",
+            "blk_" + String(repeating: "a", count: 61),
+            "blk_invalid.dot",
+            "ce149160-c19b-4f53-9bfb-53d465eca177",
+            "blk_é",
+        ]
+        for id in invalidIDs {
+            XCTAssertThrowsError(
+                try MergeArtifactEditorCodec.decode(
+                    cardDocumentJSON: Data(
+                        Self.document(blocks: Self.paragraph(id: id)).utf8
+                    )
+                ),
+                "Expected invalid server block ID rejection for \(id)"
+            ) { error in
+                XCTAssertEqual(
+                    error as? MergeArtifactEditorCodecError,
+                    .invalidCardDocument
+                )
+            }
+        }
+
+        let original = try MergeArtifactEditorCodec.decode(
+            cardDocumentJSON: Data(
+                Self.document(blocks: Self.paragraph(id: "blk_original")).utf8
+            )
+        )
+        var blocks = try blockNoteBlocks(original.blockNoteJSON)
+        blocks[0]["id"] = "ce149160-c19b-4f53-9bfb-53d465eca177"
+        assertLosslessFailure(
+            blockNoteJSON: try jsonString(blocks),
+            manifest: original.preservationManifest
+        )
+    }
+
     func testDeletingPassthroughBlockFailsLosslessRoundTrip() throws {
         let decoded = try MergeArtifactEditorCodec.decode(
             cardDocumentJSON: Data(Self.richCardDocument.utf8)
@@ -181,6 +297,17 @@ final class MergeArtifactEditorCodecTests: XCTestCase {
 
     private static func document(blocks: String) -> String {
         #"{"blocks":\#(blocks),"meta":{"producer":"merge.vnext","route":"text_fusion"},"schemaVersion":"card_doc.v1"}"#
+    }
+
+    private static func paragraph(id: String) -> String {
+        let encodedID = String(decoding: try! JSONEncoder().encode(id), as: UTF8.self)
+        return #"[{"content":[{"text":"text","type":"text"}],"id":\#(encodedID),"type":"paragraph"}]"#
+    }
+
+    private static func linkDocument(_ href: String) -> Data {
+        let encodedHref = String(decoding: try! JSONEncoder().encode(href), as: UTF8.self)
+        let blocks = #"[{"content":[{"content":[{"text":"reference","type":"text"}],"href":\#(encodedHref),"type":"link"}],"id":"blk_link","type":"paragraph"}]"#
+        return Data(document(blocks: blocks).utf8)
     }
 
     private static let richCardDocument = #"{"blocks":[{"content":[{"styles":{"bold":true},"text":"Rich heading","type":"text"}],"id":"blk_rich_heading","props":{"level":2},"type":"heading"},{"content":[{"text":"Plain ","type":"text"},{"styles":{"italic":true},"text":"italic ","type":"text"},{"content":[{"styles":{"underline":true},"text":"reference","type":"text"}],"href":"https://example.com/reference","type":"link"}],"id":"blk_rich_paragraph","type":"paragraph"},{"children":[{"content":[{"text":"Nested detail","type":"text"}],"id":"blk_rich_child","type":"paragraph"}],"content":[{"text":"Parent item","type":"text"}],"id":"blk_rich_bullet","type":"bullet_list"},{"content":[{"styles":{"strike":true},"text":"Completed","type":"text"}],"id":"blk_rich_check","props":{"checked":true},"type":"checklist"},{"id":"blk_rich_image","props":{"alignment":"center","mediaRef":"med_1111111111111111","origin":"source_image","prominence":"wide","semanticRole":"evidence"},"type":"image"},{"content":[{"text":"Preserve quote","type":"text"}],"id":"blk_rich_quote","type":"quote"},{"content":[{"text":"let exact = true","type":"text"}],"id":"blk_rich_code","type":"code"},{"content":[],"id":"blk_rich_divider","type":"divider"}],"meta":{"producer":"merge.vnext","route":"text_fusion"},"schemaVersion":"card_doc.v1"}"#

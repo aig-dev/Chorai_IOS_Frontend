@@ -23,9 +23,6 @@ final class NetworkCoreMergeSourceContractTests: XCTestCase {
         XCTAssertFalse(modelSource.contains("let capability: String\n    let idemKey"))
         XCTAssertFalse(modelSource.contains("let context: [String: MergeJSONValue]"))
         XCTAssertTrue(modelSource.contains("let versionId: String"))
-        XCTAssertTrue(modelSource.contains("let latestRevision: Int"))
-        XCTAssertTrue(modelSource.contains("let latestHash: String"))
-        XCTAssertTrue(modelSource.contains("let document: MergeCardDocumentDTO"))
         XCTAssertTrue(modelSource.contains("let revision: Int\n    let artifactHash: String\n    let idemKey: String"))
         XCTAssertTrue(modelSource.contains("let noteAssetId: String"))
         XCTAssertTrue(modelSource.contains("let actionLogId: String"))
@@ -70,6 +67,34 @@ final class NetworkCoreMergeSourceContractTests: XCTestCase {
         XCTAssertTrue(serviceSource.contains("network.saveMergeArtifact("))
         XCTAssertTrue(serviceSource.contains("documentJSON: request.documentJSON"))
         XCTAssertTrue(serviceSource.contains("presentationHash: response.presentationHash"))
+    }
+
+    func testArtifactReadKeepsRawDocumentBytesThroughTheNetworkBoundary() throws {
+        let serviceSource = try source("ArcNote/CoreFlow/NetworkCoreMergeService.swift")
+        let modelSource = try source("ArcNote/Models/MergeModels.swift")
+        let networkSource = try source("ArcNote/NetworkManager.swift")
+        let readDeclaration = try declaration(
+            named: "func getMergeArtifact(jobId: String)",
+            until: "func saveMergeArtifact(",
+            in: networkSource
+        )
+
+        XCTAssertTrue(
+            modelSource.contains(
+                "typealias MergeArtifactResponse = CoreFlow.MergeArtifactResponseDTO"
+            )
+        )
+        XCTAssertTrue(readDeclaration.contains("requestData("))
+        XCTAssertTrue(
+            readDeclaration.contains(
+                "MergeArtifactResponse.decode(responseData: $0)"
+            )
+        )
+        XCTAssertFalse(
+            readDeclaration.contains("responseType: MergeArtifactResponse.self")
+        )
+        XCTAssertTrue(serviceSource.contains("documentJSON: response.documentJSON"))
+        XCTAssertFalse(serviceSource.contains("response.document.canonicalJSON()"))
     }
 
     private func source(_ relativePath: String) throws -> String {

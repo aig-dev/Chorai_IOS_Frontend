@@ -100,7 +100,7 @@ struct NetworkCoreMergeService: CoreMergeServing, @unchecked Sendable {
                 revision: response.revision,
                 documentHash: response.docHash,
                 presentationHash: response.presentationHash,
-                presentation: Self.mapPresentation(response.presentation)
+                presentation: response.presentation
             )
         } catch {
             throw Self.mapError(error)
@@ -194,8 +194,8 @@ struct NetworkCoreMergeService: CoreMergeServing, @unchecked Sendable {
         _ response: MergeArtifactResponse
     ) throws -> MergeArtifact {
         MergeArtifact(
-            artifactID: response.artifactId,
-            jobID: response.jobId,
+            artifactID: response.artifactID,
+            jobID: response.jobID,
             capabilityID: response.route,
             outputKind: .document,
             document: MergeDocument(
@@ -217,19 +217,9 @@ struct NetworkCoreMergeService: CoreMergeServing, @unchecked Sendable {
             ],
             latestRevision: response.latestRevision,
             latestHash: response.latestHash,
-            documentJSON: try response.document.canonicalJSON(),
+            documentJSON: response.documentJSON,
             presentationHash: response.presentationHash,
-            presentation: mapPresentation(response.presentation)
-        )
-    }
-
-    private static func mapPresentation(
-        _ presentation: MergeArtifactPresentationDTO
-    ) -> MergeArtifactPresentation {
-        MergeArtifactPresentation(
-            schemaVersion: presentation.schemaVersion,
-            tags: presentation.tags,
-            rate: presentation.rate
+            presentation: response.presentation
         )
     }
 

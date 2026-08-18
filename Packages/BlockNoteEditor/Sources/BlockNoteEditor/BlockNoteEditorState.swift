@@ -325,23 +325,34 @@ struct BlockNoteBridgeOutputDispatcher {
 struct BlockNoteEditorBridgeSession: Sendable {
     private let document: BlockNoteInitialDocument
     private let editable: Bool
+    private var mergeRuntimeAdapter: BlockNoteMergeRuntimeAdapter?
     private var queuedCommands: [BlockNoteEditorCommand] = []
     private(set) var state: BlockNoteEditorState
 
     init(document: BlockNoteInitialDocument, editable: Bool) {
         self.document = document
         self.editable = editable
+        mergeRuntimeAdapter = nil
         state = BlockNoteEditorState(editable: editable)
     }
 
     mutating func navigationFinished() -> BlockNoteBridgeSessionOutput {
         state.beginInitialization()
+        if document.profile == .mergeArtifact {
+            mergeRuntimeAdapter = try? BlockNoteMergeRuntimeAdapter(
+                contentJSON: document.contentJSON
+            )
+        } else {
+            mergeRuntimeAdapter = nil
+        }
         return .init(commands: [
             .initialize(
                 protocolVersion: BlockNoteEditorProtocol.version,
-                documentJSON: document.contentJSON,
+                documentJSON: mergeRuntimeAdapter?.runtimeDocumentJSON
+                    ?? document.contentJSON,
                 fallbackMarkdown: document.fallbackMarkdown,
-                editable: editable
+                editable: editable,
+                profile: document.profile
             ),
         ])
     }
@@ -370,7 +381,13 @@ struct BlockNoteEditorBridgeSession: Sendable {
     }
 
     mutating func receive(_ message: BlockNoteEditorMessage) -> BlockNoteBridgeSessionOutput {
-        let update = state.receive(message)
+        let adaptedMessage: BlockNoteEditorMessage
+        do {
+            adaptedMessage = try mergeRuntimeAdapter?.adapt(message) ?? message
+        } catch {
+            return bridgeFailure(code: "merge_runtime_adapter_failed")
+        }
+        let update = state.receive(adaptedMessage)
         var output = BlockNoteBridgeSessionOutput(
             events: update.events,
             snapshot: update.snapshot,
@@ -418,5 +435,271 @@ struct BlockNoteEditorBridgeSession: Sendable {
     mutating func teardown() -> BlockNoteBridgeSessionOutput {
         queuedCommands.removeAll()
         return .init(snapshotFailure: .tornDown)
+    }
+}
+
+private struct BlockNoteMergeRuntimeAdapter: Sendable {
+    let runtimeDocumentJSON: String
+    private let originalsByID: [String: RuntimeBlock]
+    private var mappedRuntimeIDs: [String: String] = [:]
+    private var usedOutputIDs: Set<String>
+
+    init(contentJSON: String?) throws {
+        guard let contentJSON,
+              let data = contentJSON.data(using: .utf8) else {
+            throw AdapterError.invalidDocument
+        }
+        let mergeBlocks = try JSONDecoder().decode([RuntimeBlock].self, from: data)
+        guard !mergeBlocks.isEmpty else { throw AdapterError.invalidDocument }
+
+        var originals: [String: RuntimeBlock] = [:]
+        try Self.collectOriginals(mergeBlocks, into: &originals)
+        originalsByID = originals
+        usedOutputIDs = Set(originals.keys)
+
+        let runtimeBlocks = try mergeBlocks.map(Self.runtimeBlock)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+        runtimeDocumentJSON = String(
+            decoding: try encoder.encode(runtimeBlocks),
+            as: UTF8.self
+        )
+    }
+
+    mutating func adapt(_ message: BlockNoteEditorMessage) throws -> BlockNoteEditorMessage {
+        switch message {
+        case let .documentChanged(revision, contentJSON, fallbackMarkdown):
+            return .documentChanged(
+                revision: revision,
+                contentJSON: try mergeDocumentJSON(from: contentJSON),
+                fallbackMarkdown: fallbackMarkdown
+            )
+        case let .snapshot(requestID, revision, contentJSON, fallbackMarkdown):
+            return .snapshot(
+                requestID: requestID,
+                revision: revision,
+                contentJSON: try mergeDocumentJSON(from: contentJSON),
+                fallbackMarkdown: fallbackMarkdown
+            )
+        default:
+            return message
+        }
+    }
+
+    private mutating func mergeDocumentJSON(from runtimeJSON: String) throws -> String {
+        guard let data = runtimeJSON.data(using: .utf8) else {
+            throw AdapterError.invalidDocument
+        }
+        let runtimeBlocks = try JSONDecoder().decode([RuntimeBlock].self, from: data)
+        let mergeBlocks = try runtimeBlocks.map { try mergeBlock($0) }
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+        return String(decoding: try encoder.encode(mergeBlocks), as: UTF8.self)
+    }
+
+    private mutating func mergeBlock(_ runtime: RuntimeBlock) throws -> RuntimeBlock {
+        let outputID = outputID(for: runtime.id)
+        let original = originalsByID[runtime.id]
+        let props: [String: RuntimeJSONValue]
+        if let original {
+            var projected: [String: RuntimeJSONValue] = [:]
+            for (key, originalValue) in original.props {
+                if key == "mediaRef" {
+                    projected[key] = originalValue
+                } else if let runtimeValue = runtime.props[key] {
+                    projected[key] = runtimeValue
+                } else {
+                    throw AdapterError.invalidDocument
+                }
+            }
+            props = projected
+        } else {
+            props = Self.newBlockProps(runtime)
+        }
+
+        let children = try runtime.children.map { try mergeBlock($0) }
+        return RuntimeBlock(
+            id: outputID,
+            type: runtime.type,
+            props: props,
+            content: original?.content == nil && runtime.type == "image"
+                ? nil
+                : (runtime.content ?? []),
+            children: children
+        )
+    }
+
+    private mutating func outputID(for runtimeID: String) -> String {
+        if originalsByID[runtimeID] != nil { return runtimeID }
+        if let mapped = mappedRuntimeIDs[runtimeID] { return mapped }
+        if Self.isServerBlockID(runtimeID), usedOutputIDs.insert(runtimeID).inserted {
+            mappedRuntimeIDs[runtimeID] = runtimeID
+            return runtimeID
+        }
+
+        var generated: String
+        repeat {
+            generated = "blk_" + UUID().uuidString
+                .replacingOccurrences(of: "-", with: "")
+                .lowercased()
+        } while !usedOutputIDs.insert(generated).inserted
+        mappedRuntimeIDs[runtimeID] = generated
+        return generated
+    }
+
+    private static func runtimeBlock(_ merge: RuntimeBlock) throws -> RuntimeBlock {
+        var props = runtimeDefaults(for: merge.type)
+        for (key, value) in merge.props where key != "mediaRef" {
+            props[key] = value
+        }
+        if merge.type == "image" {
+            guard case .string? = merge.props["mediaRef"] else {
+                throw AdapterError.invalidDocument
+            }
+        } else if merge.props["mediaRef"] != nil {
+            throw AdapterError.invalidDocument
+        }
+
+        return RuntimeBlock(
+            id: merge.id,
+            type: merge.type,
+            props: props,
+            content: merge.type == "image" ? nil : (merge.content ?? []),
+            children: try merge.children.map(runtimeBlock)
+        )
+    }
+
+    private static func runtimeDefaults(
+        for type: String
+    ) -> [String: RuntimeJSONValue] {
+        let standard: [String: RuntimeJSONValue] = [
+            "backgroundColor": .string("default"),
+            "textAlignment": .string("left"),
+            "textColor": .string("default"),
+        ]
+        switch type {
+        case "paragraph", "bulletListItem":
+            return standard
+        case "heading":
+            return standard.merging(["isToggleable": .bool(false)]) { _, new in new }
+        case "numberedListItem":
+            return standard
+        case "checkListItem":
+            return standard.merging(["checked": .bool(false)]) { _, new in new }
+        case "quote":
+            return [
+                "backgroundColor": .string("default"),
+                "textColor": .string("default"),
+            ]
+        case "codeBlock":
+            return ["language": .string("text")]
+        case "image":
+            return [
+                "backgroundColor": .string("default"),
+                "caption": .string(""),
+                "name": .string(""),
+                "showPreview": .bool(true),
+                "textAlignment": .string("left"),
+                "url": .string(""),
+            ]
+        default:
+            return [:]
+        }
+    }
+
+    private static func newBlockProps(
+        _ runtime: RuntimeBlock
+    ) -> [String: RuntimeJSONValue] {
+        switch runtime.type {
+        case "heading":
+            return runtime.props["level"].map { ["level": $0] } ?? [:]
+        case "checkListItem":
+            return runtime.props["checked"].map { ["checked": $0] } ?? [:]
+        default:
+            return [:]
+        }
+    }
+
+    private static func collectOriginals(
+        _ blocks: [RuntimeBlock],
+        into result: inout [String: RuntimeBlock]
+    ) throws {
+        for block in blocks {
+            guard isServerBlockID(block.id), result[block.id] == nil else {
+                throw AdapterError.invalidDocument
+            }
+            result[block.id] = block
+            try collectOriginals(block.children, into: &result)
+        }
+    }
+
+    private static func isServerBlockID(_ value: String) -> Bool {
+        let bytes = Array(value.utf8)
+        guard bytes.count > 4,
+              bytes.count <= 64,
+              bytes.starts(with: Array("blk_".utf8)) else {
+            return false
+        }
+        return bytes.dropFirst(4).allSatisfy { byte in
+            (0x30...0x39).contains(byte)
+                || (0x41...0x5A).contains(byte)
+                || (0x61...0x7A).contains(byte)
+                || byte == 0x5F
+                || byte == 0x2D
+        }
+    }
+
+    private enum AdapterError: Error {
+        case invalidDocument
+    }
+
+    private struct RuntimeBlock: Codable, Equatable, Sendable {
+        let id: String
+        let type: String
+        let props: [String: RuntimeJSONValue]
+        let content: [RuntimeJSONValue]?
+        let children: [RuntimeBlock]
+    }
+
+    private indirect enum RuntimeJSONValue: Codable, Equatable, Sendable {
+        case string(String)
+        case number(Double)
+        case bool(Bool)
+        case object([String: RuntimeJSONValue])
+        case array([RuntimeJSONValue])
+        case null
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.singleValueContainer()
+            if container.decodeNil() {
+                self = .null
+            } else if let value = try? container.decode(Bool.self) {
+                self = .bool(value)
+            } else if let value = try? container.decode(Double.self) {
+                self = .number(value)
+            } else if let value = try? container.decode(String.self) {
+                self = .string(value)
+            } else if let value = try? container.decode(
+                [String: RuntimeJSONValue].self
+            ) {
+                self = .object(value)
+            } else if let value = try? container.decode([RuntimeJSONValue].self) {
+                self = .array(value)
+            } else {
+                throw AdapterError.invalidDocument
+            }
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.singleValueContainer()
+            switch self {
+            case .string(let value): try container.encode(value)
+            case .number(let value): try container.encode(value)
+            case .bool(let value): try container.encode(value)
+            case .object(let value): try container.encode(value)
+            case .array(let value): try container.encode(value)
+            case .null: try container.encodeNil()
+            }
+        }
     }
 }

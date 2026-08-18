@@ -10,6 +10,9 @@ let package = Package(
     products: [
         .library(name: "BlockNoteEditor", targets: ["BlockNoteEditor"]),
     ],
+    dependencies: [
+        .package(path: "../CoreFlow"),
+    ],
     targets: [
         .target(
             name: "BlockNoteEditor",
@@ -18,7 +21,10 @@ let package = Package(
         ),
         .testTarget(
             name: "BlockNoteEditorTests",
-            dependencies: ["BlockNoteEditor"]
+            dependencies: [
+                "BlockNoteEditor",
+                .product(name: "CoreFlow", package: "CoreFlow"),
+            ]
         ),
     ]
 )

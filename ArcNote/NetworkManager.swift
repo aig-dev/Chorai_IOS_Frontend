@@ -2327,13 +2327,18 @@ extension NetworkManager {
     }
 
     func getMergeArtifact(jobId: String) -> AnyPublisher<MergeArtifactResponse, NetworkError> {
-        return self.request(
+        requestData(
             endpoint: "/api/merge/jobs/\(jobId)/artifact",
             method: .get,
             encoding: URLEncoding.default,
-            responseType: MergeArtifactResponse.self,
+            accept: "application/json",
             presentsError: false
         )
+        .tryMap { try MergeArtifactResponse.decode(responseData: $0) }
+        .mapError { error in
+            (error as? NetworkError) ?? .decodingError
+        }
+        .eraseToAnyPublisher()
     }
 
     func saveMergeArtifact(

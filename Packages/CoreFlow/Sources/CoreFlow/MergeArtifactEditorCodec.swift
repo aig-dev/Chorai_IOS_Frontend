@@ -160,7 +160,7 @@ private extension MergeArtifactEditorCodec {
     ) throws -> CodecJSON {
         guard case .object(let block) = value,
               case .string(let id)? = block["id"],
-              !id.isEmpty,
+              isValidServerBlockID(id),
               context.blockIDs.insert(id).inserted,
               case .string(let type)? = block["type"] else {
             throw MergeArtifactEditorCodecError.invalidCardDocument
@@ -311,7 +311,7 @@ private extension MergeArtifactEditorCodec {
     ) throws -> CodecJSON {
         guard case .object(let block) = value,
               case .string(let id)? = block["id"],
-              !id.isEmpty,
+              isValidServerBlockID(id),
               context.seenBlockIDs.insert(id).inserted else {
             throw MergeArtifactEditorCodecError.losslessRoundTripFailed
         }
@@ -426,6 +426,7 @@ private extension MergeArtifactEditorCodec {
         for value in blocks {
             guard case .object(let block) = value,
                   case .string(let id)? = block["id"],
+                  isValidServerBlockID(id),
                   result[id] == nil else {
                 throw MergeArtifactEditorCodecError.losslessRoundTripFailed
             }
@@ -657,14 +658,150 @@ private extension MergeArtifactEditorCodec {
     }
 
     static func isGovernedLink(_ value: String) -> Bool {
-        guard let components = URLComponents(string: value),
-              let scheme = components.scheme?.lowercased(),
-              scheme == "http" || scheme == "https",
-              components.host != nil else {
+        let bytes = Array(value.utf8)
+        guard !bytes.isEmpty,
+              bytes.count <= 2_048,
+              bytes.allSatisfy({ $0 >= 0x21 && $0 <= 0x7E && $0 != 0x5C }),
+              let schemeEnd = bytes.firstRange(of: Array("://".utf8))?.lowerBound else {
             return false
+        }
+        let scheme = Array(bytes[..<schemeEnd])
+        guard scheme == Array("http".utf8) || scheme == Array("https".utf8) else {
+            return false
+        }
+
+        let restStart = schemeEnd + 3
+        let rest = Array(bytes[restStart...])
+        let authorityEnd = rest.firstIndex(where: { byte in
+            byte == 0x2F || byte == 0x3F || byte == 0x23
+        }) ?? rest.endIndex
+        let hostPort = Array(rest[..<authorityEnd])
+        guard !hostPort.isEmpty, !hostPort.contains(0x40) else { return false }
+
+        var host = hostPort
+        if let portIndex = hostPort.lastIndex(of: 0x3A) {
+            host = Array(hostPort[..<portIndex])
+            let portText = Array(hostPort[(portIndex + 1)...])
+            guard isShortestDecimal(portText) else { return false }
+            var port = 0
+            for byte in portText {
+                port = port * 10 + Int(byte - 0x30)
+                guard port <= 65_535 else { return false }
+            }
+            guard port >= 1,
+                  !(scheme == Array("http".utf8) && port == 80),
+                  !(scheme == Array("https".utf8) && port == 443) else {
+                return false
+            }
+        }
+        guard (1...253).contains(host.count) else { return false }
+        let labels = host.split(separator: 0x2E, omittingEmptySubsequences: false)
+        guard labels.allSatisfy(validLinkHostLabel) else { return false }
+
+        var tail = Array(rest[authorityEnd...])
+        var fragment: [UInt8] = []
+        if let fragmentIndex = tail.firstIndex(of: 0x23) {
+            fragment = Array(tail[(fragmentIndex + 1)...])
+            tail = Array(tail[..<fragmentIndex])
+            guard !fragment.isEmpty, !fragment.contains(0x23) else { return false }
+        }
+        var query: [UInt8] = []
+        if let queryIndex = tail.firstIndex(of: 0x3F) {
+            query = Array(tail[(queryIndex + 1)...])
+            tail = Array(tail[..<queryIndex])
+            guard !query.isEmpty else { return false }
+        }
+
+        return validLinkComponent(tail, alphabet: linkPathRawCharacters)
+            && validLinkComponent(query, alphabet: linkQueryFragmentRawCharacters)
+            && validLinkComponent(fragment, alphabet: linkQueryFragmentRawCharacters)
+    }
+
+    static func isValidServerBlockID(_ value: String) -> Bool {
+        let bytes = Array(value.utf8)
+        guard bytes.count > 4,
+              bytes.count <= 64,
+              bytes.starts(with: Array("blk_".utf8)) else {
+            return false
+        }
+        return bytes.dropFirst(4).allSatisfy { byte in
+            isASCIIAlphaNumeric(byte) || byte == 0x5F || byte == 0x2D
+        }
+    }
+
+    static func isShortestDecimal(_ bytes: [UInt8]) -> Bool {
+        guard !bytes.isEmpty,
+              !(bytes.count > 1 && bytes[0] == 0x30) else {
+            return false
+        }
+        return bytes.allSatisfy { (0x30...0x39).contains($0) }
+    }
+
+    static func validLinkHostLabel(_ label: ArraySlice<UInt8>) -> Bool {
+        guard (1...63).contains(label.count),
+              let first = label.first,
+              let last = label.last,
+              isLowercaseASCIIAlphaNumeric(first),
+              isLowercaseASCIIAlphaNumeric(last) else {
+            return false
+        }
+        return label.allSatisfy { byte in
+            isLowercaseASCIIAlphaNumeric(byte) || byte == 0x2D
+        }
+    }
+
+    static func validLinkComponent(
+        _ bytes: [UInt8],
+        alphabet: Set<UInt8>
+    ) -> Bool {
+        var index = 0
+        while index < bytes.count {
+            if bytes[index] == 0x25 {
+                guard index + 2 < bytes.count,
+                      let high = uppercaseHexValue(bytes[index + 1]),
+                      let low = uppercaseHexValue(bytes[index + 2]) else {
+                    return false
+                }
+                let decoded = high * 16 + low
+                guard !linkUnreservedCharacters.contains(decoded) else {
+                    return false
+                }
+                index += 3
+            } else {
+                guard alphabet.contains(bytes[index]) else { return false }
+                index += 1
+            }
         }
         return true
     }
+
+    static func uppercaseHexValue(_ byte: UInt8) -> UInt8? {
+        switch byte {
+        case 0x30...0x39: return byte - 0x30
+        case 0x41...0x46: return byte - 0x41 + 10
+        default: return nil
+        }
+    }
+
+    static func isASCIIAlphaNumeric(_ byte: UInt8) -> Bool {
+        (0x30...0x39).contains(byte)
+            || (0x41...0x5A).contains(byte)
+            || (0x61...0x7A).contains(byte)
+    }
+
+    static func isLowercaseASCIIAlphaNumeric(_ byte: UInt8) -> Bool {
+        (0x30...0x39).contains(byte) || (0x61...0x7A).contains(byte)
+    }
+
+    static let linkPathRawCharacters = Set(
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~!$&'()*+,;=:@/".utf8
+    )
+    static let linkQueryFragmentRawCharacters = Set(
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~!$&'()*+,;=:@/?".utf8
+    )
+    static let linkUnreservedCharacters = Set(
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~".utf8
+    )
 
     static func previewWidth(for prominence: String) -> Int? {
         switch prominence {

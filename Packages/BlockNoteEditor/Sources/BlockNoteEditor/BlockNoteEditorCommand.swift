@@ -11,11 +11,22 @@ public enum BlockNoteEditorProtocol {
 public struct BlockNoteInitialDocument: Equatable, Sendable {
     public let contentJSON: String?
     public let fallbackMarkdown: String
+    public let profile: BlockNoteDocumentProfile
 
-    public init(contentJSON: String?, fallbackMarkdown: String) {
+    public init(
+        contentJSON: String?,
+        fallbackMarkdown: String,
+        profile: BlockNoteDocumentProfile = .standard
+    ) {
         self.contentJSON = contentJSON
         self.fallbackMarkdown = fallbackMarkdown
+        self.profile = profile
     }
+}
+
+public enum BlockNoteDocumentProfile: String, Codable, Sendable {
+    case standard
+    case mergeArtifact
 }
 
 public enum BlockNoteFormat: String, Codable, CaseIterable, Sendable {
@@ -42,7 +53,8 @@ public enum BlockNoteEditorCommand: Equatable, Sendable, Codable {
         protocolVersion: Int,
         documentJSON: String?,
         fallbackMarkdown: String,
-        editable: Bool
+        editable: Bool,
+        profile: BlockNoteDocumentProfile
     )
     case applyFormat(BlockNoteFormat)
     case setBlockType(BlockNoteBlockType)
@@ -61,6 +73,7 @@ public enum BlockNoteEditorCommand: Equatable, Sendable, Codable {
         case documentJSON
         case fallbackMarkdown
         case editable
+        case profile
         case format
         case blockType
         case listType
@@ -86,7 +99,11 @@ public enum BlockNoteEditorCommand: Equatable, Sendable, Codable {
                 protocolVersion: try container.decode(Int.self, forKey: .protocolVersion),
                 documentJSON: documentJSON,
                 fallbackMarkdown: try container.decode(String.self, forKey: .fallbackMarkdown),
-                editable: try container.decode(Bool.self, forKey: .editable)
+                editable: try container.decode(Bool.self, forKey: .editable),
+                profile: try container.decodeIfPresent(
+                    BlockNoteDocumentProfile.self,
+                    forKey: .profile
+                ) ?? .standard
             )
 
         case "applyFormat":
@@ -143,7 +160,7 @@ public enum BlockNoteEditorCommand: Equatable, Sendable, Codable {
         var container = encoder.container(keyedBy: CodingKeys.self)
 
         switch self {
-        case let .initialize(protocolVersion, documentJSON, fallbackMarkdown, editable):
+        case let .initialize(protocolVersion, documentJSON, fallbackMarkdown, editable, profile):
             try container.encode("initialize", forKey: .type)
             try container.encode(protocolVersion, forKey: .protocolVersion)
             if let documentJSON {
@@ -153,6 +170,7 @@ public enum BlockNoteEditorCommand: Equatable, Sendable, Codable {
             }
             try container.encode(fallbackMarkdown, forKey: .fallbackMarkdown)
             try container.encode(editable, forKey: .editable)
+            try container.encode(profile, forKey: .profile)
 
         case let .applyFormat(format):
             try container.encode("applyFormat", forKey: .type)
