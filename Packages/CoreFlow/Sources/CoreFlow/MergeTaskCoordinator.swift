@@ -331,6 +331,10 @@ public final class MergeTaskCoordinator: ObservableObject {
         guard isNetworkAvailable != isAvailable else { return }
         isNetworkAvailable = isAvailable
         for runtime in runtimesByOperationID.values {
+            runtime.store.setNetworkAvailable(isAvailable)
+            if runtime.store.phase == .ready {
+                continue
+            }
             if recoveryStrategy(for: runtime.store) == .replacement {
                 runtime.store.suspend(reason: nil)
                 continue
@@ -348,6 +352,9 @@ public final class MergeTaskCoordinator: ObservableObject {
         guard isApplicationActive != isActive else { return }
         isApplicationActive = isActive
         for runtime in runtimesByOperationID.values {
+            if runtime.store.phase == .ready {
+                continue
+            }
             if recoveryStrategy(for: runtime.store) == .replacement {
                 runtime.store.suspend(reason: nil)
                 continue
@@ -728,6 +735,10 @@ public final class MergeTaskCoordinator: ObservableObject {
     }
 
     private func suspendIfNeeded(_ store: MergeSessionStore) {
+        store.setNetworkAvailable(isNetworkAvailable)
+        if store.phase == .ready {
+            return
+        }
         if !isNetworkAvailable {
             store.suspend(reason: .offline)
         } else if !isApplicationActive {

@@ -42,6 +42,8 @@ public final class MergeSessionStore: ObservableObject {
     @Published public private(set) var capabilities: [MergeCapability] = []
     @Published public private(set) var job: MergeJob?
     @Published public private(set) var artifact: MergeArtifact?
+    @Published public private(set) var artifactDraft: MergeArtifactDraftSnapshot?
+    @Published public private(set) var artifactDraftSyncState: MergeDraftSyncState = .clean
     @Published public private(set) var artifactActionError: CoreMergeError?
     @Published public private(set) var notFoundResource: MergeNotFoundResource?
     @Published public private(set) var phase: MergeSessionPhase = .idle
@@ -90,8 +92,17 @@ public final class MergeSessionStore: ObservableObject {
 
     private var snapshot: MergeSessionSnapshot?
     private var operationTask: Task<Void, Never>?
+    private var draftDebounceTask: Task<Void, Never>?
+    private var activeDraftSaveTask: Task<MergeArtifact, Error>?
+    private var activeDraftSaveToken: UUID?
+    private var conflictServerArtifact: MergeArtifact?
+    private var draftLifetimeGeneration = 0
+    private var pendingSaveWasAttempted = false
+    private var isNetworkAvailable = true
     private var hasStarted = false
     private var isLifetimeInvalidated = false
+
+    private static let artifactDraftDebounceNanoseconds: UInt64 = 600_000_000
 
     public init(
         actorID: String,
@@ -255,7 +266,7 @@ public final class MergeSessionStore: ObservableObject {
         if let commitRequest = snapshot.commitRequest, shouldReplayCommit {
             phase = .committing
             launch { store in
-                await store.submitCommit(
+                await store.submitRecoveredCommit(
                     jobID: snapshot.jobID ?? "",
                     request: commitRequest,
                     reconcileConflict: true
@@ -314,6 +325,122 @@ public final class MergeSessionStore: ObservableObject {
         }
     }
 
+    public func updateArtifactDraft(
+        documentJSON: Data,
+        preservationManifest: Data
+    ) {
+        guard
+            !isLifetimeInvalidated,
+            phase == .ready,
+            var current = artifactDraft,
+            current.documentJSON != documentJSON
+                || current.preservationManifest != preservationManifest
+        else {
+            return
+        }
+
+        current = enqueueDraftMutation(
+            current: current,
+            documentJSON: documentJSON,
+            tags: current.tags,
+            preservationManifest: preservationManifest
+        )
+        persistArtifactDraft(current, invalidatingCommitRequest: true)
+        scheduleDraftSynchronizationIfEligible()
+    }
+
+    public func updateArtifactTags(_ tags: [String]) {
+        let normalized = CardEditingTag.normalize(tags)
+        guard
+            !isLifetimeInvalidated,
+            phase == .ready,
+            var current = artifactDraft,
+            current.tags != normalized
+        else {
+            return
+        }
+
+        current = enqueueDraftMutation(
+            current: current,
+            documentJSON: current.documentJSON,
+            tags: normalized,
+            preservationManifest: current.preservationManifest
+        )
+        persistArtifactDraft(current, invalidatingCommitRequest: true)
+        scheduleDraftSynchronizationIfEligible()
+    }
+
+    public func flushArtifactDraft() async throws -> MergeArtifact {
+        draftDebounceTask?.cancel()
+        draftDebounceTask = nil
+        return try await synchronizeArtifactDraft()
+    }
+
+    public func resolveArtifactConflict(
+        _ resolution: MergeArtifactConflictResolution
+    ) async {
+        guard
+            !isLifetimeInvalidated,
+            case .conflict = artifactDraftSyncState,
+            let serverArtifact = conflictServerArtifact,
+            let current = artifactDraft
+        else {
+            return
+        }
+
+        switch resolution {
+        case .reloadServer:
+            adoptServerArtifact(serverArtifact)
+        case .keepMine:
+            let pending = MergePendingArtifactSave(
+                idempotencyKey: idempotencyKey(),
+                baseRevision: serverArtifact.latestRevision,
+                baseDocumentHash: serverArtifact.latestHash,
+                documentJSON: current.documentJSON,
+                tags: current.tags
+            )
+            let rebased = MergeArtifactDraftSnapshot(
+                baseRevision: serverArtifact.latestRevision,
+                baseDocumentHash: serverArtifact.latestHash,
+                documentJSON: current.documentJSON,
+                tags: current.tags,
+                rate: serverArtifact.presentation.rate,
+                preservationManifest: current.preservationManifest,
+                pendingSave: pending
+            )
+            artifact = serverArtifact
+            conflictServerArtifact = nil
+            pendingSaveWasAttempted = false
+            artifactDraftSyncState = isNetworkAvailable
+                ? .dirty
+                : .unsynced(.offline)
+            persistArtifactDraft(rebased, invalidatingCommitRequest: true)
+            guard isNetworkAvailable else { return }
+            do {
+                _ = try await flushArtifactDraft()
+            } catch {
+                return
+            }
+        }
+    }
+
+    public func setNetworkAvailable(_ isAvailable: Bool) {
+        guard !isLifetimeInvalidated else { return }
+        isNetworkAvailable = isAvailable
+
+        guard artifactDraft?.pendingSave != nil else { return }
+        if isAvailable {
+            if activeDraftSaveTask == nil {
+                artifactDraftSyncState = .dirty
+            }
+            scheduleDraftSynchronization(afterDebounce: false)
+        } else {
+            draftDebounceTask?.cancel()
+            draftDebounceTask = nil
+            artifactDraftSyncState = .unsynced(.offline)
+        }
+    }
+
     public func commit() {
         guard
             !isLifetimeInvalidated,
@@ -321,36 +448,14 @@ public final class MergeSessionStore: ObservableObject {
             phase == .ready,
             let job,
             job.status.canCommit,
-            var value = snapshot
+            snapshot != nil
         else {
             return
         }
 
         artifactActionError = nil
-
-        let request: MergeCommitRequest
-        if let existing = value.commitRequest {
-            request = existing
-        } else {
-            request = MergeCommitRequest(
-                idempotencyKey: idempotencyKey(),
-                target: .newCard(
-                    spaceID: nil,
-                    titleOverride: nil
-                )
-            )
-            value.commitRequest = request
-            snapshot = value
-            persistence.save(value)
-        }
-
-        phase = .committing
         launch { store in
-            await store.submitCommit(
-                jobID: job.jobID,
-                request: request,
-                reconcileConflict: true
-            )
+            await store.flushAndSubmitCommit(jobID: job.jobID)
         }
     }
 
@@ -394,6 +499,10 @@ public final class MergeSessionStore: ObservableObject {
         selectedSources = request.sources
         job = nil
         artifact = nil
+        artifactDraft = nil
+        artifactDraftSyncState = .clean
+        conflictServerArtifact = nil
+        cancelDraftWork()
         artifactActionError = nil
         notFoundResource = nil
         titleOverride = ""
@@ -438,11 +547,16 @@ public final class MergeSessionStore: ObservableObject {
         }
         persistence.remove(actorID: actorID)
         snapshot = nil
+        artifactDraft = nil
+        artifactDraftSyncState = .clean
+        cancelDraftWork()
     }
 
     func invalidateLifetime() {
         guard !isLifetimeInvalidated else { return }
         isLifetimeInvalidated = true
+        draftLifetimeGeneration += 1
+        cancelDraftWork()
         operationTask?.cancel()
         operationTask = nil
         isOperationInFlight = false
@@ -486,6 +600,16 @@ public final class MergeSessionStore: ObservableObject {
 
     private func restore(_ restored: MergeSessionSnapshot) {
         snapshot = restored
+        artifactDraft = restored.artifactDraft
+        if restored.artifactDraft?.pendingSave != nil {
+            artifactDraftSyncState = isNetworkAvailable
+                ? .dirty
+                : .unsynced(.offline)
+            pendingSaveWasAttempted = true
+        } else {
+            artifactDraftSyncState = .clean
+            pendingSaveWasAttempted = false
+        }
         selectedSources = restored.createRequest.sources
         if let restoredAnchor = restored.createRequest.sources.first(
             where: { $0.assetID == restored.anchorAssetID }
@@ -595,12 +719,560 @@ public final class MergeSessionStore: ObservableObject {
     }
 
     private func finishArtifactDiscard() {
+        draftLifetimeGeneration += 1
+        cancelDraftWork()
         persistence.remove(actorID: actorID)
         snapshot = nil
         job = nil
         artifact = nil
+        artifactDraft = nil
+        artifactDraftSyncState = .clean
+        conflictServerArtifact = nil
         artifactActionError = nil
         phase = .cancelled
+    }
+
+    private func enqueueDraftMutation(
+        current: MergeArtifactDraftSnapshot,
+        documentJSON: Data,
+        tags: [String],
+        preservationManifest: Data
+    ) -> MergeArtifactDraftSnapshot {
+        let pending: MergePendingArtifactSave
+        if let existing = current.pendingSave,
+           !pendingSaveWasAttempted,
+           activeDraftSaveTask == nil,
+           conflictServerArtifact == nil {
+            pending = MergePendingArtifactSave(
+                idempotencyKey: existing.idempotencyKey,
+                baseRevision: existing.baseRevision,
+                baseDocumentHash: existing.baseDocumentHash,
+                documentJSON: documentJSON,
+                tags: tags
+            )
+        } else if let existing = current.pendingSave {
+            pending = existing
+        } else {
+            pendingSaveWasAttempted = false
+            pending = MergePendingArtifactSave(
+                idempotencyKey: idempotencyKey(),
+                baseRevision: current.baseRevision,
+                baseDocumentHash: current.baseDocumentHash,
+                documentJSON: documentJSON,
+                tags: tags
+            )
+        }
+
+        switch artifactDraftSyncState {
+        case .conflict:
+            break
+        case .unsynced where pendingSaveWasAttempted:
+            break
+        default:
+            if !isNetworkAvailable {
+                artifactDraftSyncState = .unsynced(.offline)
+            } else if activeDraftSaveTask != nil {
+                artifactDraftSyncState = .saving
+            } else {
+                artifactDraftSyncState = .dirty
+            }
+        }
+
+        return MergeArtifactDraftSnapshot(
+            baseRevision: current.baseRevision,
+            baseDocumentHash: current.baseDocumentHash,
+            documentJSON: documentJSON,
+            tags: tags,
+            rate: current.rate,
+            preservationManifest: preservationManifest,
+            pendingSave: pending
+        )
+    }
+
+    private func persistArtifactDraft(
+        _ draft: MergeArtifactDraftSnapshot,
+        invalidatingCommitRequest: Bool = false
+    ) {
+        artifactDraft = draft
+        guard var value = snapshot,
+              value.jobID != nil else {
+            return
+        }
+        value.artifactDraft = draft
+        if invalidatingCommitRequest {
+            value.commitRequest = nil
+        }
+        snapshot = value
+        persistence.save(value)
+    }
+
+    private func scheduleDraftSynchronizationIfEligible() {
+        guard case .dirty = artifactDraftSyncState else { return }
+        scheduleDraftSynchronization(afterDebounce: true)
+    }
+
+    private func scheduleDraftSynchronization(afterDebounce: Bool) {
+        guard
+            !isLifetimeInvalidated,
+            isNetworkAvailable,
+            artifactDraft?.pendingSave != nil
+        else {
+            return
+        }
+
+        draftDebounceTask?.cancel()
+        let generation = draftLifetimeGeneration
+        draftDebounceTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                if afterDebounce {
+                    try await self.sleeper.sleep(
+                        nanoseconds: Self.artifactDraftDebounceNanoseconds
+                    )
+                }
+                try Task.checkCancellation()
+                guard generation == self.draftLifetimeGeneration else { return }
+                _ = try await self.synchronizeArtifactDraft()
+            } catch {
+                return
+            }
+        }
+    }
+
+    private func synchronizeArtifactDraft() async throws -> MergeArtifact {
+        while true {
+            guard !isLifetimeInvalidated,
+                  let jobID = snapshot?.jobID,
+                  !jobID.isEmpty,
+                  let currentArtifact = artifact,
+                  let draft = artifactDraft else {
+                throw CoreMergeError.interrupted
+            }
+            if case .conflict = artifactDraftSyncState {
+                throw CoreMergeError.conflict(code: "artifact_draft_conflict")
+            }
+            guard let pending = draft.pendingSave else {
+                return currentArtifact
+            }
+            guard isNetworkAvailable else {
+                artifactDraftSyncState = .unsynced(.offline)
+                throw CoreMergeError.offline
+            }
+
+            let saved = try await executeDraftSave(
+                jobID: jobID,
+                pending: pending
+            )
+            guard artifactDraft?.pendingSave != nil else {
+                return saved
+            }
+        }
+    }
+
+    private func executeDraftSave(
+        jobID: String,
+        pending: MergePendingArtifactSave
+    ) async throws -> MergeArtifact {
+        if let activeDraftSaveTask,
+           let activeDraftSaveToken {
+            defer { clearActiveDraftSave(ifMatching: activeDraftSaveToken) }
+            return try await activeDraftSaveTask.value
+        }
+
+        pendingSaveWasAttempted = true
+        artifactDraftSyncState = .saving
+        let saveToken = UUID()
+        let generation = draftLifetimeGeneration
+        activeDraftSaveToken = saveToken
+        let task = Task { @MainActor [weak self] () throws -> MergeArtifact in
+            guard let self else { throw CoreMergeError.interrupted }
+            return try await self.performDraftSave(
+                jobID: jobID,
+                pending: pending,
+                saveToken: saveToken,
+                generation: generation
+            )
+        }
+        activeDraftSaveTask = task
+        defer { clearActiveDraftSave(ifMatching: saveToken) }
+        return try await task.value
+    }
+
+    private func clearActiveDraftSave(ifMatching saveToken: UUID) {
+        guard activeDraftSaveToken == saveToken else { return }
+        activeDraftSaveTask = nil
+        activeDraftSaveToken = nil
+    }
+
+    private func performDraftSave(
+        jobID: String,
+        pending: MergePendingArtifactSave,
+        saveToken: UUID,
+        generation: Int
+    ) async throws -> MergeArtifact {
+        let request = MergeArtifactSaveRequest(
+            baseRevision: pending.baseRevision,
+            baseHash: pending.baseDocumentHash,
+            idempotencyKey: pending.idempotencyKey,
+            documentJSON: pending.documentJSON,
+            tags: pending.tags
+        )
+
+        do {
+            let result = try await service.saveArtifact(
+                jobID: jobID,
+                request: request
+            )
+            guard shouldAcceptDraftResult(
+                jobID: jobID,
+                pending: pending,
+                saveToken: saveToken,
+                generation: generation
+            ) else {
+                throw CoreMergeError.interrupted
+            }
+            return try applyDraftSaveResult(
+                result,
+                jobID: jobID,
+                pending: pending
+            )
+        } catch {
+            let mapped = coreError(from: error)
+            guard shouldAcceptDraftResult(
+                jobID: jobID,
+                pending: pending,
+                saveToken: saveToken,
+                generation: generation
+            ) else {
+                throw CoreMergeError.interrupted
+            }
+            if case .conflict = mapped {
+                return try await reconcileArtifactSaveConflict(
+                    jobID: jobID,
+                    pending: pending,
+                    saveToken: saveToken,
+                    generation: generation
+                )
+            }
+            artifactDraftSyncState = .unsynced(draftFailure(from: mapped))
+            throw mapped
+        }
+    }
+
+    private func applyDraftSaveResult(
+        _ result: MergeArtifactSaveResult,
+        jobID: String,
+        pending: MergePendingArtifactSave
+    ) throws -> MergeArtifact {
+        guard let previousArtifact = artifact,
+              previousArtifact.jobID == jobID,
+              result.artifactID == previousArtifact.artifactID,
+              result.revision > pending.baseRevision,
+              !result.documentHash.isEmpty,
+              !result.presentationHash.isEmpty,
+              let current = artifactDraft,
+              current.pendingSave == pending else {
+            throw CoreMergeError.decoding
+        }
+
+        let acknowledged = MergeArtifact(
+            artifactID: result.artifactID,
+            jobID: jobID,
+            capabilityID: previousArtifact.capabilityID,
+            outputKind: previousArtifact.outputKind,
+            document: previousArtifact.document,
+            fragments: previousArtifact.fragments,
+            metadata: previousArtifact.metadata,
+            latestRevision: result.revision,
+            latestHash: result.documentHash,
+            documentJSON: pending.documentJSON,
+            presentationHash: result.presentationHash,
+            presentation: result.presentation
+        )
+        artifact = acknowledged
+
+        let hasNewerMutation = current.documentJSON != pending.documentJSON
+            || current.tags != pending.tags
+        let nextTags = hasNewerMutation
+            ? current.tags
+            : CardEditingTag.normalize(result.presentation.tags)
+        let nextPending: MergePendingArtifactSave?
+        if hasNewerMutation {
+            nextPending = MergePendingArtifactSave(
+                idempotencyKey: idempotencyKey(),
+                baseRevision: result.revision,
+                baseDocumentHash: result.documentHash,
+                documentJSON: current.documentJSON,
+                tags: current.tags
+            )
+            pendingSaveWasAttempted = false
+        } else {
+            nextPending = nil
+            pendingSaveWasAttempted = false
+        }
+        let updated = MergeArtifactDraftSnapshot(
+            baseRevision: result.revision,
+            baseDocumentHash: result.documentHash,
+            documentJSON: current.documentJSON,
+            tags: nextTags,
+            rate: result.presentation.rate,
+            preservationManifest: current.preservationManifest,
+            pendingSave: nextPending
+        )
+        conflictServerArtifact = nil
+        artifactDraftSyncState = nextPending == nil ? .clean : .dirty
+        persistArtifactDraft(updated)
+        return acknowledged
+    }
+
+    private func reconcileArtifactSaveConflict(
+        jobID: String,
+        pending: MergePendingArtifactSave,
+        saveToken: UUID,
+        generation: Int
+    ) async throws -> MergeArtifact {
+        let hadLocalChanges: Bool
+        if let draft = artifactDraft, let acknowledged = artifact {
+            hadLocalChanges = draft.documentJSON != acknowledged.documentJSON
+                || draft.tags != CardEditingTag.normalize(acknowledged.presentation.tags)
+        } else {
+            hadLocalChanges = true
+        }
+
+        do {
+            let latest = try await service.artifact(jobID: jobID)
+            guard latest.jobID == jobID,
+                  shouldAcceptDraftResult(
+                    jobID: jobID,
+                    pending: pending,
+                    saveToken: saveToken,
+                    generation: generation
+                  ) else {
+                throw CoreMergeError.interrupted
+            }
+            if hadLocalChanges {
+                conflictServerArtifact = latest
+                artifactDraftSyncState = .conflict(
+                    MergeArtifactConflict(
+                        serverRevision: latest.latestRevision,
+                        serverDocumentHash: latest.latestHash
+                    )
+                )
+                throw CoreMergeError.conflict(code: "artifact_draft_conflict")
+            }
+            adoptServerArtifact(latest)
+            return latest
+        } catch {
+            let mapped = coreError(from: error)
+            if case .conflict = artifactDraftSyncState {
+                throw mapped
+            }
+            artifactDraftSyncState = .unsynced(draftFailure(from: mapped))
+            throw mapped
+        }
+    }
+
+    private func adoptServerArtifact(_ serverArtifact: MergeArtifact) {
+        artifact = serverArtifact
+        let clean = makeCleanDraft(from: serverArtifact)
+        conflictServerArtifact = nil
+        pendingSaveWasAttempted = false
+        artifactDraftSyncState = .clean
+        persistArtifactDraft(clean, invalidatingCommitRequest: true)
+    }
+
+    private func makeCleanDraft(
+        from artifact: MergeArtifact
+    ) -> MergeArtifactDraftSnapshot {
+        let preservationManifest = (try? MergeArtifactEditorCodec.decode(
+            cardDocumentJSON: artifact.documentJSON
+        ).preservationManifest) ?? Data()
+        return MergeArtifactDraftSnapshot(
+            baseRevision: artifact.latestRevision,
+            baseDocumentHash: artifact.latestHash,
+            documentJSON: artifact.documentJSON,
+            tags: CardEditingTag.normalize(artifact.presentation.tags),
+            rate: artifact.presentation.rate,
+            preservationManifest: preservationManifest,
+            pendingSave: nil
+        )
+    }
+
+    private func shouldAcceptDraftResult(
+        jobID: String,
+        pending: MergePendingArtifactSave,
+        saveToken: UUID,
+        generation: Int
+    ) -> Bool {
+        !isLifetimeInvalidated
+            && !Task.isCancelled
+            && generation == draftLifetimeGeneration
+            && activeDraftSaveToken == saveToken
+            && snapshot?.jobID == jobID
+            && artifactDraft?.pendingSave == pending
+    }
+
+    private func draftFailure(from error: CoreMergeError) -> MergeDraftFailure {
+        switch error {
+        case .offline:
+            return .offline
+        case .timeout:
+            return .timeout
+        case .unavailable(let code):
+            return .unavailable(code: code)
+        case .validation(let code):
+            return .validation(code: code)
+        case .server(let code):
+            return .server(code: code)
+        case .unauthorized:
+            return .unknown(code: "unauthorized")
+        case .forbidden:
+            return .unknown(code: "forbidden")
+        case .notFound:
+            return .unknown(code: "not_found")
+        case .conflict(let code):
+            return .unknown(code: code)
+        case .interrupted:
+            return .unknown(code: "interrupted")
+        case .artifactNotReady:
+            return .unknown(code: "artifact_not_ready")
+        case .cancelled:
+            return .unknown(code: "cancelled")
+        case .decoding:
+            return .validation(code: "invalid_artifact_save_response")
+        case .unknown(let code):
+            return .unknown(code: code)
+        }
+    }
+
+    private func cancelDraftWork() {
+        draftDebounceTask?.cancel()
+        draftDebounceTask = nil
+        activeDraftSaveTask?.cancel()
+        activeDraftSaveTask = nil
+        activeDraftSaveToken = nil
+        pendingSaveWasAttempted = false
+    }
+
+    private func flushAndSubmitCommit(jobID: String) async {
+        do {
+            let savedArtifact: MergeArtifact
+            while true {
+                let candidate = try await flushArtifactDraft()
+                guard shouldAcceptAsyncResult,
+                      snapshot?.jobID == jobID else {
+                    return
+                }
+                guard artifactDraft?.pendingSave == nil,
+                      artifactDraftSyncState == .clean,
+                      artifact?.latestRevision == candidate.latestRevision,
+                      artifact?.latestHash == candidate.latestHash else {
+                    continue
+                }
+                savedArtifact = candidate
+                break
+            }
+            guard var value = snapshot,
+                  value.jobID == jobID else { return }
+
+            let request: MergeCommitRequest
+            if let existing = value.commitRequest {
+                switch (existing.revision, existing.artifactHash) {
+                case (.some, .some):
+                    request = existing
+                case (nil, nil):
+                    request = MergeCommitRequest(
+                        idempotencyKey: existing.idempotencyKey,
+                        revision: savedArtifact.latestRevision,
+                        artifactHash: savedArtifact.latestHash,
+                        target: existing.target
+                    )
+                default:
+                    throw CoreMergeError.decoding
+                }
+            } else {
+                request = MergeCommitRequest(
+                    idempotencyKey: idempotencyKey(),
+                    revision: savedArtifact.latestRevision,
+                    artifactHash: savedArtifact.latestHash,
+                    target: .newCard(spaceID: nil, titleOverride: nil)
+                )
+            }
+            value.commitRequest = request
+            snapshot = value
+            persistence.save(value)
+            phase = .committing
+            await submitCommit(
+                jobID: jobID,
+                request: request,
+                reconcileConflict: true
+            )
+        } catch {
+            guard shouldAcceptAsyncResult else { return }
+            artifactActionError = coreError(from: error)
+            phase = .ready
+        }
+    }
+
+    private func submitRecoveredCommit(
+        jobID: String,
+        request: MergeCommitRequest,
+        reconcileConflict: Bool
+    ) async {
+        do {
+            switch (request.revision, request.artifactHash) {
+            case (.some, .some):
+                await submitCommit(
+                    jobID: jobID,
+                    request: request,
+                    reconcileConflict: reconcileConflict
+                )
+                return
+            case (nil, nil):
+                break
+            default:
+                throw CoreMergeError.decoding
+            }
+
+            let selectedArtifact: MergeArtifact
+            if let artifact, artifact.jobID == jobID {
+                selectedArtifact = artifact
+            } else {
+                selectedArtifact = try await service.artifact(jobID: jobID)
+            }
+            guard shouldAcceptAsyncResult,
+                  selectedArtifact.jobID == jobID,
+                  !selectedArtifact.latestHash.isEmpty,
+                  var value = snapshot,
+                  value.jobID == jobID else {
+                throw CoreMergeError.decoding
+            }
+            let migrated = MergeCommitRequest(
+                idempotencyKey: request.idempotencyKey,
+                revision: selectedArtifact.latestRevision,
+                artifactHash: selectedArtifact.latestHash,
+                target: request.target
+            )
+            artifact = selectedArtifact
+            value.commitRequest = migrated
+            snapshot = value
+            persistence.save(value)
+            await submitCommit(
+                jobID: jobID,
+                request: migrated,
+                reconcileConflict: reconcileConflict
+            )
+        } catch {
+            guard shouldAcceptAsyncResult else { return }
+            let mapped = coreError(from: error)
+            if artifact != nil {
+                artifactActionError = mapped
+                phase = .ready
+            } else {
+                notFoundResource = mapped == .notFound ? .artifact : nil
+                phase = .paused(mapped)
+            }
+        }
     }
 
     private func submitCommit(
@@ -656,7 +1328,7 @@ public final class MergeSessionStore: ObservableObject {
                 if let committedAssetID = snapshot?.committedAssetID {
                     phase = .completed(assetID: committedAssetID)
                 } else if let commitRequest = snapshot?.commitRequest {
-                    await submitCommit(
+                    await submitRecoveredCommit(
                         jobID: current.jobID,
                         request: commitRequest,
                         reconcileConflict: false
@@ -726,10 +1398,33 @@ public final class MergeSessionStore: ObservableObject {
             titleOverride = ""
             if var value = snapshot {
                 value.artifactID = loaded.artifactID
+                let restoredDraft = value.artifactDraft
+                if let restoredDraft,
+                   restoredDraft.pendingSave != nil {
+                    artifactDraft = restoredDraft
+                    pendingSaveWasAttempted = true
+                    artifactDraftSyncState = isNetworkAvailable
+                        ? .dirty
+                        : .unsynced(.offline)
+                } else if let restoredDraft,
+                          restoredDraft.baseRevision == loaded.latestRevision,
+                          restoredDraft.baseDocumentHash == loaded.latestHash {
+                    artifactDraft = restoredDraft
+                    pendingSaveWasAttempted = false
+                    artifactDraftSyncState = .clean
+                } else {
+                    artifactDraft = makeCleanDraft(from: loaded)
+                    pendingSaveWasAttempted = false
+                    artifactDraftSyncState = .clean
+                }
+                value.artifactDraft = artifactDraft
                 snapshot = value
                 persistence.save(value)
             }
             phase = .ready
+            if artifactDraft?.pendingSave != nil, isNetworkAvailable {
+                scheduleDraftSynchronization(afterDebounce: false)
+            }
         } catch {
             guard shouldAcceptAsyncResult else { return }
             let mapped = coreError(from: error)

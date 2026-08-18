@@ -942,10 +942,19 @@ public struct MergeCommitTarget: Codable, Equatable, Sendable {
 
 public struct MergeCommitRequest: Codable, Equatable, Sendable {
     public let idempotencyKey: String
+    public let revision: Int?
+    public let artifactHash: String?
     public let target: MergeCommitTarget
 
-    public init(idempotencyKey: String, target: MergeCommitTarget) {
+    public init(
+        idempotencyKey: String,
+        revision: Int? = nil,
+        artifactHash: String? = nil,
+        target: MergeCommitTarget
+    ) {
         self.idempotencyKey = idempotencyKey
+        self.revision = revision
+        self.artifactHash = artifactHash
         self.target = target
     }
 }

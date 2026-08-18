@@ -39,6 +39,10 @@ public final class MergeTaskSessionPersistence: MergeSessionPersisting {
 
         let savedAt = now()
         let canonicalJobID = snapshot.jobID?.nonEmpty
+        var snapshotToSave = snapshot
+        if canonicalJobID == nil {
+            snapshotToSave.artifactDraft = nil
+        }
         store.update(actorID: actorID) { collection in
             let pending = collection.pendingCreations[operationID]
             let current = currentJobID.flatMap { collection.tasks[$0] }
@@ -56,7 +60,7 @@ public final class MergeTaskSessionPersistence: MergeSessionPersisting {
                 }
                 collection.tasks[canonicalJobID] = MergeTaskRecord(
                     operationID: operationID,
-                    snapshot: snapshot,
+                    snapshot: snapshotToSave,
                     createdAt: createdAt,
                     updatedAt: savedAt,
                     replacesJobID: nil
@@ -68,7 +72,7 @@ public final class MergeTaskSessionPersistence: MergeSessionPersisting {
             let createdAt = pending?.createdAt ?? current?.createdAt ?? savedAt
             collection.pendingCreations[operationID] = MergeTaskRecord(
                 operationID: operationID,
-                snapshot: snapshot,
+                snapshot: snapshotToSave,
                 createdAt: createdAt,
                 updatedAt: savedAt,
                 replacesJobID: pending?.replacesJobID ?? currentJobID

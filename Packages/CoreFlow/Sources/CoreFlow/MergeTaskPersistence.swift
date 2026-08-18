@@ -24,7 +24,7 @@ public struct MergeTaskRecord: Codable, Equatable, Sendable, Identifiable {
 }
 
 public struct MergeTaskCollection: Equatable, Sendable {
-    public static let currentSchemaVersion = 2
+    public static let currentSchemaVersion = 3
     public let schemaVersion: Int
     public let actorID: String
     public var pendingCreations: [String: MergeTaskRecord]
@@ -63,7 +63,7 @@ public protocol MergeTaskCollectionPersisting {
 }
 
 struct MergeTaskCollectionEnvelope: Codable, Equatable {
-    let schemaVersion: Int
+    var schemaVersion: Int
     let actorID: String
     var pendingCreations: [String: Data]
     var tasks: [String: Data]
@@ -154,7 +154,7 @@ public final class UserDefaultsMergeTaskStore: MergeTaskCollectionPersisting {
         guard let envelope = try? JSONDecoder().decode(
             MergeTaskCollectionEnvelope.self,
             from: data
-        ), envelope.schemaVersion == MergeTaskCollection.currentSchemaVersion,
+        ), [2, MergeTaskCollection.currentSchemaVersion].contains(envelope.schemaVersion),
            envelope.actorID == actorID
         else {
             defaults.removeObject(forKey: key)
@@ -165,6 +165,8 @@ public final class UserDefaultsMergeTaskStore: MergeTaskCollectionPersisting {
         var pending: [String: MergeTaskRecord] = [:]
         var tasks: [String: MergeTaskRecord] = [:]
         var quarantined: [(String, String)] = []
+        var requiresRewrite = envelope.schemaVersion != MergeTaskCollection.currentSchemaVersion
+        repaired.schemaVersion = MergeTaskCollection.currentSchemaVersion
 
         decodeRecords(
             repaired.pendingCreations,
@@ -173,7 +175,8 @@ public final class UserDefaultsMergeTaskStore: MergeTaskCollectionPersisting {
             isPending: true,
             into: &pending,
             envelope: &repaired,
-            quarantined: &quarantined
+            quarantined: &quarantined,
+            requiresRewrite: &requiresRewrite
         )
         decodeRecords(
             repaired.tasks,
@@ -182,10 +185,11 @@ public final class UserDefaultsMergeTaskStore: MergeTaskCollectionPersisting {
             isPending: false,
             into: &tasks,
             envelope: &repaired,
-            quarantined: &quarantined
+            quarantined: &quarantined,
+            requiresRewrite: &requiresRewrite
         )
 
-        if !quarantined.isEmpty, let repairedData = try? JSONEncoder().encode(repaired) {
+        if requiresRewrite, let repairedData = try? JSONEncoder().encode(repaired) {
             defaults.set(repairedData, forKey: key)
             for (_, recordKey) in quarantined {
                 logQuarantine(actorID: actorID, recordKey: recordKey)
@@ -212,24 +216,69 @@ public final class UserDefaultsMergeTaskStore: MergeTaskCollectionPersisting {
         isPending: Bool,
         into records: inout [String: MergeTaskRecord],
         envelope: inout MergeTaskCollectionEnvelope,
-        quarantined: inout [(String, String)]
+        quarantined: inout [(String, String)],
+        requiresRewrite: inout Bool
     ) {
         for (key, data) in encodedRecords {
-            guard let record = try? JSONDecoder().decode(MergeTaskRecord.self, from: data),
+            guard var record = try? JSONDecoder().decode(MergeTaskRecord.self, from: data),
+                  let migrated = record.snapshot.migratedToCurrentSchema()
+            else {
+                quarantine(
+                    key: key,
+                    data: data,
+                    prefix: prefix,
+                    isPending: isPending,
+                    envelope: &envelope,
+                    quarantined: &quarantined
+                )
+                requiresRewrite = true
+                continue
+            }
+            if migrated != record.snapshot {
+                record.snapshot = migrated
+                requiresRewrite = true
+                if let migratedData = try? JSONEncoder().encode(record) {
+                    if isPending {
+                        envelope.pendingCreations[key] = migratedData
+                    } else {
+                        envelope.tasks[key] = migratedData
+                    }
+                }
+            }
+            guard
                   isValid(record, key: key, actorID: actorID, isPending: isPending)
             else {
-                let quarantinedKey = "\(prefix):\(key)"
-                envelope.quarantinedRecords[quarantinedKey] = data
-                if isPending {
-                    envelope.pendingCreations.removeValue(forKey: key)
-                } else {
-                    envelope.tasks.removeValue(forKey: key)
-                }
-                quarantined.append((quarantinedKey, key))
+                quarantine(
+                    key: key,
+                    data: data,
+                    prefix: prefix,
+                    isPending: isPending,
+                    envelope: &envelope,
+                    quarantined: &quarantined
+                )
+                requiresRewrite = true
                 continue
             }
             records[key] = record
         }
+    }
+
+    private func quarantine(
+        key: String,
+        data: Data,
+        prefix: String,
+        isPending: Bool,
+        envelope: inout MergeTaskCollectionEnvelope,
+        quarantined: inout [(String, String)]
+    ) {
+        let quarantinedKey = "\(prefix):\(key)"
+        envelope.quarantinedRecords[quarantinedKey] = data
+        if isPending {
+            envelope.pendingCreations.removeValue(forKey: key)
+        } else {
+            envelope.tasks.removeValue(forKey: key)
+        }
+        quarantined.append((quarantinedKey, key))
     }
 
     private func migratedCollection(

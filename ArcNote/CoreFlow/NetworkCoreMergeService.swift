@@ -131,16 +131,17 @@ struct NetworkCoreMergeService: CoreMergeServing, @unchecked Sendable {
         guard request.target.targetType == "new_card" else {
             throw CoreMergeError.validation(code: "unsupported_commit_target")
         }
+        guard let revision = request.revision,
+              let artifactHash = request.artifactHash else {
+            throw CoreMergeError.validation(code: "commit_artifact_selection_required")
+        }
 
         do {
             // The vNext API commits an immutable artifact revision. It does not
             // accept client-side title or space overrides at this boundary.
-            let artifact = try await firstValue(
-                network.getMergeArtifact(jobId: jobID)
-            )
             let wireRequest = CommitMergeJobRequest(
-                revision: artifact.latestRevision,
-                artifactHash: artifact.latestHash,
+                revision: revision,
+                artifactHash: artifactHash,
                 idemKey: request.idempotencyKey
             )
             let response = try await firstValue(

@@ -1,7 +1,7 @@
 import Foundation
 
 public struct MergeSessionSnapshot: Codable, Equatable, Sendable {
-    public static let currentSchemaVersion = 1
+    public static let currentSchemaVersion = 2
 
     public let schemaVersion: Int
     public let actorID: String
@@ -14,6 +14,7 @@ public struct MergeSessionSnapshot: Codable, Equatable, Sendable {
     public var artifactID: String?
     public var commitRequest: MergeCommitRequest?
     public var committedAssetID: String?
+    public var artifactDraft: MergeArtifactDraftSnapshot?
 
     public init(
         schemaVersion: Int = MergeSessionSnapshot.currentSchemaVersion,
@@ -26,7 +27,8 @@ public struct MergeSessionSnapshot: Codable, Equatable, Sendable {
         lastStatus: MergeJobStatus?,
         artifactID: String?,
         commitRequest: MergeCommitRequest?,
-        committedAssetID: String?
+        committedAssetID: String?,
+        artifactDraft: MergeArtifactDraftSnapshot? = nil
     ) {
         self.schemaVersion = schemaVersion
         self.actorID = actorID
@@ -39,6 +41,30 @@ public struct MergeSessionSnapshot: Codable, Equatable, Sendable {
         self.artifactID = artifactID
         self.commitRequest = commitRequest
         self.committedAssetID = committedAssetID
+        self.artifactDraft = artifactDraft
+    }
+
+    func migratedToCurrentSchema() -> MergeSessionSnapshot? {
+        switch schemaVersion {
+        case Self.currentSchemaVersion:
+            return self
+        case 1:
+            return MergeSessionSnapshot(
+                actorID: actorID,
+                anchorAssetID: anchorAssetID,
+                anchorPreview: anchorPreview,
+                createRequest: createRequest,
+                selectedCapability: selectedCapability,
+                jobID: jobID,
+                lastStatus: lastStatus,
+                artifactID: artifactID,
+                commitRequest: commitRequest,
+                committedAssetID: committedAssetID,
+                artifactDraft: nil
+            )
+        default:
+            return nil
+        }
     }
 }
 
@@ -111,18 +137,24 @@ public final class UserDefaultsMergeSessionStore: MergeSessionPersisting {
         }
 
         do {
-            let value = try JSONDecoder().decode(
+            let decoded = try JSONDecoder().decode(
                 MergeSessionSnapshot.self,
                 from: data
             )
+            guard let value = decoded.migratedToCurrentSchema() else {
+                defaults.removeObject(forKey: storageKey)
+                return nil
+            }
             guard
-                value.schemaVersion == MergeSessionSnapshot.currentSchemaVersion,
                 value.actorID == actorID,
                 !value.anchorAssetID.isEmpty,
                 value.createRequest.sources.count >= 2
             else {
                 defaults.removeObject(forKey: storageKey)
                 return nil
+            }
+            if value != decoded, let migrated = try? JSONEncoder().encode(value) {
+                defaults.set(migrated, forKey: storageKey)
             }
             return value
         } catch {

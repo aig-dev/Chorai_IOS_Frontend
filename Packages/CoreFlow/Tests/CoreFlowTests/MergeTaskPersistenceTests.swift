@@ -89,6 +89,131 @@ final class MergeTaskPersistenceTests: XCTestCase {
         )
     }
 
+    func testVersionTwoCollectionMigratesHealthyVersionOneRecordAndQuarantinesCorruptSibling() throws {
+        let store = makeTaskStore()
+        var good = record(
+            operationID: "op_good",
+            actorID: "actor_1",
+            jobID: "job_good",
+            createKey: "create-good"
+        )
+        good.snapshot = legacyVersionOneSnapshot(from: good.snapshot)
+        let envelope = MergeTaskCollectionEnvelope(
+            schemaVersion: 2,
+            actorID: "actor_1",
+            pendingCreations: [:],
+            tasks: [
+                "job_good": try JSONEncoder().encode(good),
+                "job_bad": Data("not-json".utf8),
+            ],
+            quarantinedRecords: [:]
+        )
+        defaults.set(
+            try JSONEncoder().encode(envelope),
+            forKey: store.storageKey(actorID: "actor_1")
+        )
+
+        let restored = store.collection(actorID: "actor_1")
+
+        XCTAssertEqual(restored.schemaVersion, MergeTaskCollection.currentSchemaVersion)
+        XCTAssertEqual(
+            restored.tasks["job_good"]?.snapshot.schemaVersion,
+            MergeSessionSnapshot.currentSchemaVersion
+        )
+        XCTAssertNil(restored.tasks["job_good"]?.snapshot.artifactDraft)
+        XCTAssertNil(restored.tasks["job_bad"])
+        let persistedData = try XCTUnwrap(
+            defaults.data(forKey: store.storageKey(actorID: "actor_1"))
+        )
+        let persistedEnvelope = try JSONDecoder().decode(
+            MergeTaskCollectionEnvelope.self,
+            from: persistedData
+        )
+        XCTAssertEqual(
+            persistedEnvelope.schemaVersion,
+            MergeTaskCollection.currentSchemaVersion
+        )
+        XCTAssertEqual(
+            persistedEnvelope.quarantinedRecords["tasks:job_bad"],
+            Data("not-json".utf8)
+        )
+    }
+
+    func testCollectionRoundTripKeepsExactPendingDraftBytesAndKeyOnOnlyItsJob() throws {
+        let store = makeTaskStore()
+        let pendingDocument = Data(#"{"type":"doc","content":[{"id":"blk_pending"}]}"#.utf8)
+        var first = record(
+            operationID: "op_1",
+            actorID: "actor_1",
+            jobID: "job_1",
+            createKey: "create-1"
+        )
+        first.snapshot.artifactDraft = MergeArtifactDraftSnapshot(
+            baseRevision: 4,
+            baseDocumentHash: "sha256:base-4",
+            documentJSON: pendingDocument,
+            tags: ["Design"],
+            rate: 3,
+            preservationManifest: Data(#"{"ids":["blk_pending"]}"#.utf8),
+            pendingSave: MergePendingArtifactSave(
+                idempotencyKey: "save-job-1-stable",
+                baseRevision: 4,
+                baseDocumentHash: "sha256:base-4",
+                documentJSON: pendingDocument,
+                tags: ["Design"]
+            )
+        )
+        let sibling = record(
+            operationID: "op_2",
+            actorID: "actor_1",
+            jobID: "job_2",
+            createKey: "create-2"
+        )
+        var collection = MergeTaskCollection.empty(actorID: "actor_1")
+        collection.tasks["job_1"] = first
+        collection.tasks["job_2"] = sibling
+
+        store.save(collection)
+        let restored = store.collection(actorID: "actor_1")
+
+        XCTAssertEqual(restored.tasks["job_1"]?.snapshot.artifactDraft, first.snapshot.artifactDraft)
+        XCTAssertEqual(
+            restored.tasks["job_1"]?.snapshot.artifactDraft?.pendingSave?.documentJSON,
+            pendingDocument
+        )
+        XCTAssertEqual(
+            restored.tasks["job_1"]?.snapshot.artifactDraft?.pendingSave?.idempotencyKey,
+            "save-job-1-stable"
+        )
+        XCTAssertNil(restored.tasks["job_2"]?.snapshot.artifactDraft)
+    }
+
+    func testPendingCreationCannotPersistArtifactDraftBeforeCanonicalJobExists() {
+        let collections = InMemoryMergeTaskCollectionStore(actorID: "actor_1")
+        let persistence = MergeTaskSessionPersistence(
+            actorID: "actor_1",
+            operationID: "op_pending",
+            store: collections
+        )
+        var pending = makeMergeSnapshot(jobID: nil, createKey: "create-pending")
+        pending.artifactDraft = MergeArtifactDraftSnapshot(
+            baseRevision: 1,
+            baseDocumentHash: "sha256:base-1",
+            documentJSON: Data("draft".utf8),
+            tags: [],
+            rate: 1,
+            preservationManifest: Data(),
+            pendingSave: nil
+        )
+
+        persistence.save(pending)
+
+        XCTAssertNil(
+            collections.collection(actorID: "actor_1")
+                .pendingCreations["op_pending"]?.snapshot.artifactDraft
+        )
+    }
+
     func testLegacyAcceptedSnapshotMigratesExactlyOnce() {
         let legacy = makeLegacyStore()
         legacy.save(makeMergeSnapshot(jobID: "job_legacy", status: .generating))
@@ -206,6 +331,25 @@ final class MergeTaskPersistenceTests: XCTestCase {
             defaults: defaults,
             keyPrefix: "merge.legacy",
             notificationCenter: notificationCenter
+        )
+    }
+
+    private func legacyVersionOneSnapshot(
+        from value: MergeSessionSnapshot
+    ) -> MergeSessionSnapshot {
+        MergeSessionSnapshot(
+            schemaVersion: 1,
+            actorID: value.actorID,
+            anchorAssetID: value.anchorAssetID,
+            anchorPreview: value.anchorPreview,
+            createRequest: value.createRequest,
+            selectedCapability: value.selectedCapability,
+            jobID: value.jobID,
+            lastStatus: value.lastStatus,
+            artifactID: value.artifactID,
+            commitRequest: value.commitRequest,
+            committedAssetID: value.committedAssetID,
+            artifactDraft: nil
         )
     }
 

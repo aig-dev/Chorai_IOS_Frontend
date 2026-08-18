@@ -360,6 +360,34 @@ final class CoreMergeModelsTests: XCTestCase {
         XCTAssertEqual(request.target.titleOverride, "A title")
     }
 
+    func testCommitRequestRoundTripsExactSavedRevisionAndHash() throws {
+        let request = MergeCommitRequest(
+            idempotencyKey: "commit-key",
+            revision: 8,
+            artifactHash: "sha256:artifact-8",
+            target: .newCard(spaceID: "space_1", titleOverride: nil)
+        )
+
+        let encoded = try JSONEncoder().encode(request)
+        let decoded = try JSONDecoder().decode(MergeCommitRequest.self, from: encoded)
+
+        XCTAssertEqual(decoded, request)
+        XCTAssertEqual(decoded.revision, 8)
+        XCTAssertEqual(decoded.artifactHash, "sha256:artifact-8")
+    }
+
+    func testLegacyCommitRequestDecodesWithoutInventingArtifactSelection() throws {
+        let legacy = Data(
+            #"{"idempotencyKey":"legacy-key","target":{"targetType":"new_card","spaceID":"space_1"}}"#.utf8
+        )
+
+        let decoded = try JSONDecoder().decode(MergeCommitRequest.self, from: legacy)
+
+        XCTAssertEqual(decoded.idempotencyKey, "legacy-key")
+        XCTAssertNil(decoded.revision)
+        XCTAssertNil(decoded.artifactHash)
+    }
+
     func testArtifactTextFallbackPreservesStructuredAndUnknownContent() {
         let document = MergeDocument(
             schemaVersion: "1.0",

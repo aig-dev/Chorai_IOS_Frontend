@@ -44,8 +44,11 @@ final class MergeSessionPersistenceTests: XCTestCase {
         value.artifactID = "artifact_1"
         value.commitRequest = MergeCommitRequest(
             idempotencyKey: "commit-stable",
+            revision: 4,
+            artifactHash: "sha256:saved-4",
             target: .newCard(spaceID: nil, titleOverride: "Merged title")
         )
+        value.artifactDraft = draftSnapshot()
         value.committedAssetID = "ast_committed"
 
         store.save(value)
@@ -58,7 +61,42 @@ final class MergeSessionPersistenceTests: XCTestCase {
             ["ast_anchor", "ast_companion"]
         )
         XCTAssertEqual(restored?.commitRequest?.idempotencyKey, "commit-stable")
+        XCTAssertEqual(restored?.commitRequest?.revision, 4)
+        XCTAssertEqual(restored?.commitRequest?.artifactHash, "sha256:saved-4")
+        XCTAssertEqual(restored?.artifactDraft, value.artifactDraft)
         XCTAssertEqual(restored?.committedAssetID, "ast_committed")
+    }
+
+    func testVersionOneSnapshotWithoutDraftMigratesToCurrentCleanSnapshot() throws {
+        let keyPrefix = "merge.test"
+        let store = UserDefaultsMergeSessionStore(
+            defaults: defaults,
+            keyPrefix: keyPrefix
+        )
+        let legacy = snapshot(
+            schemaVersion: 1,
+            actorID: "actor_a",
+            anchorID: "ast_anchor"
+        )
+        var object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: JSONEncoder().encode(legacy))
+                as? [String: Any]
+        )
+        object.removeValue(forKey: "artifactDraft")
+        defaults.set(
+            try JSONSerialization.data(withJSONObject: object),
+            forKey: "\(keyPrefix).actor_a"
+        )
+
+        let restored = try XCTUnwrap(store.snapshot(actorID: "actor_a"))
+
+        XCTAssertEqual(restored.schemaVersion, MergeSessionSnapshot.currentSchemaVersion)
+        XCTAssertNil(restored.artifactDraft)
+        let persisted = try XCTUnwrap(defaults.data(forKey: "\(keyPrefix).actor_a"))
+        XCTAssertEqual(
+            try JSONDecoder().decode(MergeSessionSnapshot.self, from: persisted),
+            restored
+        )
     }
 
     func testResumeMetadataContainsNoArtifactBody() {
@@ -140,13 +178,17 @@ final class MergeSessionPersistenceTests: XCTestCase {
         )
     }
 
-    private func snapshot(actorID: String, anchorID: String) -> MergeSessionSnapshot {
+    private func snapshot(
+        schemaVersion: Int = MergeSessionSnapshot.currentSchemaVersion,
+        actorID: String,
+        anchorID: String
+    ) -> MergeSessionSnapshot {
         let sources = [
             MergeSource(assetID: anchorID, versionID: nil, preview: "Anchor preview"),
             MergeSource(assetID: "ast_companion", versionID: "ver_1", preview: "Companion")
         ]
         return MergeSessionSnapshot(
-            schemaVersion: 1,
+            schemaVersion: schemaVersion,
             actorID: actorID,
             anchorAssetID: anchorID,
             anchorPreview: "Anchor preview",
@@ -162,6 +204,25 @@ final class MergeSessionPersistenceTests: XCTestCase {
             artifactID: nil,
             commitRequest: nil,
             committedAssetID: nil
+        )
+    }
+
+    private func draftSnapshot() -> MergeArtifactDraftSnapshot {
+        let document = Data(#"{"type":"doc","content":[{"id":"blk_draft"}]}"#.utf8)
+        return MergeArtifactDraftSnapshot(
+            baseRevision: 3,
+            baseDocumentHash: "sha256:base-3",
+            documentJSON: document,
+            tags: ["Design"],
+            rate: 3,
+            preservationManifest: Data(#"{"ids":["blk_draft"]}"#.utf8),
+            pendingSave: MergePendingArtifactSave(
+                idempotencyKey: "save-stable",
+                baseRevision: 3,
+                baseDocumentHash: "sha256:base-3",
+                documentJSON: document,
+                tags: ["Design"]
+            )
         )
     }
 }

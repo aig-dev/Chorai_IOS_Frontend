@@ -19,6 +19,11 @@ final class NetworkCoreMergeSourceContractTests: XCTestCase {
     func testCreateCommitAndCancelMatchTheStrictVNextWireContract() throws {
         let serviceSource = try source("ArcNote/CoreFlow/NetworkCoreMergeService.swift")
         let modelSource = try source("ArcNote/Models/MergeModels.swift")
+        let commitDeclaration = try declaration(
+            named: "func commit(",
+            until: "private static func mapJob",
+            in: serviceSource
+        )
 
         XCTAssertFalse(modelSource.contains("let capability: String\n    let idemKey"))
         XCTAssertFalse(modelSource.contains("let context: [String: MergeJSONValue]"))
@@ -28,9 +33,11 @@ final class NetworkCoreMergeSourceContractTests: XCTestCase {
         XCTAssertTrue(modelSource.contains("let actionLogId: String"))
 
         XCTAssertTrue(serviceSource.contains("guard let versionID = $0.versionID"))
-        XCTAssertTrue(serviceSource.contains("network.getMergeArtifact(jobId: jobID)"))
-        XCTAssertTrue(serviceSource.contains("revision: artifact.latestRevision"))
-        XCTAssertTrue(serviceSource.contains("artifactHash: artifact.latestHash"))
+        XCTAssertFalse(commitDeclaration.contains("network.getMergeArtifact(jobId: jobID)"))
+        XCTAssertTrue(commitDeclaration.contains("request.revision"))
+        XCTAssertTrue(commitDeclaration.contains("request.artifactHash"))
+        XCTAssertFalse(commitDeclaration.contains("artifact.latestRevision"))
+        XCTAssertFalse(commitDeclaration.contains("artifact.latestHash"))
         XCTAssertTrue(serviceSource.contains("assetID: response.noteAssetId"))
         XCTAssertTrue(serviceSource.contains("logID: response.actionLogId"))
         XCTAssertTrue(serviceSource.contains("CancelMergeJobRequest("))

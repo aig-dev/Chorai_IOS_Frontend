@@ -560,6 +560,158 @@ final class MergeTaskCoordinatorTests: XCTestCase {
         XCTAssertTrue(createCalls.isEmpty)
     }
 
+    func testReadyDraftStaysCompleteOfflineAndRecoveryReplaysOnlyTargetSibling() async {
+        let fixture = makeCoordinatorFixture(
+            keys: ["save-job-1"],
+            collection: restoredCollection([
+                ("job_1", .artifactReady, 100),
+                ("job_2", .artifactReady, 200),
+            ])
+        )
+        for jobID in ["job_1", "job_2"] {
+            await fixture.service.enqueueJob(
+                id: jobID,
+                .success(
+                    makeMergeJob(
+                        id: jobID,
+                        status: .artifactReady,
+                        artifactID: "artifact_\(jobID)"
+                    )
+                )
+            )
+            await fixture.service.enqueueArtifact(
+                jobID: jobID,
+                .success(
+                    makeMergeArtifact(
+                        jobID: jobID,
+                        artifactID: "artifact_\(jobID)"
+                    )
+                )
+            )
+        }
+        fixture.coordinator.activate(actorID: "actor_1")
+        await waitForMergeCoordinator {
+            fixture.coordinator.summary(jobID: "job_1")?.visualState == .complete
+                && fixture.coordinator.summary(jobID: "job_2")?.visualState == .complete
+        }
+        let target = try? XCTUnwrap(fixture.coordinator.session(jobID: "job_1"))
+        let sibling = try? XCTUnwrap(fixture.coordinator.session(jobID: "job_2"))
+
+        fixture.coordinator.setNetworkAvailable(false)
+        target?.updateArtifactTags([" Offline "])
+
+        XCTAssertEqual(target?.phase, .ready)
+        XCTAssertEqual(target?.artifactDraftSyncState, .unsynced(.offline))
+        XCTAssertEqual(sibling?.phase, .ready)
+        XCTAssertEqual(
+            fixture.coordinator.summary(jobID: "job_1")?.visualState,
+            .complete
+        )
+        XCTAssertEqual(
+            fixture.coordinator.summary(jobID: "job_2")?.visualState,
+            .complete
+        )
+        let persistedPending = fixture.persistence.collection(actorID: "actor_1")
+            .tasks["job_1"]?.snapshot.artifactDraft?.pendingSave
+        XCTAssertEqual(persistedPending?.idempotencyKey, "save-job-1")
+        XCTAssertNil(
+            fixture.persistence.collection(actorID: "actor_1")
+                .tasks["job_2"]?.snapshot.artifactDraft?.pendingSave
+        )
+        await fixture.service.enqueueSave(
+            jobID: "job_1",
+            .success(
+                MergeArtifactSaveResult(
+                    artifactID: "artifact_job_1",
+                    revision: 2,
+                    documentHash: "sha256:job-1-document-2",
+                    presentationHash: "sha256:job-1-presentation-2",
+                    presentation: MergeArtifactPresentation(
+                        schemaVersion: "merge_artifact_presentation.v1",
+                        tags: ["Offline"],
+                        rate: 1
+                    )
+                )
+            )
+        )
+
+        fixture.coordinator.setNetworkAvailable(true)
+        await waitForMergeCoordinator {
+            target?.artifactDraftSyncState == .clean
+        }
+
+        let saveCalls = await fixture.service.saveCalls
+        XCTAssertEqual(saveCalls.map(\.jobID), ["job_1"])
+        XCTAssertEqual(saveCalls.first?.request.idempotencyKey, "save-job-1")
+        XCTAssertEqual(saveCalls.first?.request.tags, ["Offline"])
+        XCTAssertEqual(sibling?.artifact?.latestRevision, 1)
+    }
+
+    func testActorChangeRejectsLateDraftSaveAcknowledgement() async {
+        var collection = MergeTaskCollection.empty(actorID: "actor_1")
+        collection.tasks["job_1"] = makeMergeTaskRecord(
+            jobID: "job_1",
+            status: .artifactReady,
+            operationID: "op_1"
+        )
+        let persistence = InMemoryMergeTaskCollectionStore(collection: collection)
+        let service = ControlledDraftMergeService(initialArtifact: makeMergeArtifact())
+        let response = ControlledDraftSaveResponse(
+            result: .success(
+                MergeArtifactSaveResult(
+                    artifactID: "artifact_1",
+                    revision: 2,
+                    documentHash: "sha256:late-2",
+                    presentationHash: "sha256:late-presentation-2",
+                    presentation: MergeArtifactPresentation(
+                        schemaVersion: "merge_artifact_presentation.v1",
+                        tags: ["Late"],
+                        rate: 1
+                    )
+                )
+            )
+        )
+        await service.enqueueSave(response)
+        var keys = ["save-late"]
+        let coordinator = MergeTaskCoordinator(
+            service: service,
+            persistence: persistence,
+            sleeper: ImmediateMergeSleeper(),
+            pollingGate: MergePollingGate(maxConcurrentRequests: 4),
+            idempotencyKey: { keys.removeFirst() },
+            operationID: { "unused" }
+        )
+        coordinator.activate(actorID: "actor_1")
+        await waitForMergeCoordinator {
+            coordinator.summary(jobID: "job_1")?.visualState == .complete
+        }
+        let staleStore = try? XCTUnwrap(coordinator.session(jobID: "job_1"))
+        staleStore?.updateArtifactTags(["Late"])
+        await waitForControlledDraftSave(response)
+        let pendingBeforeActorChange = persistence.collection(actorID: "actor_1")
+            .tasks["job_1"]?.snapshot.artifactDraft?.pendingSave
+
+        coordinator.activate(actorID: "actor_2")
+        await response.resume()
+        for _ in 0..<20 { await Task.yield() }
+
+        let actorOne = persistence.collection(actorID: "actor_1")
+        XCTAssertEqual(
+            actorOne.tasks["job_1"]?.snapshot.artifactDraft?.pendingSave,
+            pendingBeforeActorChange
+        )
+        XCTAssertEqual(
+            actorOne.tasks["job_1"]?.snapshot.artifactDraft?.baseRevision,
+            1
+        )
+        XCTAssertEqual(staleStore?.artifact?.latestRevision, 1)
+        XCTAssertEqual(
+            persistence.collection(actorID: "actor_2"),
+            .empty(actorID: "actor_2")
+        )
+        XCTAssertTrue(coordinator.summaries.isEmpty)
+    }
+
     func testPausedServerFailureRetriesSameJobWithoutCreatingReplacement() async {
         let fixture = makeCoordinatorFixture(
             keys: [],
