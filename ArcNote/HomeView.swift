@@ -1190,6 +1190,11 @@ struct NotesListView: View {
                                 }
                             }
                             .buttonStyle(.plain)
+                            .anchorPreference(
+                                key: MergeTaskRailAnchorPreferenceKey.self,
+                                value: .bounds,
+                                transform: { $0 }
+                            )
                             .accessibilityIdentifier("note.create")
                             .accessibilityHint("Create a Library note")
 

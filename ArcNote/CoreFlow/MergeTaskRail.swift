@@ -38,10 +38,8 @@ struct MergeTaskRail: View {
     }
 
     var body: some View {
-        ZStack(alignment: .topTrailing) {
-            VStack(alignment: .trailing, spacing: 8) {
-                collapsedControl
-
+        ZStack(alignment: .bottom) {
+            VStack(alignment: .center, spacing: 8) {
                 if isExpanded, summaries.count > 1 {
                     ScrollView(.vertical, showsIndicators: false) {
                         VStack(spacing: 8) {
@@ -55,11 +53,19 @@ struct MergeTaskRail: View {
                     }
                     .frame(height: expandedListHeight)
                     .accessibilityIdentifier("merge.task-list")
-                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .transition(
+                        .move(edge: .bottom).combined(with: .opacity)
+                    )
                 }
+
+                collapsedControl
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+        .frame(
+            maxWidth: .infinity,
+            maxHeight: .infinity,
+            alignment: .bottom
+        )
         .onChange(of: summaries.count) { count in
             if count < 2 {
                 isExpanded = false
@@ -120,7 +126,7 @@ struct MergeTaskRail: View {
                     .accessibilityIdentifier("merge.task-count")
             }
         }
-        .frame(width: 49, height: 49, alignment: .bottomLeading)
+        .frame(width: 49, height: 49, alignment: .bottom)
     }
 
     private var railShell: some View {
@@ -261,6 +267,7 @@ struct MergeTaskRailShellOverlay<Callout: View>: View {
     @Binding var isExpanded: Bool
     let onSelect: (String) -> Void
     let isHaloVisible: Bool
+    let newNoteFrame: CGRect
     private let callout: Callout
 
     @State private var catchesOutsideTaps = false
@@ -270,17 +277,19 @@ struct MergeTaskRailShellOverlay<Callout: View>: View {
         isExpanded: Binding<Bool>,
         onSelect: @escaping (String) -> Void,
         isHaloVisible: Bool,
+        newNoteFrame: CGRect,
         @ViewBuilder callout: () -> Callout
     ) {
         self.summaries = summaries
         _isExpanded = isExpanded
         self.onSelect = onSelect
         self.isHaloVisible = isHaloVisible
+        self.newNoteFrame = newNoteFrame
         self.callout = callout()
     }
 
     var body: some View {
-        ZStack(alignment: .topTrailing) {
+        ZStack(alignment: .topLeading) {
             if isExpanded, catchesOutsideTaps {
                 Color.clear
                     .contentShape(Rectangle())
@@ -292,26 +301,33 @@ struct MergeTaskRailShellOverlay<Callout: View>: View {
                     .accessibilityHidden(true)
             }
 
-            VStack(alignment: .trailing, spacing: 10) {
-                callout
-
-                MergeTaskRail(
-                    summaries: summaries,
-                    isExpanded: $isExpanded,
-                    onSelect: onSelect
-                )
-                .frame(
-                    width: 49,
-                    height: railHeight,
-                    alignment: .topTrailing
-                )
-                .overlay(alignment: .topTrailing) {
-                    ContextualGuideTargetHalo(isVisible: isHaloVisible)
-                        .offset(x: 2, y: -2)
+            MergeTaskRail(
+                summaries: summaries,
+                isExpanded: $isExpanded,
+                onSelect: onSelect
+            )
+            .frame(
+                width: 49,
+                height: railHeight,
+                alignment: .bottom
+            )
+            .overlay(alignment: .bottomTrailing) {
+                VStack(alignment: .trailing, spacing: 10) {
+                    callout
+                    Color.clear
+                        .frame(width: 49, height: railHeight)
+                        .allowsHitTesting(false)
                 }
+                .fixedSize(horizontal: true, vertical: true)
             }
-            .padding(.top, 112)
-            .padding(.trailing, 20)
+            .overlay(alignment: .bottom) {
+                ContextualGuideTargetHalo(isVisible: isHaloVisible)
+                    .offset(x: 2, y: -2)
+            }
+            .position(
+                x: newNoteFrame.midX,
+                y: newNoteFrame.minY - 12 - railHeight / 2
+            )
         }
         .frame(
             maxWidth: .infinity,
@@ -339,6 +355,7 @@ struct MergeTaskRailShellOverlay<Callout: View>: View {
 }
 
 struct MergeTaskRailPortalModifier<Callout: View>: ViewModifier {
+    @ObservedObject var anchorStore: MergeTaskRailAnchorStore
     let summaries: [MergeTaskSummary]
     @Binding var isExpanded: Bool
     let isHidden: Bool
@@ -349,12 +366,38 @@ struct MergeTaskRailPortalModifier<Callout: View>: ViewModifier {
     func body(content: Content) -> some View {
         ZStack {
             content
-            if !isHidden, !summaries.isEmpty {
+        }
+        .overlayPreferenceValue(
+            MergeTaskRailAnchorPreferenceKey.self
+        ) { preference in
+            GeometryReader { proxy in
+                anchorOverlay(
+                    measuredNewNoteFrame: preference.map { proxy[$0] }
+                )
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func anchorOverlay(
+        measuredNewNoteFrame: CGRect?
+    ) -> some View {
+        ZStack(alignment: .topLeading) {
+            MergeTaskRailAnchorStoreUpdater(
+                store: anchorStore,
+                newNoteFrame: measuredNewNoteFrame
+            )
+
+            if !isHidden,
+               !summaries.isEmpty,
+               let newNoteFrame = measuredNewNoteFrame
+                    ?? anchorStore.newNoteFrame {
                 MergeTaskRailShellOverlay(
                     summaries: summaries,
                     isExpanded: $isExpanded,
                     onSelect: onSelect,
-                    isHaloVisible: isHaloVisible
+                    isHaloVisible: isHaloVisible,
+                    newNoteFrame: newNoteFrame
                 ) {
                     callout
                 }
@@ -364,8 +407,31 @@ struct MergeTaskRailPortalModifier<Callout: View>: ViewModifier {
     }
 }
 
+private struct MergeTaskRailAnchorStoreUpdater: View {
+    @ObservedObject var store: MergeTaskRailAnchorStore
+    let newNoteFrame: CGRect?
+
+    var body: some View {
+        Color.clear
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+            .onAppear {
+                updateStore(with: newNoteFrame)
+            }
+            .onChange(of: newNoteFrame) { frame in
+                updateStore(with: frame)
+            }
+    }
+
+    private func updateStore(with frame: CGRect?) {
+        guard let frame else { return }
+        store.update(newNoteFrame: frame)
+    }
+}
+
 extension View {
     func mergeTaskRailPortal<Callout: View>(
+        anchorStore: MergeTaskRailAnchorStore,
         summaries: [MergeTaskSummary],
         isExpanded: Binding<Bool>,
         isHidden: Bool,
@@ -375,6 +441,7 @@ extension View {
     ) -> some View {
         modifier(
             MergeTaskRailPortalModifier(
+                anchorStore: anchorStore,
                 summaries: summaries,
                 isExpanded: isExpanded,
                 isHidden: isHidden,
@@ -414,6 +481,7 @@ enum MergeTaskPortalLifecycleSynchronizer {
 }
 
 struct GlobalMergeTaskPortalModifier: ViewModifier {
+    @ObservedObject var anchorStore: MergeTaskRailAnchorStore
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var authManager = AuthManager.shared
     @StateObject private var onboardingStore = OnboardingGuideStore(
@@ -497,6 +565,7 @@ struct GlobalMergeTaskPortalModifier: ViewModifier {
             .environmentObject(coordinator)
             .environment(\.cardNavigationMergeCoordinator, coordinator)
             .mergeTaskRailPortal(
+                anchorStore: anchorStore,
                 summaries: coordinator.summaries,
                 isExpanded: $isExpanded,
                 isHidden: coordinator.presentation != nil,
@@ -541,8 +610,12 @@ struct GlobalMergeTaskPortalModifier: ViewModifier {
 }
 
 extension View {
-    func globalMergeTaskPortal() -> some View {
-        modifier(GlobalMergeTaskPortalModifier())
+    func globalMergeTaskPortal(
+        anchorStore: MergeTaskRailAnchorStore
+    ) -> some View {
+        modifier(
+            GlobalMergeTaskPortalModifier(anchorStore: anchorStore)
+        )
     }
 }
 
@@ -651,6 +724,7 @@ private struct MergeTaskRailRouteFixtureScreen: View {
     @State private var isExpanded: Bool
     @State private var path: [Route] = []
     @State private var selectedJobID: String?
+    @StateObject private var anchorStore = MergeTaskRailAnchorStore()
 
     private let visualState: MergeTaskVisualState?
     private let taskCount: Int
@@ -743,6 +817,34 @@ private struct MergeTaskRailRouteFixtureScreen: View {
                         .accessibilityLabel(selectedJobID ?? "none")
                         .accessibilityIdentifier("merge.fixture.selected-job")
                 }
+
+                if path.isEmpty {
+                    VStack {
+                        Spacer()
+                        HStack {
+                            Spacer()
+                            Button(action: {}) {
+                                ZStack {
+                                    Circle()
+                                        .fill(.ultraThinMaterial.opacity(0.3))
+                                        .frame(width: 56, height: 56)
+                                    Image(systemName: "plus")
+                                        .font(.system(size: 24, weight: .medium))
+                                        .foregroundStyle(.white)
+                                }
+                            }
+                            .buttonStyle(.plain)
+                            .anchorPreference(
+                                key: MergeTaskRailAnchorPreferenceKey.self,
+                                value: .bounds,
+                                transform: { $0 }
+                            )
+                            .accessibilityIdentifier("note.create")
+                        }
+                        .padding(.trailing, 20)
+                        .padding(.bottom, 130)
+                    }
+                }
             }
             .navigationDestination(for: Route.self) { route in
                 ZStack {
@@ -762,6 +864,7 @@ private struct MergeTaskRailRouteFixtureScreen: View {
             }
         }
         .mergeTaskRailPortal(
+            anchorStore: anchorStore,
             summaries: summaries,
             isExpanded: $isExpanded,
             isHidden: false,

@@ -33,6 +33,7 @@
 		C0DEF1422F60000100000003 /* MergeTaskRail.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1422F60000100000002 /* MergeTaskRail.swift */; };
 		C0DEF1432F60000100000003 /* MergeArtifactEditorSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1432F60000100000002 /* MergeArtifactEditorSurface.swift */; };
 		C0DEF1442F60000100000003 /* MergeArtifactDraftController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1442F60000100000002 /* MergeArtifactDraftController.swift */; };
+		C0DEF1452F60000100000003 /* MergeTaskRailAnchor.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1452F60000100000002 /* MergeTaskRailAnchor.swift */; };
 		C0DEF1052F60000100000003 /* NetworkCoreOnboardingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1052F60000100000002 /* NetworkCoreOnboardingService.swift */; };
 		C0DEF1062F60000100000003 /* OnboardingGuideLine.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1062F60000100000002 /* OnboardingGuideLine.swift */; };
 		C0DEF1072F60000100000003 /* NetworkCoreShareService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1072F60000100000002 /* NetworkCoreShareService.swift */; };
@@ -159,6 +160,7 @@
 		C0DEF1422F60000100000002 /* MergeTaskRail.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MergeTaskRail.swift; sourceTree = "<group>"; };
 		C0DEF1432F60000100000002 /* MergeArtifactEditorSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MergeArtifactEditorSurface.swift; sourceTree = "<group>"; };
 		C0DEF1442F60000100000002 /* MergeArtifactDraftController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MergeArtifactDraftController.swift; sourceTree = "<group>"; };
+		C0DEF1452F60000100000002 /* MergeTaskRailAnchor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MergeTaskRailAnchor.swift; sourceTree = "<group>"; };
 		C0DEF1052F60000100000002 /* NetworkCoreOnboardingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkCoreOnboardingService.swift; sourceTree = "<group>"; };
 		C0DEF1062F60000100000002 /* OnboardingGuideLine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingGuideLine.swift; sourceTree = "<group>"; };
 		C0DEF1072F60000100000002 /* NetworkCoreShareService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkCoreShareService.swift; sourceTree = "<group>"; };
@@ -333,6 +335,7 @@
 				C0DEF1422F60000100000002 /* MergeTaskRail.swift */,
 				C0DEF1432F60000100000002 /* MergeArtifactEditorSurface.swift */,
 				C0DEF1442F60000100000002 /* MergeArtifactDraftController.swift */,
+				C0DEF1452F60000100000002 /* MergeTaskRailAnchor.swift */,
 				C0DEF1052F60000100000002 /* NetworkCoreOnboardingService.swift */,
 				C0DEF1062F60000100000002 /* OnboardingGuideLine.swift */,
 				C0DEF1072F60000100000002 /* NetworkCoreShareService.swift */,
@@ -654,6 +657,7 @@
 				C0DEF1422F60000100000003 /* MergeTaskRail.swift in Sources */,
 				C0DEF1432F60000100000003 /* MergeArtifactEditorSurface.swift in Sources */,
 				C0DEF1442F60000100000003 /* MergeArtifactDraftController.swift in Sources */,
+				C0DEF1452F60000100000003 /* MergeTaskRailAnchor.swift in Sources */,
 				C0DEF1052F60000100000003 /* NetworkCoreOnboardingService.swift in Sources */,
 				C0DEF1062F60000100000003 /* OnboardingGuideLine.swift in Sources */,
 				C0DEF1072F60000100000003 /* NetworkCoreShareService.swift in Sources */,

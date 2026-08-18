@@ -93,15 +93,27 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertEqual(rail.value as? String, "5, failed")
         rail.tap()
 
+        let newNote = waitForButton("note.create")
+
         for number in 1...5 {
             let task = waitForButton("merge.task.\(number)")
             XCTAssertGreaterThanOrEqual(task.frame.width, 44)
             XCTAssertGreaterThanOrEqual(task.frame.height, 44)
+            XCTAssertFalse(
+                task.frame.intersects(newNote.frame),
+                "Merge task \(number) must never cover New Note"
+            )
         }
         for number in 1...4 {
+            let task = waitForButton("merge.task.\(number)")
             XCTAssertTrue(
-                waitForButton("merge.task.\(number)").isHittable,
+                task.isHittable,
                 "Expected task \(number) inside the four-row viewport"
+            )
+            XCTAssertLessThanOrEqual(
+                task.frame.maxY,
+                rail.frame.minY,
+                "Expanded tasks must grow upward from the collapsed rail"
             )
         }
         let fifth = waitForButton("merge.task.5")
@@ -114,6 +126,8 @@ final class ArcNoteUITests: XCTestCase {
         taskList.swipeUp()
         XCTAssertTrue(fifth.waitForExistence(timeout: 3))
         XCTAssertTrue(fifth.isHittable)
+        XCTAssertLessThanOrEqual(fifth.frame.maxY, rail.frame.minY)
+        XCTAssertFalse(fifth.frame.intersects(newNote.frame))
         fifth.tap()
 
         XCTAssertEqual(
@@ -150,6 +164,29 @@ final class ArcNoteUITests: XCTestCase {
             25,
             accuracy: 2,
             "The 44-point Merge control must remain at the right-edge slot"
+        )
+    }
+
+    func testMergeTaskRailAnchorsTwelvePointsAboveNewNote() {
+        app.launchArguments.append("--ui-test-merge-task-rail")
+        app.launchEnvironment["CHORAI_UI_TEST_MERGE_TASK_VISUAL_STATE"] =
+            "working"
+        app.launch()
+
+        let rail = waitForButton("merge.task-rail")
+        let newNote = waitForButton("note.create")
+
+        XCTAssertEqual(
+            rail.frame.midX,
+            newNote.frame.midX,
+            accuracy: 1.5,
+            "The collapsed Merge rail must share New Note's center line"
+        )
+        XCTAssertEqual(
+            newNote.frame.minY - rail.frame.maxY,
+            12,
+            accuracy: 2,
+            "The collapsed Merge rail must sit 12 points above New Note"
         )
     }
 
@@ -209,11 +246,25 @@ final class ArcNoteUITests: XCTestCase {
         app.launchArguments.append("--ui-test-merge-task-rail")
         app.launch()
 
-        assertExactlyOneAccessibleMergeRail()
+        let homeRail = waitForExactlyOneMergeTaskRail()
+        let homeFrame = homeRail.frame
         for route in ["spark", "home-detail", "explore-detail"] {
             waitForButton("merge.portal.route.\(route)").tap()
             waitFor("merge.portal.destination.\(route)")
+            let pushedRail = waitForExactlyOneMergeTaskRail()
             assertExactlyOneAccessibleMergeRail()
+            XCTAssertEqual(
+                pushedRail.frame.midX,
+                homeFrame.midX,
+                accuracy: 1.5,
+                "The cached rail slot must survive pushed routes"
+            )
+            XCTAssertEqual(
+                pushedRail.frame.maxY,
+                homeFrame.maxY,
+                accuracy: 2,
+                "The cached rail slot must not jump vertically"
+            )
             waitForButton("merge.portal.route.back").tap()
             waitFor("merge.portal.destination.root")
         }

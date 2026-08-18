@@ -1248,9 +1248,18 @@ struct TagView: View {
     }
 }
 
+@MainActor
+private struct TabBarMergePortalPreview: View {
+    @StateObject private var anchorStore = MergeTaskRailAnchorStore()
+
+    var body: some View {
+        TabBarView()
+            .globalMergeTaskPortal(anchorStore: anchorStore)
+    }
+}
+
 #Preview {
-    TabBarView()
-        .globalMergeTaskPortal()
+    TabBarMergePortalPreview()
 }
 
 

@@ -24,6 +24,8 @@ private let configurationLogger = Logger(
 struct ArcNoteApp: App {
     @StateObject private var chatHistoryDependency =
         ChatHistoryVisibilityDependency()
+    @StateObject private var mergeTaskRailAnchorStore =
+        MergeTaskRailAnchorStore()
     #if DEBUG
     private let isAPIMigrationSmoke = APIMigrationSmokeRunner.isRequested
     private let isInterestUITestRoute = ProcessInfo.processInfo.arguments
@@ -228,7 +230,9 @@ struct ArcNoteApp: App {
                 #endif
                 }
                 .environmentObject(chatHistoryDependency)
-                .globalMergeTaskPortal()
+                .globalMergeTaskPortal(
+                    anchorStore: mergeTaskRailAnchorStore
+                )
             }
         }
     }

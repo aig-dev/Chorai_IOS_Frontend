@@ -14,9 +14,13 @@ final class MergeTaskRailSourceContractTests: XCTestCase {
 
         XCTAssertEqual(rail.components(separatedBy: ownerToken).count - 1, 1)
         XCTAssertEqual(
-            app.components(separatedBy: ".globalMergeTaskPortal()").count - 1,
+            app.components(separatedBy: ".globalMergeTaskPortal(").count - 1,
             1
         )
+        XCTAssertTrue(
+            app.contains("@StateObject private var mergeTaskRailAnchorStore")
+        )
+        XCTAssertTrue(app.contains("anchorStore: mergeTaskRailAnchorStore"))
         for source in [app, tabBar, popup, home, explore, spark] {
             XCTAssertFalse(source.contains(ownerToken))
             XCTAssertFalse(source.contains("CardNavigationDestinationRail"))
@@ -45,6 +49,28 @@ final class MergeTaskRailSourceContractTests: XCTestCase {
         )
         XCTAssertTrue(rail.contains("ZStack {\n            content"))
         XCTAssertFalse(rail.contains("content.overlay"))
+    }
+
+    func testRailUsesMeasuredNewNoteAnchorInsteadOfHardCodedTopSlot() throws {
+        let anchor = try source(
+            at: "ArcNote/CoreFlow/MergeTaskRailAnchor.swift"
+        )
+        let home = try source(at: "ArcNote/HomeView.swift")
+        let rail = try source(at: "ArcNote/CoreFlow/MergeTaskRail.swift")
+
+        XCTAssertTrue(anchor.contains("final class MergeTaskRailAnchorStore"))
+        XCTAssertTrue(
+            anchor.contains("struct MergeTaskRailAnchorPreferenceKey")
+        )
+        XCTAssertTrue(
+            home.contains(
+                ".anchorPreference(\n"
+                    + "                                key: MergeTaskRailAnchorPreferenceKey.self"
+            )
+        )
+        XCTAssertTrue(rail.contains("MergeTaskRailAnchorStore()"))
+        XCTAssertTrue(rail.contains("newNoteFrame.minY - 12"))
+        XCTAssertFalse(rail.contains(".padding(.top, 112)"))
     }
 
     func testAcceptedFailureRetryVisibilityUsesCoordinatorPolicy() throws {
