@@ -457,7 +457,6 @@ private struct MergeLifecycleView: View {
     @State private var searchText = ""
     @FocusState private var isTextInputFocused: Bool
     @State private var pendingCancellationIntent: MergeCancellationIntent?
-    @State private var showDiscardConfirmation = false
 
     private let onBack: () -> Void
     private let onJobAccepted: ((String) -> Void)?
@@ -524,7 +523,9 @@ private struct MergeLifecycleView: View {
                 atmosphere
 
                 VStack(spacing: 0) {
-                    header
+                    if !isArtifactPresentation {
+                        header
+                    }
                     if !isArtifactPresentation,
                        let onboardingStore {
                         OnboardingGuideLine(
@@ -578,16 +579,6 @@ private struct MergeLifecycleView: View {
             }
             Button("Keep", role: .cancel) {}
         }
-        .confirmationDialog(
-            "Discard Merge?",
-            isPresented: $showDiscardConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button("Discard", role: .destructive) {
-                store.discardArtifact()
-            }
-            Button("Keep", role: .cancel) {}
-        }
         .onChange(of: searchText) { query in
             dismissMergeTipIfVisible()
             candidates.scheduleSearch(query)
@@ -604,7 +595,8 @@ private struct MergeLifecycleView: View {
         .gesture(
             DragGesture()
                 .onEnded { value in
-                    guard value.translation.width > 100,
+                    guard !isArtifactPresentation,
+                          value.translation.width > 100,
                           abs(value.translation.height) < 50 else {
                         return
                     }
@@ -844,18 +836,13 @@ private struct MergeLifecycleView: View {
                 .ignoresSafeArea()
                 .accessibilityHidden(true)
 
-            if let artifact = store.artifact {
-                MergeArtifactReviewPanel(
-                    artifact: artifact,
-                    rate: store.artifactDraft?.rate ?? artifact.presentation.rate,
-                    sourceCount: store.selectedSources.count,
-                    error: store.artifactActionError,
-                    operation: artifactOperation,
-                    onDiscard: { showDiscardConfirmation = true },
-                    onSave: store.commit
+            if store.artifact != nil {
+                MergeArtifactEditorHost(
+                    store: store,
+                    onBack: onBack
                 )
                 .adaptiveContentGutter()
-                .padding(.vertical, 24)
+                .padding(.vertical, 18)
                 .overlay(alignment: .topLeading) {
                     automationText(
                         "ready",
@@ -863,17 +850,6 @@ private struct MergeLifecycleView: View {
                     )
                 }
             }
-        }
-    }
-
-    private var artifactOperation: MergeArtifactOperation {
-        switch store.phase {
-        case .committing:
-            return .saving
-        case .cancelling:
-            return .discarding
-        default:
-            return .idle
         }
     }
 
@@ -1147,209 +1123,29 @@ private struct MergeSelectionActionDockSurface: View {
     }
 }
 
-private enum MergeArtifactOperation: Equatable {
-    case idle
-    case discarding
-    case saving
-}
+@MainActor
+private struct MergeArtifactEditorHost: View {
+    @StateObject private var controller: MergeArtifactDraftController
+    let onBack: () -> Void
 
-private struct MergeArtifactReviewPanel: View {
-    let artifact: MergeArtifact
-    let rate: Int
-    let sourceCount: Int
-    let error: CoreMergeError?
-    let operation: MergeArtifactOperation
-    let onDiscard: () -> Void
-    let onSave: () -> Void
-
-    private var isBusy: Bool { operation != .idle }
-
-    private var style: CardLevelStyle {
-        CardLevelStyle(rate: rate)
-    }
-
-    private var estimatedBodyHeight: CGFloat {
-        let estimatedLines = artifact.document.blocks.reduce(into: 0) {
-            partialResult, block in
-            let textLength = max(
-                1,
-                block.plainTextLines.joined(separator: " ").count
+    init(store: MergeSessionStore, onBack: @escaping () -> Void) {
+        _controller = StateObject(
+            wrappedValue: MergeArtifactDraftController(
+                store: store,
+                // The current artifact contract exposes no authorized display
+                // URL. Keep canonical media references and show the surface's
+                // explicit secure-preview fallback instead of inventing one.
+                authorizedDisplayURLsByMediaReference: [:]
             )
-            partialResult += max(1, Int(ceil(Double(textLength) / 38)))
-        }
-        let interBlockSpacing = max(0, artifact.document.blocks.count - 1) * 12
-        return CGFloat(estimatedLines) * 22
-            + CGFloat(interBlockSpacing)
-            + 40
-    }
-
-    private func panelHeight(in availableHeight: CGFloat) -> CGFloat {
-        let chromeHeight: CGFloat = error == nil ? 178 : 212
-        let idealHeight = chromeHeight + estimatedBodyHeight
-        return min(max(390, idealHeight), min(620, availableHeight * 0.68))
+        )
+        self.onBack = onBack
     }
 
     var body: some View {
-        GeometryReader { geometry in
-            VStack(spacing: 0) {
-                VStack(spacing: 6) {
-                    Text("Merge preview")
-                        .font(.headline)
-
-                    Text(style.label)
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(.white)
-                        .accessibilityLabel(style.label)
-
-                    Text("\(sourceCount) sources → 1 card")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.54))
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.horizontal, 20)
-                .padding(.top, 22)
-                .padding(.bottom, 18)
-
-                Divider()
-                    .overlay(Color.white.opacity(0.12))
-
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 12) {
-                        if let subtitle = artifact.document.subtitle,
-                           !subtitle.trimmingCharacters(
-                                in: .whitespacesAndNewlines
-                           ).isEmpty {
-                            Text(subtitle)
-                                .font(.system(size: 13, weight: .medium))
-                                .foregroundStyle(.white.opacity(0.58))
-                                .padding(.bottom, 2)
-                        }
-
-                        ForEach(
-                            Array(artifact.document.blocks.enumerated()),
-                            id: \.offset
-                        ) { _, block in
-                            MergeArtifactBlockView(block: block, depth: 0)
-                        }
-
-                        if artifact.document.blocks.isEmpty {
-                            Text("No body")
-                                .font(.system(size: 14))
-                                .foregroundStyle(.white.opacity(0.55))
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(20)
-                    .accessibilityElement(children: .contain)
-                    .accessibilityIdentifier("merge.artifact.body")
-                }
-                .scrollIndicators(.hidden)
-
-                if error != nil {
-                    Text("Couldn’t complete that action. Try again.")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(Color(red: 1, green: 0.70, blue: 0.70))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 20)
-                        .padding(.bottom, 10)
-                        .accessibilityIdentifier("merge.artifact.error")
-                }
-
-                Divider()
-                    .overlay(Color.white.opacity(0.12))
-
-                HStack(spacing: 12) {
-                    MergeArtifactTextAction(
-                        title: operation == .discarding ? "Discarding…" : "Discard",
-                        systemImage: "xmark",
-                        isFilled: false,
-                        isBusy: operation == .discarding,
-                        isEnabled: !isBusy,
-                        identifier: "merge.discard",
-                        action: onDiscard
-                    )
-
-                    MergeArtifactTextAction(
-                        title: operation == .saving ? "Saving…" : "Save",
-                        systemImage: "checkmark",
-                        isFilled: true,
-                        isBusy: operation == .saving,
-                        isEnabled: !isBusy,
-                        identifier: "merge.commit",
-                        action: onSave
-                    )
-                }
-                .padding(16)
-            }
-            .frame(
-                width: geometry.size.width,
-                height: panelHeight(in: geometry.size.height),
-                alignment: .top
-            )
-            .background {
-                CardLevelMaterial(
-                    style: style,
-                    shape: RoundedRectangle(
-                        cornerRadius: 28,
-                        style: .continuous
-                    )
-                )
-            }
-            .shadow(color: Color.black.opacity(0.34), radius: 26, y: 14)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("Merge preview")
-        .accessibilityIdentifier("merge.artifact.panel")
-    }
-}
-
-private struct MergeArtifactTextAction: View {
-    let title: String
-    let systemImage: String
-    let isFilled: Bool
-    let isBusy: Bool
-    let isEnabled: Bool
-    let identifier: String
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 8) {
-                if isBusy {
-                    ProgressView()
-                        .tint(.white)
-                        .controlSize(.small)
-                } else {
-                    Image(systemName: systemImage)
-                        .font(.system(size: 14, weight: .semibold))
-                }
-
-                Text(title)
-                    .font(.system(size: 15, weight: .semibold))
-            }
-            .foregroundStyle(.white.opacity(isEnabled || isBusy ? 0.94 : 0.42))
-            .frame(maxWidth: .infinity, minHeight: 48)
-            .background {
-                Capsule()
-                    .fill(
-                        isFilled
-                            ? Color.white.opacity(isEnabled ? 0.18 : 0.08)
-                            : Color.clear
-                    )
-                    .overlay {
-                        Capsule()
-                            .stroke(
-                                Color.white.opacity(isEnabled ? 0.24 : 0.10),
-                                lineWidth: 1
-                            )
-                    }
-            }
-        }
-        .buttonStyle(.plain)
-        .disabled(!isEnabled)
-        .accessibilityLabel(title)
-        .accessibilityIdentifier(identifier)
+        MergeArtifactEditorSurface(
+            controller: controller,
+            onBack: onBack
+        )
     }
 }
 
@@ -1493,50 +1289,35 @@ struct MergeSelectionVisualFixtureScreen: View {
 @MainActor
 struct MergeArtifactVisualFixtureScreen: View {
     let usesLongDocument: Bool
-    @State private var operation: MergeArtifactOperation = .idle
+    @StateObject private var store: MergeSessionStore
+    @StateObject private var operationProbe: MergeArtifactFixtureOperationProbe
+    @State private var isPresented = true
 
-    private var blocks: [MergeBlock] {
-        let copy = [
-            "Clarity comes from keeping the relationship between ideas visible.",
-            "A quiet interface can preserve context without asking for another decision.",
-            "The resulting card should feel complete, but still belong to the same library.",
-            "Rate color is ambient metadata, never the primary content.",
-            "Direct actions make the review state easy to understand and easy to leave.",
-            "Long artifacts scroll inside the panel while their actions remain reachable.",
-            "The exact server document is what Save commits.",
-            "No title, tags, or route controls are invented by the client.",
-        ]
-        let values = usesLongDocument
-            ? copy + copy + copy
-            : Array(copy.prefix(3))
-        return values.enumerated().map { index, text in
-            MergeBlock(
-                id: "fixture-block-\(index)",
-                type: index == 0 ? "heading_2" : "paragraph",
-                content: [
-                    MergeInline(type: "text", text: text, properties: [:])
-                ],
-                properties: [:],
-                children: []
+    init(usesLongDocument: Bool) {
+        self.usesLongDocument = usesLongDocument
+        let artifact = MergeArtifactFixtureFactory.artifact(
+            usesLongDocument: usesLongDocument
+        )
+        let persistence = MergeArtifactFixturePersistence(
+            snapshot: MergeArtifactFixtureFactory.snapshot()
+        )
+        let operationProbe = MergeArtifactFixtureOperationProbe()
+        let behavior = MergeArtifactFixtureBehavior.current
+        _operationProbe = StateObject(wrappedValue: operationProbe)
+        _store = StateObject(
+            wrappedValue: MergeSessionStore(
+                actorID: MergeArtifactFixtureFactory.actorID,
+                anchor: MergeArtifactFixtureFactory.sources[0],
+                service: MergeArtifactFixtureService(
+                    artifact: artifact,
+                    behavior: behavior,
+                    operationProbe: operationProbe
+                ),
+                persistence: persistence,
+                pollDelaysNanoseconds: [0],
+                pollDelayJitter: { $0 },
+                maxPollAttempts: 1
             )
-        }
-    }
-
-    private var artifact: MergeArtifact {
-        MergeArtifact(
-            artifactID: "fixture-artifact",
-            jobID: "fixture-job",
-            capabilityID: "structured_text",
-            outputKind: .document,
-            document: MergeDocument(
-                schemaVersion: "card_doc.v1",
-                title: nil,
-                subtitle: nil,
-                blocks: blocks,
-                metadata: [:]
-            ),
-            fragments: [],
-            metadata: [:]
         )
     }
 
@@ -1568,89 +1349,362 @@ struct MergeArtifactVisualFixtureScreen: View {
                 .ignoresSafeArea()
                 .accessibilityHidden(true)
 
-            MergeArtifactReviewPanel(
-                artifact: artifact,
-                rate: artifact.presentation.rate,
-                sourceCount: 3,
-                error: nil,
-                operation: operation,
-                onDiscard: { operation = .discarding },
-                onSave: { operation = .saving }
-            )
-            .adaptiveContentGutter()
-            .padding(.vertical, 24)
+            if isPresented, store.artifact != nil {
+                MergeArtifactEditorHost(
+                    store: store,
+                    onBack: { isPresented = false }
+                )
+                .adaptiveContentGutter()
+                .padding(.vertical, 18)
+            } else if isPresented {
+                ProgressView()
+                    .tint(.white)
+            } else {
+                Button {
+                    isPresented = true
+                } label: {
+                    Image(systemName: "square.stack.3d.up")
+                        .font(.system(size: 20, weight: .semibold))
+                        .frame(width: 52, height: 52)
+                        .background(Color.white.opacity(0.16))
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.white)
+                .accessibilityLabel("Complete Merge")
+                .accessibilityValue("1, complete")
+                .accessibilityIdentifier("merge.task-rail")
+            }
         }
         .preferredColorScheme(.dark)
+        .environment(
+            \.sizeCategory,
+            ProcessInfo.processInfo.environment[
+                "CHORAI_UI_TEST_MERGE_DYNAMIC_TYPE"
+            ] == "AX5"
+                ? .accessibilityExtraExtraExtraLarge
+                : .large
+        )
+        .overlay(alignment: .topLeading) {
+            VStack(spacing: 0) {
+                Text(String(operationProbe.commitCallCount))
+                    .accessibilityIdentifier(
+                        "fixture.merge.commit-call-count"
+                    )
+                Text(String(operationProbe.cancelCallCount))
+                    .accessibilityIdentifier(
+                        "fixture.merge.cancel-call-count"
+                    )
+            }
+            .font(.system(size: 1))
+            .foregroundStyle(.white.opacity(0.01))
+            .frame(width: 1, height: 2)
+            .accessibilityElement(children: .contain)
+        }
+        .task {
+            store.start()
+        }
+    }
+}
+
+private enum MergeArtifactFixtureFactory {
+    static let actorID = "fixture-merge-artifact-actor"
+    static let sources = [
+        MergeSource(
+            assetID: "fixture-source-one",
+            versionID: "fixture-version-one",
+            preview: "First source"
+        ),
+        MergeSource(
+            assetID: "fixture-source-two",
+            versionID: "fixture-version-two",
+            preview: "Second source"
+        ),
+        MergeSource(
+            assetID: "fixture-source-three",
+            versionID: "fixture-version-three",
+            preview: "Third source"
+        ),
+    ]
+
+    static func snapshot() -> MergeSessionSnapshot {
+        MergeSessionSnapshot(
+            actorID: actorID,
+            anchorAssetID: sources[0].assetID,
+            anchorPreview: sources[0].preview,
+            createRequest: MergeCreateRequest(
+                sources: sources,
+                capability: "structured_text",
+                idempotencyKey: "fixture-create",
+                context: [:]
+            ),
+            selectedCapability: "structured_text",
+            jobID: "fixture-merge-wysiwyg-job",
+            lastStatus: .artifactReady,
+            artifactID: "fixture-merge-wysiwyg-artifact",
+            commitRequest: nil,
+            committedAssetID: nil
+        )
+    }
+
+    static func artifact(usesLongDocument: Bool) -> MergeArtifact {
+        let extraBlocks = usesLongDocument
+            ? #",{"content":[{"text":"An additional long-fixture paragraph keeps compact phones honest.","type":"text"}],"id":"blk_fixture_extra","type":"paragraph"}"#
+            : ""
+        let baseDocument =
+            #"{"blocks":[{"content":[{"styles":{"bold":true},"text":"A durable merged insight","type":"text"}],"id":"blk_fixture_heading","props":{"level":2},"type":"heading"},{"content":[{"text":"Clarity comes from keeping related ideas visible on one editable surface.","type":"text"}],"id":"blk_fixture_intro","type":"paragraph"},{"content":[{"text":"Scrolling is preview, and a tap edits the exact same document.","type":"text"}],"id":"blk_fixture_scroll","type":"paragraph"},{"content":[{"styles":{"italic":true},"text":"The card keeps its typography, frame, and material while focus changes.","type":"text"}],"id":"blk_fixture_focus","type":"paragraph"},{"content":[{"text":"Tags stay aligned with the Card Editor and never gain colored dots.","type":"text"}],"id":"blk_fixture_tags","type":"bullet_list"},{"content":[{"text":"Local snapshots survive minimizing the completed task.","type":"text"}],"id":"blk_fixture_restore","type":"paragraph"},{"content":[{"text":"Final WYSIWYG fixture paragraph.","type":"text"}],"id":"blk_fixture_final","type":"paragraph"}"#
+        let documentSuffix =
+            #"],"meta":{"producer":"merge.fixture","route":"text_fusion"},"schemaVersion":"card_doc.v1"}"#
+        let documentJSON = Data(
+            (baseDocument + extraBlocks + documentSuffix).utf8
+        )
+        let legacyBlocks = [
+            "A durable merged insight",
+            "Clarity comes from keeping related ideas visible on one editable surface.",
+            "Scrolling is preview, and a tap edits the exact same document.",
+            "The card keeps its typography, frame, and material while focus changes.",
+            "Tags stay aligned with the Card Editor and never gain colored dots.",
+            "Local snapshots survive minimizing the completed task.",
+            "Final WYSIWYG fixture paragraph.",
+        ].enumerated().map { index, text in
+            MergeBlock(
+                id: "blk_fixture_legacy_\(index)",
+                type: index == 0 ? "heading" : "paragraph",
+                content: [
+                    MergeInline(type: "text", text: text, properties: [:])
+                ],
+                properties: [:],
+                children: []
+            )
+        }
+        return MergeArtifact(
+            artifactID: "fixture-merge-wysiwyg-artifact",
+            jobID: "fixture-merge-wysiwyg-job",
+            capabilityID: "structured_text",
+            outputKind: .document,
+            document: MergeDocument(
+                schemaVersion: "card_doc.v1",
+                title: nil,
+                subtitle: nil,
+                blocks: legacyBlocks,
+                metadata: [:]
+            ),
+            fragments: [],
+            metadata: [:],
+            latestRevision: 1,
+            latestHash: "fixture-document-hash-1",
+            documentJSON: documentJSON,
+            presentationHash: "fixture-presentation-hash-1",
+            presentation: MergeArtifactPresentation(
+                schemaVersion: "merge_artifact_presentation.v1",
+                tags: ["Design", "Inspiration", "Nature"],
+                rate: 3
+            )
+        )
+    }
+}
+
+private actor MergeArtifactFixtureService: CoreMergeServing {
+    private let initialArtifact: MergeArtifact
+    private let behavior: MergeArtifactFixtureBehavior
+    private let operationProbe: MergeArtifactFixtureOperationProbe
+    private var revision: Int
+
+    init(
+        artifact: MergeArtifact,
+        behavior: MergeArtifactFixtureBehavior,
+        operationProbe: MergeArtifactFixtureOperationProbe
+    ) {
+        initialArtifact = artifact
+        self.behavior = behavior
+        self.operationProbe = operationProbe
+        revision = artifact.latestRevision
+    }
+
+    func capabilities() async throws -> [MergeCapability] {
+        [
+            MergeCapability(
+                capabilityID: "structured_text",
+                displayName: "Structured text",
+                outputKind: .document,
+                blockExport: false,
+                slotCommit: false,
+                isEnabled: true,
+                rolloutStage: "fixture"
+            )
+        ]
+    }
+
+    func createJob(_ request: MergeCreateRequest) async throws -> MergeJob {
+        try await job(id: initialArtifact.jobID)
+    }
+
+    func job(id: String) async throws -> MergeJob {
+        return MergeJob(
+            jobID: id,
+            status: .artifactReady,
+            capability: "structured_text",
+            selectedCapability: "structured_text",
+            planScore: nil,
+            artifactID: initialArtifact.artifactID,
+            latestCommit: nil,
+            failureStage: nil,
+            errorCode: nil,
+            failureReason: nil
+        )
+    }
+
+    func artifact(jobID: String) async throws -> MergeArtifact {
+        initialArtifact
+    }
+
+    func saveArtifact(
+        jobID: String,
+        request: MergeArtifactSaveRequest
+    ) async throws -> MergeArtifactSaveResult {
+        revision += 1
+        return MergeArtifactSaveResult(
+            artifactID: initialArtifact.artifactID,
+            revision: revision,
+            documentHash: "fixture-document-hash-\(revision)",
+            presentationHash: "fixture-presentation-hash-\(revision)",
+            presentation: MergeArtifactPresentation(
+                schemaVersion: "merge_artifact_presentation.v1",
+                tags: request.tags,
+                rate: 3
+            )
+        )
+    }
+
+    func cancel(jobID: String) async throws -> MergeJob {
+        await operationProbe.recordCancel()
+        if behavior.cancelDelayNanoseconds > 0 {
+            try await Task.sleep(
+                nanoseconds: behavior.cancelDelayNanoseconds
+            )
+        }
+        if behavior.cancelShouldFail {
+            throw CoreMergeError.unavailable(code: "fixture_cancel_failure")
+        }
+        return MergeJob(
+            jobID: jobID,
+            status: .cancelled,
+            capability: "structured_text",
+            selectedCapability: "structured_text",
+            planScore: nil,
+            artifactID: initialArtifact.artifactID,
+            latestCommit: nil,
+            failureStage: nil,
+            errorCode: nil,
+            failureReason: nil
+        )
+    }
+
+    func commit(
+        jobID: String,
+        request: MergeCommitRequest
+    ) async throws -> MergeCommitResult {
+        await operationProbe.recordCommit()
+        if behavior.commitDelayNanoseconds > 0 {
+            try await Task.sleep(
+                nanoseconds: behavior.commitDelayNanoseconds
+            )
+        }
+        if behavior.commitShouldFail {
+            throw CoreMergeError.unavailable(code: "fixture_commit_failure")
+        }
+        return MergeCommitResult(
+            commitID: "fixture-commit",
+            status: "COMMITTED",
+            targetType: "new_card",
+            assetID: "fixture-accepted-card",
+            versionID: "fixture-accepted-version",
+            activityID: nil,
+            logID: nil,
+            errorCode: nil,
+            backgroundMediaReference: nil
+        )
+    }
+}
+
+private struct MergeArtifactFixtureBehavior: Sendable {
+    let commitDelayNanoseconds: UInt64
+    let commitShouldFail: Bool
+    let cancelDelayNanoseconds: UInt64
+    let cancelShouldFail: Bool
+
+    static var current: Self {
+        let environment = ProcessInfo.processInfo.environment
+        return Self(
+            commitDelayNanoseconds: UInt64(
+                environment[
+                    "CHORAI_UI_TEST_MERGE_COMMIT_DELAY_NANOSECONDS"
+                ] ?? ""
+            ) ?? 0,
+            commitShouldFail: environment[
+                "CHORAI_UI_TEST_MERGE_COMMIT_SHOULD_FAIL"
+            ] == "1",
+            cancelDelayNanoseconds: UInt64(
+                environment[
+                    "CHORAI_UI_TEST_MERGE_CANCEL_DELAY_NANOSECONDS"
+                ] ?? ""
+            ) ?? 0,
+            cancelShouldFail: environment[
+                "CHORAI_UI_TEST_MERGE_CANCEL_SHOULD_FAIL"
+            ] == "1"
+        )
+    }
+}
+
+@MainActor
+private final class MergeArtifactFixtureOperationProbe: ObservableObject {
+    @Published private(set) var commitCallCount = 0
+    @Published private(set) var cancelCallCount = 0
+
+    func recordCommit() {
+        commitCallCount += 1
+    }
+
+    func recordCancel() {
+        cancelCallCount += 1
+    }
+}
+
+private final class MergeArtifactFixturePersistence: MergeSessionPersisting {
+    private var value: MergeSessionSnapshot?
+
+    init(snapshot: MergeSessionSnapshot) {
+        value = snapshot
+    }
+
+    func snapshot(actorID: String) -> MergeSessionSnapshot? {
+        value?.actorID == actorID ? value : nil
+    }
+
+    func save(_ snapshot: MergeSessionSnapshot) {
+        value = snapshot
+    }
+
+    func remove(actorID: String) {
+        if value?.actorID == actorID {
+            value = nil
+        }
+    }
+
+    func resumeMetadata(actorID: String) -> MergeResumeMetadata? {
+        guard let value = snapshot(actorID: actorID) else { return nil }
+        return MergeResumeMetadata(
+            actorID: value.actorID,
+            anchorAssetID: value.anchorAssetID,
+            anchorPreview: value.anchorPreview,
+            sourceCount: value.createRequest.sources.count,
+            jobID: value.jobID,
+            status: value.lastStatus,
+            committedAssetID: value.committedAssetID
+        )
     }
 }
 #endif
-
-private struct MergeArtifactBlockView: View {
-    let block: MergeBlock
-    let depth: Int
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if let text = ownText {
-                Text(prefix + text)
-                    .font(font)
-                    .foregroundStyle(.white.opacity(textOpacity))
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.leading, CGFloat(depth) * 14)
-            }
-
-            ForEach(Array(block.children.enumerated()), id: \.offset) { _, child in
-                MergeArtifactBlockView(block: child, depth: depth + 1)
-            }
-
-            if ownText == nil && block.children.isEmpty {
-                Text("…")
-                    .font(.system(size: 14))
-                    .foregroundStyle(.white.opacity(0.42))
-                    .accessibilityLabel("Unsupported Merge content")
-            }
-        }
-    }
-
-    private var ownText: String? {
-        let inline = block.content
-            .compactMap(\.plainText)
-            .joined()
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        if !inline.isEmpty { return inline }
-        for key in ["text", "label", "title", "name", "summary", "content"] {
-            if let value = block.properties[key]?.textValue?
-                .trimmingCharacters(in: .whitespacesAndNewlines),
-               !value.isEmpty {
-                return value
-            }
-        }
-        return nil
-    }
-
-    private var prefix: String {
-        switch block.type.lowercased() {
-        case "list_item", "bullet", "bullet_item": return "• "
-        case "quote", "blockquote": return "“"
-        default: return ""
-        }
-    }
-
-    private var font: Font {
-        switch block.type.lowercased() {
-        case "heading", "heading_1", "h1":
-            return .system(size: 19, weight: .semibold)
-        case "heading_2", "h2":
-            return .system(size: 17, weight: .semibold)
-        default:
-            return .system(size: 15, weight: .regular)
-        }
-    }
-
-    private var textOpacity: Double {
-        block.type.lowercased().contains("heading") ? 0.96 : 0.82
-    }
-}
 
 private struct MergeLifecycleAction: View {
     let systemImage: String?

@@ -46,6 +46,7 @@ struct CardMetadataTagCapsule: View {
             if let leadingSystemImage {
                 Image(systemName: leadingSystemImage)
                     .font(.caption2.weight(.semibold))
+                    .accessibilityHidden(true)
             }
 
             Text(tag)
@@ -56,6 +57,7 @@ struct CardMetadataTagCapsule: View {
             if showsRemoveIndicator {
                 Image(systemName: "xmark")
                     .font(.caption2.weight(.semibold))
+                    .accessibilityHidden(true)
             }
         }
         .cardMetadataTagCapsuleStyle()

@@ -60,8 +60,11 @@ final class LibraryCardPreviewSourceContractTests: XCTestCase {
         let home = try source(at: "ArcNote/HomeView.swift")
         let merge = try source(at: "ArcNote/MergeView.swift")
         let newInsight = try source(at: "ArcNote/NewInsightView.swift")
-        let mergeLifecycle = try source(
-            at: "ArcNote/CoreFlow/MergeLifecycleViews.swift"
+        let mergeArtifactController = try source(
+            at: "ArcNote/CoreFlow/MergeArtifactDraftController.swift"
+        )
+        let mergeArtifactSurface = try source(
+            at: "ArcNote/CoreFlow/MergeArtifactEditorSurface.swift"
         )
         let discoveryPath = try source(at: "ArcNote/RootView.swift")
 
@@ -71,17 +74,17 @@ final class LibraryCardPreviewSourceContractTests: XCTestCase {
             ).count - 1,
             2
         )
-        for rateSurface in [home, newInsight, mergeLifecycle] {
+        for rateSurface in [home, newInsight] {
             XCTAssertTrue(rateSurface.contains("CardLevelStyle(rate:"))
             XCTAssertFalse(rateSurface.contains("LibraryCardRateStyle"))
             XCTAssertFalse(rateSurface.contains("Critical"))
         }
+        XCTAssertTrue(mergeArtifactController.contains("CardLevelStyle("))
+        XCTAssertFalse(mergeArtifactController.contains("LibraryCardRateStyle"))
+        XCTAssertFalse(mergeArtifactController.contains("Critical"))
         XCTAssertTrue(newInsight.contains("Text(levelStyle.label)"))
-        XCTAssertTrue(
-            mergeLifecycle.contains(
-                "rate: store.artifactDraft?.rate ?? artifact.presentation.rate"
-            )
-        )
+        XCTAssertTrue(mergeArtifactController.contains("store.artifactDraft?.rate"))
+        XCTAssertTrue(mergeArtifactController.contains("store.artifact?.presentation.rate"))
         XCTAssertTrue(
             home.contains(
                 "backgroundMediaRef: card.backgroundMediaRef,\n"
@@ -119,30 +122,24 @@ final class LibraryCardPreviewSourceContractTests: XCTestCase {
                 home,
                 merge,
                 newInsight,
-                mergeLifecycle,
+                mergeArtifactController,
+                mergeArtifactSurface,
                 discoveryPath,
             ] {
                 XCTAssertFalse(source.contains(legacyRange))
             }
         }
 
-        let panelStart = try XCTUnwrap(
-            mergeLifecycle.range(of: "private struct MergeArtifactReviewPanel")
+        XCTAssertTrue(
+            mergeArtifactSurface.contains("Text(controller.levelStyle.label)")
         )
-        let panelEnd = try XCTUnwrap(
-            mergeLifecycle.range(
-                of: "private struct MergeArtifactTextAction",
-                range: panelStart.upperBound..<mergeLifecycle.endIndex
+        XCTAssertTrue(
+            mergeArtifactSurface.contains(
+                ".accessibilityLabel(controller.levelStyle.label)"
             )
         )
-        let panel = String(
-            mergeLifecycle[panelStart.lowerBound..<panelEnd.lowerBound]
-        )
-        XCTAssertTrue(panel.contains("CardLevelStyle(rate: rate)"))
-        XCTAssertTrue(panel.contains(".accessibilityLabel(style.label)"))
-        XCTAssertFalse(panel.contains(#"\(rate)"#))
-        XCTAssertFalse(panel.contains("String(rate)"))
-        XCTAssertFalse(panel.contains(".accessibilityValue"))
+        XCTAssertFalse(mergeArtifactSurface.contains(#"\(rate)"#))
+        XCTAssertFalse(mergeArtifactSurface.contains("String(rate)"))
     }
 
     func testNewInsightBadgeUsesSharedTierAccentMaterial() throws {

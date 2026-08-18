@@ -28,6 +28,12 @@ struct CardEditorLinkItem: Identifiable, Equatable {
     }
 }
 
+struct CardEditorTagSemantics: Equatable {
+    let tagIdentifierPrefix: String
+    let addTagIdentifier: String
+    let inputIdentifier: String
+}
+
 struct CardEditorTagRow: View {
     let tags: [String]
     let isEditable: Bool
@@ -35,10 +41,37 @@ struct CardEditorTagRow: View {
     let prefersKeyboardTagAction: Bool
     @Binding var tagInput: String
     let isTagInputFocused: FocusState<Bool>.Binding
+    let semantics: CardEditorTagSemantics
     let onBeginTag: () -> Void
     let onCompleteTag: () -> Void
     let onInteraction: () -> Void
     let onRemove: (String) -> Void
+
+    init(
+        tags: [String],
+        isEditable: Bool,
+        isAddingTag: Bool,
+        prefersKeyboardTagAction: Bool,
+        tagInput: Binding<String>,
+        isTagInputFocused: FocusState<Bool>.Binding,
+        semantics: CardEditorTagSemantics = .cardEditor,
+        onBeginTag: @escaping () -> Void,
+        onCompleteTag: @escaping () -> Void,
+        onInteraction: @escaping () -> Void,
+        onRemove: @escaping (String) -> Void
+    ) {
+        self.tags = tags
+        self.isEditable = isEditable
+        self.isAddingTag = isAddingTag
+        self.prefersKeyboardTagAction = prefersKeyboardTagAction
+        _tagInput = tagInput
+        self.isTagInputFocused = isTagInputFocused
+        self.semantics = semantics
+        self.onBeginTag = onBeginTag
+        self.onCompleteTag = onCompleteTag
+        self.onInteraction = onInteraction
+        self.onRemove = onRemove
+    }
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -61,7 +94,8 @@ struct CardEditorTagRow: View {
                         isEditable ? "Remove tag \(tag)" : "Tag \(tag)"
                     )
                     .accessibilityIdentifier(
-                        "cardEditorTag.\(accessibilityComponent(tag))"
+                        semantics.tagIdentifierPrefix
+                            + accessibilityComponent(tag)
                     )
                 }
 
@@ -69,26 +103,20 @@ struct CardEditorTagRow: View {
                     CardEditorTagInput(
                         tagInput: $tagInput,
                         isTagInputFocused: isTagInputFocused,
+                        accessibilityIdentifier: semantics.inputIdentifier,
                         onComplete: onCompleteTag
                     )
                 } else {
-                    Button(action: onBeginTag) {
-                        CardMetadataTagCapsule(
-                            tag: "Tag",
-                            showsRemoveIndicator: false,
-                            leadingSystemImage: "plus"
-                        )
+                    Group {
+                        if semantics == .cardEditor {
+                            addTagButton
+                                .accessibilityIdentifier("cardEditorAddTag")
+                        } else {
+                            addTagButton.accessibilityIdentifier(
+                                semantics.addTagIdentifier
+                            )
+                        }
                     }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.white)
-                    .frame(minWidth: 44, minHeight: 44)
-                    .contentShape(Rectangle())
-                    .disabled(
-                        !isEditable || tags.count >= CardEditingTag.maximumCount
-                    )
-                    .accessibilityLabel("Add Tag")
-                    .accessibilityHint("Adds a tag to this note")
-                    .accessibilityIdentifier("cardEditorAddTag")
                     .accessibilityHidden(prefersKeyboardTagAction)
                     .allowsHitTesting(!prefersKeyboardTagAction)
                 }
@@ -96,16 +124,54 @@ struct CardEditorTagRow: View {
             .padding(.horizontal, 1)
         }
     }
+
+    private var addTagButton: some View {
+        Button(action: onBeginTag) {
+            CardMetadataTagCapsule(
+                tag: "Tag",
+                showsRemoveIndicator: false,
+                leadingSystemImage: "plus"
+            )
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.white)
+        .frame(minWidth: 44, minHeight: 44)
+        .contentShape(Rectangle())
+        .disabled(
+            !isEditable || tags.count >= CardEditingTag.maximumCount
+        )
+        .accessibilityLabel("Add Tag")
+        .accessibilityHint("Adds a tag to this note")
+    }
 }
 
 private struct CardEditorTagInput: View {
     @Binding var tagInput: String
     let isTagInputFocused: FocusState<Bool>.Binding
+    let accessibilityIdentifier: String
     let onComplete: () -> Void
 
     @State private var didAcquireFocus = false
 
     var body: some View {
+        Group {
+            if accessibilityIdentifier
+                == CardEditorTagSemantics.cardEditor.inputIdentifier {
+                tagField.accessibilityIdentifier("cardEditorTagInput")
+            } else {
+                tagField.accessibilityIdentifier(accessibilityIdentifier)
+            }
+        }
+        .accessibilityAction(named: Text("Finish Editing")) {
+            onComplete()
+        }
+        .task {
+            await Task.yield()
+            isTagInputFocused.wrappedValue = true
+        }
+    }
+
+    private var tagField: some View {
         TextField("Tag", text: $tagInput)
             .font(.caption.weight(.medium))
             .textInputAutocapitalization(.never)
@@ -126,15 +192,15 @@ private struct CardEditorTagInput: View {
             .cardMetadataTagCapsuleStyle(maximumWidth: 120)
             .frame(minWidth: 44, minHeight: 44)
             .accessibilityLabel("Tag")
-            .accessibilityIdentifier("cardEditorTagInput")
-            .accessibilityAction(named: Text("Finish Editing")) {
-                onComplete()
-            }
-            .task {
-                await Task.yield()
-                isTagInputFocused.wrappedValue = true
-            }
     }
+}
+
+extension CardEditorTagSemantics {
+    static let cardEditor = CardEditorTagSemantics(
+        tagIdentifierPrefix: "cardEditorTag.",
+        addTagIdentifier: "cardEditorAddTag",
+        inputIdentifier: "cardEditorTagInput"
+    )
 }
 
 struct CardEditorLinkRow: View {

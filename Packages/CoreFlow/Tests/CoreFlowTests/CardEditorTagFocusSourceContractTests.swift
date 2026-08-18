@@ -2,6 +2,31 @@ import Foundation
 import XCTest
 
 final class CardEditorTagFocusSourceContractTests: XCTestCase {
+    func testSharedTagRowUsesConfigurableSemanticsAndSharedCapsule() throws {
+        let metadata = try source(
+            at: "ArcNote/CardEditor/CardEditorMetadataRows.swift"
+        )
+        let presentation = try source(
+            at: "ArcNote/CardEditor/CardMetadataPresentation.swift"
+        )
+        let row = try body(in: metadata, after: "struct CardEditorTagRow: View")
+        let capsule = try body(
+            in: presentation,
+            after: "struct CardMetadataTagCapsule: View"
+        )
+
+        XCTAssertTrue(metadata.contains("struct CardEditorTagSemantics"))
+        XCTAssertTrue(row.contains("let semantics: CardEditorTagSemantics"))
+        XCTAssertTrue(row.contains("CardMetadataTagCapsule("))
+        XCTAssertTrue(row.contains("semantics.tagIdentifierPrefix"))
+        XCTAssertTrue(row.contains("semantics.addTagIdentifier"))
+        XCTAssertTrue(row.contains("semantics.inputIdentifier"))
+        XCTAssertTrue(row.contains("CardEditingTag.maximumCount"))
+        XCTAssertFalse(row.contains("if isMerge"))
+        XCTAssertFalse(row.contains("Circle().fill"))
+        XCTAssertFalse(capsule.contains("Circle().fill"))
+    }
+
     func testShellOwnsTagFocusAndInputConsumesItsBinding() throws {
         let metadata = try source(
             at: "ArcNote/CardEditor/CardEditorMetadataRows.swift"

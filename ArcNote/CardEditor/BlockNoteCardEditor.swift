@@ -289,6 +289,15 @@ final class BlockNoteCardEditorModel: ObservableObject {
 
 struct BlockNoteCardEditor: View {
     @ObservedObject var model: BlockNoteCardEditorModel
+    let minimumHeight: CGFloat
+
+    init(
+        model: BlockNoteCardEditorModel,
+        minimumHeight: CGFloat = 248
+    ) {
+        self.model = model
+        self.minimumHeight = max(44, minimumHeight)
+    }
 
     var body: some View {
         Group {
@@ -307,7 +316,7 @@ struct BlockNoteCardEditor: View {
         ) { _ in
             model.keyboardDidHide()
         }
-        .frame(minHeight: 248, alignment: .topLeading)
+        .frame(minHeight: minimumHeight, alignment: .topLeading)
     }
 
     private var editableBody: some View {
@@ -320,7 +329,7 @@ struct BlockNoteCardEditor: View {
             }
         )
         .id(model.editorInstanceID)
-        .frame(height: model.renderedHeight)
+        .frame(height: max(minimumHeight, model.renderedHeight))
         .simultaneousGesture(
             TapGesture().onEnded(model.focusBody)
         )
@@ -352,7 +361,7 @@ struct BlockNoteCardEditor: View {
                 .accessibilityIdentifier("cardEditorCompatibilityNotice")
         }
         .padding(10)
-        .frame(minHeight: 248, alignment: .topLeading)
+        .frame(minHeight: minimumHeight, alignment: .topLeading)
     }
 
     private func bridgeFailureFallback(
@@ -397,6 +406,6 @@ struct BlockNoteCardEditor: View {
             )
         }
         .padding(10)
-        .frame(minHeight: 248, alignment: .topLeading)
+        .frame(minHeight: minimumHeight, alignment: .topLeading)
     }
 }

@@ -408,54 +408,288 @@ final class ArcNoteUITests: XCTestCase {
         )
     }
 
-    func testMergeArtifactFixtureUsesCenteredTwoActionPreview() {
+    func testMergeArtifactEditsInPlaceAndRestoresDraft() {
         app.launchArguments.append("--ui-test-merge-artifact")
+        app.launchEnvironment["CHORAI_UI_TEST_MERGE_SESSION_SCOPE"] =
+            "\(name).stable"
         app.launch()
 
-        let window = app.windows.firstMatch
-        XCTAssertTrue(window.waitForExistence(timeout: 10))
-        let panel = waitFor("merge.artifact.panel")
-        let discard = waitForButton("merge.discard")
-        let save = waitForButton("merge.commit")
-
-        XCTAssertEqual(panel.label, "Merge preview")
-        XCTAssertTrue(waitFor("merge.artifact.body").exists)
-        XCTAssertEqual(app.buttons.matching(identifier: "merge.discard").count, 1)
-        XCTAssertEqual(app.buttons.matching(identifier: "merge.commit").count, 1)
-        XCTAssertGreaterThan(panel.frame.minY, window.frame.minY + 80)
-        XCTAssertLessThan(panel.frame.maxY, window.frame.maxY - 30)
-        XCTAssertTrue(discard.isHittable)
-        XCTAssertTrue(save.isHittable)
-
-        for forbidden in ["New Insight", "Uncommon", "Add tag"] {
-            XCTAssertFalse(
-                app.descendants(matching: .any)[forbidden].exists,
-                "Unexpected legacy artifact control: \(forbidden)"
-            )
-        }
-        XCTAssertFalse(
-            app.buttons["Close"].exists,
-            "Artifact review must not add a redundant Close action"
+        XCTAssertTrue(waitFor("screen.merge.artifact").exists)
+        let level = waitFor("merge.artifact.level")
+        XCTAssertEqual(level.label, "Notable")
+        let standaloneThreePattern = #".*\b3\b.*"#
+        XCTAssertEqual(
+            app.descendants(matching: .any).matching(
+                NSPredicate(
+                    format: "label MATCHES %@ OR value MATCHES %@",
+                    standaloneThreePattern,
+                    standaloneThreePattern
+                )
+            ).count,
+            0,
+            "The numeric rate must not leak into visual or accessibility output"
         )
-        captureMergeVisual("artifact-centered")
+        XCTAssertFalse(app.buttons["Preview"].exists)
+        XCTAssertFalse(app.buttons["Edit"].exists)
+
+        let editor = waitFor("merge.artifact.editor")
+        let firstHeading = app.staticTexts["A durable merged insight"]
+        XCTAssertTrue(firstHeading.waitForExistence(timeout: 10))
+        let finalParagraph = app.staticTexts[
+            "Final WYSIWYG fixture paragraph."
+        ]
+        let headingYBeforeScroll = firstHeading.frame.minY
+        editor.swipeUp()
+        XCTAssertLessThan(
+            firstHeading.frame.minY,
+            headingYBeforeScroll - 10,
+            "The single WYSIWYG body must scroll vertically"
+        )
+        XCTAssertTrue(finalParagraph.waitForExistence(timeout: 5))
+        XCTAssertTrue(finalParagraph.isHittable)
+
+        let frameBeforeFocus = editor.frame
+        editor.coordinate(
+            withNormalizedOffset: CGVector(dx: 0.35, dy: 0.35)
+        ).tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 10))
+        waitForAccessibilityValue(
+            "merge.artifact.editor",
+            expected: "Editing"
+        )
+        XCTAssertEqual(editor.frame.minX, frameBeforeFocus.minX, accuracy: 1.5)
+        XCTAssertEqual(editor.frame.minY, frameBeforeFocus.minY, accuracy: 1.5)
+        XCTAssertEqual(editor.frame.width, frameBeforeFocus.width, accuracy: 1.5)
+        XCTAssertEqual(editor.frame.height, frameBeforeFocus.height, accuracy: 1.5)
+        app.typeText(" restored-body")
+
+        let keyboard = app.keyboards.firstMatch
+        let screenOrigin = app.coordinate(
+            withNormalizedOffset: CGVector(dx: 0, dy: 0)
+        )
+        let dragStartY = min(
+            editor.frame.midY,
+            keyboard.frame.minY - 120
+        )
+        let dragStart = screenOrigin.withOffset(
+            CGVector(dx: editor.frame.midX, dy: dragStartY)
+        )
+        let dragEnd = screenOrigin.withOffset(
+            CGVector(
+                dx: editor.frame.midX,
+                dy: min(keyboard.frame.minY - 24, dragStartY + 96)
+            )
+        )
+        dragStart.press(forDuration: 0.05, thenDragTo: dragEnd)
+        waitForAccessibilityValue(
+            "merge.artifact.editor",
+            expected: "Preview",
+            timeout: 3
+        )
+        let keyboardDismissed = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == false"),
+            object: keyboard
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [keyboardDismissed], timeout: 5),
+            .completed,
+            "Scrolling the WYSIWYG body must dismiss its keyboard"
+        )
+
+        let originalTag = waitForButton("merge.artifact.tag.Design")
+        originalTag.tap()
+        waitForMissing("merge.artifact.tag.Design")
+        waitForButton("merge.artifact.add-tag").tap()
+        let input = waitFor("merge.artifact.tag-input")
+        input.typeText("restored-tag\n")
+        XCTAssertTrue(waitForButton("merge.artifact.tag.restored-tag").exists)
+
+        waitForButton("merge.artifact.back").tap()
+        waitForMissing("screen.merge.artifact")
+        let rail = waitForExactlyOneMergeTaskRail()
+        XCTAssertEqual(rail.value as? String, "1, complete")
+        rail.tap()
+
+        XCTAssertTrue(waitFor("screen.merge.artifact").exists)
+        XCTAssertTrue(
+            app.staticTexts.matching(
+                NSPredicate(format: "label CONTAINS %@", "restored-body")
+            ).firstMatch.waitForExistence(timeout: 10)
+        )
+        XCTAssertTrue(waitForButton("merge.artifact.tag.restored-tag").exists)
+        XCTAssertFalse(app.buttons["merge.artifact.tag.Design"].exists)
+        captureMergeVisual("artifact-wysiwyg-restored")
     }
 
-    func testMergeLongArtifactKeepsActionsReachable() {
-        app.launchArguments.append("--ui-test-merge-artifact-long")
+    func testMergeArtifactAccessibilityTypeKeepsActionsReachable() {
+        app.launchArguments.append("--ui-test-merge-artifact")
+        app.launchEnvironment["CHORAI_UI_TEST_MERGE_DYNAMIC_TYPE"] = "AX5"
+        app.launchEnvironment["CHORAI_UI_TEST_MERGE_SESSION_SCOPE"] =
+            "\(name).stable"
         app.launch()
 
-        let window = app.windows.firstMatch
-        XCTAssertTrue(window.waitForExistence(timeout: 10))
-        XCTAssertTrue(waitFor("merge.artifact.body").exists)
-
         for action in [
-            waitForButton("merge.discard"),
-            waitForButton("merge.commit"),
+            waitForButton("merge.artifact.discard"),
+            waitForButton("merge.artifact.accept"),
         ] {
             XCTAssertTrue(action.isHittable)
-            XCTAssertLessThanOrEqual(action.frame.maxY, window.frame.maxY)
+            XCTAssertGreaterThanOrEqual(action.frame.width, 44)
+            XCTAssertGreaterThanOrEqual(action.frame.height, 44)
         }
-        captureMergeVisual("artifact-long")
+        let editor = waitFor("merge.artifact.editor")
+        XCTAssertTrue(editor.isHittable)
+        let addTag = waitForButton("merge.artifact.add-tag")
+        if !addTag.isHittable {
+            waitFor("merge.artifact.tags").swipeLeft()
+        }
+        XCTAssertTrue(addTag.isHittable)
+        captureMergeVisual("artifact-wysiwyg-dynamic-type")
+    }
+
+    func testMergeArtifactLocksEditorDuringDelayedAccept() {
+        app.launchArguments.append("--ui-test-merge-artifact")
+        app.launchEnvironment[
+            "CHORAI_UI_TEST_MERGE_COMMIT_DELAY_NANOSECONDS"
+        ] = "5000000000"
+        app.launchEnvironment[
+            "CHORAI_UI_TEST_MERGE_COMMIT_SHOULD_FAIL"
+        ] = "1"
+        app.launchEnvironment["CHORAI_UI_TEST_MERGE_SESSION_SCOPE"] =
+            "\(name).stable"
+        app.launch()
+
+        let editor = waitFor("merge.artifact.editor")
+        XCTAssertTrue(editor.isHittable)
+        let accept = waitForButton("merge.artifact.accept")
+        waitForEnabled(accept).tap()
+
+        let accepting = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label CONTAINS %@", "Accepting"),
+            object: accept
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [accepting], timeout: 5),
+            .completed
+        )
+        let commitCount = waitFor("fixture.merge.commit-call-count")
+        let oneCommit = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label == %@", "1"),
+            object: commitCount
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [oneCommit], timeout: 5),
+            .completed
+        )
+        XCTAssertTrue(waitFor("screen.merge.artifact").exists)
+        waitForAccessibilityValue(
+            "merge.artifact.editor",
+            expected: "Locked"
+        )
+        app.coordinate(
+            withNormalizedOffset: CGVector(dx: 0, dy: 0)
+        ).withOffset(
+            CGVector(dx: editor.frame.midX, dy: editor.frame.midY)
+        ).tap()
+        XCTAssertFalse(app.keyboards.firstMatch.waitForExistence(timeout: 0.5))
+
+        let failureState = waitFor("merge.artifact.sync-state")
+        let failed = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label CONTAINS %@", "didn’t finish"),
+            object: failureState
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [failed], timeout: 10),
+            .completed
+        )
+        waitForAccessibilityValue(
+            "merge.artifact.editor",
+            expected: "Preview"
+        )
+        editor.coordinate(
+            withNormalizedOffset: CGVector(dx: 0.35, dy: 0.35)
+        ).tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+        XCTAssertEqual(commitCount.label, "1")
+    }
+
+    func testMergeArtifactDiscardRequiresConfirmation() {
+        app.launchArguments.append("--ui-test-merge-artifact")
+        app.launchEnvironment[
+            "CHORAI_UI_TEST_MERGE_CANCEL_DELAY_NANOSECONDS"
+        ] = "5000000000"
+        app.launchEnvironment[
+            "CHORAI_UI_TEST_MERGE_CANCEL_SHOULD_FAIL"
+        ] = "1"
+        app.launchEnvironment["CHORAI_UI_TEST_MERGE_SESSION_SCOPE"] =
+            "\(name).stable"
+        app.launch()
+
+        let editor = waitFor("merge.artifact.editor")
+        let cancelCount = waitFor("fixture.merge.cancel-call-count")
+        XCTAssertEqual(cancelCount.label, "0")
+        waitForButton("merge.artifact.discard").tap()
+        let dialog = app.sheets["Discard Merge?"]
+        XCTAssertTrue(dialog.waitForExistence(timeout: 5))
+        XCTAssertEqual(cancelCount.label, "0")
+        let dismissRegion = app.descendants(matching: .any)[
+            "PopoverDismissRegion"
+        ]
+        XCTAssertTrue(dismissRegion.waitForExistence(timeout: 2))
+        dismissRegion.tap()
+        let dismissed = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == false"),
+            object: dialog
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [dismissed], timeout: 2),
+            .completed
+        )
+
+        XCTAssertTrue(waitFor("screen.merge.artifact").exists)
+        XCTAssertEqual(cancelCount.label, "0")
+        waitForButton("merge.artifact.discard").tap()
+        XCTAssertTrue(dialog.waitForExistence(timeout: 5))
+        let confirmDiscard = dialog.buttons["Discard"]
+        XCTAssertTrue(confirmDiscard.waitForExistence(timeout: 2))
+        confirmDiscard.tap()
+
+        let oneCancel = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label == %@", "1"),
+            object: cancelCount
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [oneCancel], timeout: 5),
+            .completed
+        )
+        waitForAccessibilityValue(
+            "merge.artifact.editor",
+            expected: "Locked"
+        )
+        app.coordinate(
+            withNormalizedOffset: CGVector(dx: 0, dy: 0)
+        ).withOffset(
+            CGVector(dx: editor.frame.midX, dy: editor.frame.midY)
+        ).tap()
+        XCTAssertFalse(app.keyboards.firstMatch.waitForExistence(timeout: 0.5))
+
+        let failureState = waitFor("merge.artifact.sync-state")
+        let failed = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label CONTAINS %@", "didn’t finish"),
+            object: failureState
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [failed], timeout: 10),
+            .completed
+        )
+        waitForAccessibilityValue(
+            "merge.artifact.editor",
+            expected: "Preview"
+        )
+        editor.coordinate(
+            withNormalizedOffset: CGVector(dx: 0.35, dy: 0.35)
+        ).tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+        XCTAssertEqual(cancelCount.label, "1")
     }
 
     func testNativeOnboardingFixtureCompletesLibraryTipFromItsRealTarget() {
