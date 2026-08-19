@@ -300,3 +300,30 @@ See project-root `design-qa.md` for the final fidelity decision.
 ## Artifact policy
 
 Original screenshots and compact comparison sheets are durable. Giant `.xcresult` bundles and screen recordings remain under `/tmp` and are not committed. Temporary `_probe` images were deleted before staging.
+
+## 2026-08-19 WYSIWYG closeout addendum
+
+Task 12 reverified the global background rail together with the final one-surface
+Merge artifact editor on iPhone 17 Pro and iPhone SE 3. The final post-fix
+device bundles passed 15/15 and 11/11 tests respectively. They cover the
+numeric-only rail, fifth-task scrolling, measured/cached/cold anchors,
+landscape adaptive capacity, Preview suppression, Complete restoration,
+Working cancellation, Discard confirmation, accessibility Dynamic Type, and
+the same-job edit/minimize/relaunch/Accept path.
+
+The sole authorized post-fix live job was used for the complete
+edit/relaunch/Accept/DTO proof. No additional live sibling job was created;
+Discard and sibling isolation remain covered by controlled Pro/SE product
+fixtures and Go cancellation/commit invariants. The populated default-dev
+presentation transition also remains explicitly blocked and was not mutated.
+
+After evidence capture, the task backend and fixture runtime were stopped,
+three temporary source bridge pointers were restored by exact compare-and-set,
+the canonical output and its task-only mixed-schema projection rows were
+removed, and both isolated schemas plus the task-only MySQL container/volume
+were deleted. The default runtime, default schemas, and the existing 22
+`ARTIFACT_READY` jobs remained unchanged.
+
+See [iOS Merge WYSIWYG preview verification](ios-merge-wysiwyg-preview.md) for
+the exact bundles, backend proof, settings readback, visual matrix, and recorded
+operational limitations.

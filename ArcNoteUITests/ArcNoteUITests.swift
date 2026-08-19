@@ -91,6 +91,10 @@ final class ArcNoteUITests: XCTestCase {
         let rail = waitForButton("merge.task-rail")
         XCTAssertEqual(waitFor("merge.task-count").label, "5")
         XCTAssertEqual(rail.value as? String, "5, failed")
+        let deviceLabel = ProcessInfo.processInfo.environment[
+            "CHORAI_UI_TEST_DEVICE_LABEL"
+        ] ?? "device"
+        captureMergeVisual("rail-\(deviceLabel)-collapsed-five")
         rail.tap()
 
         let newNote = waitForButton("note.create")
@@ -116,6 +120,7 @@ final class ArcNoteUITests: XCTestCase {
                 "Expanded tasks must grow upward from the collapsed rail"
             )
         }
+        captureMergeVisual("rail-\(deviceLabel)-expanded-five")
         let fifth = waitForButton("merge.task.5")
         XCTAssertFalse(
             fifth.isHittable,
@@ -148,6 +153,7 @@ final class ArcNoteUITests: XCTestCase {
             waitForButton("merge.task-rail").value as? String,
             "1, working"
         )
+        captureMergeVisual("rail-working-reduce-motion")
     }
 
     func testMergeTaskRailPinsSingleControlToRightEdge() {
@@ -353,6 +359,112 @@ final class ArcNoteUITests: XCTestCase {
         assertExactlyOneAccessibleMergeRail()
         XCTAssertEqual(restoredRail.frame.midX, portraitFrame.midX, accuracy: 2)
         XCTAssertEqual(restoredRail.frame.maxY, portraitFrame.maxY, accuracy: 2)
+    }
+
+    func testMergeTaskRailColdFallbackAdaptsExpansionInLandscape() {
+        XCUIDevice.shared.orientation = .portrait
+        addTeardownBlock {
+            XCUIDevice.shared.orientation = .portrait
+        }
+
+        app.launchArguments.append("--ui-test-merge-task-rail")
+        app.launchEnvironment["CHORAI_UI_TEST_MERGE_TASK_COUNT"] = "5"
+        app.launchEnvironment["CHORAI_UI_TEST_MERGE_START_DETAIL"] = "1"
+        app.launch()
+
+        waitFor("merge.portal.destination.home-detail")
+        let window = app.windows.firstMatch
+        XCTAssertTrue(window.waitForExistence(timeout: 3))
+
+        XCUIDevice.shared.orientation = .landscapeLeft
+        let landscapeExpectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in
+                window.frame.width > window.frame.height
+            },
+            object: window
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [landscapeExpectation], timeout: 5),
+            .completed
+        )
+
+        waitForButton("merge.task-rail").tap()
+        let taskList = waitFor("merge.task-list")
+        XCTAssertGreaterThanOrEqual(taskList.frame.minY, window.frame.minY)
+        XCTAssertLessThanOrEqual(taskList.frame.maxY, window.frame.maxY)
+        XCTAssertGreaterThanOrEqual(taskList.frame.height, 44)
+        let first = waitForButton("merge.task.1")
+        XCTAssertTrue(first.isHittable)
+        XCTAssertGreaterThanOrEqual(first.frame.width, 44)
+        XCTAssertGreaterThanOrEqual(first.frame.height, 44)
+        for number in 1...5 {
+            let task = waitForButton("merge.task.\(number)")
+            guard task.isHittable else { continue }
+            XCTAssertGreaterThanOrEqual(task.frame.minY, window.frame.minY)
+            XCTAssertLessThanOrEqual(task.frame.maxY, window.frame.maxY)
+        }
+        let fifth = waitForButton("merge.task.5")
+        XCTAssertFalse(fifth.isHittable)
+        taskList.swipeUp()
+        XCTAssertTrue(fifth.isHittable)
+        XCTAssertGreaterThanOrEqual(fifth.frame.minY, window.frame.minY)
+        XCTAssertLessThanOrEqual(fifth.frame.maxY, window.frame.maxY)
+    }
+
+    func testMergeTaskRailMeasuredAnchorAdaptsExpansionInLandscape() {
+        XCUIDevice.shared.orientation = .portrait
+        addTeardownBlock {
+            XCUIDevice.shared.orientation = .portrait
+        }
+
+        app.launchArguments.append("--ui-test-merge-task-rail")
+        app.launchEnvironment["CHORAI_UI_TEST_MERGE_TASK_COUNT"] = "5"
+        app.launch()
+
+        let window = app.windows.firstMatch
+        XCTAssertTrue(window.waitForExistence(timeout: 3))
+        let newNote = waitForButton("note.create")
+
+        XCUIDevice.shared.orientation = .landscapeLeft
+        let landscapeExpectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in
+                window.frame.width > window.frame.height
+            },
+            object: window
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [landscapeExpectation], timeout: 5),
+            .completed
+        )
+
+        let rail = waitForButton("merge.task-rail")
+        XCTAssertEqual(newNote.frame.minY - rail.frame.maxY, 12, accuracy: 2)
+        rail.tap()
+
+        let taskList = waitFor("merge.task-list")
+        XCTAssertGreaterThanOrEqual(taskList.frame.minY, window.frame.minY)
+        XCTAssertLessThanOrEqual(taskList.frame.maxY, window.frame.maxY)
+        XCTAssertFalse(taskList.frame.intersects(newNote.frame))
+        XCTAssertGreaterThanOrEqual(taskList.frame.height, 44)
+        let first = waitForButton("merge.task.1")
+        XCTAssertTrue(first.isHittable)
+        XCTAssertGreaterThanOrEqual(first.frame.width, 44)
+        XCTAssertGreaterThanOrEqual(first.frame.height, 44)
+        for number in 1...5 {
+            let task = waitForButton("merge.task.\(number)")
+            guard task.isHittable else { continue }
+            XCTAssertGreaterThanOrEqual(task.frame.minY, window.frame.minY)
+            XCTAssertLessThanOrEqual(task.frame.maxY, window.frame.maxY)
+            XCTAssertFalse(task.frame.intersects(newNote.frame))
+        }
+
+        let fifth = waitForButton("merge.task.5")
+        XCTAssertFalse(fifth.isHittable)
+        taskList.swipeUp()
+        XCTAssertTrue(fifth.isHittable)
+        XCTAssertGreaterThanOrEqual(fifth.frame.minY, window.frame.minY)
+        XCTAssertLessThanOrEqual(fifth.frame.maxY, window.frame.maxY)
+        XCTAssertFalse(fifth.frame.intersects(newNote.frame))
     }
 
     func testWorkingMergeCancelConfirmsCanonicalCallAndCleanupDuringActivePoll() {
@@ -567,6 +679,7 @@ final class ArcNoteUITests: XCTestCase {
         )
         XCTAssertFalse(app.buttons["Preview"].exists)
         XCTAssertFalse(app.buttons["Edit"].exists)
+        captureMergeVisual("artifact-preview-open-no-rail")
 
         let editor = waitFor("merge.artifact.editor")
         let firstHeading = app.staticTexts["A durable merged insight"]
@@ -600,28 +713,84 @@ final class ArcNoteUITests: XCTestCase {
         app.typeText(" restored-body")
 
         let keyboard = app.keyboards.firstMatch
-        let screenOrigin = app.coordinate(
-            withNormalizedOffset: CGVector(dx: 0, dy: 0)
+        let layoutSettled = expectation(description: "Keyboard layout settled")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+            layoutSettled.fulfill()
+        }
+        wait(for: [layoutSettled], timeout: 2)
+
+        XCTAssertEqual(editor.frame.minX, frameBeforeFocus.minX, accuracy: 1.5)
+        XCTAssertEqual(editor.frame.minY, frameBeforeFocus.minY, accuracy: 1.5)
+        XCTAssertEqual(editor.frame.width, frameBeforeFocus.width, accuracy: 1.5)
+        XCTAssertEqual(editor.frame.height, frameBeforeFocus.height, accuracy: 1.5)
+
+        let discardAction = waitForButton("merge.artifact.discard")
+        let typedLine = app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS %@", "restored-body")
+        ).firstMatch
+        XCTAssertTrue(typedLine.waitForExistence(timeout: 3))
+        let visibleTop = editor.frame.minY
+        let visibleBottom = min(
+            editor.frame.maxY,
+            discardAction.frame.minY - 8,
+            keyboard.frame.minY - 8
         )
-        let dragStartY = min(
-            editor.frame.midY,
-            keyboard.frame.minY - 120
-        )
-        let dragStart = screenOrigin.withOffset(
-            CGVector(dx: editor.frame.midX, dy: dragStartY)
-        )
-        let dragEnd = screenOrigin.withOffset(
-            CGVector(
-                dx: editor.frame.midX,
-                dy: min(keyboard.frame.minY - 24, dragStartY + 96)
+        XCTAssertTrue(typedLine.isHittable)
+        XCTAssertGreaterThanOrEqual(typedLine.frame.minY, visibleTop)
+        XCTAssertLessThanOrEqual(typedLine.frame.maxY, visibleBottom)
+        XCTAssertGreaterThanOrEqual(visibleBottom - visibleTop, 48)
+        let origin = app.coordinate(withNormalizedOffset: .zero)
+
+        origin.withOffset(
+            CGVector(dx: typedLine.frame.maxX - 12, dy: typedLine.frame.midY)
+        ).press(
+            forDuration: 0.55,
+            thenDragTo: origin.withOffset(
+                CGVector(dx: typedLine.frame.minX + 12, dy: typedLine.frame.midY)
             )
         )
-        dragStart.press(forDuration: 0.05, thenDragTo: dragEnd)
+        waitForAccessibilityValue(
+            "merge.artifact.editor",
+            expected: "Editing"
+        )
+        XCTAssertTrue(keyboard.exists)
+        app.typeText(" horizontal-safe-input-keeps-editing")
+        waitForAccessibilityValue(
+            "merge.artifact.editor",
+            expected: "Editing"
+        )
+        XCTAssertTrue(keyboard.exists)
+        let replacementLine = app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS %@", "horizontal-safe-input")
+        ).firstMatch
+        XCTAssertTrue(replacementLine.waitForExistence(timeout: 3))
+        XCTAssertTrue(replacementLine.isHittable)
+        XCTAssertGreaterThanOrEqual(replacementLine.frame.minY, visibleTop)
+        XCTAssertLessThanOrEqual(replacementLine.frame.maxY, visibleBottom)
+
+        origin.withOffset(
+            CGVector(
+                dx: replacementLine.frame.midX,
+                dy: replacementLine.frame.midY
+            )
+        ).press(
+            forDuration: 0.08,
+            thenDragTo: origin.withOffset(
+                CGVector(
+                    dx: replacementLine.frame.midX,
+                    dy: min(replacementLine.frame.midY + 72, visibleBottom - 4)
+                )
+            )
+        )
         waitForAccessibilityValue(
             "merge.artifact.editor",
             expected: "Preview",
             timeout: 3
         )
+        XCTAssertEqual(editor.frame.minX, frameBeforeFocus.minX, accuracy: 1.5)
+        XCTAssertEqual(editor.frame.minY, frameBeforeFocus.minY, accuracy: 1.5)
+        XCTAssertEqual(editor.frame.width, frameBeforeFocus.width, accuracy: 1.5)
+        XCTAssertEqual(editor.frame.height, frameBeforeFocus.height, accuracy: 1.5)
         let keyboardDismissed = XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "exists == false"),
             object: keyboard
@@ -631,6 +800,10 @@ final class ArcNoteUITests: XCTestCase {
             .completed,
             "Scrolling the WYSIWYG body must dismiss its keyboard"
         )
+        XCTAssertEqual(editor.frame.minX, frameBeforeFocus.minX, accuracy: 1.5)
+        XCTAssertEqual(editor.frame.minY, frameBeforeFocus.minY, accuracy: 1.5)
+        XCTAssertEqual(editor.frame.width, frameBeforeFocus.width, accuracy: 1.5)
+        XCTAssertEqual(editor.frame.height, frameBeforeFocus.height, accuracy: 1.5)
 
         let originalTag = waitForButton("merge.artifact.tag.Design")
         originalTag.tap()
@@ -644,26 +817,639 @@ final class ArcNoteUITests: XCTestCase {
         waitForMissing("screen.merge.artifact")
         let rail = waitForExactlyOneMergeTaskRail()
         XCTAssertEqual(rail.value as? String, "1, complete")
+        captureMergeVisual("artifact-preview-closed-complete-rail")
         rail.tap()
 
         XCTAssertTrue(waitFor("screen.merge.artifact").exists)
         XCTAssertTrue(
             app.staticTexts.matching(
-                NSPredicate(format: "label CONTAINS %@", "restored-body")
+                NSPredicate(format: "label CONTAINS %@", "horizontal-safe-input")
             ).firstMatch.waitForExistence(timeout: 10)
         )
         XCTAssertTrue(waitForButton("merge.artifact.tag.restored-tag").exists)
         XCTAssertFalse(app.buttons["merge.artifact.tag.Design"].exists)
+
+        let restoredEditor = waitFor("merge.artifact.editor")
+        restoredEditor.coordinate(
+            withNormalizedOffset: CGVector(dx: 0.35, dy: 0.35)
+        ).tap()
+        let restoredKeyboard = app.keyboards.firstMatch
+        XCTAssertTrue(restoredKeyboard.waitForExistence(timeout: 10))
+        waitForAccessibilityValue(
+            "merge.artifact.editor",
+            expected: "Editing"
+        )
+        let done = app.buttons["Done"]
+        XCTAssertTrue(done.waitForExistence(timeout: 3))
+        XCTAssertTrue(done.isHittable)
+        done.tap()
+        waitForAccessibilityValue(
+            "merge.artifact.editor",
+            expected: "Preview"
+        )
+        let restoredKeyboardDismissed = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == false"),
+            object: restoredKeyboard
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [restoredKeyboardDismissed], timeout: 5),
+            .completed
+        )
         captureMergeVisual("artifact-wysiwyg-restored")
     }
 
-    func testMergeArtifactAccessibilityTypeKeepsActionsReachable() {
+    func testMergeArtifactReflowsAndRestoresAcrossRotation() {
+        XCUIDevice.shared.orientation = .portrait
+        addTeardownBlock {
+            XCUIDevice.shared.orientation = .portrait
+        }
+
+        app.launchArguments.append("--ui-test-merge-artifact-long")
+        app.launchEnvironment["CHORAI_UI_TEST_MERGE_SESSION_SCOPE"] =
+            "\(name).stable"
+        app.launch()
+
+        let window = app.windows.firstMatch
+        XCTAssertTrue(window.waitForExistence(timeout: 3))
+        let editor = waitFor("merge.artifact.editor")
+        let portraitEditorHeight = editor.frame.height
+
+        XCUIDevice.shared.orientation = .landscapeLeft
+        let landscapeExpectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in
+                window.frame.width > window.frame.height
+            },
+            object: window
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [landscapeExpectation], timeout: 5),
+            .completed
+        )
+        XCTAssertGreaterThanOrEqual(editor.frame.height, 180)
+        XCTAssertLessThanOrEqual(editor.frame.height, 360)
+        for actionID in [
+            "merge.artifact.discard",
+            "merge.artifact.accept",
+        ] {
+            let action = waitForButton(actionID)
+            let settledAction = XCTNSPredicateExpectation(
+                predicate: NSPredicate { _, _ in
+                    action.isHittable
+                        && action.frame.minY >= window.frame.minY
+                        && action.frame.maxY <= window.frame.maxY
+                },
+                object: action
+            )
+            XCTAssertEqual(
+                XCTWaiter.wait(for: [settledAction], timeout: 5),
+                .completed,
+                "\(actionID) must remain in the visible landscape viewport; "
+                    + "action=\(action.frame), window=\(window.frame)"
+            )
+        }
+
+        XCUIDevice.shared.orientation = .portrait
+        let portraitExpectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in
+                window.frame.height > window.frame.width
+                    && abs(editor.frame.height - portraitEditorHeight) <= 1.5
+            },
+            object: window
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [portraitExpectation], timeout: 5),
+            .completed,
+            "The container-relative editor height must restore after rotation"
+        )
+    }
+
+    func testMergeArtifactFocusedRotationDismissesSafelyAndRestores() {
+        XCUIDevice.shared.orientation = .portrait
+        addTeardownBlock {
+            XCUIDevice.shared.orientation = .portrait
+        }
+
+        app.launchArguments.append("--ui-test-merge-artifact-long")
+        app.launchEnvironment["CHORAI_UI_TEST_MERGE_SESSION_SCOPE"] =
+            "\(name).stable"
+        app.launch()
+
+        let window = app.windows.firstMatch
+        XCTAssertTrue(window.waitForExistence(timeout: 3))
+        let editor = waitFor("merge.artifact.editor")
+        let finalParagraph = app.staticTexts[
+            "Final WYSIWYG fixture paragraph."
+        ]
+        editor.swipeUp()
+        XCTAssertTrue(finalParagraph.waitForExistence(timeout: 5))
+        XCTAssertTrue(finalParagraph.isHittable)
+        let portraitFrame = editor.frame
+        editor.coordinate(
+            withNormalizedOffset: CGVector(dx: 0.35, dy: 0.35)
+        ).tap()
+        let keyboard = app.keyboards.firstMatch
+        XCTAssertTrue(keyboard.waitForExistence(timeout: 10))
+        waitForAccessibilityValue(
+            "merge.artifact.editor",
+            expected: "Editing"
+        )
+        app.typeText(" focused-rotation-marker")
+
+        let marker = app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS %@", "focused-rotation-marker")
+        ).firstMatch
+        XCTAssertTrue(marker.waitForExistence(timeout: 3))
+        let portraitSettled = expectation(
+            description: "Focused portrait layout settled"
+        )
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+            portraitSettled.fulfill()
+        }
+        wait(for: [portraitSettled], timeout: 2)
+        assertFocusedMergeBodyLineIsReadable(
+            marker,
+            editor: editor,
+            keyboard: keyboard
+        )
+
+        XCUIDevice.shared.orientation = .landscapeLeft
+        let landscapeExpectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in
+                window.frame.width > window.frame.height
+            },
+            object: window
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [landscapeExpectation], timeout: 5),
+            .completed
+        )
+        let landscapeSettled = expectation(
+            description: "Focused landscape layout settled"
+        )
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+            landscapeSettled.fulfill()
+        }
+        wait(for: [landscapeSettled], timeout: 2)
+        waitForAccessibilityValue(
+            "merge.artifact.editor",
+            expected: "Preview"
+        )
+        let keyboardDismissedForRotation = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == false"),
+            object: keyboard
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [keyboardDismissedForRotation], timeout: 5),
+            .completed
+        )
+        XCTAssertTrue(marker.exists)
+        XCTAssertTrue(marker.isHittable)
+        XCTAssertTrue(marker.frame.intersects(editor.frame))
+        XCTAssertGreaterThanOrEqual(editor.frame.height, 180)
+        XCTAssertLessThanOrEqual(editor.frame.height, 360)
+        for actionID in [
+            "merge.artifact.discard",
+            "merge.artifact.accept",
+        ] {
+            let action = waitForButton(actionID)
+            XCTAssertTrue(action.isHittable)
+            XCTAssertGreaterThanOrEqual(action.frame.minY, window.frame.minY)
+            XCTAssertLessThanOrEqual(action.frame.maxY, window.frame.maxY)
+        }
+
+        XCUIDevice.shared.orientation = .portrait
+        let portraitExpectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in
+                window.frame.height > window.frame.width
+            },
+            object: window
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [portraitExpectation], timeout: 5),
+            .completed
+        )
+        let restoredSettled = expectation(
+            description: "Focused portrait layout restored"
+        )
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+            restoredSettled.fulfill()
+        }
+        wait(for: [restoredSettled], timeout: 2)
+        waitForAccessibilityValue(
+            "merge.artifact.editor",
+            expected: "Preview"
+        )
+        XCTAssertFalse(keyboard.exists)
+        XCTAssertTrue(marker.exists)
+        XCTAssertTrue(marker.isHittable)
+        XCTAssertEqual(editor.frame.minX, portraitFrame.minX, accuracy: 1.5)
+        XCTAssertEqual(editor.frame.minY, portraitFrame.minY, accuracy: 1.5)
+        XCTAssertEqual(editor.frame.width, portraitFrame.width, accuracy: 1.5)
+        XCTAssertEqual(editor.frame.height, portraitFrame.height, accuracy: 1.5)
+
+        editor.coordinate(
+            withNormalizedOffset: CGVector(dx: 0.35, dy: 0.35)
+        ).tap()
+        XCTAssertTrue(keyboard.waitForExistence(timeout: 10))
+        waitForAccessibilityValue(
+            "merge.artifact.editor",
+            expected: "Editing"
+        )
+        let done = app.buttons["Done"]
+        XCTAssertTrue(done.waitForExistence(timeout: 3))
+        XCTAssertTrue(done.isHittable)
+        done.tap()
+        waitForAccessibilityValue(
+            "merge.artifact.editor",
+            expected: "Preview"
+        )
+        let keyboardDismissed = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == false"),
+            object: keyboard
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [keyboardDismissed], timeout: 5),
+            .completed
+        )
+        XCTAssertEqual(editor.frame.minX, portraitFrame.minX, accuracy: 1.5)
+        XCTAssertEqual(editor.frame.minY, portraitFrame.minY, accuracy: 1.5)
+        XCTAssertEqual(editor.frame.width, portraitFrame.width, accuracy: 1.5)
+        XCTAssertEqual(editor.frame.height, portraitFrame.height, accuracy: 1.5)
+    }
+
+    func testMergeArtifactTagFocusCannotPoisonRotatedViewportSlot() {
+        XCUIDevice.shared.orientation = .portrait
+        addTeardownBlock {
+            XCUIDevice.shared.orientation = .portrait
+        }
+
         app.launchArguments.append("--ui-test-merge-artifact")
+        app.launchEnvironment["CHORAI_UI_TEST_MERGE_SESSION_SCOPE"] =
+            "\(name).stable"
+        app.launch()
+
+        let window = app.windows.firstMatch
+        XCTAssertTrue(window.waitForExistence(timeout: 3))
+        let editor = waitFor("merge.artifact.editor")
+        let addTag = waitForButton("merge.artifact.add-tag")
+        addTag.tap()
+        let tagInput = waitFor("merge.artifact.tag-input")
+        let tagKeyboard = app.keyboards.firstMatch
+        XCTAssertTrue(tagKeyboard.waitForExistence(timeout: 10))
+        tagInput.typeText("rotation-slot-tag")
+
+        XCUIDevice.shared.orientation = .landscapeLeft
+        let landscapeExpectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in
+                window.frame.width > window.frame.height
+            },
+            object: window
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [landscapeExpectation], timeout: 5),
+            .completed
+        )
+        XCTAssertTrue(tagKeyboard.exists)
+        let tagKeyboardSettled = expectation(
+            description: "Tag keyboard outlasted viewport slot settling"
+        )
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+            tagKeyboardSettled.fulfill()
+        }
+        wait(for: [tagKeyboardSettled], timeout: 2)
+        app.typeText("\n")
+        XCTAssertTrue(
+            waitForButton("merge.artifact.tag.rotation-slot-tag").exists
+        )
+        let tagKeyboardDismissed = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == false"),
+            object: tagKeyboard
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [tagKeyboardDismissed], timeout: 5),
+            .completed
+        )
+        let landscapeSettled = expectation(
+            description: "Tag-focused landscape layout settled"
+        )
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+            landscapeSettled.fulfill()
+        }
+        wait(for: [landscapeSettled], timeout: 2)
+        let restingLandscapeFrame = editor.frame
+
+        let focusLine = [
+            "A durable merged insight",
+            "Clarity comes from keeping related ideas visible on one editable surface.",
+            "Scrolling is preview, and a tap edits the exact same document.",
+            "The card keeps its typography, frame, and material while focus changes.",
+            "Tags stay aligned with the Card Editor and never gain colored dots.",
+            "Local snapshots survive minimizing the completed task.",
+            "Final WYSIWYG fixture paragraph.",
+        ]
+            .map { app.staticTexts[$0] }
+            .first { $0.exists && $0.isHittable }
+        XCTAssertNotNil(
+            focusLine,
+            "At least one WYSIWYG body line must remain reachable after tag input"
+        )
+        focusLine?.tap()
+        let bodyKeyboard = app.keyboards.firstMatch
+        XCTAssertTrue(bodyKeyboard.waitForExistence(timeout: 10))
+        waitForAccessibilityValue(
+            "merge.artifact.editor",
+            expected: "Editing"
+        )
+        let bodyLayoutSettled = expectation(
+            description: "Rotated body keyboard layout settled"
+        )
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+            bodyLayoutSettled.fulfill()
+        }
+        wait(for: [bodyLayoutSettled], timeout: 2)
+        app.typeText(" rotated-body-slot-marker")
+        let marker = app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS %@", "rotated-body-slot-marker")
+        ).firstMatch
+        XCTAssertTrue(marker.waitForExistence(timeout: 3))
+        let focusedLandscapeFrame = editor.frame
+        let frameDiagnostic = "resting=\(restingLandscapeFrame), "
+            + "focused=\(focusedLandscapeFrame), marker=\(marker.frame), "
+            + "keyboard=\(bodyKeyboard.frame), window=\(window.frame)"
+        XCTAssertEqual(
+            focusedLandscapeFrame.minX,
+            restingLandscapeFrame.minX,
+            accuracy: 1.5,
+            frameDiagnostic
+        )
+        XCTAssertLessThanOrEqual(
+            focusedLandscapeFrame.minY,
+            restingLandscapeFrame.minY - 24,
+            "Landscape focus must reveal the body within the existing surface; "
+                + frameDiagnostic
+        )
+        XCTAssertEqual(
+            focusedLandscapeFrame.width,
+            restingLandscapeFrame.width,
+            accuracy: 1.5,
+            frameDiagnostic
+        )
+        XCTAssertEqual(
+            focusedLandscapeFrame.height,
+            restingLandscapeFrame.height,
+            accuracy: 1.5,
+            frameDiagnostic
+        )
+        XCTAssertTrue(marker.isHittable, frameDiagnostic)
+        XCTAssertLessThan(
+            focusedLandscapeFrame.minY,
+            bodyKeyboard.frame.minY - 8,
+            frameDiagnostic
+        )
+        XCTAssertLessThanOrEqual(
+            marker.frame.maxY,
+            bodyKeyboard.frame.minY - 8,
+            frameDiagnostic
+        )
+        XCTAssertTrue(
+            marker.frame.intersects(focusedLandscapeFrame),
+            frameDiagnostic
+        )
+        let visibleBodyTop = max(
+            marker.frame.minY,
+            focusedLandscapeFrame.minY
+        )
+        let visibleBodyBottom = min(
+            marker.frame.maxY,
+            focusedLandscapeFrame.maxY,
+            bodyKeyboard.frame.minY - 8
+        )
+        XCTAssertGreaterThanOrEqual(
+            visibleBodyBottom - visibleBodyTop,
+            24,
+            "Landscape focus must keep at least one readable body line "
+                + "inside the editor and above the keyboard; "
+                + frameDiagnostic
+        )
+        let done = app.buttons["Done"]
+        XCTAssertTrue(done.waitForExistence(timeout: 3))
+        XCTAssertTrue(done.isHittable)
+        done.tap()
+        waitForAccessibilityValue(
+            "merge.artifact.editor",
+            expected: "Preview"
+        )
+        let bodyKeyboardDismissed = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == false"),
+            object: bodyKeyboard
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [bodyKeyboardDismissed], timeout: 5),
+            .completed
+        )
+        let previewSettled = expectation(
+            description: "Landscape preview preserves its reading position"
+        )
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            previewSettled.fulfill()
+        }
+        wait(for: [previewSettled], timeout: 3)
+        XCTAssertTrue(marker.exists)
+        XCTAssertTrue(marker.isHittable)
+        let postDismissFrame = editor.frame
+        let postDismissDiagnostic = "resting=\(restingLandscapeFrame), "
+            + "focused=\(focusedLandscapeFrame), post=\(postDismissFrame), "
+            + "marker=\(marker.frame), window=\(window.frame)"
+        XCTAssertEqual(
+            postDismissFrame.minX,
+            restingLandscapeFrame.minX,
+            accuracy: 1.5,
+            postDismissDiagnostic
+        )
+        XCTAssertEqual(
+            postDismissFrame.width,
+            restingLandscapeFrame.width,
+            accuracy: 1.5,
+            postDismissDiagnostic
+        )
+        XCTAssertEqual(
+            postDismissFrame.height,
+            restingLandscapeFrame.height,
+            accuracy: 1.5,
+            postDismissDiagnostic
+        )
+        XCTAssertGreaterThanOrEqual(
+            postDismissFrame.minY,
+            min(focusedLandscapeFrame.minY, restingLandscapeFrame.minY) - 1.5,
+            postDismissDiagnostic
+        )
+        XCTAssertLessThanOrEqual(
+            postDismissFrame.minY,
+            max(focusedLandscapeFrame.minY, restingLandscapeFrame.minY) + 1.5,
+            postDismissDiagnostic
+        )
+        XCTAssertGreaterThanOrEqual(postDismissFrame.minY, window.frame.minY)
+        XCTAssertLessThanOrEqual(postDismissFrame.maxY, window.frame.maxY)
+        XCTAssertTrue(marker.frame.intersects(postDismissFrame))
+        for actionID in [
+            "merge.artifact.discard",
+            "merge.artifact.accept",
+        ] {
+            let action = waitForButton(actionID)
+            XCTAssertTrue(action.isHittable)
+            XCTAssertGreaterThanOrEqual(action.frame.minY, window.frame.minY)
+            XCTAssertLessThanOrEqual(action.frame.maxY, window.frame.maxY)
+        }
+    }
+
+    func testMergeArtifactVisualMatrixCapturesNotableStatesAndTags() {
+        app.launchArguments.append("--ui-test-merge-artifact")
+        app.launchEnvironment["CHORAI_UI_TEST_MERGE_SESSION_SCOPE"] =
+            "\(name).stable"
+        app.launch()
+
+        let variant = ProcessInfo.processInfo.environment[
+            "CHORAI_UI_TEST_VISUAL_VARIANT"
+        ] ?? "standard"
+        XCTAssertTrue(waitFor("screen.merge.artifact").exists)
+        XCTAssertEqual(waitFor("merge.artifact.level").label, "Notable")
+        captureMergeVisual("artifact-notable-\(variant)-unfocused-tags-3")
+
+        let window = app.windows.firstMatch
+        XCTAssertTrue(window.waitForExistence(timeout: 3))
+        for actionID in [
+            "merge.artifact.discard",
+            "merge.artifact.accept",
+        ] {
+            let action = waitForButton(actionID)
+            XCTAssertTrue(
+                action.isHittable,
+                "\(actionID) must remain visible and hittable on every supported iPhone; "
+                    + "action=\(action.frame), window=\(window.frame)"
+            )
+            XCTAssertGreaterThanOrEqual(action.frame.minY, window.frame.minY)
+            XCTAssertLessThanOrEqual(
+                action.frame.maxY,
+                window.frame.maxY,
+                "\(actionID) is clipped below the visible window"
+            )
+        }
+        let tagViewport = waitFor("merge.artifact.tags")
+        let addTag = waitForButton("merge.artifact.add-tag")
+        if !addTag.isHittable || addTag.frame.maxX > tagViewport.frame.maxX {
+            tagViewport.swipeLeft()
+        }
+        XCTAssertTrue(
+            addTag.isHittable,
+            "One horizontal swipe must make Add Tag hittable"
+        )
+        XCTAssertGreaterThanOrEqual(
+            addTag.frame.minX,
+            tagViewport.frame.minX,
+            "Add Tag remains clipped before the tag viewport after one swipe"
+        )
+        XCTAssertLessThanOrEqual(
+            addTag.frame.maxX,
+            tagViewport.frame.maxX,
+            "Add Tag remains clipped after one horizontal swipe"
+        )
+        guard variant == "standard" else { return }
+
+        let editor = waitFor("merge.artifact.editor")
+        editor.coordinate(
+            withNormalizedOffset: CGVector(dx: 0.35, dy: 0.35)
+        ).tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 10))
+        captureMergeVisual("artifact-notable-standard-focused")
+        editor.swipeDown()
+        let keyboard = app.keyboards.firstMatch
+        let keyboardDismissed = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == false"),
+            object: keyboard
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [keyboardDismissed], timeout: 5),
+            .completed,
+            "The visual matrix must restore the unfocused surface before editing tags"
+        )
+
+        for tag in ["Design", "Inspiration", "Nature"] {
+            waitForButton("merge.artifact.tag.\(tag)").tap()
+        }
+        captureMergeVisual("artifact-notable-standard-tags-0")
+
+        for index in 1...10 {
+            let tag = String(format: "matrix-%02d", index)
+            let tagViewport = waitFor("merge.artifact.tags")
+            let addTag = waitForButton("merge.artifact.add-tag")
+            for _ in 0..<3
+            where !addTag.isHittable
+                || addTag.frame.maxX > tagViewport.frame.maxX {
+                tagViewport.swipeLeft()
+            }
+            XCTAssertTrue(
+                addTag.isHittable,
+                "Add Tag must remain reachable through horizontal overflow"
+            )
+            XCTAssertLessThanOrEqual(
+                addTag.frame.maxX,
+                tagViewport.frame.maxX,
+                "Add Tag must be fully visible before adding tag \(index)"
+            )
+            addTag.tap()
+            waitFor("merge.artifact.tag-input").typeText(tag + "\n")
+            XCTAssertTrue(waitForButton("merge.artifact.tag.\(tag)").exists)
+        }
+        captureMergeVisual("artifact-notable-standard-tags-10")
+    }
+
+    func testMergeArtifactVisualMatrixCapturesLongBodyDefault() {
+        app.launchArguments.append("--ui-test-merge-artifact-long")
+        app.launchEnvironment["CHORAI_UI_TEST_MERGE_SESSION_SCOPE"] =
+            "\(name).stable"
+        app.launch()
+
+        XCTAssertTrue(waitFor("screen.merge.artifact").exists)
+        XCTAssertEqual(waitFor("merge.artifact.level").label, "Notable")
+        captureMergeVisual("artifact-notable-long-body-default")
+    }
+
+    func testCardLevelVisualMatrixCapturesSixTiers() {
+        let tiers: [(label: String, rate: Int)] = [
+            ("basic", 1),
+            ("notable", 3),
+            ("valuable", 9),
+            ("significant", 27),
+            ("exceptional", 81),
+            ("definitive", 243),
+        ]
+
+        for tier in tiers {
+            if app.state != .notRunning {
+                app.terminate()
+            }
+            app = XCUIApplication()
+            app.launchArguments.append("--ui-test-library-preview")
+            app.launchEnvironment["CHORAI_UI_TEST_LIBRARY_RATE"] =
+                String(tier.rate)
+            app.launch()
+            _ = waitFor("card.home.library-preview-fixture", timeout: 10)
+            RunLoop.current.run(until: Date().addingTimeInterval(0.4))
+            captureMergeVisual(
+                "card-level-\(tier.label)-rate-\(tier.rate)"
+            )
+        }
+    }
+
+    func testMergeArtifactAccessibilityTypeKeepsActionsReachable() {
+        app.launchArguments.append("--ui-test-merge-artifact-long")
         app.launchEnvironment["CHORAI_UI_TEST_MERGE_DYNAMIC_TYPE"] = "AX5"
         app.launchEnvironment["CHORAI_UI_TEST_MERGE_SESSION_SCOPE"] =
             "\(name).stable"
         app.launch()
 
+        XCTAssertTrue(waitFor("screen.merge.artifact").exists)
+        captureMergeVisual("artifact-notable-long-dynamic-type")
         for action in [
             waitForButton("merge.artifact.discard"),
             waitForButton("merge.artifact.accept"),
@@ -674,12 +1460,14 @@ final class ArcNoteUITests: XCTestCase {
         }
         let editor = waitFor("merge.artifact.editor")
         XCTAssertTrue(editor.isHittable)
+        let tagViewport = waitFor("merge.artifact.tags")
         let addTag = waitForButton("merge.artifact.add-tag")
-        if !addTag.isHittable {
-            waitFor("merge.artifact.tags").swipeLeft()
+        if !addTag.isHittable || addTag.frame.maxX > tagViewport.frame.maxX {
+            tagViewport.swipeLeft()
         }
         XCTAssertTrue(addTag.isHittable)
-        captureMergeVisual("artifact-wysiwyg-dynamic-type")
+        XCTAssertGreaterThanOrEqual(addTag.frame.minX, tagViewport.frame.minX)
+        XCTAssertLessThanOrEqual(addTag.frame.maxX, tagViewport.frame.maxX)
     }
 
     func testMergeArtifactLocksEditorDuringDelayedAccept() {
@@ -3937,65 +4725,218 @@ final class ArcNoteUITests: XCTestCase {
         seedAppSession(session)
 
         let uniqueSuffix = Int(Date().timeIntervalSince1970)
-        let sourceToken = "merge-resume-source-\(uniqueSuffix)"
-        let targetToken = "merge-resume-target-\(uniqueSuffix)"
-        let sourceCardID = try createPublicSmokeCard(
-            token: session.token,
-            searchToken: sourceToken
-        )
-        try updateSmokeCardToMultiBlock(
-            id: sourceCardID,
-            token: session.token,
-            searchToken: sourceToken
-        )
-        let targetCardID = try createPublicSmokeCard(
-            token: session.token,
-            searchToken: targetToken
-        )
+        let configuredSourceIDs = ProcessInfo.processInfo.environment[
+            "CHORAI_UI_TEST_TASK12_SOURCE_IDS"
+        ]?.split(separator: ",").map(String.init) ?? []
+        let configuredQueries = ProcessInfo.processInfo.environment[
+            "CHORAI_UI_TEST_TASK12_SOURCE_QUERIES"
+        ]?.split(separator: ",").map(String.init) ?? []
+        let ownsSourceCards = configuredSourceIDs.count != 3
+        let sourceQueries: [String]
+        let sourceCardIDs: [String]
+        if ownsSourceCards {
+            sourceQueries = (1...3).map {
+                "merge-resume-source-\($0)-\(uniqueSuffix)"
+            }
+            sourceCardIDs = try sourceQueries.map {
+                try createPublicSmokeCard(
+                    token: session.token,
+                    searchToken: $0
+                )
+            }
+        } else {
+            sourceCardIDs = configuredSourceIDs
+            sourceQueries = configuredQueries.count == 3
+                ? configuredQueries
+                : ["one", "two", "three"]
+        }
+        let sourceCardID = sourceCardIDs[0]
+        let targetCardIDs = Array(sourceCardIDs.dropFirst())
         var committedCardID: String?
         defer {
             if let committedCardID {
                 deleteSmokeCard(id: committedCardID, token: session.token)
             }
-            deleteSmokeCard(id: sourceCardID, token: session.token)
-            deleteSmokeCard(id: targetCardID, token: session.token)
+            if ownsSourceCards {
+                for cardID in sourceCardIDs {
+                    deleteSmokeCard(id: cardID, token: session.token)
+                }
+            }
         }
 
-        app.launchArguments.append("--ui-test-open-recommended-detail")
-        app.launchEnvironment["CHORAI_UI_TEST_DETAIL_CARD_ID"] = sourceCardID
-        app.launchEnvironment[
-            "CHORAI_UI_TEST_MERGE_SESSION_SCOPE"
-        ] = sparkSessionScope
-        launchAuthenticatedApp()
+        let configuredExistingJobID = ProcessInfo.processInfo.environment[
+            "CHORAI_UI_TEST_TASK12_EXISTING_JOB_ID"
+        ].flatMap { $0.isEmpty ? nil : $0 }
+        let configuredExistingSessionScope = ProcessInfo.processInfo.environment[
+            "CHORAI_UI_TEST_TASK12_EXISTING_SESSION_SCOPE"
+        ].flatMap { $0.isEmpty ? nil : $0 }
+        if configuredExistingJobID == nil {
+            app.launchArguments.append("--ui-test-open-recommended-detail")
+            app.launchEnvironment["CHORAI_UI_TEST_DETAIL_CARD_ID"] = sourceCardID
+            app.launchEnvironment[
+                "CHORAI_UI_TEST_MERGE_SESSION_SCOPE"
+            ] = sparkSessionScope
+            launchAuthenticatedApp()
 
-        waitFor("screen.detail.loaded", timeout: 30)
-        tap("detail.menu.open")
-        tap("popup-menu.item.merge")
-        waitFor("screen.merge.loaded", timeout: 30)
-        waitForMergeCardsLoaded()
+            waitFor("screen.detail.loaded", timeout: 30)
+            tap("detail.menu.open")
+            tap("popup-menu.item.merge")
+            waitFor("screen.merge.loaded", timeout: 30)
+            waitForMergeCardsLoaded()
 
-        let searchInput = waitFor("merge.search.input", timeout: 20)
-        searchInput.tap()
-        searchInput.typeText(targetToken)
-        let targetCard = waitFor("merge.card.\(targetCardID)", timeout: 30)
-        dismissKeyboard()
-        if (targetCard.value as? String) != "selected" {
-            targetCard.coordinate(
-                withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)
-            ).tap()
+            for (cardID, query) in zip(
+                targetCardIDs,
+                sourceQueries.dropFirst()
+            ) {
+                if ownsSourceCards {
+                    replaceText("merge.search.input", with: query)
+                }
+                let targetCard = waitFor(
+                    "merge.card.\(cardID)",
+                    timeout: 30
+                )
+                dismissKeyboard()
+                if (targetCard.value as? String) != "selected" {
+                    targetCard.coordinate(
+                        withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)
+                    ).tap()
+                }
+                waitForAccessibilityValue(
+                    "merge.card.\(cardID)",
+                    expected: "selected"
+                )
+            }
+            tap("merge.action")
+            let rail = waitForExactlyOneMergeTaskRail(timeout: 30)
+            XCTAssertEqual(rail.value as? String, "1, working")
+            waitForMissing("screen.merge.loaded", timeout: 5)
+            let window = app.windows.firstMatch
+            XCTAssertTrue(window.waitForExistence(timeout: 3))
+            XCTAssertTrue(rail.isHittable)
+            XCTAssertTrue(
+                window.frame.insetBy(dx: -1, dy: -1).contains(rail.frame),
+                "The cold-detail fallback rail must remain inside the visible window"
+            )
+
+            waitForButton("detail.back").tap()
+        } else {
+            if let configuredExistingSessionScope {
+                app.launchEnvironment[
+                    "CHORAI_UI_TEST_MERGE_SESSION_SCOPE"
+                ] = configuredExistingSessionScope
+            }
+            launchAuthenticatedApp()
+            waitFor("screen.flow.content", timeout: 30)
         }
-        waitForAccessibilityValue(
-            "merge.card.\(targetCardID)",
-            expected: "selected"
+
+        waitForButton("tab.library").tap()
+        waitFor("screen.home.content", timeout: 30)
+        let measuredRail = waitForExactlyOneMergeTaskRail(timeout: 10)
+        let measuredNewNote = waitForButton("note.create")
+        XCTAssertEqual(
+            measuredRail.frame.midX,
+            measuredNewNote.frame.midX,
+            accuracy: 1.5,
+            "The measured Home anchor must supersede the cold-detail fallback"
         )
-        tap("merge.action")
-        let rail = waitForExactlyOneMergeTaskRail(timeout: 30)
-        XCTAssertEqual(rail.value as? String, "1, working")
-        waitForMissing("screen.merge.loaded", timeout: 5)
-        rail.tap()
-        waitFor("merge.job.id", timeout: 30)
-        let originalJobID = mergeAnchorValue("merge.job.id")
-        waitForButton("merge.back").tap()
+        XCTAssertEqual(
+            measuredNewNote.frame.minY - measuredRail.frame.maxY,
+            12,
+            accuracy: 2
+        )
+        measuredRail.tap()
+        let shouldTriggerRetry = ProcessInfo.processInfo.environment[
+            "CHORAI_UI_TEST_TASK12_TRIGGER_RETRY"
+        ] == "1"
+        let displayedJobID: String
+        if shouldTriggerRetry,
+           let configuredExistingJobID,
+           app.descendants(matching: .any)["merge.phase.failed"]
+            .waitForExistence(timeout: 30) {
+            displayedJobID = configuredExistingJobID
+        } else {
+            waitFor("merge.job.id", timeout: 30)
+            displayedJobID = mergeAnchorValue("merge.job.id")
+        }
+        let originalJobID = configuredExistingJobID ?? displayedJobID
+        XCTAssertEqual(displayedJobID, originalJobID)
+        if shouldTriggerRetry {
+            XCTAssertEqual(
+                try fetchSmokeMergeJob(
+                    jobID: originalJobID,
+                    token: session.token
+                ).status,
+                "FAILED"
+            )
+            let retry = waitForButton("merge.retry")
+            let window = app.windows.firstMatch
+            XCTAssertTrue(window.waitForExistence(timeout: 5))
+            XCTAssertTrue(
+                window.frame.insetBy(dx: -1, dy: -1).contains(retry.frame),
+                "Canonical Retry must remain fully inside the visible window: "
+                    + "retry=\(retry.frame), window=\(window.frame)"
+            )
+            XCTAssertTrue(
+                retry.isHittable,
+                "Canonical Retry must be directly hittable after recovery"
+            )
+            retry.tap()
+            let jobIDAnchor = waitFor("merge.job.id", timeout: 30)
+            let replacement = XCTNSPredicateExpectation(
+                predicate: NSPredicate { _, _ in
+                    let candidate = self.mergeAnchorValue("merge.job.id")
+                    return !candidate.isEmpty && candidate != originalJobID
+                },
+                object: jobIDAnchor
+            )
+            XCTAssertEqual(
+                XCTWaiter.wait(for: [replacement], timeout: 30),
+                .completed,
+                "Canonical Retry did not adopt one replacement Merge job"
+            )
+            let replacementJobID = mergeAnchorValue("merge.job.id")
+            XCTAssertNotEqual(replacementJobID, originalJobID)
+            let attachment = XCTAttachment(
+                string: "\(originalJobID) -> \(replacementJobID)"
+            )
+            attachment.name = "task12-canonical-retry-job-transition"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+            return
+        }
+        if ProcessInfo.processInfo.environment[
+            "CHORAI_UI_TEST_TASK12_RECOVERY_ONLY"
+        ] == "1" {
+            XCTAssertEqual(
+                try fetchSmokeMergeJob(
+                    jobID: originalJobID,
+                    token: session.token
+                ).status,
+                "FAILED"
+            )
+            let window = app.windows.firstMatch
+            XCTAssertTrue(window.waitForExistence(timeout: 5))
+            for identifier in ["merge.remove", "merge.retry"] {
+                let action = waitForButton(identifier)
+                XCTAssertTrue(
+                    window.frame.insetBy(dx: -1, dy: -1)
+                        .contains(action.frame),
+                    "\(identifier) must remain fully inside the visible window: "
+                        + "action=\(action.frame), window=\(window.frame)"
+                )
+                XCTAssertTrue(
+                    action.isHittable,
+                    "\(identifier) must remain directly hittable after recovery"
+                )
+            }
+            return
+        }
+        let readyBack = app.buttons["merge.artifact.back"]
+        if readyBack.waitForExistence(timeout: 2) {
+            readyBack.tap()
+        } else {
+            waitForButton("merge.back").tap()
+        }
         _ = waitForExactlyOneMergeTaskRail()
 
         app.terminate()
@@ -4005,21 +4946,100 @@ final class ArcNoteUITests: XCTestCase {
         launchAuthenticatedApp()
 
         waitFor("screen.flow.content", timeout: 30)
-        waitForExactlyOneMergeTaskRail(timeout: 20).tap()
+        waitForButton("tab.library").tap()
+        waitFor("screen.home.content", timeout: 30)
+        let resumedRail = waitForExactlyOneMergeTaskRail(timeout: 20)
+        let newNote = waitForButton("note.create")
+        XCTAssertEqual(resumedRail.frame.midX, newNote.frame.midX, accuracy: 1.5)
+        XCTAssertEqual(
+            newNote.frame.minY - resumedRail.frame.maxY,
+            12,
+            accuracy: 2,
+            "The live Merge rail must remain 12 points above New Note"
+        )
+        resumedRail.tap()
         captureMergeVisual("resume-affordance")
 
         waitFor("screen.merge.loaded", timeout: 30)
         XCTAssertEqual(mergeAnchorValue("merge.job.id"), originalJobID)
         waitForMergeArtifactReady(timeout: 360, maxRetries: 0)
         XCTAssertEqual(mergeAnchorValue("merge.job.status"), "ARTIFACT_READY")
+        XCTAssertTrue(waitFor("screen.merge.artifact").exists)
+        XCTAssertEqual(waitFor("merge.artifact.level").label, "Notable")
+        XCTAssertFalse(app.buttons["Preview"].exists)
+        XCTAssertFalse(app.buttons["Edit"].exists)
+        XCTAssertFalse(
+            app.descendants(matching: .any)["merge.artifact.rate"].exists,
+            "The artifact must not expose a separate rate control"
+        )
+        for forbiddenRateLabel in ["3", "Rate 3", "Rate: 3"] {
+            XCTAssertFalse(
+                app.staticTexts[forbiddenRateLabel].exists
+                    || app.buttons[forbiddenRateLabel].exists,
+                "The server-owned rate must be represented only by Notable"
+            )
+        }
         captureMergeVisual("preview-open-no-rail")
 
-        waitForButton("merge.back").tap()
+        let bodyMarker = " task12-body-\(uniqueSuffix)"
+        let editedTag = "task12-edited"
+        let editor = waitFor("merge.artifact.editor")
+        editor.coordinate(
+            withNormalizedOffset: CGVector(dx: 0.35, dy: 0.35)
+        ).tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 10))
+        app.typeText(bodyMarker)
+        dismissKeyboard()
+        waitForButton("merge.artifact.add-tag").tap()
+        let tagInput = waitFor("merge.artifact.tag-input")
+        tagInput.typeText(editedTag + "\n")
+        XCTAssertTrue(
+            waitForButton("merge.artifact.tag.\(editedTag)").exists
+        )
+        let savedState = waitFor("merge.artifact.sync-state")
+        let saved = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label == %@", "Saved"),
+            object: savedState
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [saved], timeout: 30),
+            .completed,
+            "The edited body and tags never reached a durable revision"
+        )
+
+        waitForButton("merge.artifact.back").tap()
         captureMergeVisual("preview-closed-complete-rail")
         waitForExactlyOneMergeTaskRail().tap()
         waitForMergeArtifactReady(timeout: 30)
+        XCTAssertTrue(
+            app.staticTexts.matching(
+                NSPredicate(format: "label CONTAINS %@", bodyMarker)
+            ).firstMatch.waitForExistence(timeout: 10)
+        )
+        XCTAssertTrue(waitForButton("merge.artifact.tag.\(editedTag)").exists)
 
-        tap("merge.commit")
+        app.terminate()
+        launchAuthenticatedApp()
+        waitFor("screen.flow.content", timeout: 30)
+        waitForExactlyOneMergeTaskRail(timeout: 20).tap()
+        waitForMergeArtifactReady(timeout: 30)
+        XCTAssertEqual(mergeAnchorValue("merge.job.id"), originalJobID)
+        XCTAssertTrue(
+            app.staticTexts.matching(
+                NSPredicate(format: "label CONTAINS %@", bodyMarker)
+            ).firstMatch.waitForExistence(timeout: 10)
+        )
+        XCTAssertTrue(waitForButton("merge.artifact.tag.\(editedTag)").exists)
+
+        let selectedArtifact = try fetchSmokeMergeArtifact(
+            jobID: originalJobID,
+            token: session.token
+        )
+        XCTAssertGreaterThanOrEqual(selectedArtifact.latestRevision, 2)
+        XCTAssertEqual(selectedArtifact.presentation.rate, 3)
+        XCTAssertTrue(selectedArtifact.presentation.tags.contains(editedTag))
+
+        waitForEnabled(waitForButton("merge.artifact.accept")).tap()
         committedCardID = waitForCommittedMergeCard(
             excluding: sourceCardID,
             timeout: 90
@@ -4040,11 +5060,9 @@ final class ArcNoteUITests: XCTestCase {
             id: committedCardID,
             token: session.token
         )
-        XCTAssertFalse(
-            committedCard.content
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-                .isEmpty
-        )
+        XCTAssertTrue(committedCard.content.contains(bodyMarker))
+        XCTAssertTrue(committedCard.tags.contains(editedTag))
+        XCTAssertEqual(committedCard.rate, 3)
         waitForLoadedDetailCard(committedCardID, timeout: 30)
         waitForMissing("merge.task-rail", timeout: 30)
         RunLoop.current.run(until: Date().addingTimeInterval(1))
@@ -8063,6 +9081,46 @@ final class ArcNoteUITests: XCTestCase {
         )
     }
 
+    private func assertFocusedMergeBodyLineIsReadable(
+        _ lineElement: XCUIElement,
+        editor: XCUIElement,
+        keyboard: XCUIElement,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        XCTAssertEqual(
+            editor.value as? String,
+            "Editing",
+            file: file,
+            line: line
+        )
+        XCTAssertTrue(keyboard.exists, file: file, line: line)
+        XCTAssertTrue(lineElement.exists, file: file, line: line)
+        XCTAssertTrue(
+            lineElement.isHittable,
+            "Focused Merge body line must remain readable and interactive; "
+                + "line=\(lineElement.frame), editor=\(editor.frame), "
+                + "keyboard=\(keyboard.frame)",
+            file: file,
+            line: line
+        )
+        XCTAssertGreaterThanOrEqual(
+            lineElement.frame.minY,
+            editor.frame.minY,
+            file: file,
+            line: line
+        )
+        XCTAssertLessThanOrEqual(
+            lineElement.frame.maxY,
+            min(editor.frame.maxY, keyboard.frame.minY - 8),
+            "Focused Merge body line must remain fully above the keyboard; "
+                + "line=\(lineElement.frame), editor=\(editor.frame), "
+                + "keyboard=\(keyboard.frame)",
+            file: file,
+            line: line
+        )
+    }
+
     private func openSparkFromDetail(
         cardID: String,
         session: SmokeSession
@@ -9738,9 +10796,10 @@ final class ArcNoteUITests: XCTestCase {
             let isPinned: Bool
             let tags: [String]
             let backgroundMediaRef: String?
+            let rate: Int
 
             enum CodingKeys: String, CodingKey {
-                case id, title, content, tags
+                case id, title, content, tags, rate
                 case contentJSON = "content_json"
                 case isPublic = "is_public"
                 case isPinned = "is_pinned"
@@ -9811,7 +10870,38 @@ final class ArcNoteUITests: XCTestCase {
     }
 
     private struct SmokeMergeJobResponse: Decodable {
+        let jobID: String
         let status: String
+        let artifactID: String
+
+        enum CodingKeys: String, CodingKey {
+            case jobID = "jobId"
+            case status
+            case artifactID = "artifactId"
+        }
+    }
+
+    private struct SmokeMergeArtifactResponse: Decodable {
+        let artifactID: String
+        let jobID: String
+        let latestRevision: Int
+        let latestHash: String
+        let presentationHash: String
+        let presentation: Presentation
+
+        struct Presentation: Decodable {
+            let tags: [String]
+            let rate: Int
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case artifactID = "artifactId"
+            case jobID = "jobId"
+            case latestRevision
+            case latestHash
+            case presentationHash
+            case presentation
+        }
     }
 
     private struct AssetStatusResponse: Decodable {
@@ -10945,6 +12035,25 @@ final class ArcNoteUITests: XCTestCase {
         return try sendRequest(
             request,
             responseType: SmokeMergeJobResponse.self
+        )
+    }
+
+    private func fetchSmokeMergeArtifact(
+        jobID: String,
+        token: String
+    ) throws -> SmokeMergeArtifactResponse {
+        let baseURL = UITestAPIConfiguration.baseURL
+        guard let url = URL(
+            string: "\(baseURL)/api/merge/jobs/\(jobID)/artifact"
+        ) else {
+            throw URLError(.badURL)
+        }
+
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        return try sendRequest(
+            request,
+            responseType: SmokeMergeArtifactResponse.self
         )
     }
 
