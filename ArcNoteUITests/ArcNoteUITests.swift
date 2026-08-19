@@ -4904,6 +4904,155 @@ final class ArcNoteUITests: XCTestCase {
         )
     }
 
+    func testTask12LiveSiblingDiscardRemovesOnlyTargetJob() throws {
+        let sourceCardIDs = ProcessInfo.processInfo.environment[
+            "CHORAI_UI_TEST_TASK12_SIBLING_SOURCE_IDS"
+        ]?.split(separator: ",").map(String.init) ?? []
+        guard sourceCardIDs.count == 3 else {
+            throw XCTSkip("Task 12 live sibling source IDs are not configured")
+        }
+
+        let session = try requireSmokeSession()
+        seedAppSession(session)
+        let sourceCardID = sourceCardIDs[0]
+        let targetCardIDs = Array(sourceCardIDs.dropFirst())
+        let configuredExistingJobID = ProcessInfo.processInfo.environment[
+            "CHORAI_UI_TEST_TASK12_SIBLING_EXISTING_JOB_ID"
+        ].flatMap { $0.isEmpty ? nil : $0 }
+        let configuredExistingSessionScope = ProcessInfo.processInfo.environment[
+            "CHORAI_UI_TEST_TASK12_SIBLING_EXISTING_SESSION_SCOPE"
+        ].flatMap { $0.isEmpty ? nil : $0 }
+
+        func startMerge() {
+            waitFor("screen.detail.loaded", timeout: 30)
+            tap("detail.menu.open")
+            tap("popup-menu.item.merge")
+            waitFor("screen.merge.loaded", timeout: 30)
+            waitForMergeCardsLoaded()
+            for cardID in targetCardIDs {
+                let target = waitFor("merge.card.\(cardID)", timeout: 30)
+                if (target.value as? String) != "selected" {
+                    target.coordinate(
+                        withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)
+                    ).tap()
+                }
+                waitForAccessibilityValue(
+                    "merge.card.\(cardID)",
+                    expected: "selected"
+                )
+            }
+            tap("merge.action")
+            waitForMissing("screen.merge.loaded", timeout: 10)
+        }
+
+        app.launchArguments.append("--ui-test-open-recommended-detail")
+        app.launchEnvironment["CHORAI_UI_TEST_DETAIL_CARD_ID"] = sourceCardID
+        app.launchEnvironment[
+            "CHORAI_UI_TEST_MERGE_SESSION_SCOPE"
+        ] = configuredExistingSessionScope ?? sparkSessionScope
+        launchAuthenticatedApp()
+
+        if configuredExistingJobID == nil {
+            startMerge()
+        }
+        let firstRail = waitForExactlyOneMergeTaskRail(timeout: 30)
+        XCTAssertTrue(
+            (firstRail.value as? String)?.hasPrefix("1,") == true,
+            "The initial rail must expose exactly one task"
+        )
+        firstRail.tap()
+        waitFor("merge.job.id", timeout: 30)
+        let firstJobID = mergeAnchorValue("merge.job.id")
+        XCTAssertFalse(firstJobID.isEmpty)
+        if let configuredExistingJobID {
+            XCTAssertEqual(firstJobID, configuredExistingJobID)
+        }
+        let readyBack = app.buttons["merge.artifact.back"]
+        if readyBack.waitForExistence(timeout: 2) {
+            readyBack.tap()
+        } else {
+            waitForButton("merge.back").tap()
+        }
+        _ = waitForExactlyOneMergeTaskRail(timeout: 10)
+
+        startMerge()
+        let twoTaskRail = waitForExactlyOneMergeTaskRail(timeout: 30)
+        let twoTasks = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value BEGINSWITH %@", "2,"),
+            object: twoTaskRail
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [twoTasks], timeout: 30),
+            .completed,
+            "Both accepted sibling jobs must appear in the sole global rail"
+        )
+
+        twoTaskRail.tap()
+        waitForButton("merge.task.1").tap()
+        waitFor("merge.job.id", timeout: 30)
+        let discardedJobID = mergeAnchorValue("merge.job.id")
+        XCTAssertFalse(discardedJobID.isEmpty)
+        waitForMergeArtifactReady(timeout: 180, maxRetries: 0)
+
+        waitForButton("merge.artifact.discard").tap()
+        let discardDialog = app.sheets["Discard Merge?"]
+        XCTAssertTrue(discardDialog.waitForExistence(timeout: 3))
+        let confirmDiscard = discardDialog.buttons["Discard"]
+        XCTAssertTrue(confirmDiscard.waitForExistence(timeout: 3))
+        confirmDiscard.tap()
+
+        let remainingRail = waitForExactlyOneMergeTaskRail(timeout: 30)
+        let oneTask = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value BEGINSWITH %@", "1,"),
+            object: remainingRail
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [oneTask], timeout: 30),
+            .completed,
+            "Discard must remove only its target from the global rail"
+        )
+        XCTAssertEqual(
+            try fetchSmokeMergeJob(
+                jobID: discardedJobID,
+                token: session.token
+            ).status,
+            "CANCELLED"
+        )
+
+        remainingRail.tap()
+        waitFor("merge.job.id", timeout: 30)
+        let siblingJobID = mergeAnchorValue("merge.job.id")
+        XCTAssertFalse(siblingJobID.isEmpty)
+        XCTAssertNotEqual(siblingJobID, discardedJobID)
+        XCTAssertTrue(
+            firstJobID == discardedJobID || firstJobID == siblingJobID,
+            "The original accepted job must remain one of the two siblings"
+        )
+        waitForMergeArtifactReady(timeout: 180, maxRetries: 0)
+        XCTAssertEqual(
+            try fetchSmokeMergeJob(
+                jobID: siblingJobID,
+                token: session.token
+            ).status,
+            "ARTIFACT_READY"
+        )
+        XCTAssertEqual(
+            try fetchSmokeMergeJob(
+                jobID: discardedJobID,
+                token: session.token
+            ).status,
+            "CANCELLED",
+            "The sibling reaching Preview must not revive the discarded job"
+        )
+
+        let evidence = XCTAttachment(
+            string: "discarded=\(discardedJobID) sibling=\(siblingJobID)"
+        )
+        evidence.name = "task12-live-sibling-discard-isolation"
+        evidence.lifetime = .keepAlways
+        add(evidence)
+    }
+
     func testMergeRelaunchResumesCommitsAndOpensCanonicalCard() throws {
         let session = try requireSmokeSession()
         seedAppSession(session)

@@ -1,7 +1,7 @@
 # iOS Merge WYSIWYG preview verification
 
 Date: 2026-08-19
-Result: passed, with the operational limitations recorded below
+Result: passed
 
 ## Scope
 
@@ -10,7 +10,9 @@ the iOS app. It verifies one WYSIWYG surface for scrolling and editing, shared
 Card Editor tag presentation, the shared six-tier material, durable recovery of
 the same job and draft, exact revision commit, the global numeric task rail,
 compact-device reachability, accessibility settings, and the approved visual
-matrix.
+matrix. A final whole-range review also verifies that a clean HTTP 409 server
+adoption reprojects the canonical document and tags into the open editor
+without losing an unfinished tag or issuing a stale replacement save.
 
 The frozen bases were Go
 `047a5fbb00c5a25a54c6a748e5f69bf4fff429d2` and iOS
@@ -30,13 +32,15 @@ The frozen bases were Go
 - The real flow ran against isolated Task 12 ontology/domain schemas. Provider
   instability was separated from product behavior by a repository-supported,
   authenticated deterministic fixture runtime on a task-owned loopback port.
-  No protocol response was invented and no source Card was created.
+  No protocol response was invented. Three task-only source Cards used by the
+  sibling test were permanently deleted after the proof; no pre-existing Card
+  was changed.
 - Private tokens, credentials, URLs, fixture body text, and source Card IDs are
   intentionally absent from this document and the image assets.
 
 ## Real cross-platform proof
 
-The sole authorized post-fix fresh job was
+The canonical post-fix commit job was
 `mjob_5834a876a5c578a3986702cc`. It reached `COMMITTED` through the
 normal product flow after the app:
 
@@ -76,14 +80,53 @@ They were confined to the isolated authority and removed with that authority
 after evidence capture. They are provider-diagnosis evidence, not product
 success evidence.
 
+## Live sibling Discard proof
+
+A final product-boundary run created two real jobs from the same ordered set of
+three task-owned source Cards. The sole global rail displayed two tasks. The
+test opened one completed artifact, used the destructive `Discard`
+confirmation, and proved that only that job disappeared from the rail:
+
+- `mjob_258441c43d722cf89ae17deb` became `CANCELLED` through the visible
+  WYSIWYG Discard action;
+- `mjob_afce66aefa3b886c938949fe` remained `ARTIFACT_READY`, stayed as the one
+  surviving rail task, and was opened successfully;
+- both jobs retained exactly the same three frozen source IDs in source order;
+- the surviving sibling was cancelled exactly once only during cleanup.
+
+The fresh result bundle is
+`/private/tmp/chorai-task12-live-sibling-discard-20260819-v3.xcresult`: 1 test,
+0 failures, 48.530 seconds. Read-only database verification independently
+confirmed the `CANCELLED`/`ARTIFACT_READY` split before cleanup.
+
 ## Final iOS behavior gates
 
 Fresh, non-parallel UI batches were run from the final built test runner.
 
 | Device | Result bundle | Result | Coverage |
 | --- | --- | ---: | --- |
-| iPhone 17 Pro | `/private/tmp/chorai-task12-pro-final-affected-20260819.xcresult` | 15/15 passed | selection, Working cancel, rail count/fifth/cold/measured/rotation, WYSIWYG edit/reopen, focused and unfocused rotation, tag-focus width-slot race, default tags, busy Accept, Discard confirmation |
-| iPhone SE 3 | `/private/tmp/chorai-task12-se-final-affected-20260819.xcresult` | 11/11 passed | WYSIWYG edit/reopen, focused and unfocused rotation, tag-focus width-slot race, default tags, accessibility Dynamic Type, busy Accept, Discard confirmation, fifth/cold/measured rail |
+| iPhone 17 Pro | `/private/tmp/chorai-task12-post-sibling-pro-v1.xcresult` | 18/18 passed | selection, Working cancel, rail count/fifth/cold/measured/rotation, WYSIWYG edit/reopen, focused and unfocused rotation, tag-focus width-slot race, default tags, busy Accept, Discard confirmation, timeout Retry, and both clean-409 controller cases |
+| iPhone SE 3 | `/private/tmp/chorai-task12-post-sibling-se-v1.xcresult` | 14/14 passed | WYSIWYG edit/reopen, focused and unfocused rotation, tag-focus width-slot race, default tags, accessibility Dynamic Type, busy Accept, Discard confirmation, timeout Retry, fifth/cold/measured rail, and both clean-409 controller cases |
+
+The post-matrix whole-range review found and fixed one controller/store
+reconciliation gap. In the controlled case, revision 1 content was edited and
+returned exactly to its acknowledged value while its PUT was in flight; the
+PUT received 409 and the server supplied canonical revision 2. The final
+controller now reprojects only when the Store is clean, has no pending save,
+and the canonical document/tag identity differs from the currently projected
+identity. Ordinary local writes and save acknowledgements do not rebuild the
+editor. Automatic adoption preserves an unfinished tag input, while an
+explicit Reload Server action retains its documented discard semantics.
+
+The final controller bundles prove canonical revision 2 becomes visible on
+both phones, an unfinished tag is appended to the adopted server tags and
+saved against revision 2, Accept performs no stale replacement PUT, and commit
+is invoked exactly once:
+
+- `/private/tmp/chorai-task12-clean409-controller-green-20260819-v1.xcresult`
+- `/private/tmp/chorai-task12-clean409-controller-se-green-20260819-v1.xcresult`
+- `/private/tmp/chorai-task12-clean409-pending-tag-green-20260819-v2.xcresult`
+- `/private/tmp/chorai-task12-clean409-pending-tag-se-green-20260819-v1.xcresult`
 
 The compact keyboard regression was tested explicitly. Portrait focus preserves
 the editor frame after settling. Landscape focus reveals at least one readable
@@ -112,16 +155,14 @@ and make the remaining tasks reachable by scrolling.
 | `git diff --check` and exact cached-path audits | passed |
 
 The final builds used isolated DerivedData at
-`/private/tmp/chorai-task12-final-debug-build-20260819` and
-`/private/tmp/chorai-task12-final-production-build-20260819` with automatic
-package resolution and updates disabled.
+`/private/tmp/chorai-task12-post-sibling-debug-build-20260819` and
+`/private/tmp/chorai-task12-post-sibling-production-build-20260819` with
+automatic package resolution and updates disabled.
 
-Go unit, affected integration, full test, build, vet, contract, and isolated
-presentation-transition gates passed. The repository cutover command could not
-refresh its exact pinned registry image within the bounded 15-minute window;
-only that task-owned command tree was terminated. This is recorded as registry
-infrastructure timeout, not as a passing cutover gate and not as a product test
-failure.
+Go unit, affected integration, full test, build, vet, contract, isolated
+presentation-transition, and repository cutover gates passed. The fresh
+`make verify-merge-vnext-cutover` run completed every hermetic proof and ended
+with `MERGE_VNEXT_HARD_CUTOVER_QUALIFIED`.
 
 ## Accessibility settings
 
@@ -181,25 +222,31 @@ Cleanup was exact and completed only after the final read-only evidence pass:
   and the three task-only note-history projection rows left by the mixed-schema
   fixture seam were removed by exact IDs in the same guarded cleanup
   transaction;
+- all three sibling-test source Cards were soft-deleted and permanently deleted
+  through the canonical API; a guarded transaction then removed exactly three
+  default bridge assets, three versions, three ownership relations, three note
+  documents, three document versions, and three block-index rows;
+- the surviving sibling was cancelled exactly once after the UI isolation
+  proof; both sibling jobs were terminal before authority removal;
 - both Task 12 schemas, the task-only canonical MySQL container, and its sole
   anonymous volume were removed;
 - the default runtime, default MySQL container, `domain` and `ontology`
   schemas, and the pre-existing set of 22 `ARTIFACT_READY` jobs remained
   present and unchanged.
 
-The cleanup guard observed exact mutation counts of 3 bridge rows, 2 block
-index rows, and 1 note-document row. Final verification found zero Task 12
-schemas, zero output projection rows, and no task backend/runtime listener.
+The first cleanup guard observed exact mutation counts of 3 bridge rows, 2
+block-index rows, and 1 note-document row. The sibling cleanup guard added eight
+independent precondition/row-count/postcondition checks around its exact
+3/3/3 ontology and 3/3/3 domain deletes. Final verification found zero Task 12
+schemas, zero task projection rows, and no task backend/runtime listener. The
+pre-existing default set remained 22 `ARTIFACT_READY` jobs with the identical
+sorted-ID SHA-256
+`56f38dacfa0ef019ea99303deba5de1b84ae64f9e31e5b2833a3ce3ee65cfb22`.
 
 ## Operational limitations
 
 - The populated default development transition remains blocked and is not
   reported as passed.
-- The one allowed post-fix live job was reserved for the complete
-  edit/relaunch/Accept/DTO proof. No extra live sibling was created after that
-  boundary. Discard and sibling isolation are therefore covered by the final
-  Pro/SE controlled product fixtures plus Go cancellation/commit invariants,
-  not claimed as a second live sibling run.
 - Simulator evidence cannot independently prove physical OLED/P3 rendering;
   this is a non-blocking hardware-only caveat.
 
@@ -208,4 +255,6 @@ schemas, zero output projection rows, and no task backend/runtime listener.
 - Go product fix: `dd8370762ac0e25bc2ab8ddbdc724e6ddd0ff028`
 - Go Task 12 QA: `32aeb60c4b904aa26809b09a2f30b521077fd549`
 - iOS reachability/layout fix: `c855fc8052dd4629b8186df6f9485ee140efe852`
-- iOS Task 12 QA: this verification commit
+- iOS Task 12 QA: `5995cc2ad133524d022962e117d8fad0cad99496`
+- iOS canonical-draft reconciliation fix:
+  `cdf003bc2172aa8a379effac6a604e10738e473e`
