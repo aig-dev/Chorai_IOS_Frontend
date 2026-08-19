@@ -69,7 +69,15 @@ final class MergeTaskRailSourceContractTests: XCTestCase {
             )
         )
         XCTAssertTrue(rail.contains("MergeTaskRailAnchorStore()"))
-        XCTAssertTrue(rail.contains("newNoteFrame.minY - 12"))
+        XCTAssertTrue(
+            rail.contains("static let noteClearance: CGFloat = 12")
+        )
+        XCTAssertTrue(
+            rail.contains(
+                "newNoteFrame.minY\n"
+                    + "                    - MergeTaskRailLayout.noteClearance"
+            )
+        )
         XCTAssertFalse(rail.contains(".padding(.top, 112)"))
     }
 

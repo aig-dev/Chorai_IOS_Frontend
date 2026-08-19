@@ -2,6 +2,40 @@ import CoreFlow
 import Combine
 import SwiftUI
 
+private enum MergeTaskRailLayout {
+    static let maximumVisibleTaskCount = 4
+    static let taskHeight: CGFloat = 44
+    static let taskSpacing: CGFloat = 8
+    static let collapsedHeight: CGFloat = 49
+    static let expandedSectionSpacing: CGFloat = 8
+    static let noteClearance: CGFloat = 12
+
+    static func visibleTaskCount(
+        summaryCount: Int,
+        availableHeight: CGFloat
+    ) -> Int {
+        let maximum = min(summaryCount, maximumVisibleTaskCount)
+        guard maximum > 0 else { return 0 }
+        for count in stride(from: maximum, through: 1, by: -1)
+        where railHeight(visibleTaskCount: count) <= availableHeight {
+            return count
+        }
+        return 1
+    }
+
+    static func listHeight(visibleTaskCount: Int) -> CGFloat {
+        let count = CGFloat(max(0, visibleTaskCount))
+        return count * taskHeight
+            + max(0, count - 1) * taskSpacing
+    }
+
+    static func railHeight(visibleTaskCount: Int) -> CGFloat {
+        listHeight(visibleTaskCount: visibleTaskCount)
+            + expandedSectionSpacing
+            + collapsedHeight
+    }
+}
+
 struct MergeTaskRail: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityReduceTransparency)
@@ -10,6 +44,7 @@ struct MergeTaskRail: View {
     let summaries: [MergeTaskSummary]
     @Binding var isExpanded: Bool
     let onSelect: (String) -> Void
+    let visibleTaskCapacity: Int
 
     private var hasActiveTask: Bool {
         summaries.contains {
@@ -39,10 +74,13 @@ struct MergeTaskRail: View {
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            VStack(alignment: .center, spacing: 8) {
+            VStack(
+                alignment: .center,
+                spacing: MergeTaskRailLayout.expandedSectionSpacing
+            ) {
                 if isExpanded, summaries.count > 1 {
                     ScrollView(.vertical, showsIndicators: false) {
-                        VStack(spacing: 8) {
+                        VStack(spacing: MergeTaskRailLayout.taskSpacing) {
                             ForEach(
                                 Array(summaries.enumerated()),
                                 id: \.element.jobID
@@ -74,8 +112,9 @@ struct MergeTaskRail: View {
     }
 
     private var expandedListHeight: CGFloat {
-        let count = CGFloat(min(summaries.count, 4))
-        return count * 44 + max(0, count - 1) * 8
+        MergeTaskRailLayout.listHeight(
+            visibleTaskCount: min(summaries.count, visibleTaskCapacity)
+        )
     }
 
     private var collapsedControl: some View {
@@ -126,7 +165,11 @@ struct MergeTaskRail: View {
                     .accessibilityIdentifier("merge.task-count")
             }
         }
-        .frame(width: 49, height: 49, alignment: .bottom)
+        .frame(
+            width: MergeTaskRailLayout.collapsedHeight,
+            height: MergeTaskRailLayout.collapsedHeight,
+            alignment: .bottom
+        )
     }
 
     private var railShell: some View {
@@ -226,7 +269,10 @@ struct MergeTaskRail: View {
                         .offset(x: 3, y: -3)
                 }
             }
-            .frame(width: 44, height: 44)
+            .frame(
+                width: MergeTaskRailLayout.taskHeight,
+                height: MergeTaskRailLayout.taskHeight
+            )
         }
         .buttonStyle(.plain)
         .accessibilityLabel(
@@ -304,10 +350,11 @@ struct MergeTaskRailShellOverlay<Callout: View>: View {
             MergeTaskRail(
                 summaries: summaries,
                 isExpanded: $isExpanded,
-                onSelect: onSelect
+                onSelect: onSelect,
+                visibleTaskCapacity: visibleTaskCapacity
             )
             .frame(
-                width: 49,
+                width: MergeTaskRailLayout.collapsedHeight,
                 height: railHeight,
                 alignment: .bottom
             )
@@ -315,7 +362,10 @@ struct MergeTaskRailShellOverlay<Callout: View>: View {
                 VStack(alignment: .trailing, spacing: 10) {
                     callout
                     Color.clear
-                        .frame(width: 49, height: railHeight)
+                        .frame(
+                            width: MergeTaskRailLayout.collapsedHeight,
+                            height: railHeight
+                        )
                         .allowsHitTesting(false)
                 }
                 .fixedSize(horizontal: true, vertical: true)
@@ -326,7 +376,9 @@ struct MergeTaskRailShellOverlay<Callout: View>: View {
             }
             .position(
                 x: newNoteFrame.midX,
-                y: newNoteFrame.minY - 12 - railHeight / 2
+                y: newNoteFrame.minY
+                    - MergeTaskRailLayout.noteClearance
+                    - railHeight / 2
             )
         }
         .frame(
@@ -348,9 +400,22 @@ struct MergeTaskRailShellOverlay<Callout: View>: View {
     }
 
     private var railHeight: CGFloat {
-        guard isExpanded, summaries.count > 1 else { return 49 }
-        let visibleCount = min(summaries.count, 4)
-        return CGFloat(visibleCount * 52 + 49)
+        guard isExpanded, summaries.count > 1 else {
+            return MergeTaskRailLayout.collapsedHeight
+        }
+        return MergeTaskRailLayout.railHeight(
+            visibleTaskCount: visibleTaskCapacity
+        )
+    }
+
+    private var visibleTaskCapacity: Int {
+        MergeTaskRailLayout.visibleTaskCount(
+            summaryCount: summaries.count,
+            availableHeight: max(
+                0,
+                newNoteFrame.minY - MergeTaskRailLayout.noteClearance
+            )
+        )
     }
 }
 
@@ -753,11 +818,15 @@ private struct MergeTaskRailRouteFixtureScreen: View {
         taskCount = Int(
             environment["CHORAI_UI_TEST_MERGE_TASK_COUNT"] ?? "3"
         ) ?? 3
+        let startsOnDetail = environment[
+            "CHORAI_UI_TEST_MERGE_START_DETAIL"
+        ] == "1"
         _isExpanded = State(
             initialValue: environment[
                 "CHORAI_UI_TEST_MERGE_TASK_EXPANDED"
             ] == "1"
         )
+        _path = State(initialValue: startsOnDetail ? [.homeDetail] : [])
     }
 
     private var summaries: [MergeTaskSummary] {

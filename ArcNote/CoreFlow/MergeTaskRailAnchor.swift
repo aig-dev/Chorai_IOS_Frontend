@@ -2,6 +2,10 @@ import SwiftUI
 
 @MainActor
 final class MergeTaskRailAnchorStore: ObservableObject {
+    private static let fallbackTrailingInset: CGFloat = 20
+    private static let fallbackBottomInset: CGFloat = 130
+    private static let fallbackNoteSize = CGSize(width: 56, height: 56)
+
     private struct CachedSlot: Equatable {
         let measurementContainerSize: CGSize
         let trailingInset: CGFloat
@@ -57,7 +61,21 @@ final class MergeTaskRailAnchorStore: ObservableObject {
               containerSize.height > 0 else {
             return nil
         }
-        return cachedSlot?.newNoteFrame(in: containerSize)
+        if let cachedSlot {
+            return cachedSlot.newNoteFrame(in: containerSize)
+        }
+        guard containerSize.width
+                >= Self.fallbackNoteSize.width + Self.fallbackTrailingInset,
+              containerSize.height
+                >= Self.fallbackNoteSize.height + Self.fallbackBottomInset else {
+            return nil
+        }
+        return CachedSlot(
+            measurementContainerSize: containerSize,
+            trailingInset: Self.fallbackTrailingInset,
+            bottomInset: Self.fallbackBottomInset,
+            noteSize: Self.fallbackNoteSize
+        ).newNoteFrame(in: containerSize)
     }
 }
 

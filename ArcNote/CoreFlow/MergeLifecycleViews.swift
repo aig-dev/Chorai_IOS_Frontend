@@ -519,34 +519,30 @@ private struct MergeLifecycleView: View {
 
     var body: some View {
         KeyboardStableViewport(isFocused: isTextInputFocused) { _ in
-            ZStack {
-                atmosphere
-
-                VStack(spacing: 0) {
-                    if !isArtifactPresentation {
-                        header
-                    }
-                    if !isArtifactPresentation,
-                       let onboardingStore {
-                        OnboardingGuideLine(
-                            store: onboardingStore,
-                            allowedStates: [
-                                "product_merge_intro",
-                                "product_merge_preview"
-                            ]
-                        )
-                        .adaptiveContentGutter()
-                        .padding(.bottom, 10)
-                    }
-                    phaseContent
+            VStack(spacing: 0) {
+                if !isArtifactPresentation {
+                    header
                 }
-                .frame(
-                    maxWidth: .infinity,
-                    maxHeight: .infinity,
-                    alignment: .top
-                )
-
+                if !isArtifactPresentation,
+                   let onboardingStore {
+                    OnboardingGuideLine(
+                        store: onboardingStore,
+                        allowedStates: [
+                            "product_merge_intro",
+                            "product_merge_preview"
+                        ]
+                    )
+                    .adaptiveContentGutter()
+                    .padding(.bottom, 10)
+                }
+                phaseContent
             }
+            .frame(
+                maxWidth: .infinity,
+                maxHeight: .infinity,
+                alignment: .top
+            )
+            .background { atmosphere }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if case .selection = store.phase {
@@ -828,10 +824,6 @@ private struct MergeLifecycleView: View {
 
     private var artifactContent: some View {
         ZStack {
-            selectionContent
-                .allowsHitTesting(false)
-                .accessibilityHidden(true)
-
             Color.black.opacity(reduceTransparency ? 0.72 : 0.58)
                 .ignoresSafeArea()
                 .accessibilityHidden(true)
@@ -850,6 +842,11 @@ private struct MergeLifecycleView: View {
                     )
                 }
             }
+        }
+        .background {
+            selectionContent
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
         }
     }
 
@@ -1324,28 +1321,6 @@ struct MergeArtifactVisualFixtureScreen: View {
 
     var body: some View {
         ZStack {
-            Image("home_bg")
-                .resizable()
-                .scaledToFill()
-                .ignoresSafeArea()
-
-            VStack(spacing: 18) {
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .fill(Color.white.opacity(0.08))
-                    .frame(height: 180)
-                    .adaptiveContentGutter()
-
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .fill(Color.white.opacity(0.06))
-                    .frame(height: 250)
-                    .adaptiveContentGutter()
-            }
-            .foregroundStyle(.white)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .padding(.top, 54)
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
-
             Color.black.opacity(0.58)
                 .ignoresSafeArea()
                 .accessibilityHidden(true)
@@ -1376,6 +1351,30 @@ struct MergeArtifactVisualFixtureScreen: View {
                 .accessibilityValue("1, complete")
                 .accessibilityIdentifier("merge.task-rail")
             }
+        }
+        .background {
+            VStack(spacing: 18) {
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(Color.white.opacity(0.08))
+                    .frame(height: 180)
+                    .adaptiveContentGutter()
+
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(Color.white.opacity(0.06))
+                    .frame(height: 250)
+                    .adaptiveContentGutter()
+            }
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .padding(.top, 54)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+        }
+        .background {
+            Image("home_bg")
+                .resizable()
+                .scaledToFill()
+                .ignoresSafeArea()
         }
         .preferredColorScheme(.dark)
         .environment(
