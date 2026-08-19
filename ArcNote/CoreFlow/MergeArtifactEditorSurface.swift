@@ -3,6 +3,7 @@ import SwiftUI
 
 @MainActor
 struct MergeArtifactEditorSurface: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ObservedObject var controller: MergeArtifactDraftController
     let onBack: () -> Void
 
@@ -38,7 +39,13 @@ struct MergeArtifactEditorSurface: View {
             let layoutViewportHeight = controller.bodyModel.isBodyFocused
                 ? restingViewportHeight
                 : viewportHeight
-            let surfaceHeight = max(0, layoutViewportHeight - 52)
+            let surfaceVerticalInset: CGFloat = dynamicTypeSize.isAccessibilitySize
+                ? 0
+                : 52
+            let surfaceHeight = max(
+                0,
+                layoutViewportHeight - surfaceVerticalInset
+            )
             let actionAreaHeight: CGFloat = 78
             VStack(spacing: 0) {
                 ScrollViewReader { proxy in

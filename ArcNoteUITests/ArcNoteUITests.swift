@@ -1450,17 +1450,43 @@ final class ArcNoteUITests: XCTestCase {
 
         XCTAssertTrue(waitFor("screen.merge.artifact").exists)
         captureMergeVisual("artifact-notable-long-dynamic-type")
-        for action in [
+        let window = app.windows.firstMatch
+        XCTAssertTrue(window.waitForExistence(timeout: 3))
+        let actions = [
             waitForButton("merge.artifact.discard"),
             waitForButton("merge.artifact.accept"),
-        ] {
+        ]
+        for action in actions {
             XCTAssertTrue(action.isHittable)
             XCTAssertGreaterThanOrEqual(action.frame.width, 44)
             XCTAssertGreaterThanOrEqual(action.frame.height, 44)
+            XCTAssertGreaterThanOrEqual(action.frame.minY, window.frame.minY)
+            XCTAssertLessThanOrEqual(action.frame.maxY, window.frame.maxY)
         }
         let editor = waitFor("merge.artifact.editor")
         XCTAssertTrue(editor.isHittable)
         let tagViewport = waitFor("merge.artifact.tags")
+        let syncState = waitFor("merge.artifact.sync-state")
+        let actionTop = actions.map(\.frame.minY).min() ?? window.frame.maxY
+        XCTAssertLessThanOrEqual(
+            editor.frame.maxY,
+            tagViewport.frame.minY - 8,
+            "AX editor and tag row must remain separate; "
+                + "editor=\(editor.frame), tags=\(tagViewport.frame)"
+        )
+        XCTAssertLessThanOrEqual(
+            tagViewport.frame.maxY,
+            syncState.frame.minY - 4,
+            "AX tag and sync rows must both render as complete rows; "
+                + "tags=\(tagViewport.frame), sync=\(syncState.frame)"
+        )
+        XCTAssertLessThanOrEqual(
+            syncState.frame.maxY,
+            actionTop - 8,
+            "AX sync state must be fully visible above the pinned actions; "
+                + "sync=\(syncState.frame), actionTop=\(actionTop)"
+        )
+        XCTAssertGreaterThanOrEqual(syncState.frame.minY, window.frame.minY)
         let addTag = waitForButton("merge.artifact.add-tag")
         if !addTag.isHittable || addTag.frame.maxX > tagViewport.frame.maxX {
             tagViewport.swipeLeft()

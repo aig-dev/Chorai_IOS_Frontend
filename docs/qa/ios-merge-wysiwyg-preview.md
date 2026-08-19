@@ -181,21 +181,80 @@ The final UI batches prove full `Discard` and `Accept` labels, 52-point mutation
 targets, 44-point rail rows, keyboard dismissal, and no accessibility-only
 symbol crowding on the SE.
 
+### iPhone SE 3 accessibility-layout repair
+
+The previous AX5 capture exposed a real compact-height defect rather than an
+image crop: the `Saved` row ended at `y = 591`, while the mutation actions
+started at `y = 554.5`. The rows overlapped by 36.5 points, and the required
+8-point separation made the total height deficit 44.5 points. The frozen RED
+bundle is
+`/private/tmp/chorai-se3-ax-layout-red-20260819.xcresult`.
+
+The surface now consumes its decorative 52-point vertical inset at
+accessibility Dynamic Type instead of compressing text or controls. Default
+Dynamic Type keeps the approved inset. The repaired AX5 image preserves the
+large type and shows complete body, tag, `Saved`, `Discard`, and `Accept` rows:
+
+[Open the repaired SE 3 AX5 original](assets/ios-merge-wysiwyg-preview/iphonese3-artifact-notable-long-dynamic-type.png)
+
+Fresh post-fix evidence:
+
+- exact AX5 layout test: 1/1 passed in
+  `/private/tmp/chorai-se3-ax-layout-green-attempt1-20260819.xcresult`;
+- SE 3 compact regression batch: 5/5 passed in
+  `/private/tmp/chorai-se3-axfix-regression-20260819.xcresult`;
+- Pro rate/AX comparison batch: 2/2 passed in
+  `/private/tmp/chorai-pro-rate-and-ax-20260819.xcresult`.
+
+The SE batch covers AX5 row separation, in-window 52-point actions, default
+0/3/10-tag overflow behavior, in-place editing and reopen, delayed Accept
+locking, and rotation.
+
+Post-repair full gates also passed: CoreFlow 748/748, BlockNoteEditor 45/45,
+the ArcNote Debug build at
+`/private/tmp/chorai-se3-axfix-final-debug-20260819`, and the ArcNote
+Debug-Production build at
+`/private/tmp/chorai-se3-axfix-final-production-20260819`.
+
+## Rate material matrix
+
+The product does not render a numeric rate chip. It maps the canonical rate to
+one shared level material. The following are fresh iPhone 17 Pro originals
+captured with the same card content and viewport so the material itself is the
+only intentional visual difference.
+
+| Canonical rate | Applied range | Visible level | Accent | Original screenshot |
+| ---: | ---: | --- | --- | --- |
+| 3 | 3...8 | Notable | green `#00FF66` | [PNG](assets/ios-merge-wysiwyg-preview/iphone17pro-card-notable.png) |
+| 9 | 9...26 | Valuable | blue `#0371FF` | [PNG](assets/ios-merge-wysiwyg-preview/iphone17pro-card-valuable.png) |
+| 27 | 27...80 | Significant | purple `#9627D2` | [PNG](assets/ios-merge-wysiwyg-preview/iphone17pro-card-significant.png) |
+| 81 | 81...242 | Exceptional | amber `#D97800` | [PNG](assets/ios-merge-wysiwyg-preview/iphone17pro-card-exceptional.png) |
+| 243 | 243 and above | Definitive | orange-red `#FF5E00` | [PNG](assets/ios-merge-wysiwyg-preview/iphone17pro-card-definitive.png) |
+
+[Open the labeled rate 3-to-243 contact sheet](assets/ios-merge-wysiwyg-preview/contact-sheet-card-rates-3-243.png)
+
+The rate matrix was regenerated from the passing
+`testCardLevelVisualMatrixCapturesSixTiers` UI fixture. It also generated the
+rate-1 Basic control image; the table above starts at rate 3 to match this
+acceptance request and ends at the open-ended Definitive tier.
+
 ## Visual evidence
 
-The durable evidence directory contains 23 original-resolution PNGs and three
+The durable evidence directory contains 23 original-resolution PNGs and four
 contact sheets:
 
 `docs/qa/assets/ios-merge-wysiwyg-preview/`
 
 - `contact-sheet-card-tiers.png` — Basic, Notable, Valuable, Significant,
   Exceptional, and Definitive.
+- `contact-sheet-card-rates-3-243.png` — the requested rate 3, 9, 27, 81, and
+  243 comparison, labeled with the exact canonical value and level.
 - `contact-sheet-artifact-states.png` — focused/unfocused Notable, 0/3/10
   tags, long body, Reduce Transparency, and Increased Contrast.
 - `contact-sheet-rail-and-devices.png` — Pro/SE rail states, Dynamic Type,
   Preview suppression, and Complete restoration.
 
-All originals and all three sheets were opened and inspected against
+All originals and all four sheets were opened and inspected against
 `2026-08-17-ios-merge-wysiwyg-preview-approved-v2.png`. Final verdict:
 
 - P0: none;
