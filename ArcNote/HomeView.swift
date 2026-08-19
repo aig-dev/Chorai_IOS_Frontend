@@ -6,6 +6,7 @@ struct HomeView: View {
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Binding var showSideMenu: Bool
     let refreshID: UUID
+    let committedCardID: String?
     var onboardingStore: OnboardingGuideStore?
     var contextualTipStore: ContextualGuideTipStore?
     let isOnboardingLibrarySurfaceActive: Bool
@@ -36,10 +37,12 @@ struct HomeView: View {
     @State private var selectedCardId: String? = nil
     @State private var navigateToUserProfile = false
     @State private var selectedActorId: String? = nil
+    @State private var handledCommittedCardID: String?
 
     init(
         showSideMenu: Binding<Bool>,
         refreshID: UUID,
+        committedCardID: String? = nil,
         onboardingStore: OnboardingGuideStore? = nil,
         contextualTipStore: ContextualGuideTipStore? = nil,
         isOnboardingLibrarySurfaceActive: Bool = false,
@@ -54,6 +57,7 @@ struct HomeView: View {
             wrappedValue: librarySearchManager
         )
         self.refreshID = refreshID
+        self.committedCardID = committedCardID
         self.onboardingStore = onboardingStore
         self.contextualTipStore = contextualTipStore
         self.isOnboardingLibrarySurfaceActive =
@@ -92,6 +96,21 @@ struct HomeView: View {
     private func loadUserCards() {
         // 使用默认排序（Latest Edited）
         cardsManager.loadUserCards(refresh: true, sortBy: "updated_at", sortOrder: "desc")
+    }
+
+    private func presentCommittedCardIfNeeded(_ value: String?) {
+        guard let cardID = value?.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        ), !cardID.isEmpty, handledCommittedCardID != cardID else {
+            return
+        }
+
+        handledCommittedCardID = cardID
+        if librarySearchSession.isActive {
+            exitLibrarySearch()
+        }
+        selectedSegment = 0
+        cardsManager.promoteCommittedCard(id: cardID)
     }
 
     // MARK: 应用排序
@@ -691,12 +710,16 @@ struct HomeView: View {
         .onAppear {
             // 使用默认排序（Latest Edited）
             cardsManager.loadUserCards(refresh: true, sortBy: "updated_at", sortOrder: "desc")
+            presentCommittedCardIfNeeded(committedCardID)
         }
         .onDisappear {
             onLibrarySurfaceVisibilityChanged(false)
         }
         .onChange(of: refreshID) { _ in
             cardsManager.loadUserCards(refresh: true, sortBy: "updated_at", sortOrder: "desc")
+        }
+        .onChange(of: committedCardID) { cardID in
+            presentCommittedCardIfNeeded(cardID)
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ShowCardMenu"))) { notification in
             if let userInfo = notification.userInfo,

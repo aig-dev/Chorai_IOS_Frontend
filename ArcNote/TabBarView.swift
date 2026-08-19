@@ -496,6 +496,7 @@ struct TabBarView: View {
                 HomeView(
                     showSideMenu: $showSideMenu,
                     refreshID: coordinator.libraryRefreshID,
+                    committedCardID: coordinator.lastMergedCardID,
                     onboardingStore: onboardingStore,
                     contextualTipStore: contextualTipStore,
                     isOnboardingLibrarySurfaceActive:
@@ -824,7 +825,10 @@ struct TabBarView: View {
             mergeTaskCoordinator.minimize()
             onboardingStore.receive(.mergeCommitted(assetID: intent.assetID))
             coordinator.mergeCompleted(cardID: intent.assetID)
-            navigationPath.append(TabRoute.detail(intent.assetID))
+            if !navigationPath.isEmpty {
+                navigationPath.removeLast(navigationPath.count)
+            }
+            onMyNotesTapped()
             mergeTaskCoordinator.acknowledgeCommittedCardIntent(
                 jobID: intent.jobID
             )

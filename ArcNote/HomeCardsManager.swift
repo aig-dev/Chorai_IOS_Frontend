@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import CoreFlow
 import SwiftUI
 
 class HomeCardsManager: ObservableObject {
@@ -18,6 +19,9 @@ class HomeCardsManager: ObservableObject {
     private let pageSize: Int = 20
     private var currentSortBy: String? = "updated_at" // 默认排序字段
     private var currentSortOrder: String? = "desc" // 默认排序顺序
+    private var pendingCommittedCardID: String?
+    private var pendingCommittedCard: UserCard?
+    private var loadGeneration = 0
     
     func loadUserCards(refresh: Bool = false, sortBy: String? = nil, sortOrder: String? = nil) {
         guard authManager.currentUser != nil else {
@@ -39,10 +43,12 @@ class HomeCardsManager: ObservableObject {
         
         
         if refresh {
+            loadGeneration += 1
             currentPage = 1
             cards = []
             hasMoreData = true
         }
+        let requestGeneration = loadGeneration
         
         isLoading = true
         error = nil
@@ -51,9 +57,13 @@ class HomeCardsManager: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { [weak self] completion in
-                    self?.isLoading = false
+                    guard let self,
+                          self.loadGeneration == requestGeneration else {
+                        return
+                    }
+                    self.isLoading = false
                     if case .failure(let error) = completion {
-                        self?.error = error
+                        self.error = error
                         print("获取用户卡片失败: \(error)")
                     }
                     var atsStatus = ""
@@ -71,24 +81,108 @@ class HomeCardsManager: ObservableObject {
                     print(atsStatus)
                 },
                 receiveValue: { [weak self] response in
-                    guard let self = self else { return }
+                    guard let self,
+                          self.loadGeneration == requestGeneration else {
+                        return
+                    }
                     
                     for (index, card) in response.data.enumerated() {
                         print("卡片 \(index): id=\(card.id), commentCount=\(card.commentCount ?? -1), likeCount=\(card.likeCount)")
                     }
                     
+                    let responseCards = self.cardsIncludingPendingCommit(
+                        response.data
+                    )
                     if refresh {
-                        self.cards = response.data
+                        self.cards = responseCards
                     } else {
-                        self.cards.append(contentsOf: response.data)
+                        let existingIDs = Set(self.cards.map(\.id))
+                        self.cards.append(
+                            contentsOf: responseCards.filter {
+                                !existingIDs.contains($0.id)
+                            }
+                        )
                     }
-                    
+
                     self.hasMoreData = response.data.count == self.pageSize
                     self.currentPage += 1
+
+                    if let pendingID = self.pendingCommittedCardID,
+                       response.data.contains(where: { $0.id == pendingID }) {
+                        self.pendingCommittedCardID = nil
+                        self.pendingCommittedCard = nil
+                    }
               
                 }
             )
             .store(in: &cancellables)
+    }
+
+    /// The commit response is authoritative before the paginated Library
+    /// projection is guaranteed to include the new Card. Fetch that exact Card
+    /// and keep it at the head of Notes while the normal list catches up.
+    func promoteCommittedCard(id: String) {
+        let cardID = id.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cardID.isEmpty else { return }
+
+        pendingCommittedCardID = cardID
+        networkManager.getCard(id: cardID)
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { [weak self] completion in
+                    guard case let .failure(error) = completion,
+                          self?.pendingCommittedCardID == cardID else {
+                        return
+                    }
+                    self?.error = error
+                },
+                receiveValue: { [weak self] response in
+                    guard let self,
+                          response.success,
+                          response.data.id == cardID,
+                          self.pendingCommittedCardID == cardID else {
+                        return
+                    }
+                    let card = Self.userCard(from: response.data)
+                    self.pendingCommittedCard = card
+                    self.cards.removeAll { $0.id == cardID }
+                    self.cards.insert(card, at: 0)
+                }
+            )
+            .store(in: &cancellables)
+    }
+
+    private func cardsIncludingPendingCommit(
+        _ responseCards: [UserCard]
+    ) -> [UserCard] {
+        guard let pendingCommittedCard else { return responseCards }
+        return [pendingCommittedCard]
+            + responseCards.filter { $0.id != pendingCommittedCard.id }
+    }
+
+    private static func userCard(from card: CardResponseData) -> UserCard {
+        UserCard(
+            id: card.id,
+            title: card.title,
+            content: card.content,
+            contentJSON: card.contentJSON,
+            backgroundMediaRef: card.backgroundMediaRef,
+            contentHash: card.contentHash,
+            isPublic: card.isPublic,
+            tags: card.tags,
+            createdAt: card.createdAt,
+            updatedAt: card.updatedAt,
+            likeCount: card.likeCount,
+            commentCount: card.commentCount,
+            isLiked: card.isLiked,
+            isPinned: card.isPinned,
+            pinnedAt: card.pinnedAt,
+            isFavorited: card.isFavorited,
+            favoriteCount: card.favoriteCount,
+            rate: card.rate,
+            ownerActorId: card.ownerActorID ?? card.author?.id,
+            isOwner: card.isOwner
+        )
     }
 
     func loadPublicProfileCards(actorId: String, refresh: Bool = false) {

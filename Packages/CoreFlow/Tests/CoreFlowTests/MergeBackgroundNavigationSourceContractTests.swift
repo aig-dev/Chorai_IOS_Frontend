@@ -32,6 +32,53 @@ final class MergeBackgroundNavigationSourceContractTests: XCTestCase {
         XCTAssertFalse(source.contains("mergeResumeMetadata"))
     }
 
+    func testCommittedMergeReturnsToRefreshedLibraryNotes() throws {
+        let tabBar = try source(at: "ArcNote/TabBarView.swift")
+        let coordinator = try source(
+            at: "Packages/CoreFlow/Sources/CoreFlow/CoreFlowCoordinator.swift"
+        )
+        let home = try source(at: "ArcNote/HomeView.swift")
+        let cardsManager = try source(at: "ArcNote/HomeCardsManager.swift")
+        guard let start = tabBar.range(
+            of: ".onChange(of: mergeTaskCoordinator.committedCardIntent)"
+        ), let end = tabBar[start.upperBound...].range(
+            of: ".onChange(of: showSideMenu)"
+        ) else {
+            return XCTFail("Missing committed Merge navigation handler")
+        }
+
+        let handler = String(tabBar[start.lowerBound..<end.lowerBound])
+        XCTAssertTrue(handler.contains("coordinator.mergeCompleted(cardID:"))
+        XCTAssertTrue(handler.contains("navigationPath.removeLast"))
+        XCTAssertTrue(handler.contains("onMyNotesTapped()"))
+        XCTAssertFalse(
+            handler.contains("navigationPath.append(TabRoute.detail")
+        )
+        XCTAssertTrue(coordinator.contains("func mergeCompleted(cardID:"))
+        XCTAssertTrue(coordinator.contains("libraryRefreshID = UUID()"))
+        XCTAssertTrue(
+            tabBar.contains(
+                "committedCardID: coordinator.lastMergedCardID"
+            )
+        )
+        XCTAssertTrue(home.contains("let committedCardID: String?"))
+        XCTAssertTrue(home.contains(".onChange(of: committedCardID)"))
+        XCTAssertTrue(home.contains("cardsManager.promoteCommittedCard(id:"))
+        XCTAssertTrue(home.contains(".onChange(of: refreshID)"))
+        XCTAssertTrue(
+            home.contains(
+                "loadUserCards(refresh: true, sortBy: \"updated_at\", sortOrder: \"desc\")"
+            )
+        )
+        XCTAssertTrue(home.contains("selectedSegment = 0"))
+        XCTAssertTrue(cardsManager.contains("func promoteCommittedCard(id:"))
+        XCTAssertTrue(cardsManager.contains("networkManager.getCard(id:"))
+        XCTAssertTrue(cardsManager.contains("pendingCommittedCard"))
+        XCTAssertTrue(cardsManager.contains("loadGeneration"))
+        XCTAssertTrue(cardsManager.contains("requestGeneration"))
+        XCTAssertTrue(cardsManager.contains("responseCards.filter"))
+    }
+
     func testAppRootSynchronizesMergeRuntimeBeforeActorActivation() throws {
         let source = try source(at: "ArcNote/CoreFlow/MergeTaskRail.swift")
 

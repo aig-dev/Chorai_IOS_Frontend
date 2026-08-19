@@ -573,7 +573,7 @@ private struct MergeLifecycleView: View {
                     break
                 }
             }
-            Button("Keep", role: .cancel) {}
+            Button("Keep Merging", role: .cancel) {}
         }
         .onChange(of: searchText) { query in
             dismissMergeTipIfVisible()
@@ -867,10 +867,11 @@ private struct MergeLifecycleView: View {
 
             if store.canCancelCanonicalJob {
                 MergeLifecycleAction(
-                    systemImage: "xmark",
+                    systemImage: nil,
                     assetImage: nil,
+                    title: "Cancel",
                     isFilled: false,
-                    accessibilityLabel: "Cancel Merge",
+                    accessibilityLabel: "Cancel",
                     accessibilityIdentifier: "merge.cancel"
                 ) {
                     pendingCancellationIntent = .working
@@ -914,10 +915,11 @@ private struct MergeLifecycleView: View {
 
                 if canCancelFailure {
                     MergeLifecycleAction(
-                        systemImage: "xmark",
+                        systemImage: nil,
                         assetImage: nil,
+                        title: "Cancel",
                         isFilled: false,
-                        accessibilityLabel: "Cancel Merge",
+                        accessibilityLabel: "Cancel",
                         accessibilityIdentifier: "merge.cancel"
                     ) {
                         pendingCancellationIntent = failureCancellationIntent
@@ -1899,6 +1901,7 @@ private final class MergeArtifactFixturePersistence: MergeSessionPersisting {
 private struct MergeLifecycleAction: View {
     let systemImage: String?
     let assetImage: String?
+    var title: String? = nil
     let isFilled: Bool
     let accessibilityLabel: String
     let accessibilityIdentifier: String
@@ -1907,7 +1910,10 @@ private struct MergeLifecycleAction: View {
     var body: some View {
         Button(action: action) {
             Group {
-                if let systemImage {
+                if let title {
+                    Text(title)
+                        .font(.system(size: 17, weight: .semibold))
+                } else if let systemImage {
                     Image(systemName: systemImage)
                         .font(.system(size: 16, weight: .semibold))
                 } else if let assetImage {

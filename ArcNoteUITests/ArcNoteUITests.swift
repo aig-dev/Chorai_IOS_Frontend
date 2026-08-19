@@ -488,15 +488,36 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertEqual(waitFor("merge.job.status").label, "GENERATING")
         XCTAssertTrue(waitFor("merge.phase.weaving").exists)
 
-        waitForButton("merge.cancel").tap()
-        let confirmation = app.buttons.matching(
-            NSPredicate(
-                format: "label == %@ AND identifier != %@",
-                "Cancel Merge",
-                "merge.cancel"
-            )
-        ).firstMatch
-        XCTAssertTrue(confirmation.waitForExistence(timeout: 3))
+        let cancel = waitForButton("merge.cancel")
+        XCTAssertEqual(cancel.label, "Cancel")
+        XCTAssertEqual(waitFor("merge.fixture.cancel-calls").label, "none")
+
+        cancel.tap()
+        let dialog = app.sheets["Cancel Merge?"]
+        XCTAssertTrue(dialog.waitForExistence(timeout: 3))
+        XCTAssertEqual(waitFor("merge.fixture.cancel-calls").label, "none")
+        XCTAssertEqual(waitFor("merge.fixture.target-state").label, "retained")
+
+        let dismissRegion = app.descendants(matching: .any)[
+            "PopoverDismissRegion"
+        ]
+        XCTAssertTrue(dismissRegion.waitForExistence(timeout: 2))
+        dismissRegion.tap()
+        let dismissed = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == false"),
+            object: dialog
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [dismissed], timeout: 2),
+            .completed
+        )
+        XCTAssertEqual(waitFor("merge.fixture.cancel-calls").label, "none")
+        XCTAssertEqual(waitFor("merge.fixture.target-state").label, "retained")
+
+        cancel.tap()
+        XCTAssertTrue(dialog.waitForExistence(timeout: 3))
+        let confirmation = dialog.buttons["Cancel Merge"]
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 2))
         confirmation.tap()
 
         XCTAssertEqual(
@@ -5079,7 +5100,7 @@ final class ArcNoteUITests: XCTestCase {
         add(evidence)
     }
 
-    func testMergeRelaunchResumesCommitsAndOpensCanonicalCard() throws {
+    func testMergeRelaunchResumesCommitsAndReturnsCanonicalCardToLibrary() throws {
         let session = try requireSmokeSession()
         seedAppSession(session)
 
@@ -5340,15 +5361,29 @@ final class ArcNoteUITests: XCTestCase {
         }
         captureMergeVisual("preview-open-no-rail")
 
-        let bodyMarker = " task12-body-\(uniqueSuffix)"
-        let editedTag = "task12-edited"
-        let editor = waitFor("merge.artifact.editor")
-        editor.coordinate(
-            withNormalizedOffset: CGVector(dx: 0.35, dy: 0.35)
-        ).tap()
-        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 10))
+		let bodyMarker = " task12-body-\(uniqueSuffix)"
+		let editedTag = "task12-edited"
+		let editor = waitFor("merge.artifact.editor")
+		XCTAssertTrue(
+			waitForEnabled(waitForButton("merge.artifact.accept")).isEnabled,
+			"The live artifact must be editable before exercising WYSIWYG changes"
+		)
+		editor.coordinate(
+			withNormalizedOffset: CGVector(dx: 0.35, dy: 0.35)
+		).tap()
+		XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 10))
         app.typeText(bodyMarker)
-        dismissKeyboard()
+        editor.swipeDown()
+        let bodyKeyboard = app.keyboards.firstMatch
+        let bodyKeyboardDismissed = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == false"),
+            object: bodyKeyboard
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [bodyKeyboardDismissed], timeout: 5),
+            .completed,
+            "Scrolling the Merge body must dismiss the keyboard before editing tags"
+        )
         waitForButton("merge.artifact.add-tag").tap()
         let tagInput = waitFor("merge.artifact.tag-input")
         tagInput.typeText(editedTag + "\n")
@@ -5390,16 +5425,16 @@ final class ArcNoteUITests: XCTestCase {
         )
         XCTAssertTrue(waitForButton("merge.artifact.tag.\(editedTag)").exists)
 
-        let selectedArtifact = try fetchSmokeMergeArtifact(
-            jobID: originalJobID,
-            token: session.token
-        )
-        XCTAssertGreaterThanOrEqual(selectedArtifact.latestRevision, 2)
-        XCTAssertEqual(selectedArtifact.presentation.rate, 3)
-        XCTAssertTrue(selectedArtifact.presentation.tags.contains(editedTag))
+		let selectedArtifact = try fetchSmokeMergeArtifact(
+			jobID: originalJobID,
+			token: session.token
+		)
+		XCTAssertGreaterThanOrEqual(selectedArtifact.latestRevision, 2)
+		XCTAssertEqual(selectedArtifact.presentation.rate, 3)
+		XCTAssertTrue(selectedArtifact.presentation.tags.contains(editedTag))
 
         waitForEnabled(waitForButton("merge.artifact.accept")).tap()
-        committedCardID = waitForCommittedMergeCard(
+        committedCardID = waitForCommittedMergeCardInLibrary(
             excluding: sourceCardID,
             timeout: 90
         )
@@ -5415,17 +5450,53 @@ final class ArcNoteUITests: XCTestCase {
             ).status,
             "COMMITTED"
         )
-        let committedCard = try fetchSmokeCard(
-            id: committedCardID,
-            token: session.token
-        )
-        XCTAssertTrue(committedCard.content.contains(bodyMarker))
-        XCTAssertTrue(committedCard.tags.contains(editedTag))
+		let committedCard = try fetchSmokeCard(
+			id: committedCardID,
+			token: session.token
+		)
+		let committedUpdatedAt = try XCTUnwrap(
+			ISO8601DateFormatter().date(from: committedCard.updatedAt)
+		)
+		XCTAssertLessThan(
+			abs(committedUpdatedAt.timeIntervalSinceNow),
+			120,
+			"The committed Card timestamp must reflect the current local database wall clock"
+		)
+		XCTAssertTrue(committedCard.content.contains(bodyMarker))
+		XCTAssertTrue(
+			committedCard.contentJSON?.contains(bodyMarker) == true,
+			"The committed Library card must retain the edited structured body"
+		)
+		let committedDocument = try XCTUnwrap(
+			committedCard.contentJSON?.data(using: .utf8)
+		)
+		let committedStructure = try JSONDecoder().decode(
+			SmokeBlockNoteDocument.self,
+			from: committedDocument
+		)
+		XCTAssertEqual(committedStructure.schemaVersion, 1)
+		XCTAssertEqual(committedStructure.editorKind, "blocknote")
+		XCTAssertEqual(
+			blockStructure(
+				selectedArtifact.document.blocks,
+				projectingArtifactTypes: true
+			),
+			blockStructure(
+				committedStructure.blocks,
+				projectingArtifactTypes: false
+			),
+			"Accept must preserve nested block IDs, projected types, and order"
+		)
+		XCTAssertTrue(committedCard.tags.contains(editedTag))
         XCTAssertEqual(committedCard.rate, 3)
-        waitForLoadedDetailCard(committedCardID, timeout: 30)
+        XCTAssertTrue(waitFor("card.home.\(committedCardID)").isHittable)
+        XCTAssertFalse(
+            app.descendants(matching: .any)["screen.detail.card-id"].exists,
+            "Accept must return to Library instead of opening Community detail"
+        )
         waitForMissing("merge.task-rail", timeout: 30)
         RunLoop.current.run(until: Date().addingTimeInterval(1))
-        captureMergeVisual("committed-detail")
+        captureMergeVisual("committed-library")
 
         app.terminate()
         launchAuthenticatedApp()
@@ -5433,7 +5504,7 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertFalse(
             app.descendants(matching: .any)["merge.task-rail"]
                 .waitForExistence(timeout: 3),
-            "Completed Merge recovery should be cleared after opening detail"
+            "Completed Merge recovery should be cleared after returning to Library"
         )
     }
 
@@ -10339,16 +10410,17 @@ final class ArcNoteUITests: XCTestCase {
         let remaining = (element.value as? String) ?? ""
         let placeholder = element.placeholderValue ?? ""
         if !remaining.isEmpty && remaining != placeholder {
-            element.press(forDuration: 1)
-            let selectAllMenuItem = app.menuItems["Select All"].firstMatch
-            let selectAllButton = app.buttons["Select All"].firstMatch
-            if selectAllMenuItem.waitForExistence(timeout: 3) {
-                selectAllMenuItem.tap()
-            } else if selectAllButton.waitForExistence(timeout: 1) {
-                selectAllButton.tap()
-            } else {
+            element.tap()
+            element.typeText(
+                String(
+                    repeating: XCUIKeyboardKey.delete.rawValue,
+                    count: remaining.count
+                )
+            )
+            let uncleared = (element.value as? String) ?? ""
+            if !uncleared.isEmpty && uncleared != placeholder {
                 XCTFail(
-                    "Could not select all text for \(identifier)",
+                    "Could not clear text for \(identifier)",
                     file: file,
                     line: line
                 )
@@ -10856,13 +10928,17 @@ final class ArcNoteUITests: XCTestCase {
         )
     }
 
-    private func waitForCommittedMergeCard(
+    private func waitForCommittedMergeCardInLibrary(
         excluding sourceCardID: String,
         timeout: TimeInterval = 90,
         file: StaticString = #filePath,
         line: UInt = #line
     ) -> String? {
         let deadline = Date().addingTimeInterval(timeout)
+        let committedID = app.descendants(matching: .any)[
+            "merge.committed-card-id"
+        ]
+        let library = app.descendants(matching: .any)["screen.home.content"]
         let detailID = app.descendants(matching: .any)["screen.detail.card-id"]
         let paused = app.descendants(matching: .any)["merge.phase.paused"]
         let failed = app.descendants(matching: .any)["merge.phase.failed"]
@@ -10870,19 +10946,34 @@ final class ArcNoteUITests: XCTestCase {
 
         while Date() < deadline {
             if detailID.exists {
-                let value = detailID.label.trimmingCharacters(
+                XCTFail(
+                    "Merge commit opened Community detail instead of Library",
+                    file: file,
+                    line: line
+                )
+                return nil
+            }
+            if committedID.exists {
+                let value = committedID.label.trimmingCharacters(
                     in: .whitespacesAndNewlines
                 )
-                if !value.isEmpty, value != sourceCardID {
+                let card = app.descendants(matching: .any)[
+                    "card.home.\(value)"
+                ]
+                if !value.isEmpty,
+                   value != sourceCardID,
+                   library.exists,
+                   card.exists,
+                   card.isHittable {
                     return value
                 }
             }
             if paused.exists {
-                XCTFail("Merge commit paused before opening detail", file: file, line: line)
+                XCTFail("Merge commit paused before returning to Library", file: file, line: line)
                 return nil
             }
             if failed.exists {
-                XCTFail("Merge commit failed before opening detail", file: file, line: line)
+                XCTFail("Merge commit failed before returning to Library", file: file, line: line)
                 return nil
             }
             let status = app.descendants(matching: .any)["merge.job.status"]
@@ -10895,42 +10986,11 @@ final class ArcNoteUITests: XCTestCase {
         }
 
         XCTFail(
-            "Timed out waiting for committed Merge detail; last status: \(lastStatus)",
+            "Timed out waiting for committed Merge card in Library; last status: \(lastStatus)",
             file: file,
             line: line
         )
         return nil
-    }
-
-    private func waitForLoadedDetailCard(
-        _ expectedCardID: String,
-        timeout: TimeInterval = 30,
-        file: StaticString = #filePath,
-        line: UInt = #line
-    ) {
-        let deadline = Date().addingTimeInterval(timeout)
-        let loadedCardID = app.descendants(matching: .any)[
-            "screen.detail.loaded-card-id"
-        ]
-        var lastCardID = "missing"
-
-        while Date() < deadline {
-            if loadedCardID.exists {
-                lastCardID = loadedCardID.label.trimmingCharacters(
-                    in: .whitespacesAndNewlines
-                )
-                if lastCardID == expectedCardID {
-                    return
-                }
-            }
-            RunLoop.current.run(until: Date().addingTimeInterval(0.2))
-        }
-
-        XCTFail(
-            "Detail did not load committed card \(expectedCardID); last loaded card: \(lastCardID)",
-            file: file,
-            line: line
-        )
     }
 
     private func waitForMergeCardsLoaded(timeout: TimeInterval = 30, file: StaticString = #filePath, line: UInt = #line) {
@@ -11154,16 +11214,18 @@ final class ArcNoteUITests: XCTestCase {
             let isPublic: Bool
             let isPinned: Bool
             let tags: [String]
-            let backgroundMediaRef: String?
-            let rate: Int
+			let backgroundMediaRef: String?
+			let rate: Int
+			let updatedAt: String
 
             enum CodingKeys: String, CodingKey {
                 case id, title, content, tags, rate
                 case contentJSON = "content_json"
                 case isPublic = "is_public"
                 case isPinned = "is_pinned"
-                case backgroundMediaRef = "background_media_ref"
-            }
+				case backgroundMediaRef = "background_media_ref"
+				case updatedAt = "updated_at"
+			}
         }
     }
 
@@ -11240,13 +11302,14 @@ final class ArcNoteUITests: XCTestCase {
         }
     }
 
-    private struct SmokeMergeArtifactResponse: Decodable {
-        let artifactID: String
-        let jobID: String
-        let latestRevision: Int
-        let latestHash: String
-        let presentationHash: String
-        let presentation: Presentation
+	private struct SmokeMergeArtifactResponse: Decodable {
+		let artifactID: String
+		let jobID: String
+		let latestRevision: Int
+		let latestHash: String
+		let presentationHash: String
+		let document: SmokeArtifactDocument
+		let presentation: Presentation
 
         struct Presentation: Decodable {
             let tags: [String]
@@ -11257,11 +11320,72 @@ final class ArcNoteUITests: XCTestCase {
             case artifactID = "artifactId"
             case jobID = "jobId"
             case latestRevision
-            case latestHash
-            case presentationHash
-            case presentation
-        }
-    }
+			case latestHash
+			case document
+			case presentationHash
+			case presentation
+		}
+	}
+
+	private struct SmokeArtifactDocument: Decodable {
+		let schemaVersion: String
+		let blocks: [SmokeStructuredBlock]
+	}
+
+	private struct SmokeBlockNoteDocument: Decodable {
+		let schemaVersion: Int
+		let editorKind: String
+		let blocks: [SmokeStructuredBlock]
+
+		enum CodingKeys: String, CodingKey {
+			case schemaVersion = "schema_version"
+			case editorKind = "editor_kind"
+			case blocks
+		}
+	}
+
+	private struct SmokeStructuredBlock: Decodable {
+		let id: String
+		let type: String
+		let children: [SmokeStructuredBlock]?
+	}
+
+	private struct SmokeBlockStructure: Equatable {
+		let id: String
+		let type: String
+		let children: [SmokeBlockStructure]
+	}
+
+	private func blockStructure(
+		_ blocks: [SmokeStructuredBlock],
+		projectingArtifactTypes: Bool
+	) -> [SmokeBlockStructure] {
+		let projectedTypes = [
+			"paragraph": "paragraph",
+			"heading": "heading",
+			"bullet_list": "bulletListItem",
+			"numbered_list": "numberedListItem",
+			"checklist": "checkListItem",
+			"quote": "quote",
+			"code": "codeBlock",
+			"divider": "paragraph",
+			"image": "image",
+		]
+
+		return blocks.map { block in
+			let type = projectingArtifactTypes
+				? projectedTypes[block.type, default: "unsupported:\(block.type)"]
+				: block.type
+			return SmokeBlockStructure(
+				id: block.id,
+				type: type,
+				children: blockStructure(
+					block.children ?? [],
+					projectingArtifactTypes: projectingArtifactTypes
+				)
+			)
+		}
+	}
 
     private struct AssetStatusResponse: Decodable {
         let data: [String: Bool]
