@@ -56,6 +56,28 @@ final class LibraryCardPreviewSourceContractTests: XCTestCase {
         XCTAssertTrue(surface.contains("@Environment(\\.accessibilityReduceTransparency)"))
     }
 
+    func testLibraryBackgroundPreservesGlassBaseInsteadOfArtifactAsset() throws {
+        let home = try source(at: "ArcNote/HomeView.swift")
+        let surfaceStart = try XCTUnwrap(
+            home.range(of: "struct LibraryCardBackgroundSurface")
+        )
+        let notesCardStart = try XCTUnwrap(
+            home.range(
+                of: "struct NotesCard: View",
+                range: surfaceStart.upperBound..<home.endIndex
+            )
+        )
+        let surface = String(
+            home[surfaceStart.lowerBound..<notesCardStart.lowerBound]
+        )
+
+        XCTAssertTrue(surface.contains("fallback()"))
+        XCTAssertTrue(surface.contains("levelStyle.materialAccentColor"))
+        XCTAssertTrue(surface.contains("rateTreatment"))
+        XCTAssertFalse(surface.contains("CardLevelMaterial("))
+        XCTAssertFalse(surface.contains("style.materialAssetName"))
+    }
+
     func testEveryRateSurfaceConsumesCanonicalLevelStyle() throws {
         let home = try source(at: "ArcNote/HomeView.swift")
         let merge = try source(at: "ArcNote/MergeView.swift")

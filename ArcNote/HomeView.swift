@@ -1469,6 +1469,41 @@ struct LibraryCardBackgroundSurface<Fallback: View>: View {
         CardLevelStyle(rate: rate)
     }
 
+    private var rateGlowOpacity: Double {
+        if reduceTransparency { return 0.14 }
+        return contrast == .increased ? 0.24 : 0.22
+    }
+
+    private var rateBorderOpacity: Double {
+        contrast == .increased ? 0.52 : 0.32
+    }
+
+    @ViewBuilder
+    private var rateTreatment: some View {
+        if let rateAccent = levelStyle.materialAccentColor {
+            GeometryReader { geometry in
+                RadialGradient(
+                    colors: [
+                        rateAccent.opacity(rateGlowOpacity),
+                        rateAccent.opacity(rateGlowOpacity * 0.32),
+                        Color.clear,
+                    ],
+                    center: .top,
+                    startRadius: 1,
+                    endRadius: max(
+                        geometry.size.width,
+                        geometry.size.height
+                    ) * 0.86
+                )
+            }
+
+            shape.stroke(
+                rateAccent.opacity(rateBorderOpacity),
+                lineWidth: contrast == .increased ? 1.5 : 1
+            )
+        }
+    }
+
     var body: some View {
         ZStack {
             fallback()
@@ -1527,11 +1562,7 @@ struct LibraryCardBackgroundSurface<Fallback: View>: View {
                 }
             }
 
-            CardLevelMaterial(
-                style: levelStyle,
-                shape: shape,
-                usesAssetBase: backgroundURL == nil
-            )
+            rateTreatment
         }
         .clipShape(shape)
         .accessibilityHidden(true)
