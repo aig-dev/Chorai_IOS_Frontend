@@ -1736,6 +1736,190 @@ final class ArcNoteUITests: XCTestCase {
         waitForMissing("merge.artifact.retry-sync")
     }
 
+    func testMergeArtifactCleanConflictAdoptsCanonicalServerDraftBeforeAccept() {
+        app.launchArguments.append("--ui-test-merge-artifact")
+        app.launchEnvironment[
+            "CHORAI_UI_TEST_MERGE_SAVE_CONFLICTS_ONCE_WITH_REMOTE"
+        ] = "1"
+        app.launchEnvironment[
+            "CHORAI_UI_TEST_MERGE_SAVE_CONFLICT_DELAY_NANOSECONDS"
+        ] = "10000000000"
+        app.launchEnvironment["CHORAI_UI_TEST_MERGE_SESSION_SCOPE"] =
+            "\(name).stable"
+        app.launch()
+
+        XCTAssertTrue(
+            app.staticTexts["A durable merged insight"]
+                .waitForExistence(timeout: 10)
+        )
+        waitForButton("merge.artifact.tag.Nature").tap()
+        waitForMissing("merge.artifact.tag.Nature")
+
+        let saveCount = waitFor("fixture.merge.save-call-count")
+        let firstSaveStarted = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label == %@", "1"),
+            object: saveCount
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [firstSaveStarted], timeout: 5),
+            .completed
+        )
+
+        waitForButton("merge.artifact.add-tag").tap()
+        waitFor("merge.artifact.tag-input").typeText("Nature\n")
+        XCTAssertTrue(waitForButton("merge.artifact.tag.Nature").exists)
+        XCTAssertEqual(
+            waitFor("fixture.merge.draft-matches-artifact-document").label,
+            "true"
+        )
+        XCTAssertEqual(
+            waitFor("fixture.merge.draft-matches-artifact-tags").label,
+            "true",
+            "The local draft must be back at acknowledged A before 409"
+        )
+
+        let saved = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label == %@", "Saved"),
+            object: waitFor("merge.artifact.sync-state")
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [saved], timeout: 10),
+            .completed,
+            "The clean 409 path must auto-adopt the canonical server draft"
+        )
+        XCTAssertEqual(saveCount.label, "1")
+
+        XCTAssertTrue(
+            app.staticTexts["Server canonical revision B"]
+                .waitForExistence(timeout: 5),
+            "The editor must reproject the clean server document"
+        )
+        XCTAssertTrue(waitForButton("merge.artifact.tag.Remote").exists)
+        XCTAssertTrue(waitForButton("merge.artifact.tag.Canonical").exists)
+        XCTAssertFalse(app.buttons["merge.artifact.tag.Design"].exists)
+        XCTAssertFalse(app.buttons["merge.artifact.tag.Nature"].exists)
+
+        waitForEnabled(waitForButton("merge.artifact.accept")).tap()
+        let committed = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label == %@", "1"),
+            object: waitFor("fixture.merge.commit-call-count")
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [committed], timeout: 5),
+            .completed
+        )
+        XCTAssertEqual(
+            saveCount.label,
+            "1",
+            "Accept must not PUT the stale local projection over revision B"
+        )
+    }
+
+    func testMergeArtifactCleanConflictPreservesPendingTagOnServerReprojection() {
+        app.launchArguments.append("--ui-test-merge-artifact")
+        app.launchEnvironment[
+            "CHORAI_UI_TEST_MERGE_SAVE_CONFLICTS_ONCE_WITH_REMOTE"
+        ] = "1"
+        app.launchEnvironment[
+            "CHORAI_UI_TEST_MERGE_SAVE_CONFLICT_DELAY_NANOSECONDS"
+        ] = "16000000000"
+        app.launchEnvironment["CHORAI_UI_TEST_MERGE_SESSION_SCOPE"] =
+            "\(name).stable"
+        app.launch()
+
+        XCTAssertTrue(
+            app.staticTexts["A durable merged insight"]
+                .waitForExistence(timeout: 10)
+        )
+        waitForButton("merge.artifact.tag.Nature").tap()
+        waitForMissing("merge.artifact.tag.Nature")
+
+        let saveCount = waitFor("fixture.merge.save-call-count")
+        let firstSaveStarted = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label == %@", "1"),
+            object: saveCount
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [firstSaveStarted], timeout: 5),
+            .completed
+        )
+        waitForButton("merge.artifact.add-tag").tap()
+        waitFor("merge.artifact.tag-input").typeText("Nature\n")
+        XCTAssertTrue(waitForButton("merge.artifact.tag.Nature").exists)
+        XCTAssertEqual(
+            waitFor("fixture.merge.draft-matches-artifact-document").label,
+            "true"
+        )
+        XCTAssertEqual(
+            waitFor("fixture.merge.draft-matches-artifact-tags").label,
+            "true",
+            "The Store draft must be clean A before server adoption"
+        )
+
+        waitForButton("merge.artifact.add-tag").tap()
+        let pendingTag = waitFor("merge.artifact.tag-input")
+        pendingTag.typeText("LocalAfterServer")
+        XCTAssertEqual(pendingTag.value as? String, "LocalAfterServer")
+
+        let saved = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label == %@", "Saved"),
+            object: waitFor("merge.artifact.sync-state")
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [saved], timeout: 15),
+            .completed
+        )
+        XCTAssertTrue(
+            app.staticTexts["Server canonical revision B"]
+                .waitForExistence(timeout: 5)
+        )
+        let preservedTag = waitFor("merge.artifact.tag-input", timeout: 3)
+        XCTAssertEqual(
+            preservedTag.value as? String,
+            "LocalAfterServer",
+            "Automatic server adoption must retain controller-only tag input"
+        )
+        XCTAssertTrue(waitForButton("merge.artifact.tag.Remote").exists)
+        XCTAssertTrue(waitForButton("merge.artifact.tag.Canonical").exists)
+
+        preservedTag.typeText("\n")
+        XCTAssertTrue(
+            waitForButton("merge.artifact.tag.LocalAfterServer").exists
+        )
+        let secondSave = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label == %@", "2"),
+            object: saveCount
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [secondSave], timeout: 5),
+            .completed
+        )
+        XCTAssertEqual(
+            waitFor("fixture.merge.second-save-uses-server-base").label,
+            "true",
+            "The preserved tag must save on top of canonical revision B"
+        )
+
+        let savedAgain = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label == %@", "Saved"),
+            object: waitFor("merge.artifact.sync-state")
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [savedAgain], timeout: 5),
+            .completed
+        )
+        waitForEnabled(waitForButton("merge.artifact.accept")).tap()
+        let committed = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label == %@", "1"),
+            object: waitFor("fixture.merge.commit-call-count")
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [committed], timeout: 5),
+            .completed
+        )
+        XCTAssertEqual(saveCount.label, "2")
+    }
+
     func testNativeOnboardingFixtureCompletesLibraryTipFromItsRealTarget() {
         app.launchArguments.append("--ui-test-native-onboarding")
         app.launch()

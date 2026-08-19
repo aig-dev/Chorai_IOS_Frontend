@@ -22,6 +22,7 @@ final class MergeArtifactDraftController: ObservableObject {
     private let documentRelay: MergeArtifactDocumentRelay
     private var preservationManifest: Data
     private var hasLosslessProjection: Bool
+    private var projectedDraftIdentity: DraftProjectionIdentity
     private var storeObservation: AnyCancellable?
     private var bodyModelObservation: AnyCancellable?
 
@@ -44,6 +45,7 @@ final class MergeArtifactDraftController: ObservableObject {
         )
         preservationManifest = projection.preservationManifest
         hasLosslessProjection = projection.isLossless
+        projectedDraftIdentity = projection.draftIdentity
         tags = projection.tags
         unresolvedMediaReferences = projection.unresolvedMediaReferences
         validationMessage = projection.validationMessage
@@ -57,6 +59,7 @@ final class MergeArtifactDraftController: ObservableObject {
             self?.objectWillChange.send()
             Task { @MainActor [weak self] in
                 await Task.yield()
+                self?.reconcileCanonicalProjectionAfterStoreChange()
                 self?.reconcileAcceptLockAfterStoreChange()
             }
         }
@@ -171,6 +174,7 @@ final class MergeArtifactDraftController: ObservableObject {
             return
         }
         tags = next
+        updateProjectedDraftIdentity(tags: next)
         store.updateArtifactTags(next)
     }
 
@@ -179,6 +183,7 @@ final class MergeArtifactDraftController: ObservableObject {
         let next = tags.filter { $0 != tag }
         guard next != tags else { return }
         tags = next
+        updateProjectedDraftIdentity(tags: next)
         store.updateArtifactTags(next)
     }
 
@@ -240,7 +245,7 @@ final class MergeArtifactDraftController: ObservableObject {
         Task { @MainActor in
             await store.resolveArtifactConflict(resolution)
             if resolution == .reloadServer {
-                reloadFromStore()
+                reloadFromStore(preservePendingTagInput: false)
             }
         }
     }
@@ -269,6 +274,7 @@ final class MergeArtifactDraftController: ObservableObject {
                 blockNoteJSON: blockNoteJSON,
                 preserving: preservationManifest
             )
+            updateProjectedDraftIdentity(documentJSON: documentJSON)
             store.updateArtifactDraft(
                 documentJSON: documentJSON,
                 preservationManifest: preservationManifest
@@ -288,7 +294,7 @@ final class MergeArtifactDraftController: ObservableObject {
         }
     }
 
-    private func reloadFromStore() {
+    private func reloadFromStore(preservePendingTagInput: Bool) {
         let projection = Self.projection(
             from: store.artifactDraft,
             artifact: store.artifact,
@@ -297,11 +303,14 @@ final class MergeArtifactDraftController: ObservableObject {
         )
         preservationManifest = projection.preservationManifest
         hasLosslessProjection = projection.isLossless
+        projectedDraftIdentity = projection.draftIdentity
         tags = projection.tags
         unresolvedMediaReferences = projection.unresolvedMediaReferences
         validationMessage = projection.validationMessage
-        tagInput = ""
-        isAddingTag = false
+        if !preservePendingTagInput {
+            tagInput = ""
+            isAddingTag = false
+        }
         bodyModel = Self.makeBodyModel(
             projection: projection,
             relay: documentRelay
@@ -313,6 +322,33 @@ final class MergeArtifactDraftController: ObservableObject {
         bodyModelObservation = bodyModel.objectWillChange.sink { [weak self] _ in
             self?.objectWillChange.send()
         }
+    }
+
+    private func updateProjectedDraftIdentity(
+        documentJSON: Data? = nil,
+        tags: [String]? = nil
+    ) {
+        projectedDraftIdentity = DraftProjectionIdentity(
+            documentJSON: documentJSON
+                ?? projectedDraftIdentity.documentJSON,
+            tags: CardEditingTag.normalize(
+                tags ?? projectedDraftIdentity.tags
+            )
+        )
+    }
+
+    private func reconcileCanonicalProjectionAfterStoreChange() {
+        guard case .clean = store.artifactDraftSyncState,
+              let draft = store.artifactDraft,
+              draft.pendingSave == nil else {
+            return
+        }
+        let canonicalIdentity = DraftProjectionIdentity(
+            documentJSON: draft.documentJSON,
+            tags: CardEditingTag.normalize(draft.tags)
+        )
+        guard canonicalIdentity != projectedDraftIdentity else { return }
+        reloadFromStore(preservePendingTagInput: true)
     }
 
     private func reconcileAcceptLockAfterStoreChange() {
@@ -336,7 +372,13 @@ private final class MergeArtifactDocumentRelay {
 }
 
 private extension MergeArtifactDraftController {
+    struct DraftProjectionIdentity: Equatable {
+        let documentJSON: Data
+        let tags: [String]
+    }
+
     struct EditorProjection {
+        let draftIdentity: DraftProjectionIdentity
         let blockNoteJSON: String?
         let fallbackMarkdown: String
         let preservationManifest: Data
@@ -365,6 +407,10 @@ private extension MergeArtifactDraftController {
                 ? draft?.preservationManifest ?? editable.preservationManifest
                 : editable.preservationManifest
             return EditorProjection(
+                draftIdentity: DraftProjectionIdentity(
+                    documentJSON: documentJSON,
+                    tags: tags
+                ),
                 blockNoteJSON: editable.blockNoteJSON,
                 fallbackMarkdown: editable.fallbackMarkdown,
                 preservationManifest: manifest,
@@ -383,6 +429,10 @@ private extension MergeArtifactDraftController {
             let fallback = artifact?.document.plainText
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             return EditorProjection(
+                draftIdentity: DraftProjectionIdentity(
+                    documentJSON: documentJSON,
+                    tags: tags
+                ),
                 blockNoteJSON: nil,
                 fallbackMarkdown: fallback?.isEmpty == false
                     ? fallback ?? "Merge content is unavailable."

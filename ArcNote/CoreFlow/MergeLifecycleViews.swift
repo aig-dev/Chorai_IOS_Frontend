@@ -1407,6 +1407,26 @@ struct MergeArtifactVisualFixtureScreen: View {
                     .accessibilityIdentifier(
                         "fixture.merge.retry-same-key"
                     )
+                Text(String(operationProbe.secondSaveUsesServerBase))
+                    .accessibilityIdentifier(
+                        "fixture.merge.second-save-uses-server-base"
+                    )
+                Text(String(
+                    store.artifactDraft?.documentJSON
+                        == store.artifact?.documentJSON
+                ))
+                .accessibilityIdentifier(
+                    "fixture.merge.draft-matches-artifact-document"
+                )
+                Text(String(
+                    store.artifactDraft?.tags
+                        == store.artifact.map {
+                            CardEditingTag.normalize($0.presentation.tags)
+                        }
+                ))
+                .accessibilityIdentifier(
+                    "fixture.merge.draft-matches-artifact-tags"
+                )
             }
             .font(.system(size: 1))
             .foregroundStyle(.white.opacity(0.01))
@@ -1537,12 +1557,68 @@ private enum MergeArtifactFixtureFactory {
             )
         )
     }
+
+    static func serverAdoptedArtifact(
+        from artifact: MergeArtifact
+    ) -> MergeArtifact {
+        let serverHeading = "Server canonical revision B"
+        let initialHeading = "A durable merged insight"
+        let documentJSON = Data(
+            String(decoding: artifact.documentJSON, as: UTF8.self)
+                .replacingOccurrences(
+                    of: initialHeading,
+                    with: serverHeading
+                )
+                .utf8
+        )
+        let blocks = artifact.document.blocks.enumerated().map { index, block in
+            guard index == 0 else { return block }
+            return MergeBlock(
+                id: block.id,
+                type: block.type,
+                content: [
+                    MergeInline(
+                        type: "text",
+                        text: serverHeading,
+                        properties: [:]
+                    )
+                ],
+                properties: block.properties,
+                children: block.children
+            )
+        }
+        return MergeArtifact(
+            artifactID: artifact.artifactID,
+            jobID: artifact.jobID,
+            capabilityID: artifact.capabilityID,
+            outputKind: artifact.outputKind,
+            document: MergeDocument(
+                schemaVersion: artifact.document.schemaVersion,
+                title: artifact.document.title,
+                subtitle: artifact.document.subtitle,
+                blocks: blocks,
+                metadata: artifact.document.metadata
+            ),
+            fragments: artifact.fragments,
+            metadata: artifact.metadata,
+            latestRevision: 2,
+            latestHash: "fixture-document-hash-2-server",
+            documentJSON: documentJSON,
+            presentationHash: "fixture-presentation-hash-2-server",
+            presentation: MergeArtifactPresentation(
+                schemaVersion: "merge_artifact_presentation.v1",
+                tags: ["Remote", "Canonical"],
+                rate: 3
+            )
+        )
+    }
 }
 
 private actor MergeArtifactFixtureService: CoreMergeServing {
     private let initialArtifact: MergeArtifact
     private let behavior: MergeArtifactFixtureBehavior
     private let operationProbe: MergeArtifactFixtureOperationProbe
+    private var currentArtifact: MergeArtifact
     private var revision: Int
 
     init(
@@ -1553,6 +1629,7 @@ private actor MergeArtifactFixtureService: CoreMergeServing {
         initialArtifact = artifact
         self.behavior = behavior
         self.operationProbe = operationProbe
+        currentArtifact = artifact
         revision = artifact.latestRevision
     }
 
@@ -1590,7 +1667,7 @@ private actor MergeArtifactFixtureService: CoreMergeServing {
     }
 
     func artifact(jobID: String) async throws -> MergeArtifact {
-        initialArtifact
+        currentArtifact
     }
 
     func saveArtifact(
@@ -1601,8 +1678,22 @@ private actor MergeArtifactFixtureService: CoreMergeServing {
         if behavior.saveFailsOnceWithTimeout, callCount == 1 {
             throw CoreMergeError.timeout
         }
+        if behavior.saveConflictsOnceWithRemoteLatest, callCount == 1 {
+            currentArtifact = MergeArtifactFixtureFactory.serverAdoptedArtifact(
+                from: initialArtifact
+            )
+            revision = currentArtifact.latestRevision
+            if behavior.saveConflictDelayNanoseconds > 0 {
+                try await Task.sleep(
+                    nanoseconds: behavior.saveConflictDelayNanoseconds
+                )
+            }
+            throw CoreMergeError.conflict(
+                code: "fixture_remote_artifact_revision"
+            )
+        }
         revision += 1
-        return MergeArtifactSaveResult(
+        let result = MergeArtifactSaveResult(
             artifactID: initialArtifact.artifactID,
             revision: revision,
             documentHash: "fixture-document-hash-\(revision)",
@@ -1613,6 +1704,21 @@ private actor MergeArtifactFixtureService: CoreMergeServing {
                 rate: 3
             )
         )
+        currentArtifact = MergeArtifact(
+            artifactID: currentArtifact.artifactID,
+            jobID: currentArtifact.jobID,
+            capabilityID: currentArtifact.capabilityID,
+            outputKind: currentArtifact.outputKind,
+            document: currentArtifact.document,
+            fragments: currentArtifact.fragments,
+            metadata: currentArtifact.metadata,
+            latestRevision: result.revision,
+            latestHash: result.documentHash,
+            documentJSON: request.documentJSON,
+            presentationHash: result.presentationHash,
+            presentation: result.presentation
+        )
+        return result
     }
 
     func cancel(jobID: String) async throws -> MergeJob {
@@ -1669,6 +1775,8 @@ private actor MergeArtifactFixtureService: CoreMergeServing {
 private struct MergeArtifactFixtureBehavior: Sendable {
     let includesLossyPassthrough: Bool
     let saveFailsOnceWithTimeout: Bool
+    let saveConflictsOnceWithRemoteLatest: Bool
+    let saveConflictDelayNanoseconds: UInt64
     let commitDelayNanoseconds: UInt64
     let commitShouldFail: Bool
     let cancelDelayNanoseconds: UInt64
@@ -1683,6 +1791,14 @@ private struct MergeArtifactFixtureBehavior: Sendable {
             saveFailsOnceWithTimeout: environment[
                 "CHORAI_UI_TEST_MERGE_SAVE_FAILS_ONCE_TIMEOUT"
             ] == "1",
+            saveConflictsOnceWithRemoteLatest: environment[
+                "CHORAI_UI_TEST_MERGE_SAVE_CONFLICTS_ONCE_WITH_REMOTE"
+            ] == "1",
+            saveConflictDelayNanoseconds: UInt64(
+                environment[
+                    "CHORAI_UI_TEST_MERGE_SAVE_CONFLICT_DELAY_NANOSECONDS"
+                ] ?? ""
+            ) ?? 0,
             commitDelayNanoseconds: UInt64(
                 environment[
                     "CHORAI_UI_TEST_MERGE_COMMIT_DELAY_NANOSECONDS"
@@ -1710,6 +1826,7 @@ private final class MergeArtifactFixtureOperationProbe: ObservableObject {
     @Published private(set) var saveCallCount = 0
     @Published private(set) var retryMatchesFirstPayload = false
     @Published private(set) var retryMatchesFirstKey = false
+    @Published private(set) var secondSaveUsesServerBase = false
 
     private var firstSaveRequest: MergeArtifactSaveRequest?
 
@@ -1734,6 +1851,10 @@ private final class MergeArtifactFixtureOperationProbe: ObservableObject {
                 == firstSaveRequest.idempotencyKey
         } else {
             firstSaveRequest = request
+        }
+        if saveCallCount == 2 {
+            secondSaveUsesServerBase = request.baseRevision == 2
+                && request.baseHash == "fixture-document-hash-2-server"
         }
         return saveCallCount
     }
