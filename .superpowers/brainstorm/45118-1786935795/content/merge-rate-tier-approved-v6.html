@@ -1,0 +1,29 @@
+<style>
+  .approved-tier-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; max-width:880px; }
+  .approved-tier { position:relative; overflow:hidden; min-height:190px; border-radius:22px; color:white; }
+  .approved-tier img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+  .approved-tier-copy { position:absolute; inset:0; padding:22px; display:flex; flex-direction:column; justify-content:space-between; }
+  .approved-tier-rate { font-size:12px; opacity:.68; letter-spacing:.08em; }
+  .approved-tier-name { font-size:25px; margin-top:6px; }
+  .approved-tier-color { font-size:13px; opacity:.76; }
+  @media (max-width:800px) { .approved-tier-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+  @media (max-width:520px) { .approved-tier-grid { grid-template-columns:1fr; } }
+</style>
+
+<h2>Merge Card · Rate 色阶已确认</h2>
+<p class="subtitle">第 4 档采用更正向的 <strong>Exceptional</strong>。六档背景、连续边缘和局部光晕均跟随本档颜色；界面不显示数值 rate。</p>
+
+<div class="approved-tier-grid">
+  <div class="approved-tier"><img src="/files/rate-tier-basic.png" alt="Basic"><div class="approved-tier-copy"><div><div class="approved-tier-rate">RATE &lt; 3</div><div class="approved-tier-name">Basic</div></div><div class="approved-tier-color">中性深紫灰</div></div></div>
+  <div class="approved-tier"><img src="/files/rate-tier-notable.png" alt="Notable"><div class="approved-tier-copy"><div><div class="approved-tier-rate">RATE 3–8</div><div class="approved-tier-name">Notable</div></div><div class="approved-tier-color">翡翠绿</div></div></div>
+  <div class="approved-tier"><img src="/files/rate-tier-valuable.png" alt="Valuable"><div class="approved-tier-copy"><div><div class="approved-tier-rate">RATE 9–26</div><div class="approved-tier-name">Valuable</div></div><div class="approved-tier-color">蓝宝石</div></div></div>
+  <div class="approved-tier"><img src="/files/rate-tier-significant.png" alt="Significant"><div class="approved-tier-copy"><div><div class="approved-tier-rate">RATE 27–80</div><div class="approved-tier-name">Significant</div></div><div class="approved-tier-color">紫晶</div></div></div>
+  <div class="approved-tier"><img src="/files/rate-tier-critical.png" alt="Exceptional"><div class="approved-tier-copy"><div><div class="approved-tier-rate">RATE 81–242</div><div class="approved-tier-name">Exceptional</div></div><div class="approved-tier-color">琥珀金</div></div></div>
+  <div class="approved-tier"><img src="/files/rate-tier-definitive.png" alt="Definitive"><div class="approved-tier-copy"><div><div class="approved-tier-rate">RATE ≥ 243</div><div class="approved-tier-name">Definitive</div></div><div class="approved-tier-color">赤橙红</div></div></div>
+</div>
+
+<div class="section">
+  <h3>最终顺序</h3>
+  <p><strong>Basic → Notable → Valuable → Significant → Exceptional → Definitive</strong></p>
+  <p class="subtitle">绿色为 Notable；琥珀金为 Exceptional。参考图中绿色或琥珀色出现蓝色描边的情况不进入最终实现。</p>
+</div>

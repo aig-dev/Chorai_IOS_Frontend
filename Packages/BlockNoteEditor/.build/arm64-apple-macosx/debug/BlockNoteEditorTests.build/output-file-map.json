@@ -37,6 +37,13 @@
     "swift-dependencies": "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditorTests.build/BlockNoteEditorResourceTests.swiftdeps",
     "diagnostics": "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditorTests.build/BlockNoteEditorResourceTests.dia"
   },
+  "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/Tests/BlockNoteEditorTests/BlockNoteMergeRuntimeTests.swift": {
+    "dependencies": "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditorTests.build/BlockNoteMergeRuntimeTests.d",
+    "object": "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditorTests.build/BlockNoteMergeRuntimeTests.swift.o",
+    "swiftmodule": "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditorTests.build/BlockNoteMergeRuntimeTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditorTests.build/BlockNoteMergeRuntimeTests.swiftdeps",
+    "diagnostics": "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditorTests.build/BlockNoteMergeRuntimeTests.dia"
+  },
   "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/Tests/BlockNoteEditorTests/BlockNoteNavigationPolicyTests.swift": {
     "dependencies": "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditorTests.build/BlockNoteNavigationPolicyTests.d",
     "object": "/Users/luffylu/Documents/Chorai/Chorai_IOS_Frontend/Packages/BlockNoteEditor/.build/arm64-apple-macosx/debug/BlockNoteEditorTests.build/BlockNoteNavigationPolicyTests.swift.o",

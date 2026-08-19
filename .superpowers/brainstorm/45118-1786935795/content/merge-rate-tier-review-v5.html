@@ -1,0 +1,99 @@
+<style>
+  .rate-tier-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:18px; align-items:start; max-width:880px; }
+  @media (max-width:800px) { .rate-tier-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+  @media (max-width:520px) { .rate-tier-grid { grid-template-columns:1fr; } }
+</style>
+
+<h2>Merge Card · 六档 Rate 色阶审阅</h2>
+<p class="subtitle">以下直接使用 iOS 现有六张等级背景资产。每档的材质、边缘与局部光晕使用同一等级色；绿色与琥珀色不再混入蓝色描边。</p>
+
+<div class="rate-tier-grid">
+  <div class="card" data-choice="tier-basic" onclick="toggleSelect(this)">
+    <div class="card-image" style="position:relative;overflow:hidden;border-radius:24px;aspect-ratio:343/527;background:#171222;">
+      <img src="/files/rate-tier-basic.png" alt="Basic neutral violet material" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;">
+      <div style="position:absolute;inset:0;padding:28px;display:flex;flex-direction:column;justify-content:space-between;color:white;text-align:center;">
+        <div><div style="font-size:13px;opacity:.68;letter-spacing:.08em;">RATE &lt; 3</div><div style="font-size:27px;margin-top:10px;">Basic</div></div>
+        <div style="font-size:14px;opacity:.72;">中性深紫灰 · 无等级强光</div>
+      </div>
+    </div>
+    <div class="card-body"><h3>0 · Basic</h3><p>基础信息；以低饱和紫灰玻璃承接产品底色。</p></div>
+  </div>
+
+  <div class="card" data-choice="tier-notable" onclick="toggleSelect(this)">
+    <div class="card-image" style="position:relative;overflow:hidden;border-radius:24px;aspect-ratio:343/527;background:#17251f;">
+      <img src="/files/rate-tier-notable.png" alt="Notable emerald material" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;">
+      <div style="position:absolute;inset:0;padding:28px;display:flex;flex-direction:column;justify-content:space-between;color:white;text-align:center;">
+        <div><div style="font-size:13px;opacity:.68;letter-spacing:.08em;">RATE 3–8</div><div style="font-size:27px;margin-top:10px;">Notable</div></div>
+        <div style="font-size:14px;opacity:.76;">翡翠绿 · 克制而明确</div>
+      </div>
+    </div>
+    <div class="card-body"><h3>1 · Notable</h3><p>你确认的绿色等级；rate = 3 从这里开始。</p></div>
+  </div>
+
+  <div class="card" data-choice="tier-valuable" onclick="toggleSelect(this)">
+    <div class="card-image" style="position:relative;overflow:hidden;border-radius:24px;aspect-ratio:343/527;background:#182440;">
+      <img src="/files/rate-tier-valuable.png" alt="Valuable sapphire material" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;">
+      <div style="position:absolute;inset:0;padding:28px;display:flex;flex-direction:column;justify-content:space-between;color:white;text-align:center;">
+        <div><div style="font-size:13px;opacity:.68;letter-spacing:.08em;">RATE 9–26</div><div style="font-size:27px;margin-top:10px;">Valuable</div></div>
+        <div style="font-size:14px;opacity:.76;">蓝宝石 · 清晰冷静</div>
+      </div>
+    </div>
+    <div class="card-body"><h3>2 · Valuable</h3><p>高于 Notable，使用更清晰的蓝色能量与边缘。</p></div>
+  </div>
+
+  <div class="card" data-choice="tier-significant" onclick="toggleSelect(this)">
+    <div class="card-image" style="position:relative;overflow:hidden;border-radius:24px;aspect-ratio:343/527;background:#261b3c;">
+      <img src="/files/rate-tier-significant.png" alt="Significant amethyst material" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;">
+      <div style="position:absolute;inset:0;padding:28px;display:flex;flex-direction:column;justify-content:space-between;color:white;text-align:center;">
+        <div><div style="font-size:13px;opacity:.68;letter-spacing:.08em;">RATE 27–80</div><div style="font-size:27px;margin-top:10px;">Significant</div></div>
+        <div style="font-size:14px;opacity:.76;">紫晶 · 稀有感上升</div>
+      </div>
+    </div>
+    <div class="card-body"><h3>3 · Significant</h3><p>重要洞见；延续 Chorai 主色但提高紫晶亮度。</p></div>
+  </div>
+
+  <div class="card" data-choice="tier-critical" onclick="toggleSelect(this)">
+    <div class="card-image" style="position:relative;overflow:hidden;border-radius:24px;aspect-ratio:343/527;background:#3b2d22;">
+      <img src="/files/rate-tier-critical.png" alt="Critical amber material" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;">
+      <div style="position:absolute;inset:0;padding:28px;display:flex;flex-direction:column;justify-content:space-between;color:white;text-align:center;">
+        <div><div style="font-size:13px;opacity:.68;letter-spacing:.08em;">RATE 81–242</div><div style="font-size:27px;margin-top:10px;">Critical</div></div>
+        <div style="font-size:14px;opacity:.76;">琥珀金 · 高价值强度</div>
+      </div>
+    </div>
+    <div class="card-body"><h3>4 · Critical</h3><p>颜色层级成立；英文可能被理解成“严重告警”，需要你特别确认。</p></div>
+  </div>
+
+  <div class="card" data-choice="tier-definitive" onclick="toggleSelect(this)">
+    <div class="card-image" style="position:relative;overflow:hidden;border-radius:24px;aspect-ratio:343/527;background:#402033;">
+      <img src="/files/rate-tier-definitive.png" alt="Definitive vermilion material" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;">
+      <div style="position:absolute;inset:0;padding:28px;display:flex;flex-direction:column;justify-content:space-between;color:white;text-align:center;">
+        <div><div style="font-size:13px;opacity:.68;letter-spacing:.08em;">RATE ≥ 243</div><div style="font-size:27px;margin-top:10px;">Definitive</div></div>
+        <div style="font-size:14px;opacity:.76;">赤橙红 · 最高等级</div>
+      </div>
+    </div>
+    <div class="card-body"><h3>5 · Definitive</h3><p>顶级卡片；赤红主体配暖橙局部反射。</p></div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>命名审查结论</h3>
+  <p><strong>Basic → Notable → Valuable → Significant → Critical → Definitive</strong></p>
+  <p class="subtitle">前四档和最高档语义递进清楚。第 4 档若强调“知识价值”而非“严重程度”，可把 Critical 改为 Exceptional；颜色与 rate 区间不变。</p>
+</div>
+
+<div class="options">
+  <div class="option" data-choice="approve-rate-tier-system-v5" onclick="toggleSelect(this)">
+    <div class="letter">✓</div>
+    <div class="content">
+      <h3>确认六档颜色、区间与现有名称</h3>
+      <p>保留 Critical；实现与规范统一使用这套映射。</p>
+    </div>
+  </div>
+  <div class="option" data-choice="rename-critical-to-exceptional" onclick="toggleSelect(this)">
+    <div class="letter">E</div>
+    <div class="content">
+      <h3>只把 Critical 改为 Exceptional</h3>
+      <p>保留琥珀金与 81–242，仅让英文含义更正向。</p>
+    </div>
+  </div>
+</div>
