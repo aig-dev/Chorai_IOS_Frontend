@@ -56,6 +56,12 @@ final class NewNoteViewSourceContractTests: XCTestCase {
         )
         XCTAssertLessThan(storeHydration.lowerBound, seedCreation.lowerBound)
         XCTAssertTrue(hydration.contains("title: card.title"))
+        XCTAssertTrue(
+            hydration.contains("document: BlockNoteInitialDocument.existingCard("),
+            "Existing cards must select the lossless runtime profile from their document shape"
+        )
+        XCTAssertTrue(hydration.contains("contentJSON: card.contentJSON"))
+        XCTAssertTrue(hydration.contains("fallbackMarkdown: card.content"))
         XCTAssertTrue(hydration.contains("isNew: false"))
         XCTAssertTrue(hydration.contains("initialFocus: false"))
     }

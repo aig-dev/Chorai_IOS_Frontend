@@ -325,31 +325,28 @@ struct BlockNoteBridgeOutputDispatcher {
 struct BlockNoteEditorBridgeSession: Sendable {
     private let document: BlockNoteInitialDocument
     private let editable: Bool
-    private var mergeRuntimeAdapter: BlockNoteMergeRuntimeAdapter?
+    private var runtimeDocumentAdapter: BlockNoteRuntimeDocumentAdapter?
     private var queuedCommands: [BlockNoteEditorCommand] = []
     private(set) var state: BlockNoteEditorState
 
     init(document: BlockNoteInitialDocument, editable: Bool) {
         self.document = document
         self.editable = editable
-        mergeRuntimeAdapter = nil
+        runtimeDocumentAdapter = nil
         state = BlockNoteEditorState(editable: editable)
     }
 
     mutating func navigationFinished() -> BlockNoteBridgeSessionOutput {
         state.beginInitialization()
-        if document.profile == .mergeArtifact {
-            mergeRuntimeAdapter = try? BlockNoteMergeRuntimeAdapter(
-                contentJSON: document.contentJSON,
-                displayURLsByMediaReference: document.displayURLsByMediaReference
-            )
-        } else {
-            mergeRuntimeAdapter = nil
-        }
+        runtimeDocumentAdapter = try? BlockNoteRuntimeDocumentAdapter(
+            contentJSON: document.contentJSON,
+            displayURLsByMediaReference: document.displayURLsByMediaReference,
+            preservesStandardProjection: document.profile == .standard
+        )
         return .init(commands: [
             .initialize(
                 protocolVersion: BlockNoteEditorProtocol.version,
-                documentJSON: mergeRuntimeAdapter?.runtimeDocumentJSON
+                documentJSON: runtimeDocumentAdapter?.runtimeDocumentJSON
                     ?? document.contentJSON,
                 fallbackMarkdown: document.fallbackMarkdown,
                 editable: editable,
@@ -384,7 +381,7 @@ struct BlockNoteEditorBridgeSession: Sendable {
     mutating func receive(_ message: BlockNoteEditorMessage) -> BlockNoteBridgeSessionOutput {
         let adaptedMessage: BlockNoteEditorMessage
         do {
-            adaptedMessage = try mergeRuntimeAdapter?.adapt(message) ?? message
+            adaptedMessage = try runtimeDocumentAdapter?.adapt(message) ?? message
         } catch {
             return bridgeFailure(code: "merge_runtime_adapter_failed")
         }
@@ -439,26 +436,33 @@ struct BlockNoteEditorBridgeSession: Sendable {
     }
 }
 
-private struct BlockNoteMergeRuntimeAdapter: Sendable {
+private struct BlockNoteRuntimeDocumentAdapter: Sendable {
     let runtimeDocumentJSON: String
     private let originalsByID: [String: RuntimeBlock]
+    private let envelopeMetadata: [String: RuntimeJSONValue]?
+    private let preservesStandardProjection: Bool
+    private let initialRuntimeImageURLsByID: [String: RuntimeJSONValue]
     private var mappedRuntimeIDs: [String: String] = [:]
     private var usedOutputIDs: Set<String>
 
     init(
         contentJSON: String?,
-        displayURLsByMediaReference: [String: String]
+        displayURLsByMediaReference: [String: String],
+        preservesStandardProjection: Bool
     ) throws {
         guard let contentJSON,
               let data = contentJSON.data(using: .utf8) else {
             throw AdapterError.invalidDocument
         }
-        let mergeBlocks = try JSONDecoder().decode([RuntimeBlock].self, from: data)
+        let document = try Self.decodeDocument(from: data)
+        let mergeBlocks = document.blocks
         guard !mergeBlocks.isEmpty else { throw AdapterError.invalidDocument }
 
         var originals: [String: RuntimeBlock] = [:]
         try Self.collectOriginals(mergeBlocks, into: &originals)
         originalsByID = originals
+        envelopeMetadata = document.envelopeMetadata
+        self.preservesStandardProjection = preservesStandardProjection
         usedOutputIDs = Set(originals.keys)
 
         let runtimeBlocks = try mergeBlocks.map {
@@ -467,12 +471,59 @@ private struct BlockNoteMergeRuntimeAdapter: Sendable {
                 displayURLsByMediaReference: displayURLsByMediaReference
             )
         }
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
-        runtimeDocumentJSON = String(
-            decoding: try encoder.encode(runtimeBlocks),
-            as: UTF8.self
+        var initialImageURLs: [String: RuntimeJSONValue] = [:]
+        Self.collectRuntimeImageURLs(runtimeBlocks, into: &initialImageURLs)
+        initialRuntimeImageURLsByID = initialImageURLs
+        runtimeDocumentJSON = try Self.encodeDocument(
+            blocks: runtimeBlocks,
+            envelopeMetadata: document.envelopeMetadata
         )
+    }
+
+    static func requiresRuntimeAdaptation(contentJSON: String?) -> Bool {
+        guard let contentJSON,
+              let sourceData = contentJSON.data(using: .utf8),
+              let sourceDocument = try? decodeDocument(from: sourceData),
+              sourceDocument.envelopeMetadata != nil,
+              !sourceDocument.blocks.isEmpty,
+              let adapter = try? BlockNoteRuntimeDocumentAdapter(
+                  contentJSON: contentJSON,
+                  displayURLsByMediaReference: [:],
+                  preservesStandardProjection: false
+              ),
+              let runtimeData = adapter.runtimeDocumentJSON.data(using: .utf8),
+              let runtimeDocument = try? decodeDocument(from: runtimeData),
+              runtimeDocument.envelopeMetadata == sourceDocument.envelopeMetadata,
+              let addsRuntimeProps = addsRuntimeProps(
+                  source: sourceDocument.blocks,
+                  runtime: runtimeDocument.blocks
+              ) else {
+            return false
+        }
+        return addsRuntimeProps
+    }
+
+    private static func addsRuntimeProps(
+        source: [RuntimeBlock],
+        runtime: [RuntimeBlock]
+    ) -> Bool? {
+        guard source.count == runtime.count else { return nil }
+        for (sourceBlock, runtimeBlock) in zip(source, runtime) {
+            guard sourceBlock.id == runtimeBlock.id,
+                  sourceBlock.type == runtimeBlock.type,
+                  let childAdds = addsRuntimeProps(
+                      source: sourceBlock.children,
+                      runtime: runtimeBlock.children
+                  ) else {
+                return nil
+            }
+            if runtimeBlock.props.contains(where: { key, value in
+                sourceBlock.props[key] != value
+            }) || childAdds {
+                return true
+            }
+        }
+        return false
     }
 
     mutating func adapt(_ message: BlockNoteEditorMessage) throws -> BlockNoteEditorMessage {
@@ -499,11 +550,87 @@ private struct BlockNoteMergeRuntimeAdapter: Sendable {
         guard let data = runtimeJSON.data(using: .utf8) else {
             throw AdapterError.invalidDocument
         }
-        let runtimeBlocks = try JSONDecoder().decode([RuntimeBlock].self, from: data)
-        let mergeBlocks = try runtimeBlocks.map { try mergeBlock($0) }
+        let runtimeDocument = try Self.decodeDocument(from: data)
+        guard runtimeDocument.envelopeMetadata == envelopeMetadata else {
+            throw AdapterError.invalidDocument
+        }
+        let mergeBlocks = try runtimeDocument.blocks.map { try mergeBlock($0) }
+        return try Self.encodeDocument(
+            blocks: mergeBlocks,
+            envelopeMetadata: envelopeMetadata
+        )
+    }
+
+    private static func decodeDocument(from data: Data) throws -> RuntimeDocument {
+        let decoder = JSONDecoder()
+        if let blocks = try? decoder.decode([RuntimeBlock].self, from: data) {
+            return RuntimeDocument(blocks: blocks, envelopeMetadata: nil)
+        }
+
+        let root = try decoder.decode([String: RuntimeJSONValue].self, from: data)
+        let allowedKeys: Set<String> = [
+            "blocks",
+            "content",
+            "editor_kind",
+            "schema_version",
+            "tags",
+            "title",
+        ]
+        guard Set(root.keys).isSubset(of: allowedKeys),
+              root["schema_version"] == .number(1),
+              root["editor_kind"] == .string("blocknote"),
+              case let .array(rawBlocks)? = root["blocks"],
+              Self.hasValidOptionalEnvelopeMetadata(root) else {
+            throw AdapterError.invalidDocument
+        }
+
+        let blockData = try JSONEncoder().encode(rawBlocks)
+        let blocks = try decoder.decode([RuntimeBlock].self, from: blockData)
+        var metadata = root
+        metadata.removeValue(forKey: "blocks")
+        return RuntimeDocument(blocks: blocks, envelopeMetadata: metadata)
+    }
+
+    private static func hasValidOptionalEnvelopeMetadata(
+        _ root: [String: RuntimeJSONValue]
+    ) -> Bool {
+        for key in ["content", "title"] {
+            if let value = root[key], case .string = value {
+                continue
+            } else if root[key] != nil {
+                return false
+            }
+        }
+        if let tags = root["tags"] {
+            guard case let .array(values) = tags,
+                  values.allSatisfy({ value in
+                      if case .string = value { return true }
+                      return false
+                  }) else {
+                return false
+            }
+        }
+        return true
+    }
+
+    private static func encodeDocument(
+        blocks: [RuntimeBlock],
+        envelopeMetadata: [String: RuntimeJSONValue]?
+    ) throws -> String {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
-        return String(decoding: try encoder.encode(mergeBlocks), as: UTF8.self)
+        let encoded: Data
+        if var envelopeMetadata {
+            let blockData = try encoder.encode(blocks)
+            envelopeMetadata["blocks"] = try JSONDecoder().decode(
+                RuntimeJSONValue.self,
+                from: blockData
+            )
+            encoded = try encoder.encode(envelopeMetadata)
+        } else {
+            encoded = try encoder.encode(blocks)
+        }
+        return String(decoding: encoded, as: UTF8.self)
     }
 
     private mutating func mergeBlock(_ runtime: RuntimeBlock) throws -> RuntimeBlock {
@@ -511,29 +638,62 @@ private struct BlockNoteMergeRuntimeAdapter: Sendable {
         let original = originalsByID[runtime.id]
         let props: [String: RuntimeJSONValue]
         if let original {
-            var projected: [String: RuntimeJSONValue] = [:]
-            for (key, originalValue) in original.props {
-                if key == "mediaRef" {
-                    projected[key] = originalValue
-                } else if let runtimeValue = runtime.props[key] {
-                    projected[key] = runtimeValue
+            if preservesStandardProjection {
+                var projected = original.props
+                if let runtimeKeys = Self.runtimePropKeys(for: runtime.type) {
+                    for key in runtimeKeys {
+                        if let runtimeValue = runtime.props[key] {
+                            projected[key] = runtimeValue
+                        } else {
+                            projected.removeValue(forKey: key)
+                        }
+                    }
                 } else {
-                    throw AdapterError.invalidDocument
+                    for (key, runtimeValue) in runtime.props {
+                        projected[key] = runtimeValue
+                    }
                 }
+                if runtime.type == "image",
+                   original.props["mediaRef"] != nil,
+                   runtime.props["url"] != initialRuntimeImageURLsByID[runtime.id] {
+                    projected.removeValue(forKey: "mediaRef")
+                }
+                props = projected
+            } else {
+                var projected: [String: RuntimeJSONValue] = [:]
+                for (key, originalValue) in original.props {
+                    if key == "mediaRef" {
+                        projected[key] = originalValue
+                    } else if let runtimeValue = runtime.props[key] {
+                        projected[key] = runtimeValue
+                    } else {
+                        throw AdapterError.invalidDocument
+                    }
+                }
+                props = projected
             }
-            props = projected
         } else {
-            props = Self.newBlockProps(runtime)
+            props = preservesStandardProjection
+                ? runtime.props
+                : Self.newBlockProps(runtime)
         }
 
         let children = try runtime.children.map { try mergeBlock($0) }
+        let content: [RuntimeJSONValue]?
+        if preservesStandardProjection {
+            content = original?.content == nil && runtime.content == nil
+                ? nil
+                : (runtime.content ?? [])
+        } else {
+            content = original?.content == nil && runtime.type == "image"
+                ? nil
+                : (runtime.content ?? [])
+        }
         return RuntimeBlock(
             id: outputID,
             type: runtime.type,
             props: props,
-            content: original?.content == nil && runtime.type == "image"
-                ? nil
-                : (runtime.content ?? []),
+            content: content,
             children: children
         )
     }
@@ -561,8 +721,11 @@ private struct BlockNoteMergeRuntimeAdapter: Sendable {
         displayURLsByMediaReference: [String: String]
     ) throws -> RuntimeBlock {
         var props = runtimeDefaults(for: merge.type)
+        let runtimeKeys = runtimePropKeys(for: merge.type)
         for (key, value) in merge.props where key != "mediaRef" {
-            props[key] = value
+            if runtimeKeys?.contains(key) ?? true {
+                props[key] = value
+            }
         }
         if merge.type == "image" {
             guard case let .string(mediaReference)? = merge.props["mediaRef"],
@@ -630,6 +793,33 @@ private struct BlockNoteMergeRuntimeAdapter: Sendable {
         }
     }
 
+    private static func runtimePropKeys(for type: String) -> Set<String>? {
+        switch type {
+        case "paragraph", "bulletListItem", "numberedListItem":
+            return ["backgroundColor", "textAlignment", "textColor"]
+        case "heading":
+            return [
+                "backgroundColor", "isToggleable", "level",
+                "textAlignment", "textColor",
+            ]
+        case "checkListItem":
+            return [
+                "backgroundColor", "checked", "textAlignment", "textColor",
+            ]
+        case "quote":
+            return ["backgroundColor", "textColor"]
+        case "codeBlock":
+            return ["language"]
+        case "image":
+            return [
+                "backgroundColor", "caption", "name", "previewWidth",
+                "showPreview", "textAlignment", "url",
+            ]
+        default:
+            return nil
+        }
+    }
+
     private static func newBlockProps(
         _ runtime: RuntimeBlock
     ) -> [String: RuntimeJSONValue] {
@@ -648,7 +838,7 @@ private struct BlockNoteMergeRuntimeAdapter: Sendable {
         into result: inout [String: RuntimeBlock]
     ) throws {
         for block in blocks {
-            guard isServerBlockID(block.id), result[block.id] == nil else {
+            guard isPersistedBlockID(block.id), result[block.id] == nil else {
                 throw AdapterError.invalidDocument
             }
             result[block.id] = block
@@ -656,14 +846,31 @@ private struct BlockNoteMergeRuntimeAdapter: Sendable {
         }
     }
 
+    private static func collectRuntimeImageURLs(
+        _ blocks: [RuntimeBlock],
+        into result: inout [String: RuntimeJSONValue]
+    ) {
+        for block in blocks {
+            if block.type == "image", let url = block.props["url"] {
+                result[block.id] = url
+            }
+            collectRuntimeImageURLs(block.children, into: &result)
+        }
+    }
+
     private static func isServerBlockID(_ value: String) -> Bool {
         let bytes = Array(value.utf8)
         guard bytes.count > 4,
-              bytes.count <= 64,
               bytes.starts(with: Array("blk_".utf8)) else {
             return false
         }
-        return bytes.dropFirst(4).allSatisfy { byte in
+        return isPersistedBlockID(value)
+    }
+
+    private static func isPersistedBlockID(_ value: String) -> Bool {
+        let bytes = Array(value.utf8)
+        guard !bytes.isEmpty, bytes.count <= 64 else { return false }
+        return bytes.allSatisfy { byte in
             (0x30...0x39).contains(byte)
                 || (0x41...0x5A).contains(byte)
                 || (0x61...0x7A).contains(byte)
@@ -674,6 +881,11 @@ private struct BlockNoteMergeRuntimeAdapter: Sendable {
 
     private enum AdapterError: Error {
         case invalidDocument
+    }
+
+    private struct RuntimeDocument: Sendable {
+        let blocks: [RuntimeBlock]
+        let envelopeMetadata: [String: RuntimeJSONValue]?
     }
 
     private struct RuntimeBlock: Codable, Equatable, Sendable {
@@ -724,5 +936,22 @@ private struct BlockNoteMergeRuntimeAdapter: Sendable {
             case .null: try container.encodeNil()
             }
         }
+    }
+}
+
+public extension BlockNoteInitialDocument {
+    static func existingCard(
+        contentJSON: String?,
+        fallbackMarkdown: String,
+        displayURLsByMediaReference: [String: String] = [:]
+    ) -> BlockNoteInitialDocument {
+        BlockNoteInitialDocument(
+            contentJSON: contentJSON,
+            fallbackMarkdown: fallbackMarkdown,
+            profile: BlockNoteRuntimeDocumentAdapter.requiresRuntimeAdaptation(
+                contentJSON: contentJSON
+            ) ? .mergeArtifact : .standard,
+            displayURLsByMediaReference: displayURLsByMediaReference
+        )
     }
 }

@@ -147,7 +147,7 @@ struct NewNoteView: View {
         )
         editorSeed = CardEditorSeed(
             id: UUID(),
-            document: BlockNoteInitialDocument(
+            document: BlockNoteInitialDocument.existingCard(
                 contentJSON: card.contentJSON,
                 fallbackMarkdown: card.content
             ),
