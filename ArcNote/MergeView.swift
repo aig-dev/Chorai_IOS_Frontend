@@ -521,26 +521,7 @@ private struct LegacyMergeView: View {
     
     // MARK: 转换CardDetail为MergeCard
     private func convertCardDetailToMergeCard(_ cardDetail: CardDetail) -> MergeCard {
-        // 格式化日期
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
-        
-        let displayDate: String
-        if let date = dateFormatter.date(from: cardDetail.createdAt) {
-            let now = Date()
-            let timeInterval = now.timeIntervalSince(date)
-            
-            if timeInterval < 86400 { // 24小时内
-                displayDate = "Today"
-            } else if timeInterval < 172800 { // 48小时内
-                displayDate = "Yesterday"
-            } else {
-                let days = Int(timeInterval / 86400)
-                displayDate = "\(days) days ago"
-            }
-        } else {
-            displayDate = "Unknown"
-        }
+        let displayDate = CardTimestamp.dateOnly(from: cardDetail.createdAt)
         
         return MergeCard(
             id: cardDetail.id,
@@ -741,26 +722,7 @@ private struct LegacyMergeView: View {
     
     // MARK: - 转换SearchCard为MergeCard
     private func convertSearchCardToMergeCard(_ searchCard: SearchCard) -> MergeCard {
-        // 格式化日期
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
-        
-        let displayDate: String
-        if let date = dateFormatter.date(from: searchCard.createdAt) {
-            let now = Date()
-            let timeInterval = now.timeIntervalSince(date)
-            
-            if timeInterval < 86400 { // 24小时内
-                displayDate = "Today"
-            } else if timeInterval < 172800 { // 48小时内
-                displayDate = "Yesterday"
-            } else {
-                let days = Int(timeInterval / 86400)
-                displayDate = "\(days) days ago"
-            }
-        } else {
-            displayDate = "Unknown"
-        }
+        let displayDate = CardTimestamp.dateOnly(from: searchCard.createdAt)
         
         return MergeCard(
             id: searchCard.id,
@@ -780,26 +742,7 @@ private struct LegacyMergeView: View {
     
     // MARK: 转换UserAllCard为MergeCard
     private func convertUserAllCardToMergeCard(_ userAllCard: UserAllCard, isOwnCard: Bool) -> MergeCard {
-        // 格式化日期
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
-        
-        let displayDate: String
-        if let date = dateFormatter.date(from: userAllCard.createdAt) {
-            let now = Date()
-            let timeInterval = now.timeIntervalSince(date)
-            
-            if timeInterval < 86400 { // 24小时内
-                displayDate = "Today"
-            } else if timeInterval < 172800 { // 48小时内
-                displayDate = "Yesterday"
-            } else {
-                let days = Int(timeInterval / 86400)
-                displayDate = "\(days) days ago"
-            }
-        } else {
-            displayDate = "Unknown"
-        }
+        let displayDate = CardTimestamp.dateOnly(from: userAllCard.createdAt)
         
         return MergeCard(
             id: userAllCard.id,

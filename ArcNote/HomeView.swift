@@ -1343,7 +1343,7 @@ struct AIListView: View {
                         HomePostCard(
                             profileImage: favorite.author.avatar ?? "",
                             name: favorite.author.username,
-                            time: formatFavoriteTime(favorite.favoritedAt),
+                            time: formatFavoriteDate(favorite.favoritedAt),
                             content: favorite.content,
                             contentJSON: favorite.contentJSON,
                             backgroundMediaRef: favorite.backgroundMediaRef,
@@ -1411,30 +1411,8 @@ struct AIListView: View {
         }
     }
     
-    // 格式化收藏时间
-    private func formatFavoriteTime(_ dateString: String) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
-        
-        if let date = formatter.date(from: dateString) {
-            let now = Date()
-            let timeInterval = now.timeIntervalSince(date)
-            
-            if timeInterval < 60 {
-                return "Just favorited"
-            } else if timeInterval < 3600 {
-                let minutes = Int(timeInterval / 60)
-                return "\(minutes)m ago favorited"
-            } else if timeInterval < 86400 {
-                let hours = Int(timeInterval / 3600)
-                return "\(hours)h ago favorited"
-            } else {
-                let days = Int(timeInterval / 86400)
-                return "\(days)d ago favorited"
-            }
-        }
-        
-        return "Unknown favorited time"
+    private func formatFavoriteDate(_ dateString: String) -> String {
+        CardTimestamp.dateOnly(from: dateString)
     }
 }
 
