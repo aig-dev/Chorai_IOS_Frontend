@@ -1934,32 +1934,7 @@ struct NotesCard: View {
     
     // MARK: - 日期格式化方法
     private func formatDate(_ dateString: String) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
-        
-        if let date = formatter.date(from: dateString) {
-            let now = Date()
-            let timeInterval = now.timeIntervalSince(date)
-            
-            if timeInterval < 60 {
-                return "just now"
-            } else if timeInterval < 3600 {
-                let minutes = Int(timeInterval / 60)
-                return "\(minutes) minutes ago"
-            } else if timeInterval < 86400 {
-                let hours = Int(timeInterval / 3600)
-                return "\(hours) hours ago"
-            } else if timeInterval < 604800 {
-                let days = Int(timeInterval / 86400)
-                return "\(days) days ago"
-            } else {
-                let displayFormatter = DateFormatter()
-                displayFormatter.dateFormat = "MM-dd"
-                return displayFormatter.string(from: date)
-            }
-        }
-        
-        return dateString
+        CardTimestamp.dateOnly(from: dateString)
     }
 }
 

@@ -452,28 +452,7 @@ struct UserProfileView: View {
     
     // MARK: Helper Functions
     private func formatDate(_ dateString: String) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
-        
-        if let date = formatter.date(from: dateString) {
-            let now = Date()
-            let timeInterval = now.timeIntervalSince(date)
-            
-            if timeInterval < 60 {
-                return "just now"
-            } else if timeInterval < 3600 {
-                let minutes = Int(timeInterval / 60)
-                return "\(minutes) minutes ago"
-            } else if timeInterval < 86400 {
-                let hours = Int(timeInterval / 3600)
-                return "\(hours) hours ago"
-            } else {
-                let days = Int(timeInterval / 86400)
-                return "\(days) days ago"
-            }
-        }
-        
-        return dateString
+        CardTimestamp.dateOnly(from: dateString)
     }
     
     // MARK: 发起会话
@@ -776,28 +755,7 @@ struct UserPostCard: View {
     
     // MARK: - Helper Functions
     private func formatDate(_ dateString: String) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
-        
-        if let date = formatter.date(from: dateString) {
-            let now = Date()
-            let timeInterval = now.timeIntervalSince(date)
-            
-            if timeInterval < 60 {
-                return "just now"
-            } else if timeInterval < 3600 {
-                let minutes = Int(timeInterval / 60)
-                return "\(minutes) minutes ago"
-            } else if timeInterval < 86400 {
-                let hours = Int(timeInterval / 3600)
-                return "\(hours) hours ago"
-            } else {
-                let days = Int(timeInterval / 86400)
-                return "\(days) days ago"
-            }
-        }
-        
-        return dateString
+        CardTimestamp.dateOnly(from: dateString)
     }
     
     // MARK: Background Views

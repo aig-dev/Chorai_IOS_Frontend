@@ -402,17 +402,7 @@ private struct DiscoveryPathCardView: View {
     }
 
     private static func formattedDate(_ raw: String) -> String {
-        let fractional = ISO8601DateFormatter()
-        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        let fallback = ISO8601DateFormatter()
-        fallback.formatOptions = [.withInternetDateTime]
-        guard let date = fractional.date(from: raw) ?? fallback.date(from: raw) else {
-            return raw
-        }
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .none
-        return formatter.string(from: date)
+        CardTimestamp.dateOnly(from: raw)
     }
 }
 
