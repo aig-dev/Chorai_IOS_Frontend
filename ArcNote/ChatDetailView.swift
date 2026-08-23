@@ -124,6 +124,26 @@ struct ChatDetailView: View {
             )
         )
     }
+
+    private var chatPartnerName: String {
+        let name = chatDetailManager.conversation?.partner.username
+            ?? contactName
+        let trimmedName = name.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        return trimmedName.isEmpty ? "Chora" : trimmedName
+    }
+
+    private var chatPartnerAvatar: String? {
+        chatDetailManager.conversation?.partner.avatarUrl ?? contactAvatar
+    }
+
+    private var isAgentTyping: Bool {
+        if case .thinking = chatDetailManager.agentDeliveryState {
+            return true
+        }
+        return false
+    }
     
 
     
@@ -142,20 +162,15 @@ struct ChatDetailView: View {
                 
                 HStack(spacing: 10) {
                     ChatAvatarView(
-                        rawValue: chatDetailManager.conversation?.partner.avatarUrl
-                            ?? contactAvatar,
+                        rawValue: chatPartnerAvatar,
                         size: 40
                     )
                     
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(chatDetailManager.conversation?.partner.username ?? contactName)
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundColor(.white)
-                        
-                        Text(contactStatus)
-                            .font(.system(size: 12, weight: .regular))
-                            .foregroundColor(.green)
-                    }
+                    ChatHeaderIdentity(
+                        name: chatPartnerName,
+                        status: contactStatus,
+                        isTyping: isAgentTyping
+                    )
                 }
                 
                 Spacer()
@@ -290,24 +305,7 @@ struct ChatDetailView: View {
                 .padding(.bottom, 16)
             }
 
-            switch chatDetailManager.agentDeliveryState {
-            case .idle:
-                EmptyView()
-            case .thinking:
-                HStack(spacing: 8) {
-                    ProgressView()
-                        .progressViewStyle(
-                            CircularProgressViewStyle(tint: .white.opacity(0.8))
-                        )
-                    Text("Chora is thinking…")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundColor(.white.opacity(0.72))
-                    Spacer()
-                }
-                .adaptiveContentGutter()
-                .padding(.bottom, 8)
-                .accessibilityIdentifier("chat.agent.thinking")
-            case .failed(message: let message):
+            if case .failed(let message) = chatDetailManager.agentDeliveryState {
                 HStack {
                     Image(systemName: "exclamationmark.circle")
                     Text(message)
@@ -427,6 +425,78 @@ struct ChatDetailView: View {
             } else {
                 proxy.scrollTo("chatBottom", anchor: .bottom)
             }
+        }
+    }
+}
+
+private struct ChatHeaderIdentity: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var ellipsisIsDimmed = false
+
+    let name: String
+    let status: String
+    let isTyping: Bool
+
+    var body: some View {
+        ZStack(alignment: .leading) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(name)
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(.white)
+
+                Text(status)
+                    .font(.system(size: 12, weight: .regular))
+                    .foregroundColor(.green)
+            }
+            .opacity(isTyping ? 0 : 1)
+            .offset(y: isTyping ? -4 : 0)
+
+            HStack(spacing: 0) {
+                Text("\(name) is typing")
+                    .foregroundColor(.white)
+                Text("…")
+                    .foregroundColor(.white.opacity(0.72))
+                    .opacity(
+                        reduceMotion || !isTyping
+                            ? 1
+                            : (ellipsisIsDimmed ? 0.38 : 1)
+                    )
+            }
+            .font(.system(size: 16, weight: .semibold))
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
+            .opacity(isTyping ? 1 : 0)
+            .offset(y: isTyping ? 0 : 4)
+        }
+        .frame(height: 40, alignment: .leading)
+        .animation(
+            reduceMotion ? nil : .easeOut(duration: 0.18),
+            value: isTyping
+        )
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(
+            isTyping ? "\(name) is typing" : "\(name), \(status)"
+        )
+        .accessibilityAddTraits(.updatesFrequently)
+        .accessibilityIdentifier("chat.header.identity")
+        .onAppear {
+            updateEllipsisAnimation()
+        }
+        .onChange(of: isTyping) { _ in
+            updateEllipsisAnimation()
+        }
+        .onChange(of: reduceMotion) { _ in
+            updateEllipsisAnimation()
+        }
+    }
+
+    private func updateEllipsisAnimation() {
+        ellipsisIsDimmed = false
+        guard isTyping, !reduceMotion else { return }
+        withAnimation(
+            .easeInOut(duration: 0.85).repeatForever(autoreverses: true)
+        ) {
+            ellipsisIsDimmed = true
         }
     }
 }

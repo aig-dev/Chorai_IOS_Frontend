@@ -30,11 +30,9 @@ final class ChatAgentDeliverySourceContractTests: XCTestCase {
         )
     }
 
-    func testChatViewShowsDeliveryStateAndStopsStreamOnDisappear() throws {
+    func testChatViewStopsStreamOnDisappear() throws {
         let source = try source("ArcNote/ChatDetailView.swift")
 
-        XCTAssertTrue(source.contains("Chora is thinking"))
-        XCTAssertTrue(source.contains("failed(message: let message)"))
         XCTAssertTrue(source.contains(".onDisappear"))
         XCTAssertTrue(source.contains("stopConversationEvents()"))
     }

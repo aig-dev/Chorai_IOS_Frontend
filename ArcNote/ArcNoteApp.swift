@@ -1288,7 +1288,9 @@ private final class ChatVisibilityFixtureService:
     private let humanActorID: String
     private let conversationID: String
     private let includesAttachmentScenario: Bool
+    private let partnerUsername: String
     private let partnerAvatarURL: String?
+    private let emitsThinkingEvent: Bool
     private var hasPostCutoffMessage = false
     private var sentMessages: [APIChatMessage] = []
     private let conversationSubject:
@@ -1298,17 +1300,22 @@ private final class ChatVisibilityFixtureService:
         humanActorID: String,
         conversationID: String,
         includesAttachmentScenario: Bool = false,
-        partnerAvatarURL: String? = nil
+        partnerUsername: String = "Fixture Partner",
+        partnerAvatarURL: String? = nil,
+        emitsThinkingEvent: Bool = false
     ) {
         self.humanActorID = humanActorID
         self.conversationID = conversationID
         self.includesAttachmentScenario = includesAttachmentScenario
+        self.partnerUsername = partnerUsername
         self.partnerAvatarURL = partnerAvatarURL
+        self.emitsThinkingEvent = emitsThinkingEvent
         conversationSubject = CurrentValueSubject(
             Self.conversations(
                 humanActorID: humanActorID,
                 conversationID: conversationID,
                 hasPostCutoffMessage: false,
+                partnerUsername: partnerUsername,
                 partnerAvatarURL: partnerAvatarURL
             )
         )
@@ -1321,6 +1328,7 @@ private final class ChatVisibilityFixtureService:
                 humanActorID: humanActorID,
                 conversationID: conversationID,
                 hasPostCutoffMessage: true,
+                partnerUsername: partnerUsername,
                 partnerAvatarURL: partnerAvatarURL
             )
         )
@@ -1342,7 +1350,7 @@ private final class ChatVisibilityFixtureService:
                     id: conversationId,
                     partner: ChatPartner(
                         id: "partner_\(humanActorID)",
-                        username: "Fixture Partner",
+                        username: partnerUsername,
                         avatarUrl: partnerAvatarURL
                     ),
                     createdAt: Self.beforeTimestamp,
@@ -1477,7 +1485,26 @@ private final class ChatVisibilityFixtureService:
         conversationId: String,
         lastEventID: String?
     ) -> AnyPublisher<ChatConversationEvent, NetworkError> {
-        Empty<ChatConversationEvent, NetworkError>(completeImmediately: false)
+        if emitsThinkingEvent {
+            return Just(
+                ChatConversationEvent(
+                    name: "agent.thinking",
+                    id: "1",
+                    data: Data("{}".utf8)
+                )
+            )
+            .setFailureType(to: NetworkError.self)
+            .append(
+                Empty<ChatConversationEvent, NetworkError>(
+                    completeImmediately: false
+                )
+            )
+            .eraseToAnyPublisher()
+        }
+
+        return Empty<ChatConversationEvent, NetworkError>(
+            completeImmediately: false
+        )
             .eraseToAnyPublisher()
     }
 
@@ -1502,6 +1529,7 @@ private final class ChatVisibilityFixtureService:
         humanActorID: String,
         conversationID: String,
         hasPostCutoffMessage: Bool,
+        partnerUsername: String,
         partnerAvatarURL: String?
     ) -> ConversationsResponse {
         let timestamp = hasPostCutoffMessage ? afterTimestamp : beforeTimestamp
@@ -1514,7 +1542,7 @@ private final class ChatVisibilityFixtureService:
                         id: conversationID,
                         partner: ChatPartner(
                             id: "partner_\(humanActorID)",
-                            username: "Fixture Partner",
+                            username: partnerUsername,
                             avatarUrl: partnerAvatarURL
                         ),
                         lastMessage: LastMessage(
@@ -1569,6 +1597,13 @@ private struct ChatVisibilityFixtureScreen: View {
         includesAttachmentScenario: true,
         partnerAvatarURL: "/fixture-partner-avatar.png"
     )
+    @StateObject private var typingService = ChatVisibilityFixtureService(
+        humanActorID: "human_typing",
+        conversationID: "conversation_typing",
+        partnerUsername: "Chora",
+        partnerAvatarURL: "/uploads/avatars/default.png",
+        emitsThinkingEvent: true
+    )
 
     var body: some View {
         NavigationStack {
@@ -1602,6 +1637,16 @@ private struct ChatVisibilityFixtureScreen: View {
                     )
                 }
                 .accessibilityIdentifier("chat.fixture.open-attachment-list")
+
+                NavigationLink("Open typing chat") {
+                    ChatView(
+                        showSideMenu: .constant(false),
+                        humanActorID: "human_typing",
+                        conversationFetcher: typingService,
+                        detailFetcher: typingService
+                    )
+                }
+                .accessibilityIdentifier("chat.fixture.open-typing-list")
 
                 NavigationLink("Open clear chat history") {
                     ChoraChatHistorySection(

@@ -4430,6 +4430,27 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertEqual(avatar.label, "Chora default avatar")
     }
 
+    func testChatShowsAccessibleTypingStateInHeaderOnly() throws {
+        app.launchArguments.append("--ui-test-chat-visibility")
+        app.launch()
+
+        tap("chat.fixture.open-typing-list")
+        tap("chat.conversation.conversation_typing")
+
+        let headerIdentity = waitFor("chat.header.identity")
+        let firstMessage = app.staticTexts
+            .matching(identifier: "chat.message.message_before")
+            .firstMatch
+        XCTAssertTrue(firstMessage.waitForExistence(timeout: 10))
+        XCTAssertEqual(headerIdentity.label, "Chora is typing")
+        XCTAssertLessThan(headerIdentity.frame.maxY, firstMessage.frame.minY)
+        XCTAssertFalse(
+            app.descendants(matching: .any)["chat.agent.thinking"].exists
+        )
+        XCTAssertFalse(app.staticTexts["Chora is thinking…"].exists)
+        captureVisual("chat-header-typing-state")
+    }
+
     func testChatRestoresLatestSentMessageAndHydratesCompactAttachment() throws {
         app.launchArguments.append("--ui-test-chat-visibility")
         app.launch()
