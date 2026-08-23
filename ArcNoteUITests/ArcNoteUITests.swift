@@ -4451,6 +4451,39 @@ final class ArcNoteUITests: XCTestCase {
         captureVisual("chat-header-typing-state")
     }
 
+    func testChatRecoveryActionReturnsHeaderToTypingWithoutFailureTreatment() throws {
+        app.launchArguments.append("--ui-test-chat-visibility")
+        app.launch()
+
+        tap("chat.fixture.open-recovery-list")
+        tap("chat.conversation.conversation_recovery")
+
+        let retry = waitForButton("chat.agent.retry")
+        XCTAssertFalse(app.descendants(matching: .any)["chat.agent.failed"].exists)
+        XCTAssertFalse(app.images["exclamationmark.circle"].exists)
+        captureVisual("chat-agent-recovery-available")
+        retry.tap()
+
+        let headerIdentity = waitFor("chat.header.identity")
+        let typing = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label == %@", "Chora is typing"),
+            object: headerIdentity
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [typing], timeout: 10), .completed)
+        XCTAssertEqual(waitFor("chat.fixture.retry-count").label, "1")
+        let retryAttemptCount = waitFor("chat.fixture.retry-attempt-count")
+        let retriedTwice = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label == %@", "3"),
+            object: retryAttemptCount
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [retriedTwice], timeout: 10),
+            .completed
+        )
+        XCTAssertFalse(app.descendants(matching: .any)["chat.agent.failed"].exists)
+        captureVisual("chat-agent-recovery-state")
+    }
+
     func testChatRestoresLatestSentMessageAndHydratesCompactAttachment() throws {
         app.launchArguments.append("--ui-test-chat-visibility")
         app.launch()

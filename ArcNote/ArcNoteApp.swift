@@ -1291,6 +1291,9 @@ private final class ChatVisibilityFixtureService:
     private let partnerUsername: String
     private let partnerAvatarURL: String?
     private let emitsThinkingEvent: Bool
+    private let emitsRecoveryEvent: Bool
+    @Published private(set) var retryCallCount = 0
+    @Published private(set) var retrySubscriptionCount = 0
     private var hasPostCutoffMessage = false
     private var sentMessages: [APIChatMessage] = []
     private let conversationSubject:
@@ -1302,7 +1305,8 @@ private final class ChatVisibilityFixtureService:
         includesAttachmentScenario: Bool = false,
         partnerUsername: String = "Fixture Partner",
         partnerAvatarURL: String? = nil,
-        emitsThinkingEvent: Bool = false
+        emitsThinkingEvent: Bool = false,
+        emitsRecoveryEvent: Bool = false
     ) {
         self.humanActorID = humanActorID
         self.conversationID = conversationID
@@ -1310,6 +1314,7 @@ private final class ChatVisibilityFixtureService:
         self.partnerUsername = partnerUsername
         self.partnerAvatarURL = partnerAvatarURL
         self.emitsThinkingEvent = emitsThinkingEvent
+        self.emitsRecoveryEvent = emitsRecoveryEvent
         conversationSubject = CurrentValueSubject(
             Self.conversations(
                 humanActorID: humanActorID,
@@ -1485,6 +1490,24 @@ private final class ChatVisibilityFixtureService:
         conversationId: String,
         lastEventID: String?
     ) -> AnyPublisher<ChatConversationEvent, NetworkError> {
+        if emitsRecoveryEvent {
+            return Just(
+                ChatConversationEvent(
+                    name: "agent.response_ready",
+                    id: "1",
+                    data: Data(
+                        #"{"status":"retry_available","source_message_id":"message_human_recovery"}"#.utf8
+                    )
+                )
+            )
+            .setFailureType(to: NetworkError.self)
+            .append(
+                Empty<ChatConversationEvent, NetworkError>(
+                    completeImmediately: false
+                )
+            )
+            .eraseToAnyPublisher()
+        }
         if emitsThinkingEvent {
             return Just(
                 ChatConversationEvent(
@@ -1506,6 +1529,36 @@ private final class ChatVisibilityFixtureService:
             completeImmediately: false
         )
             .eraseToAnyPublisher()
+    }
+
+    func retryAgentReply(
+        conversationId: String,
+        sourceMessageId: String
+    ) -> AnyPublisher<AgentReplyRetryResponse, NetworkError> {
+        retryCallCount += 1
+        return Deferred { [weak self] () -> AnyPublisher<AgentReplyRetryResponse, NetworkError> in
+            guard let self else {
+                return Fail(error: NetworkError.unknown)
+                    .eraseToAnyPublisher()
+            }
+            self.retrySubscriptionCount += 1
+            if self.retrySubscriptionCount <= 2 {
+                return Fail(error: NetworkError.timeout)
+                    .eraseToAnyPublisher()
+            }
+            return Just(
+                AgentReplyRetryResponse(
+                    success: true,
+                    data: AgentReplyRetryData(
+                        status: "accepted",
+                        sourceMessageId: sourceMessageId
+                    )
+                )
+            )
+            .setFailureType(to: NetworkError.self)
+            .eraseToAnyPublisher()
+        }
+        .eraseToAnyPublisher()
     }
 
     func getReferencedNote(
@@ -1604,6 +1657,13 @@ private struct ChatVisibilityFixtureScreen: View {
         partnerAvatarURL: "/uploads/avatars/default.png",
         emitsThinkingEvent: true
     )
+    @StateObject private var recoveryService = ChatVisibilityFixtureService(
+        humanActorID: "human_recovery",
+        conversationID: "conversation_recovery",
+        partnerUsername: "Chora",
+        partnerAvatarURL: "/uploads/avatars/default.png",
+        emitsRecoveryEvent: true
+    )
 
     var body: some View {
         NavigationStack {
@@ -1648,6 +1708,16 @@ private struct ChatVisibilityFixtureScreen: View {
                 }
                 .accessibilityIdentifier("chat.fixture.open-typing-list")
 
+                NavigationLink("Open recovery chat") {
+                    ChatView(
+                        showSideMenu: .constant(false),
+                        humanActorID: "human_recovery",
+                        conversationFetcher: recoveryService,
+                        detailFetcher: recoveryService
+                    )
+                }
+                .accessibilityIdentifier("chat.fixture.open-recovery-list")
+
                 NavigationLink("Open clear chat history") {
                     ChoraChatHistorySection(
                         humanActorID: "human_a",
@@ -1665,6 +1735,17 @@ private struct ChatVisibilityFixtureScreen: View {
             }
         }
         .environmentObject(visibilityDependency)
+        .overlay(alignment: .topTrailing) {
+            VStack {
+                Text(String(recoveryService.retryCallCount))
+                    .accessibilityIdentifier("chat.fixture.retry-count")
+                Text(String(recoveryService.retrySubscriptionCount))
+                    .accessibilityIdentifier("chat.fixture.retry-attempt-count")
+            }
+            .font(.system(size: 1))
+            .foregroundColor(.white.opacity(0.01))
+            .frame(width: 1, height: 1)
+        }
     }
 }
 

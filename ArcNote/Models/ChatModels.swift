@@ -21,6 +21,10 @@ protocol ChatDetailFetching {
         conversationId: String,
         request: SendMessageRequest
     ) -> AnyPublisher<SendMessageResponse, NetworkError>
+    func retryAgentReply(
+        conversationId: String,
+        sourceMessageId: String
+    ) -> AnyPublisher<AgentReplyRetryResponse, NetworkError>
     func streamConversationEvents(
         conversationId: String,
         lastEventID: String?
@@ -249,6 +253,21 @@ struct SendMessageData: Codable {
     }
 }
 
+struct AgentReplyRetryResponse: Codable {
+    let success: Bool
+    let data: AgentReplyRetryData
+}
+
+struct AgentReplyRetryData: Codable {
+    let status: String
+    let sourceMessageId: String
+
+    enum CodingKeys: String, CodingKey {
+        case status
+        case sourceMessageId = "source_message_id"
+    }
+}
+
 // MARK: 聊天消息模型
 struct APIChatMessage: Codable, Identifiable {
     let id: String
@@ -318,6 +337,8 @@ class ChatDetailManager: ObservableObject {
     private var visibilityCancellable: AnyCancellable?
     private var avatarUpdateCancellable: AnyCancellable?
     private var eventCancellable: AnyCancellable?
+    private var agentReplyRecoveryCancellable: AnyCancellable?
+    private var agentReplyRecoveryRequestID: UUID?
     private var eventReconnectTask: Task<Void, Never>?
     private var eventConversationID: String?
     private var eventCursor = ChatConversationEventCursor()
@@ -403,6 +424,9 @@ class ChatDetailManager: ObservableObject {
         eventReconnectTask = nil
         eventCancellable?.cancel()
         eventCancellable = nil
+        agentReplyRecoveryCancellable?.cancel()
+        agentReplyRecoveryCancellable = nil
+        agentReplyRecoveryRequestID = nil
         agentDeliveryState = .idle
     }
     
@@ -499,6 +523,65 @@ class ChatDetailManager: ObservableObject {
             .store(in: &cancellables)
     }
 
+    func retryAgentReply(conversationId: String, sourceMessageId: String) {
+        let sourceMessageID = sourceMessageId.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        guard !sourceMessageID.isEmpty,
+              eventConversationID == conversationId else { return }
+
+        agentReplyRecoveryCancellable?.cancel()
+        let requestID = UUID()
+        agentReplyRecoveryRequestID = requestID
+        agentDeliveryState = .thinking
+
+        agentReplyRecoveryCancellable = fetcher.retryAgentReply(
+            conversationId: conversationId,
+            sourceMessageId: sourceMessageID
+        )
+        .retry(2)
+        .receive(on: DispatchQueue.main)
+        .sink(
+            receiveCompletion: { [weak self] completion in
+                guard let self,
+                      self.agentReplyRecoveryRequestID == requestID,
+                      self.eventConversationID == conversationId else { return }
+                self.agentReplyRecoveryCancellable = nil
+                self.agentReplyRecoveryRequestID = nil
+                if case .failure = completion {
+                    self.agentDeliveryState = .retryAvailable(
+                        sourceMessageID: sourceMessageID
+                    )
+                }
+            },
+            receiveValue: { [weak self] response in
+                guard let self,
+                      self.agentReplyRecoveryRequestID == requestID,
+                      self.eventConversationID == conversationId else { return }
+                let status = response.data.status.trimmingCharacters(
+                    in: .whitespacesAndNewlines
+                ).lowercased()
+                guard response.success else {
+                    self.agentDeliveryState = .retryAvailable(
+                        sourceMessageID: sourceMessageID
+                    )
+                    return
+                }
+                switch status {
+                case "succeeded":
+                    self.agentDeliveryState = .idle
+                    self.loadMessages(conversationId: conversationId)
+                case "accepted":
+                    self.agentDeliveryState = .thinking
+                default:
+                    self.agentDeliveryState = .retryAvailable(
+                        sourceMessageID: sourceMessageID
+                    )
+                }
+            }
+        )
+    }
+
     private func connectConversationEvents(conversationId: String) {
         guard eventConversationID == conversationId else { return }
 
@@ -518,9 +601,7 @@ class ChatDetailManager: ObservableObject {
                 if case .failure(let error) = completion {
                     switch error {
                     case .unauthorized, .forbidden, .notFound:
-                        self.agentDeliveryState = .failed(
-                            message: "Chat updates are unavailable. Please reopen this conversation."
-                        )
+                        self.agentDeliveryState = .idle
                         return
                     default:
                         break

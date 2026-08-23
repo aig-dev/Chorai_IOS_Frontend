@@ -305,17 +305,45 @@ struct ChatDetailView: View {
                 .padding(.bottom, 16)
             }
 
-            if case .failed(let message) = chatDetailManager.agentDeliveryState {
-                HStack {
-                    Image(systemName: "exclamationmark.circle")
-                    Text(message)
-                        .font(.system(size: 13, weight: .medium))
+            if case .retryAvailable(let sourceMessageID) = chatDetailManager.agentDeliveryState {
+                HStack(spacing: 10) {
+                    ChatAvatarView(
+                        rawValue: chatPartnerAvatar,
+                        size: 28
+                    )
+
+                    Button {
+                        chatDetailManager.retryAgentReply(
+                            conversationId: conversationId,
+                            sourceMessageId: sourceMessageID
+                        )
+                    } label: {
+                        HStack(spacing: 7) {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.system(size: 13, weight: .semibold))
+                            Text("Continue \(chatPartnerName)'s reply")
+                                .font(.system(size: 13, weight: .medium))
+                        }
+                        .foregroundColor(.white.opacity(0.9))
+                        .padding(.horizontal, 13)
+                        .frame(minHeight: 44)
+                        .background(
+                            Capsule()
+                                .fill(Color.white.opacity(0.08))
+                                .overlay(
+                                    Capsule()
+                                        .stroke(Color.white.opacity(0.16), lineWidth: 1)
+                                )
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Continue \(chatPartnerName)'s reply")
+                    .accessibilityIdentifier("chat.agent.retry")
+
                     Spacer()
                 }
-                .foregroundColor(.orange)
                 .adaptiveContentGutter()
                 .padding(.bottom, 8)
-                .accessibilityIdentifier("chat.agent.failed")
             }
             
             // 底部输入栏

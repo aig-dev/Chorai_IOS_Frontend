@@ -64,33 +64,70 @@ final class ChatAgentDeliveryTests: XCTestCase {
         )
     }
 
-    func testFailedResponseReadyTransitionsToUserSafeFailure() {
+    func testRetryingResponseReadyKeepsThinkingWithoutRefresh() {
         let update = ChatAgentDeliveryReducer.reduce(
             event: event(
                 name: "agent.response_ready",
-                json: #"{"status":"failed","error_code":"AGENT_MESSAGE_PERSIST_FAILED","error_detail":"mysql: internal schema detail"}"#
+                json: #"{"status":"retrying","attempt":2,"next_retry_at":"2026-08-23T08:00:03Z"}"#
             )
         )
 
-        XCTAssertEqual(update?.shouldRefreshMessages, false)
-        guard case .failed(let message) = update?.state else {
-            return XCTFail("expected failed delivery state")
-        }
-        XCTAssertEqual(message, "Chora couldn't reply. Please try again.")
-        XCTAssertFalse(message.contains("mysql"))
-        XCTAssertFalse(message.contains("AGENT_MESSAGE_PERSIST_FAILED"))
+        XCTAssertEqual(
+            update,
+            ChatAgentDeliveryUpdate(state: .thinking, shouldRefreshMessages: false)
+        )
     }
 
-    func testMalformedResponseReadyTransitionsToSafeFailure() {
+    func testRecoveryAvailableCarriesOwnedSourceMessageID() {
         let update = ChatAgentDeliveryReducer.reduce(
-            event: event(name: "agent.response_ready", json: #"{"unexpected":true}"#)
+            event: event(
+                name: "agent.response_ready",
+                json: #"{"status":"retry_available","source_message_id":"msg_human_1"}"#
+            )
         )
 
-        XCTAssertEqual(update?.shouldRefreshMessages, false)
-        guard case .failed(let message) = update?.state else {
-            return XCTFail("expected malformed ready payload to fail closed")
-        }
-        XCTAssertEqual(message, "Chora couldn't reply. Please try again.")
+        XCTAssertEqual(
+            update,
+            ChatAgentDeliveryUpdate(
+                state: .retryAvailable(sourceMessageID: "msg_human_1"),
+                shouldRefreshMessages: false
+            )
+        )
+    }
+
+    func testLegacyFailedWithSourceIDBecomesRecoveryAvailableWithoutTechnicalCopy() {
+        let update = ChatAgentDeliveryReducer.reduce(
+            event: event(
+                name: "agent.response_ready",
+                json: #"{"status":"failed","source_message_id":"msg_human_1","error_code":"AGENT_MESSAGE_PERSIST_FAILED","error_detail":"mysql: private detail"}"#
+            )
+        )
+
+        XCTAssertEqual(
+            update,
+            ChatAgentDeliveryUpdate(
+                state: .retryAvailable(sourceMessageID: "msg_human_1"),
+                shouldRefreshMessages: false
+            )
+        )
+    }
+
+    func testMalformedAndFutureResponseReadyStatesDoNotManufactureFailure() {
+        XCTAssertNil(
+            ChatAgentDeliveryReducer.reduce(
+                event: event(name: "agent.response_ready", json: #"{"unexpected":true}"#)
+            )
+        )
+        XCTAssertNil(
+            ChatAgentDeliveryReducer.reduce(
+                event: event(name: "agent.response_ready", json: #"{"status":"future_state"}"#)
+            )
+        )
+        XCTAssertNil(
+            ChatAgentDeliveryReducer.reduce(
+                event: event(name: "agent.response_ready", json: #"{"status":"retry_available"}"#)
+            )
+        )
     }
 
     func testEventCursorAdvancesMonotonicallyAcrossRacingSources() {

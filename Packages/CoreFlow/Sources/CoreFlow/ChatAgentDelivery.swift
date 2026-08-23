@@ -122,7 +122,7 @@ public struct ChatServerSentEventParser: Sendable {
 public enum ChatAgentDeliveryState: Equatable, Sendable {
     case idle
     case thinking
-    case failed(message: String)
+    case retryAvailable(sourceMessageID: String)
 }
 
 public struct ChatAgentDeliveryUpdate: Equatable, Sendable {
@@ -141,6 +141,12 @@ public struct ChatAgentDeliveryUpdate: Equatable, Sendable {
 public enum ChatAgentDeliveryReducer {
     private struct ResponseReadyPayload: Decodable {
         let status: String
+        let sourceMessageID: String?
+
+        private enum CodingKeys: String, CodingKey {
+            case status
+            case sourceMessageID = "source_message_id"
+        }
     }
 
     public static func reduce(
@@ -159,7 +165,7 @@ public enum ChatAgentDeliveryReducer {
                     from: event.data
                 )
             else {
-                return failedUpdate()
+                return nil
             }
 
             switch payload.status.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
@@ -168,22 +174,37 @@ public enum ChatAgentDeliveryReducer {
                     state: .idle,
                     shouldRefreshMessages: true
                 )
-            case "failed":
-                return failedUpdate()
+            case "retrying":
+                return ChatAgentDeliveryUpdate(
+                    state: .thinking,
+                    shouldRefreshMessages: false
+                )
+            case "retry_available", "failed":
+                guard let sourceMessageID = normalizedSourceMessageID(payload.sourceMessageID) else {
+                    return nil
+                }
+                return ChatAgentDeliveryUpdate(
+                    state: .retryAvailable(sourceMessageID: sourceMessageID),
+                    shouldRefreshMessages: false
+                )
+            case "not_applicable":
+                return ChatAgentDeliveryUpdate(
+                    state: .idle,
+                    shouldRefreshMessages: false
+                )
             default:
-                return failedUpdate()
+                return nil
             }
         default:
             return nil
         }
     }
 
-    private static func failedUpdate() -> ChatAgentDeliveryUpdate {
-        ChatAgentDeliveryUpdate(
-            state: .failed(
-                message: "Chora couldn't reply. Please try again."
-            ),
-            shouldRefreshMessages: false
-        )
+    private static func normalizedSourceMessageID(_ value: String?) -> String? {
+        guard let normalized = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !normalized.isEmpty else {
+            return nil
+        }
+        return normalized
     }
 }

@@ -1062,6 +1062,25 @@ extension NetworkManager {
         )
     }
 
+    // MARK: - 恢复 Chora 回复
+    func retryAgentReply(
+        conversationId: String,
+        sourceMessageId: String
+    ) -> AnyPublisher<AgentReplyRetryResponse, NetworkError> {
+        Deferred { [weak self] () -> AnyPublisher<AgentReplyRetryResponse, NetworkError> in
+            guard let self else {
+                return Fail(error: NetworkError.unknown)
+                    .eraseToAnyPublisher()
+            }
+            return self.request(
+                endpoint: "/api/chats/conversations/\(conversationId)/messages/\(sourceMessageId)/agent-reply/retry",
+                method: .post,
+                responseType: AgentReplyRetryResponse.self
+            )
+        }
+        .eraseToAnyPublisher()
+    }
+
     // MARK: - 订阅会话事件
     func streamConversationEvents(
         conversationId: String,
