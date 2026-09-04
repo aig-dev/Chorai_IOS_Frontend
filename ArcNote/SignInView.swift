@@ -7,6 +7,7 @@
 
 import SwiftUI
 import Combine
+import CoreFlow
 import GoogleSignIn
 import AuthenticationServices
 
@@ -310,34 +311,82 @@ struct SignInView: View {
     // MARK: 处理登录错误
     private func handleLoginError(_ error: NetworkError) {
         switch error {
-        case .serverError(let code, let message):
-            switch code {
-            case 400:
-                showAlert(message: "Incorrect username or password")
-            case 401:
-                showAlert(message: "Incorrect username or password")
-            case 404:
-                showAlert(message: "User does not exist")
-            default:
-                showAlert(message: message ?? "Login failed, please try again later")
-            }
-        case .api(let statusCode, _, _):
-            switch statusCode {
-            case 400, 401:
-                showAlert(message: "Incorrect username or password")
-            case 404:
-                showAlert(message: "User does not exist")
-            default:
-                showAlert(message: "Login failed, please try again later")
-            }
+        case .serverError(let statusCode, _):
+            showAlert(
+                message: AuthenticationErrorPresentation.signInMessage(
+                    statusCode: statusCode,
+                    errorCode: nil
+                )
+            )
+        case .api(let statusCode, let errorCode, _):
+            showAlert(
+                message: AuthenticationErrorPresentation.signInMessage(
+                    statusCode: statusCode,
+                    errorCode: errorCode
+                )
+            )
         case .unauthorized:
-            showAlert(message: "Incorrect username or password")
+            showAlert(
+                message: AuthenticationErrorPresentation.signInMessage(
+                    statusCode: 401,
+                    errorCode: "UNAUTHORIZED"
+                )
+            )
+        case .forbidden:
+            showAlert(
+                message: AuthenticationErrorPresentation.signInMessage(
+                    statusCode: 403,
+                    errorCode: "FORBIDDEN"
+                )
+            )
+        case .notFound:
+            showAlert(
+                message: AuthenticationErrorPresentation.signInMessage(
+                    statusCode: 404,
+                    errorCode: nil
+                )
+            )
         case .networkError:
             showAlert(message: "Network connection failed, please check your network settings")
         case .timeout:
             showAlert(message: "Request timeout, please try again later")
+        case .decodingError:
+            showAlert(message: "The server returned an unexpected response. Please try again later.")
         default:
-            showAlert(message: error.localizedDescription)
+            showAlert(message: "Sign-in failed. Please try again.")
+        }
+    }
+
+    private func handleFederatedLoginError(
+        _ error: NetworkError,
+        provider: String
+    ) {
+        let genericMessage = "\(provider) sign-in could not be verified. Please try again."
+        switch error {
+        case .api(let statusCode, let errorCode, _):
+            let sharedCodes = [
+                "PRODUCT_ACCESS_REQUIRED",
+                "FORBIDDEN",
+                "ACCOUNT_DISABLED",
+                "RATE_LIMIT_EXCEEDED",
+                "SERVICE_UNAVAILABLE",
+                "DATABASE_ERROR",
+                "INTERNAL_ERROR",
+            ]
+            if sharedCodes.contains(errorCode?.uppercased() ?? "")
+                || statusCode == 429
+                || (500...599).contains(statusCode) {
+                handleLoginError(error)
+            } else {
+                showAlert(message: genericMessage)
+            }
+        case .serverError(let statusCode, _)
+            where statusCode == 429 || (500...599).contains(statusCode):
+            handleLoginError(error)
+        case .forbidden, .networkError, .timeout, .decodingError:
+            handleLoginError(error)
+        default:
+            showAlert(message: genericMessage)
         }
     }
     
@@ -386,7 +435,7 @@ struct SignInView: View {
                 receiveCompletion: { completion in
                     if case .failure(let error) = completion {
                         print("后端Google登录失败: \(error.localizedDescription)")
-                        showAlert(message: "Google sign in failed, please try again")
+                        handleFederatedLoginError(error, provider: "Google")
                     }
                 },
                 receiveValue: { authResponse in
@@ -462,7 +511,7 @@ struct SignInView: View {
                 receiveCompletion: { completion in
                     if case .failure(let error) = completion {
                         print("后端Apple登录失败: \(error.localizedDescription)")
-                        showAlert(message: "Apple sign in failed, please try again")
+                        handleFederatedLoginError(error, provider: "Apple")
                     }
                 },
                 receiveValue: { authResponse in

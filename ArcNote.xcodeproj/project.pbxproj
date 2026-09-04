@@ -7,71 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		C0DEF1002F60000100000001 /* CoreFlow in Frameworks */ = {isa = PBXBuildFile; productRef = C0DEF1002F60000100000003 /* CoreFlow */; };
-		C0DEF2002F70000100000001 /* BlockNoteEditor in Frameworks */ = {isa = PBXBuildFile; productRef = C0DEF2002F70000100000003 /* BlockNoteEditor */; };
-		C0DEF3002F80000100000011 /* BlockNoteCardEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF3002F80000100000021 /* BlockNoteCardEditor.swift */; };
-		C0DEF3002F80000100000012 /* CardEditorShell.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF3002F80000100000022 /* CardEditorShell.swift */; };
-		C0DEF3002F80000100000013 /* CardEditorMetadataRows.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF3002F80000100000023 /* CardEditorMetadataRows.swift */; };
-		C0DEF3002F80000100000014 /* CardEditorFormattingBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF3002F80000100000024 /* CardEditorFormattingBar.swift */; };
-		C0DEF3002F80000100000015 /* CardEditorBackground.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF3002F80000100000025 /* CardEditorBackground.swift */; };
-		C0DEF3002F80000100000016 /* CardMetadataPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF3002F80000100000026 /* CardMetadataPresentation.swift */; };
-		C0DEF3002F80000100000017 /* ActionBoxView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF3002F80000100000027 /* ActionBoxView.swift */; };
-		C0DEF3002F80000100000018 /* CardEditorActionBox.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF3002F80000100000028 /* CardEditorActionBox.swift */; };
-		C0DEF3002F80000100000019 /* CardEditorInlineImageSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF3002F80000100000029 /* CardEditorInlineImageSource.swift */; };
-		C0DEF3002F8000010000001A /* CardEditorGlassSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF3002F8000010000002A /* CardEditorGlassSurface.swift */; };
-		C0DEF3002F8000010000001B /* CardEditorAmbientBackdrop.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF3002F8000010000002B /* CardEditorAmbientBackdrop.swift */; };
-		C0DEF3002F8000010000001C /* CardEditorBackgroundActions.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF3002F8000010000002C /* CardEditorBackgroundActions.swift */; };
-		C0DEF3002F8000010000001D /* AdaptiveLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF3002F8000010000002D /* AdaptiveLayout.swift */; };
-		C0DEF3002F8000010000001E /* CardLevelMaterial.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF3002F8000010000002E /* CardLevelMaterial.swift */; };
-		C0DEF1012F60000100000003 /* NetworkCoreFlowService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1012F60000100000002 /* NetworkCoreFlowService.swift */; };
-		C0DEF1402F60000100000003 /* AccessGateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1402F60000100000002 /* AccessGateView.swift */; };
-		C0DEF1412F60000100000003 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1412F60000100000002 /* KeychainStore.swift */; };
-		C0DEF1022F60000100000003 /* NetworkCoreSparkService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1022F60000100000002 /* NetworkCoreSparkService.swift */; };
-		C0DEF1022F60000100000005 /* SparkContinuationViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1022F60000100000004 /* SparkContinuationViews.swift */; };
-		C0DEF1032F60000100000003 /* NetworkCoreMergeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1032F60000100000002 /* NetworkCoreMergeService.swift */; };
-		C0DEF1042F60000100000003 /* MergeLifecycleViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1042F60000100000002 /* MergeLifecycleViews.swift */; };
-		C0DEF1422F60000100000003 /* MergeTaskRail.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1422F60000100000002 /* MergeTaskRail.swift */; };
-		C0DEF1432F60000100000003 /* MergeArtifactEditorSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1432F60000100000002 /* MergeArtifactEditorSurface.swift */; };
-		C0DEF1442F60000100000003 /* MergeArtifactDraftController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1442F60000100000002 /* MergeArtifactDraftController.swift */; };
-		C0DEF1452F60000100000003 /* MergeTaskRailAnchor.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1452F60000100000002 /* MergeTaskRailAnchor.swift */; };
-		C0DEF1052F60000100000003 /* NetworkCoreOnboardingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1052F60000100000002 /* NetworkCoreOnboardingService.swift */; };
-		C0DEF1062F60000100000003 /* OnboardingGuideLine.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1062F60000100000002 /* OnboardingGuideLine.swift */; };
-		C0DEF1072F60000100000003 /* NetworkCoreShareService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1072F60000100000002 /* NetworkCoreShareService.swift */; };
-		C0DEF1082F60000100000003 /* ShareCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1082F60000100000002 /* ShareCardView.swift */; };
-		C0DEF1092F60000100000003 /* NetworkContentReportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1092F60000100000002 /* NetworkContentReportService.swift */; };
-		C0DEF1102F60000100000003 /* ContentReportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1102F60000100000002 /* ContentReportView.swift */; };
-		C0DEF1112F60000100000003 /* NetworkCoreCardEditingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1112F60000100000002 /* NetworkCoreCardEditingService.swift */; };
-		C0DEF1122F60000100000003 /* NetworkCoreInterestSelectionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1122F60000100000002 /* NetworkCoreInterestSelectionService.swift */; };
-		C0DEF1132F60000100000003 /* NetworkCoreCardLikeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1132F60000100000002 /* NetworkCoreCardLikeService.swift */; };
-		C0DEF1142F60000100000003 /* CardEngagementCenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1142F60000100000002 /* CardEngagementCenter.swift */; };
-		C0DEF1152F60000100000003 /* NetworkCommunityProfileService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1152F60000100000002 /* NetworkCommunityProfileService.swift */; };
-		C0DEF1182F60000100000003 /* NetworkNotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1182F60000100000002 /* NetworkNotificationService.swift */; };
-		C0DEF1192F60000100000003 /* ChoraProfileResponses.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1192F60000100000002 /* ChoraProfileResponses.swift */; };
-		C0DEF1202F60000100000003 /* NetworkChoraProfileService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1202F60000100000002 /* NetworkChoraProfileService.swift */; };
-		C0DEF1212F60000100000003 /* NetworkNoteImportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1212F60000100000002 /* NetworkNoteImportService.swift */; };
-		C0DEF1222F60000100000003 /* NetworkNotionSourceService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1222F60000100000002 /* NetworkNotionSourceService.swift */; };
-		C0DEF1232F60000100000003 /* ChoraProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1232F60000100000002 /* ChoraProfileView.swift */; };
-		C0DEF1242F60000100000003 /* ChoraProfileSections.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1242F60000100000002 /* ChoraProfileSections.swift */; };
-		C0DEF1252F60000100000003 /* ChoraIdentityGrowthSections.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1252F60000100000002 /* ChoraIdentityGrowthSections.swift */; };
-		C0DEF1262F60000100000003 /* ChoraChatHistorySection.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1262F60000100000002 /* ChoraChatHistorySection.swift */; };
-		C0DEF1272F60000100000003 /* NotionOAuthCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1272F60000100000002 /* NotionOAuthCoordinator.swift */; };
-		C0DEF1282F60000100000003 /* NoteImportDocumentPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1282F60000100000002 /* NoteImportDocumentPicker.swift */; };
-		C0DEF1292F60000100000003 /* InvitationCreditResponses.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1292F60000100000002 /* InvitationCreditResponses.swift */; };
-		C0DEF1302F60000100000003 /* NetworkInvitationCreditService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1302F60000100000002 /* NetworkInvitationCreditService.swift */; };
-		C0DEF1312F60000100000003 /* NetworkInvitationAccountRegistrar.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1312F60000100000002 /* NetworkInvitationAccountRegistrar.swift */; };
-		C0DEF1322F60000100000003 /* InvitationCreditView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1322F60000100000002 /* InvitationCreditView.swift */; };
-		C0DEF1332F60000100000003 /* InvitationCreditDetailViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1332F60000100000002 /* InvitationCreditDetailViews.swift */; };
-		C0DEF1342F60000100000003 /* InvitationShareController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1342F60000100000002 /* InvitationShareController.swift */; };
-		C0DEF1352F60000100000003 /* NetworkPrivacySettingsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1352F60000100000002 /* NetworkPrivacySettingsService.swift */; };
-		C0DEF1362F60000100000003 /* NetworkDiscoveryPathService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1362F60000100000002 /* NetworkDiscoveryPathService.swift */; };
-		C0DEF1162F60000100000003 /* FollowListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1162F60000100000002 /* FollowListView.swift */; };
-		C0DEF1172F60000100000003 /* BlockedActorsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1172F60000100000002 /* BlockedActorsView.swift */; };
-		C0DEF1012F60000100000005 /* FlowViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1012F60000100000004 /* FlowViews.swift */; };
-		C0DEF1012F60000100000007 /* CoreShellViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1012F60000100000006 /* CoreShellViews.swift */; };
-		A00000012F50000100000001 /* ArcNoteUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000012F50000100000002 /* ArcNoteUITests.swift */; };
-		A10000012F90000100000001 /* APIEnvironmentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000012F90000100000002 /* APIEnvironmentTests.swift */; };
-		A10000012F90000100000003 /* APIEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000012F90000100000004 /* APIEnvironment.swift */; };
-		A10000012F90000100000005 /* APIEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000012F90000100000004 /* APIEnvironment.swift */; };
 		1B055F4E2E4E08EF00896B01 /* ChatDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B055F4D2E4E08EE00896B01 /* ChatDetailView.swift */; };
 		1B055F502E4EFC9000896B01 /* NotificationDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B055F4F2E4EFC9000896B01 /* NotificationDetailView.swift */; };
 		1B055F552E4F178400896B01 /* LinkPopupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B055F542E4F178400896B01 /* LinkPopupView.swift */; };
@@ -137,6 +72,71 @@
 		1BF373192E30D5E100255F41 /* SignInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1BF373182E30D5E100255F41 /* SignInView.swift */; };
 		1BF3731B2E30DA7A00255F41 /* ChooseInterestsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1BF3731A2E30DA7A00255F41 /* ChooseInterestsView.swift */; };
 		8D4846EB2F409AEB00A3D3C7 /* NoteCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D4846EA2F409AEB00A3D3C7 /* NoteCard.swift */; };
+		A00000012F50000100000001 /* ArcNoteUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000012F50000100000002 /* ArcNoteUITests.swift */; };
+		A10000012F90000100000001 /* APIEnvironmentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000012F90000100000002 /* APIEnvironmentTests.swift */; };
+		A10000012F90000100000003 /* APIEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000012F90000100000004 /* APIEnvironment.swift */; };
+		A10000012F90000100000005 /* APIEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000012F90000100000004 /* APIEnvironment.swift */; };
+		C0DEF1002F60000100000001 /* CoreFlow in Frameworks */ = {isa = PBXBuildFile; productRef = C0DEF1002F60000100000003 /* CoreFlow */; };
+		C0DEF1012F60000100000003 /* NetworkCoreFlowService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1012F60000100000002 /* NetworkCoreFlowService.swift */; };
+		C0DEF1012F60000100000005 /* FlowViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1012F60000100000004 /* FlowViews.swift */; };
+		C0DEF1012F60000100000007 /* CoreShellViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1012F60000100000006 /* CoreShellViews.swift */; };
+		C0DEF1022F60000100000003 /* NetworkCoreSparkService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1022F60000100000002 /* NetworkCoreSparkService.swift */; };
+		C0DEF1022F60000100000005 /* SparkContinuationViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1022F60000100000004 /* SparkContinuationViews.swift */; };
+		C0DEF1032F60000100000003 /* NetworkCoreMergeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1032F60000100000002 /* NetworkCoreMergeService.swift */; };
+		C0DEF1042F60000100000003 /* MergeLifecycleViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1042F60000100000002 /* MergeLifecycleViews.swift */; };
+		C0DEF1052F60000100000003 /* NetworkCoreOnboardingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1052F60000100000002 /* NetworkCoreOnboardingService.swift */; };
+		C0DEF1062F60000100000003 /* OnboardingGuideLine.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1062F60000100000002 /* OnboardingGuideLine.swift */; };
+		C0DEF1072F60000100000003 /* NetworkCoreShareService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1072F60000100000002 /* NetworkCoreShareService.swift */; };
+		C0DEF1082F60000100000003 /* ShareCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1082F60000100000002 /* ShareCardView.swift */; };
+		C0DEF1092F60000100000003 /* NetworkContentReportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1092F60000100000002 /* NetworkContentReportService.swift */; };
+		C0DEF1102F60000100000003 /* ContentReportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1102F60000100000002 /* ContentReportView.swift */; };
+		C0DEF1112F60000100000003 /* NetworkCoreCardEditingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1112F60000100000002 /* NetworkCoreCardEditingService.swift */; };
+		C0DEF1122F60000100000003 /* NetworkCoreInterestSelectionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1122F60000100000002 /* NetworkCoreInterestSelectionService.swift */; };
+		C0DEF1132F60000100000003 /* NetworkCoreCardLikeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1132F60000100000002 /* NetworkCoreCardLikeService.swift */; };
+		C0DEF1142F60000100000003 /* CardEngagementCenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1142F60000100000002 /* CardEngagementCenter.swift */; };
+		C0DEF1152F60000100000003 /* NetworkCommunityProfileService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1152F60000100000002 /* NetworkCommunityProfileService.swift */; };
+		C0DEF1162F60000100000003 /* FollowListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1162F60000100000002 /* FollowListView.swift */; };
+		C0DEF1172F60000100000003 /* BlockedActorsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1172F60000100000002 /* BlockedActorsView.swift */; };
+		C0DEF1182F60000100000003 /* NetworkNotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1182F60000100000002 /* NetworkNotificationService.swift */; };
+		C0DEF1192F60000100000003 /* ChoraProfileResponses.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1192F60000100000002 /* ChoraProfileResponses.swift */; };
+		C0DEF1202F60000100000003 /* NetworkChoraProfileService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1202F60000100000002 /* NetworkChoraProfileService.swift */; };
+		C0DEF1212F60000100000003 /* NetworkNoteImportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1212F60000100000002 /* NetworkNoteImportService.swift */; };
+		C0DEF1222F60000100000003 /* NetworkNotionSourceService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1222F60000100000002 /* NetworkNotionSourceService.swift */; };
+		C0DEF1232F60000100000003 /* ChoraProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1232F60000100000002 /* ChoraProfileView.swift */; };
+		C0DEF1242F60000100000003 /* ChoraProfileSections.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1242F60000100000002 /* ChoraProfileSections.swift */; };
+		C0DEF1252F60000100000003 /* ChoraIdentityGrowthSections.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1252F60000100000002 /* ChoraIdentityGrowthSections.swift */; };
+		C0DEF1262F60000100000003 /* ChoraChatHistorySection.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1262F60000100000002 /* ChoraChatHistorySection.swift */; };
+		C0DEF1272F60000100000003 /* NotionOAuthCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1272F60000100000002 /* NotionOAuthCoordinator.swift */; };
+		C0DEF1282F60000100000003 /* NoteImportDocumentPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1282F60000100000002 /* NoteImportDocumentPicker.swift */; };
+		C0DEF1292F60000100000003 /* InvitationCreditResponses.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1292F60000100000002 /* InvitationCreditResponses.swift */; };
+		C0DEF1302F60000100000003 /* NetworkInvitationCreditService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1302F60000100000002 /* NetworkInvitationCreditService.swift */; };
+		C0DEF1312F60000100000003 /* NetworkInvitationAccountRegistrar.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1312F60000100000002 /* NetworkInvitationAccountRegistrar.swift */; };
+		C0DEF1322F60000100000003 /* InvitationCreditView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1322F60000100000002 /* InvitationCreditView.swift */; };
+		C0DEF1332F60000100000003 /* InvitationCreditDetailViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1332F60000100000002 /* InvitationCreditDetailViews.swift */; };
+		C0DEF1342F60000100000003 /* InvitationShareController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1342F60000100000002 /* InvitationShareController.swift */; };
+		C0DEF1352F60000100000003 /* NetworkPrivacySettingsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1352F60000100000002 /* NetworkPrivacySettingsService.swift */; };
+		C0DEF1362F60000100000003 /* NetworkDiscoveryPathService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1362F60000100000002 /* NetworkDiscoveryPathService.swift */; };
+		C0DEF1402F60000100000003 /* AccessGateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1402F60000100000002 /* AccessGateView.swift */; };
+		C0DEF1412F60000100000003 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1412F60000100000002 /* KeychainStore.swift */; };
+		C0DEF1422F60000100000003 /* MergeTaskRail.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1422F60000100000002 /* MergeTaskRail.swift */; };
+		C0DEF1432F60000100000003 /* MergeArtifactEditorSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1432F60000100000002 /* MergeArtifactEditorSurface.swift */; };
+		C0DEF1442F60000100000003 /* MergeArtifactDraftController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1442F60000100000002 /* MergeArtifactDraftController.swift */; };
+		C0DEF1452F60000100000003 /* MergeTaskRailAnchor.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1452F60000100000002 /* MergeTaskRailAnchor.swift */; };
+		C0DEF2002F70000100000001 /* BlockNoteEditor in Frameworks */ = {isa = PBXBuildFile; productRef = C0DEF2002F70000100000003 /* BlockNoteEditor */; };
+		C0DEF3002F80000100000011 /* BlockNoteCardEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF3002F80000100000021 /* BlockNoteCardEditor.swift */; };
+		C0DEF3002F80000100000012 /* CardEditorShell.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF3002F80000100000022 /* CardEditorShell.swift */; };
+		C0DEF3002F80000100000013 /* CardEditorMetadataRows.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF3002F80000100000023 /* CardEditorMetadataRows.swift */; };
+		C0DEF3002F80000100000014 /* CardEditorFormattingBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF3002F80000100000024 /* CardEditorFormattingBar.swift */; };
+		C0DEF3002F80000100000015 /* CardEditorBackground.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF3002F80000100000025 /* CardEditorBackground.swift */; };
+		C0DEF3002F80000100000016 /* CardMetadataPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF3002F80000100000026 /* CardMetadataPresentation.swift */; };
+		C0DEF3002F80000100000017 /* ActionBoxView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF3002F80000100000027 /* ActionBoxView.swift */; };
+		C0DEF3002F80000100000018 /* CardEditorActionBox.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF3002F80000100000028 /* CardEditorActionBox.swift */; };
+		C0DEF3002F80000100000019 /* CardEditorInlineImageSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF3002F80000100000029 /* CardEditorInlineImageSource.swift */; };
+		C0DEF3002F8000010000001A /* CardEditorGlassSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF3002F8000010000002A /* CardEditorGlassSurface.swift */; };
+		C0DEF3002F8000010000001B /* CardEditorAmbientBackdrop.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF3002F8000010000002B /* CardEditorAmbientBackdrop.swift */; };
+		C0DEF3002F8000010000001C /* CardEditorBackgroundActions.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF3002F8000010000002C /* CardEditorBackgroundActions.swift */; };
+		C0DEF3002F8000010000001D /* AdaptiveLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF3002F8000010000002D /* AdaptiveLayout.swift */; };
+		C0DEF3002F8000010000001E /* CardLevelMaterial.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF3002F8000010000002E /* CardLevelMaterial.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -150,63 +150,6 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		C0DEF1012F60000100000002 /* NetworkCoreFlowService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkCoreFlowService.swift; sourceTree = "<group>"; };
-		C0DEF1402F60000100000002 /* AccessGateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessGateView.swift; sourceTree = "<group>"; };
-		C0DEF1412F60000100000002 /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
-		C0DEF1022F60000100000002 /* NetworkCoreSparkService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkCoreSparkService.swift; sourceTree = "<group>"; };
-		C0DEF1022F60000100000004 /* SparkContinuationViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SparkContinuationViews.swift; sourceTree = "<group>"; };
-		C0DEF1032F60000100000002 /* NetworkCoreMergeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkCoreMergeService.swift; sourceTree = "<group>"; };
-		C0DEF1042F60000100000002 /* MergeLifecycleViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MergeLifecycleViews.swift; sourceTree = "<group>"; };
-		C0DEF1422F60000100000002 /* MergeTaskRail.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MergeTaskRail.swift; sourceTree = "<group>"; };
-		C0DEF1432F60000100000002 /* MergeArtifactEditorSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MergeArtifactEditorSurface.swift; sourceTree = "<group>"; };
-		C0DEF1442F60000100000002 /* MergeArtifactDraftController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MergeArtifactDraftController.swift; sourceTree = "<group>"; };
-		C0DEF1452F60000100000002 /* MergeTaskRailAnchor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MergeTaskRailAnchor.swift; sourceTree = "<group>"; };
-		C0DEF1052F60000100000002 /* NetworkCoreOnboardingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkCoreOnboardingService.swift; sourceTree = "<group>"; };
-		C0DEF1062F60000100000002 /* OnboardingGuideLine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingGuideLine.swift; sourceTree = "<group>"; };
-		C0DEF1072F60000100000002 /* NetworkCoreShareService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkCoreShareService.swift; sourceTree = "<group>"; };
-		C0DEF1082F60000100000002 /* ShareCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareCardView.swift; sourceTree = "<group>"; };
-		C0DEF1092F60000100000002 /* NetworkContentReportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkContentReportService.swift; sourceTree = "<group>"; };
-		C0DEF1102F60000100000002 /* ContentReportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentReportView.swift; sourceTree = "<group>"; };
-		C0DEF1112F60000100000002 /* NetworkCoreCardEditingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkCoreCardEditingService.swift; sourceTree = "<group>"; };
-		C0DEF1122F60000100000002 /* NetworkCoreInterestSelectionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkCoreInterestSelectionService.swift; sourceTree = "<group>"; };
-		C0DEF1132F60000100000002 /* NetworkCoreCardLikeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkCoreCardLikeService.swift; sourceTree = "<group>"; };
-		C0DEF1142F60000100000002 /* CardEngagementCenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardEngagementCenter.swift; sourceTree = "<group>"; };
-		C0DEF1152F60000100000002 /* NetworkCommunityProfileService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkCommunityProfileService.swift; sourceTree = "<group>"; };
-		C0DEF1182F60000100000002 /* NetworkNotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkNotificationService.swift; sourceTree = "<group>"; };
-		C0DEF1192F60000100000002 /* ChoraProfileResponses.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChoraProfileResponses.swift; sourceTree = "<group>"; };
-		C0DEF1202F60000100000002 /* NetworkChoraProfileService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkChoraProfileService.swift; sourceTree = "<group>"; };
-		C0DEF1212F60000100000002 /* NetworkNoteImportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkNoteImportService.swift; sourceTree = "<group>"; };
-		C0DEF1222F60000100000002 /* NetworkNotionSourceService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkNotionSourceService.swift; sourceTree = "<group>"; };
-		C0DEF1232F60000100000002 /* ChoraProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChoraProfileView.swift; sourceTree = "<group>"; };
-		C0DEF1242F60000100000002 /* ChoraProfileSections.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChoraProfileSections.swift; sourceTree = "<group>"; };
-		C0DEF1252F60000100000002 /* ChoraIdentityGrowthSections.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChoraIdentityGrowthSections.swift; sourceTree = "<group>"; };
-		C0DEF1262F60000100000002 /* ChoraChatHistorySection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChoraChatHistorySection.swift; sourceTree = "<group>"; };
-		C0DEF1272F60000100000002 /* NotionOAuthCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotionOAuthCoordinator.swift; sourceTree = "<group>"; };
-		C0DEF1282F60000100000002 /* NoteImportDocumentPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteImportDocumentPicker.swift; sourceTree = "<group>"; };
-		C0DEF1292F60000100000002 /* InvitationCreditResponses.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InvitationCreditResponses.swift; sourceTree = "<group>"; };
-		C0DEF1302F60000100000002 /* NetworkInvitationCreditService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkInvitationCreditService.swift; sourceTree = "<group>"; };
-		C0DEF1352F60000100000002 /* NetworkPrivacySettingsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkPrivacySettingsService.swift; sourceTree = "<group>"; };
-		C0DEF1362F60000100000002 /* NetworkDiscoveryPathService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkDiscoveryPathService.swift; sourceTree = "<group>"; };
-		C0DEF1312F60000100000002 /* NetworkInvitationAccountRegistrar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkInvitationAccountRegistrar.swift; sourceTree = "<group>"; };
-		C0DEF1322F60000100000002 /* InvitationCreditView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InvitationCreditView.swift; sourceTree = "<group>"; };
-		C0DEF1332F60000100000002 /* InvitationCreditDetailViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InvitationCreditDetailViews.swift; sourceTree = "<group>"; };
-		C0DEF1342F60000100000002 /* InvitationShareController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InvitationShareController.swift; sourceTree = "<group>"; };
-		C0DEF1162F60000100000002 /* FollowListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FollowListView.swift; sourceTree = "<group>"; };
-		C0DEF1172F60000100000002 /* BlockedActorsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlockedActorsView.swift; sourceTree = "<group>"; };
-		C0DEF1012F60000100000004 /* FlowViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlowViews.swift; sourceTree = "<group>"; };
-		C0DEF1012F60000100000006 /* CoreShellViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreShellViews.swift; sourceTree = "<group>"; };
-		C0DEF3002F80000100000021 /* BlockNoteCardEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlockNoteCardEditor.swift; sourceTree = "<group>"; };
-		C0DEF3002F80000100000022 /* CardEditorShell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardEditorShell.swift; sourceTree = "<group>"; };
-		C0DEF3002F80000100000023 /* CardEditorMetadataRows.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardEditorMetadataRows.swift; sourceTree = "<group>"; };
-		C0DEF3002F80000100000024 /* CardEditorFormattingBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardEditorFormattingBar.swift; sourceTree = "<group>"; };
-		C0DEF3002F80000100000025 /* CardEditorBackground.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardEditorBackground.swift; sourceTree = "<group>"; };
-		C0DEF3002F80000100000026 /* CardMetadataPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardMetadataPresentation.swift; sourceTree = "<group>"; };
-		A00000012F50000100000002 /* ArcNoteUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArcNoteUITests.swift; sourceTree = "<group>"; };
-		A10000012F90000100000002 /* APIEnvironmentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIEnvironmentTests.swift; sourceTree = "<group>"; };
-		A10000012F90000100000004 /* APIEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIEnvironment.swift; sourceTree = "<group>"; };
-		A20000012FA0000000000001 /* Local.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Local.xcconfig; sourceTree = "<group>"; };
-		A20000012FA0000000000002 /* Production.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Production.xcconfig; sourceTree = "<group>"; };
-		A00000012F50000100000003 /* ArcNoteUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ArcNoteUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		1B055F4D2E4E08EE00896B01 /* ChatDetailView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ChatDetailView.swift; sourceTree = "<group>"; };
 		1B055F4F2E4EFC9000896B01 /* NotificationDetailView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = NotificationDetailView.swift; sourceTree = "<group>"; };
 		1B055F542E4F178400896B01 /* LinkPopupView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = LinkPopupView.swift; sourceTree = "<group>"; };
@@ -238,14 +181,6 @@
 		1B6E6FA92E6AB8A5006898F5 /* NetworkManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkManager.swift; sourceTree = "<group>"; };
 		1B6E6FAA2E6AB8A5006898F5 /* NetworkModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkModels.swift; sourceTree = "<group>"; };
 		1B7248B32E34AAE000035D3D /* PopupMenuView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = PopupMenuView.swift; sourceTree = "<group>"; };
-		C0DEF3002F80000100000027 /* ActionBoxView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionBoxView.swift; sourceTree = "<group>"; };
-		C0DEF3002F80000100000028 /* CardEditorActionBox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardEditorActionBox.swift; sourceTree = "<group>"; };
-		C0DEF3002F80000100000029 /* CardEditorInlineImageSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardEditorInlineImageSource.swift; sourceTree = "<group>"; };
-		C0DEF3002F8000010000002A /* CardEditorGlassSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardEditorGlassSurface.swift; sourceTree = "<group>"; };
-		C0DEF3002F8000010000002B /* CardEditorAmbientBackdrop.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardEditorAmbientBackdrop.swift; sourceTree = "<group>"; };
-		C0DEF3002F8000010000002C /* CardEditorBackgroundActions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardEditorBackgroundActions.swift; sourceTree = "<group>"; };
-		C0DEF3002F8000010000002D /* AdaptiveLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdaptiveLayout.swift; sourceTree = "<group>"; };
-		C0DEF3002F8000010000002E /* CardLevelMaterial.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardLevelMaterial.swift; sourceTree = "<group>"; };
 		1B7248B72E34BA4B00035D3D /* ExploreView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ExploreView.swift; sourceTree = "<group>"; };
 		1B7248B82E34BA4B00035D3D /* ChatView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
 		1B7248B92E34BA4B00035D3D /* HomeView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
@@ -279,6 +214,71 @@
 		1BF373182E30D5E100255F41 /* SignInView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SignInView.swift; sourceTree = "<group>"; };
 		1BF3731A2E30DA7A00255F41 /* ChooseInterestsView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ChooseInterestsView.swift; sourceTree = "<group>"; };
 		8D4846EA2F409AEB00A3D3C7 /* NoteCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteCard.swift; sourceTree = "<group>"; };
+		A00000012F50000100000002 /* ArcNoteUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArcNoteUITests.swift; sourceTree = "<group>"; };
+		A00000012F50000100000003 /* ArcNoteUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ArcNoteUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		A10000012F90000100000002 /* APIEnvironmentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIEnvironmentTests.swift; sourceTree = "<group>"; };
+		A10000012F90000100000004 /* APIEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIEnvironment.swift; sourceTree = "<group>"; };
+		A20000012FA0000000000001 /* Local.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Local.xcconfig; sourceTree = "<group>"; };
+		A20000012FA0000000000002 /* Production.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Production.xcconfig; sourceTree = "<group>"; };
+		C0DEF1012F60000100000002 /* NetworkCoreFlowService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkCoreFlowService.swift; sourceTree = "<group>"; };
+		C0DEF1012F60000100000004 /* FlowViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlowViews.swift; sourceTree = "<group>"; };
+		C0DEF1012F60000100000006 /* CoreShellViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreShellViews.swift; sourceTree = "<group>"; };
+		C0DEF1022F60000100000002 /* NetworkCoreSparkService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkCoreSparkService.swift; sourceTree = "<group>"; };
+		C0DEF1022F60000100000004 /* SparkContinuationViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SparkContinuationViews.swift; sourceTree = "<group>"; };
+		C0DEF1032F60000100000002 /* NetworkCoreMergeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkCoreMergeService.swift; sourceTree = "<group>"; };
+		C0DEF1042F60000100000002 /* MergeLifecycleViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MergeLifecycleViews.swift; sourceTree = "<group>"; };
+		C0DEF1052F60000100000002 /* NetworkCoreOnboardingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkCoreOnboardingService.swift; sourceTree = "<group>"; };
+		C0DEF1062F60000100000002 /* OnboardingGuideLine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingGuideLine.swift; sourceTree = "<group>"; };
+		C0DEF1072F60000100000002 /* NetworkCoreShareService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkCoreShareService.swift; sourceTree = "<group>"; };
+		C0DEF1082F60000100000002 /* ShareCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareCardView.swift; sourceTree = "<group>"; };
+		C0DEF1092F60000100000002 /* NetworkContentReportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkContentReportService.swift; sourceTree = "<group>"; };
+		C0DEF1102F60000100000002 /* ContentReportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentReportView.swift; sourceTree = "<group>"; };
+		C0DEF1112F60000100000002 /* NetworkCoreCardEditingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkCoreCardEditingService.swift; sourceTree = "<group>"; };
+		C0DEF1122F60000100000002 /* NetworkCoreInterestSelectionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkCoreInterestSelectionService.swift; sourceTree = "<group>"; };
+		C0DEF1132F60000100000002 /* NetworkCoreCardLikeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkCoreCardLikeService.swift; sourceTree = "<group>"; };
+		C0DEF1142F60000100000002 /* CardEngagementCenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardEngagementCenter.swift; sourceTree = "<group>"; };
+		C0DEF1152F60000100000002 /* NetworkCommunityProfileService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkCommunityProfileService.swift; sourceTree = "<group>"; };
+		C0DEF1162F60000100000002 /* FollowListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FollowListView.swift; sourceTree = "<group>"; };
+		C0DEF1172F60000100000002 /* BlockedActorsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlockedActorsView.swift; sourceTree = "<group>"; };
+		C0DEF1182F60000100000002 /* NetworkNotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkNotificationService.swift; sourceTree = "<group>"; };
+		C0DEF1192F60000100000002 /* ChoraProfileResponses.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChoraProfileResponses.swift; sourceTree = "<group>"; };
+		C0DEF1202F60000100000002 /* NetworkChoraProfileService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkChoraProfileService.swift; sourceTree = "<group>"; };
+		C0DEF1212F60000100000002 /* NetworkNoteImportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkNoteImportService.swift; sourceTree = "<group>"; };
+		C0DEF1222F60000100000002 /* NetworkNotionSourceService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkNotionSourceService.swift; sourceTree = "<group>"; };
+		C0DEF1232F60000100000002 /* ChoraProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChoraProfileView.swift; sourceTree = "<group>"; };
+		C0DEF1242F60000100000002 /* ChoraProfileSections.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChoraProfileSections.swift; sourceTree = "<group>"; };
+		C0DEF1252F60000100000002 /* ChoraIdentityGrowthSections.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChoraIdentityGrowthSections.swift; sourceTree = "<group>"; };
+		C0DEF1262F60000100000002 /* ChoraChatHistorySection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChoraChatHistorySection.swift; sourceTree = "<group>"; };
+		C0DEF1272F60000100000002 /* NotionOAuthCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotionOAuthCoordinator.swift; sourceTree = "<group>"; };
+		C0DEF1282F60000100000002 /* NoteImportDocumentPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteImportDocumentPicker.swift; sourceTree = "<group>"; };
+		C0DEF1292F60000100000002 /* InvitationCreditResponses.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InvitationCreditResponses.swift; sourceTree = "<group>"; };
+		C0DEF1302F60000100000002 /* NetworkInvitationCreditService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkInvitationCreditService.swift; sourceTree = "<group>"; };
+		C0DEF1312F60000100000002 /* NetworkInvitationAccountRegistrar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkInvitationAccountRegistrar.swift; sourceTree = "<group>"; };
+		C0DEF1322F60000100000002 /* InvitationCreditView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InvitationCreditView.swift; sourceTree = "<group>"; };
+		C0DEF1332F60000100000002 /* InvitationCreditDetailViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InvitationCreditDetailViews.swift; sourceTree = "<group>"; };
+		C0DEF1342F60000100000002 /* InvitationShareController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InvitationShareController.swift; sourceTree = "<group>"; };
+		C0DEF1352F60000100000002 /* NetworkPrivacySettingsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkPrivacySettingsService.swift; sourceTree = "<group>"; };
+		C0DEF1362F60000100000002 /* NetworkDiscoveryPathService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkDiscoveryPathService.swift; sourceTree = "<group>"; };
+		C0DEF1402F60000100000002 /* AccessGateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessGateView.swift; sourceTree = "<group>"; };
+		C0DEF1412F60000100000002 /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
+		C0DEF1422F60000100000002 /* MergeTaskRail.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MergeTaskRail.swift; sourceTree = "<group>"; };
+		C0DEF1432F60000100000002 /* MergeArtifactEditorSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MergeArtifactEditorSurface.swift; sourceTree = "<group>"; };
+		C0DEF1442F60000100000002 /* MergeArtifactDraftController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MergeArtifactDraftController.swift; sourceTree = "<group>"; };
+		C0DEF1452F60000100000002 /* MergeTaskRailAnchor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MergeTaskRailAnchor.swift; sourceTree = "<group>"; };
+		C0DEF3002F80000100000021 /* BlockNoteCardEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlockNoteCardEditor.swift; sourceTree = "<group>"; };
+		C0DEF3002F80000100000022 /* CardEditorShell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardEditorShell.swift; sourceTree = "<group>"; };
+		C0DEF3002F80000100000023 /* CardEditorMetadataRows.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardEditorMetadataRows.swift; sourceTree = "<group>"; };
+		C0DEF3002F80000100000024 /* CardEditorFormattingBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardEditorFormattingBar.swift; sourceTree = "<group>"; };
+		C0DEF3002F80000100000025 /* CardEditorBackground.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardEditorBackground.swift; sourceTree = "<group>"; };
+		C0DEF3002F80000100000026 /* CardMetadataPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardMetadataPresentation.swift; sourceTree = "<group>"; };
+		C0DEF3002F80000100000027 /* ActionBoxView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionBoxView.swift; sourceTree = "<group>"; };
+		C0DEF3002F80000100000028 /* CardEditorActionBox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardEditorActionBox.swift; sourceTree = "<group>"; };
+		C0DEF3002F80000100000029 /* CardEditorInlineImageSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardEditorInlineImageSource.swift; sourceTree = "<group>"; };
+		C0DEF3002F8000010000002A /* CardEditorGlassSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardEditorGlassSurface.swift; sourceTree = "<group>"; };
+		C0DEF3002F8000010000002B /* CardEditorAmbientBackdrop.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardEditorAmbientBackdrop.swift; sourceTree = "<group>"; };
+		C0DEF3002F8000010000002C /* CardEditorBackgroundActions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardEditorBackgroundActions.swift; sourceTree = "<group>"; };
+		C0DEF3002F8000010000002D /* AdaptiveLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdaptiveLayout.swift; sourceTree = "<group>"; };
+		C0DEF3002F8000010000002E /* CardLevelMaterial.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardLevelMaterial.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -305,62 +305,6 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		C0DEF3002F80000100000001 /* CardEditor */ = {
-			isa = PBXGroup;
-			children = (
-				C0DEF3002F80000100000021 /* BlockNoteCardEditor.swift */,
-				C0DEF3002F80000100000022 /* CardEditorShell.swift */,
-				C0DEF3002F80000100000023 /* CardEditorMetadataRows.swift */,
-				C0DEF3002F80000100000026 /* CardMetadataPresentation.swift */,
-				C0DEF3002F80000100000024 /* CardEditorFormattingBar.swift */,
-				C0DEF3002F80000100000025 /* CardEditorBackground.swift */,
-				C0DEF3002F8000010000002C /* CardEditorBackgroundActions.swift */,
-				C0DEF3002F80000100000028 /* CardEditorActionBox.swift */,
-				C0DEF3002F80000100000029 /* CardEditorInlineImageSource.swift */,
-				C0DEF3002F8000010000002A /* CardEditorGlassSurface.swift */,
-				C0DEF3002F8000010000002B /* CardEditorAmbientBackdrop.swift */,
-				C0DEF3002F8000010000002E /* CardLevelMaterial.swift */,
-			);
-			path = CardEditor;
-			sourceTree = "<group>";
-		};
-		C0DEF1012F60000100000001 /* CoreFlow */ = {
-			isa = PBXGroup;
-			children = (
-				C0DEF1012F60000100000002 /* NetworkCoreFlowService.swift */,
-				C0DEF1022F60000100000002 /* NetworkCoreSparkService.swift */,
-				C0DEF1022F60000100000004 /* SparkContinuationViews.swift */,
-				C0DEF1032F60000100000002 /* NetworkCoreMergeService.swift */,
-				C0DEF1042F60000100000002 /* MergeLifecycleViews.swift */,
-				C0DEF1422F60000100000002 /* MergeTaskRail.swift */,
-				C0DEF1432F60000100000002 /* MergeArtifactEditorSurface.swift */,
-				C0DEF1442F60000100000002 /* MergeArtifactDraftController.swift */,
-				C0DEF1452F60000100000002 /* MergeTaskRailAnchor.swift */,
-				C0DEF1052F60000100000002 /* NetworkCoreOnboardingService.swift */,
-				C0DEF1062F60000100000002 /* OnboardingGuideLine.swift */,
-				C0DEF1072F60000100000002 /* NetworkCoreShareService.swift */,
-				C0DEF1082F60000100000002 /* ShareCardView.swift */,
-				C0DEF1092F60000100000002 /* NetworkContentReportService.swift */,
-				C0DEF1102F60000100000002 /* ContentReportView.swift */,
-				C0DEF1112F60000100000002 /* NetworkCoreCardEditingService.swift */,
-				C0DEF1122F60000100000002 /* NetworkCoreInterestSelectionService.swift */,
-				C0DEF1132F60000100000002 /* NetworkCoreCardLikeService.swift */,
-				C0DEF1142F60000100000002 /* CardEngagementCenter.swift */,
-				C0DEF1152F60000100000002 /* NetworkCommunityProfileService.swift */,
-				C0DEF1182F60000100000002 /* NetworkNotificationService.swift */,
-				C0DEF1202F60000100000002 /* NetworkChoraProfileService.swift */,
-				C0DEF1212F60000100000002 /* NetworkNoteImportService.swift */,
-				C0DEF1222F60000100000002 /* NetworkNotionSourceService.swift */,
-				C0DEF1302F60000100000002 /* NetworkInvitationCreditService.swift */,
-				C0DEF1352F60000100000002 /* NetworkPrivacySettingsService.swift */,
-				C0DEF1362F60000100000002 /* NetworkDiscoveryPathService.swift */,
-				C0DEF1312F60000100000002 /* NetworkInvitationAccountRegistrar.swift */,
-				C0DEF1012F60000100000004 /* FlowViews.swift */,
-				C0DEF1012F60000100000006 /* CoreShellViews.swift */,
-			);
-			path = CoreFlow;
-			sourceTree = "<group>";
-		};
 		1B48AE282E30967F0090CF86 = {
 			isa = PBXGroup;
 			children = (
@@ -371,15 +315,6 @@
 			);
 			sourceTree = "<group>";
 		};
-		A20000012FA0000000000003 /* Config */ = {
-			isa = PBXGroup;
-			children = (
-				A20000012FA0000000000001 /* Local.xcconfig */,
-				A20000012FA0000000000002 /* Production.xcconfig */,
-			);
-			path = Config;
-			sourceTree = "<group>";
-		};
 		1B48AE322E30967F0090CF86 /* Products */ = {
 			isa = PBXGroup;
 			children = (
@@ -387,15 +322,6 @@
 				A00000012F50000100000003 /* ArcNoteUITests.xctest */,
 			);
 			name = Products;
-			sourceTree = "<group>";
-		};
-		A00000012F50000100000004 /* ArcNoteUITests */ = {
-			isa = PBXGroup;
-			children = (
-				A00000012F50000100000002 /* ArcNoteUITests.swift */,
-				A10000012F90000100000002 /* APIEnvironmentTests.swift */,
-			);
-			path = ArcNoteUITests;
 			sourceTree = "<group>";
 		};
 		1B48AE332E30967F0090CF86 /* ArcNote */ = {
@@ -504,6 +430,80 @@
 			path = Models;
 			sourceTree = "<group>";
 		};
+		A00000012F50000100000004 /* ArcNoteUITests */ = {
+			isa = PBXGroup;
+			children = (
+				A00000012F50000100000002 /* ArcNoteUITests.swift */,
+				A10000012F90000100000002 /* APIEnvironmentTests.swift */,
+			);
+			path = ArcNoteUITests;
+			sourceTree = "<group>";
+		};
+		A20000012FA0000000000003 /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				A20000012FA0000000000001 /* Local.xcconfig */,
+				A20000012FA0000000000002 /* Production.xcconfig */,
+			);
+			path = Config;
+			sourceTree = "<group>";
+		};
+		C0DEF1012F60000100000001 /* CoreFlow */ = {
+			isa = PBXGroup;
+			children = (
+				C0DEF1012F60000100000002 /* NetworkCoreFlowService.swift */,
+				C0DEF1022F60000100000002 /* NetworkCoreSparkService.swift */,
+				C0DEF1022F60000100000004 /* SparkContinuationViews.swift */,
+				C0DEF1032F60000100000002 /* NetworkCoreMergeService.swift */,
+				C0DEF1042F60000100000002 /* MergeLifecycleViews.swift */,
+				C0DEF1422F60000100000002 /* MergeTaskRail.swift */,
+				C0DEF1432F60000100000002 /* MergeArtifactEditorSurface.swift */,
+				C0DEF1442F60000100000002 /* MergeArtifactDraftController.swift */,
+				C0DEF1452F60000100000002 /* MergeTaskRailAnchor.swift */,
+				C0DEF1052F60000100000002 /* NetworkCoreOnboardingService.swift */,
+				C0DEF1062F60000100000002 /* OnboardingGuideLine.swift */,
+				C0DEF1072F60000100000002 /* NetworkCoreShareService.swift */,
+				C0DEF1082F60000100000002 /* ShareCardView.swift */,
+				C0DEF1092F60000100000002 /* NetworkContentReportService.swift */,
+				C0DEF1102F60000100000002 /* ContentReportView.swift */,
+				C0DEF1112F60000100000002 /* NetworkCoreCardEditingService.swift */,
+				C0DEF1122F60000100000002 /* NetworkCoreInterestSelectionService.swift */,
+				C0DEF1132F60000100000002 /* NetworkCoreCardLikeService.swift */,
+				C0DEF1142F60000100000002 /* CardEngagementCenter.swift */,
+				C0DEF1152F60000100000002 /* NetworkCommunityProfileService.swift */,
+				C0DEF1182F60000100000002 /* NetworkNotificationService.swift */,
+				C0DEF1202F60000100000002 /* NetworkChoraProfileService.swift */,
+				C0DEF1212F60000100000002 /* NetworkNoteImportService.swift */,
+				C0DEF1222F60000100000002 /* NetworkNotionSourceService.swift */,
+				C0DEF1302F60000100000002 /* NetworkInvitationCreditService.swift */,
+				C0DEF1352F60000100000002 /* NetworkPrivacySettingsService.swift */,
+				C0DEF1362F60000100000002 /* NetworkDiscoveryPathService.swift */,
+				C0DEF1312F60000100000002 /* NetworkInvitationAccountRegistrar.swift */,
+				C0DEF1012F60000100000004 /* FlowViews.swift */,
+				C0DEF1012F60000100000006 /* CoreShellViews.swift */,
+			);
+			path = CoreFlow;
+			sourceTree = "<group>";
+		};
+		C0DEF3002F80000100000001 /* CardEditor */ = {
+			isa = PBXGroup;
+			children = (
+				C0DEF3002F80000100000021 /* BlockNoteCardEditor.swift */,
+				C0DEF3002F80000100000022 /* CardEditorShell.swift */,
+				C0DEF3002F80000100000023 /* CardEditorMetadataRows.swift */,
+				C0DEF3002F80000100000026 /* CardMetadataPresentation.swift */,
+				C0DEF3002F80000100000024 /* CardEditorFormattingBar.swift */,
+				C0DEF3002F80000100000025 /* CardEditorBackground.swift */,
+				C0DEF3002F8000010000002C /* CardEditorBackgroundActions.swift */,
+				C0DEF3002F80000100000028 /* CardEditorActionBox.swift */,
+				C0DEF3002F80000100000029 /* CardEditorInlineImageSource.swift */,
+				C0DEF3002F8000010000002A /* CardEditorGlassSurface.swift */,
+				C0DEF3002F8000010000002B /* CardEditorAmbientBackdrop.swift */,
+				C0DEF3002F8000010000002E /* CardLevelMaterial.swift */,
+			);
+			path = CardEditor;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -598,13 +598,6 @@
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		A00000012F50000100000007 /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		1B48AE2F2E30967F0090CF86 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -615,19 +608,16 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-/* End PBXResourcesBuildPhase section */
-
-/* Begin PBXSourcesBuildPhase section */
-		A00000012F50000100000005 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
+		A00000012F50000100000007 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				A00000012F50000100000001 /* ArcNoteUITests.swift in Sources */,
-				A10000012F90000100000001 /* APIEnvironmentTests.swift in Sources */,
-				A10000012F90000100000003 /* APIEnvironment.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
 		1B48AE2D2E30967F0090CF86 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -753,6 +743,16 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A00000012F50000100000005 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A00000012F50000100000001 /* ArcNoteUITests.swift in Sources */,
+				A10000012F90000100000001 /* APIEnvironmentTests.swift in Sources */,
+				A10000012F90000100000003 /* APIEnvironment.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -827,69 +827,6 @@
 			};
 			name = Debug;
 		};
-		A20000012FA0000000000004 /* Debug-Production */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ALWAYS_SEARCH_USER_PATHS = NO;
-				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
-				CLANG_ANALYZER_NONNULL = YES;
-				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
-				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
-				CLANG_ENABLE_MODULES = YES;
-				CLANG_ENABLE_OBJC_ARC = YES;
-				CLANG_ENABLE_OBJC_WEAK = YES;
-				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
-				CLANG_WARN_BOOL_CONVERSION = YES;
-				CLANG_WARN_COMMA = YES;
-				CLANG_WARN_CONSTANT_CONVERSION = YES;
-				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
-				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
-				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
-				CLANG_WARN_EMPTY_BODY = YES;
-				CLANG_WARN_ENUM_CONVERSION = YES;
-				CLANG_WARN_INFINITE_RECURSION = YES;
-				CLANG_WARN_INT_CONVERSION = YES;
-				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
-				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
-				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
-				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
-				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
-				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
-				CLANG_WARN_STRICT_PROTOTYPES = YES;
-				CLANG_WARN_SUSPICIOUS_MOVE = YES;
-				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
-				CLANG_WARN_UNREACHABLE_CODE = YES;
-				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
-				COPY_PHASE_STRIP = NO;
-				DEBUG_INFORMATION_FORMAT = dwarf;
-				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				ENABLE_TESTABILITY = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
-				GCC_C_LANGUAGE_STANDARD = gnu17;
-				GCC_DYNAMIC_NO_PIC = NO;
-				GCC_NO_COMMON_BLOCKS = YES;
-				GCC_OPTIMIZATION_LEVEL = 0;
-				GCC_PREPROCESSOR_DEFINITIONS = (
-					"DEBUG=1",
-					"$(inherited)",
-				);
-				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
-				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
-				GCC_WARN_UNDECLARED_SELECTOR = YES;
-				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
-				GCC_WARN_UNUSED_FUNCTION = YES;
-				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
-				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
-				MTL_FAST_MATH = YES;
-				ONLY_ACTIVE_ARCH = YES;
-				SDKROOT = iphoneos;
-				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
-				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
-			};
-			name = Debug-Production;
-		};
 		1B48AE3E2E3096810090CF86 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -956,7 +893,7 @@
 				CODE_SIGN_ENTITLEMENTS = ArcNote/ArcNote.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 61;
+				CURRENT_PROJECT_VERSION = 64;
 				DEVELOPMENT_ASSET_PATHS = "\"ArcNote/Preview Content\"";
 				DEVELOPMENT_TEAM = 3YVRHRU9YA;
 				ENABLE_PREVIEWS = YES;
@@ -975,7 +912,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.2.1;
+				MARKETING_VERSION = 2.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.michen.arcnote;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -987,47 +924,6 @@
 			};
 			name = Debug;
 		};
-		A20000012FA0000000000005 /* Debug-Production */ = {
-			isa = XCBuildConfiguration;
-			baseConfigurationReference = A20000012FA0000000000002 /* Production.xcconfig */;
-			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
-				CODE_SIGN_ENTITLEMENTS = ArcNote/ArcNote.entitlements;
-				CODE_SIGN_IDENTITY = "Apple Development";
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 61;
-				DEVELOPMENT_ASSET_PATHS = "\"ArcNote/Preview Content\"";
-				DEVELOPMENT_TEAM = 3YVRHRU9YA;
-				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = ArcNote/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = Chorai;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.lifestyle";
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
-				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UILaunchStoryboardName = "Launch Screen";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UIUserInterfaceStyle = Light;
-				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-				);
-				MARKETING_VERSION = 1.2.1;
-				PRODUCT_BUNDLE_IDENTIFIER = com.michen.arcnote;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				PROVISIONING_PROFILE_SPECIFIER = "";
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
-				SUPPORTS_MACCATALYST = NO;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = 1;
-			};
-			name = Debug-Production;
-		};
 		1B48AE412E3096810090CF86 /* Release */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = A20000012FA0000000000002 /* Production.xcconfig */;
@@ -1038,7 +934,7 @@
 				CODE_SIGN_ENTITLEMENTS = ArcNote/ArcNote.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 61;
+				CURRENT_PROJECT_VERSION = 64;
 				DEVELOPMENT_ASSET_PATHS = "\"ArcNote/Preview Content\"";
 				DEVELOPMENT_TEAM = 3YVRHRU9YA;
 				ENABLE_PREVIEWS = YES;
@@ -1057,7 +953,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.2.1;
+				MARKETING_VERSION = 2.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.michen.arcnote;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -1087,24 +983,6 @@
 			};
 			name = Debug;
 		};
-		A20000012FA0000000000006 /* Debug-Production */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 3YVRHRU9YA;
-				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.michen.arcnoteUITests;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = 1;
-				TEST_TARGET_NAME = ArcNote;
-			};
-			name = Debug-Production;
-		};
 		A00000012F5000010000000A /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -1122,6 +1000,128 @@
 				TEST_TARGET_NAME = ArcNote;
 			};
 			name = Release;
+		};
+		A20000012FA0000000000004 /* Debug-Production */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = "Debug-Production";
+		};
+		A20000012FA0000000000005 /* Debug-Production */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = A20000012FA0000000000002 /* Production.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
+				CODE_SIGN_ENTITLEMENTS = ArcNote/ArcNote.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 64;
+				DEVELOPMENT_ASSET_PATHS = "\"ArcNote/Preview Content\"";
+				DEVELOPMENT_TEAM = 3YVRHRU9YA;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = ArcNote/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Chorai;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.lifestyle";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchStoryboardName = "Launch Screen";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UIUserInterfaceStyle = Light;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 2.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.michen.arcnote;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = "Debug-Production";
+		};
+		A20000012FA0000000000006 /* Debug-Production */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 3YVRHRU9YA;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.michen.arcnoteUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_TARGET_NAME = ArcNote;
+			};
+			name = "Debug-Production";
 		};
 /* End XCBuildConfiguration section */
 
@@ -1197,14 +1197,6 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		C0DEF1002F60000100000003 /* CoreFlow */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = CoreFlow;
-		};
-		C0DEF2002F70000100000003 /* BlockNoteEditor */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = BlockNoteEditor;
-		};
 		1B6E6FBA2E6ABA88006898F5 /* Alamofire */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 1B6E6FB92E6ABA88006898F5 /* XCRemoteSwiftPackageReference "Alamofire" */;
@@ -1224,6 +1216,14 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 1B846EF02E84F19100A7E621 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
 			productName = GoogleSignInSwift;
+		};
+		C0DEF1002F60000100000003 /* CoreFlow */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = CoreFlow;
+		};
+		C0DEF2002F70000100000003 /* BlockNoteEditor */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = BlockNoteEditor;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

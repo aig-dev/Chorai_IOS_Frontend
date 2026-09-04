@@ -13,16 +13,6 @@ struct NetworkResponse<T: Codable>: Codable {
     }
 }
 
-struct GoAPIErrorEnvelope: Codable {
-    let success: Bool?
-    let error: GoAPIErrorPayload?
-}
-
-struct GoAPIErrorPayload: Codable {
-    let code: String?
-    let message: String?
-}
-
 struct EmptyResponseData: Codable {}
 
 struct HealthResponse: Codable {
@@ -612,13 +602,13 @@ enum NetworkError: Error, LocalizedError {
         case .noData:
             return "NoData"
         case .decodingError:
-            return "DecodingError"
+            return "The server returned an unexpected response. Please try again later."
         case .encodingError:
             return "EncodingError"
         case .serverError(let code, let message):
             return "Server Error (\(code)): \(message ?? "未知错误")"
-        case .api(let statusCode, let code, _):
-            return "API Error (\(statusCode)): \(code ?? "UNKNOWN")"
+        case .api:
+            return "The request could not be completed."
         case .networkError(let error):
             return "NetWord Error: \(error.localizedDescription)"
         case .unauthorized:

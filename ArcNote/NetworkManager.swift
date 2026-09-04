@@ -112,7 +112,8 @@ class NetworkManager: ObservableObject {
         headers: HTTPHeaders? = nil,
         responseType: T.Type,
         presentsError: Bool = true,
-        suppressesPayloadLogging: Bool = false
+        suppressesPayloadLogging: Bool = false,
+        isCredentialExchange: Bool = false
     ) -> AnyPublisher<T, NetworkError> {
 
         return Future<T, NetworkError> { [weak self] promise in
@@ -168,6 +169,24 @@ class NetworkManager: ObservableObject {
                         print("响应数据: <redacted>")
                     }
 
+                    let statusCode = response.response?.statusCode
+                    if isCredentialExchange,
+                       let apiError = APIErrorPayload.decode(
+                        from: data,
+                        statusCode: statusCode
+                    ) {
+                        promise(
+                            .failure(
+                                .api(
+                                    statusCode: statusCode ?? 200,
+                                    code: apiError.code,
+                                    message: apiError.message
+                                )
+                            )
+                        )
+                        return
+                    }
+
                     do {
                         let decodedResponse = try JSONDecoder().decode(T.self, from: data)
                         print("解码成功: \(type(of: decodedResponse))")
@@ -179,7 +198,8 @@ class NetworkManager: ObservableObject {
 
                 case .failure(let error):
                     var responseMessage: String?
-                    var apiError: GoAPIErrorPayload?
+                    var apiError: APIErrorPayload?
+                    let statusCode = response.response?.statusCode
                     if let data = response.data {
                         if Self.shouldLogPayload(
                             suppressesPayloadLogging: suppressesPayloadLogging
@@ -188,13 +208,10 @@ class NetworkManager: ObservableObject {
                         } else {
                             print("请求失败响应数据: <redacted>")
                         }
-                        apiError = try? JSONDecoder().decode(GoAPIErrorEnvelope.self, from: data).error
-                        if apiError == nil {
-                            apiError = try? JSONDecoder().decode(
-                                GoAPIErrorPayload.self,
-                                from: data
-                            )
-                        }
+                        apiError = APIErrorPayload.decode(
+                            from: data,
+                            statusCode: statusCode
+                        )
                         responseMessage = apiError?.message ?? self.extractMessage(from: data)
                     }
                     if let httpResponse = response.response {
@@ -202,7 +219,6 @@ class NetworkManager: ObservableObject {
                     }
                     print("请求失败错误: \(error)")
 
-                    let statusCode = response.response?.statusCode
                     let isStaleUnauthorizedRequest = statusCode == 401
                         && self.authToken == nil
                     if presentsError,
@@ -213,13 +229,15 @@ class NetworkManager: ObservableObject {
                     }
 
                     let networkError: NetworkError
-                    if statusCode == 401 {
+                    if statusCode == 401 && !isCredentialExchange {
                         networkError = .unauthorized
-                    } else if let statusCode, (400...599).contains(statusCode), let apiError {
+                    } else if let statusCode,
+                              (400...599).contains(statusCode),
+                              isCredentialExchange || apiError != nil {
                         networkError = .api(
                             statusCode: statusCode,
-                            code: apiError.code,
-                            message: apiError.message
+                            code: apiError?.code,
+                            message: apiError?.message ?? responseMessage
                         )
                     } else {
                         networkError = self.handleError(error, response: response.response)
@@ -289,20 +307,15 @@ class NetworkManager: ObservableObject {
                 case .success(let data):
                     promise(.success(data))
                 case .failure(let error):
-                    var apiError: GoAPIErrorPayload?
+                    let statusCode = response.response?.statusCode
+                    var apiError: APIErrorPayload?
                     if let data = response.data {
-                        apiError = try? JSONDecoder()
-                            .decode(GoAPIErrorEnvelope.self, from: data)
-                            .error
-                        if apiError == nil {
-                            apiError = try? JSONDecoder().decode(
-                                GoAPIErrorPayload.self,
-                                from: data
-                            )
-                        }
+                        apiError = APIErrorPayload.decode(
+                            from: data,
+                            statusCode: statusCode
+                        )
                     }
 
-                    let statusCode = response.response?.statusCode
                     if presentsError, let message = apiError?.message {
                         self.presentErrorAlert(message: message)
                     }
@@ -471,7 +484,9 @@ extension NetworkManager {
             method: .post,
             parameters: parameters,
             responseType: AuthResponse.self,
-            suppressesPayloadLogging: true
+            presentsError: false,
+            suppressesPayloadLogging: true,
+            isCredentialExchange: true
         )
     }
 
@@ -503,7 +518,9 @@ extension NetworkManager {
             method: .post,
             parameters: parameters,
             responseType: AuthResponse.self,
-            suppressesPayloadLogging: true
+            presentsError: false,
+            suppressesPayloadLogging: true,
+            isCredentialExchange: true
         )
     }
 
@@ -516,7 +533,8 @@ extension NetworkManager {
             endpoint: "/api/auth/send-verification-code",
             method: .post,
             parameters: parameters,
-            responseType: SendVerificationCodeResponse.self
+            responseType: SendVerificationCodeResponse.self,
+            presentsError: false
         )
     }
 
@@ -539,7 +557,9 @@ extension NetworkManager {
             method: .post,
             parameters: parameters,
             responseType: AuthResponse.self,
-            suppressesPayloadLogging: true
+            presentsError: false,
+            suppressesPayloadLogging: true,
+            isCredentialExchange: true
         )
     }
 
@@ -2606,7 +2626,9 @@ extension NetworkManager {
             method: .post,
             parameters: parameters,
             responseType: AuthResponse.self,
-            suppressesPayloadLogging: true
+            presentsError: false,
+            suppressesPayloadLogging: true,
+            isCredentialExchange: true
         )
     }
 

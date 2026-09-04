@@ -471,7 +471,7 @@ struct SignUpView: View {
                 receiveCompletion: { completion in
                     isSendingCode = false
                     if case .failure(let error) = completion {
-                        showAlert(message: error.localizedDescription)
+                        handleVerificationCodeError(error)
                     }
                 },
                 receiveValue: { response in
@@ -480,11 +480,43 @@ struct SignUpView: View {
                         startCountdown()
                         showAlert(message: response.message ?? "Verification code has been sent to your email")
                     } else {
-                        showAlert(message: response.message ?? "Failed to send, please try again")
+                        showAlert(
+                            message: AuthenticationErrorPresentation.verificationCodeMessage(
+                                statusCode: nil,
+                                errorCode: response.errorCode
+                            )
+                        )
                     }
                 }
             )
             .store(in: &cancellables)
+    }
+
+    private func handleVerificationCodeError(_ error: NetworkError) {
+        switch error {
+        case .serverError(let statusCode, _):
+            showAlert(
+                message: AuthenticationErrorPresentation.verificationCodeMessage(
+                    statusCode: statusCode,
+                    errorCode: nil
+                )
+            )
+        case .api(let statusCode, let errorCode, _):
+            showAlert(
+                message: AuthenticationErrorPresentation.verificationCodeMessage(
+                    statusCode: statusCode,
+                    errorCode: errorCode
+                )
+            )
+        case .networkError:
+            showAlert(message: "Network connection failed, please check your network settings")
+        case .timeout:
+            showAlert(message: "Request timeout, please try again later")
+        case .decodingError:
+            showAlert(message: "The server returned an unexpected response. Please try again later.")
+        default:
+            showAlert(message: "Verification code could not be sent. Please try again.")
+        }
     }
     
     // MARK: - 创建账户
@@ -593,34 +625,28 @@ struct SignUpView: View {
     // MARK: 处理注册错误
     private func handleRegistrationError(_ error: NetworkError) {
         switch error {
-        case .serverError(let code, let message):
-            switch code {
-            case 400:
-                showAlert(message: "Invalid request parameters, please check your input")
-            case 409:
-                showAlert(message: "Username or email already in use, please try another one")
-            case 422:
-                showAlert(message: "Verification code is incorrect or expired, please get a new one")
-            default:
-                showAlert(message: message ?? "Registration failed, please try again later")
-            }
-        case .api(let statusCode, _, _):
-            switch statusCode {
-            case 400:
-                showAlert(message: "Invalid request parameters, please check your input")
-            case 409:
-                showAlert(message: "Username or email already in use, please try another one")
-            case 422:
-                showAlert(message: "Verification code is incorrect or expired, please get a new one")
-            default:
-                showAlert(message: "Registration failed, please try again later")
-            }
+        case .serverError(let statusCode, _):
+            showAlert(
+                message: AuthenticationErrorPresentation.registrationMessage(
+                    statusCode: statusCode,
+                    errorCode: nil
+                )
+            )
+        case .api(let statusCode, let errorCode, _):
+            showAlert(
+                message: AuthenticationErrorPresentation.registrationMessage(
+                    statusCode: statusCode,
+                    errorCode: errorCode
+                )
+            )
         case .networkError:
             showAlert(message: "Network connection failed, please check your network settings")
         case .timeout:
             showAlert(message: "Request timeout, please try again later")
+        case .decodingError:
+            showAlert(message: "The server returned an unexpected response. Please try again later.")
         default:
-            showAlert(message: error.localizedDescription)
+            showAlert(message: "Registration failed. Please try again.")
         }
     }
     
@@ -677,7 +703,7 @@ struct SignUpView: View {
                 receiveCompletion: { completion in
                     if case .failure(let error) = completion {
                         print("后端Google登录失败: \(error.localizedDescription)")
-                        showAlert(message: "Google sign in failed, please try again")
+                        handleRegistrationError(error)
                     }
                 },
                 receiveValue: { authResponse in
@@ -759,7 +785,7 @@ struct SignUpView: View {
                 receiveCompletion: { completion in
                     if case .failure(let error) = completion {
                         print("后端Apple登录失败: \(error.localizedDescription)")
-                        showAlert(message: "Apple sign in failed, please try again")
+                        handleRegistrationError(error)
                     }
                 },
                 receiveValue: { authResponse in
