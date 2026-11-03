@@ -111,9 +111,10 @@ final class MergeSessionStoreCommitTests: XCTestCase {
         let commitCalls = await service.commitCalls
         XCTAssertTrue(didInjectMutation)
         XCTAssertEqual(saveCalls.map(\.request.idempotencyKey), ["save-first", "save-second"])
+        XCTAssertEqual(commitCalls.count, 1)
+        guard saveCalls.count == 2, commitCalls.count == 1 else { return }
         XCTAssertEqual(saveCalls[1].request.baseRevision, 2)
         XCTAssertEqual(saveCalls[1].request.tags, ["Second"])
-        XCTAssertEqual(commitCalls.count, 1)
         XCTAssertEqual(commitCalls[0].request.revision, 3)
         XCTAssertEqual(commitCalls[0].request.artifactHash, "sha256:document-3")
     }

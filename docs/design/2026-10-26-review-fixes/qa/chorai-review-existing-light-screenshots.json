@@ -1,0 +1,8 @@
+[
+  {
+    "file": "review-editor-existing-light.png",
+    "sourceResult": "/tmp/chorai-review-existing-light.xcresult",
+    "test": "ArcNoteUITests/testNativeFidelityHomeMenuOpensRealUnboxedEditor()",
+    "device": "iPhone 17 Pro"
+  }
+]

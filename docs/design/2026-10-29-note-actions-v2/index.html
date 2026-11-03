@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Chorai · Note 交互与 Chat 空态 · 第二轮</title>
+<style>
+:root{color-scheme:light;--paper:#faf9f6;--ink:#153b37;--muted:#586d64;--line:#d7dfd8;--gold:#846838}*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}main{max-width:1280px;margin:auto;padding:44px 28px 72px}a{color:inherit;text-underline-offset:4px}h1{font-size:clamp(28px,4vw,42px);line-height:1.25;letter-spacing:-.025em;margin:12px 0 18px}h2{font-size:24px;line-height:1.3;margin:0 0 12px}p{margin:0 0 16px;max-width:880px}.eyebrow{font-size:12px;font-weight:650;letter-spacing:.1em;color:var(--gold)}.muted{color:var(--muted)}.intro{padding-bottom:32px;border-bottom:1px solid var(--line)}nav{display:flex;gap:10px;flex-wrap:wrap;margin:24px 0 0}.button{display:inline-flex;align-items:center;justify-content:center;min-height:46px;padding:9px 19px;border:1px solid var(--line);border-radius:30px;background:#fff;text-decoration:none;font-size:14px;font-weight:600}.button.primary{background:var(--ink);color:#fff;border-color:var(--ink)}a:focus-visible{outline:3px solid var(--gold);outline-offset:4px}.flows{display:grid;grid-template-columns:1fr 1fr;gap:38px;padding:38px 0;border-bottom:1px solid var(--line)}.flows p{font-size:15px}.flows ul{padding-left:20px;font-size:15px;color:var(--muted)}section{scroll-margin-top:24px}#chat{padding-top:40px}.options{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;margin-top:26px}figure{margin:0}figure img{display:block;width:100%;height:auto;border:1px solid var(--line);border-radius:20px;background:#fff}figcaption{display:flex;justify-content:space-between;align-items:center;margin:0 0 12px;font-size:16px;font-weight:600}figcaption a{font-size:13px;font-weight:400}.note{font-size:13px;color:var(--muted);padding-top:24px}footer{border-top:1px solid var(--line);margin-top:36px;padding-top:22px;font-size:13px;color:var(--muted)}@media(max-width:760px){main{padding:28px 18px 40px}.flows{grid-template-columns:1fr;gap:28px}.options{grid-template-columns:1fr;max-width:430px;margin:auto;gap:30px}#chat>p{margin-bottom:28px}}
+</style>
+<main>
+<header class="intro">
+<div class="eyebrow">CHORAI · 2026.10.29 · DESIGN REVIEW 02</div>
+<h1>同一张 note，同一种使用方式。</h1>
+<p class="muted">这一轮对齐 Spark 的卡片与阅读详情，加入长按与 Home 滑动方案，并重新设计 Chat 空态。先确认交互和视觉，再落地到原生 App。</p>
+<nav aria-label="本轮设计"><a class="button primary" href="spark.html">试用 Spark 与普通 Grid 对照</a><a class="button" href="gestures.html">试用长按与左右滑动</a><a class="button" href="#chat">看 Chat 空态设计图</a></nav>
+</header>
+<div class="flows">
+<section><h2>01 · Spark，回到同一套 note</h2><p>普通 Explore 与 Spark 结果使用同一套 Grid 缩略样式和阅读详情。卡片点开读全文；收藏、点赞、评论等保留原有语义。</p><ul><li>每张卡片都有直接 Spark 按钮。</li><li>点击哪张，就以哪张作为下一轮来源。</li><li>取消圈选与底部 Continue；等级笔触保留。</li><li>详情底部互动区随正文滚动。</li></ul><a href="spark.html">打开可点击方案 →</a></section>
+<section><h2>02 · 手势，是已有操作的快捷入口</h2><p>长按打开已有功能菜单。Home 的本人笔记左滑露出删除、右滑露出编辑；竖向浏览保持优先。</p><ul><li>删除需要点击并再次确认，不以全幅滑动直接删除。</li><li>收藏内容只提供取消收藏，不出现编辑或删除原文。</li><li>Explore 滑卡保留原来的跳过／收藏。</li><li>长按不占用编辑器和阅读正文的文字选择。</li></ul><a href="gestures.html">打开手势演示 →</a></section>
+</div>
+<section id="chat">
+<div class="eyebrow">03 · CHAT EMPTY STATE</div>
+<h2>三个视觉方向</h2>
+<p class="muted">保留已确认的居中小标题与底部导航。入口都通向现有 Explore：找到感兴趣的笔记，再联系作者。以下为视觉设计图，尚未替换原生页面。</p>
+<div class="options">
+<figure><figcaption>方案 1 <a href="chat-designs/option-1.png" target="_blank" rel="noopener">查看原图</a></figcaption><a href="chat-designs/option-1.png" target="_blank" rel="noopener"><img src="chat-designs/option-1.png" alt="Chat 空态设计方案 1"></a></figure>
+<figure><figcaption>方案 2 <a href="chat-designs/option-2.png" target="_blank" rel="noopener">查看原图</a></figcaption><a href="chat-designs/option-2.png" target="_blank" rel="noopener"><img src="chat-designs/option-2.png" alt="Chat 空态设计方案 2"></a></figure>
+<figure><figcaption>方案 3 <a href="chat-designs/option-3.png" target="_blank" rel="noopener">查看原图</a></figcaption><a href="chat-designs/option-3.png" target="_blank" rel="noopener"><img src="chat-designs/option-3.png" alt="Chat 空态设计方案 3"></a></figure>
+</div>
+<p class="note">图像用于比较构图、留白和视觉表达；最终控件沿用真实 iOS 组件。这里只展示“成功加载但没有会话”的空态，加载中与网络错误另保留各自状态。</p>
+</section>
+<footer>本轮为本地离线设计演示。Spark、评论和收藏仅在演示内变化，不调用服务或保存真实数据。之前的原型与 App 实现均保留。<br><a href="../2026-10-29-spark-chat-alignment/">上一轮方案</a> · <a href="DESIGN.md">交互与实现边界</a></footer>
+</main>
+</html>

@@ -1,0 +1,369 @@
+Command line invocation:
+    /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild test-without-building -project ArcNote.xcodeproj -scheme ArcNoteUITests -destination "platform=iOS Simulator,id=92DE3535-B261-49B5-844F-9BD9B8C241B4" -derivedDataPath /Users/didi/Library/Caches/ChoraiReview/app-derived -clonedSourcePackagesDirPath /Users/didi/Library/Developer/Xcode/DerivedData/ArcNote-aybvwriajptjnqfsotseyzwxdivu/SourcePackages -disableAutomaticPackageResolution -onlyUsePackageVersionsFromResolvedFile -parallel-testing-enabled NO "-only-testing:ArcNoteUITests/ArcNoteUITests/testNativeExploreFixedSummaryAndHistoryKeepTheOriginalCard" "-only-testing:ArcNoteUITests/ArcNoteUITests/testNativeReformGridReaderAndHomeKeepRealNavigation" "-only-testing:ArcNoteUITests/ArcNoteUITests/testNativeFidelityHomeMenuOpensRealUnboxedEditor" -resultBundlePath /tmp/chorai-remediation-core-ui.xcresult CODE_SIGNING_ALLOWED=NO
+
+Build settings from command line:
+    CODE_SIGNING_ALLOWED = NO
+
+Resolve Package Graph
+
+
+Resolved source packages:
+  GTMAppAuth: https://github.com/google/GTMAppAuth.git @ 5.0.0
+  GoogleSignIn: https://github.com/google/GoogleSignIn-iOS @ 9.0.0
+  AppAuth: https://github.com/openid/AppAuth-iOS.git @ 2.0.0
+  Promises: https://github.com/google/promises.git @ 2.4.0
+  BlockNoteEditor: /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/Packages/BlockNoteEditor @ local
+  CoreFlow: /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/Packages/CoreFlow @ local
+  SwiftyJSON: https://github.com/SwiftyJSON/SwiftyJSON.git @ 5.0.2
+  GTMSessionFetcher: https://github.com/google/gtm-session-fetcher.git @ 3.5.0
+  GoogleUtilities: https://github.com/google/GoogleUtilities.git @ 8.1.0
+  Alamofire: https://github.com/Alamofire/Alamofire.git @ 5.10.2
+  AppCheck: https://github.com/google/app-check.git @ 11.2.0
+
+Writing result bundle at path:
+	/tmp/chorai-remediation-core-ui.xcresult
+
+2026-10-27 14:05:35.741 xcodebuild[54622:315131] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-10-27 14:05:43.997222+0800 ArcNoteUITests-Runner[54767:316435] [Default] Running tests...
+    t =      nans Interface orientation changed to Portrait
+Test Suite 'Selected tests' started at 2026-10-27 14:05:44.614.
+Test Suite 'ArcNoteUITests.xctest' started at 2026-10-27 14:05:44.614.
+Test Suite 'ArcNoteUITests' started at 2026-10-27 14:05:44.614.
+Test Case '-[ArcNoteUITests.ArcNoteUITests testNativeExploreFixedSummaryAndHistoryKeepTheOriginalCard]' started.
+    t =     0.00s Start Test at 2026-10-27 14:05:44.615
+    t =     0.13s Set Up
+    t =     0.14s Open com.michen.arcnote
+    t =     0.14s     Launch com.michen.arcnote
+2026-10-27 14:05:45.034 xcodebuild[54622:315131] [MT] IDELaunchParametersSnapshot: debugger version lookup failed for path '<nil>': noURL
+2026-10-27 14:05:45.034 xcodebuild[54622:315131] [MT] IDELaunchParametersSnapshot: no debugger version
+objc[54767]: Class UIAccessibilityLoaderWebShared is implemented in both /Library/Developer/CoreSimulator/Volumes/iOS_23F73/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebCore.axbundle/WebCore (0x1072a8310) and /Library/Developer/CoreSimulator/Volumes/iOS_23F73/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebKit.axbundle/WebKit (0x107300398). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+2026-10-27 14:05:45.081 xcodebuild[54622:315131] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+    t =     0.85s         Setting up automation session
+    t =     1.49s         Wait for com.michen.arcnote to idle
+    t =     3.58s Waiting 10.0s for "flow.card.preview-field-note" Button to exist
+    t =     4.61s     Checking `Expect predicate `existsNoRetry == 1` for object "flow.card.preview-field-note" Button`
+    t =     4.61s         Checking existence of `"flow.card.preview-field-note" Button`
+    t =     4.74s Find the "flow.card.surface.preview-field-note" Other
+    t =     4.79s Checking existence of `"flow.previous" Button`
+    t =     4.83s Checking existence of `"← Skip · Collect →" StaticText`
+    t =     4.88s Find the Target Application 'com.michen.arcnote'
+    t =     4.98s Added attachment named 'remediation-explore-summary'
+    t =     4.98s Press "flow.card.preview-field-note" Button[0.50, 0.50] for 0.1 seconds, then drag to "flow.card.preview-field-note" Button[0.50, 0.50] -> (30.0, 0.0) with velocity of 500.00 pixels per second, and then hold for 0.0 seconds 
+    t =     4.98s     Wait for com.michen.arcnote to idle
+    t =     4.99s     Find the "flow.card.preview-field-note" Button
+    t =     5.03s     Check for interrupting elements affecting "flow.card.preview-field-note" Button
+    t =     5.08s     Synthesize event
+    t =     5.08s         Find the "flow.card.preview-field-note" Button
+    t =     5.13s         Find the "flow.card.preview-field-note" Button
+    t =     5.17s         Find the "flow.card.preview-field-note" Button
+    t =     5.22s         Find the "flow.card.preview-field-note" Button
+    t =     5.27s         Find the "flow.card.preview-field-note" Button
+    t =     5.78s     Wait for com.michen.arcnote to idle
+    t =     5.78s Checking existence of `"screen.detail.loaded" StaticText`
+    t =     5.83s Checking existence of `"flow.card.preview-field-note" Button`
+    t =     5.88s Swipe left "flow.card.preview-field-note" Button
+    t =     5.88s     Wait for com.michen.arcnote to idle
+    t =     5.88s     Find the "flow.card.preview-field-note" Button
+    t =     5.92s     Check for interrupting elements affecting "flow.card.preview-field-note" Button
+    t =     5.96s     Synthesize event
+    t =     6.40s     Wait for com.michen.arcnote to idle
+    t =     6.41s Waiting 10.0s for "flow.card.preview-field-note-1" Button to exist
+    t =     7.45s     Checking `Expect predicate `existsNoRetry == 1` for object "flow.card.preview-field-note-1" Button`
+    t =     7.45s         Checking existence of `"flow.card.preview-field-note-1" Button`
+    t =     7.50s Find the "flow.card.surface.preview-field-note-1" Other
+    t =     7.54s Find the "flow.favorite.preview-field-note-1" Button
+    t =     7.60s Checking existence of `"flow.deck.scroll" ScrollView`
+    t =     7.64s Find the Target Application 'com.michen.arcnote'
+    t =     7.73s Added attachment named 'remediation-explore-long-summary'
+    t =     7.73s Tap "flow.card.preview-field-note-1" Button
+    t =     7.73s     Wait for com.michen.arcnote to idle
+    t =     7.74s     Find the "flow.card.preview-field-note-1" Button
+    t =     7.78s     Check for interrupting elements affecting "flow.card.preview-field-note-1" Button
+    t =     7.82s     Synthesize event
+    t =     8.10s     Wait for com.michen.arcnote to idle
+    t =     8.93s Waiting 8.0s for "screen.detail.loaded" StaticText to exist
+    t =     9.97s     Checking `Expect predicate `existsNoRetry == 1` for object "screen.detail.loaded" StaticText`
+    t =     9.97s         Checking existence of `"screen.detail.loaded" StaticText`
+    t =    10.04s Find the "Explore" Button
+    t =    11.07s     Find the "Explore" Button (retry 1)
+    t =    12.12s     Find the "Explore" Button (retry 2)
+    t =    12.17s Find the Target Application 'com.michen.arcnote'
+    t =    12.25s Added attachment named 'remediation-reader-document'
+    t =    12.25s Tap Button (First Match)
+    t =    12.25s     Wait for com.michen.arcnote to idle
+    t =    12.25s     Find the Button (First Match)
+    t =    12.28s     Check for interrupting elements affecting "BackButton" Button
+    t =    12.31s     Synthesize event
+    t =    12.60s     Wait for com.michen.arcnote to idle
+    t =    13.41s Waiting 5.0s for "flow.card.preview-field-note-1" Button to exist
+    t =    14.45s     Checking `Expect predicate `existsNoRetry == 1` for object "flow.card.preview-field-note-1" Button`
+    t =    14.45s         Checking existence of `"flow.card.preview-field-note-1" Button`
+    t =    14.52s Waiting 10.0s for "flow.history" Button to exist
+    t =    15.56s     Checking `Expect predicate `existsNoRetry == 1` for object "flow.history" Button`
+    t =    15.56s         Checking existence of `"flow.history" Button`
+    t =    15.64s Tap "flow.history" Button
+    t =    15.64s     Wait for com.michen.arcnote to idle
+    t =    15.64s     Find the "flow.history" Button
+    t =    15.69s     Check for interrupting elements affecting "flow.history" Button
+    t =    15.72s     Synthesize event
+    t =    16.01s     Wait for com.michen.arcnote to idle
+    t =    16.47s Waiting 10.0s for "flow.history.item.preview-field-note" Button to exist
+    t =    17.51s     Checking `Expect predicate `existsNoRetry == 1` for object "flow.history.item.preview-field-note" Button`
+    t =    17.51s         Checking existence of `"flow.history.item.preview-field-note" Button`
+    t =    17.57s Tap "flow.history.item.preview-field-note" Button
+    t =    17.57s     Wait for com.michen.arcnote to idle
+    t =    17.57s     Find the "flow.history.item.preview-field-note" Button
+    t =    17.63s     Check for interrupting elements affecting "flow.history.item.preview-field-note" Button
+    t =    17.67s     Synthesize event
+    t =    17.96s     Wait for com.michen.arcnote to idle
+    t =    18.38s Waiting 5.0s for "flow.card.preview-field-note" Button to exist
+    t =    19.42s     Checking `Expect predicate `existsNoRetry == 1` for object "flow.card.preview-field-note" Button`
+    t =    19.42s         Checking existence of `"flow.card.preview-field-note" Button`
+    t =    19.50s Waiting 10.0s for "flow.resume" Button to exist
+    t =    20.55s     Checking `Expect predicate `existsNoRetry == 1` for object "flow.resume" Button`
+    t =    20.55s         Checking existence of `"flow.resume" Button`
+    t =    20.62s Tap "flow.resume" Button
+    t =    20.62s     Wait for com.michen.arcnote to idle
+    t =    20.63s     Find the "flow.resume" Button
+    t =    20.67s     Check for interrupting elements affecting "flow.resume" Button
+    t =    20.71s     Synthesize event
+    t =    21.00s     Wait for com.michen.arcnote to idle
+    t =    21.00s Waiting 5.0s for "flow.card.preview-field-note-1" Button to exist
+    t =    22.05s     Checking `Expect predicate `existsNoRetry == 1` for object "flow.card.preview-field-note-1" Button`
+    t =    22.05s         Checking existence of `"flow.card.preview-field-note-1" Button`
+    t =    22.10s Tear Down
+Test Case '-[ArcNoteUITests.ArcNoteUITests testNativeExploreFixedSummaryAndHistoryKeepTheOriginalCard]' passed (22.406 seconds).
+Test Case '-[ArcNoteUITests.ArcNoteUITests testNativeFidelityHomeMenuOpensRealUnboxedEditor]' started.
+    t =     0.00s Start Test at 2026-10-27 14:06:07.022
+    t =     0.02s Set Up
+    t =     0.02s Open com.michen.arcnote
+    t =     0.02s     Launch com.michen.arcnote
+    t =     0.02s         Terminate com.michen.arcnote:54781
+2026-10-27 14:06:07.061 xcodebuild[54622:315131] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-10-27 14:06:07.061 xcodebuild[54622:315131] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-10-27 14:06:08.114 xcodebuild[54622:315131] [MT] IDELaunchParametersSnapshot: debugger version lookup failed for path '<nil>': noURL
+2026-10-27 14:06:08.114 xcodebuild[54622:315131] [MT] IDELaunchParametersSnapshot: no debugger version
+2026-10-27 14:06:08.137 xcodebuild[54622:315131] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+    t =     1.30s         Setting up automation session
+    t =     2.00s         Wait for com.michen.arcnote to idle
+    t =     3.66s Waiting 10.0s for "local-preview.indicator" StaticText to exist
+    t =     4.69s     Checking `Expect predicate `existsNoRetry == 1` for object "local-preview.indicator" StaticText`
+    t =     4.69s         Checking existence of `"local-preview.indicator" StaticText`
+    t =     4.83s Tap "Home" Button
+    t =     4.83s     Wait for com.michen.arcnote to idle
+    t =     4.83s     Find the "Home" Button
+    t =     4.88s     Check for interrupting elements affecting "tab.library" Button
+    t =     4.92s     Synthesize event
+    t =     5.21s     Wait for com.michen.arcnote to idle
+    t =     6.42s Waiting 5.0s for "Home" NavigationBar to exist
+    t =     7.46s     Checking `Expect predicate `existsNoRetry == 1` for object "Home" NavigationBar`
+    t =     7.46s         Checking existence of `"Home" NavigationBar`
+    t =     7.54s Find the "note.create" Button
+    t =     7.57s Waiting 10.0s for "home.card.menu.preview-note" Button to exist
+    t =     8.61s     Checking `Expect predicate `existsNoRetry == 1` for object "home.card.menu.preview-note" Button`
+    t =     8.61s         Checking existence of `"home.card.menu.preview-note" Button`
+    t =     8.67s Tap "home.card.menu.preview-note" Button
+    t =     8.67s     Wait for com.michen.arcnote to idle
+    t =     8.67s     Find the "home.card.menu.preview-note" Button
+    t =     8.71s     Check for interrupting elements affecting "home.card.menu.preview-note" Button
+    t =     8.74s     Synthesize event
+    t =     9.03s     Wait for com.michen.arcnote to idle
+    t =    10.33s Find the Target Application 'com.michen.arcnote'
+    t =    10.45s Added attachment named 'Fidelity native Home menu'
+    t =    10.45s Waiting 10.0s for "popup-menu.item.edit" Button to exist
+    t =    11.50s     Checking `Expect predicate `existsNoRetry == 1` for object "popup-menu.item.edit" Button`
+    t =    11.50s         Checking existence of `"popup-menu.item.edit" Button`
+    t =    11.54s Tap "popup-menu.item.edit" Button
+    t =    11.54s     Wait for com.michen.arcnote to idle
+    t =    11.54s     Find the "popup-menu.item.edit" Button
+    t =    11.58s     Check for interrupting elements affecting "popup-menu.item.edit" Button
+    t =    11.61s     Synthesize event
+    t =    11.90s     Wait for com.michen.arcnote to idle
+    t =    13.24s Waiting 10.0s for "cardEditorLeadingAction" Button to exist
+    t =    14.25s     Checking `Expect predicate `existsNoRetry == 1` for object "cardEditorLeadingAction" Button`
+    t =    14.25s         Checking existence of `"cardEditorLeadingAction" Button`
+    t =    14.30s Waiting 10.0s for "cardEditorBodyWebView" Any to exist
+    t =    15.34s     Checking `Expect predicate `existsNoRetry == 1` for object "cardEditorBodyWebView" Any`
+    t =    15.34s         Checking existence of `"cardEditorBodyWebView" Any`
+    t =    15.39s Checking existence of `"cardEditorBodyWebView" Any`
+    t =    15.44s Checking existence of `"Note" StaticText`
+    t =    15.46s Find the Target Application 'com.michen.arcnote'
+    t =    15.53s Added attachment named 'Fidelity real editor'
+    t =    15.53s Find the Target Application 'com.michen.arcnote'
+    t =    15.60s Added attachment named 'review-editor-existing'
+    t =    15.60s Find the "cardEditorLeadingAction" Button
+    t =    15.62s Tap "cardEditorLeadingAction" Button
+    t =    15.62s     Wait for com.michen.arcnote to idle
+    t =    15.62s     Find the "cardEditorLeadingAction" Button
+    t =    15.64s     Check for interrupting elements affecting "cardEditorLeadingAction" Button
+    t =    15.65s     Synthesize event
+    t =    15.94s     Wait for com.michen.arcnote to idle
+    t =    16.36s Waiting 5.0s for "note.create" Button to exist
+    t =    17.40s     Checking `Expect predicate `existsNoRetry == 1` for object "note.create" Button`
+    t =    17.40s         Checking existence of `"note.create" Button`
+    t =    17.47s Find the "Home" Button
+    t =    17.51s Waiting 10.0s for "home.card.body.preview-note" Any to exist
+    t =    18.54s     Checking `Expect predicate `existsNoRetry == 1` for object "home.card.body.preview-note" Any`
+    t =    18.54s         Checking existence of `"home.card.body.preview-note" Any`
+    t =    18.61s Tap "home.card.body.preview-note" Any
+    t =    18.61s     Wait for com.michen.arcnote to idle
+    t =    18.61s     Find the "home.card.body.preview-note" Any
+    t =    18.65s     Check for interrupting elements affecting "home.card.body.preview-note" StaticText
+    t =    18.68s     Synthesize event
+    t =    18.97s     Wait for com.michen.arcnote to idle
+    t =    19.32s Waiting 10.0s for "cardEditorLeadingAction" Button to exist
+    t =    20.35s     Checking `Expect predicate `existsNoRetry == 1` for object "cardEditorLeadingAction" Button`
+    t =    20.35s         Checking existence of `"cardEditorLeadingAction" Button`
+    t =    20.38s Find the "Home" Button
+    t =    21.41s     Find the "Home" Button (retry 1)
+    t =    22.44s     Find the "Home" Button (retry 2)
+    t =    22.47s Tap "cardEditorLeadingAction" Button
+    t =    22.47s     Wait for com.michen.arcnote to idle
+    t =    22.47s     Find the "cardEditorLeadingAction" Button
+    t =    22.49s     Check for interrupting elements affecting "cardEditorLeadingAction" Button
+    t =    22.51s     Synthesize event
+    t =    22.80s     Wait for com.michen.arcnote to idle
+    t =    23.27s Waiting 10.0s for "note.create" Button to exist
+    t =    24.30s     Checking `Expect predicate `existsNoRetry == 1` for object "note.create" Button`
+    t =    24.30s         Checking existence of `"note.create" Button`
+    t =    24.35s Find the "note.create" Button
+    t =    24.39s Find the "Home" Button
+    t =    24.42s Tear Down
+Test Case '-[ArcNoteUITests.ArcNoteUITests testNativeFidelityHomeMenuOpensRealUnboxedEditor]' passed (24.661 seconds).
+Test Case '-[ArcNoteUITests.ArcNoteUITests testNativeReformGridReaderAndHomeKeepRealNavigation]' started.
+    t =     0.00s Start Test at 2026-10-27 14:06:31.683
+    t =     0.02s Set Up
+    t =     0.02s Open com.michen.arcnote
+    t =     0.02s     Launch com.michen.arcnote
+    t =     0.02s         Terminate com.michen.arcnote:54949
+2026-10-27 14:06:31.724 xcodebuild[54622:315131] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-10-27 14:06:31.724 xcodebuild[54622:315131] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-10-27 14:06:32.749 xcodebuild[54622:315131] [MT] IDELaunchParametersSnapshot: debugger version lookup failed for path '<nil>': noURL
+2026-10-27 14:06:32.749 xcodebuild[54622:315131] [MT] IDELaunchParametersSnapshot: no debugger version
+2026-10-27 14:06:32.770 xcodebuild[54622:315131] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+    t =     1.27s         Setting up automation session
+    t =     1.78s         Wait for com.michen.arcnote to idle
+    t =     3.38s Waiting 10.0s for "local-preview.indicator" StaticText to exist
+    t =     4.41s     Checking `Expect predicate `existsNoRetry == 1` for object "local-preview.indicator" StaticText`
+    t =     4.41s         Checking existence of `"local-preview.indicator" StaticText`
+    t =     4.54s Find the Target Application 'com.michen.arcnote'
+    t =     4.63s Added attachment named 'fidelity-explore-deck'
+    t =     4.63s Waiting 5.0s for "explore.browse-mode" Button to exist
+    t =     5.64s     Checking `Expect predicate `existsNoRetry == 1` for object "explore.browse-mode" Button`
+    t =     5.64s         Checking existence of `"explore.browse-mode" Button`
+    t =     5.69s Tap "explore.browse-mode" Button
+    t =     5.69s     Wait for com.michen.arcnote to idle
+    t =     5.69s     Find the "explore.browse-mode" Button
+    t =     5.74s     Check for interrupting elements affecting "explore.browse-mode" Button
+    t =     5.78s     Synthesize event
+    t =     6.07s     Wait for com.michen.arcnote to idle
+    t =     6.90s Waiting 8.0s for "explore.grid.card.preview-field-note" Button to exist
+    t =     7.94s     Checking `Expect predicate `existsNoRetry == 1` for object "explore.grid.card.preview-field-note" Button`
+    t =     7.94s         Checking existence of `"explore.grid.card.preview-field-note" Button`
+    t =     8.01s Find the "explore.grid.card.preview-field-note" Button
+    t =     8.06s Find the Target Application 'com.michen.arcnote'
+    t =     8.15s Added attachment named 'Native reform Grid'
+    t =     8.15s Tap "explore.grid.card.preview-field-note" Button
+    t =     8.15s     Wait for com.michen.arcnote to idle
+    t =     8.15s     Find the "explore.grid.card.preview-field-note" Button
+    t =     8.19s     Check for interrupting elements affecting "explore.grid.card.preview-field-note" Button
+    t =     8.23s     Synthesize event
+    t =     8.51s     Wait for com.michen.arcnote to idle
+    t =     9.28s Waiting 8.0s for "screen.detail.content" Other to exist
+    t =    10.32s     Checking `Expect predicate `existsNoRetry == 1` for object "screen.detail.content" Other`
+    t =    10.32s         Checking existence of `"screen.detail.content" Other`
+    t =    10.41s         Capturing element debug description
+    t =    11.34s     Checking `Expect predicate `existsNoRetry == 1` for object "screen.detail.content" Other`
+    t =    11.34s         Checking existence of `"screen.detail.content" Other`
+    t =    11.41s         Capturing element debug description
+    t =    12.35s     Checking `Expect predicate `existsNoRetry == 1` for object "screen.detail.content" Other`
+    t =    12.35s         Checking existence of `"screen.detail.content" Other`
+    t =    12.43s         Capturing element debug description
+    t =    13.36s     Checking `Expect predicate `existsNoRetry == 1` for object "screen.detail.content" Other`
+    t =    13.36s         Checking existence of `"screen.detail.content" Other`
+    t =    13.42s         Capturing element debug description
+    t =    14.34s     Checking `Expect predicate `existsNoRetry == 1` for object "screen.detail.content" Other`
+    t =    14.34s         Checking existence of `"screen.detail.content" Other`
+    t =    14.40s         Capturing element debug description
+    t =    15.33s     Checking `Expect predicate `existsNoRetry == 1` for object "screen.detail.content" Other`
+    t =    15.33s         Checking existence of `"screen.detail.content" Other`
+    t =    15.42s         Capturing element debug description
+    t =    16.35s     Checking `Expect predicate `existsNoRetry == 1` for object "screen.detail.content" Other`
+    t =    16.35s         Checking existence of `"screen.detail.content" Other`
+    t =    16.41s         Capturing element debug description
+    t =    17.28s     Checking `Expect predicate `existsNoRetry == 1` for object "screen.detail.content" Other`
+    t =    17.28s         Checking existence of `"screen.detail.content" Other`
+    t =    17.34s         Capturing element debug description
+    t =    17.34s     Checking existence of `"screen.detail.content" Other`
+    t =    17.39s Collecting debug information to assist test failure triage
+    t =    17.39s     Requesting snapshot of accessibility hierarchy for app with pid 55096
+    t =    17.45s Checking existence of `"screen.detail.loaded" StaticText`
+    t =    17.48s Find the "Explore" Button
+    t =    18.51s     Find the "Explore" Button (retry 1)
+    t =    19.58s     Find the "Explore" Button (retry 2)
+    t =    19.64s Find the Target Application 'com.michen.arcnote'
+    t =    19.73s Added attachment named 'Native reform reader'
+    t =    19.73s Waiting 5.0s for "The things we notice become the things we care about." StaticText to exist
+    t =    20.76s     Checking `Expect predicate `existsNoRetry == 1` for object "The things we notice become the things we care about." StaticText`
+    t =    20.76s         Checking existence of `"The things we notice become the things we care about." StaticText`
+    t =    20.82s Find the "The things we notice become the things we care about." StaticText
+    t =    20.88s Find the "The things we notice become the things we care about." StaticText
+    t =    20.91s Find the "The things we notice become the things we care about." StaticText
+    t =    20.95s Find the "The things we notice become the things we care about." StaticText
+    t =    20.99s Find the "The things we notice become the things we care about." StaticText
+    t =    21.02s Find the WebView (First Match)
+    t =    21.06s Tap Button (First Match)
+    t =    21.06s     Wait for com.michen.arcnote to idle
+    t =    21.07s     Find the Button (First Match)
+    t =    21.09s     Check for interrupting elements affecting "BackButton" Button
+    t =    21.12s     Synthesize event
+    t =    21.41s     Wait for com.michen.arcnote to idle
+    t =    22.16s Waiting 5.0s for "explore.grid.card.preview-field-note" Button to exist
+    t =    23.19s     Checking `Expect predicate `existsNoRetry == 1` for object "explore.grid.card.preview-field-note" Button`
+    t =    23.19s         Checking existence of `"explore.grid.card.preview-field-note" Button`
+    t =    23.26s Find the "explore.browse-mode" Button
+    t =    23.31s Tap "Home" Button
+    t =    23.31s     Wait for com.michen.arcnote to idle
+    t =    23.31s     Find the "Home" Button
+    t =    23.35s     Check for interrupting elements affecting "tab.library" Button
+    t =    23.39s     Synthesize event
+    t =    23.68s     Wait for com.michen.arcnote to idle
+    t =    25.26s Waiting 5.0s for "note.create" Button to exist
+    t =    26.28s     Checking `Expect predicate `existsNoRetry == 1` for object "note.create" Button`
+    t =    26.28s         Checking existence of `"note.create" Button`
+    t =    26.36s Checking existence of `"Home" NavigationBar`
+    t =    26.39s Find the "note.create" Button
+    t =    26.43s Find the Target Application 'com.michen.arcnote'
+    t =    26.51s Added attachment named 'Native reform Home'
+    t =    26.51s Tap "Explore" Button
+    t =    26.51s     Wait for com.michen.arcnote to idle
+    t =    26.52s     Find the "Explore" Button
+    t =    26.55s     Check for interrupting elements affecting "tab.flow" Button
+    t =    26.58s     Synthesize event
+    t =    26.87s     Wait for com.michen.arcnote to idle
+    t =    28.33s Waiting 5.0s for "explore.grid.card.preview-field-note" Button to exist
+    t =    29.35s     Checking `Expect predicate `existsNoRetry == 1` for object "explore.grid.card.preview-field-note" Button`
+    t =    29.35s         Checking existence of `"explore.grid.card.preview-field-note" Button`
+    t =    29.43s Find the "explore.browse-mode" Button
+    t =    29.48s Tear Down
+Test Case '-[ArcNoteUITests.ArcNoteUITests testNativeReformGridReaderAndHomeKeepRealNavigation]' passed (29.737 seconds).
+Test Suite 'ArcNoteUITests' passed at 2026-10-27 14:07:01.421.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 76.804 (76.806) seconds
+Test Suite 'ArcNoteUITests.xctest' passed at 2026-10-27 14:07:01.422.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 76.804 (76.808) seconds
+Test Suite 'Selected tests' passed at 2026-10-27 14:07:01.423.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 76.804 (76.809) seconds
+2026-10-27 14:07:01.478 xcodebuild[54622:315131] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-10-27 14:07:01.478 xcodebuild[54622:315131] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-10-27 14:07:01.490 xcodebuild[54622:315131] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-10-27 14:07:01.490 xcodebuild[54622:315131] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-10-27 14:07:01.831 xcodebuild[54622:315131] [MT] IDETestOperationsObserverDebug: 86.571 elapsed -- Testing started completed.
+2026-10-27 14:07:01.831 xcodebuild[54622:315131] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-27 14:07:01.831 xcodebuild[54622:315131] [MT] IDETestOperationsObserverDebug: 86.571 sec, +86.571 sec -- end
+
+Test session results, code coverage, and logs:
+	/tmp/chorai-remediation-core-ui.xcresult
+
+** TEST EXECUTE SUCCEEDED **
+
+Testing started

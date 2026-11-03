@@ -1,0 +1,392 @@
+//
+//  SignInView.swift
+//  ArcNote
+//
+//  Created by 海了个螺 on 2025/7/23.
+//
+
+import SwiftUI
+import Combine
+import CoreFlow
+import GoogleSignIn
+import AuthenticationServices
+
+struct SignInView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    // 添加状态变量来管理输入内容
+    @State private var usernameEmail = ""
+    @State private var password = ""
+
+    // 登录相关状态
+    @State private var isSigningIn = false
+    @State private var showAlert = false
+    @State private var alertMessage = ""
+    @State private var showTabBar = false
+    @State private var showChooseInterests = false
+
+    // 认证管理器
+    @StateObject private var authManager = AuthManager.shared
+    @State private var cancellables = Set<AnyCancellable>()
+    @State private var appleSignInDelegate: AppleSignInDelegate?
+    @State private var accessKey = "ios-\(UUID().uuidString.lowercased())"
+    @State private var accessKeyCode: String?
+
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 28) {
+                VStack(spacing: 16) {
+                    InputField(icon: "person", placeholder: "Email", text: $usernameEmail, accessibilityIdentifier: "signin.email")
+                    InputField(icon: "lock", placeholder: "Password", text: $password, accessibilityIdentifier: "signin.password")
+                }
+                Button(action: signIn) {
+                    HStack(spacing: 10) {
+                        if isSigningIn { ProgressView().tint(ChoraiTheme.onAccent) }
+                        Text(isSigningIn ? "Logging..." : "SIGN IN").font(.headline)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 52)
+                    .foregroundStyle(ChoraiTheme.onAccent)
+                }
+                .choraiGlassButton(prominent: true)
+                .disabled(isSigningIn)
+                .accessibilityIdentifier("signin.submit")
+                HStack(spacing: 16) {
+                    Rectangle().fill(ChoraiTheme.separator).frame(height: 1)
+                    Text("Or sign in with").font(.caption).foregroundStyle(.secondary).fixedSize()
+                    Rectangle().fill(ChoraiTheme.separator).frame(height: 1)
+                }
+                SocialLoginRow(googleAction: signInWithGoogle, appleAction: signInWithApple)
+            }
+            .adaptiveContentGutter()
+            .padding(.vertical, 28)
+        }
+        .scrollDismissesKeyboard(.interactively)
+        .choraiPageBackground()
+        .navigationTitle("Sign In")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.visible, for: .navigationBar)
+        .navigationDestination(isPresented: $showTabBar) {
+            TabBarView()
+        }
+        .navigationDestination(isPresented: $showChooseInterests) {
+            ChooseInterestsView()
+        }
+        .alert("Notice", isPresented: $showAlert) {
+            Button("OK") { }
+        } message: {
+            Text(alertMessage)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("InterestsSelectionCompleted"))) { _ in
+            showChooseInterests = false
+            showTabBar = true
+        }
+        #if DEBUG
+        .overlay(alignment: .topLeading) {
+            Text("Sign In loaded")
+                .font(.system(size: 1))
+                .foregroundColor(.white.opacity(0.01))
+                .frame(width: 1, height: 1)
+                .accessibilityIdentifier("screen.sign-in")
+        }
+        #endif
+    }
+
+    // MARK: - 登录功能
+    private func signIn() {
+        // 验证输入
+//        guard !usernameEmail.isEmpty else {
+//            showAlert(message: "请输入用户名或邮箱")
+//            return
+//        }
+
+//        guard !password.isEmpty else {
+//            showAlert(message: "请输入密码")
+//            return
+//        }
+
+//        guard password.count >= 6 else {
+//            showAlert(message: "密码长度至少6位")
+//            return
+//        }
+
+        // 检测用户名格式是否为邮箱
+//        if !isValidEmail(usernameEmail) {
+//            showAlert(message: "请输入有效的邮箱地址")
+//            return
+//        }
+
+        // 开始登录
+        isSigningIn = true
+
+        // 调用登录API
+        authManager.login(email: usernameEmail, password: password)
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { completion in
+                    isSigningIn = false
+                    if case .failure(let error) = completion {
+                        handleLoginError(error)
+                    }
+                },
+                receiveValue: { authResponse in
+                    isSigningIn = false
+                    routeAfterAuth(authResponse)
+                }
+            )
+            .store(in: &cancellables)
+    }
+
+    // MARK: 显示提示信息
+    private func showAlert(message: String) {
+        alertMessage = message
+        showAlert = true
+    }
+
+    // MARK: 邮箱格式验证
+    private func isValidEmail(_ email: String) -> Bool {
+        let emailRegex = "^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$"
+        let emailPredicate = NSPredicate(format: "SELF MATCHES %@", emailRegex)
+        return emailPredicate.evaluate(with: email)
+    }
+
+    // MARK: 处理登录错误
+    private func handleLoginError(_ error: NetworkError) {
+        switch error {
+        case .serverError(let statusCode, _):
+            showAlert(
+                message: AuthenticationErrorPresentation.signInMessage(
+                    statusCode: statusCode,
+                    errorCode: nil
+                )
+            )
+        case .api(let statusCode, let errorCode, _):
+            showAlert(
+                message: AuthenticationErrorPresentation.signInMessage(
+                    statusCode: statusCode,
+                    errorCode: errorCode
+                )
+            )
+        case .unauthorized:
+            showAlert(
+                message: AuthenticationErrorPresentation.signInMessage(
+                    statusCode: 401,
+                    errorCode: "UNAUTHORIZED"
+                )
+            )
+        case .forbidden:
+            showAlert(
+                message: AuthenticationErrorPresentation.signInMessage(
+                    statusCode: 403,
+                    errorCode: "FORBIDDEN"
+                )
+            )
+        case .notFound:
+            showAlert(
+                message: AuthenticationErrorPresentation.signInMessage(
+                    statusCode: 404,
+                    errorCode: nil
+                )
+            )
+        case .networkError:
+            showAlert(message: "Network connection failed, please check your network settings")
+        case .timeout:
+            showAlert(message: "Request timeout, please try again later")
+        case .decodingError:
+            showAlert(message: "The server returned an unexpected response. Please try again later.")
+        default:
+            showAlert(message: "Sign-in failed. Please try again.")
+        }
+    }
+
+    private func handleFederatedLoginError(
+        _ error: NetworkError,
+        provider: String
+    ) {
+        let genericMessage = "\(provider) sign-in could not be verified. Please try again."
+        switch error {
+        case .api(let statusCode, let errorCode, _):
+            let sharedCodes = [
+                "PRODUCT_ACCESS_REQUIRED",
+                "FORBIDDEN",
+                "ACCOUNT_DISABLED",
+                "RATE_LIMIT_EXCEEDED",
+                "SERVICE_UNAVAILABLE",
+                "DATABASE_ERROR",
+                "INTERNAL_ERROR",
+            ]
+            if sharedCodes.contains(errorCode?.uppercased() ?? "")
+                || statusCode == 429
+                || (500...599).contains(statusCode) {
+                handleLoginError(error)
+            } else {
+                showAlert(message: genericMessage)
+            }
+        case .serverError(let statusCode, _)
+            where statusCode == 429 || (500...599).contains(statusCode):
+            handleLoginError(error)
+        case .forbidden, .networkError, .timeout, .decodingError:
+            handleLoginError(error)
+        default:
+            showAlert(message: genericMessage)
+        }
+    }
+
+    // MARK: - Google登录
+    private func signInWithGoogle() {
+        guard let presentingViewController = UIApplication.shared.connectedScenes
+            .compactMap({ $0 as? UIWindowScene })
+            .flatMap({ $0.windows })
+            .first(where: { $0.isKeyWindow })?.rootViewController else {
+            return
+        }
+
+        GIDSignIn.sharedInstance.signIn(withPresenting: presentingViewController) { result, error in
+            if let error = error {
+                print("Google登录失败: \(error.localizedDescription)")
+                return
+            }
+
+            guard let user = result?.user else {
+                return
+            }
+
+            print("Google登录成功")
+
+            guard let idToken = user.idToken?.tokenString else {
+                print("无法获取ID Token")
+                return
+            }
+
+            DispatchQueue.main.async {
+                self.handleGoogleLoginResponse(idToken: idToken)
+            }
+        }
+    }
+
+    // MARK: - 处理Google登录响应
+    private func handleGoogleLoginResponse(idToken: String) {
+        let pair = pendingAccessPair()
+        authManager.googleLogin(
+            idToken: idToken,
+            accessCode: pair.code,
+            idempotencyKey: pair.key
+        )
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { completion in
+                    if case .failure(let error) = completion {
+                        print("后端Google登录失败: \(error.localizedDescription)")
+                        handleFederatedLoginError(error, provider: "Google")
+                    }
+                },
+                receiveValue: { authResponse in
+                    print("后端Google登录成功")
+                    routeAfterAuth(authResponse)
+                }
+            )
+            .store(in: &cancellables)
+    }
+
+    // MARK: Apple登录
+    private func signInWithApple() {
+        let request = ASAuthorizationAppleIDProvider().createRequest()
+        request.requestedScopes = [.fullName, .email]
+
+        appleSignInDelegate = AppleSignInDelegate { result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let authorization):
+                    print("Apple授权成功")
+                    if let appleIDCredential = authorization.credential as? ASAuthorizationAppleIDCredential {
+                        print("Apple登录成功")
+
+                        guard let identityToken = appleIDCredential.identityToken,
+                              let identityTokenString = String(data: identityToken, encoding: .utf8) else {
+                            print("无法获取Identity Token")
+                            return
+                        }
+
+                        guard let authorizationCode = appleIDCredential.authorizationCode,
+                              let authorizationCodeString = String(data: authorizationCode, encoding: .utf8) else {
+                            print("无法获取Authorization Code")
+                            return
+                        }
+
+                        let appleUserInfo = AppleUserInfo(
+                            name: AppleName(
+                                firstName: appleIDCredential.fullName?.givenName ?? "",
+                                lastName: appleIDCredential.fullName?.familyName ?? ""
+                            )
+                        )
+
+                        let pair = pendingAccessPair()
+                        let appleLoginRequest = AppleLoginRequest(
+                            identityToken: identityTokenString,
+                            authorizationCode: authorizationCodeString,
+                            userInfo: appleUserInfo,
+                            accessCode: pair.code,
+                            idempotencyKey: pair.key
+                        )
+
+                        self.handleAppleLoginResponse(request: appleLoginRequest)
+                    } else {
+                        print("无法获取Apple ID凭证")
+                    }
+                case .failure(let error):
+                    print("Apple登录失败: \(error.localizedDescription)")
+                    showAlert(message: "Apple sign in failed, please try again")
+                }
+            }
+        }
+
+        let authorizationController = ASAuthorizationController(authorizationRequests: [request])
+        authorizationController.delegate = appleSignInDelegate
+        authorizationController.performRequests()
+    }
+
+    // MARK: 处理Apple登录响应
+    private func handleAppleLoginResponse(request: AppleLoginRequest) {
+        authManager.appleLogin(request: request)
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { completion in
+                    if case .failure(let error) = completion {
+                        print("后端Apple登录失败: \(error.localizedDescription)")
+                        handleFederatedLoginError(error, provider: "Apple")
+                    }
+                },
+                receiveValue: { authResponse in
+                    print("后端Apple登录成功")
+                    routeAfterAuth(authResponse)
+                }
+            )
+            .store(in: &cancellables)
+    }
+
+    private func pendingAccessPair() -> (code: String?, key: String?) {
+        guard let code = KeychainStore.shared.load() else {
+            return (nil, nil)
+        }
+        if accessKeyCode != code {
+            accessKeyCode = code
+            accessKey = "ios-\(UUID().uuidString.lowercased())"
+        }
+        return (code, accessKey)
+    }
+
+    private func routeAfterAuth(_ response: AuthResponse) {
+        guard response.data.productAccess.status == "allowed" else { return }
+        if response.data.isNewUser == true {
+            showChooseInterests = true
+        } else {
+            showTabBar = true
+        }
+    }
+}
+
+struct SignInView_Previews: PreviewProvider {
+    static var previews: some View {
+        SignInView()
+    }
+}

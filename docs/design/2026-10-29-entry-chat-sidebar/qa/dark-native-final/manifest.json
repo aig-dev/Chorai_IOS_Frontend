@@ -1,0 +1,17 @@
+[
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "92DE3535-B261-49B5-844F-9BD9B8C241B4",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "ED56A899-736E-4190-8CB7-CC3E6E6F9AF4.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "chat-two-chora-empty_0_459B781C-059A-4E14-B025-FE6F43C4B682.png",
+        "timestamp" : 1793283248.165
+      }
+    ],
+    "testIdentifier" : "ChatEmptyStateUITests/testEmptyConversationActionOpensExistingExploreTab()",
+    "testIdentifierURL" : "test://com.apple.xcode/ArcNote/ArcNoteUITests/ChatEmptyStateUITests/testEmptyConversationActionOpensExistingExploreTab"
+  }
+]

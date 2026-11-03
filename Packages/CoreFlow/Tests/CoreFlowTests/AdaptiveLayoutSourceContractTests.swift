@@ -61,11 +61,31 @@ final class AdaptiveLayoutSourceContractTests: XCTestCase {
     }
 
     func testEveryResponsiveRootUsesTheSharedGutter() throws {
+        let systemFormRoots: Set<String> = [
+            "ArcNote/CoreFlow/ShareCardView.swift",
+            "ArcNote/CoreFlow/ContentReportView.swift",
+        ]
         for path in responsiveRoots {
-            XCTAssertTrue(
-                try source(at: path).contains(".adaptiveContentGutter()"),
-                "\(path) must use the shared responsive content gutter"
-            )
+            let contents = try source(at: path)
+            if systemFormRoots.contains(path) {
+                XCTAssertTrue(contents.contains("Form {"), "\(path) uses the system adaptive Form insets")
+                XCTAssertTrue(contents.contains("NavigationStack {"))
+            } else if ["ArcNote/TrashView.swift", "ArcNote/SettingsView.swift", "ArcNote/BlockedActorsView.swift", "ArcNote/InvitationCreditView.swift", "ArcNote/InvitationCreditDetailViews.swift"].contains(path) {
+                XCTAssertTrue(contents.contains("Form {") || contents.contains("List {"), "System containers own the adaptive row insets")
+                XCTAssertTrue(contents.contains(".navigationTitle("), "The existing parent navigation stack owns these destinations")
+            } else if path == "ArcNote/DetailView.swift" {
+                XCTAssertTrue(contents.contains(".padding(.horizontal, 24)"), "Full reading retains the V9 document gutter")
+                XCTAssertTrue(contents.contains("ScrollView {"))
+            } else if path == "ArcNote/CoreFlow/SparkContinuationViews.swift" {
+                XCTAssertTrue(contents.contains(".padding(.horizontal, 22)"), "Spark uses the approved V6 reading gutter")
+                XCTAssertTrue(contents.contains("ScrollView {"))
+                XCTAssertTrue(contents.contains(".safeAreaInset(edge: .bottom, spacing: 0)"))
+            } else {
+                XCTAssertTrue(
+                    contents.contains(".adaptiveContentGutter()"),
+                    "\(path) must use the shared responsive content gutter"
+                )
+            }
         }
     }
 

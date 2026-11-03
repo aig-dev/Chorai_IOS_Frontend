@@ -76,22 +76,51 @@ struct CardEditorTagRow: View {
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
+                if semantics == .cardEditor {
+                    Image(systemName: "number")
+                        .foregroundStyle(.tertiary)
+                        .accessibilityHidden(true)
+                }
                 ForEach(tags, id: \.self) { tag in
-                    Button {
-                        onInteraction()
-                        onRemove(tag)
-                    } label: {
-                        CardMetadataTagCapsule(
-                            tag: tag,
-                            showsRemoveIndicator: true
-                        )
+                    Group {
+                        if semantics == .cardEditor {
+                            Menu {
+                                Button(role: .destructive) {
+                                    onInteraction()
+                                    onRemove(tag)
+                                } label: {
+                                    Label("Remove tag", systemImage: "trash")
+                                }
+                                .accessibilityIdentifier("cardEditorTagRemove." + accessibilityComponent(tag))
+                            } label: {
+                                Text(tag)
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                                    .padding(.horizontal, 5)
+                                    .frame(minWidth: 44, minHeight: 44)
+                                    .contentShape(Rectangle())
+                            }
+                        } else {
+                            Button {
+                                onInteraction()
+                                onRemove(tag)
+                            } label: {
+                                CardMetadataTagCapsule(
+                                    tag: tag,
+                                    showsRemoveIndicator: true
+                                )
+                            }
+                        }
                     }
                     .buttonStyle(.plain)
                     .frame(minWidth: 44, minHeight: 44)
                     .contentShape(Rectangle())
                     .disabled(!isEditable)
                     .accessibilityLabel(
-                        isEditable ? "Remove tag \(tag)" : "Tag \(tag)"
+                        isEditable
+                            ? (semantics == .cardEditor ? "Tag actions for \(tag)" : "Remove tag \(tag)")
+                            : "Tag \(tag)"
                     )
                     .accessibilityIdentifier(
                         semantics.tagIdentifierPrefix
@@ -106,7 +135,7 @@ struct CardEditorTagRow: View {
                         accessibilityIdentifier: semantics.inputIdentifier,
                         onComplete: onCompleteTag
                     )
-                } else {
+                } else if semantics != .cardEditor || tags.isEmpty {
                     Group {
                         if semantics == .cardEditor {
                             addTagButton
@@ -127,14 +156,21 @@ struct CardEditorTagRow: View {
 
     private var addTagButton: some View {
         Button(action: onBeginTag) {
-            CardMetadataTagCapsule(
-                tag: "Tag",
-                showsRemoveIndicator: false,
-                leadingSystemImage: "plus"
-            )
+            if semantics == .cardEditor {
+                Text("Add tags")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            } else {
+                CardMetadataTagCapsule(
+                    tag: "Tag",
+                    showsRemoveIndicator: false,
+                    leadingSystemImage: "plus"
+                )
+            }
         }
         .buttonStyle(.plain)
-        .foregroundStyle(.white)
+        .foregroundStyle(ChoraiTheme.ink)
         .frame(minWidth: 44, minHeight: 44)
         .contentShape(Rectangle())
         .disabled(
@@ -232,7 +268,7 @@ struct CardEditorLinkRow: View {
                                 : "chevron.down"
                         )
                         .font(.system(size: 16, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.7))
+                        .foregroundStyle(ChoraiTheme.secondaryInk)
                         .frame(width: 44, height: 44)
                         .contentShape(Rectangle())
                     }
@@ -261,7 +297,7 @@ struct CardEditorLinkRow: View {
                                     if unlinkingLinkID == link.id {
                                         ProgressView()
                                             .controlSize(.small)
-                                            .tint(.white.opacity(0.7))
+                                            .tint(ChoraiTheme.secondaryInk)
                                             .frame(width: 44, height: 44)
                                             .accessibilityLabel(
                                                 "Unlinking \(link.title)"
@@ -282,7 +318,7 @@ struct CardEditorLinkRow: View {
                                                     )
                                                 )
                                                 .foregroundStyle(
-                                                    .white.opacity(0.7)
+                                                    ChoraiTheme.secondaryInk
                                                 )
                                                 .frame(width: 44, height: 44)
                                                 .contentShape(Rectangle())
@@ -300,7 +336,7 @@ struct CardEditorLinkRow: View {
 
                             if index < links.count - 1 {
                                 Rectangle()
-                                    .fill(Color.white.opacity(0.1))
+                                    .fill(ChoraiTheme.ink.opacity(0.1))
                                     .frame(height: 1)
                             }
                         }

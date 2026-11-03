@@ -1,0 +1,8 @@
+[
+  {
+    "file": "review-home-sort-menu-light.png",
+    "sourceResult": "/tmp/chorai-review-sort-light.xcresult",
+    "test": "ArcNoteUITests/testNativeReviewSortUsesSystemMenuWithoutExpandingThePage()",
+    "device": "iPhone 17 Pro"
+  }
+]

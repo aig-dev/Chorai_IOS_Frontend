@@ -16,7 +16,7 @@ final class CommentUISourceContractTests: XCTestCase {
         let network = try source(at: "ArcNote/NetworkManager.swift")
         let models = try source(at: "ArcNote/Models/CommentModels.swift")
 
-        XCTAssertTrue(popup.contains(#"Image(isPrivateMode ? "secret_active" : "secret")"#))
+        XCTAssertTrue(popup.contains(#"Image(systemName: isPrivateMode ? "lock.fill" : "globe")"#))
         XCTAssertTrue(popup.contains(#".accessibilityIdentifier("comment.visibility.toggle")"#))
         XCTAssertTrue(popup.contains(#".accessibilityIdentifier("comment.reply.\(comment.id)")"#))
         XCTAssertTrue(popup.contains(#".accessibilityIdentifier("comment.actions.\(comment.id)")"#))

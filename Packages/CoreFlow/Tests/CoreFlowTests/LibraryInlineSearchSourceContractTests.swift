@@ -2,6 +2,16 @@ import Foundation
 import XCTest
 
 final class LibraryInlineSearchSourceContractTests: XCTestCase {
+    func testLibrarySearchPreparesNativeMenusWithoutOpeningTheLegacyOverlay() throws {
+        let home = try source(at: "ArcNote/HomeView.swift")
+        let start = try XCTUnwrap(home.range(of: "onShowMenu: { result in"))
+        let end = try XCTUnwrap(home.range(of: "onCardTap:", range: start.upperBound..<home.endIndex))
+        let preparation = String(home[start.lowerBound..<end.lowerBound])
+        XCTAssertTrue(preparation.contains("currentCardId = result.id"))
+        XCTAssertTrue(preparation.contains("currentMenuCardData = result.card"))
+        XCTAssertFalse(preparation.contains("showPopupMenu ="), "Both library result cards now open their native Menu directly")
+    }
+
     func testLibraryOwnsInlineHeaderSearchInsteadOfNavigation() throws {
         let home = try source(at: "ArcNote/HomeView.swift")
 
@@ -29,7 +39,7 @@ final class LibraryInlineSearchSourceContractTests: XCTestCase {
         XCTAssertTrue(home.contains(#".accessibilityIdentifier("home.filter")"#))
         XCTAssertTrue(home.contains(#".accessibilityIdentifier("home.search")"#))
         XCTAssertGreaterThanOrEqual(
-            home.components(separatedBy: ".frame(minWidth: 44, minHeight: 44)").count - 1,
+            home.components(separatedBy: ".frame(minWidth: 44, minHeight: 52)").count - 1,
             4
         )
 
@@ -40,7 +50,7 @@ final class LibraryInlineSearchSourceContractTests: XCTestCase {
         )
         let textFieldIndex = try XCTUnwrap(header.range(of: "TextField("))
         let filterIndex = try XCTUnwrap(
-            header.range(of: #"Image("filter")"#)
+            header.range(of: #"Image(systemName: "line.3.horizontal.decrease")"#)
         )
         XCTAssertLessThan(textFieldIndex.lowerBound, filterIndex.lowerBound)
     }
@@ -56,6 +66,32 @@ final class LibraryInlineSearchSourceContractTests: XCTestCase {
         XCTAssertTrue(search.contains("searchType: scope.apiSearchType"))
         XCTAssertTrue(search.contains("limit: 200"))
         XCTAssertTrue(search.contains("requestID == self.activeRequestID"))
+    }
+
+    func testReturningAndRefreshingLibraryPreserveTheSelectedSort() throws {
+        let home = try source(at: "ArcNote/HomeView.swift")
+        let reload = try section(
+            named: "private func loadUserCards()",
+            endingAt: "private func presentCommittedCardIfNeeded",
+            in: home
+        )
+        XCTAssertTrue(reload.contains("selectedSortOption.descriptor"))
+        XCTAssertTrue(reload.contains("sortBy: descriptor.field.apiName"))
+        XCTAssertTrue(reload.contains("sortOrder: descriptor.order.apiName"))
+        XCTAssertFalse(reload.contains(#""updated_at""#),
+                       "A reload must not silently replace the menu's selected order with Latest edited")
+
+        for (start, end) in [
+            (".onAppear {", ".onDisappear {"),
+            (".onChange(of: refreshID)", ".onChange(of: committedCardID)")
+        ] {
+            let transition = try section(named: start, endingAt: end, in: home)
+            XCTAssertTrue(transition.contains("loadUserCards()"),
+                          "Returning and refresh events must reload with the current selection")
+            XCTAssertFalse(transition.contains("selectedFilter ="))
+            XCTAssertFalse(transition.contains("submitLibrarySearch()"),
+                           "A list reload must not submit or replace a pending search draft")
+        }
     }
 
     func testStandaloneSearchFiltersAndExploreSearchAreRetired() throws {

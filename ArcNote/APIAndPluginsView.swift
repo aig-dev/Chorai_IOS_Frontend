@@ -10,17 +10,15 @@ struct APIAndPluginsView: View {
     @State private var calendarIntegration = true
     @State private var wereadImport = true
     @State private var browserExtension = true
-    
 
-    
+
+
     var body: some View {
         ZStack {
             // 背景图片
-            Image("home_bg")
-                .resizable()
-                .aspectRatio(contentMode: .fill)
+            ChoraiBackground()
                 .ignoresSafeArea()
-            
+
             VStack(spacing: 0) {
                 // 顶部导航栏
                 HStack {
@@ -28,40 +26,42 @@ struct APIAndPluginsView: View {
                         presentationMode.wrappedValue.dismiss()
                     }) {
                         Image(systemName: "chevron.left")
-                            .font(.system(size: 20, weight: .medium))
-                            .foregroundColor(.white)
+                            .font(.title3.weight(.medium))
+                            .foregroundColor(ChoraiTheme.ink)
+                    .frame(minWidth: 44, minHeight: 44)
                     }
-                    
+
                     Spacer()
-                    
+
                     Text("API & Plugins")
-                        .font(.system(size: 24, weight: .bold))
-                        .foregroundColor(.white)
-                    
+                        .font(.title2.weight(.bold))
+                        .foregroundColor(ChoraiTheme.ink)
+
                     Spacer()
-                    
+
                     // 占位符保持对称
                     Image(systemName: "chevron.left")
-                        .font(.system(size: 20, weight: .medium))
+                        .font(.title3.weight(.medium))
                         .foregroundColor(.clear)
+                    .frame(minWidth: 44, minHeight: 44)
                 }
                 .adaptiveContentGutter()
-                .padding(.top, 60)
+                .padding(.top, 12)
                 .padding(.bottom, 30)
-                
+
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
                         Text("Your Personal Notes API")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundColor(.white)
-                        
+                            .font(.headline.weight(.semibold))
+                            .foregroundColor(ChoraiTheme.ink)
+
                         // Your Personal Notes API Section
                         VStack(alignment: .leading, spacing: 16) {
                             // API URL
                             HStack(spacing: 12) {
                                 Text(AttributedString("https://arcnote.com/api..."))
-                                    .font(.system(size: 14, weight: .regular))
-                                    .foregroundColor(.gray)
+                                    .font(.subheadline.weight(.regular))
+                                    .foregroundColor(ChoraiTheme.secondaryInk)
                                     .lineLimit(1)
                                     .frame(maxWidth: .infinity)
                                     .truncationMode(.tail)
@@ -69,25 +69,25 @@ struct APIAndPluginsView: View {
                                     .padding(.vertical, 12)
                                     .background(
                                         RoundedRectangle(cornerRadius: 30)
-                                            .fill(Color.white.opacity(0.05))
+                                            .fill(ChoraiTheme.surface)
                                     )
                                     .textSelection(.disabled)
 
-                                
+
                                 Button("Copy Link") {
                                     // 复制链接功能
                                 }
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundColor(.white)
+                                .font(.subheadline.weight(.medium))
+                                .foregroundColor(ChoraiTheme.ink)
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 11)
                                 .background(
                                     RoundedRectangle(cornerRadius: 20)
-                                        .fill(.ultraThinMaterial.opacity(0.1))
+                                        .fill(ChoraiTheme.surface)
                                         // 左上角高光
                                         .overlay(
                                             RoundedRectangle(cornerRadius: 20)
-                                                .stroke(Color.white.opacity(0.2), lineWidth: 2)
+                                                .stroke(ChoraiTheme.separator, lineWidth: 1)
                                                 .offset(x: 0, y: 0)
                                                 .mask(
                                                     RoundedRectangle(cornerRadius: 20)
@@ -104,7 +104,7 @@ struct APIAndPluginsView: View {
                                         // 右下角高光
                                         .overlay(
                                             RoundedRectangle(cornerRadius: 20)
-                                                .stroke(Color.white.opacity(0.2), lineWidth: 2)
+                                                .stroke(ChoraiTheme.separator, lineWidth: 1)
                                                 .offset(x: 0, y: 0)
                                                 .mask(
                                                     RoundedRectangle(cornerRadius: 20)
@@ -121,7 +121,7 @@ struct APIAndPluginsView: View {
                                         // 上面边缘高光
                                         .overlay(
                                             RoundedRectangle(cornerRadius: 20)
-                                                .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                                                .stroke(ChoraiTheme.separator, lineWidth: 1)
                                                 .offset(x: 0, y: -1)
                                                 .mask(
                                                     RoundedRectangle(cornerRadius: 20)
@@ -137,7 +137,7 @@ struct APIAndPluginsView: View {
                                         // 下面边缘高光
                                         .overlay(
                                             RoundedRectangle(cornerRadius: 20)
-                                                .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                                                .stroke(ChoraiTheme.separator, lineWidth: 1)
                                                 .offset(x: -1, y: 1)
                                                 .mask(
                                                     RoundedRectangle(cornerRadius: 20)
@@ -152,32 +152,32 @@ struct APIAndPluginsView: View {
                                         )
                                 )
                                 .fixedSize()
-                                
+
                             }
-                            
+
                             // PRO Member Notice
                             (Text("PRO Member Exclusive Feature. ")
-                                .font(.system(size: 14, weight: .regular))
-                                .foregroundColor(.white) +
+                                .font(.subheadline.weight(.regular))
+                                .foregroundColor(ChoraiTheme.ink) +
                             Text("Upgrade to PRO")
-                                .font(.system(size: 14, weight: .medium))
+                                .font(.subheadline.weight(.medium))
                                 .foregroundColor(.orange)
                                 .underline(color: .orange) +
                             Text(" to use.")
-                                .font(.system(size: 14, weight: .regular))
-                                .foregroundColor(.white))
+                                .font(.subheadline.weight(.regular))
+                                .foregroundColor(ChoraiTheme.ink))
                             .onTapGesture {
                                 // 升级到PRO功能
                             }
-                            
+
                             Text("Up to 100 notes per day via API.")
-                                .font(.system(size: 14, weight: .regular))
-                                .foregroundColor(.white)
-                            
+                                .font(.subheadline.weight(.regular))
+                                .foregroundColor(ChoraiTheme.ink)
+
                             Button("Reset API Key") {
                                 // 重置API密钥功能
                             }
-                            .font(.system(size: 16, weight: .medium))
+                            .font(.body.weight(.medium))
                             .foregroundColor(Color(red: 0.82, green: 0.40, blue: 0.15))
                             .padding(.horizontal, 18)
                             .padding(.vertical, 12)
@@ -189,22 +189,22 @@ struct APIAndPluginsView: View {
                         .padding(20)
                         .background(
                             RoundedRectangle(cornerRadius: 16)
-                                .fill(Color.white.opacity(0.1))
+                                .fill(ChoraiTheme.surface)
                                 .cardHighlightEffect()
                         )
-                        
+
                         Text("Plugin Management")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundColor(.white)
-                        
+                            .font(.headline.weight(.semibold))
+                            .foregroundColor(ChoraiTheme.ink)
+
                         // Plugin Management Section
                         VStack(alignment: .leading, spacing: 20) {
                             // Official Plugins
                             VStack(alignment: .leading, spacing: 16) {
                                 Text("Official Plugins")
-                                    .font(.system(size: 16, weight: .semibold))
-                                    .foregroundColor(.white)
-                                
+                                    .font(.body.weight(.semibold))
+                                    .foregroundColor(ChoraiTheme.ink)
+
                                 // Desktop Widget
                                 PluginRow(
                                     iconName: "plugins_1",
@@ -212,7 +212,7 @@ struct APIAndPluginsView: View {
                                     description: "Quickly Add Desktop Widget forQuick Notes",
                                     isEnabled: $desktopWidget
                                 )
-                                
+
                                 // Send Text
                                 PluginRow(
                                     iconName: "plugins_2",
@@ -220,7 +220,7 @@ struct APIAndPluginsView: View {
                                     description: "Quickly save interesting content.",
                                     isEnabled: $sendText
                                 )
-                                
+
                                 // Kindle Import
                                 PluginRow(
                                     iconName: "plugins_3",
@@ -228,7 +228,7 @@ struct APIAndPluginsView: View {
                                     description: "Sync your reading notes.",
                                     isEnabled: $kindleImport
                                 )
-                                
+
                                 // Twitter Integration
                                 PluginRow(
                                     iconName: "plugins_4",
@@ -236,7 +236,7 @@ struct APIAndPluginsView: View {
                                     description: "Share notes to X with oneclick.",
                                     isEnabled: $twitterIntegration
                                 )
-                                
+
                                 // LinkedIn Integration
                                 PluginRow(
                                     iconName: "plugins_5",
@@ -244,7 +244,7 @@ struct APIAndPluginsView: View {
                                     description: "professional content toyour network.",
                                     isEnabled: $linkedinIntegration
                                 )
-                                
+
                                 // Calendar Integration
                                 PluginRow(
                                     iconName: "plugins_6",
@@ -253,28 +253,28 @@ struct APIAndPluginsView: View {
                                     isEnabled: $calendarIntegration
                                 )
                             }
-                            
+
                         }
                         .padding(20)
                         .background(
                             RoundedRectangle(cornerRadius: 16)
-                                .fill(Color.white.opacity(0.1))
+                                .fill(ChoraiTheme.surface)
                                 .cardHighlightEffect()
                         )
-                        
+
                         Text("Community Plugins")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundColor(.white)
-                        
+                            .font(.headline.weight(.semibold))
+                            .foregroundColor(ChoraiTheme.ink)
+
                         // Plugin Management Section
                         VStack(alignment: .leading, spacing: 20) {
-                            
+
                             // Community Plugins
                             VStack(alignment: .leading, spacing: 16) {
                                 Text("Official Plugins")
-                                    .font(.system(size: 16, weight: .semibold))
-                                    .foregroundColor(.white)
-                                
+                                    .font(.body.weight(.semibold))
+                                    .foregroundColor(ChoraiTheme.ink)
+
                                 // WeRead Import
                                 PluginRow(
                                     iconName: "plugins_7",
@@ -282,7 +282,7 @@ struct APIAndPluginsView: View {
                                     description: "Sync content from multiplechannels.",
                                     isEnabled: $wereadImport
                                 )
-                                
+
                                 // Browser Extension
                                 PluginRow(
                                     iconName: "plugins_8",
@@ -291,30 +291,30 @@ struct APIAndPluginsView: View {
                                     isEnabled: $browserExtension
                                 )
                             }
-                            
+
                         }
                         .padding(20)
                         .background(
                             RoundedRectangle(cornerRadius: 16)
-                                .fill(Color.white.opacity(0.1))
+                                .fill(ChoraiTheme.surface)
                                 .cardHighlightEffect()
                         )
-                        
+
                                                     // Browse More Plugins Button
                             Button("Browse More Plugins") {
                                 // 浏览更多插件功能
                             }
-                            .font(.system(size: 16, weight: .medium))
-                            .foregroundColor(.white)
+                            .font(.body.weight(.medium))
+                            .foregroundColor(ChoraiTheme.ink)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 16)
                             .background(
                                 RoundedRectangle(cornerRadius: 30)
-                                    .fill(.ultraThinMaterial.opacity(0.1))
+                                    .fill(ChoraiTheme.surface)
                                     // 左上角高光
                                     .overlay(
                                         RoundedRectangle(cornerRadius: 30)
-                                            .stroke(Color.white, lineWidth: 2)
+                                            .stroke(ChoraiTheme.separator, lineWidth: 1)
                                             .offset(x: 0, y: 0)
                                             .mask(
                                                 RoundedRectangle(cornerRadius: 30)
@@ -331,7 +331,7 @@ struct APIAndPluginsView: View {
                                     // 右下角高光
                                     .overlay(
                                         RoundedRectangle(cornerRadius: 30)
-                                            .stroke(Color.white, lineWidth: 2)
+                                            .stroke(ChoraiTheme.separator, lineWidth: 1)
                                             .offset(x: 0, y: 0)
                                             .mask(
                                                 RoundedRectangle(cornerRadius: 30)
@@ -348,7 +348,7 @@ struct APIAndPluginsView: View {
                                     // 上面边缘高光
                                     .overlay(
                                         RoundedRectangle(cornerRadius: 30)
-                                            .stroke(Color.white, lineWidth: 1)
+                                            .stroke(ChoraiTheme.separator, lineWidth: 1)
                                             .offset(x: 0, y: -1)
                                             .mask(
                                                 RoundedRectangle(cornerRadius: 30)
@@ -364,7 +364,7 @@ struct APIAndPluginsView: View {
                                     // 下面边缘高光
                                     .overlay(
                                         RoundedRectangle(cornerRadius: 30)
-                                            .stroke(Color.white, lineWidth: 1)
+                                            .stroke(ChoraiTheme.separator, lineWidth: 1)
                                             .offset(x: -1, y: 1)
                                             .mask(
                                                 RoundedRectangle(cornerRadius: 30)
@@ -378,22 +378,22 @@ struct APIAndPluginsView: View {
                                             )
                                     )
                             )
-                        
+
                         Text("Developers")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundColor(.white)
-                        
+                            .font(.headline.weight(.semibold))
+                            .foregroundColor(ChoraiTheme.ink)
+
                         // Developers Section
                         VStack(alignment: .leading, spacing: 16) {
                             HStack {
                                 Text("Have your own plugin? ")
-                                    .font(.system(size: 16, weight: .regular))
-                                    .foregroundColor(.white)
-                                
+                                    .font(.body.weight(.regular))
+                                    .foregroundColor(ChoraiTheme.ink)
+
                                 Button("Submit it here") {
                                     // 提交插件功能
                                 }
-                                .font(.system(size: 16, weight: .medium))
+                                .font(.body.weight(.medium))
                                 .foregroundColor(.orange)
                                 .overlay(
                                     Rectangle()
@@ -402,40 +402,40 @@ struct APIAndPluginsView: View {
                                         .offset(y: 8)
                                 )
                             }
-                            
+
                             Text("Develop Your Own")
-                                .font(.system(size: 16, weight: .semibold))
-                                .foregroundColor(.white)
-                            
+                                .font(.body.weight(.semibold))
+                                .foregroundColor(ChoraiTheme.ink)
+
                             // API Example
                             VStack(alignment: .leading, spacing: 8) {
                                 Text("post https://arcnote.com/api/v1/no")
-                                    .font(.system(size: 12, weight: .regular))
-                                    .foregroundColor(.white)
+                                    .font(.caption.weight(.regular))
+                                    .foregroundColor(ChoraiTheme.ink)
                                 Text("content-type:application/json")
-                                    .font(.system(size: 12, weight: .regular))
-                                    .foregroundColor(.white)
+                                    .font(.caption.weight(.regular))
+                                    .foregroundColor(ChoraiTheme.ink)
                                 Text("{")
-                                    .font(.system(size: 12, weight: .regular))
-                                    .foregroundColor(.white)
+                                    .font(.caption.weight(.regular))
+                                    .foregroundColor(ChoraiTheme.ink)
                                 Text("  \"content\":\"hello, #arcnote\"")
-                                    .font(.system(size: 12, weight: .regular))
-                                    .foregroundColor(.white)
+                                    .font(.caption.weight(.regular))
+                                    .foregroundColor(ChoraiTheme.ink)
                                 Text("}")
-                                    .font(.system(size: 12, weight: .regular))
-                                    .foregroundColor(.white)
+                                    .font(.caption.weight(.regular))
+                                    .foregroundColor(ChoraiTheme.ink)
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(16)
                             .background(
                                 RoundedRectangle(cornerRadius: 12)
-                                    .fill(Color.black.opacity(0.3))
+                                    .fill(ChoraiTheme.raisedSurface)
                             )
-                            
+
                             Button("View API Documentation") {
                                 // 查看API文档功能
                             }
-                            .font(.system(size: 16, weight: .medium))
+                            .font(.body.weight(.medium))
                             .foregroundColor(.orange)
                             .overlay(
                                 Rectangle()
@@ -450,6 +450,8 @@ struct APIAndPluginsView: View {
                 }
             }
         }
+        .foregroundStyle(ChoraiTheme.ink)
+        .tint(ChoraiTheme.accent)
         .navigationBarHidden(true)
     }
 }
@@ -459,29 +461,29 @@ struct PluginRow: View {
     let title: String
     let description: String
     @Binding var isEnabled: Bool
-    
+
     var body: some View {
         HStack(spacing: 12) {
             Image(iconName)
                 .resizable()
                 .aspectRatio(contentMode: .fit)
                 .frame(width: 32, height: 32)
-            
+
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(.white)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundColor(ChoraiTheme.ink)
                     .multilineTextAlignment(.leading)
-                
+
                 Text(description)
-                    .font(.system(size: 12, weight: .regular))
-                    .foregroundColor(.gray)
+                    .font(.caption.weight(.regular))
+                    .foregroundColor(ChoraiTheme.secondaryInk)
                     .multilineTextAlignment(.leading)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            
+
             Toggle("", isOn: $isEnabled)
-                .toggleStyle(SwitchToggleStyle(tint: .purple))
+                .toggleStyle(SwitchToggleStyle(tint: ChoraiTheme.accent))
                 .fixedSize()
         }
         .padding(.vertical, 8)
@@ -490,4 +492,4 @@ struct PluginRow: View {
 
 #Preview {
     APIAndPluginsView()
-} 
+}

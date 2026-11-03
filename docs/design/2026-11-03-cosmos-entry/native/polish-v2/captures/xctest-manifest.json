@@ -1,0 +1,188 @@
+[
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "92DE3535-B261-49B5-844F-9BD9B8C241B4",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "547E1CFC-EB54-4E13-B793-1E25B4D19959.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "auth-interests-before-skip_0_987043FA-40AE-46DA-BECA-DE0C8EC65B60.png",
+        "timestamp" : 1793720317.918
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "92DE3535-B261-49B5-844F-9BD9B8C241B4",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "D9C5C7A6-C3D7-4191-BD7C-4AE304DF54EB.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "auth-signup-password-mismatch_0_73ADF43C-88C9-4597-A352-CF3642AEAABA.png",
+        "timestamp" : 1793720310.565
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "92DE3535-B261-49B5-844F-9BD9B8C241B4",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "16B936B3-9BE3-43C4-9AC0-5DB02B2CB591.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "auth-polish-signup-confirmation_0_B0D968CD-4C55-4AEE-B407-C51E840253FF.png",
+        "timestamp" : 1793720309.08
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "92DE3535-B261-49B5-844F-9BD9B8C241B4",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "BAB76B4F-C04B-41EB-B8A8-85590C71B9B0.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "auth-polish-signup-password_0_85509237-8AE5-4BCE-B899-9BE34831FF39.png",
+        "timestamp" : 1793720302.544
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "92DE3535-B261-49B5-844F-9BD9B8C241B4",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "E02A6440-5362-4B83-A4C3-B36F1EE80B17.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "auth-polish-signup-username_0_898FE8A5-798E-4B20-94DC-7CA0BE3DF3B1.png",
+        "timestamp" : 1793720296.044
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "92DE3535-B261-49B5-844F-9BD9B8C241B4",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "418C8251-1842-4364-A809-2EB02525CB4E.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "auth-polish-signup-code_0_6F49050A-AC91-44DC-9752-04EB98BB251B.png",
+        "timestamp" : 1793720293.251
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "92DE3535-B261-49B5-844F-9BD9B8C241B4",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "0D6D486C-3089-4404-8548-9B9576554A08.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "auth-polish-signup-email_0_28EFC526-0299-4AA6-94ED-5FC956C55A25.png",
+        "timestamp" : 1793720287.684
+      }
+    ],
+    "testIdentifier" : "AuthEntryFlowUITests/testEmailSignupRecoversFromSendFailureAndSkipsInterests()",
+    "testIdentifierURL" : "test://com.apple.xcode/ArcNote/ArcNoteUITests/AuthEntryFlowUITests/testEmailSignupRecoversFromSendFailureAndSkipsInterests"
+  },
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "92DE3535-B261-49B5-844F-9BD9B8C241B4",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "031DBBCB-DC98-4153-A8AD-82BA4D000490.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "auth-polish-large-dark-interests_0_47D9E9D0-8E0F-48CD-91DF-B28AD271A8EC.png",
+        "timestamp" : 1793720362.49
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "92DE3535-B261-49B5-844F-9BD9B8C241B4",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "3C8E598A-7C11-4CA7-9B95-EF8BE4CB650F.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "auth-polish-large-dark-confirm_0_482E3666-89E4-4A3B-99CF-A1DB931F4175.png",
+        "timestamp" : 1793720360.584
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "92DE3535-B261-49B5-844F-9BD9B8C241B4",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "D8401569-BE99-4D5A-B9BD-404A00C41847.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "auth-polish-large-dark-email_0_67EAAE2B-E354-43E6-AEDC-E11790B56455.png",
+        "timestamp" : 1793720336.203
+      }
+    ],
+    "testIdentifier" : "AuthEntryFlowUITests/testLargeTextDarkSignupKeepsActionsReachable()",
+    "testIdentifierURL" : "test://com.apple.xcode/ArcNote/ArcNoteUITests/AuthEntryFlowUITests/testLargeTextDarkSignupKeepsActionsReachable"
+  },
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "92DE3535-B261-49B5-844F-9BD9B8C241B4",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "BC749631-9B9A-4417-9635-06D1A0DADF63.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "auth-signup-verification-recovery_0_38E2848A-C328-4058-BF21-9F4ECBA0D104.png",
+        "timestamp" : 1793720411.854
+      }
+    ],
+    "testIdentifier" : "AuthEntryFlowUITests/testRejectedVerificationCodeReturnsToCodeStep()",
+    "testIdentifierURL" : "test://com.apple.xcode/ArcNote/ArcNoteUITests/AuthEntryFlowUITests/testRejectedVerificationCodeReturnsToCodeStep"
+  },
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "92DE3535-B261-49B5-844F-9BD9B8C241B4",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "6E0AEE31-0BAB-495F-B1AE-63DDE6BAD699.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "auth-polish-private-beta-returned-draft_0_16B981CA-3E39-4EC6-A612-B1EF5F87D81A.png",
+        "timestamp" : 1793720426.742
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "92DE3535-B261-49B5-844F-9BD9B8C241B4",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "0FDF2886-077C-41F3-B3F3-13DE7006626B.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "auth-polish-private-beta-draft_0_EB8367EE-F9B8-4BC2-B910-C56BAD7A3DCA.png",
+        "timestamp" : 1793720422.15
+      }
+    ],
+    "testIdentifier" : "AuthEntryFlowUITests/testReturningFromSignInPreservesUnsubmittedPrivateBetaCode()",
+    "testIdentifierURL" : "test://com.apple.xcode/ArcNote/ArcNoteUITests/AuthEntryFlowUITests/testReturningFromSignInPreservesUnsubmittedPrivateBetaCode"
+  },
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "92DE3535-B261-49B5-844F-9BD9B8C241B4",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "AB7E6150-AE5E-4407-9EE5-2A80B3D011E3.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "auth-returning-welcome-back_0_659100B3-10F3-4B7C-8E64-2F98D633C56F.png",
+        "timestamp" : 1793720436.942
+      }
+    ],
+    "testIdentifier" : "AuthEntryFlowUITests/testReturningLaunchOpensSignInAndBackReturnsToWelcome()",
+    "testIdentifierURL" : "test://com.apple.xcode/ArcNote/ArcNoteUITests/AuthEntryFlowUITests/testReturningLaunchOpensSignInAndBackReturnsToWelcome"
+  },
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "92DE3535-B261-49B5-844F-9BD9B8C241B4",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "202A8448-605E-43FC-A48B-6FA2DB3007C4.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "auth-signin-keyboard_0_8ECA291B-2C83-4234-A5BB-15F833731E4C.png",
+        "timestamp" : 1793720464.147
+      }
+    ],
+    "testIdentifier" : "AuthEntryFlowUITests/testSignInValidationAndOfflineCompletion()",
+    "testIdentifierURL" : "test://com.apple.xcode/ArcNote/ArcNoteUITests/AuthEntryFlowUITests/testSignInValidationAndOfflineCompletion"
+  },
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "92DE3535-B261-49B5-844F-9BD9B8C241B4",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "8B57C01D-3F69-4E4D-8D37-7291C2E4E9D8.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "auth-interests-nine-selected_0_1ECF8378-FB83-4E26-9DDE-9F6AB90497A7.png",
+        "timestamp" : 1793720513.512
+      }
+    ],
+    "testIdentifier" : "AuthEntryFlowUITests/testSignupInterestSelectionStopsAtNineAndContinues()",
+    "testIdentifierURL" : "test://com.apple.xcode/ArcNote/ArcNoteUITests/AuthEntryFlowUITests/testSignupInterestSelectionStopsAtNineAndContinues"
+  }
+]

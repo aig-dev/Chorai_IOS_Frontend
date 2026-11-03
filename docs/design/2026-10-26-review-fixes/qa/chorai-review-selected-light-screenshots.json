@@ -1,0 +1,23 @@
+[
+  {
+    "file": "review-editor-existing-light.png",
+    "sourceResult": "/tmp/chorai-review-light-complete.xcresult",
+    "test": "ArcNoteUITests/testNativeFidelityHomeMenuOpensRealUnboxedEditor()",
+    "testOutcome": "passed",
+    "device": "iPhone 17 Pro"
+  },
+  {
+    "file": "review-editor-short-existing-light.png",
+    "sourceResult": "/tmp/chorai-review-light-complete.xcresult",
+    "test": "ArcNoteUITests/testNativeReviewExistingShortNoteUsesFullWritingPage()",
+    "testOutcome": "passed",
+    "device": "iPhone 17 Pro"
+  },
+  {
+    "file": "review-home-sort-menu-light.png",
+    "sourceResult": "/tmp/chorai-review-light-complete.xcresult",
+    "test": "ArcNoteUITests/testNativeReviewSortUsesSystemMenuWithoutExpandingThePage()",
+    "testOutcome": "passed",
+    "device": "iPhone 17 Pro"
+  }
+]

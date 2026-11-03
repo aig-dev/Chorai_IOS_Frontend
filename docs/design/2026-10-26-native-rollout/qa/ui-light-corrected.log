@@ -1,0 +1,878 @@
+Command line invocation:
+    /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild test -project ArcNote.xcodeproj -scheme ArcNoteUITests -destination "platform=iOS Simulator,id=92DE3535-B261-49B5-844F-9BD9B8C241B4" -derivedDataPath /tmp/chorai-ios-reform-derived -clonedSourcePackagesDirPath /Users/didi/Library/Developer/Xcode/DerivedData/ArcNote-aybvwriajptjnqfsotseyzwxdivu/SourcePackages -disableAutomaticPackageResolution -onlyUsePackageVersionsFromResolvedFile -parallel-testing-enabled NO -resultBundlePath /tmp/chorai-ios-reform-ui-2.xcresult "-only-testing:ArcNoteUITests/ArcNoteUITests/testNativeReformGridReaderAndHomeKeepRealNavigation" "-only-testing:ArcNoteUITests/ArcNoteUITests/testNativeReformColdSidebarCollectionsSelectsLibraryScope" CODE_SIGNING_ALLOWED=NO
+
+Build settings from command line:
+    CODE_SIGNING_ALLOWED = NO
+
+Resolve Package Graph
+
+
+Resolved source packages:
+  Promises: https://github.com/google/promises.git @ 2.4.0
+  GoogleUtilities: https://github.com/google/GoogleUtilities.git @ 8.1.0
+  BlockNoteEditor: /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/Packages/BlockNoteEditor @ local
+  AppAuth: https://github.com/openid/AppAuth-iOS.git @ 2.0.0
+  SwiftyJSON: https://github.com/SwiftyJSON/SwiftyJSON.git @ 5.0.2
+  Alamofire: https://github.com/Alamofire/Alamofire.git @ 5.10.2
+  GoogleSignIn: https://github.com/google/GoogleSignIn-iOS @ 9.0.0
+  GTMAppAuth: https://github.com/google/GTMAppAuth.git @ 5.0.0
+  CoreFlow: /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/Packages/CoreFlow @ local
+  GTMSessionFetcher: https://github.com/google/gtm-session-fetcher.git @ 3.5.0
+  AppCheck: https://github.com/google/app-check.git @ 11.2.0
+
+Writing result bundle at path:
+	/tmp/chorai-ios-reform-ui-2.xcresult
+
+ComputePackagePrebuildTargetDependencyGraph
+
+Prepare packages
+
+CreateBuildRequest
+
+SendProjectDescription
+
+CreateBuildOperation
+
+ComputeTargetDependencyGraph
+note: Building targets in dependency order
+note: Target dependency graph (45 targets)
+    Target 'ArcNoteUITests' in project 'ArcNote'
+        ➜ Explicit dependency on target 'ArcNote' in project 'ArcNote'
+    Target 'ArcNote' in project 'ArcNote'
+        ➜ Explicit dependency on target 'CoreFlow-product' in project 'CoreFlow'
+        ➜ Explicit dependency on target 'BlockNoteEditor-product' in project 'BlockNoteEditor'
+        ➜ Explicit dependency on target 'GoogleSignInSwift-product' in project 'GoogleSignIn'
+        ➜ Explicit dependency on target 'SwiftyJSON-product' in project 'SwiftyJSON'
+        ➜ Explicit dependency on target 'GoogleSignIn-product' in project 'GoogleSignIn'
+        ➜ Explicit dependency on target 'Alamofire-product' in project 'Alamofire'
+    Target 'Alamofire-product' in project 'Alamofire'
+        ➜ Explicit dependency on target 'Alamofire' in project 'Alamofire'
+        ➜ Explicit dependency on target 'Alamofire_Alamofire' in project 'Alamofire'
+    Target 'Alamofire' in project 'Alamofire'
+        ➜ Explicit dependency on target 'Alamofire_Alamofire' in project 'Alamofire'
+    Target 'Alamofire_Alamofire' in project 'Alamofire' (no dependencies)
+    Target 'GoogleSignIn-product' in project 'GoogleSignIn'
+        ➜ Explicit dependency on target 'GoogleSignIn' in project 'GoogleSignIn'
+        ➜ Explicit dependency on target 'GoogleSignIn_GoogleSignIn' in project 'GoogleSignIn'
+        ➜ Explicit dependency on target 'AppAuth-product' in project 'AppAuth'
+        ➜ Explicit dependency on target 'AppAuthCore-product' in project 'AppAuth'
+        ➜ Explicit dependency on target 'AppCheckCore-product' in project 'AppCheck'
+        ➜ Explicit dependency on target 'GTMAppAuth-product' in project 'GTMAppAuth'
+        ➜ Explicit dependency on target 'GTMSessionFetcherCore-product' in project 'GTMSessionFetcher'
+    Target 'SwiftyJSON-product' in project 'SwiftyJSON'
+        ➜ Explicit dependency on target 'SwiftyJSON' in project 'SwiftyJSON'
+        ➜ Explicit dependency on target 'SwiftyJSON_SwiftyJSON' in project 'SwiftyJSON'
+    Target 'SwiftyJSON' in project 'SwiftyJSON'
+        ➜ Explicit dependency on target 'SwiftyJSON_SwiftyJSON' in project 'SwiftyJSON'
+    Target 'SwiftyJSON_SwiftyJSON' in project 'SwiftyJSON' (no dependencies)
+    Target 'GoogleSignInSwift-product' in project 'GoogleSignIn'
+        ➜ Explicit dependency on target 'GoogleSignInSwift' in project 'GoogleSignIn'
+        ➜ Explicit dependency on target 'GoogleSignIn_GoogleSignInSwift' in project 'GoogleSignIn'
+        ➜ Explicit dependency on target 'GoogleSignIn' in project 'GoogleSignIn'
+        ➜ Explicit dependency on target 'AppAuth-product' in project 'AppAuth'
+        ➜ Explicit dependency on target 'AppAuthCore-product' in project 'AppAuth'
+        ➜ Explicit dependency on target 'AppCheckCore-product' in project 'AppCheck'
+        ➜ Explicit dependency on target 'GTMAppAuth-product' in project 'GTMAppAuth'
+        ➜ Explicit dependency on target 'GTMSessionFetcherCore-product' in project 'GTMSessionFetcher'
+    Target 'GoogleSignInSwift' in project 'GoogleSignIn'
+        ➜ Explicit dependency on target 'GoogleSignIn_GoogleSignInSwift' in project 'GoogleSignIn'
+        ➜ Explicit dependency on target 'GoogleSignIn' in project 'GoogleSignIn'
+        ➜ Explicit dependency on target 'AppAuth-product' in project 'AppAuth'
+        ➜ Explicit dependency on target 'AppAuthCore-product' in project 'AppAuth'
+        ➜ Explicit dependency on target 'AppCheckCore-product' in project 'AppCheck'
+        ➜ Explicit dependency on target 'GTMAppAuth-product' in project 'GTMAppAuth'
+        ➜ Explicit dependency on target 'GTMSessionFetcherCore-product' in project 'GTMSessionFetcher'
+    Target 'GoogleSignIn' in project 'GoogleSignIn'
+        ➜ Explicit dependency on target 'GoogleSignIn_GoogleSignIn' in project 'GoogleSignIn'
+        ➜ Explicit dependency on target 'AppAuth-product' in project 'AppAuth'
+        ➜ Explicit dependency on target 'AppAuthCore-product' in project 'AppAuth'
+        ➜ Explicit dependency on target 'AppCheckCore-product' in project 'AppCheck'
+        ➜ Explicit dependency on target 'GTMAppAuth-product' in project 'GTMAppAuth'
+        ➜ Explicit dependency on target 'GTMSessionFetcherCore-product' in project 'GTMSessionFetcher'
+    Target 'GTMAppAuth-product' in project 'GTMAppAuth'
+        ➜ Explicit dependency on target 'GTMAppAuth' in project 'GTMAppAuth'
+        ➜ Explicit dependency on target 'GTMAppAuth_GTMAppAuth' in project 'GTMAppAuth'
+        ➜ Explicit dependency on target 'GTMSessionFetcherCore-product' in project 'GTMSessionFetcher'
+        ➜ Explicit dependency on target 'AppAuthCore-product' in project 'AppAuth'
+    Target 'GTMAppAuth' in project 'GTMAppAuth'
+        ➜ Explicit dependency on target 'GTMAppAuth_GTMAppAuth' in project 'GTMAppAuth'
+        ➜ Explicit dependency on target 'GTMSessionFetcherCore-product' in project 'GTMSessionFetcher'
+        ➜ Explicit dependency on target 'AppAuthCore-product' in project 'AppAuth'
+    Target 'GTMSessionFetcherCore-product' in project 'GTMSessionFetcher'
+        ➜ Explicit dependency on target 'GTMSessionFetcherCore' in project 'GTMSessionFetcher'
+        ➜ Explicit dependency on target 'GTMSessionFetcher_GTMSessionFetcherCore' in project 'GTMSessionFetcher'
+    Target 'GTMSessionFetcherCore' in project 'GTMSessionFetcher'
+        ➜ Explicit dependency on target 'GTMSessionFetcher_GTMSessionFetcherCore' in project 'GTMSessionFetcher'
+    Target 'GTMSessionFetcher_GTMSessionFetcherCore' in project 'GTMSessionFetcher' (no dependencies)
+    Target 'GTMAppAuth_GTMAppAuth' in project 'GTMAppAuth' (no dependencies)
+    Target 'AppCheckCore-product' in project 'AppCheck'
+        ➜ Explicit dependency on target 'AppCheckCore' in project 'AppCheck'
+        ➜ Explicit dependency on target 'FBLPromises-product' in project 'Promises'
+        ➜ Explicit dependency on target 'GULEnvironment-product' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GULUserDefaults-product' in project 'GoogleUtilities'
+    Target 'AppCheckCore' in project 'AppCheck'
+        ➜ Explicit dependency on target 'FBLPromises-product' in project 'Promises'
+        ➜ Explicit dependency on target 'GULEnvironment-product' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GULUserDefaults-product' in project 'GoogleUtilities'
+    Target 'GULUserDefaults-product' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities-UserDefaults' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities_GoogleUtilities-UserDefaults' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'third-party-IsAppEncrypted' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities-Environment' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities-Logger' in project 'GoogleUtilities'
+    Target 'GoogleUtilities-UserDefaults' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities_GoogleUtilities-UserDefaults' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'third-party-IsAppEncrypted' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities-Environment' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities-Logger' in project 'GoogleUtilities'
+    Target 'GoogleUtilities-Logger' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities_GoogleUtilities-Logger' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'third-party-IsAppEncrypted' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities-Environment' in project 'GoogleUtilities'
+    Target 'GoogleUtilities_GoogleUtilities-Logger' in project 'GoogleUtilities' (no dependencies)
+    Target 'GoogleUtilities_GoogleUtilities-UserDefaults' in project 'GoogleUtilities' (no dependencies)
+    Target 'GULEnvironment-product' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities-Environment' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities_GoogleUtilities-Environment' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'third-party-IsAppEncrypted' in project 'GoogleUtilities'
+    Target 'GoogleUtilities-Environment' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities_GoogleUtilities-Environment' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'third-party-IsAppEncrypted' in project 'GoogleUtilities'
+    Target 'third-party-IsAppEncrypted' in project 'GoogleUtilities' (no dependencies)
+    Target 'GoogleUtilities_GoogleUtilities-Environment' in project 'GoogleUtilities' (no dependencies)
+    Target 'FBLPromises-product' in project 'Promises'
+        ➜ Explicit dependency on target 'FBLPromises' in project 'Promises'
+        ➜ Explicit dependency on target 'Promises_FBLPromises' in project 'Promises'
+    Target 'FBLPromises' in project 'Promises'
+        ➜ Explicit dependency on target 'Promises_FBLPromises' in project 'Promises'
+    Target 'Promises_FBLPromises' in project 'Promises' (no dependencies)
+    Target 'AppAuthCore-product' in project 'AppAuth'
+        ➜ Explicit dependency on target 'AppAuthCore' in project 'AppAuth'
+        ➜ Explicit dependency on target 'AppAuth_AppAuthCore' in project 'AppAuth'
+    Target 'AppAuth-product' in project 'AppAuth'
+        ➜ Explicit dependency on target 'AppAuth' in project 'AppAuth'
+        ➜ Explicit dependency on target 'AppAuth_AppAuth' in project 'AppAuth'
+        ➜ Explicit dependency on target 'AppAuthCore' in project 'AppAuth'
+    Target 'AppAuth' in project 'AppAuth'
+        ➜ Explicit dependency on target 'AppAuth_AppAuth' in project 'AppAuth'
+        ➜ Explicit dependency on target 'AppAuthCore' in project 'AppAuth'
+    Target 'AppAuthCore' in project 'AppAuth'
+        ➜ Explicit dependency on target 'AppAuth_AppAuthCore' in project 'AppAuth'
+    Target 'AppAuth_AppAuthCore' in project 'AppAuth' (no dependencies)
+    Target 'AppAuth_AppAuth' in project 'AppAuth' (no dependencies)
+    Target 'GoogleSignIn_GoogleSignIn' in project 'GoogleSignIn' (no dependencies)
+    Target 'GoogleSignIn_GoogleSignInSwift' in project 'GoogleSignIn' (no dependencies)
+    Target 'BlockNoteEditor-product' in project 'BlockNoteEditor'
+        ➜ Explicit dependency on target 'BlockNoteEditor' in project 'BlockNoteEditor'
+        ➜ Explicit dependency on target 'BlockNoteEditor_BlockNoteEditor' in project 'BlockNoteEditor'
+    Target 'BlockNoteEditor' in project 'BlockNoteEditor'
+        ➜ Explicit dependency on target 'BlockNoteEditor_BlockNoteEditor' in project 'BlockNoteEditor'
+    Target 'BlockNoteEditor_BlockNoteEditor' in project 'BlockNoteEditor' (no dependencies)
+    Target 'CoreFlow-product' in project 'CoreFlow'
+        ➜ Explicit dependency on target 'CoreFlow' in project 'CoreFlow'
+    Target 'CoreFlow' in project 'CoreFlow' (no dependencies)
+
+GatherProvisioningInputs
+
+CreateBuildDescription
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc --version
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -v -E -dM -arch arm64 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.1.sdk -x objective-c -c /dev/null
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/usr/bin/ibtool --version --output-format xml1
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -v -E -dM -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.1.sdk -x c -c /dev/null
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/usr/bin/actool --print-asset-tag-combinations --output-format xml1 /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/Preview Content/Preview Assets.xcassets /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/Assets.xcassets
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -v -E -dM -arch arm64 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.1.sdk -x c -c /dev/null
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ld -version_details
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/usr/bin/actool --version --output-format xml1
+
+Build description signature: 9c0a4d42948c1875e657346868da1a9f
+Build description path: /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/XCBuildData/9c0a4d42948c1875e657346868da1a9f.xcbuilddata
+ClangStatCache /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang-stat-cache /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.1.sdk /tmp/chorai-ios-reform-derived/SDKStatCaches.noindex/iphonesimulator27.1-24A94232-35d3147121984ba087c28d913653d626.sdkstatcache
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote.xcodeproj
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang-stat-cache /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.1.sdk -o /tmp/chorai-ios-reform-derived/SDKStatCaches.noindex/iphonesimulator27.1-24A94232-35d3147121984ba087c28d913653d626.sdkstatcache
+
+SwiftDriver CoreFlow normal arm64 com.apple.xcode.tools.swift.compiler (in target 'CoreFlow' from project 'CoreFlow')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote.xcodeproj
+    builtin-SwiftDriver -- /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -parse-as-library -module-name CoreFlow -Onone @/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/CoreFlow.build/Debug-iphonesimulator/CoreFlow-t.build/Objects-normal/arm64/CoreFlow.SwiftFileList -DSWIFT_PACKAGE -DDEBUG -DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE -DXcode -plugin-path /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing -enable-experimental-feature DebugDescriptionMacro -sdk /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.1.sdk -target arm64-apple-ios16.0-simulator -g -module-cache-path /tmp/chorai-ios-reform-derived/ModuleCache.noindex -Xfrontend -serialize-debugging-options -enable-testing -index-store-path /tmp/chorai-ios-reform-derived/Index.noindex/DataStore -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -swift-version 5 -I /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator -Isystem /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib -F /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator -F /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks -F /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.1.sdk/Developer/Library/Frameworks -c -j10 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc /tmp/chorai-ios-reform-derived/SDKStatCaches.noindex/iphonesimulator27.1-24A94232-35d3147121984ba087c28d913653d626.sdkstatcache -output-file-map /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/CoreFlow.build/Debug-iphonesimulator/CoreFlow-t.build/Objects-normal/arm64/CoreFlow-OutputFileMap.json -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path /tmp/chorai-ios-reform-derived/ModuleCache.noindex -sdk-module-cache-path /tmp/chorai-ios-reform-derived/SDKExplicitPrecompiledModules -emit-dependencies -emit-module -emit-module-path /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/CoreFlow.build/Debug-iphonesimulator/CoreFlow-t.build/Objects-normal/arm64/CoreFlow.swiftmodule -serialize-diagnostics -dependency-scan-serialize-diagnostics-path /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/CoreFlow.build/Debug-iphonesimulator/CoreFlow-t.build/Objects-normal/arm64/CoreFlow-dependency-scan.dia -validate-clang-modules-once -clang-build-session-file /tmp/chorai-ios-reform-derived/ModuleCache.noindex/Session.modulevalidation -Xcc -fmodules-prune-interval\=86400 -Xcc -fmodules-prune-after\=345600 -package-name coreflow -emit-const-values -const-gather-protocols-list /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/CoreFlow.build/Debug-iphonesimulator/CoreFlow-t.build/Objects-normal/arm64/CoreFlow_const_extract_protocols.json -Xcc -I/tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/include -Xcc -I/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/CoreFlow.build/Debug-iphonesimulator/CoreFlow-t.build/DerivedSources-normal/arm64 -Xcc -I/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/CoreFlow.build/Debug-iphonesimulator/CoreFlow-t.build/DerivedSources/arm64 -Xcc -I/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/CoreFlow.build/Debug-iphonesimulator/CoreFlow-t.build/DerivedSources -Xcc -DSWIFT_PACKAGE -Xcc -DDEBUG\=1 -emit-objc-header -emit-objc-header-path /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/CoreFlow.build/Debug-iphonesimulator/CoreFlow-t.build/Objects-normal/arm64/CoreFlow-Swift.h -working-directory /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote.xcodeproj -experimental-emit-module-separately -disable-cmo
+
+SwiftEmitModule normal arm64 Emitting\ module\ for\ CoreFlow (in target 'CoreFlow' from project 'CoreFlow')
+
+SwiftCompile normal arm64 (in target 'CoreFlow' from project 'CoreFlow')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote.xcodeproj
+    
+
+SwiftDriverJobDiscovery normal arm64 Emitting module for CoreFlow (in target 'CoreFlow' from project 'CoreFlow')
+
+SwiftDriver\ Compilation\ Requirements CoreFlow normal arm64 com.apple.xcode.tools.swift.compiler (in target 'CoreFlow' from project 'CoreFlow')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote.xcodeproj
+    builtin-Swift-Compilation-Requirements -- /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -parse-as-library -module-name CoreFlow -Onone @/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/CoreFlow.build/Debug-iphonesimulator/CoreFlow-t.build/Objects-normal/arm64/CoreFlow.SwiftFileList -DSWIFT_PACKAGE -DDEBUG -DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE -DXcode -plugin-path /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing -enable-experimental-feature DebugDescriptionMacro -sdk /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.1.sdk -target arm64-apple-ios16.0-simulator -g -module-cache-path /tmp/chorai-ios-reform-derived/ModuleCache.noindex -Xfrontend -serialize-debugging-options -enable-testing -index-store-path /tmp/chorai-ios-reform-derived/Index.noindex/DataStore -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -swift-version 5 -I /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator -Isystem /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib -F /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator -F /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks -F /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.1.sdk/Developer/Library/Frameworks -c -j10 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc /tmp/chorai-ios-reform-derived/SDKStatCaches.noindex/iphonesimulator27.1-24A94232-35d3147121984ba087c28d913653d626.sdkstatcache -output-file-map /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/CoreFlow.build/Debug-iphonesimulator/CoreFlow-t.build/Objects-normal/arm64/CoreFlow-OutputFileMap.json -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path /tmp/chorai-ios-reform-derived/ModuleCache.noindex -sdk-module-cache-path /tmp/chorai-ios-reform-derived/SDKExplicitPrecompiledModules -emit-dependencies -emit-module -emit-module-path /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/CoreFlow.build/Debug-iphonesimulator/CoreFlow-t.build/Objects-normal/arm64/CoreFlow.swiftmodule -serialize-diagnostics -dependency-scan-serialize-diagnostics-path /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/CoreFlow.build/Debug-iphonesimulator/CoreFlow-t.build/Objects-normal/arm64/CoreFlow-dependency-scan.dia -validate-clang-modules-once -clang-build-session-file /tmp/chorai-ios-reform-derived/ModuleCache.noindex/Session.modulevalidation -Xcc -fmodules-prune-interval\=86400 -Xcc -fmodules-prune-after\=345600 -package-name coreflow -emit-const-values -const-gather-protocols-list /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/CoreFlow.build/Debug-iphonesimulator/CoreFlow-t.build/Objects-normal/arm64/CoreFlow_const_extract_protocols.json -Xcc -I/tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/include -Xcc -I/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/CoreFlow.build/Debug-iphonesimulator/CoreFlow-t.build/DerivedSources-normal/arm64 -Xcc -I/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/CoreFlow.build/Debug-iphonesimulator/CoreFlow-t.build/DerivedSources/arm64 -Xcc -I/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/CoreFlow.build/Debug-iphonesimulator/CoreFlow-t.build/DerivedSources -Xcc -DSWIFT_PACKAGE -Xcc -DDEBUG\=1 -emit-objc-header -emit-objc-header-path /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/CoreFlow.build/Debug-iphonesimulator/CoreFlow-t.build/Objects-normal/arm64/CoreFlow-Swift.h -working-directory /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote.xcodeproj -experimental-emit-module-separately -disable-cmo
+
+Copy /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/CoreFlow.swiftmodule/arm64-apple-ios-simulator.swiftmodule /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/CoreFlow.build/Debug-iphonesimulator/CoreFlow-t.build/Objects-normal/arm64/CoreFlow.swiftmodule (in target 'CoreFlow' from project 'CoreFlow')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/Packages/CoreFlow
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks -rename /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/CoreFlow.build/Debug-iphonesimulator/CoreFlow-t.build/Objects-normal/arm64/CoreFlow.swiftmodule /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/CoreFlow.swiftmodule/arm64-apple-ios-simulator.swiftmodule
+
+Copy /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/CoreFlow.swiftmodule/Project/arm64-apple-ios-simulator.swiftsourceinfo /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/CoreFlow.build/Debug-iphonesimulator/CoreFlow-t.build/Objects-normal/arm64/CoreFlow.swiftsourceinfo (in target 'CoreFlow' from project 'CoreFlow')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/Packages/CoreFlow
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks -rename /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/CoreFlow.build/Debug-iphonesimulator/CoreFlow-t.build/Objects-normal/arm64/CoreFlow.swiftsourceinfo /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/CoreFlow.swiftmodule/Project/arm64-apple-ios-simulator.swiftsourceinfo
+
+Copy /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/CoreFlow.swiftmodule/arm64-apple-ios-simulator.abi.json /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/CoreFlow.build/Debug-iphonesimulator/CoreFlow-t.build/Objects-normal/arm64/CoreFlow.abi.json (in target 'CoreFlow' from project 'CoreFlow')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/Packages/CoreFlow
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks -rename /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/CoreFlow.build/Debug-iphonesimulator/CoreFlow-t.build/Objects-normal/arm64/CoreFlow.abi.json /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/CoreFlow.swiftmodule/arm64-apple-ios-simulator.abi.json
+
+SwiftDriver ArcNote normal arm64 com.apple.xcode.tools.swift.compiler (in target 'ArcNote' from project 'ArcNote')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend
+    builtin-SwiftDriver -- /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name ArcNote -Onone @/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/Objects-normal/arm64/ArcNote.SwiftFileList -DDEBUG -Xcc -fmodule-map-file\=/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/GeneratedModuleMaps-iphonesimulator/AppAuth.modulemap -Xcc -fmodule-map-file\=/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/GeneratedModuleMaps-iphonesimulator/AppAuthCore.modulemap -Xcc -fmodule-map-file\=/Users/didi/Library/Developer/Xcode/DerivedData/ArcNote-aybvwriajptjnqfsotseyzwxdivu/SourcePackages/checkouts/promises/Sources/FBLPromises/include/module.modulemap -Xcc -fmodule-map-file\=/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/GeneratedModuleMaps-iphonesimulator/GoogleUtilities-Logger.modulemap -Xcc -fmodule-map-file\=/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/GeneratedModuleMaps-iphonesimulator/GoogleUtilities-Environment.modulemap -Xcc -fmodule-map-file\=/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/GeneratedModuleMaps-iphonesimulator/third-party-IsAppEncrypted.modulemap -Xcc -fmodule-map-file\=/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/GeneratedModuleMaps-iphonesimulator/GoogleUtilities-UserDefaults.modulemap -Xcc -fmodule-map-file\=/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/GeneratedModuleMaps-iphonesimulator/AppCheckCore.modulemap -Xcc -fmodule-map-file\=/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/GeneratedModuleMaps-iphonesimulator/GTMSessionFetcherCore.modulemap -Xcc -fmodule-map-file\=/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/GeneratedModuleMaps-iphonesimulator/GoogleSignIn.modulemap -enable-bare-slash-regex -enable-experimental-feature DebugDescriptionMacro -sdk /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.1.sdk -target arm64-apple-ios16.0-simulator -g -module-cache-path /tmp/chorai-ios-reform-derived/ModuleCache.noindex -Xfrontend -serialize-debugging-options -enable-testing -index-store-path /tmp/chorai-ios-reform-derived/Index.noindex/DataStore -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -swift-version 5 -I /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator -F /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/PackageFrameworks -F /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator -emit-localized-strings -emit-localized-strings-path /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/Objects-normal/arm64 -c -j10 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc /tmp/chorai-ios-reform-derived/SDKStatCaches.noindex/iphonesimulator27.1-24A94232-35d3147121984ba087c28d913653d626.sdkstatcache -output-file-map /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/Objects-normal/arm64/ArcNote-OutputFileMap.json -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path /tmp/chorai-ios-reform-derived/ModuleCache.noindex -sdk-module-cache-path /tmp/chorai-ios-reform-derived/SDKExplicitPrecompiledModules -emit-dependencies -emit-module -emit-module-path /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/Objects-normal/arm64/ArcNote.swiftmodule -serialize-diagnostics -dependency-scan-serialize-diagnostics-path /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/Objects-normal/arm64/ArcNote-dependency-scan.dia -validate-clang-modules-once -clang-build-session-file /tmp/chorai-ios-reform-derived/ModuleCache.noindex/Session.modulevalidation -Xcc -fmodules-prune-interval\=86400 -Xcc -fmodules-prune-after\=345600 -emit-const-values -const-gather-protocols-list /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/Objects-normal/arm64/ArcNote_const_extract_protocols.json -Xcc -iquote -Xcc /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/ArcNote-generated-files.hmap -Xcc -I/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/ArcNote-own-target-headers.hmap -Xcc -I/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/ArcNote-all-non-framework-target-headers.hmap -Xcc -ivfsoverlay -Xcc /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote-c9f338de1635ad2f8d7835649ac88264-VFS-iphonesimulator/all-product-headers.yaml -Xcc -iquote -Xcc /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/ArcNote-project-headers.hmap -Xcc -I/Users/didi/Library/Developer/Xcode/DerivedData/ArcNote-aybvwriajptjnqfsotseyzwxdivu/SourcePackages/checkouts/AppAuth-iOS/Sources/AppAuth -Xcc -I/Users/didi/Library/Developer/Xcode/DerivedData/ArcNote-aybvwriajptjnqfsotseyzwxdivu/SourcePackages/checkouts/AppAuth-iOS/Sources/AppAuthCore -Xcc -I/Users/didi/Library/Developer/Xcode/DerivedData/ArcNote-aybvwriajptjnqfsotseyzwxdivu/SourcePackages/checkouts/promises/Sources/FBLPromises/include -Xcc -I/Users/didi/Library/Developer/Xcode/DerivedData/ArcNote-aybvwriajptjnqfsotseyzwxdivu/SourcePackages/checkouts/GoogleUtilities/GoogleUtilities/Logger/Public -Xcc -I/Users/didi/Library/Developer/Xcode/DerivedData/ArcNote-aybvwriajptjnqfsotseyzwxdivu/SourcePackages/checkouts/GoogleUtilities/GoogleUtilities/Environment/Public -Xcc -I/Users/didi/Library/Developer/Xcode/DerivedData/ArcNote-aybvwriajptjnqfsotseyzwxdivu/SourcePackages/checkouts/GoogleUtilities/third_party/IsAppEncrypted/Public -Xcc -I/Users/didi/Library/Developer/Xcode/DerivedData/ArcNote-aybvwriajptjnqfsotseyzwxdivu/SourcePackages/checkouts/GoogleUtilities/GoogleUtilities/UserDefaults/Public -Xcc -I/Users/didi/Library/Developer/Xcode/DerivedData/ArcNote-aybvwriajptjnqfsotseyzwxdivu/SourcePackages/checkouts/app-check/AppCheckCore/Sources/Public -Xcc -I/Users/didi/Library/Developer/Xcode/DerivedData/ArcNote-aybvwriajptjnqfsotseyzwxdivu/SourcePackages/checkouts/gtm-session-fetcher/Sources/Core/Public -Xcc -I/Users/didi/Library/Developer/Xcode/DerivedData/ArcNote-aybvwriajptjnqfsotseyzwxdivu/SourcePackages/checkouts/GoogleSignIn-iOS/GoogleSignIn/Sources/Public -Xcc -I/tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/include -Xcc -I/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/DerivedSources-normal/arm64 -Xcc -I/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/DerivedSources/arm64 -Xcc -I/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/DerivedSources -Xcc -DDEBUG\=1 -emit-objc-header -emit-objc-header-path /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/Objects-normal/arm64/ArcNote-Swift.h -working-directory /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend -experimental-emit-module-separately -disable-cmo
+
+SwiftExplicitDependencyGeneratePcm arm64 /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules/GTMSessionFetcherCore-B2RWNGQINIMCLNJJ3J7F331GQ.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules/GoogleSignIn-9Z7QSP9BJS3LGGKC3VV3OF9YS.pcm
+
+SwiftEmitModule normal arm64 Emitting\ module\ for\ ArcNote (in target 'ArcNote' from project 'ArcNote')
+
+SwiftCompile normal arm64 (in target 'ArcNote' from project 'ArcNote')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend
+    
+
+SwiftDriverJobDiscovery normal arm64 Emitting module for ArcNote (in target 'ArcNote' from project 'ArcNote')
+
+SwiftDriver\ Compilation\ Requirements ArcNote normal arm64 com.apple.xcode.tools.swift.compiler (in target 'ArcNote' from project 'ArcNote')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend
+    builtin-Swift-Compilation-Requirements -- /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name ArcNote -Onone @/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/Objects-normal/arm64/ArcNote.SwiftFileList -DDEBUG -Xcc -fmodule-map-file\=/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/GeneratedModuleMaps-iphonesimulator/AppAuth.modulemap -Xcc -fmodule-map-file\=/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/GeneratedModuleMaps-iphonesimulator/AppAuthCore.modulemap -Xcc -fmodule-map-file\=/Users/didi/Library/Developer/Xcode/DerivedData/ArcNote-aybvwriajptjnqfsotseyzwxdivu/SourcePackages/checkouts/promises/Sources/FBLPromises/include/module.modulemap -Xcc -fmodule-map-file\=/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/GeneratedModuleMaps-iphonesimulator/GoogleUtilities-Logger.modulemap -Xcc -fmodule-map-file\=/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/GeneratedModuleMaps-iphonesimulator/GoogleUtilities-Environment.modulemap -Xcc -fmodule-map-file\=/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/GeneratedModuleMaps-iphonesimulator/third-party-IsAppEncrypted.modulemap -Xcc -fmodule-map-file\=/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/GeneratedModuleMaps-iphonesimulator/GoogleUtilities-UserDefaults.modulemap -Xcc -fmodule-map-file\=/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/GeneratedModuleMaps-iphonesimulator/AppCheckCore.modulemap -Xcc -fmodule-map-file\=/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/GeneratedModuleMaps-iphonesimulator/GTMSessionFetcherCore.modulemap -Xcc -fmodule-map-file\=/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/GeneratedModuleMaps-iphonesimulator/GoogleSignIn.modulemap -enable-bare-slash-regex -enable-experimental-feature DebugDescriptionMacro -sdk /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.1.sdk -target arm64-apple-ios16.0-simulator -g -module-cache-path /tmp/chorai-ios-reform-derived/ModuleCache.noindex -Xfrontend -serialize-debugging-options -enable-testing -index-store-path /tmp/chorai-ios-reform-derived/Index.noindex/DataStore -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -swift-version 5 -I /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator -F /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/PackageFrameworks -F /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator -emit-localized-strings -emit-localized-strings-path /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/Objects-normal/arm64 -c -j10 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc /tmp/chorai-ios-reform-derived/SDKStatCaches.noindex/iphonesimulator27.1-24A94232-35d3147121984ba087c28d913653d626.sdkstatcache -output-file-map /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/Objects-normal/arm64/ArcNote-OutputFileMap.json -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path /tmp/chorai-ios-reform-derived/ModuleCache.noindex -sdk-module-cache-path /tmp/chorai-ios-reform-derived/SDKExplicitPrecompiledModules -emit-dependencies -emit-module -emit-module-path /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/Objects-normal/arm64/ArcNote.swiftmodule -serialize-diagnostics -dependency-scan-serialize-diagnostics-path /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/Objects-normal/arm64/ArcNote-dependency-scan.dia -validate-clang-modules-once -clang-build-session-file /tmp/chorai-ios-reform-derived/ModuleCache.noindex/Session.modulevalidation -Xcc -fmodules-prune-interval\=86400 -Xcc -fmodules-prune-after\=345600 -emit-const-values -const-gather-protocols-list /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/Objects-normal/arm64/ArcNote_const_extract_protocols.json -Xcc -iquote -Xcc /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/ArcNote-generated-files.hmap -Xcc -I/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/ArcNote-own-target-headers.hmap -Xcc -I/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/ArcNote-all-non-framework-target-headers.hmap -Xcc -ivfsoverlay -Xcc /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote-c9f338de1635ad2f8d7835649ac88264-VFS-iphonesimulator/all-product-headers.yaml -Xcc -iquote -Xcc /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/ArcNote-project-headers.hmap -Xcc -I/Users/didi/Library/Developer/Xcode/DerivedData/ArcNote-aybvwriajptjnqfsotseyzwxdivu/SourcePackages/checkouts/AppAuth-iOS/Sources/AppAuth -Xcc -I/Users/didi/Library/Developer/Xcode/DerivedData/ArcNote-aybvwriajptjnqfsotseyzwxdivu/SourcePackages/checkouts/AppAuth-iOS/Sources/AppAuthCore -Xcc -I/Users/didi/Library/Developer/Xcode/DerivedData/ArcNote-aybvwriajptjnqfsotseyzwxdivu/SourcePackages/checkouts/promises/Sources/FBLPromises/include -Xcc -I/Users/didi/Library/Developer/Xcode/DerivedData/ArcNote-aybvwriajptjnqfsotseyzwxdivu/SourcePackages/checkouts/GoogleUtilities/GoogleUtilities/Logger/Public -Xcc -I/Users/didi/Library/Developer/Xcode/DerivedData/ArcNote-aybvwriajptjnqfsotseyzwxdivu/SourcePackages/checkouts/GoogleUtilities/GoogleUtilities/Environment/Public -Xcc -I/Users/didi/Library/Developer/Xcode/DerivedData/ArcNote-aybvwriajptjnqfsotseyzwxdivu/SourcePackages/checkouts/GoogleUtilities/third_party/IsAppEncrypted/Public -Xcc -I/Users/didi/Library/Developer/Xcode/DerivedData/ArcNote-aybvwriajptjnqfsotseyzwxdivu/SourcePackages/checkouts/GoogleUtilities/GoogleUtilities/UserDefaults/Public -Xcc -I/Users/didi/Library/Developer/Xcode/DerivedData/ArcNote-aybvwriajptjnqfsotseyzwxdivu/SourcePackages/checkouts/app-check/AppCheckCore/Sources/Public -Xcc -I/Users/didi/Library/Developer/Xcode/DerivedData/ArcNote-aybvwriajptjnqfsotseyzwxdivu/SourcePackages/checkouts/gtm-session-fetcher/Sources/Core/Public -Xcc -I/Users/didi/Library/Developer/Xcode/DerivedData/ArcNote-aybvwriajptjnqfsotseyzwxdivu/SourcePackages/checkouts/GoogleSignIn-iOS/GoogleSignIn/Sources/Public -Xcc -I/tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/include -Xcc -I/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/DerivedSources-normal/arm64 -Xcc -I/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/DerivedSources/arm64 -Xcc -I/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/DerivedSources -Xcc -DDEBUG\=1 -emit-objc-header -emit-objc-header-path /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/Objects-normal/arm64/ArcNote-Swift.h -working-directory /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend -experimental-emit-module-separately -disable-cmo
+
+Copy /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/ArcNote.swiftmodule/arm64-apple-ios-simulator.swiftmodule /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/Objects-normal/arm64/ArcNote.swiftmodule (in target 'ArcNote' from project 'ArcNote')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks -rename /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/Objects-normal/arm64/ArcNote.swiftmodule /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/ArcNote.swiftmodule/arm64-apple-ios-simulator.swiftmodule
+
+Copy /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/ArcNote.swiftmodule/Project/arm64-apple-ios-simulator.swiftsourceinfo /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/Objects-normal/arm64/ArcNote.swiftsourceinfo (in target 'ArcNote' from project 'ArcNote')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks -rename /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/Objects-normal/arm64/ArcNote.swiftsourceinfo /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/ArcNote.swiftmodule/Project/arm64-apple-ios-simulator.swiftsourceinfo
+
+Copy /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/ArcNote.swiftmodule/arm64-apple-ios-simulator.abi.json /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/Objects-normal/arm64/ArcNote.abi.json (in target 'ArcNote' from project 'ArcNote')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks -rename /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/Objects-normal/arm64/ArcNote.abi.json /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/ArcNote.swiftmodule/arm64-apple-ios-simulator.abi.json
+
+SwiftDriver ArcNoteUITests normal arm64 com.apple.xcode.tools.swift.compiler (in target 'ArcNoteUITests' from project 'ArcNote')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend
+    builtin-SwiftDriver -- /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name ArcNoteUITests -Onone @/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNoteUITests.build/Objects-normal/arm64/ArcNoteUITests.SwiftFileList -DDEBUG -module-alias Testing\=_Testing_Unavailable -plugin-path /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing -enable-bare-slash-regex -enable-experimental-feature DebugDescriptionMacro -sdk /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.1.sdk -target arm64-apple-ios16.0-simulator -g -module-cache-path /tmp/chorai-ios-reform-derived/ModuleCache.noindex -Xfrontend -serialize-debugging-options -enable-testing -index-store-path /tmp/chorai-ios-reform-derived/Index.noindex/DataStore -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -swift-version 5 -I /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator -Isystem /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib -F /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator -F /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks -F /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.1.sdk/Developer/Library/Frameworks -c -j10 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc /tmp/chorai-ios-reform-derived/SDKStatCaches.noindex/iphonesimulator27.1-24A94232-35d3147121984ba087c28d913653d626.sdkstatcache -output-file-map /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNoteUITests.build/Objects-normal/arm64/ArcNoteUITests-OutputFileMap.json -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path /tmp/chorai-ios-reform-derived/ModuleCache.noindex -sdk-module-cache-path /tmp/chorai-ios-reform-derived/SDKExplicitPrecompiledModules -emit-dependencies -emit-module -emit-module-path /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNoteUITests.build/Objects-normal/arm64/ArcNoteUITests.swiftmodule -serialize-diagnostics -dependency-scan-serialize-diagnostics-path /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNoteUITests.build/Objects-normal/arm64/ArcNoteUITests-dependency-scan.dia -validate-clang-modules-once -clang-build-session-file /tmp/chorai-ios-reform-derived/ModuleCache.noindex/Session.modulevalidation -Xcc -fmodules-prune-interval\=86400 -Xcc -fmodules-prune-after\=345600 -emit-const-values -const-gather-protocols-list /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNoteUITests.build/Objects-normal/arm64/ArcNoteUITests_const_extract_protocols.json -Xcc -iquote -Xcc /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNoteUITests.build/ArcNoteUITests-generated-files.hmap -Xcc -I/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNoteUITests.build/ArcNoteUITests-own-target-headers.hmap -Xcc -I/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNoteUITests.build/ArcNoteUITests-all-non-framework-target-headers.hmap -Xcc -ivfsoverlay -Xcc /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote-c9f338de1635ad2f8d7835649ac88264-VFS-iphonesimulator/all-product-headers.yaml -Xcc -iquote -Xcc /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNoteUITests.build/ArcNoteUITests-project-headers.hmap -Xcc -I/tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/include -Xcc -I/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNoteUITests.build/DerivedSources-normal/arm64 -Xcc -I/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNoteUITests.build/DerivedSources/arm64 -Xcc -I/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNoteUITests.build/DerivedSources -Xcc -DDEBUG\=1 -emit-objc-header -emit-objc-header-path /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNoteUITests.build/Objects-normal/arm64/ArcNoteUITests-Swift.h -working-directory /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend -experimental-emit-module-separately -disable-cmo
+
+SwiftCompile normal arm64 Compiling\ FlowDeckStore.swift /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/Packages/CoreFlow/Sources/CoreFlow/FlowDeckStore.swift (in target 'CoreFlow' from project 'CoreFlow')
+
+SwiftCompile normal arm64 /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/Packages/CoreFlow/Sources/CoreFlow/FlowDeckStore.swift (in target 'CoreFlow' from project 'CoreFlow')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote.xcodeproj
+    builtin-SwiftPerFileCompile FlowDeckStore.swift
+
+SwiftCompile normal arm64 Compiling\ SparkSessionStore.swift /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/Packages/CoreFlow/Sources/CoreFlow/SparkSessionStore.swift (in target 'CoreFlow' from project 'CoreFlow')
+
+SwiftCompile normal arm64 /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/Packages/CoreFlow/Sources/CoreFlow/SparkSessionStore.swift (in target 'CoreFlow' from project 'CoreFlow')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote.xcodeproj
+    builtin-SwiftPerFileCompile SparkSessionStore.swift
+
+SwiftCompile normal arm64 Compiling\ LocalPreview.swift /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/Packages/CoreFlow/Sources/CoreFlow/LocalPreview.swift (in target 'CoreFlow' from project 'CoreFlow')
+
+SwiftCompile normal arm64 /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/Packages/CoreFlow/Sources/CoreFlow/LocalPreview.swift (in target 'CoreFlow' from project 'CoreFlow')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote.xcodeproj
+    builtin-SwiftPerFileCompile LocalPreview.swift
+
+SwiftCompile normal arm64 Compiling\ ArcNoteUITests.swift /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNoteUITests/ArcNoteUITests.swift (in target 'ArcNoteUITests' from project 'ArcNote')
+
+SwiftCompile normal arm64 /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNoteUITests/ArcNoteUITests.swift (in target 'ArcNoteUITests' from project 'ArcNote')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend
+    builtin-SwiftPerFileCompile ArcNoteUITests.swift
+
+SwiftEmitModule normal arm64 Emitting\ module\ for\ ArcNoteUITests (in target 'ArcNoteUITests' from project 'ArcNote')
+
+SwiftCompile normal arm64 (in target 'ArcNoteUITests' from project 'ArcNote')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend
+    
+
+SwiftDriverJobDiscovery normal arm64 Compiling LocalPreview.swift (in target 'CoreFlow' from project 'CoreFlow')
+
+SwiftDriverJobDiscovery normal arm64 Compiling FlowDeckStore.swift (in target 'CoreFlow' from project 'CoreFlow')
+
+SwiftDriverJobDiscovery normal arm64 Compiling SparkSessionStore.swift (in target 'CoreFlow' from project 'CoreFlow')
+
+SwiftDriver\ Compilation CoreFlow normal arm64 com.apple.xcode.tools.swift.compiler (in target 'CoreFlow' from project 'CoreFlow')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote.xcodeproj
+    builtin-Swift-Compilation -- /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -parse-as-library -module-name CoreFlow -Onone @/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/CoreFlow.build/Debug-iphonesimulator/CoreFlow-t.build/Objects-normal/arm64/CoreFlow.SwiftFileList -DSWIFT_PACKAGE -DDEBUG -DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE -DXcode -plugin-path /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing -enable-experimental-feature DebugDescriptionMacro -sdk /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.1.sdk -target arm64-apple-ios16.0-simulator -g -module-cache-path /tmp/chorai-ios-reform-derived/ModuleCache.noindex -Xfrontend -serialize-debugging-options -enable-testing -index-store-path /tmp/chorai-ios-reform-derived/Index.noindex/DataStore -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -swift-version 5 -I /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator -Isystem /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib -F /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator -F /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks -F /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.1.sdk/Developer/Library/Frameworks -c -j10 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc /tmp/chorai-ios-reform-derived/SDKStatCaches.noindex/iphonesimulator27.1-24A94232-35d3147121984ba087c28d913653d626.sdkstatcache -output-file-map /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/CoreFlow.build/Debug-iphonesimulator/CoreFlow-t.build/Objects-normal/arm64/CoreFlow-OutputFileMap.json -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path /tmp/chorai-ios-reform-derived/ModuleCache.noindex -sdk-module-cache-path /tmp/chorai-ios-reform-derived/SDKExplicitPrecompiledModules -emit-dependencies -emit-module -emit-module-path /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/CoreFlow.build/Debug-iphonesimulator/CoreFlow-t.build/Objects-normal/arm64/CoreFlow.swiftmodule -serialize-diagnostics -dependency-scan-serialize-diagnostics-path /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/CoreFlow.build/Debug-iphonesimulator/CoreFlow-t.build/Objects-normal/arm64/CoreFlow-dependency-scan.dia -validate-clang-modules-once -clang-build-session-file /tmp/chorai-ios-reform-derived/ModuleCache.noindex/Session.modulevalidation -Xcc -fmodules-prune-interval\=86400 -Xcc -fmodules-prune-after\=345600 -package-name coreflow -emit-const-values -const-gather-protocols-list /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/CoreFlow.build/Debug-iphonesimulator/CoreFlow-t.build/Objects-normal/arm64/CoreFlow_const_extract_protocols.json -Xcc -I/tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/include -Xcc -I/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/CoreFlow.build/Debug-iphonesimulator/CoreFlow-t.build/DerivedSources-normal/arm64 -Xcc -I/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/CoreFlow.build/Debug-iphonesimulator/CoreFlow-t.build/DerivedSources/arm64 -Xcc -I/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/CoreFlow.build/Debug-iphonesimulator/CoreFlow-t.build/DerivedSources -Xcc -DSWIFT_PACKAGE -Xcc -DDEBUG\=1 -emit-objc-header -emit-objc-header-path /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/CoreFlow.build/Debug-iphonesimulator/CoreFlow-t.build/Objects-normal/arm64/CoreFlow-Swift.h -working-directory /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote.xcodeproj -experimental-emit-module-separately -disable-cmo
+
+Ld /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/CoreFlow.o normal (in target 'CoreFlow' from project 'CoreFlow')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/Packages/CoreFlow
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -Xlinker -reproducible -target arm64-apple-ios16.0-simulator -r -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.1.sdk -O0 -Xlinker -no_warn_duplicate_libraries -F/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/EagerLinkingTBDs/Debug-iphonesimulator -F/tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator -iframework /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks -iframework /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.1.sdk/Developer/Library/Frameworks -filelist /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/CoreFlow.build/Debug-iphonesimulator/CoreFlow-t.build/Objects-normal/arm64/CoreFlow.LinkFileList -nostdlib -Xlinker -object_path_lto -Xlinker /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/CoreFlow.build/Debug-iphonesimulator/CoreFlow-t.build/Objects-normal/arm64/CoreFlow_lto.o -Xlinker -no_deduplicate -Xlinker -objc_abi_version -Xlinker 2 -Xlinker -dependency_info -Xlinker /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/CoreFlow.build/Debug-iphonesimulator/CoreFlow-t.build/Objects-normal/arm64/CoreFlow_dependency_info.dat -fobjc-link-runtime -L/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/iphonesimulator -L/usr/lib/swift -Xlinker -add_ast_path -Xlinker /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/CoreFlow.build/Debug-iphonesimulator/CoreFlow-t.build/Objects-normal/arm64/CoreFlow.swiftmodule -o /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/CoreFlow.o
+
+ProcessInfoPlistFile /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/Promises_FBLPromises.bundle/Info.plist /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/Promises.build/Debug-iphonesimulator/Promises_FBLPromises-b.build/empty-Promises_FBLPromises.plist (in target 'Promises_FBLPromises' from project 'Promises')
+    cd /Users/didi/Library/Developer/Xcode/DerivedData/ArcNote-aybvwriajptjnqfsotseyzwxdivu/SourcePackages/checkouts/promises
+    builtin-infoPlistUtility /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/Promises.build/Debug-iphonesimulator/Promises_FBLPromises-b.build/empty-Promises_FBLPromises.plist -producttype com.apple.product-type.bundle -expandbuildsettings -format binary -platform iphonesimulator -o /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/Promises_FBLPromises.bundle/Info.plist
+
+ProcessInfoPlistFile /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/GoogleUtilities_GoogleUtilities-Environment.bundle/Info.plist /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/GoogleUtilities.build/Debug-iphonesimulator/GoogleUtilities_GoogleUtilities-Environment-b.build/empty-GoogleUtilities_GoogleUtilities-Environment.plist (in target 'GoogleUtilities_GoogleUtilities-Environment' from project 'GoogleUtilities')
+    cd /Users/didi/Library/Developer/Xcode/DerivedData/ArcNote-aybvwriajptjnqfsotseyzwxdivu/SourcePackages/checkouts/GoogleUtilities
+    builtin-infoPlistUtility /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/GoogleUtilities.build/Debug-iphonesimulator/GoogleUtilities_GoogleUtilities-Environment-b.build/empty-GoogleUtilities_GoogleUtilities-Environment.plist -producttype com.apple.product-type.bundle -expandbuildsettings -format binary -platform iphonesimulator -o /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/GoogleUtilities_GoogleUtilities-Environment.bundle/Info.plist
+
+ProcessInfoPlistFile /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/SwiftyJSON_SwiftyJSON.bundle/Info.plist /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/SwiftyJSON.build/Debug-iphonesimulator/SwiftyJSON_SwiftyJSON-b.build/empty-SwiftyJSON_SwiftyJSON.plist (in target 'SwiftyJSON_SwiftyJSON' from project 'SwiftyJSON')
+    cd /Users/didi/Library/Developer/Xcode/DerivedData/ArcNote-aybvwriajptjnqfsotseyzwxdivu/SourcePackages/checkouts/SwiftyJSON
+    builtin-infoPlistUtility /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/SwiftyJSON.build/Debug-iphonesimulator/SwiftyJSON_SwiftyJSON-b.build/empty-SwiftyJSON_SwiftyJSON.plist -producttype com.apple.product-type.bundle -expandbuildsettings -format binary -platform iphonesimulator -o /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/SwiftyJSON_SwiftyJSON.bundle/Info.plist
+
+ProcessInfoPlistFile /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/GoogleUtilities_GoogleUtilities-Logger.bundle/Info.plist /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/GoogleUtilities.build/Debug-iphonesimulator/GoogleUtilities_GoogleUtilities-Logger-b.build/empty-GoogleUtilities_GoogleUtilities-Logger.plist (in target 'GoogleUtilities_GoogleUtilities-Logger' from project 'GoogleUtilities')
+    cd /Users/didi/Library/Developer/Xcode/DerivedData/ArcNote-aybvwriajptjnqfsotseyzwxdivu/SourcePackages/checkouts/GoogleUtilities
+    builtin-infoPlistUtility /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/GoogleUtilities.build/Debug-iphonesimulator/GoogleUtilities_GoogleUtilities-Logger-b.build/empty-GoogleUtilities_GoogleUtilities-Logger.plist -producttype com.apple.product-type.bundle -expandbuildsettings -format binary -platform iphonesimulator -o /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/GoogleUtilities_GoogleUtilities-Logger.bundle/Info.plist
+
+ProcessInfoPlistFile /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/GTMSessionFetcher_GTMSessionFetcherCore.bundle/Info.plist /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/GTMSessionFetcher.build/Debug-iphonesimulator/GTMSessionFetcher_GTMSessionFetcherCore-b.build/empty-GTMSessionFetcher_GTMSessionFetcherCore.plist (in target 'GTMSessionFetcher_GTMSessionFetcherCore' from project 'GTMSessionFetcher')
+    cd /Users/didi/Library/Developer/Xcode/DerivedData/ArcNote-aybvwriajptjnqfsotseyzwxdivu/SourcePackages/checkouts/gtm-session-fetcher
+    builtin-infoPlistUtility /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/GTMSessionFetcher.build/Debug-iphonesimulator/GTMSessionFetcher_GTMSessionFetcherCore-b.build/empty-GTMSessionFetcher_GTMSessionFetcherCore.plist -producttype com.apple.product-type.bundle -expandbuildsettings -format binary -platform iphonesimulator -o /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/GTMSessionFetcher_GTMSessionFetcherCore.bundle/Info.plist
+
+ProcessInfoPlistFile /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/GTMAppAuth_GTMAppAuth.bundle/Info.plist /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/GTMAppAuth.build/Debug-iphonesimulator/GTMAppAuth_GTMAppAuth-b.build/empty-GTMAppAuth_GTMAppAuth.plist (in target 'GTMAppAuth_GTMAppAuth' from project 'GTMAppAuth')
+    cd /Users/didi/Library/Developer/Xcode/DerivedData/ArcNote-aybvwriajptjnqfsotseyzwxdivu/SourcePackages/checkouts/GTMAppAuth
+    builtin-infoPlistUtility /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/GTMAppAuth.build/Debug-iphonesimulator/GTMAppAuth_GTMAppAuth-b.build/empty-GTMAppAuth_GTMAppAuth.plist -producttype com.apple.product-type.bundle -expandbuildsettings -format binary -platform iphonesimulator -o /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/GTMAppAuth_GTMAppAuth.bundle/Info.plist
+
+ProcessInfoPlistFile /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/AppAuth_AppAuthCore.bundle/Info.plist /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/AppAuth.build/Debug-iphonesimulator/AppAuth_AppAuthCore-b.build/empty-AppAuth_AppAuthCore.plist (in target 'AppAuth_AppAuthCore' from project 'AppAuth')
+    cd /Users/didi/Library/Developer/Xcode/DerivedData/ArcNote-aybvwriajptjnqfsotseyzwxdivu/SourcePackages/checkouts/AppAuth-iOS
+    builtin-infoPlistUtility /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/AppAuth.build/Debug-iphonesimulator/AppAuth_AppAuthCore-b.build/empty-AppAuth_AppAuthCore.plist -producttype com.apple.product-type.bundle -expandbuildsettings -format binary -platform iphonesimulator -o /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/AppAuth_AppAuthCore.bundle/Info.plist
+
+ProcessInfoPlistFile /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/BlockNoteEditor_BlockNoteEditor.bundle/Info.plist /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/BlockNoteEditor.build/Debug-iphonesimulator/BlockNoteEditor_BlockNoteEditor-b.build/empty-BlockNoteEditor_BlockNoteEditor.plist (in target 'BlockNoteEditor_BlockNoteEditor' from project 'BlockNoteEditor')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/Packages/BlockNoteEditor
+    builtin-infoPlistUtility /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/BlockNoteEditor.build/Debug-iphonesimulator/BlockNoteEditor_BlockNoteEditor-b.build/empty-BlockNoteEditor_BlockNoteEditor.plist -producttype com.apple.product-type.bundle -expandbuildsettings -format binary -platform iphonesimulator -o /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/BlockNoteEditor_BlockNoteEditor.bundle/Info.plist
+
+ProcessInfoPlistFile /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/Alamofire_Alamofire.bundle/Info.plist /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/Alamofire.build/Debug-iphonesimulator/Alamofire_Alamofire-b.build/empty-Alamofire_Alamofire.plist (in target 'Alamofire_Alamofire' from project 'Alamofire')
+    cd /Users/didi/Library/Developer/Xcode/DerivedData/ArcNote-aybvwriajptjnqfsotseyzwxdivu/SourcePackages/checkouts/Alamofire
+    builtin-infoPlistUtility /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/Alamofire.build/Debug-iphonesimulator/Alamofire_Alamofire-b.build/empty-Alamofire_Alamofire.plist -producttype com.apple.product-type.bundle -expandbuildsettings -format binary -platform iphonesimulator -o /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/Alamofire_Alamofire.bundle/Info.plist
+
+ProcessInfoPlistFile /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/GoogleUtilities_GoogleUtilities-UserDefaults.bundle/Info.plist /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/GoogleUtilities.build/Debug-iphonesimulator/GoogleUtilities_GoogleUtilities-UserDefaults-b.build/empty-GoogleUtilities_GoogleUtilities-UserDefaults.plist (in target 'GoogleUtilities_GoogleUtilities-UserDefaults' from project 'GoogleUtilities')
+    cd /Users/didi/Library/Developer/Xcode/DerivedData/ArcNote-aybvwriajptjnqfsotseyzwxdivu/SourcePackages/checkouts/GoogleUtilities
+    builtin-infoPlistUtility /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/GoogleUtilities.build/Debug-iphonesimulator/GoogleUtilities_GoogleUtilities-UserDefaults-b.build/empty-GoogleUtilities_GoogleUtilities-UserDefaults.plist -producttype com.apple.product-type.bundle -expandbuildsettings -format binary -platform iphonesimulator -o /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/GoogleUtilities_GoogleUtilities-UserDefaults.bundle/Info.plist
+
+ProcessInfoPlistFile /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/GoogleSignIn_GoogleSignInSwift.bundle/Info.plist /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/GoogleSignIn.build/Debug-iphonesimulator/GoogleSignIn_GoogleSignInSwift-b.build/empty-GoogleSignIn_GoogleSignInSwift.plist (in target 'GoogleSignIn_GoogleSignInSwift' from project 'GoogleSignIn')
+    cd /Users/didi/Library/Developer/Xcode/DerivedData/ArcNote-aybvwriajptjnqfsotseyzwxdivu/SourcePackages/checkouts/GoogleSignIn-iOS
+    builtin-infoPlistUtility /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/GoogleSignIn.build/Debug-iphonesimulator/GoogleSignIn_GoogleSignInSwift-b.build/empty-GoogleSignIn_GoogleSignInSwift.plist -producttype com.apple.product-type.bundle -expandbuildsettings -format binary -platform iphonesimulator -o /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/GoogleSignIn_GoogleSignInSwift.bundle/Info.plist
+
+ProcessInfoPlistFile /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/GoogleSignIn_GoogleSignIn.bundle/Info.plist /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/GoogleSignIn.build/Debug-iphonesimulator/GoogleSignIn_GoogleSignIn-b.build/empty-GoogleSignIn_GoogleSignIn.plist (in target 'GoogleSignIn_GoogleSignIn' from project 'GoogleSignIn')
+    cd /Users/didi/Library/Developer/Xcode/DerivedData/ArcNote-aybvwriajptjnqfsotseyzwxdivu/SourcePackages/checkouts/GoogleSignIn-iOS
+    builtin-infoPlistUtility /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/GoogleSignIn.build/Debug-iphonesimulator/GoogleSignIn_GoogleSignIn-b.build/empty-GoogleSignIn_GoogleSignIn.plist -producttype com.apple.product-type.bundle -expandbuildsettings -format binary -platform iphonesimulator -o /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/GoogleSignIn_GoogleSignIn.bundle/Info.plist
+
+SwiftCompile normal arm64 Compiling\ MergeTaskRail.swift,\ MergeArtifactEditorSurface.swift /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/CoreFlow/MergeTaskRail.swift /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/CoreFlow/MergeArtifactEditorSurface.swift (in target 'ArcNote' from project 'ArcNote')
+
+SwiftCompile normal arm64 /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/CoreFlow/MergeTaskRail.swift (in target 'ArcNote' from project 'ArcNote')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend
+    builtin-SwiftPerFileCompile MergeTaskRail.swift
+
+SwiftCompile normal arm64 /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/CoreFlow/MergeArtifactEditorSurface.swift (in target 'ArcNote' from project 'ArcNote')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend
+    builtin-SwiftPerFileCompile MergeArtifactEditorSurface.swift
+
+SwiftCompile normal arm64 Compiling\ BlockNoteCardEditor.swift,\ CardEditorShell.swift,\ CardEditorMetadataRows.swift /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/CardEditor/BlockNoteCardEditor.swift /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/CardEditor/CardEditorShell.swift /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/CardEditor/CardEditorMetadataRows.swift (in target 'ArcNote' from project 'ArcNote')
+
+SwiftCompile normal arm64 /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/CardEditor/BlockNoteCardEditor.swift (in target 'ArcNote' from project 'ArcNote')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend
+    builtin-SwiftPerFileCompile BlockNoteCardEditor.swift
+
+SwiftCompile normal arm64 /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/CardEditor/CardEditorShell.swift (in target 'ArcNote' from project 'ArcNote')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend
+    builtin-SwiftPerFileCompile CardEditorShell.swift
+
+SwiftCompile normal arm64 /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/CardEditor/CardEditorMetadataRows.swift (in target 'ArcNote' from project 'ArcNote')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend
+    builtin-SwiftPerFileCompile CardEditorMetadataRows.swift
+
+SwiftCompile normal arm64 Compiling\ FlowViews.swift,\ MergeView.swift /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/CoreFlow/FlowViews.swift /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/MergeView.swift (in target 'ArcNote' from project 'ArcNote')
+
+SwiftCompile normal arm64 /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/CoreFlow/FlowViews.swift (in target 'ArcNote' from project 'ArcNote')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend
+    builtin-SwiftPerFileCompile FlowViews.swift
+
+SwiftCompile normal arm64 /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/MergeView.swift (in target 'ArcNote' from project 'ArcNote')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend
+    builtin-SwiftPerFileCompile MergeView.swift
+
+SwiftCompile normal arm64 Compiling\ PopupMenuView.swift,\ UserProfileView.swift /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/PopupMenuView.swift /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/UserProfileView.swift (in target 'ArcNote' from project 'ArcNote')
+
+SwiftCompile normal arm64 /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/PopupMenuView.swift (in target 'ArcNote' from project 'ArcNote')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend
+    builtin-SwiftPerFileCompile PopupMenuView.swift
+
+SwiftCompile normal arm64 /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/UserProfileView.swift (in target 'ArcNote' from project 'ArcNote')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend
+    builtin-SwiftPerFileCompile UserProfileView.swift
+
+SwiftCompile normal arm64 Compiling\ TabBarView.swift,\ ExploreView.swift /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/TabBarView.swift /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/ExploreView.swift (in target 'ArcNote' from project 'ArcNote')
+/Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/ExploreView.swift:125:67: warning: 'weak' ownership of capture 'cardsManager' differs from implicitly-captured strong reference in outer scope [#ImplicitStrongCapture]
+122 |         .foregroundStyle(ChoraiTheme.ink)
+123 |         .choraiPageBackground()
+124 |         .onAppear {
+    |                   |- note: 'cardsManager' implicitly strongly captured here
+    |                   `- note: add 'cardsManager' as a capture list item to silence
+125 |             CommentPopupManager.shared.onCommentCreated = { [weak cardsManager] cardID in cardsManager?.incrementCommentCount(for: cardID) }
+    |                                                                   |- warning: 'weak' ownership of capture 'cardsManager' differs from implicitly-captured strong reference in outer scope [#ImplicitStrongCapture]
+    |                                                                   `- note: explicitly assign the capture list item to silence
+126 |             #if DEBUG
+127 |             publishVisibleRecommendedCardForUITest()
+
+[#ImplicitStrongCapture]: <https://docs.swift.org/compiler/documentation/diagnostics/implicit-strong-capture>
+
+SwiftCompile normal arm64 /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/TabBarView.swift (in target 'ArcNote' from project 'ArcNote')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend
+    builtin-SwiftPerFileCompile TabBarView.swift
+
+SwiftCompile normal arm64 /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/ExploreView.swift (in target 'ArcNote' from project 'ArcNote')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend
+    builtin-SwiftPerFileCompile ExploreView.swift
+
+SwiftCompile normal arm64 Compiling\ FollowListView.swift,\ BlockedActorsView.swift /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/FollowListView.swift /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/BlockedActorsView.swift (in target 'ArcNote' from project 'ArcNote')
+
+SwiftCompile normal arm64 /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/FollowListView.swift (in target 'ArcNote' from project 'ArcNote')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend
+    builtin-SwiftPerFileCompile FollowListView.swift
+
+SwiftCompile normal arm64 /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/BlockedActorsView.swift (in target 'ArcNote' from project 'ArcNote')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend
+    builtin-SwiftPerFileCompile BlockedActorsView.swift
+
+SwiftCompile normal arm64 Compiling\ SparkView.swift,\ NewNoteView.swift /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/SparkView.swift /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/NewNoteView.swift (in target 'ArcNote' from project 'ArcNote')
+
+SwiftCompile normal arm64 /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/SparkView.swift (in target 'ArcNote' from project 'ArcNote')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend
+    builtin-SwiftPerFileCompile SparkView.swift
+
+SwiftCompile normal arm64 /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/NewNoteView.swift (in target 'ArcNote' from project 'ArcNote')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend
+    builtin-SwiftPerFileCompile NewNoteView.swift
+
+SwiftCompile normal arm64 Compiling\ AdaptiveLayout.swift,\ SparkContinuationViews.swift,\ MergeLifecycleViews.swift /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/AdaptiveLayout.swift /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/CoreFlow/SparkContinuationViews.swift /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/CoreFlow/MergeLifecycleViews.swift (in target 'ArcNote' from project 'ArcNote')
+
+SwiftCompile normal arm64 /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/AdaptiveLayout.swift (in target 'ArcNote' from project 'ArcNote')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend
+    builtin-SwiftPerFileCompile AdaptiveLayout.swift
+
+SwiftCompile normal arm64 /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/CoreFlow/SparkContinuationViews.swift (in target 'ArcNote' from project 'ArcNote')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend
+    builtin-SwiftPerFileCompile SparkContinuationViews.swift
+
+SwiftCompile normal arm64 /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/CoreFlow/MergeLifecycleViews.swift (in target 'ArcNote' from project 'ArcNote')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend
+    builtin-SwiftPerFileCompile MergeLifecycleViews.swift
+
+SwiftCompile normal arm64 Compiling\ DetailView.swift,\ ArcNoteApp.swift /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/DetailView.swift /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/ArcNoteApp.swift (in target 'ArcNote' from project 'ArcNote')
+
+SwiftCompile normal arm64 /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/DetailView.swift (in target 'ArcNote' from project 'ArcNote')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend
+    builtin-SwiftPerFileCompile DetailView.swift
+
+SwiftCompile normal arm64 /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/ArcNoteApp.swift (in target 'ArcNote' from project 'ArcNote')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend
+    builtin-SwiftPerFileCompile ArcNoteApp.swift
+
+SwiftCompile normal arm64 Compiling\ HomeView.swift,\ NewInsightView.swift /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/HomeView.swift /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/NewInsightView.swift (in target 'ArcNote' from project 'ArcNote')
+
+SwiftCompile normal arm64 /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/HomeView.swift (in target 'ArcNote' from project 'ArcNote')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend
+    builtin-SwiftPerFileCompile HomeView.swift
+
+SwiftCompile normal arm64 /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/NewInsightView.swift (in target 'ArcNote' from project 'ArcNote')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend
+    builtin-SwiftPerFileCompile NewInsightView.swift
+
+SwiftDriverJobDiscovery normal arm64 Compiling FollowListView.swift, BlockedActorsView.swift (in target 'ArcNote' from project 'ArcNote')
+
+ProcessInfoPlistFile /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/AppAuth_AppAuth.bundle/Info.plist /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/AppAuth.build/Debug-iphonesimulator/AppAuth_AppAuth-b.build/empty-AppAuth_AppAuth.plist (in target 'AppAuth_AppAuth' from project 'AppAuth')
+    cd /Users/didi/Library/Developer/Xcode/DerivedData/ArcNote-aybvwriajptjnqfsotseyzwxdivu/SourcePackages/checkouts/AppAuth-iOS
+    builtin-infoPlistUtility /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/AppAuth.build/Debug-iphonesimulator/AppAuth_AppAuth-b.build/empty-AppAuth_AppAuth.plist -producttype com.apple.product-type.bundle -expandbuildsettings -format binary -platform iphonesimulator -o /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/AppAuth_AppAuth.bundle/Info.plist
+
+SwiftDriverJobDiscovery normal arm64 Compiling BlockNoteCardEditor.swift, CardEditorShell.swift, CardEditorMetadataRows.swift (in target 'ArcNote' from project 'ArcNote')
+
+ExtractAppIntentsMetadata (in target 'CoreFlow' from project 'CoreFlow')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/Packages/CoreFlow
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsmetadataprocessor --toolchain-dir /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --module-name CoreFlow --sdk-root /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.1.sdk --xcode-version 27A9275 --platform-family iOS --deployment-target 16.0 --bundle-identifier coreflow.CoreFlow --output /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/CoreFlow.appintents --target-triple arm64-apple-ios16.0-simulator --binary-file /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/CoreFlow.o --dependency-file /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/CoreFlow.build/Debug-iphonesimulator/CoreFlow-t.build/Objects-normal/arm64/CoreFlow_dependency_info.dat --stringsdata-file /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/CoreFlow.build/Debug-iphonesimulator/CoreFlow-t.build/Objects-normal/arm64/ExtractedAppShortcutsMetadata.stringsdata --source-file-list /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/CoreFlow.build/Debug-iphonesimulator/CoreFlow-t.build/Objects-normal/arm64/CoreFlow.SwiftFileList --metadata-file-list /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/CoreFlow.build/Debug-iphonesimulator/CoreFlow-t.build/CoreFlow.DependencyMetadataFileList --static-metadata-file-list /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/CoreFlow.build/Debug-iphonesimulator/CoreFlow-t.build/CoreFlow.DependencyStaticMetadataFileList --swift-const-vals-list /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/CoreFlow.build/Debug-iphonesimulator/CoreFlow-t.build/Objects-normal/arm64/CoreFlow.SwiftConstValuesFileList --force --compile-time-extraction --deployment-aware-processing --no-app-shortcuts-localization
+2026-10-26 12:33:01.680 appintentsmetadataprocessor[74985:4177762] Starting appintentsmetadataprocessor export
+2026-10-26 12:33:01.801 appintentsmetadataprocessor[74985:4177762] Extracted no relevant App Intents symbols, skipping writing output
+
+SwiftDriverJobDiscovery normal arm64 Compiling MergeTaskRail.swift, MergeArtifactEditorSurface.swift (in target 'ArcNote' from project 'ArcNote')
+
+SwiftDriverJobDiscovery normal arm64 Compiling PopupMenuView.swift, UserProfileView.swift (in target 'ArcNote' from project 'ArcNote')
+
+SwiftDriverJobDiscovery normal arm64 Compiling FlowViews.swift, MergeView.swift (in target 'ArcNote' from project 'ArcNote')
+
+SwiftDriverJobDiscovery normal arm64 Compiling SparkView.swift, NewNoteView.swift (in target 'ArcNote' from project 'ArcNote')
+
+SwiftDriverJobDiscovery normal arm64 Compiling TabBarView.swift, ExploreView.swift (in target 'ArcNote' from project 'ArcNote')
+
+SwiftDriverJobDiscovery normal arm64 Compiling ArcNoteUITests.swift (in target 'ArcNoteUITests' from project 'ArcNote')
+
+SwiftDriver\ Compilation ArcNoteUITests normal arm64 com.apple.xcode.tools.swift.compiler (in target 'ArcNoteUITests' from project 'ArcNote')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend
+    builtin-Swift-Compilation -- /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name ArcNoteUITests -Onone @/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNoteUITests.build/Objects-normal/arm64/ArcNoteUITests.SwiftFileList -DDEBUG -module-alias Testing\=_Testing_Unavailable -plugin-path /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing -enable-bare-slash-regex -enable-experimental-feature DebugDescriptionMacro -sdk /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.1.sdk -target arm64-apple-ios16.0-simulator -g -module-cache-path /tmp/chorai-ios-reform-derived/ModuleCache.noindex -Xfrontend -serialize-debugging-options -enable-testing -index-store-path /tmp/chorai-ios-reform-derived/Index.noindex/DataStore -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -swift-version 5 -I /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator -Isystem /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib -F /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator -F /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks -F /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.1.sdk/Developer/Library/Frameworks -c -j10 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc /tmp/chorai-ios-reform-derived/SDKStatCaches.noindex/iphonesimulator27.1-24A94232-35d3147121984ba087c28d913653d626.sdkstatcache -output-file-map /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNoteUITests.build/Objects-normal/arm64/ArcNoteUITests-OutputFileMap.json -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path /tmp/chorai-ios-reform-derived/ModuleCache.noindex -sdk-module-cache-path /tmp/chorai-ios-reform-derived/SDKExplicitPrecompiledModules -emit-dependencies -emit-module -emit-module-path /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNoteUITests.build/Objects-normal/arm64/ArcNoteUITests.swiftmodule -serialize-diagnostics -dependency-scan-serialize-diagnostics-path /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNoteUITests.build/Objects-normal/arm64/ArcNoteUITests-dependency-scan.dia -validate-clang-modules-once -clang-build-session-file /tmp/chorai-ios-reform-derived/ModuleCache.noindex/Session.modulevalidation -Xcc -fmodules-prune-interval\=86400 -Xcc -fmodules-prune-after\=345600 -emit-const-values -const-gather-protocols-list /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNoteUITests.build/Objects-normal/arm64/ArcNoteUITests_const_extract_protocols.json -Xcc -iquote -Xcc /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNoteUITests.build/ArcNoteUITests-generated-files.hmap -Xcc -I/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNoteUITests.build/ArcNoteUITests-own-target-headers.hmap -Xcc -I/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNoteUITests.build/ArcNoteUITests-all-non-framework-target-headers.hmap -Xcc -ivfsoverlay -Xcc /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote-c9f338de1635ad2f8d7835649ac88264-VFS-iphonesimulator/all-product-headers.yaml -Xcc -iquote -Xcc /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNoteUITests.build/ArcNoteUITests-project-headers.hmap -Xcc -I/tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/include -Xcc -I/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNoteUITests.build/DerivedSources-normal/arm64 -Xcc -I/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNoteUITests.build/DerivedSources/arm64 -Xcc -I/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNoteUITests.build/DerivedSources -Xcc -DDEBUG\=1 -emit-objc-header -emit-objc-header-path /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNoteUITests.build/Objects-normal/arm64/ArcNoteUITests-Swift.h -working-directory /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend -experimental-emit-module-separately -disable-cmo
+
+SwiftDriverJobDiscovery normal arm64 Emitting module for ArcNoteUITests (in target 'ArcNoteUITests' from project 'ArcNote')
+
+SwiftDriver\ Compilation\ Requirements ArcNoteUITests normal arm64 com.apple.xcode.tools.swift.compiler (in target 'ArcNoteUITests' from project 'ArcNote')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend
+    builtin-Swift-Compilation-Requirements -- /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name ArcNoteUITests -Onone @/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNoteUITests.build/Objects-normal/arm64/ArcNoteUITests.SwiftFileList -DDEBUG -module-alias Testing\=_Testing_Unavailable -plugin-path /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing -enable-bare-slash-regex -enable-experimental-feature DebugDescriptionMacro -sdk /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.1.sdk -target arm64-apple-ios16.0-simulator -g -module-cache-path /tmp/chorai-ios-reform-derived/ModuleCache.noindex -Xfrontend -serialize-debugging-options -enable-testing -index-store-path /tmp/chorai-ios-reform-derived/Index.noindex/DataStore -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -swift-version 5 -I /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator -Isystem /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib -F /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator -F /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks -F /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.1.sdk/Developer/Library/Frameworks -c -j10 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc /tmp/chorai-ios-reform-derived/SDKStatCaches.noindex/iphonesimulator27.1-24A94232-35d3147121984ba087c28d913653d626.sdkstatcache -output-file-map /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNoteUITests.build/Objects-normal/arm64/ArcNoteUITests-OutputFileMap.json -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path /tmp/chorai-ios-reform-derived/ModuleCache.noindex -sdk-module-cache-path /tmp/chorai-ios-reform-derived/SDKExplicitPrecompiledModules -emit-dependencies -emit-module -emit-module-path /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNoteUITests.build/Objects-normal/arm64/ArcNoteUITests.swiftmodule -serialize-diagnostics -dependency-scan-serialize-diagnostics-path /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNoteUITests.build/Objects-normal/arm64/ArcNoteUITests-dependency-scan.dia -validate-clang-modules-once -clang-build-session-file /tmp/chorai-ios-reform-derived/ModuleCache.noindex/Session.modulevalidation -Xcc -fmodules-prune-interval\=86400 -Xcc -fmodules-prune-after\=345600 -emit-const-values -const-gather-protocols-list /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNoteUITests.build/Objects-normal/arm64/ArcNoteUITests_const_extract_protocols.json -Xcc -iquote -Xcc /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNoteUITests.build/ArcNoteUITests-generated-files.hmap -Xcc -I/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNoteUITests.build/ArcNoteUITests-own-target-headers.hmap -Xcc -I/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNoteUITests.build/ArcNoteUITests-all-non-framework-target-headers.hmap -Xcc -ivfsoverlay -Xcc /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote-c9f338de1635ad2f8d7835649ac88264-VFS-iphonesimulator/all-product-headers.yaml -Xcc -iquote -Xcc /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNoteUITests.build/ArcNoteUITests-project-headers.hmap -Xcc -I/tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/include -Xcc -I/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNoteUITests.build/DerivedSources-normal/arm64 -Xcc -I/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNoteUITests.build/DerivedSources/arm64 -Xcc -I/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNoteUITests.build/DerivedSources -Xcc -DDEBUG\=1 -emit-objc-header -emit-objc-header-path /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNoteUITests.build/Objects-normal/arm64/ArcNoteUITests-Swift.h -working-directory /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend -experimental-emit-module-separately -disable-cmo
+
+Copy /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/ArcNoteUITests.swiftmodule/arm64-apple-ios-simulator.abi.json /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNoteUITests.build/Objects-normal/arm64/ArcNoteUITests.abi.json (in target 'ArcNoteUITests' from project 'ArcNote')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks -rename /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNoteUITests.build/Objects-normal/arm64/ArcNoteUITests.abi.json /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/ArcNoteUITests.swiftmodule/arm64-apple-ios-simulator.abi.json
+
+Copy /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/ArcNoteUITests.swiftmodule/arm64-apple-ios-simulator.swiftmodule /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNoteUITests.build/Objects-normal/arm64/ArcNoteUITests.swiftmodule (in target 'ArcNoteUITests' from project 'ArcNote')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks -rename /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNoteUITests.build/Objects-normal/arm64/ArcNoteUITests.swiftmodule /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/ArcNoteUITests.swiftmodule/arm64-apple-ios-simulator.swiftmodule
+
+Copy /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/ArcNoteUITests.swiftmodule/Project/arm64-apple-ios-simulator.swiftsourceinfo /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNoteUITests.build/Objects-normal/arm64/ArcNoteUITests.swiftsourceinfo (in target 'ArcNoteUITests' from project 'ArcNote')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks -rename /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNoteUITests.build/Objects-normal/arm64/ArcNoteUITests.swiftsourceinfo /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/ArcNoteUITests.swiftmodule/Project/arm64-apple-ios-simulator.swiftsourceinfo
+
+SwiftDriverJobDiscovery normal arm64 Compiling AdaptiveLayout.swift, SparkContinuationViews.swift, MergeLifecycleViews.swift (in target 'ArcNote' from project 'ArcNote')
+
+SwiftDriverJobDiscovery normal arm64 Compiling HomeView.swift, NewInsightView.swift (in target 'ArcNote' from project 'ArcNote')
+
+SwiftDriverJobDiscovery normal arm64 Compiling DetailView.swift, ArcNoteApp.swift (in target 'ArcNote' from project 'ArcNote')
+
+SwiftCompile normal arm64 Compiling\ LinkPopupView.swift /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/LinkPopupView.swift (in target 'ArcNote' from project 'ArcNote')
+
+SwiftCompile normal arm64 /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/LinkPopupView.swift (in target 'ArcNote' from project 'ArcNote')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend
+    builtin-SwiftPerFileCompile LinkPopupView.swift
+
+SwiftCompile normal arm64 Compiling\ WebView.swift /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/WebView.swift (in target 'ArcNote' from project 'ArcNote')
+
+SwiftCompile normal arm64 /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/WebView.swift (in target 'ArcNote' from project 'ArcNote')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend
+    builtin-SwiftPerFileCompile WebView.swift
+
+SwiftCompile normal arm64 Compiling\ MyProfileView.swift /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/MyProfileView.swift (in target 'ArcNote' from project 'ArcNote')
+
+SwiftCompile normal arm64 /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/MyProfileView.swift (in target 'ArcNote' from project 'ArcNote')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend
+    builtin-SwiftPerFileCompile MyProfileView.swift
+
+SwiftCompile normal arm64 Compiling\ NotificationView.swift /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/NotificationView.swift (in target 'ArcNote' from project 'ArcNote')
+
+SwiftCompile normal arm64 /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/NotificationView.swift (in target 'ArcNote' from project 'ArcNote')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend
+    builtin-SwiftPerFileCompile NotificationView.swift
+
+SwiftCompile normal arm64 Compiling\ ChatView.swift,\ EditProfileView.swift /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/ChatView.swift /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/EditProfileView.swift (in target 'ArcNote' from project 'ArcNote')
+
+SwiftCompile normal arm64 /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/ChatView.swift (in target 'ArcNote' from project 'ArcNote')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend
+    builtin-SwiftPerFileCompile ChatView.swift
+
+SwiftCompile normal arm64 /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/EditProfileView.swift (in target 'ArcNote' from project 'ArcNote')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend
+    builtin-SwiftPerFileCompile EditProfileView.swift
+
+SwiftCompile normal arm64 Compiling\ TrashView.swift /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/TrashView.swift (in target 'ArcNote' from project 'ArcNote')
+
+SwiftCompile normal arm64 /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/TrashView.swift (in target 'ArcNote' from project 'ArcNote')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend
+    builtin-SwiftPerFileCompile TrashView.swift
+
+SwiftCompile normal arm64 Compiling\ AccountDetailsView.swift,\ RootView.swift /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/AccountDetailsView.swift /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/RootView.swift (in target 'ArcNote' from project 'ArcNote')
+
+SwiftCompile normal arm64 /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/AccountDetailsView.swift (in target 'ArcNote' from project 'ArcNote')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend
+    builtin-SwiftPerFileCompile AccountDetailsView.swift
+
+SwiftCompile normal arm64 /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/RootView.swift (in target 'ArcNote' from project 'ArcNote')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend
+    builtin-SwiftPerFileCompile RootView.swift
+
+SwiftCompile normal arm64 Compiling\ SideMenuView.swift,\ APIAndPluginsView.swift /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/SideMenuView.swift /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/APIAndPluginsView.swift (in target 'ArcNote' from project 'ArcNote')
+
+SwiftCompile normal arm64 /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/SideMenuView.swift (in target 'ArcNote' from project 'ArcNote')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend
+    builtin-SwiftPerFileCompile SideMenuView.swift
+
+SwiftCompile normal arm64 /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/APIAndPluginsView.swift (in target 'ArcNote' from project 'ArcNote')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend
+    builtin-SwiftPerFileCompile APIAndPluginsView.swift
+
+SwiftCompile normal arm64 Compiling\ PreferencesView.swift,\ CommentPopupView.swift /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/PreferencesView.swift /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/CommentPopupView.swift (in target 'ArcNote' from project 'ArcNote')
+
+SwiftCompile normal arm64 /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/PreferencesView.swift (in target 'ArcNote' from project 'ArcNote')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend
+    builtin-SwiftPerFileCompile PreferencesView.swift
+
+SwiftCompile normal arm64 /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/CommentPopupView.swift (in target 'ArcNote' from project 'ArcNote')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend
+    builtin-SwiftPerFileCompile CommentPopupView.swift
+
+SwiftCompile normal arm64 Compiling\ SettingsView.swift,\ ChatDetailView.swift /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/SettingsView.swift /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/ChatDetailView.swift (in target 'ArcNote' from project 'ArcNote')
+
+SwiftCompile normal arm64 /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/SettingsView.swift (in target 'ArcNote' from project 'ArcNote')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend
+    builtin-SwiftPerFileCompile SettingsView.swift
+
+SwiftCompile normal arm64 /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/ChatDetailView.swift (in target 'ArcNote' from project 'ArcNote')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend
+    builtin-SwiftPerFileCompile ChatDetailView.swift
+
+/Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/ChatDetailView.swift:680:61: warning: 'weak' ownership of capture 'manager' differs from implicitly-captured strong reference in outer scope [#ImplicitStrongCapture]
+ 676 |                     }
+ 677 |                 }
+ 678 |                 .onChange(of: searchText) { newValue in
+     |                                           |- note: 'manager' implicitly strongly captured here
+     |                                           `- note: add 'manager' as a capture list item to silence
+ 679 |                     searchWorkItem?.cancel()
+ 680 |                     let workItem = DispatchWorkItem { [weak manager] in
+     |                                                             |- warning: 'weak' ownership of capture 'manager' differs from implicitly-captured strong reference in outer scope [#ImplicitStrongCapture]
+     |                                                             `- note: explicitly assign the capture list item to silence
+ 681 |                         manager?.fetchCards(searchText: newValue)
+ 682 |                     }
+
+[#ImplicitStrongCapture]: <https://docs.swift.org/compiler/documentation/diagnostics/implicit-strong-capture>
+SwiftDriverJobDiscovery normal arm64 Compiling WebView.swift (in target 'ArcNote' from project 'ArcNote')
+
+SwiftDriverJobDiscovery normal arm64 Compiling LinkPopupView.swift (in target 'ArcNote' from project 'ArcNote')
+
+SwiftDriverJobDiscovery normal arm64 Compiling AccountDetailsView.swift, RootView.swift (in target 'ArcNote' from project 'ArcNote')
+
+SwiftDriverJobDiscovery normal arm64 Compiling TrashView.swift (in target 'ArcNote' from project 'ArcNote')
+
+SwiftDriverJobDiscovery normal arm64 Compiling NotificationView.swift (in target 'ArcNote' from project 'ArcNote')
+
+SwiftDriverJobDiscovery normal arm64 Compiling MyProfileView.swift (in target 'ArcNote' from project 'ArcNote')
+
+SwiftDriverJobDiscovery normal arm64 Compiling SideMenuView.swift, APIAndPluginsView.swift (in target 'ArcNote' from project 'ArcNote')
+
+SwiftDriverJobDiscovery normal arm64 Compiling PreferencesView.swift, CommentPopupView.swift (in target 'ArcNote' from project 'ArcNote')
+
+SwiftDriverJobDiscovery normal arm64 Compiling ChatView.swift, EditProfileView.swift (in target 'ArcNote' from project 'ArcNote')
+
+SwiftDriverJobDiscovery normal arm64 Compiling SettingsView.swift, ChatDetailView.swift (in target 'ArcNote' from project 'ArcNote')
+
+SwiftDriver\ Compilation ArcNote normal arm64 com.apple.xcode.tools.swift.compiler (in target 'ArcNote' from project 'ArcNote')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend
+    builtin-Swift-Compilation -- /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name ArcNote -Onone @/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/Objects-normal/arm64/ArcNote.SwiftFileList -DDEBUG -Xcc -fmodule-map-file\=/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/GeneratedModuleMaps-iphonesimulator/AppAuth.modulemap -Xcc -fmodule-map-file\=/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/GeneratedModuleMaps-iphonesimulator/AppAuthCore.modulemap -Xcc -fmodule-map-file\=/Users/didi/Library/Developer/Xcode/DerivedData/ArcNote-aybvwriajptjnqfsotseyzwxdivu/SourcePackages/checkouts/promises/Sources/FBLPromises/include/module.modulemap -Xcc -fmodule-map-file\=/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/GeneratedModuleMaps-iphonesimulator/GoogleUtilities-Logger.modulemap -Xcc -fmodule-map-file\=/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/GeneratedModuleMaps-iphonesimulator/GoogleUtilities-Environment.modulemap -Xcc -fmodule-map-file\=/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/GeneratedModuleMaps-iphonesimulator/third-party-IsAppEncrypted.modulemap -Xcc -fmodule-map-file\=/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/GeneratedModuleMaps-iphonesimulator/GoogleUtilities-UserDefaults.modulemap -Xcc -fmodule-map-file\=/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/GeneratedModuleMaps-iphonesimulator/AppCheckCore.modulemap -Xcc -fmodule-map-file\=/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/GeneratedModuleMaps-iphonesimulator/GTMSessionFetcherCore.modulemap -Xcc -fmodule-map-file\=/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/GeneratedModuleMaps-iphonesimulator/GoogleSignIn.modulemap -enable-bare-slash-regex -enable-experimental-feature DebugDescriptionMacro -sdk /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.1.sdk -target arm64-apple-ios16.0-simulator -g -module-cache-path /tmp/chorai-ios-reform-derived/ModuleCache.noindex -Xfrontend -serialize-debugging-options -enable-testing -index-store-path /tmp/chorai-ios-reform-derived/Index.noindex/DataStore -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -swift-version 5 -I /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator -F /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/PackageFrameworks -F /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator -emit-localized-strings -emit-localized-strings-path /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/Objects-normal/arm64 -c -j10 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc /tmp/chorai-ios-reform-derived/SDKStatCaches.noindex/iphonesimulator27.1-24A94232-35d3147121984ba087c28d913653d626.sdkstatcache -output-file-map /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/Objects-normal/arm64/ArcNote-OutputFileMap.json -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path /tmp/chorai-ios-reform-derived/ModuleCache.noindex -sdk-module-cache-path /tmp/chorai-ios-reform-derived/SDKExplicitPrecompiledModules -emit-dependencies -emit-module -emit-module-path /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/Objects-normal/arm64/ArcNote.swiftmodule -serialize-diagnostics -dependency-scan-serialize-diagnostics-path /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/Objects-normal/arm64/ArcNote-dependency-scan.dia -validate-clang-modules-once -clang-build-session-file /tmp/chorai-ios-reform-derived/ModuleCache.noindex/Session.modulevalidation -Xcc -fmodules-prune-interval\=86400 -Xcc -fmodules-prune-after\=345600 -emit-const-values -const-gather-protocols-list /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/Objects-normal/arm64/ArcNote_const_extract_protocols.json -Xcc -iquote -Xcc /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/ArcNote-generated-files.hmap -Xcc -I/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/ArcNote-own-target-headers.hmap -Xcc -I/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/ArcNote-all-non-framework-target-headers.hmap -Xcc -ivfsoverlay -Xcc /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote-c9f338de1635ad2f8d7835649ac88264-VFS-iphonesimulator/all-product-headers.yaml -Xcc -iquote -Xcc /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/ArcNote-project-headers.hmap -Xcc -I/Users/didi/Library/Developer/Xcode/DerivedData/ArcNote-aybvwriajptjnqfsotseyzwxdivu/SourcePackages/checkouts/AppAuth-iOS/Sources/AppAuth -Xcc -I/Users/didi/Library/Developer/Xcode/DerivedData/ArcNote-aybvwriajptjnqfsotseyzwxdivu/SourcePackages/checkouts/AppAuth-iOS/Sources/AppAuthCore -Xcc -I/Users/didi/Library/Developer/Xcode/DerivedData/ArcNote-aybvwriajptjnqfsotseyzwxdivu/SourcePackages/checkouts/promises/Sources/FBLPromises/include -Xcc -I/Users/didi/Library/Developer/Xcode/DerivedData/ArcNote-aybvwriajptjnqfsotseyzwxdivu/SourcePackages/checkouts/GoogleUtilities/GoogleUtilities/Logger/Public -Xcc -I/Users/didi/Library/Developer/Xcode/DerivedData/ArcNote-aybvwriajptjnqfsotseyzwxdivu/SourcePackages/checkouts/GoogleUtilities/GoogleUtilities/Environment/Public -Xcc -I/Users/didi/Library/Developer/Xcode/DerivedData/ArcNote-aybvwriajptjnqfsotseyzwxdivu/SourcePackages/checkouts/GoogleUtilities/third_party/IsAppEncrypted/Public -Xcc -I/Users/didi/Library/Developer/Xcode/DerivedData/ArcNote-aybvwriajptjnqfsotseyzwxdivu/SourcePackages/checkouts/GoogleUtilities/GoogleUtilities/UserDefaults/Public -Xcc -I/Users/didi/Library/Developer/Xcode/DerivedData/ArcNote-aybvwriajptjnqfsotseyzwxdivu/SourcePackages/checkouts/app-check/AppCheckCore/Sources/Public -Xcc -I/Users/didi/Library/Developer/Xcode/DerivedData/ArcNote-aybvwriajptjnqfsotseyzwxdivu/SourcePackages/checkouts/gtm-session-fetcher/Sources/Core/Public -Xcc -I/Users/didi/Library/Developer/Xcode/DerivedData/ArcNote-aybvwriajptjnqfsotseyzwxdivu/SourcePackages/checkouts/GoogleSignIn-iOS/GoogleSignIn/Sources/Public -Xcc -I/tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/include -Xcc -I/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/DerivedSources-normal/arm64 -Xcc -I/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/DerivedSources/arm64 -Xcc -I/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/DerivedSources -Xcc -DDEBUG\=1 -emit-objc-header -emit-objc-header-path /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/Objects-normal/arm64/ArcNote-Swift.h -working-directory /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend -experimental-emit-module-separately -disable-cmo
+
+Ld /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/ArcNote.app/ArcNote.debug.dylib normal (in target 'ArcNote' from project 'ArcNote')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -Xlinker -reproducible -target arm64-apple-ios16.0-simulator -dynamiclib -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.1.sdk -O0 -Xlinker -no_warn_duplicate_libraries -L/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/EagerLinkingTBDs/Debug-iphonesimulator -L/tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator -F/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/EagerLinkingTBDs/Debug-iphonesimulator -F/tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/PackageFrameworks -F/tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator -filelist /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/Objects-normal/arm64/ArcNote.LinkFileList -install_name @rpath/ArcNote.debug.dylib -Xlinker -rpath -Xlinker /usr/lib/swift -Xlinker -rpath -Xlinker @loader_path -Xlinker -rpath -Xlinker /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/PackageFrameworks -Xlinker -rpath -Xlinker @executable_path/Frameworks -Xlinker -dead_strip -Xlinker -object_path_lto -Xlinker /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/Objects-normal/arm64/ArcNote_lto.o -rdynamic -Xlinker -no_deduplicate -Xlinker -objc_abi_version -Xlinker 2 -Xlinker -dependency_info -Xlinker /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/Objects-normal/arm64/ArcNote_dependency_info.dat -fobjc-link-runtime -L/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/iphonesimulator -L/usr/lib/swift -Xlinker -add_ast_path -Xlinker /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/Objects-normal/arm64/ArcNote.swiftmodule -framework CFNetwork -framework CoreGraphics -framework CoreText -framework Foundation -framework LocalAuthentication -framework Security -framework UIKit -framework Security -framework DeviceCheck -framework WebKit -Xlinker -alias -Xlinker _main -Xlinker ___debug_main_executable_dylib_entry_point -o /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/ArcNote.app/ArcNote.debug.dylib
+
+ConstructStubExecutorLinkFileList /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/ArcNote-ExecutorLinkFileList-normal-arm64.txt (in target 'ArcNote' from project 'ArcNote')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend
+    construct-stub-executor-link-file-list /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/ArcNote.app/ArcNote.debug.dylib /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/libPreviewsJITStubExecutor_no_swift_entry_point.a /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/libPreviewsJITStubExecutor.a --output /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/ArcNote-ExecutorLinkFileList-normal-arm64.txt
+note: Using stub executor library with Swift entry point. (in target 'ArcNote' from project 'ArcNote')
+
+Ld /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/ArcNote.app/ArcNote normal (in target 'ArcNote' from project 'ArcNote')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -Xlinker -reproducible -target arm64-apple-ios16.0-simulator -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.1.sdk -O0 -Xlinker -no_warn_duplicate_libraries -L/tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator -F/tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/PackageFrameworks -F/tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator -Xlinker -rpath -Xlinker @executable_path -Xlinker -rpath -Xlinker @loader_path -Xlinker -rpath -Xlinker /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/PackageFrameworks -Xlinker -rpath -Xlinker @executable_path/Frameworks -rdynamic -Xlinker -no_deduplicate -Xlinker -objc_abi_version -Xlinker 2 -e ___debug_blank_executor_main -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __debug_dylib -Xlinker /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/ArcNote-DebugDylibPath-normal-arm64.txt -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __debug_instlnm -Xlinker /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/ArcNote-DebugDylibInstallName-normal-arm64.txt -Xlinker -filelist -Xlinker /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/ArcNote-ExecutorLinkFileList-normal-arm64.txt /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/ArcNote.app/ArcNote.debug.dylib -o /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/ArcNote.app/ArcNote
+
+CopySwiftLibs /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/ArcNote.app (in target 'ArcNote' from project 'ArcNote')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend
+    builtin-swiftStdLibTool --copy --verbose --scan-executable /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/ArcNote.app/ArcNote.debug.dylib --scan-folder /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/ArcNote.app/Frameworks --scan-folder /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/ArcNote.app/PlugIns --scan-folder /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/ArcNote.app/SystemExtensions --scan-folder /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/ArcNote.app/Extensions --platform iphonesimulator --toolchain /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --destination /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/ArcNote.app/Frameworks --strip-bitcode --strip-bitcode-tool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/bitcode_strip --emit-dependency-info /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/SwiftStdLibToolInputDependencies.dep --filter-for-swift-os
+Ignoring --strip-bitcode because --sign was not passed
+
+ExtractAppIntentsMetadata (in target 'ArcNote' from project 'ArcNote')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsmetadataprocessor --toolchain-dir /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --module-name ArcNote --sdk-root /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.1.sdk --xcode-version 27A9275 --platform-family iOS --deployment-target 16.0 --bundle-identifier com.michen.arcnote --output /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/ArcNote.app --target-triple arm64-apple-ios16.0-simulator --binary-file /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/ArcNote.app/ArcNote --dependency-file /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/Objects-normal/arm64/ArcNote_dependency_info.dat --stringsdata-file /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/Objects-normal/arm64/ExtractedAppShortcutsMetadata.stringsdata --source-file-list /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/Objects-normal/arm64/ArcNote.SwiftFileList --metadata-file-list /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/ArcNote.DependencyMetadataFileList --static-metadata-file-list /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/ArcNote.DependencyStaticMetadataFileList --swift-const-vals-list /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/Objects-normal/arm64/ArcNote.SwiftConstValuesFileList --compile-time-extraction --deployment-aware-processing --no-app-shortcuts-localization
+2026-10-26 12:33:08.458 appintentsmetadataprocessor[75056:4178158] Starting appintentsmetadataprocessor export
+2026-10-26 12:33:08.460 appintentsmetadataprocessor[75056:4178158] warning: Metadata extraction skipped, no AppIntents.framework dependency found
+
+Copy /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/ArcNote.app/GoogleSignIn_GoogleSignIn.bundle /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/GoogleSignIn_GoogleSignIn.bundle (in target 'ArcNote' from project 'ArcNote')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/GoogleSignIn_GoogleSignIn.bundle /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/ArcNote.app
+
+ProcessInfoPlistFile /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/ArcNote.app/Info.plist /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/Info.plist (in target 'ArcNote' from project 'ArcNote')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend
+    builtin-infoPlistUtility /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote/Info.plist -producttype com.apple.product-type.application -genpkginfo /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/ArcNote.app/PkgInfo -expandbuildsettings -format binary -platform iphonesimulator -additionalcontentfile /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/Launch\ Screen-SBPartialInfo.plist -additionalcontentfile /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNote.build/assetcatalog_generated_info.plist -scanforprivacyfile /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/ArcNote.app/Alamofire_Alamofire.bundle -scanforprivacyfile /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/ArcNote.app/AppAuth_AppAuth.bundle -scanforprivacyfile /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/ArcNote.app/AppAuth_AppAuthCore.bundle -scanforprivacyfile /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/ArcNote.app/BlockNoteEditor_BlockNoteEditor.bundle -scanforprivacyfile /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/ArcNote.app/GTMAppAuth_GTMAppAuth.bundle -scanforprivacyfile /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/ArcNote.app/GTMSessionFetcher_GTMSessionFetcherCore.bundle -scanforprivacyfile /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/ArcNote.app/GoogleSignIn_GoogleSignIn.bundle -scanforprivacyfile /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/ArcNote.app/GoogleSignIn_GoogleSignInSwift.bundle -scanforprivacyfile /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/ArcNote.app/GoogleUtilities_GoogleUtilities-Environment.bundle -scanforprivacyfile /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/ArcNote.app/GoogleUtilities_GoogleUtilities-Logger.bundle -scanforprivacyfile /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/ArcNote.app/GoogleUtilities_GoogleUtilities-UserDefaults.bundle -scanforprivacyfile /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/ArcNote.app/Promises_FBLPromises.bundle -scanforprivacyfile /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/ArcNote.app/SwiftyJSON_SwiftyJSON.bundle -o /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/ArcNote.app/Info.plist
+
+Ld /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/ArcNoteUITests-Runner.app/PlugIns/ArcNoteUITests.xctest/ArcNoteUITests normal (in target 'ArcNoteUITests' from project 'ArcNote')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -Xlinker -reproducible -target arm64-apple-ios16.0-simulator -bundle -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.1.sdk -O0 -Xlinker -no_warn_duplicate_libraries -L/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/EagerLinkingTBDs/Debug-iphonesimulator -L/tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator -L/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib -F/tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/EagerLinkingTBDs/Debug-iphonesimulator -F/tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator -iframework /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks -iframework /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.1.sdk/Developer/Library/Frameworks -filelist /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNoteUITests.build/Objects-normal/arm64/ArcNoteUITests.LinkFileList -Xlinker -rpath -Xlinker /usr/lib/swift -Xlinker -rpath -Xlinker @loader_path/Frameworks -Xlinker -dead_strip -Xlinker -object_path_lto -Xlinker /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNoteUITests.build/Objects-normal/arm64/ArcNoteUITests_lto.o -rdynamic -Xlinker -no_deduplicate -Xlinker -objc_abi_version -Xlinker 2 -Xlinker -dependency_info -Xlinker /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNoteUITests.build/Objects-normal/arm64/ArcNoteUITests_dependency_info.dat -fobjc-link-runtime -L/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/iphonesimulator -L/usr/lib/swift -Xlinker -add_ast_path -Xlinker /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNoteUITests.build/Objects-normal/arm64/ArcNoteUITests.swiftmodule -Xlinker -needed_framework -Xlinker XCTest -framework XCTest -Xlinker -needed-lXCTestSwiftSupport -lXCTestSwiftSupport -o /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/ArcNoteUITests-Runner.app/PlugIns/ArcNoteUITests.xctest/ArcNoteUITests
+/Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote.xcodeproj: ArcNoteUITests: ld: warning: building for iOS-simulator-16.0, but linking with dylib '@rpath/XCTest.framework/XCTest' which was built for newer version 17.0
+/Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote.xcodeproj: ArcNoteUITests: ld: warning: building for iOS-simulator-16.0, but linking with dylib '@rpath/libXCTestSwiftSupport.dylib' which was built for newer version 17.0
+/Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/ArcNote.xcodeproj: ArcNoteUITests: ld: warning: building for iOS-simulator-16.0, but linking with dylib '@rpath/XCUIAutomation.framework/XCUIAutomation' which was built for newer version 17.0
+
+ExtractAppIntentsMetadata (in target 'ArcNoteUITests' from project 'ArcNote')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsmetadataprocessor --toolchain-dir /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --module-name ArcNoteUITests --sdk-root /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.1.sdk --xcode-version 27A9275 --platform-family iOS --deployment-target 16.0 --bundle-identifier com.michen.arcnoteUITests --output /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/ArcNoteUITests-Runner.app/PlugIns/ArcNoteUITests.xctest --target-triple arm64-apple-ios16.0-simulator --binary-file /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/ArcNoteUITests-Runner.app/PlugIns/ArcNoteUITests.xctest/ArcNoteUITests --dependency-file /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNoteUITests.build/Objects-normal/arm64/ArcNoteUITests_dependency_info.dat --stringsdata-file /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNoteUITests.build/Objects-normal/arm64/ExtractedAppShortcutsMetadata.stringsdata --source-file-list /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNoteUITests.build/Objects-normal/arm64/ArcNoteUITests.SwiftFileList --metadata-file-list /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNoteUITests.build/ArcNoteUITests.DependencyMetadataFileList --static-metadata-file-list /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNoteUITests.build/ArcNoteUITests.DependencyStaticMetadataFileList --swift-const-vals-list /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNoteUITests.build/Objects-normal/arm64/ArcNoteUITests.SwiftConstValuesFileList --compile-time-extraction --deployment-aware-processing --no-app-shortcuts-localization
+2026-10-26 12:33:08.644 appintentsmetadataprocessor[75060:4178173] Starting appintentsmetadataprocessor export
+2026-10-26 12:33:08.645 appintentsmetadataprocessor[75060:4178173] warning: Metadata extraction skipped, no AppIntents.framework dependency found
+
+ProcessInfoPlistFile /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/ArcNoteUITests-Runner.app/PlugIns/ArcNoteUITests.xctest/Info.plist /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNoteUITests.build/empty-ArcNoteUITests.plist (in target 'ArcNoteUITests' from project 'ArcNote')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend
+    builtin-infoPlistUtility /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNoteUITests.build/empty-ArcNoteUITests.plist -producttype com.apple.product-type.bundle.ui-testing -expandbuildsettings -format binary -platform iphonesimulator -additionalcontentfile /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNoteUITests.build/ProductTypeInfoPlistAdditions.plist -o /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/ArcNoteUITests-Runner.app/PlugIns/ArcNoteUITests.xctest/Info.plist
+
+CopySwiftLibs /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/ArcNoteUITests-Runner.app/PlugIns/ArcNoteUITests.xctest (in target 'ArcNoteUITests' from project 'ArcNote')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend
+    builtin-swiftStdLibTool --copy --verbose --scan-executable /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/ArcNoteUITests-Runner.app/PlugIns/ArcNoteUITests.xctest/ArcNoteUITests --scan-folder /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/ArcNoteUITests-Runner.app/PlugIns/ArcNoteUITests.xctest/Frameworks --scan-folder /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/ArcNoteUITests-Runner.app/PlugIns/ArcNoteUITests.xctest/PlugIns --scan-folder /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/ArcNoteUITests-Runner.app/PlugIns/ArcNoteUITests.xctest/SystemExtensions --scan-folder /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/ArcNoteUITests-Runner.app/PlugIns/ArcNoteUITests.xctest/Extensions --platform iphonesimulator --toolchain /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --destination /tmp/chorai-ios-reform-derived/Build/Products/Debug-iphonesimulator/ArcNoteUITests-Runner.app/PlugIns/ArcNoteUITests.xctest/Frameworks --strip-bitcode --scan-executable /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/libXCTestSwiftSupport.dylib --strip-bitcode-tool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/bitcode_strip --emit-dependency-info /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ArcNote.build/Debug-iphonesimulator/ArcNoteUITests.build/SwiftStdLibToolInputDependencies.dep --filter-for-swift-os
+Ignoring --strip-bitcode because --sign was not passed
+
+PruneExplicitPrecompiledModules /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/ExplicitPrecompiledModules
+
+PruneExplicitPrecompiledModules /tmp/chorai-ios-reform-derived/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules
+
+PruneExplicitPrecompiledModules /tmp/chorai-ios-reform-derived/SDKExplicitPrecompiledModules
+
+2026-10-26 12:33:08.903 xcodebuild[74625:4176139] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-10-26 12:33:10.377493+0800 ArcNoteUITests-Runner[75083:4178442] [Default] Running tests...
+    t =      nans Interface orientation changed to Portrait
+Test Suite 'Selected tests' started at 2026-10-26 12:33:11.114.
+Test Suite 'ArcNoteUITests.xctest' started at 2026-10-26 12:33:11.115.
+Test Suite 'ArcNoteUITests' started at 2026-10-26 12:33:11.115.
+Test Case '-[ArcNoteUITests.ArcNoteUITests testNativeReformColdSidebarCollectionsSelectsLibraryScope]' started.
+    t =     0.00s Start Test at 2026-10-26 12:33:11.115
+    t =     0.05s Set Up
+    t =     0.05s Open com.michen.arcnote
+    t =     0.05s     Launch com.michen.arcnote
+2026-10-26 12:33:11.457 xcodebuild[74625:4176139] [MT] IDELaunchParametersSnapshot: debugger version lookup failed for path '<nil>': noURL
+2026-10-26 12:33:11.457 xcodebuild[74625:4176139] [MT] IDELaunchParametersSnapshot: no debugger version
+objc[75083]: Class UIAccessibilityLoaderWebShared is implemented in both /Library/Developer/CoreSimulator/Volumes/iOS_23F73/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebCore.axbundle/WebCore (0x1084f8310) and /Library/Developer/CoreSimulator/Volumes/iOS_23F73/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebKit.axbundle/WebKit (0x108574398). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+2026-10-26 12:33:11.500 xcodebuild[74625:4176139] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+    t =     1.04s         Setting up automation session
+    t =     1.53s         Wait for com.michen.arcnote to idle
+    t =     3.58s Waiting 10.0s for "local-preview.indicator" StaticText to exist
+    t =     4.62s     Checking `Expect predicate `existsNoRetry == 1` for object "local-preview.indicator" StaticText`
+    t =     4.62s         Checking existence of `"local-preview.indicator" StaticText`
+    t =     4.74s Waiting 10.0s for "side-menu.open" Button to exist
+    t =     5.78s     Checking `Expect predicate `existsNoRetry == 1` for object "side-menu.open" Button`
+    t =     5.78s         Checking existence of `"side-menu.open" Button`
+    t =     5.82s Tap "side-menu.open" Button
+    t =     5.82s     Wait for com.michen.arcnote to idle
+    t =     5.83s     Find the "side-menu.open" Button
+    t =     5.86s     Check for interrupting elements affecting "side-menu.open" Button
+    t =     5.89s     Synthesize event
+    t =     6.18s     Wait for com.michen.arcnote to idle
+    t =     6.19s Waiting 10.0s for "side-menu.item.Favorites" Button to exist
+    t =     7.23s     Checking `Expect predicate `existsNoRetry == 1` for object "side-menu.item.Favorites" Button`
+    t =     7.23s         Checking existence of `"side-menu.item.Favorites" Button`
+    t =     7.27s Tap "side-menu.item.Favorites" Button
+    t =     7.27s     Wait for com.michen.arcnote to idle
+    t =     7.28s     Find the "side-menu.item.Favorites" Button
+    t =     7.31s     Check for interrupting elements affecting "side-menu.item.Favorites" Button
+    t =     7.34s     Synthesize event
+    t =     7.62s     Wait for com.michen.arcnote to idle
+    t =     7.62s Waiting 5.0s for "Home" Button to exist
+    t =     8.67s     Checking `Expect predicate `existsNoRetry == 1` for object "Home" Button`
+    t =     8.67s         Checking existence of `"Home" Button`
+    t =     8.72s Find the "Home" Button
+    t =     8.75s Waiting 5.0s for "Collections" Button to exist
+    t =     9.79s     Checking `Expect predicate `existsNoRetry == 1` for object "Collections" Button`
+    t =     9.79s         Checking existence of `"Collections" Button`
+    t =     9.84s Find the "Collections" Button
+    t =     9.88s Tear Down
+Test Case '-[ArcNoteUITests.ArcNoteUITests testNativeReformColdSidebarCollectionsSelectsLibraryScope]' passed (10.134 seconds).
+Test Case '-[ArcNoteUITests.ArcNoteUITests testNativeReformGridReaderAndHomeKeepRealNavigation]' started.
+    t =     0.00s Start Test at 2026-10-26 12:33:21.251
+    t =     0.03s Set Up
+    t =     0.03s Open com.michen.arcnote
+    t =     0.03s     Launch com.michen.arcnote
+    t =     0.03s         Terminate com.michen.arcnote:75092
+2026-10-26 12:33:21.293 xcodebuild[74625:4176139] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-10-26 12:33:21.293 xcodebuild[74625:4176139] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-10-26 12:33:22.344 xcodebuild[74625:4176139] [MT] IDELaunchParametersSnapshot: debugger version lookup failed for path '<nil>': noURL
+2026-10-26 12:33:22.344 xcodebuild[74625:4176139] [MT] IDELaunchParametersSnapshot: no debugger version
+2026-10-26 12:33:22.353 xcodebuild[74625:4176139] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+    t =     1.30s         Setting up automation session
+    t =     1.84s         Wait for com.michen.arcnote to idle
+    t =     3.44s Waiting 10.0s for "local-preview.indicator" StaticText to exist
+    t =     4.48s     Checking `Expect predicate `existsNoRetry == 1` for object "local-preview.indicator" StaticText`
+    t =     4.48s         Checking existence of `"local-preview.indicator" StaticText`
+    t =     4.62s Waiting 5.0s for "explore.browse-mode" SegmentedControl to exist
+    t =     5.66s     Checking `Expect predicate `existsNoRetry == 1` for object "explore.browse-mode" SegmentedControl`
+    t =     5.66s         Checking existence of `"explore.browse-mode" SegmentedControl`
+    t =     5.71s Tap "Grid" Button
+    t =     5.71s     Wait for com.michen.arcnote to idle
+    t =     5.71s     Find the "Grid" Button
+    t =     5.74s     Check for interrupting elements affecting "square.grid.2x2" Button
+    t =     5.77s     Synthesize event
+    t =     6.05s     Wait for com.michen.arcnote to idle
+    t =     7.17s Waiting 8.0s for "explore.grid.card.preview-field-note" Button to exist
+    t =     8.22s     Checking `Expect predicate `existsNoRetry == 1` for object "explore.grid.card.preview-field-note" Button`
+    t =     8.22s         Checking existence of `"explore.grid.card.preview-field-note" Button`
+    t =     8.25s Find the "explore.grid.card.preview-field-note" Button
+    t =     8.29s Find the Target Application 'com.michen.arcnote'
+    t =     8.37s Added attachment named 'Native reform Grid'
+    t =     8.37s Tap "explore.grid.card.preview-field-note" Button
+    t =     8.37s     Wait for com.michen.arcnote to idle
+    t =     8.38s     Find the "explore.grid.card.preview-field-note" Button
+    t =     8.40s     Check for interrupting elements affecting "explore.grid.card.preview-field-note" Button
+    t =     8.43s     Synthesize event
+    t =     8.71s     Wait for com.michen.arcnote to idle
+    t =     9.14s Waiting 8.0s for "screen.detail.content" Other to exist
+    t =    10.18s     Checking `Expect predicate `existsNoRetry == 1` for object "screen.detail.content" Other`
+    t =    10.18s         Checking existence of `"screen.detail.content" Other`
+    t =    10.23s         Capturing element debug description
+    t =    11.17s     Checking `Expect predicate `existsNoRetry == 1` for object "screen.detail.content" Other`
+    t =    11.17s         Checking existence of `"screen.detail.content" Other`
+    t =    11.22s         Capturing element debug description
+    t =    12.16s     Checking `Expect predicate `existsNoRetry == 1` for object "screen.detail.content" Other`
+    t =    12.16s         Checking existence of `"screen.detail.content" Other`
+    t =    12.20s         Capturing element debug description
+    t =    13.14s     Checking `Expect predicate `existsNoRetry == 1` for object "screen.detail.content" Other`
+    t =    13.14s         Checking existence of `"screen.detail.content" Other`
+    t =    13.18s         Capturing element debug description
+    t =    14.22s     Checking `Expect predicate `existsNoRetry == 1` for object "screen.detail.content" Other`
+    t =    14.22s         Checking existence of `"screen.detail.content" Other`
+    t =    14.27s         Capturing element debug description
+    t =    15.21s     Checking `Expect predicate `existsNoRetry == 1` for object "screen.detail.content" Other`
+    t =    15.21s         Checking existence of `"screen.detail.content" Other`
+    t =    15.27s         Capturing element debug description
+    t =    16.20s     Checking `Expect predicate `existsNoRetry == 1` for object "screen.detail.content" Other`
+    t =    16.20s         Checking existence of `"screen.detail.content" Other`
+    t =    16.26s         Capturing element debug description
+    t =    17.14s     Checking `Expect predicate `existsNoRetry == 1` for object "screen.detail.content" Other`
+    t =    17.15s         Checking existence of `"screen.detail.content" Other`
+    t =    17.20s         Capturing element debug description
+    t =    17.20s     Checking existence of `"screen.detail.content" Other`
+    t =    17.23s Collecting debug information to assist test failure triage
+    t =    17.23s     Requesting snapshot of accessibility hierarchy for app with pid 75221
+    t =    17.26s Checking existence of `"screen.detail.loaded" StaticText`
+    t =    17.28s Find the Target Application 'com.michen.arcnote'
+    t =    17.35s Added attachment named 'Native reform reader'
+    t =    17.36s Tap "detail.back" Button
+    t =    17.36s     Wait for com.michen.arcnote to idle
+    t =    17.36s     Find the "detail.back" Button
+    t =    17.37s     Check for interrupting elements affecting "detail.back" Button
+    t =    17.39s     Synthesize event
+    t =    17.68s     Wait for com.michen.arcnote to idle
+    t =    18.03s Waiting 5.0s for "explore.grid.card.preview-field-note" Button to exist
+    t =    19.07s     Checking `Expect predicate `existsNoRetry == 1` for object "explore.grid.card.preview-field-note" Button`
+    t =    19.07s         Checking existence of `"explore.grid.card.preview-field-note" Button`
+    t =    19.13s Find the "Grid" Button
+    t =    19.16s Tap "Home" Button
+    t =    19.17s     Wait for com.michen.arcnote to idle
+    t =    19.17s     Find the "Home" Button
+    t =    19.20s     Check for interrupting elements affecting "Home" Button
+    t =    19.23s     Synthesize event
+    t =    19.51s     Wait for com.michen.arcnote to idle
+    t =    20.91s Waiting 5.0s for "note.create" Button to exist
+    t =    21.94s     Checking `Expect predicate `existsNoRetry == 1` for object "note.create" Button`
+    t =    21.94s         Checking existence of `"note.create" Button`
+    t =    22.00s Find the Target Application 'com.michen.arcnote'
+    t =    22.08s Added attachment named 'Native reform Home'
+    t =    22.08s Tap "Explore" Button
+    t =    22.08s     Wait for com.michen.arcnote to idle
+    t =    22.08s     Find the "Explore" Button
+    t =    22.11s     Check for interrupting elements affecting "Explore" Button
+    t =    22.13s     Synthesize event
+    t =    22.41s     Wait for com.michen.arcnote to idle
+    t =    23.89s Waiting 5.0s for "explore.grid.card.preview-field-note" Button to exist
+    t =    24.93s     Checking `Expect predicate `existsNoRetry == 1` for object "explore.grid.card.preview-field-note" Button`
+    t =    24.93s         Checking existence of `"explore.grid.card.preview-field-note" Button`
+    t =    24.99s Find the "Grid" Button
+    t =    25.02s Tear Down
+Test Case '-[ArcNoteUITests.ArcNoteUITests testNativeReformGridReaderAndHomeKeepRealNavigation]' passed (25.257 seconds).
+Test Suite 'ArcNoteUITests' passed at 2026-10-26 12:33:46.508.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 35.392 (35.393) seconds
+Test Suite 'ArcNoteUITests.xctest' passed at 2026-10-26 12:33:46.509.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 35.392 (35.394) seconds
+Test Suite 'Selected tests' passed at 2026-10-26 12:33:46.509.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 35.392 (35.395) seconds
+2026-10-26 12:33:46.551 xcodebuild[74625:4176139] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-10-26 12:33:46.551 xcodebuild[74625:4176139] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-10-26 12:33:46.565 xcodebuild[74625:4176139] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-10-26 12:33:46.566 xcodebuild[74625:4176139] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-10-26 12:33:46.838 xcodebuild[74625:4176139] [MT] IDETestOperationsObserverDebug: 38.102 elapsed -- Testing started completed.
+2026-10-26 12:33:46.838 xcodebuild[74625:4176139] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-26 12:33:46.838 xcodebuild[74625:4176139] [MT] IDETestOperationsObserverDebug: 38.102 sec, +38.102 sec -- end
+
+Test session results, code coverage, and logs:
+	/tmp/chorai-ios-reform-ui-2.xcresult
+
+** TEST SUCCEEDED **
+
+Testing started

@@ -2,61 +2,45 @@ import Foundation
 import XCTest
 
 final class SidebarProfileCreditSourceContractTests: XCTestCase {
-    func testSidebarUsesProfileMediaAndClipsWholeDrawerBeforeOffset() throws {
+    func testCompactSidebarKeepsActualAvatarAndReadableControls() throws {
         let sidebar = try source(at: "ArcNote/SideMenuView.swift")
-
-        XCTAssertTrue(sidebar.contains("private var profileBackground: some View"))
-        XCTAssertTrue(sidebar.contains("profileResourceURL("))
-        XCTAssertTrue(
-            sidebar.contains("userProfileManager.userProfile?.background")
-        )
-        XCTAssertTrue(
-            sidebar.contains("userProfileManager.userProfile?.avatar")
-        )
+        XCTAssertTrue(sidebar.contains("userProfileManager.userProfile?.avatar"))
         XCTAssertTrue(sidebar.contains("APIConfiguration.resourceURLString"))
-        XCTAssertTrue(sidebar.contains("Image(\"side_bg\")"))
         XCTAssertTrue(sidebar.contains("Image(\"avatar\")"))
-
-        let clipBeforeOffset = """
-                .frame(width: adaptiveLayout.drawerWidth)
-                .ignoresSafeArea()
-                .clipped()
-                .offset(x: isPresented ? 0 : -adaptiveLayout.drawerWidth)
-"""
-        XCTAssertTrue(sidebar.contains(clipBeforeOffset))
+        XCTAssertFalse(sidebar.contains("profileBackgroundHeight"), "A decorative banner must not displace profile and menu actions")
+        XCTAssertTrue(sidebar.contains("side-menu.close"))
+        XCTAssertTrue(sidebar.contains("accessibilityReduceTransparency"))
     }
 
-    func testSidebarKeepsFollowCountTextIdentityStableWhileProfileLoads() throws {
+    func testCachedProfileValuesRemainReadableDuringRefresh() throws {
         let sidebar = try source(at: "ArcNote/SideMenuView.swift")
-
-        XCTAssertFalse(sidebar.contains("if userProfileManager.isLoading"))
-        XCTAssertTrue(
-            sidebar.contains(
-                "Text(userProfileManager.isLoading ? \"--\" : \"\\(userProfileManager.userProfile?.followingCount ?? 0)\")"
-            )
-        )
-        XCTAssertTrue(
-            sidebar.contains(
-                "Text(userProfileManager.isLoading ? \"--\" : \"\\(userProfileManager.userProfile?.followersCount ?? 0)\")"
-            )
-        )
+        XCTAssertFalse(sidebar.contains("userProfileManager.isLoading ?"), "Refresh must not replace cached follow counts with placeholders")
+        XCTAssertFalse(sidebar.contains("userProfileManager.isCreditLoading ?"), "Refresh must not replace cached credit with a placeholder")
+        XCTAssertTrue(sidebar.contains("userProfileManager.creditBalance.map"))
+        XCTAssertTrue(sidebar.contains("userProfileManager.userProfile.map"))
+        XCTAssertFalse(sidebar.contains("areFollowCountsVisible"))
+        XCTAssertFalse(sidebar.contains("Task.sleep"))
     }
 
-    func testSidebarRevealsFollowCountsOnlyAfterDrawerAnimationCompletes() throws {
+    func testSidebarPresentationKeepsRoutesInTheirOriginalNavigationHost() throws {
         let sidebar = try source(at: "ArcNote/SideMenuView.swift")
+        XCTAssertTrue(sidebar.contains("SidebarOverlayPresenter("))
+        XCTAssertTrue(sidebar.contains("isPresented && !hasActiveDestination"))
+        XCTAssertTrue(sidebar.contains(".navigationDestination(isPresented: $navigateToSettings)"))
+        XCTAssertTrue(sidebar.contains(".navigationDestination(isPresented: $navigateToMyProfile)"))
+        XCTAssertTrue(sidebar.contains("accessibilityViewIsModal = true"))
+        XCTAssertFalse(sidebar.contains("makeKeyAndVisible"), "The drawer must not steal the scene's key window or keyboard")
+        XCTAssertFalse(sidebar.contains("asyncAfter"), "Library selection must follow presentation completion, not a guessed delay")
+    }
 
-        XCTAssertTrue(
-            sidebar.contains("@State private var areFollowCountsVisible = false")
-        )
-        XCTAssertEqual(
-            sidebar.components(
-                separatedBy: ".opacity(areFollowCountsVisible ? 1 : 0)"
-            ).count - 1,
-            2
-        )
-        XCTAssertTrue(sidebar.contains(".task(id: isPresented)"))
-        XCTAssertTrue(sidebar.contains("try await Task.sleep(nanoseconds: 300_000_000)"))
-        XCTAssertTrue(sidebar.contains("guard !Task.isCancelled, isPresented else"))
+    func testOpeningSidebarDoesNotChangeRootBarVisibility() throws {
+        let tabs = try source(at: "ArcNote/TabBarView.swift")
+        XCTAssertTrue(tabs.contains(".toolbar(isTabBarCovered || keyboardLayout.isVisible"))
+        XCTAssertTrue(tabs.contains("isTabBarCovered || showSideMenu"), "Onboarding must still regard the library as covered")
+        for path in ["ArcNote/HomeView.swift", "ArcNote/ExploreView.swift"] {
+            let root = try source(at: path)
+            XCTAssertFalse(root.contains(".toolbar(showSideMenu ?"), "Opening a drawer must not expand the root viewport")
+        }
     }
 
     private func source(at path: String) throws -> String {

@@ -7,6 +7,7 @@ struct HomeView: View {
     @Binding var showSideMenu: Bool
     let refreshID: UUID
     let committedCardID: String?
+    let librarySelectionRequest: LibrarySelectionRequest?
     var onboardingStore: OnboardingGuideStore?
     var contextualTipStore: ContextualGuideTipStore?
     let isOnboardingLibrarySurfaceActive: Bool
@@ -18,7 +19,6 @@ struct HomeView: View {
 
     @State private var showPopupMenu = false
     @State private var popupMenuLayout: PopupMenuLayout = .grid2x2
-    @State private var showFilterTags = false
     @State private var selectedFilter = "Latest Edited" // 默认筛选
     @State private var librarySearchSession = LibrarySearchSession()
     @StateObject private var cardsManager = HomeCardsManager()
@@ -26,6 +26,9 @@ struct HomeView: View {
     @FocusState private var isLibrarySearchFocused: Bool
     @State private var currentCardId: String? = nil
     @State private var currentMenuCardData: UserCard? = nil
+    @State private var ownedCardActionRefresh: OwnedCardActionRefresh?
+    @State private var ownedCardRefreshRequestID: UUID?
+    @State private var ownedCardRefreshFailedID: String?
     @StateObject private var favoritesManager = FavoritesManager.shared
     @State private var showDeleteConfirmation = false
     @State private var cardToDelete: UserCard? = nil
@@ -38,11 +41,13 @@ struct HomeView: View {
     @State private var navigateToUserProfile = false
     @State private var selectedActorId: String? = nil
     @State private var handledCommittedCardID: String?
+    @State private var handledLibrarySelectionRequestID: UUID?
 
     init(
         showSideMenu: Binding<Bool>,
         refreshID: UUID,
         committedCardID: String? = nil,
+        librarySelectionRequest: LibrarySelectionRequest? = nil,
         onboardingStore: OnboardingGuideStore? = nil,
         contextualTipStore: ContextualGuideTipStore? = nil,
         isOnboardingLibrarySurfaceActive: Bool = false,
@@ -58,6 +63,7 @@ struct HomeView: View {
         )
         self.refreshID = refreshID
         self.committedCardID = committedCardID
+        self.librarySelectionRequest = librarySelectionRequest
         self.onboardingStore = onboardingStore
         self.contextualTipStore = contextualTipStore
         self.isOnboardingLibrarySurfaceActive =
@@ -94,8 +100,68 @@ struct HomeView: View {
     
     // MARK: 加载用户卡片列表
     private func loadUserCards() {
-        // 使用默认排序（Latest Edited）
-        cardsManager.loadUserCards(refresh: true, sortBy: "updated_at", sortOrder: "desc")
+        let descriptor = selectedSortOption.descriptor
+        cardsManager.loadUserCards(
+            refresh: true,
+            sortBy: descriptor.field.apiName,
+            sortOrder: descriptor.order.apiName
+        )
+    }
+
+    private func handleOwnedCardActionCommit(_ commit: OwnedCardActionCommit) {
+        if case .removed(let cardID) = commit {
+            cardsManager.cards.removeAll { $0.id == cardID }
+            librarySearchManager.remove(cardID: cardID)
+            if currentCardId == cardID { currentCardId = nil }
+            if currentMenuCardData?.id == cardID { currentMenuCardData = nil }
+            if cardToDelete?.id == cardID {
+                cardToDelete = nil
+                showDeleteConfirmation = false
+                deleteCardError = nil
+            }
+            if selectedCardId == cardID {
+                selectedCardId = nil
+                navigateToDetail = false
+                navigateToEdit = false
+            }
+        }
+        // Reload the current API sort and current submitted query, without resetting
+        // the user's segment, search text, or selected sort to a visual sample value.
+        loadUserCards()
+        if librarySearchSession.isActive { retryLibrarySearch() }
+    }
+
+    private func handleCardRouteDismissal(_ dismissal: CardNavigationDismissal) {
+        onCardRouteDismissed(dismissal)
+        if case .editor(let cardID) = dismissal.route {
+            refreshOwnedCardAfterEditing(cardID)
+        }
+    }
+
+    private func refreshOwnedCardAfterEditing(_ cardID: String) {
+        guard AuthManager.shared.currentUser != nil else { return }
+        let requestID = UUID()
+        ownedCardRefreshRequestID = requestID
+        NetworkManager.shared.getCardDetail(cardId: cardID) { result in
+            DispatchQueue.main.async {
+                guard ownedCardRefreshRequestID == requestID else { return }
+                ownedCardRefreshRequestID = nil
+                switch result {
+                case .success(let response) where response.success && response.data.id == cardID:
+                    let detail = response.data
+                    let snapshot = OwnedCardActionSnapshot(
+                        cardID: detail.id,
+                        isOwned: detail.isOwner ?? (AuthManager.shared.currentUser.map { detail.author?.actorId == $0.id } ?? false),
+                        isPublic: detail.isPublic, isPinned: detail.isPinned ?? false, pinnedAt: detail.pinnedAt
+                    )
+                    ownedCardActionRefresh = OwnedCardActionRefresh(snapshot: snapshot)
+                    ownedCardRefreshFailedID = nil
+                    loadUserCards()
+                    if librarySearchSession.isActive { retryLibrarySearch() }
+                default: ownedCardRefreshFailedID = cardID
+                }
+            }
+        }
     }
 
     private func presentCommittedCardIfNeeded(_ value: String?) {
@@ -111,6 +177,16 @@ struct HomeView: View {
         }
         selectedSegment = 0
         cardsManager.promoteCommittedCard(id: cardID)
+    }
+
+    private func applyLibrarySelectionRequest() {
+        guard let request = librarySelectionRequest,
+              handledLibrarySelectionRequestID != request.id else { return }
+        handledLibrarySelectionRequestID = request.id
+        if librarySearchSession.isActive {
+            exitLibrarySearch()
+        }
+        selectedSegment = request.scope == .notes ? 0 : 1
     }
 
     // MARK: 应用排序
@@ -145,7 +221,6 @@ struct HomeView: View {
     private var isOnboardingLibrarySurfacePresented: Bool {
         isOnboardingLibrarySurfaceActive
             && !showPopupMenu
-            && !showFilterTags
             && !showDeleteConfirmation
             && !navigateToDetail
             && !navigateToEdit
@@ -190,7 +265,6 @@ struct HomeView: View {
         let scope: LibrarySearchScope = selectedSegment == 0
             ? .notes
             : .collect
-        showFilterTags = false
 
         if reduceMotion {
             librarySearchSession.enter(scope: scope)
@@ -207,7 +281,6 @@ struct HomeView: View {
 
     private func exitLibrarySearch() {
         isLibrarySearchFocused = false
-        showFilterTags = false
         librarySearchManager.clear()
 
         if reduceMotion {
@@ -321,95 +394,107 @@ struct HomeView: View {
             )
     }
 
+    private var librarySegmentSelection: Binding<Int> {
+        Binding(get: { selectedSegment }, set: { value in
+            dismissLibraryTipIfVisible()
+            selectedSegment = value
+        })
+    }
+
+    private var librarySortSelection: Binding<LibrarySortOption> {
+        Binding(get: { selectedSortOption }, set: { option in
+            dismissLibraryTipIfVisible()
+            isLibrarySearchFocused = false
+            selectedFilter = option.rawValue
+            applySort(sortBy: option.descriptor.field.apiName,
+                      sortOrder: option.descriptor.order.apiName)
+        })
+    }
+
+    private func sortLabel(_ option: LibrarySortOption) -> String {
+        switch option {
+        case .latestEdited: return "Latest edited"
+        case .latestAdded: return "Latest added"
+        case .rarityHighLow: return "Card level: high to low"
+        case .rarityLowHigh: return "Card level: low to high"
+        }
+    }
+
+    private var librarySortOptions: some View {
+        Picker("Sort by", selection: librarySortSelection) {
+            ForEach(LibrarySortOption.allCases) { option in
+                Text(sortLabel(option)).tag(option)
+                    .accessibilityIdentifier("home.sort.\(option.id)")
+            }
+        }
+        .pickerStyle(.inline)
+    }
+
     private var libraryHeader: some View {
-        ZStack {
+        VStack(spacing: 24) {
+            Picker("Library", selection: librarySegmentSelection) {
+                Text("My Notes").tag(0).accessibilityIdentifier("home.segment.notes")
+                Text("Collections").tag(1).accessibilityIdentifier("home.segment.collect")
+            }
+            .pickerStyle(.segmented)
             HStack {
-                Button(action: {
-                    dismissLibraryTipIfVisible()
-                    withAnimation(.easeInOut(duration: 0.3)) {
-                        showSideMenu = true
-                    }
-                }) {
-                    Image("menu")
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(width: 24, height: 24)
-                        .frame(minWidth: 44, minHeight: 44)
-                }
-                .accessibilityLabel("Open menu")
-                .accessibilityIdentifier("side-menu.open")
-
+                Text(selectedSegment == 0 ? "Your thinking, in progress." : "Ideas worth returning to.")
+                    .font(.subheadline).foregroundStyle(.secondary)
                 Spacer()
-
-                HStack(spacing: 8) {
-                    Button(action: {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            dismissLibraryTipIfVisible()
-                            showFilterTags.toggle()
-                        }
-                    }) {
-                        Image("filter")
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 24, height: 24)
-                            .frame(minWidth: 44, minHeight: 44)
+                if selectedSegment == 0 {
+                    Menu { librarySortOptions } label: {
+                        Image(systemName: "line.3.horizontal.decrease").frame(width: 44, height: 44)
                     }
-                    .accessibilityLabel("Library filters")
+                    .choraiGlassButton()
+                    .simultaneousGesture(TapGesture().onEnded { dismissLibraryTipIfVisible() })
+                    .accessibilityLabel("Sort notes")
+                    .accessibilityValue(sortLabel(selectedSortOption))
                     .accessibilityIdentifier("home.filter")
-
-                    Button(action: enterLibrarySearch) {
-                        Image("search")
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 24, height: 24)
-                            .frame(minWidth: 44, minHeight: 44)
-                    }
-                    .accessibilityLabel("Search Library")
-                    .accessibilityHint("Replaces the Library header with a search field")
-                    .accessibilityIdentifier("home.search")
                 }
             }
+        }
+    }
 
-            HStack(spacing: 0) {
-                Button(action: {
-                    withAnimation(.easeInOut(duration: 0.3)) {
-                        dismissLibraryTipIfVisible()
-                        selectedSegment = 0
-                    }
-                }) {
-                    Image(selectedSegment == 0 ? "notes_active" : "notes")
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(width: 24, height: 24)
-                        .frame(width: 50, height: 32)
-                        .background(segmentBackground(for: 0))
-                }
-                .frame(minWidth: 44, minHeight: 44)
-                .accessibilityLabel("Notes")
-                .accessibilityIdentifier("home.segment.notes")
-
-                Button(action: {
-                    withAnimation(.easeInOut(duration: 0.3)) {
-                        dismissLibraryTipIfVisible()
-                        selectedSegment = 1
-                    }
-                }) {
-                    Image(selectedSegment == 1 ? "collect_active" : "collect")
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(width: 24, height: 24)
-                        .frame(width: 50, height: 32)
-                        .background(segmentBackground(for: 1))
-                }
-                .frame(minWidth: 44, minHeight: 44)
-                .accessibilityLabel("Collect")
-                .accessibilityIdentifier("home.segment.collect")
+    @ToolbarContentBuilder private var libraryToolbar: some ToolbarContent {
+        ToolbarItem(placement: .navigationBarLeading) {
+            Button {
+                dismissLibraryTipIfVisible()
+                showSideMenu = true
+            } label: {
+                Image(systemName: "line.3.horizontal")
+                    .font(.system(size: 20))
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
             }
-            .padding(.horizontal, 4)
-            .background(
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .fill(Color.black.opacity(0.3))
-            )
+            .buttonStyle(.plain)
+            .accessibilityLabel("Open menu")
+            .accessibilityIdentifier("side-menu.open")
+        }
+        ToolbarItem(placement: .principal) {
+            Text("Home")
+                .font(.headline)
+                .foregroundStyle(.primary)
+                #if DEBUG
+                .accessibilityIdentifier(LocalDevelopmentPreview.isEnabled
+                    ? "local-preview.indicator" : "home.title")
+                #endif
+        }
+        ToolbarItem(placement: .navigationBarTrailing) {
+            if librarySearchSession.isActive {
+                Button("Cancel", action: exitLibrarySearch)
+                    .accessibilityIdentifier("home.search.cancel")
+            } else {
+                Button(action: enterLibrarySearch) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 20))
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Search Library")
+                .accessibilityHint("Replaces the Library header with a search field")
+                .accessibilityIdentifier("home.search")
+            }
         }
     }
 
@@ -418,7 +503,7 @@ struct HomeView: View {
             Button(action: exitLibrarySearch) {
                 Image(systemName: "chevron.left")
                     .font(.system(size: 19, weight: .semibold))
-                    .foregroundStyle(Color.white)
+                    .foregroundStyle(ChoraiTheme.ink)
                     .frame(minWidth: 44, minHeight: 52)
             }
             .frame(minWidth: 44, minHeight: 52)
@@ -427,17 +512,17 @@ struct HomeView: View {
 
             HStack(spacing: 0) {
                 Image(systemName: "magnifyingglass")
-                    .font(.system(size: 17, weight: .medium))
-                    .foregroundStyle(Color.white.opacity(0.62))
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(ChoraiTheme.ink.opacity(0.62))
                     .padding(.leading, 16)
                     .padding(.trailing, 10)
                     .accessibilityHidden(true)
 
                 TextField("Search your Library", text: librarySearchQuery)
                     .textFieldStyle(.plain)
-                    .font(.system(size: 16, weight: .regular))
-                    .foregroundStyle(Color.white)
-                    .tint(Color.white)
+                    .font(.body.weight(.regular))
+                    .foregroundStyle(ChoraiTheme.ink)
+                    .tint(ChoraiTheme.ink)
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
                     .submitLabel(.search)
@@ -451,8 +536,8 @@ struct HomeView: View {
                 if !librarySearchSession.draftQuery.isEmpty {
                     Button(action: clearLibrarySearch) {
                         Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 17, weight: .semibold))
-                            .foregroundStyle(Color.white.opacity(0.58))
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(ChoraiTheme.ink.opacity(0.58))
                             .frame(minWidth: 44, minHeight: 52)
                     }
                     .frame(minWidth: 44, minHeight: 52)
@@ -460,20 +545,14 @@ struct HomeView: View {
                     .accessibilityIdentifier("home.search.clear")
                 }
 
-                Button(action: {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        showFilterTags.toggle()
-                    }
-                }) {
-                    Image("filter")
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(width: 21, height: 21)
+                Menu { librarySortOptions } label: {
+                    Image(systemName: "line.3.horizontal.decrease")
                         .frame(minWidth: 44, minHeight: 52)
                 }
                 .frame(minWidth: 44, minHeight: 52)
-                .accessibilityLabel("Search filters")
-                .accessibilityHint("Shows Library sort options")
+                .simultaneousGesture(TapGesture().onEnded { dismissLibraryTipIfVisible() })
+                .accessibilityLabel("Sort search results")
+                .accessibilityValue(sortLabel(selectedSortOption))
                 .accessibilityIdentifier("home.search.filter")
             }
             .frame(minHeight: 52)
@@ -482,31 +561,9 @@ struct HomeView: View {
         }
     }
 
-    @ViewBuilder
     private var librarySearchInputBackground: some View {
-        let shape = RoundedRectangle(cornerRadius: 26, style: .continuous)
-        if reduceTransparency {
-            shape
-                .fill(Color(red: 0.12, green: 0.09, blue: 0.20))
-                .overlay(shape.stroke(Color.white.opacity(0.3), lineWidth: 1))
-        } else {
-            shape
-                .fill(.ultraThinMaterial)
-                .overlay(Color.black.opacity(0.18).clipShape(shape))
-                .overlay(
-                    shape.stroke(
-                        LinearGradient(
-                            colors: [
-                                Color.white.opacity(0.52),
-                                Color.white.opacity(0.12),
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
-                        lineWidth: 1
-                    )
-                )
-        }
+        RoundedRectangle(cornerRadius: 26, style: .continuous)
+            .fill(ChoraiTheme.raisedSurface)
     }
 
     var body: some View {
@@ -522,8 +579,8 @@ struct HomeView: View {
                         .transition(.opacity.combined(with: .move(edge: .leading)))
                 }
             }
-            .adaptiveContentGutter()
-            .padding(.top, 60)
+            .padding(.horizontal, 24)
+            .padding(.top, 16)
 
             if !librarySearchSession.isActive,
                let onboardingStore {
@@ -542,40 +599,6 @@ struct HomeView: View {
                 .padding(.top, 10)
             }
             
-            // 筛选标签
-            if showFilterTags {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 12) {
-                        HomeFilterTag(title: "Latest Edited", isSelected: selectedFilter == "Latest Edited") {
-                            dismissLibraryTipIfVisible()
-                            selectedFilter = "Latest Edited"
-                            applySort(sortBy: "updated_at", sortOrder: "desc")
-                        }
-                        .frame(width: 120)
-                        HomeFilterTag(title: "Latest Added", isSelected: selectedFilter == "Latest Added") {
-                            dismissLibraryTipIfVisible()
-                            selectedFilter = "Latest Added"
-                            applySort(sortBy: "created_at", sortOrder: "desc")
-                        }
-                        .frame(width: 120)
-                        HomeFilterTag(title: "Rarity-High Low", isSelected: selectedFilter == "Rarity-High Low") {
-                            dismissLibraryTipIfVisible()
-                            selectedFilter = "Rarity-High Low"
-                            applySort(sortBy: "rate", sortOrder: "desc")
-                        }
-                        .frame(width: 140)
-                        HomeFilterTag(title: "Rarity-Low High", isSelected: selectedFilter == "Rarity-Low High") {
-                            dismissLibraryTipIfVisible()
-                            selectedFilter = "Rarity-Low High"
-                            applySort(sortBy: "rate", sortOrder: "asc")
-                        }
-                        .frame(width: 140)
-                    }
-                    .adaptiveContentGutter()
-                }
-                .padding(.top, 10)
-            }
-            
             // 主要内容区域
             if let submittedQuery = librarySearchSession.submittedQuery,
                let searchScope = librarySearchSession.scope {
@@ -590,7 +613,6 @@ struct HomeView: View {
                         popupMenuLayout = searchScope == .notes
                             ? .grid3x3
                             : .grid3x2
-                        showPopupMenu = true
                     },
                     onCardTap: { cardID in
                         selectedCardId = cardID
@@ -611,6 +633,7 @@ struct HomeView: View {
                     onUnfavorite: { cardID in
                         favoritesManager.unfavoriteCard(cardId: cardID) { result in
                             if case .success = result {
+                                NotificationCenter.default.post(name: .choraiFavoriteChanged, object: nil, userInfo: ["cardID": cardID, "isFavorited": false])
                                 favoritesManager.removeFavoriteFromList(cardId: cardID)
                                 librarySearchManager.remove(cardID: cardID)
                             }
@@ -630,11 +653,11 @@ struct HomeView: View {
                         // 设置当前卡片数据
                         currentMenuCardData = cardData
                         popupMenuLayout = .grid3x3
-                        showPopupMenu = true
                     },
                     onboardingStore: onboardingStore,
                     contextualTipStore: contextualTipStore,
-                    onNoteCreated: onNoteCreated
+                    onNoteCreated: onNoteCreated,
+                    onCardRoutePresentationChanged: onCardRoutePresentationChanged
                 )
             } else {
                 // Collect 列表
@@ -666,7 +689,6 @@ struct HomeView: View {
                         currentCardId = cardId
                         currentMenuCardData = tempCard
                         popupMenuLayout = .grid3x2
-                        showPopupMenu = true
                     }
                     },
                     onAvatarTap: { authorId in
@@ -684,7 +706,12 @@ struct HomeView: View {
                 alignment: .top
             )
         }
+        .choraiPageBackground()
         .scrollDismissesKeyboard(.interactively)
+        .navigationTitle("Home")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.visible, for: .navigationBar)
+        .toolbar { libraryToolbar }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("screen.home.content")
         .overlay(alignment: .topLeading) {
@@ -704,22 +731,40 @@ struct HomeView: View {
                 : currentMenuCardData,
             isOwnCard: librarySearchSession.scope == .notes
                 || (!librarySearchSession.isActive && selectedSegment == 0),
-            onRouteDismissed: onCardRouteDismissed,
-            onRoutePresentationChanged: onCardRoutePresentationChanged
+            onRouteDismissed: handleCardRouteDismissal,
+            onRoutePresentationChanged: onCardRoutePresentationChanged,
+            ownedCardActionRefresh: ownedCardActionRefresh,
+            ownedCardActionRefreshInFlight: ownedCardRefreshRequestID != nil,
+            onOwnedCardActionCommitted: handleOwnedCardActionCommit
         )
+        .alert("Couldn’t refresh this note", isPresented: Binding(
+            get: { ownedCardRefreshFailedID != nil },
+            set: { if !$0 { ownedCardRefreshFailedID = nil } }
+        ), presenting: ownedCardRefreshFailedID) { cardID in
+            Button("Retry") { refreshOwnedCardAfterEditing(cardID) }
+            Button("Cancel", role: .cancel) { ownedCardRefreshFailedID = nil }
+        } message: { _ in
+            Text("The last confirmed status is still shown. Try again to load your changes.")
+        }
+        .onChange(of: navigateToEdit) { isPresented in
+            if !isPresented, let cardID = selectedCardId { refreshOwnedCardAfterEditing(cardID) }
+        }
         .onAppear {
-            // 使用默认排序（Latest Edited）
-            cardsManager.loadUserCards(refresh: true, sortBy: "updated_at", sortOrder: "desc")
+            loadUserCards()
             presentCommittedCardIfNeeded(committedCardID)
+            applyLibrarySelectionRequest()
         }
         .onDisappear {
             onLibrarySurfaceVisibilityChanged(false)
         }
         .onChange(of: refreshID) { _ in
-            cardsManager.loadUserCards(refresh: true, sortBy: "updated_at", sortOrder: "desc")
+            loadUserCards()
         }
         .onChange(of: committedCardID) { cardID in
             presentCommittedCardIfNeeded(cardID)
+        }
+        .onChange(of: librarySelectionRequest?.id) { _ in
+            applyLibrarySelectionRequest()
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ShowCardMenu"))) { notification in
             if let userInfo = notification.userInfo,
@@ -757,22 +802,18 @@ struct HomeView: View {
             }
             selectedSegment = 1
         }
-        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("DeleteCard"))) { _ in
-            guard let cardId = currentCardId else {
-                print("没有找到要删除的卡片ID")
-                return
-            }
-            
-            // 找到要删除的卡片数据
-            if let card = cardsManager.cards.first(where: { $0.id == cardId })
-                ?? currentMenuCardData.flatMap({ $0.id == cardId ? $0 : nil }) {
-                cardToDelete = card
-                deleteCardError = nil
-                showDeleteConfirmation = true
-                print("显示删除确认弹窗: cardId=\(cardId)")
-            } else {
-                print("未找到要删除的卡片数据: cardId=\(cardId)")
-            }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("DeleteCard"))) { notification in
+            guard let card = CardDeletionConfirmationPolicy.target(
+                requestedID: notification.userInfo?["cardId"] as? String,
+                candidates: cardsManager.cards,
+                menuCandidate: currentMenuCardData,
+                id: \.id,
+                isConfirmationPresented: showDeleteConfirmation,
+                isDeleting: isDeletingCard
+            ) else { return }
+            cardToDelete = card
+            deleteCardError = nil
+            showDeleteConfirmation = true
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ToggleCardVisibility"))) { notification in
             guard let userInfo = notification.userInfo,
@@ -837,7 +878,6 @@ struct HomeView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("CloseAllPopups"))) { _ in
             showPopupMenu = false
-            showFilterTags = false
         }
         .overlay(
             // 确认删除对话框
@@ -878,20 +918,20 @@ struct HomeView: View {
                                 }) {
                                     Image(systemName: "xmark")
                                         .font(.title2)
-                                        .foregroundColor(.white)
+                                        .foregroundColor(ChoraiTheme.ink)
                                 }
                                 .accessibilityIdentifier("home.delete.close")
                             }
                             
                             // 确认文本
                             Text("Confirm delete this note?")
-                                .font(.system(size: 18, weight: .medium))
-                                .foregroundColor(.white)
+                                .font(.headline.weight(.medium))
+                                .foregroundColor(ChoraiTheme.ink)
                                 .multilineTextAlignment(.center)
 
                             if let deleteCardError {
                                 Text(deleteCardError)
-                                    .font(.system(size: 13, weight: .regular))
+                                    .font(.footnote.weight(.regular))
                                     .foregroundColor(.red.opacity(0.9))
                                     .multilineTextAlignment(.center)
                                     .accessibilityIdentifier("home.delete.error")
@@ -913,11 +953,11 @@ struct HomeView: View {
                                 }) {
                                     HStack(spacing: 8) {
                                         Image(systemName: "xmark")
-                                            .font(.system(size: 16, weight: .medium))
+                                            .font(.body.weight(.medium))
                                         Text("Cancel")
-                                            .font(.system(size: 16, weight: .medium))
+                                            .font(.body.weight(.medium))
                                     }
-                                    .foregroundColor(.white)
+                                    .foregroundColor(ChoraiTheme.ink)
                                     .frame(maxWidth: .infinity)
                                     .padding(.vertical, 12)
                                     .background(
@@ -962,15 +1002,15 @@ struct HomeView: View {
                                         if isDeletingCard {
                                             ProgressView()
                                                 .progressViewStyle(.circular)
-                                                .tint(.white)
+                                                .tint(ChoraiTheme.ink)
                                         } else {
                                             Image(systemName: "checkmark")
-                                                .font(.system(size: 16, weight: .medium))
+                                                .font(.body.weight(.medium))
                                         }
                                         Text("Yes")
-                                            .font(.system(size: 16, weight: .medium))
+                                            .font(.body.weight(.medium))
                                     }
-                                    .foregroundColor(.white)
+                                    .foregroundColor(ChoraiTheme.ink)
                                     .frame(maxWidth: .infinity)
                                     .padding(.vertical, 12)
                                     .background(
@@ -1019,6 +1059,12 @@ struct HomeView: View {
                 EmptyView()
             }
         }
+        .onChange(of: navigateToEdit) { isPresented in
+            // Direct row/search navigation must cover Home just like menu routes.
+            // Report the route binding, not editor appearance: nested pushes and
+            // keyboard changes must not briefly reveal the browsing tab bar.
+            onCardRoutePresentationChanged(isPresented)
+        }
         .navigationDestination(isPresented: $navigateToUserProfile) {
             if let actorId = selectedActorId {
                 UserProfileView(actorId: actorId)
@@ -1059,6 +1105,7 @@ struct NotesListView: View {
     var onboardingStore: OnboardingGuideStore?
     var contextualTipStore: ContextualGuideTipStore?
     let onNoteCreated: (String, String) -> Void
+    let onCardRoutePresentationChanged: (Bool) -> Void
     @State private var navigateToCreate = false
 
     private var isLibraryTipVisible: Bool {
@@ -1109,13 +1156,13 @@ struct NotesListView: View {
                         VStack(spacing: 12) {
                     Image(systemName: "doc.text")
                         .font(.system(size: 48, weight: .light))
-                        .foregroundColor(.white.opacity(0.5))
+                        .foregroundColor(ChoraiTheme.ink.opacity(0.5))
                             Text("Your Chorai is empty")
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundColor(.white.opacity(0.7))
-                            Text("spark it to life by tapping this + in the bottom right")
-                        .font(.system(size: 14, weight: .regular))
-                        .foregroundColor(.white.opacity(0.5))
+                        .font(.body.weight(.medium))
+                        .foregroundColor(ChoraiTheme.ink.opacity(0.7))
+                            Text("Start with a sentence, a question, or a small observation.")
+                        .font(.subheadline.weight(.regular))
+                        .foregroundColor(ChoraiTheme.ink.opacity(0.5))
                         .multilineTextAlignment(.center)
                 }
                         .frame(maxWidth: .infinity)
@@ -1162,9 +1209,9 @@ struct NotesListView: View {
                         }
                         }
                     }
-                    .padding(.horizontal, 20)
-                    .padding(.top, 20)
-                    .padding(.bottom, 100)
+                    .padding(.horizontal, 24)
+                    .padding(.top, 24)
+                    .padding(.bottom, 84)
                 }
                 .refreshable {
                     dismissLibraryTipIfVisible()
@@ -1198,21 +1245,13 @@ struct NotesListView: View {
                                 dismissLibraryTipIfVisible()
                                 navigateToCreate = true
                             } label: {
-                                ZStack {
-                                    Circle()
-                                        .fill(.ultraThinMaterial.opacity(0.3))
-                                        .frame(width: 56, height: 56)
-                                        .overlay(createButtonTopLeftHighlight)
-                                        .overlay(createButtonBottomRightHighlight)
-                                        .overlay(createButtonTopEdgeHighlight)
-                                        .overlay(createButtonBottomEdgeHighlight)
-
-                                    Image(systemName: "plus")
-                                        .font(.system(size: 24, weight: .medium))
-                                        .foregroundColor(.white)
-                                }
+                                Label("New note", systemImage: "square.and.pencil")
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(ChoraiTheme.onAccent)
+                                    .padding(.horizontal, 16)
+                                    .frame(height: 52)
                             }
-                            .buttonStyle(.plain)
+                            .choraiGlassButton(prominent: true)
                             .anchorPreference(
                                 key: MergeTaskRailAnchorPreferenceKey.self,
                                 value: .bounds,
@@ -1224,13 +1263,17 @@ struct NotesListView: View {
                             ContextualGuideTargetHalo(isVisible: isLibraryTipVisible)
                         }
                     }
-                    .padding(.trailing, 20)
-                    .padding(.bottom, 130)
+                    .padding(.trailing, 24)
+                    .padding(.bottom, 18)
                 }
             }
         }
         .navigationDestination(isPresented: $navigateToCreate) {
             NewNoteView(onCreated: handleCreatedNote)
+        }
+        .onChange(of: navigateToCreate) { isPresented in
+            // Pair one coverage update with each actual push/pop transition.
+            onCardRoutePresentationChanged(isPresented)
         }
         .onDisappear {
             dismissLibraryTipIfVisible()
@@ -1331,10 +1374,10 @@ struct AIListView: View {
                     VStack {
                         Image(systemName: "doc.text")
                             .font(.system(size: 48, weight: .light))
-                            .foregroundColor(.white.opacity(0.5))
+                            .foregroundColor(ChoraiTheme.ink.opacity(0.5))
                         Text("No favorites yet")
-                            .font(.system(size: 16, weight: .medium))
-                            .foregroundColor(.white.opacity(0.7))
+                            .font(.body.weight(.medium))
+                            .foregroundColor(ChoraiTheme.ink.opacity(0.7))
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 160)
@@ -1353,6 +1396,12 @@ struct AIListView: View {
                             cardId: favorite.id,
                             rate: favorite.rate,
                             authorId: favorite.author.id,
+                            menuCardData: UserCard(id: favorite.id, title: favorite.title ?? "", content: favorite.content,
+                                contentJSON: favorite.contentJSON, backgroundMediaRef: favorite.backgroundMediaRef,
+                                contentHash: "", isPublic: false, tags: favorite.tags ?? [],
+                                createdAt: favorite.createdAt, updatedAt: favorite.createdAt,
+                                likeCount: 0, commentCount: 0, isLiked: false, isPinned: favorite.isPinned,
+                                pinnedAt: favorite.pinnedAt, isFavorited: true, favoriteCount: favorite.favoriteCount ?? 0, rate: favorite.rate),
                             onShowMenu: { cardId in
                                 onShowMenu(cardId)
                             },
@@ -1367,7 +1416,7 @@ struct AIListView: View {
                                 favoritesManager.unfavoriteCard(cardId: cardId) { result in
                                     switch result {
                                     case .success:
-                                        print("取消收藏成功: cardId=\(cardId)")
+                                        NotificationCenter.default.post(name: .choraiFavoriteChanged, object: nil, userInfo: ["cardID": cardId, "isFavorited": false])
                                         favoritesManager.removeFavoriteFromList(cardId: cardId)
                                     case .failure(let error):
                                         print("取消收藏失败: \(error.localizedDescription)")
@@ -1397,9 +1446,9 @@ struct AIListView: View {
                     }
                 }
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 20)
-            .padding(.bottom, 100)
+            .padding(.horizontal, 24)
+            .padding(.top, 24)
+            .padding(.bottom, 84)
         }
         .refreshable {
             favoritesManager.refreshFavorites()
@@ -1437,7 +1486,7 @@ struct LibraryCardBackgroundSurface<Fallback: View>: View {
     }
 
     private var shape: RoundedRectangle {
-        RoundedRectangle(cornerRadius: 16, style: .continuous)
+        RoundedRectangle(cornerRadius: 20, style: .continuous)
     }
 
     private var backgroundURL: URL? {
@@ -1479,29 +1528,10 @@ struct LibraryCardBackgroundSurface<Fallback: View>: View {
         contrast == .increased ? 0.52 : 0.32
     }
 
-    @ViewBuilder
     private var rateTreatment: some View {
-        if let rateAccent = levelStyle.materialAccentColor {
-            GeometryReader { geometry in
-                RadialGradient(
-                    colors: [
-                        rateAccent.opacity(rateGlowOpacity),
-                        rateAccent.opacity(rateGlowOpacity * 0.32),
-                        Color.clear,
-                    ],
-                    center: .top,
-                    startRadius: 1,
-                    endRadius: max(
-                        geometry.size.width,
-                        geometry.size.height
-                    ) * 0.86
-                )
-            }
-
-            shape.stroke(
-                rateAccent.opacity(rateBorderOpacity),
-                lineWidth: contrast == .increased ? 1.5 : 1
-            )
+        ZStack {
+            shape.stroke(ChoraiCardLevel(rate: rate).color.opacity(contrast == .increased ? 1 : 0.55), lineWidth: contrast == .increased ? 1.5 : 1)
+            ChoraiLevelBrush(rate: rate)
         }
     }
 
@@ -1534,12 +1564,12 @@ struct LibraryCardBackgroundSurface<Fallback: View>: View {
                                     .clipped()
 
                                 ZStack {
-                                    Color.black.opacity(veilOpacity)
+                                    ChoraiTheme.background.opacity(veilOpacity)
                                     LinearGradient(
                                         colors: [
-                                            Color.black.opacity(0.08),
+                                            ChoraiTheme.background.opacity(0.08),
                                             Color.clear,
-                                            Color.black.opacity(bottomShadeOpacity),
+                                            ChoraiTheme.background.opacity(bottomShadeOpacity),
                                         ],
                                         startPoint: .top,
                                         endPoint: .bottom
@@ -1636,102 +1666,62 @@ struct NotesCard: View {
     }
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            // 头部信息 - 左上角：open图标 + 时间 + pin图标
-            HStack {
-                HStack(spacing: 6) {
-                    // 只有当卡片是公开状态时才显示open图标
-                    if card.isPublic {
-                        Image("open")
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 15, height: 15)
-                    }
-                    
-                    Text(formatDate(card.updatedAt))
-                        .font(.system(size: 12, weight: .regular))
-                        .foregroundColor(.white.opacity(metadataOpacity))
-                    
-                    // 只有当卡片是置顶状态时才显示pin图标
-                    if card.isPinned {
-                        Image("pin")
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 15, height: 15)
-                    }
-                }
-                
+        VStack(alignment: .leading, spacing: 13) {
+            HStack(spacing: 7) {
+                Text(formatDate(card.updatedAt).uppercased())
+                    .font(.system(size: 10, weight: .semibold)).tracking(1.2)
+                if card.isPinned { Image(systemName: "pin.fill").font(.caption2) }
                 Spacer()
-                
-                Button(action: openMenu) {
-                    Image(systemName: "ellipsis")
-                        .font(.title3)
-                        .foregroundColor(.white)
-                        .frame(width: 44, height: 44)
-                        .contentShape(Rectangle())
+                Image(systemName: card.isPublic ? "globe" : "lock").font(.caption2)
+            }.foregroundStyle(.secondary)
+            LibraryCardContentPreview(content: card.content, contentJSON: card.contentJSON,
+                                      cardID: card.id, onTap: openCard)
+                .accessibilityIdentifier("home.card.body.\(card.id)")
+            HStack(spacing: 7) {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 12) {
+                        ForEach(card.tags, id: \.self) { tag in
+                            Text("#\(tag)").font(.caption).foregroundStyle(ChoraiTheme.ink.opacity(0.8))
+                        }
+                    }
                 }
-                .buttonStyle(.plain)
+                Spacer(minLength: 0)
+            }
+            .padding(.trailing, 44)
+            .accessibilityIdentifier("home.card.tags.\(card.id)")
+            .overlay(alignment: .trailing) {
+                NativeCardActionsMenu(cardData: card, layout: .grid3x3, isOwnCard: true, onPrepare: openMenu) {
+                    Image(systemName: "ellipsis").font(.caption)
+                        .frame(width: 44, height: 44).contentShape(Rectangle())
+                }
+                .buttonStyle(.plain).foregroundStyle(.secondary)
                 .accessibilityLabel("Card menu")
                 .accessibilityIdentifier("home.card.menu.\(card.id)")
-                .overlay {
-                    ContextualGuideTargetHalo(
-                        isVisible: isMergeEntryTipVisible
-                    )
-                }
+                .overlay { ContextualGuideTargetHalo(isVisible: isMergeEntryTipVisible) }
             }
-
+            .padding(.bottom, 20)
             if isMergeEntryTipVisible, let contextualTipStore {
                 HStack {
                     Spacer(minLength: 0)
-                    ContextualGuideCallout(
-                        store: contextualTipStore,
-                        tip: .libraryMergeEntry,
-                        onboardingState: onboardingState,
-                        targetIsVisible: true
-                    )
+                    ContextualGuideCallout(store: contextualTipStore, tip: .libraryMergeEntry,
+                        onboardingState: onboardingState, targetIsVisible: true)
                 }
             }
-            
-            // 内容文本
-            VStack(alignment: .leading, spacing: 8) {
-                LibraryCardContentPreview(
-                    content: card.content,
-                    contentJSON: card.contentJSON,
-                    cardID: card.id,
-                    onTap: openCard
-                )
-            }
-            
-            // 底部标签 - 横向滚动视图
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(card.tags, id: \.self) { tag in
-                        Text(tag)
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(notesCardTagBackground)
-                            .lineLimit(1)
-                    }
-                }
-                .padding(.horizontal, 1) // 添加一点内边距，避免标签贴边
-            }
-            
+            Divider()
         }
-        .padding(20)
+        .padding(.top, 10).padding(.bottom, 4)
         .background {
-            LibraryCardBackgroundSurface(
-                backgroundMediaRef: card.backgroundMediaRef,
-                rate: card.rate
-            ) {
-                notesCardBackground
+            if hasCustomBackground {
+                LibraryCardBackgroundSurface(backgroundMediaRef: card.backgroundMediaRef, rate: card.rate) {
+                    Color.clear
+                }
             }
         }
+        .contentShape(Rectangle())
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("card.home.\(card.id)")
     }
-    
+
     // MARK: Background Views
 
     private var hasCustomBackground: Bool {
@@ -1753,27 +1743,21 @@ struct NotesCard: View {
     private var notesCardTagBackground: some View {
         RoundedRectangle(cornerRadius: 15)
             .fill(
-                (hasCustomBackground ? Color.black : Color.white)
+                (hasCustomBackground ? ChoraiTheme.background : ChoraiTheme.raisedSurface)
                     .opacity(
                         LibraryCardReadabilityPolicy.tagSurfaceOpacity(
                             hasBackground: hasCustomBackground
                         )
                     )
             )
-            .overlay(tagTopLeftHighlight)
-            .overlay(tagBottomRightHighlight)
-            .overlay(tagTopEdgeHighlight)
-            .overlay(tagBottomEdgeHighlight)
+
+
+
+
     }
     
     private var notesCardBackground: some View {
-        RoundedRectangle(cornerRadius: 16)
-            .background(.ultraThinMaterial.opacity(0.55))
-            .cornerRadius(16)
-            .overlay(topLeftHighlight)
-            .overlay(bottomRightHighlight)
-            .overlay(topEdgeHighlight)
-            .overlay(bottomEdgeHighlight)
+        RoundedRectangle(cornerRadius: 20, style: .continuous).fill(ChoraiTheme.surface)
     }
     
     // MARK: - 标签高光效果
@@ -1931,12 +1915,13 @@ struct HomePostCard: View {
     let cardId: String
     let rate: Int
     let authorId: String?
+    let menuCardData: UserCard?
     let onShowMenu: (String) -> Void
     let onCardTap: ((String) -> Void)?
     let onUnfavorite: ((String) -> Void)?
     let onAvatarTap: ((String) -> Void)?
     
-    init(profileImage: String, name: String, time: String, content: String, contentJSON: String? = nil, backgroundMediaRef: String? = nil, tags: [String], showSpark: Bool, favoriteCount: Int, cardId: String, rate: Int = 1, authorId: String? = nil, onShowMenu: @escaping (String) -> Void, onCardTap: ((String) -> Void)? = nil, onUnfavorite: ((String) -> Void)? = nil, onAvatarTap: ((String) -> Void)? = nil) {
+    init(profileImage: String, name: String, time: String, content: String, contentJSON: String? = nil, backgroundMediaRef: String? = nil, tags: [String], showSpark: Bool, favoriteCount: Int, cardId: String, rate: Int = 1, authorId: String? = nil, menuCardData: UserCard? = nil, onShowMenu: @escaping (String) -> Void, onCardTap: ((String) -> Void)? = nil, onUnfavorite: ((String) -> Void)? = nil, onAvatarTap: ((String) -> Void)? = nil) {
         self.profileImage = profileImage
         self.name = name
         self.time = time
@@ -1949,6 +1934,7 @@ struct HomePostCard: View {
         self.cardId = cardId
         self.rate = rate
         self.authorId = authorId
+        self.menuCardData = menuCardData
         self.onShowMenu = onShowMenu
         self.onCardTap = onCardTap
         self.onUnfavorite = onUnfavorite
@@ -1956,139 +1942,78 @@ struct HomePostCard: View {
     }
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            // 头部信息
-            HStack {
-                // 头像 - 可点击跳转到用户资料
-                Button(action: {
-                    if let authorId = authorId {
-                        onAvatarTap?(authorId)
-                    }
-                }) {
-                    Group {
-                        if !profileImage.isEmpty && (profileImage.hasPrefix("http://") || profileImage.hasPrefix("https://")) {
-                            // 完整 URL
-                            AsyncImage(url: URL(string: profileImage)) { image in
-                                image
-                                    .resizable()
-                                    .aspectRatio(contentMode: .fill)
-                            } placeholder: {
-                                Image("avatar")
-                                    .resizable()
-                                    .aspectRatio(contentMode: .fill)
-                            }
-                        } else if !profileImage.isEmpty {
-                            // 相对路径，拼接域名
-                            let fullAvatarUrl = APIConfiguration.resourceURLString(profileImage)
-                 
-                            AsyncImage(url: URL(string: fullAvatarUrl)) { image in
-                                image
-                                    .resizable()
-                                    .aspectRatio(contentMode: .fill)
-                            } placeholder: {
-                                Image("avatar")
-                                    .resizable()
-                                    .aspectRatio(contentMode: .fill)
-                            }
-                        } else {
-                            // 空字符串，使用占位符
-                            Image("avatar")
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                        }
-                    }
-                    .frame(width: 40, height: 40)
-                    .clipShape(Circle())
-                }
-                .disabled(authorId == nil)
-                
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(name)
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(.white)
-                    
-                    Text(time)
-                        .font(.system(size: 12, weight: .regular))
-                        .foregroundColor(.white.opacity(metadataOpacity))
-                }
-                
+        VStack(alignment: .leading, spacing: 13) {
+            HStack(spacing: 7) {
+                Text(time.uppercased()).font(.system(size: 10, weight: .semibold)).tracking(1.2)
+                Text("·")
+                Button(name) { if let authorId { onAvatarTap?(authorId) } }
+                    .font(.caption).buttonStyle(.plain).disabled(authorId == nil)
                 Spacer()
-                
-                Button(action: {
-                    onShowMenu(cardId)
-                }) {
-                    Image(systemName: "ellipsis")
-                        .font(.title3)
-                        .foregroundColor(.white)
-                }
-                .accessibilityLabel("Card menu")
-                .accessibilityIdentifier("home.card.menu.\(cardId)")
-            }
-            
-            // 内容预览
-            LibraryCardContentPreview(
-                content: content,
-                contentJSON: contentJSON,
-                cardID: cardId,
-                textFont: .system(size: 14, weight: .regular),
-                onTap: { onCardTap?(cardId) }
-            )
-            
-            // 底部标签和交互
-            VStack(spacing: 12) {
-                // 标签 - 横向滚动视图
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(tags, id: \.self) { tag in
-                            Text(tag)
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundColor(.white)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 6)
-                                .background(homePostCardTagBackground)
-                                .lineLimit(1)
-                        }
-                    }
-                    .padding(.horizontal, 1) // 添加一点内边距，避免标签贴边
-                }
-                
-                // 交互统计
                 if showSpark {
-                    HStack {
-                        Spacer()
-                        Button(action: {
-                            // 取消收藏
-                            onUnfavorite?(cardId)
-                        }) {
-                        HStack(spacing: 4) {
-                            Image("favorite_active")
-                                .resizable()
-                                .aspectRatio(contentMode: .fit)
-                                .frame(width: 18, height: 18)
-                            Text("\(favoriteCount)")
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundColor(.white.opacity(engagementOpacity))
+                    Label("\(favoriteCount)", systemImage: "bookmark.fill")
+                        .font(.caption2).monospacedDigit()
+                        .accessibilityLabel("\(favoriteCount) collections")
+                        .accessibilityIdentifier("home.card.collection-count.\(cardId)")
+                }
+            }.foregroundStyle(.secondary)
+            LibraryCardContentPreview(content: content, contentJSON: contentJSON,
+                cardID: cardId, onTap: { onCardTap?(cardId) })
+                .accessibilityIdentifier("home.card.body.\(cardId)")
+            HStack(spacing: 7) {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 12) {
+                        ForEach(tags, id: \.self) { tag in
+                            Text("#\(tag)").font(.caption).foregroundStyle(ChoraiTheme.ink.opacity(0.8))
                         }
-                        }
-                        .foregroundColor(.white.opacity(engagementOpacity))
                     }
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.trailing, showSpark ? 88 : 44)
+            .accessibilityIdentifier("home.card.tags.\(cardId)")
+            .overlay(alignment: .trailing) {
+                HStack(spacing: 0) {
+                if showSpark {
+                    Button { onUnfavorite?(cardId) } label: {
+                        Image(systemName: "bookmark.fill").font(.caption)
+                            .frame(width: 44, height: 44).contentShape(Rectangle())
+                    }.buttonStyle(.plain).accessibilityLabel("Remove from collection")
+                        .accessibilityValue("\(favoriteCount) collections")
+                }
+                Group {
+                    if let menuCardData {
+                        NativeCardActionsMenu(cardData: menuCardData, layout: .grid3x2, isOwnCard: false,
+                                              onPrepare: { onShowMenu(cardId) }) {
+                            Image(systemName: "ellipsis").font(.caption)
+                                .frame(width: 44, height: 44).contentShape(Rectangle())
+                        }
+                    } else {
+                        Button { onShowMenu(cardId) } label: {
+                            Image(systemName: "ellipsis").font(.caption)
+                                .frame(width: 44, height: 44).contentShape(Rectangle())
+                        }
+                    }
+                }.buttonStyle(.plain).foregroundStyle(.secondary)
+                    .accessibilityLabel("Card menu")
+                    .accessibilityIdentifier("home.card.menu.\(cardId)")
+                }
+            }
+            .padding(.bottom, 20)
+            Divider()
+        }
+        .padding(.top, 10).padding(.bottom, 4)
+        .background {
+            if hasCustomBackground {
+                LibraryCardBackgroundSurface(backgroundMediaRef: backgroundMediaRef, rate: rate) {
+                    Color.clear
                 }
             }
         }
-        .padding(20)
-        .background {
-            LibraryCardBackgroundSurface(
-                backgroundMediaRef: backgroundMediaRef,
-                rate: rate
-            ) {
-                homePostCardBackground
-            }
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .contentShape(Rectangle())
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("card.home.\(cardId)")
     }
-    
+
     // MARK: - Background Views
 
     private var hasCustomBackground: Bool {
@@ -2115,7 +2040,7 @@ struct HomePostCard: View {
     private var homePostCardTagBackground: some View {
         RoundedRectangle(cornerRadius: 20)
             .fill(
-                (hasCustomBackground ? Color.black : Color.white)
+                (hasCustomBackground ? ChoraiTheme.background : ChoraiTheme.raisedSurface)
                     .opacity(
                         LibraryCardReadabilityPolicy.tagSurfaceOpacity(
                             hasBackground: hasCustomBackground
@@ -2129,13 +2054,7 @@ struct HomePostCard: View {
     }
     
     private var homePostCardBackground: some View {
-        RoundedRectangle(cornerRadius: 16)
-            .background(.ultraThinMaterial.opacity(0.55))
-            .cornerRadius(16)
-            .overlay(topLeftHighlight)
-            .overlay(bottomRightHighlight)
-            .overlay(topEdgeHighlight)
-            .overlay(bottomEdgeHighlight)
+        RoundedRectangle(cornerRadius: 20, style: .continuous).fill(ChoraiTheme.surface)
     }
     
     // MARK: 标签高光效果
@@ -2282,14 +2201,15 @@ struct LibraryCardContentPreview: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private let preview: LibraryCardPreviewContent
     private let cardID: String
-    private let textFont: Font
+    private let textFont: Font?
+    @ScaledMetric(relativeTo: .body) private var readingSize = 21.0
     private let onTap: (() -> Void)?
 
     init(
         content: String,
         contentJSON: String?,
         cardID: String,
-        textFont: Font = .system(size: 17, weight: .regular),
+        textFont: Font? = nil,
         onTap: (() -> Void)? = nil
     ) {
         preview = LibraryCardPreviewParser.parse(
@@ -2319,9 +2239,10 @@ struct LibraryCardContentPreview: View {
 
             if !preview.text.isEmpty {
                 Text(preview.text)
-                    .font(textFont)
-                    .foregroundColor(.white.opacity(0.9))
-                    .lineLimit(3)
+                    .font(textFont ?? .system(size: readingSize, design: .serif))
+                    .foregroundStyle(.primary)
+                    .lineSpacing(4)
+                    .lineLimit(4)
                     .multilineTextAlignment(.leading)
             }
         }
@@ -2361,7 +2282,7 @@ struct LibraryCardContentPreview: View {
             }
         }
         .frame(maxWidth: .infinity)
-        .background(Color.black.opacity(0.14))
+        .background(ChoraiTheme.raisedSurface)
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
@@ -2376,9 +2297,9 @@ struct LibraryCardContentPreview: View {
 
     private var imageLoading: some View {
         ZStack {
-            Color.white.opacity(0.04)
+            ChoraiTheme.raisedSurface
             ProgressView()
-                .tint(.white.opacity(0.8))
+                .tint(ChoraiTheme.ink.opacity(0.8))
         }
         .frame(maxWidth: .infinity, minHeight: 180, maxHeight: 240)
     }
@@ -2390,7 +2311,7 @@ struct LibraryCardContentPreview: View {
             Text("Image unavailable")
                 .font(.caption)
         }
-        .foregroundColor(.white.opacity(0.55))
+        .foregroundColor(ChoraiTheme.ink.opacity(0.55))
         .frame(maxWidth: .infinity, minHeight: 140)
     }
 }
@@ -2406,7 +2327,7 @@ struct HTMLTextRenderer: View {
         htmlContent: String,
         maxLines: Int = 3,
         font: Font = .system(size: 17, weight: .regular),
-        foregroundColor: Color = .white.opacity(0.9)
+        foregroundColor: Color = ChoraiTheme.ink
     ) {
         self.htmlContent = htmlContent
         self.maxLines = maxLines
@@ -2460,97 +2381,3 @@ struct HTMLTextRenderer: View {
         return text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
-
-// MARK: - 筛选标签组件
-struct HomeFilterTag: View {
-    let title: String
-    let isSelected: Bool
-    let action: () -> Void
-    
-    var body: some View {
-        Button(action: action) {
-            Text(title)
-                .font(.system(size: 14, weight: .medium))
-                .foregroundColor(isSelected ? .white : .white.opacity(0.7))
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 10)
-                .background(tagBackground)
-        }
-        .animation(.easeInOut(duration: 0.2), value: isSelected)
-    }
-    
-    private var tagBackground: some View {
-        RoundedRectangle(cornerRadius: 20)
-            .fill(isSelected ? Color.white.opacity(0.3) : Color.white.opacity(0.1))
-            .overlay(tagTopLeftHighlight)
-            .overlay(tagBottomRightHighlight)
-            .overlay(tagTopEdgeHighlight)
-            .overlay(tagBottomEdgeHighlight)
-    }
-    
-    private var tagTopLeftHighlight: some View {
-        RoundedRectangle(cornerRadius: 20)
-            .stroke(Color.white, lineWidth: 1)
-            .offset(x: 0, y: -1)
-            .mask(
-                RoundedRectangle(cornerRadius: 20)
-                    .fill(
-                        RadialGradient(
-                            colors: [Color.white, Color.clear],
-                            center: .topLeading,
-                            startRadius: 5,
-                            endRadius: 20
-                        )
-                    )
-            )
-    }
-    
-    private var tagBottomRightHighlight: some View {
-        RoundedRectangle(cornerRadius: 20)
-            .stroke(Color.white, lineWidth: 1)
-            .offset(x: 0, y: 0)
-            .mask(
-                RoundedRectangle(cornerRadius: 20)
-                    .fill(
-                        RadialGradient(
-                            colors: [Color.white, Color.clear],
-                            center: .bottomTrailing,
-                            startRadius: 5,
-                            endRadius: 20
-                        )
-                    )
-            )
-    }
-    
-    private var tagTopEdgeHighlight: some View {
-        RoundedRectangle(cornerRadius: 20)
-            .stroke(Color.white, lineWidth: 1)
-            .offset(x: 0, y: -1)
-            .mask(
-                RoundedRectangle(cornerRadius: 20)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.white, Color.clear],
-                            startPoint: .top,
-                            endPoint: UnitPoint(x: 0, y: 0.05)
-                        )
-                    )
-            )
-    }
-    
-    private var tagBottomEdgeHighlight: some View {
-        RoundedRectangle(cornerRadius: 20)
-            .stroke(Color.white, lineWidth: 1)
-            .offset(x: 0, y: 1)
-            .mask(
-                RoundedRectangle(cornerRadius: 20)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.white, Color.clear],
-                            startPoint: .bottom,
-                            endPoint: UnitPoint(x: 1, y: 0.05)
-                        )
-                    )
-            )
-    }
-} 

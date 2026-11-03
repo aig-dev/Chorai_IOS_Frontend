@@ -7,12 +7,12 @@ enum ZenVisualTokens {
     static let cardRadius: CGFloat = 28
     static let tabHeight: CGFloat = 72
     static let transitionDuration = 0.28
-    static let background = Color(red: 0.045, green: 0.035, blue: 0.09)
-    static let accent = Color(red: 0.69, green: 0.58, blue: 1.0)
-    static let cardFill = Color.white.opacity(0.07)
-    static let cardBorder = Color.white.opacity(0.14)
-    static let opaqueCardFill = Color(red: 0.09, green: 0.075, blue: 0.15)
-    static let glassTint = Color(red: 0.105, green: 0.065, blue: 0.18)
+    static let background = ChoraiTheme.background
+    static let accent = ChoraiTheme.accent
+    static let cardFill = ChoraiTheme.surface
+    static let cardBorder = ChoraiTheme.separator
+    static let opaqueCardFill = ChoraiTheme.surface
+    static let glassTint = ChoraiTheme.raisedSurface
 }
 
 private enum FlowGlassLayer {
@@ -70,6 +70,12 @@ private struct FlowGlassSurface: View {
 
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.colorSchemeContrast) private var contrast
+    @Environment(\.colorScheme) private var scheme
+
+    private var shadowOpacity: Double {
+        guard !reduceTransparency, case .foreground = layer else { return 0 }
+        return scheme == .dark ? 0.1 : 0.025
+    }
 
     private var shape: RoundedRectangle {
         RoundedRectangle(
@@ -79,50 +85,11 @@ private struct FlowGlassSurface: View {
     }
 
     var body: some View {
-        ZStack {
-            shape.fill(
-                reduceTransparency
-                    ? ZenVisualTokens.opaqueCardFill
-                    : Color.clear
-            )
-
-            if !reduceTransparency {
-                shape.fill(.ultraThinMaterial)
-            }
-
-            shape.fill(
-                ZenVisualTokens.glassTint.opacity(layer.tintOpacity)
-            )
-        }
-        .clipShape(shape)
-        .overlay(
-            shape.strokeBorder(
-                edgeGradient,
-                lineWidth: contrast == .increased ? 1.5 : 1
-            )
-        )
-        .shadow(
-            color: Color.black.opacity(layer.shadowOpacity),
-            radius: layer.shadowRadius,
-            x: 0,
-            y: layer.shadowY
-        )
+        shape.fill(ZenVisualTokens.opaqueCardFill)
+            .overlay(shape.strokeBorder(ChoraiTheme.separator, lineWidth: contrast == .increased ? 1.5 : 0.7))
+            .shadow(color: Color.black.opacity(shadowOpacity), radius: 16, y: 6)
     }
 
-    private var edgeGradient: LinearGradient {
-        let contrastBoost = contrast == .increased ? 1.35 : 1
-        let opacity = min(0.78, layer.edgeOpacity * contrastBoost)
-
-        return LinearGradient(
-            colors: [
-                Color.white.opacity(opacity),
-                ZenVisualTokens.accent.opacity(opacity * 0.48),
-                Color.white.opacity(opacity * 0.18)
-            ],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-    }
 }
 
 private struct FlowDeckBackplate: View {
@@ -130,8 +97,8 @@ private struct FlowDeckBackplate: View {
 
     var body: some View {
         FlowGlassSurface(layer: .rear(depth: depth))
-            .scaleEffect(depth == 1 ? 0.972 : 0.944)
-            .offset(x: depth == 1 ? 7 : 14, y: depth == 1 ? 14 : 28)
+            .padding(.horizontal, depth == 1 ? 6 : 12)
+            .offset(y: depth == 1 ? 6 : 12)
             .allowsHitTesting(false)
             .accessibilityHidden(true)
     }
@@ -184,6 +151,16 @@ enum FlowTextPreview {
     }
 }
 
+private struct FlowSparkButtonStyle: ViewModifier {
+    @ViewBuilder func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content.buttonStyle(.glass).tint(ChoraiTheme.gold)
+        } else {
+            content.buttonStyle(.bordered).tint(ChoraiTheme.gold)
+        }
+    }
+}
+
 struct FlowCardView: View {
     let card: FlowCard
     let isInteractionLocked: Bool
@@ -195,14 +172,18 @@ struct FlowCardView: View {
     let onToggleFavorite: () -> Void
     let onSpark: () -> Void
     let onDismiss: () -> Void
+    let onCollectAndAdvance: () -> Void
     let onToggleLike: () -> Void
     var onboardingState: String?
     var contextualTipStore: ContextualGuideTipStore?
     var sparkResumeTargetIsVisible: Bool
+    var cardHeight: CGFloat = 440
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var dragOffset: CGSize = .zero
     @State private var isResolvingSwipe = false
+    @State private var dragCrossedThreshold = false
 
     private var isFlowCardTipVisible: Bool {
         contextualTipStore?.isVisible(
@@ -260,60 +241,54 @@ struct FlowCardView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            HStack(spacing: 12) {
+            let headerLayout = dynamicTypeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+                : AnyLayout(HStackLayout(spacing: 12))
+            headerLayout {
                 Button {
                     dismissVisibleTips()
                     onOpenAuthor()
                 } label: {
                     HStack(spacing: 8) {
                         authorAvatar
-                        Text(card.author?.username ?? "Chorai")
-                            .font(.subheadline.weight(.medium))
-                            .lineLimit(1)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(card.author?.username ?? "Chorai")
+                                .font(.subheadline.weight(.semibold)).foregroundStyle(Color.primary)
+                                .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
+                            if let date = cardDate {
+                                Text(date).font(.caption).foregroundStyle(Color.secondary)
+                                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
+                            }
+                        }
                     }
                 }
                 .buttonStyle(.plain)
                 .frame(minHeight: 44)
                 .contentShape(Rectangle())
                 .accessibilityLabel("Open author")
+                .accessibilityValue([card.author?.username, cardDate].compactMap { $0 }.joined(separator: ", "))
+                .accessibilityIdentifier("flow.author.\(card.id)")
                 .disabled(card.author == nil)
 
-                Spacer()
+                if !dynamicTypeSize.isAccessibilitySize { Spacer() }
 
                 HStack(spacing: 2) {
-                    Button {
-                        dismissVisibleTips()
-                        onOpenMenu()
-                    } label: {
-                        Image(systemName: "ellipsis")
-                            .font(.body.weight(.semibold))
-                            .frame(width: 44, height: 44)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("More actions")
-                    .accessibilityIdentifier("flow.menu.\(card.id)")
+                    if dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 0) }
 
-                    Button {
-                        if let activeSparkTip {
-                            contextualTipStore?.complete(
-                                activeSparkTip,
-                                onboardingState: onboardingState,
-                                targetIsVisible: true
-                            )
-                        } else {
-                            dismissVisibleTips()
+                    Button(action: performSparkAction) {
+                        Group {
+                            if dynamicTypeSize.isAccessibilitySize {
+                                Image(systemName: "sparkles").font(.system(size: 20, weight: .semibold))
+                            }
+                            else { Label("Spark", systemImage: "sparkles") }
                         }
-                        onSpark()
-                    } label: {
-                        Image("menu_spark")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 22, height: 22)
-                            .frame(width: 44, height: 44)
-                            .contentShape(Rectangle())
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(ChoraiTheme.gold)
+                            .padding(.horizontal, 4)
+                            .frame(minWidth: dynamicTypeSize.isAccessibilitySize ? 44 : nil,
+                                   minHeight: dynamicTypeSize.isAccessibilitySize ? 44 : 36)
                     }
-                    .buttonStyle(.plain)
+                    .modifier(FlowSparkButtonStyle())
                     .accessibilityLabel("Spark")
                     .accessibilityIdentifier("flow.spark.\(card.id)")
                     .overlay {
@@ -321,8 +296,32 @@ struct FlowCardView: View {
                             isVisible: activeSparkTip != nil
                         )
                     }
+                    NativeCardActionsMenu(
+                        cardData: card.asUserCard,
+                        layout: .grid2x2,
+                        isOwnCard: card.isOwner,
+                        onPrepare: dismissVisibleTips,
+                        onSpark: performSparkAction
+                    ) {
+                        Image(systemName: "ellipsis")
+                            .font(dynamicTypeSize.isAccessibilitySize
+                                  ? .system(size: 20, weight: .semibold)
+                                  : .body.weight(.semibold))
+                            .foregroundStyle(Color.secondary)
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("More actions")
+                    .accessibilityIdentifier("flow.menu.\(card.id)")
+
                 }
             }
+            .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+            .fixedSize(horizontal: false, vertical: true)
+            .layoutPriority(1)
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("flow.header.\(card.id)")
 
             if let activeSparkTip, let contextualTipStore {
                 HStack {
@@ -345,25 +344,27 @@ struct FlowCardView: View {
                 )
             }
 
-            Text(FlowTextPreview.make(card.content))
-                .font(.system(size: 17, weight: .regular, design: .rounded))
-                .lineSpacing(5)
-                .lineLimit(7)
+            ChoraiLevelBadge(rate: card.rate)
+                .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+                .fixedSize(horizontal: false, vertical: true)
+
+            FlowRichPreview(card: card, compact: false)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
                 .onTapGesture {
                     dismissVisibleTips()
                     onOpenDetail()
                 }
-                .gesture(cardDragGesture)
+                .highPriorityGesture(cardDragGesture)
                 .accessibilityElement(children: .combine)
-                .accessibilityLabel("Open card")
                 .accessibilityAddTraits(.isButton)
                 .accessibilityIdentifier("flow.card.\(card.id)")
                 .accessibilityAction {
                     dismissVisibleTips()
                     onOpenDetail()
                 }
+                .accessibilityAction(named: Text("Skip note"), onDismiss)
+                .accessibilityAction(named: Text("Collect and continue"), onCollectAndAdvance)
 
             if !card.tags.isEmpty {
                 HStack(spacing: 8) {
@@ -372,15 +373,16 @@ struct FlowCardView: View {
                             .font(.caption)
                             .lineLimit(1)
                             .padding(.horizontal, 10)
-                            .frame(minHeight: 28)
-                            .background(Capsule().fill(Color.white.opacity(0.08)))
+                            .padding(.vertical, 5)
+                            .foregroundStyle(Color.secondary)
+                            .background(Capsule().fill(ChoraiTheme.background))
                     }
                 }
+                .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+                .fixedSize(horizontal: false, vertical: true)
             }
 
-            Spacer(minLength: 0)
-
-            HStack(spacing: 10) {
+            HStack(spacing: 16) {
                 if !card.isOwner {
                     Button {
                         if !isFlowCardTipVisible {
@@ -390,8 +392,7 @@ struct FlowCardView: View {
                     } label: {
                         engagementMetric(
                             image: card.isFavorited ? "favorite_active" : "favorite",
-                            count: card.favoriteCount,
-                            iconSize: 24
+                            count: card.favoriteCount
                         )
                     }
                     .buttonStyle(.plain)
@@ -417,7 +418,7 @@ struct FlowCardView: View {
                 .accessibilityValue(card.isLiked ? "true" : "false")
                 .accessibilityIdentifier("flow.like.\(card.id)")
 
-                CommentButton(cardId: card.id, commentCount: card.commentCount, iconSize: 22)
+                CommentButton(cardId: card.id, commentCount: card.commentCount, iconSize: 14, countFont: .caption)
                     .buttonStyle(.plain)
                     .frame(minWidth: 44, minHeight: 44)
                     .contentShape(Rectangle())
@@ -430,21 +431,38 @@ struct FlowCardView: View {
                         }
                     )
             }
-            .padding(.bottom, -18)
-            .foregroundStyle(Color.white.opacity(0.58))
+            .foregroundStyle(Color.secondary)
+            .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+            .fixedSize(horizontal: false, vertical: true)
 
             if let likeErrorMessage {
                 Text(likeErrorMessage)
                     .font(.footnote)
-                    .foregroundStyle(Color.white.opacity(0.72))
+                    .foregroundStyle(ChoraiTheme.secondaryInk)
+                    .dynamicTypeSize(...DynamicTypeSize.accessibility1)
                     .accessibilityIdentifier("flow.like.error.\(card.id)")
             }
 
         }
-        .padding(22)
-        .foregroundStyle(.white)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .padding(24)
+        .foregroundStyle(ChoraiTheme.ink)
+        .frame(maxWidth: .infinity)
+        .frame(height: cardHeight, alignment: .topLeading)
         .background(cardBackground)
+        .choraiCardLevel(rate: card.rate, showsChora: false, cornerRadius: 28)
+        .overlay(alignment: .topLeading) {
+            if abs(dragOffset.width) > 8 {
+                Label(dragOffset.width > 0 ? "Collect" : "Skip", systemImage: dragOffset.width > 0 ? "bookmark.fill" : "arrow.left")
+                    .font(.headline).padding(.horizontal, 16).padding(.vertical, 10)
+                    .foregroundStyle(dragOffset.width > 0 ? ChoraiTheme.onAccent : ChoraiTheme.ink)
+                    .background(dragOffset.width > 0 ? ChoraiTheme.accent : ChoraiTheme.raisedSurface, in: Capsule())
+                    .opacity(min(1, Double(abs(dragOffset.width) / 80)))
+                    .padding(22).allowsHitTesting(false).accessibilityHidden(true)
+                    .accessibilityIdentifier("flow.swipe.feedback")
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("flow.card.surface.\(card.id)")
         .overlay {
             ContextualGuideRoundedTargetHalo(
                 isVisible: isFlowCardTipVisible,
@@ -457,8 +475,25 @@ struct FlowCardView: View {
         .disabled(isInteractionLocked || isResolvingSwipe)
     }
 
+    private func performSparkAction() {
+        if let activeSparkTip {
+            contextualTipStore?.complete(activeSparkTip, onboardingState: onboardingState, targetIsVisible: true)
+        } else {
+            dismissVisibleTips()
+        }
+        onSpark()
+    }
+
     private var cardBackground: some View {
         FlowGlassSurface(layer: .foreground)
+    }
+
+    private var cardDate: String? {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let date = formatter.date(from: card.createdAt) ?? ISO8601DateFormatter().date(from: card.createdAt)
+        guard let date else { return nil }
+        return RelativeDateTimeFormatter().localizedString(for: date, relativeTo: Date())
     }
 
     private var resolvedAvatarURL: URL? {
@@ -491,32 +526,29 @@ struct FlowCardView: View {
                 avatarPlaceholder
             }
         }
-        .frame(width: 32, height: 32)
+        .frame(width: 34, height: 34)
         .clipShape(Circle())
     }
 
     private var avatarPlaceholder: some View {
-        Circle()
-            .fill(Color.white.opacity(0.1))
-            .overlay(
-                Image(systemName: "person.fill")
-                    .font(.caption)
-                    .foregroundStyle(Color.white.opacity(0.72))
-            )
+        Text((card.author?.username ?? "Chorai").split(separator: " ").compactMap(\.first).prefix(2).map(String.init).joined())
+            .font(.system(size: 11, weight: .medium, design: .rounded))
+            .foregroundStyle(ChoraiTheme.ink)
+            .frame(width: 34, height: 34)
+            .background(ChoraiTheme.ink.opacity(0.08), in: Circle())
     }
 
     private func engagementMetric(
         image: String,
         count: Int,
-        iconSize: CGFloat = 22
+        iconSize: CGFloat = 14
     ) -> some View {
         HStack(spacing: 6) {
-            Image(image)
-                .resizable()
-                .scaledToFit()
+            Image(systemName: image == "favorite_active" ? "bookmark.fill" : image == "favorite" ? "bookmark" : image == "like_active" ? "heart.fill" : "heart")
+                .font(.system(size: 14, weight: .regular))
                 .frame(width: iconSize, height: iconSize)
             Text("\(count)")
-                .font(.system(size: 15, weight: .medium, design: .rounded))
+                .font(.caption)
                 .monospacedDigit()
         }
         .frame(minWidth: 44, minHeight: 44)
@@ -527,13 +559,15 @@ struct FlowCardView: View {
     private var cardDragGesture: some Gesture {
         DragGesture(minimumDistance: 18)
             .onChanged { value in
-                guard !isInteractionLocked, !isResolvingSwipe else { return }
-                dragOffset = CGSize(
-                    width: value.translation.width,
-                    height: value.translation.height * 0.08
-                )
+                guard !isInteractionLocked, !isResolvingSwipe, abs(value.translation.width) > abs(value.translation.height) * 1.15 else { return }
+                dragOffset = CGSize(width: value.translation.width, height: 0)
+                let crossed = abs(value.translation.width) >= 100
+                if crossed && !dragCrossedThreshold { UISelectionFeedbackGenerator().selectionChanged() }
+                dragCrossedThreshold = crossed
             }
             .onEnded { value in
+                dragCrossedThreshold = false
+                guard abs(value.translation.width) > abs(value.translation.height) * 1.15 else { dragOffset = .zero; return }
                 resolveSwipe(
                     FlowSwipeResolver.resolve(
                         translation: Double(value.translation.width),
@@ -544,54 +578,47 @@ struct FlowCardView: View {
     }
 
     private func resolveSwipe(_ decision: FlowSwipeDecision) {
+        guard !isInteractionLocked, !isResolvingSwipe else { return }
         guard decision != .cancel else {
-            withAnimation(.spring(response: ZenVisualTokens.transitionDuration, dampingFraction: 0.86)) {
-                dragOffset = .zero
-            }
+            withAnimation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.86)) { dragOffset = .zero }
             return
         }
-        guard !isResolvingSwipe else { return }
-
-        isResolvingSwipe = true
-        let advancesRight = decision == .advanceRight
+        dismissVisibleTips()
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
-
+        // Keep the card in place while a right-swipe collection is pending.
+        // The store advances only after the service confirms it.
+        if decision == .advanceRight {
+            withAnimation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.86)) { dragOffset = .zero }
+            onCollectAndAdvance()
+            return
+        }
+        contextualTipStore?.complete(.flowCard, onboardingState: onboardingState, targetIsVisible: true)
+        isResolvingSwipe = true
         guard !reduceMotion else {
             dragOffset = .zero
             isResolvingSwipe = false
-            contextualTipStore?.complete(
-                .flowCard,
-                onboardingState: onboardingState,
-                targetIsVisible: true
-            )
-            if activeSparkTip != nil {
-                dismissVisibleTips()
-            }
             onDismiss()
             return
         }
-
-        withAnimation(.spring(response: ZenVisualTokens.transitionDuration, dampingFraction: 0.86)) {
-            dragOffset.width = advancesRight ? 620 : -620
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + ZenVisualTokens.transitionDuration) {
+        withAnimation(.easeOut(duration: 0.2)) { dragOffset.width = -500 }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
             dragOffset = .zero
             isResolvingSwipe = false
-            contextualTipStore?.complete(
-                .flowCard,
-                onboardingState: onboardingState,
-                targetIsVisible: true
-            )
-            if activeSparkTip != nil {
-                dismissVisibleTips()
-            }
             onDismiss()
         }
     }
+
 }
 
 struct FlowDeckView: View {
+    private struct CollectionUndoTaskID: Equatable {
+        let cardID: String?
+        let isInteractionLocked: Bool
+        let isGrid: Bool
+    }
+
     @ObservedObject var store: FlowDeckStore
+    var isGrid = false
     @StateObject private var likeStore = CardLikeStore(
         state: CardLikeState(cardID: "", isLiked: false, likeCount: 0),
         service: NetworkCoreCardLikeService(),
@@ -609,68 +636,57 @@ struct FlowDeckView: View {
     var sparkResumeRootSourceAssetID: String?
 
     private var backplateDepths: [Int] {
-        let count = min(2, max(0, store.cards.count - 1))
+        let count = min(2, max(0, store.remainingCount - 1))
         guard count > 0 else { return [] }
         return Array(1...count)
     }
 
     var body: some View {
-        VStack(spacing: 12) {
-            Group {
-                switch store.phase {
-                case .idle, .loading:
-                    FlowSkeletonView()
-                        .accessibilityIdentifier("screen.flow.loading")
-                case .loaded:
-                    loadedDeck
-                case .empty:
-                    FlowStateView(
-                        title: "You're caught up",
-                        message: "Refresh when you want another thread to follow.",
-                        button: "Refresh",
-                        action: store.refresh
-                    )
-                    .accessibilityIdentifier("screen.flow.empty")
-                case .failed(let message):
-                    FlowStateView(
-                        title: "Flow paused",
-                        message: message,
-                        button: "Retry",
-                        action: store.refresh
-                    )
-                    .accessibilityIdentifier("screen.flow.error")
-                }
+        VStack(spacing: 10) {
+            ZStack {
+                deckContent
+                    .zIndex(isGrid ? 0 : 1)
+                    .opacity(isGrid ? 0 : 1)
+                    .allowsHitTesting(!isGrid)
+                    .accessibilityHidden(isGrid)
+                gridContent
+                    .zIndex(isGrid ? 1 : 0)
+                    .opacity(isGrid ? 1 : 0)
+                    .allowsHitTesting(isGrid)
+                    .accessibilityHidden(!isGrid)
             }
-
             noticeView
 
-            if store.phase == .loaded {
-                Text("Flow loaded")
-                    .font(.system(size: 1))
-                    .foregroundStyle(Color.white.opacity(0.01))
-                    .frame(width: 1, height: 1)
-                    .accessibilityIdentifier("screen.flow.loaded")
-            }
-
-            if let card = store.currentCard {
-                Text(card.id)
-                    .font(.system(size: 1))
-                    .foregroundStyle(Color.white.opacity(0.01))
-                    .frame(width: 1, height: 1)
-                    .accessibilityIdentifier("flow.visible-card.id")
-                Text("\(card.likeCount)")
-                    .font(.system(size: 1))
-                    .foregroundStyle(Color.white.opacity(0.01))
-                    .frame(width: 1, height: 1)
-                    .accessibilityIdentifier("flow.like.count.\(card.id)")
-                Text("\(card.favoriteCount)")
-                    .font(.system(size: 1))
-                    .foregroundStyle(Color.white.opacity(0.01))
-                    .frame(width: 1, height: 1)
-                    .accessibilityIdentifier("flow.favorite.count.\(card.id)")
+        }
+        .overlay(alignment: .top) {
+            if store.undoCollectionCardID != nil && !isGrid {
+                HStack(spacing: 12) {
+                    Label("Collected", systemImage: "bookmark.fill").font(.subheadline)
+                    Spacer(minLength: 6)
+                    Button("Undo") { store.undoLastCollection() }.font(.subheadline.weight(.semibold)).frame(minWidth: 44, minHeight: 44)
+                        .disabled(store.isInteractionLocked).accessibilityIdentifier("flow.collection.undo")
+                }.padding(.horizontal, 16).padding(.vertical, 4)
+                    .choraiGlassSurface(cornerRadius: 30).padding(.horizontal, 10).padding(.top, 6)
             }
         }
+        .overlay(alignment: .bottomLeading) { testStateMarkers }
+        .padding(.horizontal, isGrid ? 12 : 14)
+        .foregroundStyle(ChoraiTheme.ink)
         .task { store.loadInitialIfNeeded() }
+        .task(id: CollectionUndoTaskID(cardID: store.undoCollectionCardID,
+                                      isInteractionLocked: store.isInteractionLocked,
+                                      isGrid: isGrid)) {
+            guard let cardID = store.undoCollectionCardID, !store.isInteractionLocked else { return }
+            if !isGrid {
+                // A pending Undo cancels this task. A failed request starts a fresh
+                // interval, keeping the confirmed collection and its retry reachable.
+                do { try await Task.sleep(nanoseconds: 10_000_000_000) }
+                catch { return }
+            }
+            guard !Task.isCancelled else { return }
+            store.dismissCollectionUndo(for: cardID)
+        }
+        .onDisappear(perform: dismissCollectionFeedback)
         .onChange(of: store.currentCard?.id) { _ in
             if let card = store.currentCard {
                 likeStore.hydrate(
@@ -694,60 +710,98 @@ struct FlowDeckView: View {
             store.applyLikeState(state)
             likeStore.applyCommitted(state)
         }
+        .onReceive(CardEngagementCenter.shared.favorites) { store.applyFavoriteState($0) }
+    }
+
+    @ViewBuilder
+    private var deckContent: some View {
+        switch store.phase {
+        case .idle, .loading:
+            FlowSkeletonView().accessibilityIdentifier("screen.flow.loading")
+        case .loaded: loadedDeck
+        case .empty:
+            FlowStateView(title: "You're caught up", message: "Your recent notes are still here. Go back or refresh when you're ready.", button: "Refresh", action: store.refresh)
+                .accessibilityIdentifier("screen.flow.empty")
+        case .failed(let message):
+            FlowStateView(title: "Explore paused", message: message, button: "Retry", action: store.refresh)
+                .accessibilityIdentifier("screen.flow.error")
+        }
     }
 
     @ViewBuilder
     private var loadedDeck: some View {
         if let card = store.currentCard {
-            ZStack {
-                ForEach(backplateDepths.reversed(), id: \.self) { depth in
-                    FlowDeckBackplate(depth: depth)
-                }
-
-                FlowCardView(
-                    card: card,
-                    isInteractionLocked: store.isInteractionLocked,
-                    isLikeMutationInFlight: likeStore.isMutating,
-                    likeErrorMessage: likeErrorMessage(for: card.id),
-                    onOpenDetail: { onOpenDetail(card) },
-                    onOpenAuthor: { onOpenAuthor(card) },
-                    onOpenMenu: { onOpenMenu(card) },
-                    onToggleFavorite: {
-                        store.toggleFavoriteCurrent(
-                            onFavoriteSucceeded: { assetID in
-                                contextualTipStore?.complete(
-                                    .flowCard,
-                                    onboardingState: onboardingStore?.contextualTipState,
-                                    targetIsVisible: true
-                                )
-                                onCardSaved(assetID)
-                            }
-                        )
-                    },
-                    onSpark: { onSpark(card) },
-                    onDismiss: {
-                        let assetID = card.id
-                        store.dismissCurrent()
-                        onCardDismissed(assetID)
-                    },
-                    onToggleLike: likeStore.toggle,
-                    onboardingState: onboardingStore?.contextualTipState,
-                    contextualTipStore: contextualTipStore,
-                    sparkResumeTargetIsVisible:
-                        OnboardingSparkContinuationPolicy.shouldShowResumeTip(
+            GeometryReader { viewport in
+                ZStack {
+                        ForEach(backplateDepths.reversed(), id: \.self) { depth in
+                            FlowDeckBackplate(depth: depth)
+                        }
+                        FlowCardView(
+                            card: card,
+                            isInteractionLocked: store.isInteractionLocked,
+                            isLikeMutationInFlight: likeStore.isMutating,
+                            likeErrorMessage: likeErrorMessage(for: card.id),
+                            onOpenDetail: { openDetail(card) },
+                            onOpenAuthor: { onOpenAuthor(card) },
+                            onOpenMenu: { onOpenMenu(card) },
+                            onToggleFavorite: { store.toggleFavoriteCurrent(onFavoriteSucceeded: recordSaved) },
+                            onSpark: { onSpark(card) },
+                            onDismiss: {
+                                guard store.currentCard?.id == card.id, !store.isInteractionLocked else { return }
+                                store.dismissCurrent()
+                                onCardDismissed(card.id)
+                            },
+                            onCollectAndAdvance: { store.collectAndAdvanceCurrent(onFavoriteSucceeded: recordSaved, onAdvanced: onCardDismissed) },
+                            onToggleLike: likeStore.toggle,
                             onboardingState: onboardingStore?.contextualTipState,
-                            resumeRootSourceAssetID: sparkResumeRootSourceAssetID
+                            contextualTipStore: contextualTipStore,
+                            sparkResumeTargetIsVisible: OnboardingSparkContinuationPolicy.shouldShowResumeTip(
+                                onboardingState: onboardingStore?.contextualTipState,
+                                resumeRootSourceAssetID: sparkResumeRootSourceAssetID
+                            ),
+                            cardHeight: max(0, viewport.size.height - 12)
                         )
-                )
-                .id(card.id)
+                        .id(card.id)
+                }
+                .frame(height: max(0, viewport.size.height - 12))
             }
-        } else {
-            FlowStateView(
-                title: "You're caught up",
-                message: "Refresh to continue.",
-                button: "Refresh",
-                action: store.refresh
-            )
+        }
+    }
+
+    private func recordSaved(_ assetID: String) {
+        contextualTipStore?.complete(.flowCard, onboardingState: onboardingStore?.contextualTipState, targetIsVisible: true)
+        onCardSaved(assetID)
+    }
+
+    private func dismissCollectionFeedback() {
+        guard let cardID = store.undoCollectionCardID else { return }
+        store.dismissCollectionUndo(for: cardID)
+    }
+
+    private func openDetail(_ card: FlowCard) {
+        dismissCollectionFeedback()
+        onOpenDetail(card)
+    }
+
+    @ViewBuilder
+    private var gridContent: some View {
+        if store.browsingCards.isEmpty { deckContent }
+        else {
+            FlowGridView(store: store, onOpenDetail: openDetail, onOpenAuthor: onOpenAuthor, onOpenMenu: onOpenMenu, onSpark: onSpark, onCardSaved: recordSaved)
+        }
+    }
+
+    @ViewBuilder
+    private var testStateMarkers: some View {
+        if store.phase == .loaded {
+            Text("Flow loaded").font(.system(size: 1)).foregroundStyle(ChoraiTheme.ink.opacity(0.01)).frame(width: 1, height: 1).accessibilityIdentifier("screen.flow.loaded")
+        }
+        if let card = store.currentCard {
+            Group {
+                Text(card.id).accessibilityIdentifier("flow.visible-card.id")
+                Text("\(card.likeCount)").accessibilityIdentifier("flow.like.count.\(card.id)")
+                Text("\(card.favoriteCount)").accessibilityIdentifier("flow.favorite.count.\(card.id)")
+            }.font(.system(size: 1)).foregroundStyle(ChoraiTheme.ink.opacity(0.01)).frame(width: 1, height: 1)
         }
     }
 
@@ -763,9 +817,9 @@ struct FlowDeckView: View {
     private var noticeView: some View {
         switch store.notice {
         case .favoriteFailed:
-            Text("Favorite failed. Try again.")
+            Text("Collection wasn’t updated. Please try again.")
                 .font(.footnote)
-                .foregroundStyle(Color.white.opacity(0.72))
+                .foregroundStyle(ChoraiTheme.secondaryInk)
                 .accessibilityIdentifier("flow.favorite.error")
         case nil:
             EmptyView()
@@ -779,10 +833,10 @@ private struct FlowSkeletonView: View {
             .fill(ZenVisualTokens.cardFill)
             .overlay(alignment: .topLeading) {
                 VStack(alignment: .leading, spacing: 14) {
-                    Capsule().fill(Color.white.opacity(0.1)).frame(width: 112, height: 14)
-                    Capsule().fill(Color.white.opacity(0.1)).frame(height: 22)
-                    Capsule().fill(Color.white.opacity(0.08)).frame(height: 14)
-                    Capsule().fill(Color.white.opacity(0.08)).frame(width: 210, height: 14)
+                    Capsule().fill(ChoraiTheme.separator).frame(width: 112, height: 14)
+                    Capsule().fill(ChoraiTheme.separator).frame(height: 22)
+                    Capsule().fill(ChoraiTheme.raisedSurface).frame(height: 14)
+                    Capsule().fill(ChoraiTheme.raisedSurface).frame(width: 210, height: 14)
                 }
                 .padding(22)
             }
@@ -800,14 +854,362 @@ private struct FlowStateView: View {
             Text(title)
                 .font(.title3.weight(.semibold))
             Text(message)
-                .foregroundStyle(Color.white.opacity(0.62))
+                .foregroundStyle(ChoraiTheme.secondaryInk)
                 .multilineTextAlignment(.center)
             Button(button, action: action)
                 .buttonStyle(.borderedProminent)
                 .tint(ZenVisualTokens.accent)
         }
-        .foregroundStyle(.white)
+        .foregroundStyle(ChoraiTheme.ink)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(24)
+    }
+}
+
+/// Both presentations read the same store; each keeps its own scroll position.
+private struct FlowGridView: View {
+    @ObservedObject var store: FlowDeckStore
+    let onOpenDetail: (FlowCard) -> Void
+    let onOpenAuthor: (FlowCard) -> Void
+    let onOpenMenu: (FlowCard) -> Void
+    let onSpark: (FlowCard) -> Void
+    let onCardSaved: (String) -> Void
+    @Environment(\.dynamicTypeSize) private var typeSize
+
+    var body: some View {
+        ScrollView {
+            LazyVStack(spacing: 16) {
+                FlowMasonryLayout(columns: typeSize.isAccessibilitySize ? 1 : 2, spacing: 12) {
+                    ForEach(Array(store.browsingCards.enumerated()), id: \.element.id) { index, card in
+                        tile(card)
+                            .accessibilitySortPriority(Double(store.browsingCards.count - index))
+
+                    }
+                }
+                if store.canLoadMore, let last = store.browsingCards.last {
+                    Color.clear.frame(height: 1)
+                        .onAppear { store.loadMoreIfNeeded(visibleCardID: last.id) }
+                        .id(last.id)
+                }
+                if !store.canLoadMore {
+                    Text("You're all caught up").font(.caption).foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity).padding(.vertical, 24)
+                }
+            }.padding(.bottom, 20)
+        }
+        .scrollIndicators(.hidden)
+        .refreshable { store.refresh() }
+        .accessibilityIdentifier("explore.grid")
+    }
+
+    @ViewBuilder private func tile(_ card: FlowCard) -> some View {
+        if card.rate != nil { ratedTile(card) }
+        else { unratedTile(card) }
+    }
+
+    /// The rated Grid uses the approved V8 level card as a complete surface.
+    private func ratedTile(_ card: FlowCard) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            ChoraiLevelBadge(rate: card.rate, compact: true)
+            Button { onOpenDetail(card) } label: {
+                Text(ratedSummary(card)).font(.system(.subheadline, design: .serif))
+                    .lineSpacing(3).lineLimit(7)
+                    .frame(maxWidth: .infinity, minHeight: 126, alignment: .topLeading)
+                    .contentShape(Rectangle())
+            }.buttonStyle(.plain)
+                .accessibilityLabel("Read note, \(FlowTextPreview.make(card.content).prefix(100))")
+                .accessibilityHint("Opens the full note")
+                .accessibilityIdentifier("explore.grid.card.\(card.id)")
+            Button { onOpenAuthor(card) } label: {
+                Text(card.author?.username ?? "Chorai")
+                    .font(.caption.weight(.medium)).foregroundStyle(Color.secondary)
+                    .lineLimit(1).frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                    .contentShape(Rectangle())
+            }.buttonStyle(.plain).disabled(card.author == nil)
+                .accessibilityLabel("Open author, \(card.author?.username ?? "Chorai")")
+            HStack(spacing: 0) {
+                if !card.isOwner {
+                    Button { store.toggleFavorite(assetID: card.id, onFavoriteSucceeded: onCardSaved) } label: {
+                        Image(systemName: card.isFavorited ? "bookmark.fill" : "bookmark")
+                            .font(.subheadline).frame(minWidth: 44, minHeight: 44).contentShape(Rectangle())
+                    }.buttonStyle(.plain)
+                        .accessibilityLabel(card.isFavorited ? "Remove from collection" : "Collect")
+                        .accessibilityValue(card.isFavorited ? "true" : "false")
+                        .accessibilityIdentifier("explore.grid.favorite.\(card.id)")
+                }
+                Spacer(minLength: 0)
+                NativeCardActionsMenu(
+                    cardData: card.asUserCard,
+                    layout: .grid2x2,
+                    isOwnCard: card.isOwner,
+                    onSpark: { onSpark(card) }
+                ) {
+                    Image(systemName: "ellipsis").frame(width: 44, height: 44)
+                }.accessibilityLabel("Note actions")
+                    .accessibilityIdentifier("explore.grid.menu.\(card.id)")
+            }.buttonStyle(.plain)
+        }
+        .padding(14)
+        .choraiCardLevel(rate: card.rate, showsChora: false, cornerRadius: 17)
+        .foregroundStyle(ChoraiTheme.ink)
+        .multilineTextAlignment(.leading)
+        .accessibilityElement(children: .contain)
+        .disabled(store.isInteractionLocked)
+    }
+
+    private func ratedSummary(_ card: FlowCard) -> String {
+        let preview = LibraryCardPreviewParser.parse(content: card.content, contentJSON: card.contentJSON)
+        let blocks = FlowPreviewBlock.read(card, fallback: preview.text)
+        return blocks.map(\.text).joined(separator: "\n\n")
+    }
+
+    private func unratedTile(_ card: FlowCard) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button { onOpenDetail(card) } label: {
+                VStack(alignment: .leading, spacing: 0) {
+                    FlowRichPreview(card: card, compact: true)
+                }
+                .frame(maxWidth: .infinity, minHeight: 44, alignment: .topLeading)
+                .choraiCardLevel(rate: card.rate, showsChora: false, cornerRadius: 8)
+                .contentShape(RoundedRectangle(cornerRadius: 8))
+            }.buttonStyle(.plain)
+                .accessibilityLabel("Read note, \(FlowTextPreview.make(card.content).prefix(100))")
+                .accessibilityHint("Opens the full note")
+                .accessibilityIdentifier("explore.grid.card.\(card.id)")
+                .contextMenu {
+                    Button("Read note", systemImage: "doc.text") { onOpenDetail(card) }
+                    if !card.isOwner {
+                        Button(card.isFavorited ? "Remove from collection" : "Collect", systemImage: card.isFavorited ? "bookmark.slash" : "bookmark") {
+                            store.toggleFavorite(assetID: card.id, onFavoriteSucceeded: onCardSaved)
+                        }
+                    }
+                }
+            HStack(spacing: 0) {
+                Button { onOpenAuthor(card) } label: {
+                    Text(card.author?.username ?? "Chorai")
+                        .font(.system(size: 11, weight: .medium)).foregroundStyle(ChoraiTheme.ink.opacity(0.76))
+                        .lineLimit(1).frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                        .contentShape(Rectangle())
+                }.buttonStyle(.plain).disabled(card.author == nil)
+                    .accessibilityLabel("Open author, \(card.author?.username ?? "Chorai")")
+                if !card.isOwner {
+                    Button { store.toggleFavorite(assetID: card.id, onFavoriteSucceeded: onCardSaved) } label: {
+                        Image(systemName: card.isFavorited ? "bookmark.fill" : "bookmark")
+                            .font(.system(size: 14, weight: .medium)).frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
+                    }.buttonStyle(.plain)
+                        .accessibilityLabel(card.isFavorited ? "Remove from collection" : "Collect")
+                        .accessibilityValue(card.isFavorited ? "true" : "false")
+                        .accessibilityIdentifier("explore.grid.favorite.\(card.id)")
+                }
+                NativeCardActionsMenu(
+                    cardData: card.asUserCard,
+                    layout: .grid2x2,
+                    isOwnCard: card.isOwner,
+                    onSpark: { onSpark(card) }
+                ) {
+                    Image(systemName: "ellipsis").font(.system(size: 14, weight: .medium)).frame(width: 44, height: 44)
+                }.accessibilityLabel("Note actions")
+                    .accessibilityIdentifier("explore.grid.menu.\(card.id)")
+            }.padding(.leading, 3)
+        }
+        .foregroundStyle(ChoraiTheme.ink)
+        .multilineTextAlignment(.leading)
+        .accessibilityElement(children: .contain)
+        .disabled(store.isInteractionLocked)
+    }
+}
+
+/// The approved Grid places the next note in the shortest column without
+/// changing source order for VoiceOver or reading history.
+private struct FlowMasonryLayout: Layout {
+    var columns: Int
+    var spacing: CGFloat
+
+    private func placements(width: CGFloat, subviews: Subviews) -> (points: [CGPoint], heights: [CGFloat], columnWidth: CGFloat) {
+        let count = max(1, columns)
+        let columnWidth = max(1, (width - CGFloat(count - 1) * spacing) / CGFloat(count))
+        var heights = Array(repeating: CGFloat.zero, count: count)
+        var points: [CGPoint] = []
+        for subview in subviews {
+            let column = heights.indices.min { heights[$0] < heights[$1] } ?? 0
+            let size = subview.sizeThatFits(ProposedViewSize(width: columnWidth, height: nil))
+            points.append(CGPoint(x: CGFloat(column) * (columnWidth + spacing), y: heights[column]))
+            heights[column] += size.height + spacing
+        }
+        return (points, heights, columnWidth)
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let width = proposal.width ?? 360
+        let result = placements(width: width, subviews: subviews)
+        return CGSize(width: width, height: max(0, (result.heights.max() ?? 0) - spacing))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let result = placements(width: bounds.width, subviews: subviews)
+        for (index, subview) in subviews.enumerated() {
+            let point = result.points[index]
+            subview.place(at: CGPoint(x: bounds.minX + point.x, y: bounds.minY + point.y), anchor: .topLeading,
+                          proposal: ProposedViewSize(width: result.columnWidth, height: nil))
+        }
+    }
+}
+
+/// Preview only the note's real blocks. In particular a paragraph never becomes
+/// an invented title, and the legacy title field is not displayed.
+private struct FlowPreviewBlock {
+    let kind: String
+    let text: String
+    let checked: Bool
+
+    static func read(_ card: FlowCard, fallback: String) -> [Self] {
+        var decoded: Any? = card.contentJSON
+        for _ in 0..<2 {
+            guard let value = decoded as? String, let data = value.data(using: .utf8) else { break }
+            decoded = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
+        }
+        let raw = (decoded as? [[String: Any]]) ?? ((decoded as? [String: Any])?["blocks"] as? [[String: Any]])
+        if let raw {
+            func flatten(_ blocks: [[String: Any]]) -> [[String: Any]] {
+                blocks.flatMap { [$0] + flatten($0["children"] as? [[String: Any]] ?? []) }
+            }
+            let result = flatten(raw).compactMap { block -> Self? in
+                let kind = (block["type"] as? String ?? "paragraph").lowercased()
+                guard kind != "image", let data = try? JSONSerialization.data(withJSONObject: [block]),
+                      let json = String(data: data, encoding: .utf8) else { return nil }
+                // Children are separate previews, not repeated in their parent.
+                var ownBlock = block
+                ownBlock["children"] = []
+                let ownJSON = (try? JSONSerialization.data(withJSONObject: [ownBlock])).flatMap { String(data: $0, encoding: .utf8) } ?? json
+                let text = LibraryCardPreviewParser.parse(content: "", contentJSON: ownJSON).text
+                guard !text.isEmpty else { return nil }
+                let checked = (block["props"] as? [String: Any])?["checked"] as? Bool ?? false
+                return Self(kind: kind, text: text, checked: checked)
+            }
+            if !result.isEmpty { return result }
+        }
+        // Existing HTML remains a plain, paragraph-preserving preview. No title
+        // is inferred from the first sentence when structured blocks are absent.
+        return fallback.isEmpty ? [] : [Self(kind: "paragraph", text: fallback, checked: false)]
+    }
+}
+
+struct FlowRichPreview: View {
+    let card: FlowCard
+    let compact: Bool
+    @Environment(\.dynamicTypeSize) private var typeSize
+    @ScaledMetric(relativeTo: .body) private var readingSize = 20.0
+    @ScaledMetric(relativeTo: .body) private var compactSize = 13.0
+    @ScaledMetric(relativeTo: .title2) private var headingSize = 24.0
+    @ScaledMetric(relativeTo: .title2) private var compactHeadingSize = 20.0
+    @ScaledMetric(relativeTo: .title) private var quoteSize = 33.0
+    @ScaledMetric(relativeTo: .title2) private var compactQuoteSize = 23.0
+    @ScaledMetric(relativeTo: .footnote) private var codeSize = 13.0
+    @ScaledMetric(relativeTo: .footnote) private var compactCodeSize = 11.0
+
+    private var preview: LibraryCardPreviewContent {
+        LibraryCardPreviewParser.parse(content: card.content, contentJSON: card.contentJSON)
+    }
+    private var blocks: [FlowPreviewBlock] { FlowPreviewBlock.read(card, fallback: preview.text) }
+    private var imageURL: URL? {
+        guard let source = preview.imageSource else { return nil }
+        return CardEditingMediaURLResolver.resolve(
+            source.hasPrefix("chorai-assets/") ? "/\(source)" : source,
+            canonicalizeRelativePath: APIConfiguration.resourceURLString
+        )
+    }
+
+    var body: some View {
+        Group {
+            if compact {
+                previewContent(blockLimit: 5, lineLimit: nil, showsImage: true)
+            } else {
+                GeometryReader { available in
+                    ViewThatFits(in: .vertical) {
+                        previewContent(blockLimit: 3, lineLimit: 4, showsImage: true).fixedSize(horizontal: false, vertical: true)
+                        previewContent(blockLimit: 2, lineLimit: 3, showsImage: true).fixedSize(horizontal: false, vertical: true)
+                        previewContent(blockLimit: 1, lineLimit: 2, showsImage: true).fixedSize(horizontal: false, vertical: true)
+                        previewContent(blockLimit: 1, lineLimit: 3, showsImage: false).fixedSize(horizontal: false, vertical: true)
+                        Text(preview.text.isEmpty ? "Open note" : preview.text)
+                            .font(.body).lineLimit(1).truncationMode(.tail)
+                    }
+                    .frame(width: available.size.width, height: available.size.height, alignment: .topLeading)
+                }
+            }
+        }
+        .foregroundStyle(ChoraiTheme.ink)
+        .multilineTextAlignment(.leading)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func previewContent(blockLimit: Int, lineLimit: Int?, showsImage: Bool) -> some View {
+        VStack(alignment: .leading, spacing: compact ? 0 : 14) {
+            if showsImage, let imageURL { imageContent(imageURL) }
+            if !blocks.isEmpty {
+                VStack(alignment: .leading, spacing: compact ? 12 : 14) {
+                    ForEach(Array(blocks.prefix(blockLimit).enumerated()), id: \.offset) { _, block in
+                        blockContent(block, summaryLines: lineLimit)
+                    }
+                }.padding(compact ? 15 : 0)
+            } else if imageURL == nil || !showsImage {
+                Text("Open note").font(.body).foregroundStyle(.secondary).padding(compact ? 15 : 0)
+            }
+        }
+    }
+
+    @ViewBuilder private func blockContent(_ block: FlowPreviewBlock, summaryLines: Int? = nil) -> some View {
+        switch block.kind {
+        case "heading":
+            Text(block.text).font(.system(size: compact ? compactHeadingSize : headingSize, design: .serif))
+                .tracking(-0.35).lineSpacing(2).lineLimit(summaryLines ?? (typeSize.isAccessibilitySize ? nil : 4))
+        case "quote", "blockquote":
+            VStack(alignment: .leading, spacing: 12) {
+                Image(systemName: "quote.opening").font(.system(size: compact ? 22 : 30)).foregroundStyle(ChoraiTheme.gold).accessibilityHidden(true)
+                Text(block.text).font(.system(size: compact ? compactQuoteSize : quoteSize, design: .serif))
+                    .tracking(-0.4).lineSpacing(3).lineLimit(summaryLines ?? (typeSize.isAccessibilitySize ? nil : 8))
+            }.padding(.vertical, compact ? 7 : 8)
+        case "codeblock", "code":
+            Text(block.text).font(.system(size: compact ? compactCodeSize : codeSize, design: .monospaced))
+                .lineSpacing(3).lineLimit(summaryLines ?? (typeSize.isAccessibilitySize ? nil : 10))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(compact ? 0 : 14)
+                .background(compact ? Color.clear : ChoraiTheme.raisedSurface, in: RoundedRectangle(cornerRadius: 10))
+        case "checklistitem", "bulletlistitem", "numberedlistitem":
+            HStack(alignment: .firstTextBaseline, spacing: compact ? 6 : 10) {
+                Image(systemName: block.kind == "checklistitem" ? (block.checked ? "checkmark.circle.fill" : "circle") : "circle.fill")
+                    .font(.system(size: block.kind == "checklistitem" ? (compact ? 13 : 17) : 5))
+                    .foregroundStyle(ChoraiTheme.gold).accessibilityHidden(true)
+                Text(block.text).font(.system(size: compact ? compactSize : readingSize))
+                    .lineSpacing(3).lineLimit(summaryLines ?? (typeSize.isAccessibilitySize ? nil : 4))
+            }
+        default:
+            Text(block.text).font(.system(size: compact ? compactSize : readingSize, design: .serif))
+                .lineSpacing(4).lineLimit(summaryLines ?? (typeSize.isAccessibilitySize ? nil : (compact ? 10 : 12)))
+        }
+    }
+
+    private func imageContent(_ url: URL) -> some View {
+        Color.clear.frame(height: compact ? 184 : 146)
+            .overlay {
+                GeometryReader { geometry in
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .success(let image):
+                            image.resizable().scaledToFill().frame(width: geometry.size.width, height: geometry.size.height).clipped()
+                        case .empty:
+                            ZStack { ChoraiTheme.raisedSurface; ProgressView() }
+                        case .failure:
+                            ZStack {
+                                ChoraiTheme.raisedSurface
+                                Label("Image unavailable", systemImage: "photo").font(.caption).foregroundStyle(.secondary)
+                            }
+                        @unknown default: ChoraiTheme.raisedSurface
+                        }
+                    }
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: compact ? 8 : 16))
+            .accessibilityLabel(preview.imageAlternativeText ?? "Note image")
     }
 }

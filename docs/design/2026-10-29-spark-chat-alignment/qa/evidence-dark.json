@@ -1,0 +1,114 @@
+[
+  {
+    "image": "native-chat-accessibility-dark.png",
+    "test": "ChatControlSizingUITests/testAttachmentPreviewScalesAndWrapsAtAccessibilitySize()",
+    "result_bundle": "/tmp/chorai-1029-approved-a-dark.xcresult",
+    "attachment": {
+      "configurationName": "Test Scheme Action",
+      "deviceId": "92DE3535-B261-49B5-844F-9BD9B8C241B4",
+      "deviceName": "iPhone 17 Pro",
+      "exportedFileName": "F8F5DBC8-BB84-444A-8391-9893401B488F.png",
+      "isAssociatedWithFailure": false,
+      "suggestedHumanReadableName": "chat-accessibility-attachment-and-composer_0_EF0D86FA-0633-4A18-8E89-066F94F97949.png",
+      "timestamp": 1793261257.906
+    }
+  },
+  {
+    "image": "native-chat-idle-dark.png",
+    "test": "ChatControlSizingUITests/testAttachmentPreviewScalesAndWrapsAtAccessibilitySize()",
+    "result_bundle": "/tmp/chorai-1029-approved-a-dark.xcresult",
+    "attachment": {
+      "configurationName": "Test Scheme Action",
+      "deviceId": "92DE3535-B261-49B5-844F-9BD9B8C241B4",
+      "deviceName": "iPhone 17 Pro",
+      "exportedFileName": "31AB67E2-16BC-4048-ADD0-3FDF7135D615.png",
+      "isAssociatedWithFailure": false,
+      "suggestedHumanReadableName": "chat-compact-idle_0_12F03907-6604-43A3-AFE9-7A6D32472D39.png",
+      "timestamp": 1793261248.553
+    }
+  },
+  {
+    "image": "native-chat-keyboard-dark.png",
+    "test": "ChatControlSizingUITests/testComposerKeepsCompactTapTargetsAndBottomAlignedActions()",
+    "result_bundle": "/tmp/chorai-1029-approved-a-dark.xcresult",
+    "attachment": {
+      "configurationName": "Test Scheme Action",
+      "deviceId": "92DE3535-B261-49B5-844F-9BD9B8C241B4",
+      "deviceName": "iPhone 17 Pro",
+      "exportedFileName": "B5D8689C-7D64-47FB-B29B-BF1095829685.png",
+      "isAssociatedWithFailure": false,
+      "suggestedHumanReadableName": "chat-compact-multiline-composer_0_F4FD0DF5-1781-4EAB-B67F-428ACE4AB48E.png",
+      "timestamp": 1793261270.838
+    }
+  },
+  {
+    "image": "native-spark-dark.png",
+    "test": "RootHeaderAlignmentUITests/testExploreAndSparkKeepNavigationWithoutPositionCounters()",
+    "result_bundle": "/tmp/chorai-1029-approved-a-dark.xcresult",
+    "attachment": {
+      "configurationName": "Test Scheme Action",
+      "deviceId": "92DE3535-B261-49B5-844F-9BD9B8C241B4",
+      "deviceName": "iPhone 17 Pro",
+      "exportedFileName": "38A742DF-35B6-4CF1-B648-1B1EDB9E2B3B.png",
+      "isAssociatedWithFailure": false,
+      "suggestedHumanReadableName": "spark-no-counter_0_46CA4B08-8E96-44A5-8BBC-9DA1F09CA001.png",
+      "timestamp": 1793261287.45
+    }
+  },
+  {
+    "image": "native-explore-search-dark.png",
+    "test": "RootHeaderAlignmentUITests/testExploreAndSparkKeepNavigationWithoutPositionCounters()",
+    "result_bundle": "/tmp/chorai-1029-approved-a-dark.xcresult",
+    "attachment": {
+      "configurationName": "Test Scheme Action",
+      "deviceId": "92DE3535-B261-49B5-844F-9BD9B8C241B4",
+      "deviceName": "iPhone 17 Pro",
+      "exportedFileName": "78E3FAC7-40C2-45A6-A3DA-28CD43D65A3E.png",
+      "isAssociatedWithFailure": false,
+      "suggestedHumanReadableName": "explore-search-no-counter_0_CB418D48-85EF-4362-860E-8FA23ECF6E29.png",
+      "timestamp": 1793261283.005
+    }
+  },
+  {
+    "image": "native-root-chat-dark.png",
+    "test": "RootHeaderAlignmentUITests/testRealTabRootsKeepTheirTitlesAndChatActionsVisible()",
+    "result_bundle": "/tmp/chorai-1029-approved-a-dark.xcresult",
+    "attachment": {
+      "configurationName": "Test Scheme Action",
+      "deviceId": "92DE3535-B261-49B5-844F-9BD9B8C241B4",
+      "deviceName": "iPhone 17 Pro",
+      "exportedFileName": "43176D62-053B-4488-87BA-5172F4E564BD.png",
+      "isAssociatedWithFailure": false,
+      "suggestedHumanReadableName": "root-chat_0_2DCEBDB0-442B-4B96-88CA-BFD242C835D0.png",
+      "timestamp": 1793261298.403
+    }
+  },
+  {
+    "image": "native-root-home-dark.png",
+    "test": "RootHeaderAlignmentUITests/testRealTabRootsKeepTheirTitlesAndChatActionsVisible()",
+    "result_bundle": "/tmp/chorai-1029-approved-a-dark.xcresult",
+    "attachment": {
+      "configurationName": "Test Scheme Action",
+      "deviceId": "92DE3535-B261-49B5-844F-9BD9B8C241B4",
+      "deviceName": "iPhone 17 Pro",
+      "exportedFileName": "F0C72611-C14B-4623-BB3E-4742A18DBEDB.png",
+      "isAssociatedWithFailure": false,
+      "suggestedHumanReadableName": "root-home_0_73E14EFE-2551-4D63-B736-6A51F0FA2AF1.png",
+      "timestamp": 1793261295.482
+    }
+  },
+  {
+    "image": "native-root-explore-dark.png",
+    "test": "RootHeaderAlignmentUITests/testRealTabRootsKeepTheirTitlesAndChatActionsVisible()",
+    "result_bundle": "/tmp/chorai-1029-approved-a-dark.xcresult",
+    "attachment": {
+      "configurationName": "Test Scheme Action",
+      "deviceId": "92DE3535-B261-49B5-844F-9BD9B8C241B4",
+      "deviceName": "iPhone 17 Pro",
+      "exportedFileName": "6821BCB9-5630-474A-9DD8-1DCE66792209.png",
+      "isAssociatedWithFailure": false,
+      "suggestedHumanReadableName": "root-explore_0_4264A174-429A-40B7-90F3-632D7F365E21.png",
+      "timestamp": 1793261292.303
+    }
+  }
+]

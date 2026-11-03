@@ -9,15 +9,13 @@ struct PreferencesView: View {
     @State private var mentionNotifications = true
     @State private var aiTaskNotifications = true
     @State private var appUpdatesNotifications = true
-    
+
     var body: some View {
         ZStack {
             // 背景图片
-            Image("home_bg")
-                .resizable()
-                .aspectRatio(contentMode: .fill)
+            ChoraiBackground()
                 .ignoresSafeArea()
-            
+
             VStack(spacing: 0) {
                 // 顶部导航栏
                 HStack {
@@ -25,108 +23,110 @@ struct PreferencesView: View {
                         presentationMode.wrappedValue.dismiss()
                     }) {
                         Image(systemName: "chevron.left")
-                            .font(.system(size: 20, weight: .medium))
-                            .foregroundColor(.white)
+                            .font(.title3.weight(.medium))
+                            .foregroundColor(ChoraiTheme.ink)
+                    .frame(minWidth: 44, minHeight: 44)
                     }
-                    
+
                     Spacer()
-                    
+
                     Text("Preferences")
-                        .font(.system(size: 24, weight: .bold))
-                        .foregroundColor(.white)
-                    
+                        .font(.title2.weight(.bold))
+                        .foregroundColor(ChoraiTheme.ink)
+
                     Spacer()
-                    
+
                     // 占位符保持对称
                     Image(systemName: "chevron.left")
-                        .font(.system(size: 20, weight: .medium))
+                        .font(.title3.weight(.medium))
                         .foregroundColor(.clear)
+                    .frame(minWidth: 44, minHeight: 44)
                 }
                 .adaptiveContentGutter()
-                .padding(.top, 60)
+                .padding(.top, 12)
                 .padding(.bottom, 30)
-                
+
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
                         Text("Recommendation Settings")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundColor(.white)
-                        
+                            .font(.headline.weight(.semibold))
+                            .foregroundColor(ChoraiTheme.ink)
+
                         // Recommendation Settings Section
                         VStack(alignment: .leading, spacing: 0) {
                             // Content Recommendations
                             HStack {
                                 Text("Content Recommendations")
-                                    .font(.system(size: 16, weight: .regular))
-                                    .foregroundColor(.white)
+                                    .font(.body.weight(.regular))
+                                    .foregroundColor(ChoraiTheme.ink)
                                 Spacer()
                                 Toggle("", isOn: $contentRecommendations)
-                                    .toggleStyle(SwitchToggleStyle(tint: .purple))
+                                    .toggleStyle(SwitchToggleStyle(tint: ChoraiTheme.accent))
                             }
                             .padding(.horizontal, 20)
                             .padding(.vertical, 16)
-                            
+
                             Divider()
-                                .background(Color.white.opacity(0.2))
+                                .background(ChoraiTheme.surface)
                                 .padding(.leading, 0)
-                            
+
                             // Content Type
                             HStack {
                                 Text("Content Type")
-                                    .font(.system(size: 16, weight: .regular))
-                                    .foregroundColor(.white)
+                                    .font(.body.weight(.regular))
+                                    .foregroundColor(ChoraiTheme.ink)
                                 Spacer()
                                 HStack(spacing: 8) {
                                     Text("Top Content")
-                                        .font(.system(size: 16, weight: .regular))
-                                        .foregroundColor(.gray)
+                                        .font(.body.weight(.regular))
+                                        .foregroundColor(ChoraiTheme.secondaryInk)
                                     Image(systemName: "chevron.right")
-                                        .font(.system(size: 14, weight: .medium))
-                                        .foregroundColor(.gray)
+                                        .font(.subheadline.weight(.medium))
+                                        .foregroundColor(ChoraiTheme.secondaryInk)
                                 }
                             }
                             .padding(.horizontal, 20)
                             .padding(.vertical, 16)
-                            
+
                             Divider()
-                                .background(Color.white.opacity(0.2))
+                                .background(ChoraiTheme.surface)
                                 .padding(.leading, 0)
-                            
+
                             // Source
                             HStack {
                                 Text("Source")
-                                    .font(.system(size: 16, weight: .regular))
-                                    .foregroundColor(.white)
+                                    .font(.body.weight(.regular))
+                                    .foregroundColor(ChoraiTheme.ink)
                                 Spacer()
                                 HStack(spacing: 8) {
                                     Text("All Sources")
-                                        .font(.system(size: 16, weight: .regular))
-                                        .foregroundColor(.gray)
+                                        .font(.body.weight(.regular))
+                                        .foregroundColor(ChoraiTheme.secondaryInk)
                                     Image(systemName: "chevron.right")
-                                        .font(.system(size: 14, weight: .medium))
-                                        .foregroundColor(.gray)
+                                        .font(.subheadline.weight(.medium))
+                                        .foregroundColor(ChoraiTheme.secondaryInk)
                                 }
                             }
                             .padding(.horizontal, 20)
                             .padding(.vertical, 16)
-                            
+
                             Divider()
-                                .background(Color.white.opacity(0.2))
+                                .background(ChoraiTheme.surface)
                                 .padding(.leading, 0)
-                            
+
                             // Frequency
                             HStack {
                                 Text("Frequency")
-                                    .font(.system(size: 16, weight: .regular))
-                                    .foregroundColor(.white)
+                                    .font(.body.weight(.regular))
+                                    .foregroundColor(ChoraiTheme.ink)
                                 Spacer()
                                 HStack(spacing: 8) {
                                     Text("Daily")
-                                        .font(.system(size: 16, weight: .regular))
-                                        .foregroundColor(.gray)
+                                        .font(.body.weight(.regular))
+                                        .foregroundColor(ChoraiTheme.secondaryInk)
                                     Image(systemName: "chevron.right")
-                                        .font(.system(size: 14, weight: .medium))
-                                        .foregroundColor(.gray)
+                                        .font(.subheadline.weight(.medium))
+                                        .foregroundColor(ChoraiTheme.secondaryInk)
                                 }
                             }
                             .padding(.horizontal, 20)
@@ -134,84 +134,84 @@ struct PreferencesView: View {
                         }
                         .background(
                             RoundedRectangle(cornerRadius: 16)
-                                .fill(Color.white.opacity(0.1))
+                                .fill(ChoraiTheme.surface)
                                 .cardHighlightEffect()
                         )
-                        
+
                         Text("AI Settings")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundColor(.white)
-                        
+                            .font(.headline.weight(.semibold))
+                            .foregroundColor(ChoraiTheme.ink)
+
                         // AI Settings Section
                         VStack(alignment: .leading, spacing: 0) {
                             // API Key Management
                             HStack {
                                 Text("API Key Management")
-                                    .font(.system(size: 16, weight: .regular))
-                                    .foregroundColor(.white)
+                                    .font(.body.weight(.regular))
+                                    .foregroundColor(ChoraiTheme.ink)
                                 Spacer()
                                 Image(systemName: "chevron.right")
-                                    .font(.system(size: 14, weight: .medium))
-                                    .foregroundColor(.gray)
+                                    .font(.subheadline.weight(.medium))
+                                    .foregroundColor(ChoraiTheme.secondaryInk)
                             }
                             .padding(.horizontal, 20)
                             .padding(.vertical, 16)
-                            
+
                             Divider()
-                                .background(Color.white.opacity(0.2))
+                                .background(ChoraiTheme.surface)
                                 .padding(.leading, 0)
-                            
+
                             // Default AI Model
                             HStack {
                                 Text("Default AI Model")
-                                    .font(.system(size: 16, weight: .regular))
-                                    .foregroundColor(.white)
+                                    .font(.body.weight(.regular))
+                                    .foregroundColor(ChoraiTheme.ink)
                                 Spacer()
                                 HStack(spacing: 8) {
                                     Text("Auto")
-                                        .font(.system(size: 16, weight: .regular))
-                                        .foregroundColor(.gray)
+                                        .font(.body.weight(.regular))
+                                        .foregroundColor(ChoraiTheme.secondaryInk)
                                     Image(systemName: "chevron.right")
-                                        .font(.system(size: 14, weight: .medium))
-                                        .foregroundColor(.gray)
+                                        .font(.subheadline.weight(.medium))
+                                        .foregroundColor(ChoraiTheme.secondaryInk)
                                 }
                             }
                             .padding(.horizontal, 20)
                             .padding(.vertical, 16)
-                            
+
                             Divider()
-                                .background(Color.white.opacity(0.2))
+                                .background(ChoraiTheme.surface)
                                 .padding(.leading, 0)
-                            
+
                             // Smart Tagging
                             HStack {
                                 Text("Smart Tagging")
-                                    .font(.system(size: 16, weight: .regular))
-                                    .foregroundColor(.white)
+                                    .font(.body.weight(.regular))
+                                    .foregroundColor(ChoraiTheme.ink)
                                 Spacer()
                                 Toggle("", isOn: $smartTagging)
-                                    .toggleStyle(SwitchToggleStyle(tint: .purple))
+                                    .toggleStyle(SwitchToggleStyle(tint: ChoraiTheme.accent))
                             }
                             .padding(.horizontal, 20)
                             .padding(.vertical, 16)
-                            
+
                             Divider()
-                                .background(Color.white.opacity(0.2))
+                                .background(ChoraiTheme.surface)
                                 .padding(.leading, 0)
-                            
+
                             // AI Data & Privacy
                             HStack {
                                 Text("AI Data & Privacy")
-                                    .font(.system(size: 16, weight: .regular))
-                                    .foregroundColor(.white)
+                                    .font(.body.weight(.regular))
+                                    .foregroundColor(ChoraiTheme.ink)
                                 Spacer()
                                 HStack(spacing: 8) {
                                     Text("View Settings")
-                                        .font(.system(size: 16, weight: .regular))
-                                        .foregroundColor(.gray)
+                                        .font(.body.weight(.regular))
+                                        .foregroundColor(ChoraiTheme.secondaryInk)
                                     Image(systemName: "chevron.right")
-                                        .font(.system(size: 14, weight: .medium))
-                                        .foregroundColor(.gray)
+                                        .font(.subheadline.weight(.medium))
+                                        .foregroundColor(ChoraiTheme.secondaryInk)
                                 }
                             }
                             .padding(.horizontal, 20)
@@ -219,109 +219,109 @@ struct PreferencesView: View {
                         }
                         .background(
                             RoundedRectangle(cornerRadius: 16)
-                                .fill(Color.white.opacity(0.1))
+                                .fill(ChoraiTheme.surface)
                                 .cardHighlightEffect()
                         )
-                        
+
                         Text("Notification Management")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundColor(.white)
-                        
+                            .font(.headline.weight(.semibold))
+                            .foregroundColor(ChoraiTheme.ink)
+
                         // Notification Management Section
                         VStack(alignment: .leading, spacing: 0) {
                             // Link Notifications
                             HStack {
                                 Text("Link Notifications")
-                                    .font(.system(size: 16, weight: .regular))
-                                    .foregroundColor(.white)
+                                    .font(.body.weight(.regular))
+                                    .foregroundColor(ChoraiTheme.ink)
                                 Spacer()
                                 Toggle("", isOn: $linkNotifications)
-                                    .toggleStyle(SwitchToggleStyle(tint: .purple))
+                                    .toggleStyle(SwitchToggleStyle(tint: ChoraiTheme.accent))
                             }
                             .padding(.horizontal, 20)
                             .padding(.vertical, 16)
-                            
+
                             Divider()
-                                .background(Color.white.opacity(0.2))
+                                .background(ChoraiTheme.surface)
                                 .padding(.leading, 0)
-                            
+
                             // Follow & Interaction Notifications
                             HStack {
                                 Text("Follow & Interaction Notifications")
-                                    .font(.system(size: 16, weight: .regular))
-                                    .foregroundColor(.white)
+                                    .font(.body.weight(.regular))
+                                    .foregroundColor(ChoraiTheme.ink)
                                 Spacer()
                                 Toggle("", isOn: $followNotifications)
-                                    .toggleStyle(SwitchToggleStyle(tint: .purple))
+                                    .toggleStyle(SwitchToggleStyle(tint: ChoraiTheme.accent))
                             }
                             .padding(.horizontal, 20)
                             .padding(.vertical, 16)
-                            
+
                             Divider()
-                                .background(Color.white.opacity(0.2))
+                                .background(ChoraiTheme.surface)
                                 .padding(.leading, 0)
-                            
+
                             // Mention Notifications
                             HStack {
                                 Text("Mention(@Mention) Notifications")
-                                    .font(.system(size: 16, weight: .regular))
-                                    .foregroundColor(.white)
+                                    .font(.body.weight(.regular))
+                                    .foregroundColor(ChoraiTheme.ink)
                                 Spacer()
                                 Toggle("", isOn: $mentionNotifications)
-                                    .toggleStyle(SwitchToggleStyle(tint: .purple))
+                                    .toggleStyle(SwitchToggleStyle(tint: ChoraiTheme.accent))
                             }
                             .padding(.horizontal, 20)
                             .padding(.vertical, 16)
-                            
+
                             Divider()
-                                .background(Color.white.opacity(0.2))
+                                .background(ChoraiTheme.surface)
                                 .padding(.leading, 0)
-                            
+
                             // AI Task Notifications
                             HStack {
                                 Text("AI Task Notifications")
-                                    .font(.system(size: 16, weight: .regular))
-                                    .foregroundColor(.white)
+                                    .font(.body.weight(.regular))
+                                    .foregroundColor(ChoraiTheme.ink)
                                 Spacer()
                                 Toggle("", isOn: $aiTaskNotifications)
-                                    .toggleStyle(SwitchToggleStyle(tint: .purple))
+                                    .toggleStyle(SwitchToggleStyle(tint: ChoraiTheme.accent))
                             }
                             .padding(.horizontal, 20)
                             .padding(.vertical, 16)
-                            
+
                             Divider()
-                                .background(Color.white.opacity(0.2))
+                                .background(ChoraiTheme.surface)
                                 .padding(.leading, 0)
-                            
+
                             // App Updates & Announcements
                             HStack {
                                 Text("App Updates & Announcements")
-                                    .font(.system(size: 16, weight: .regular))
-                                    .foregroundColor(.white)
+                                    .font(.body.weight(.regular))
+                                    .foregroundColor(ChoraiTheme.ink)
                                 Spacer()
                                 Toggle("", isOn: $appUpdatesNotifications)
-                                    .toggleStyle(SwitchToggleStyle(tint: .purple))
+                                    .toggleStyle(SwitchToggleStyle(tint: ChoraiTheme.accent))
                             }
                             .padding(.horizontal, 20)
                             .padding(.vertical, 16)
-                            
+
                             Divider()
-                                .background(Color.white.opacity(0.2))
+                                .background(ChoraiTheme.surface)
                                 .padding(.leading, 0)
-                            
+
                             // Global Quiet Hours
                             HStack {
                                 Text("Global Quiet Hours")
-                                    .font(.system(size: 16, weight: .regular))
-                                    .foregroundColor(.white)
+                                    .font(.body.weight(.regular))
+                                    .foregroundColor(ChoraiTheme.ink)
                                 Spacer()
                                 HStack(spacing: 8) {
                                     Text("22:00-07:00")
-                                        .font(.system(size: 16, weight: .regular))
-                                        .foregroundColor(.gray)
+                                        .font(.body.weight(.regular))
+                                        .foregroundColor(ChoraiTheme.secondaryInk)
                                     Image(systemName: "chevron.right")
-                                        .font(.system(size: 14, weight: .medium))
-                                        .foregroundColor(.gray)
+                                        .font(.subheadline.weight(.medium))
+                                        .foregroundColor(ChoraiTheme.secondaryInk)
                                 }
                             }
                             .padding(.horizontal, 20)
@@ -329,7 +329,7 @@ struct PreferencesView: View {
                         }
                         .background(
                             RoundedRectangle(cornerRadius: 16)
-                                .fill(Color.white.opacity(0.1))
+                                .fill(ChoraiTheme.surface)
                                 .cardHighlightEffect()
                         )
                     }
@@ -338,10 +338,12 @@ struct PreferencesView: View {
                 }
             }
         }
+        .foregroundStyle(ChoraiTheme.ink)
+        .tint(ChoraiTheme.accent)
         .navigationBarHidden(true)
     }
 }
 
 #Preview {
     PreferencesView()
-} 
+}

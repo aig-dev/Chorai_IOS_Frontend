@@ -1,0 +1,134 @@
+Command line invocation:
+    /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild test-without-building -project ArcNote.xcodeproj -scheme ArcNoteUITests -destination "platform=iOS Simulator,id=92DE3535-B261-49B5-844F-9BD9B8C241B4" -derivedDataPath /Users/didi/Library/Caches/ChoraiReview/app-derived -parallel-testing-enabled NO "-only-testing:ArcNoteUITests/ArcNoteUITests/testNativeReviewSortUsesSystemMenuWithoutExpandingThePage" -resultBundlePath /tmp/chorai-review-sort-light.xcresult CODE_SIGNING_ALLOWED=NO
+
+Build settings from command line:
+    CODE_SIGNING_ALLOWED = NO
+
+Resolve Package Graph
+
+
+Resolved source packages:
+  Promises: https://github.com/google/promises.git @ 2.4.0
+  AppAuth: https://github.com/openid/AppAuth-iOS.git @ 2.0.0
+  Alamofire: https://github.com/Alamofire/Alamofire.git @ 5.10.2
+  SwiftyJSON: https://github.com/SwiftyJSON/SwiftyJSON.git @ 5.0.2
+  BlockNoteEditor: /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/Packages/BlockNoteEditor @ local
+  GTMSessionFetcher: https://github.com/google/gtm-session-fetcher.git @ 3.5.0
+  GTMAppAuth: https://github.com/google/GTMAppAuth.git @ 5.0.0
+  GoogleUtilities: https://github.com/google/GoogleUtilities.git @ 8.1.0
+  GoogleSignIn: https://github.com/google/GoogleSignIn-iOS @ 9.0.0
+  AppCheck: https://github.com/google/app-check.git @ 11.2.0
+  CoreFlow: /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/Packages/CoreFlow @ local
+
+Writing result bundle at path:
+	/tmp/chorai-review-sort-light.xcresult
+
+2026-10-27 11:37:33.377 xcodebuild[9149:67322] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-10-27 11:37:34.481673+0800 ArcNoteUITests-Runner[9277:68186] [Default] Running tests...
+    t =      nans Interface orientation changed to Portrait
+Test Suite 'Selected tests' started at 2026-10-27 11:37:35.295.
+Test Suite 'ArcNoteUITests.xctest' started at 2026-10-27 11:37:35.296.
+Test Suite 'ArcNoteUITests' started at 2026-10-27 11:37:35.296.
+Test Case '-[ArcNoteUITests.ArcNoteUITests testNativeReviewSortUsesSystemMenuWithoutExpandingThePage]' started.
+    t =     0.00s Start Test at 2026-10-27 11:37:35.297
+    t =     0.05s Set Up
+    t =     0.05s Open com.michen.arcnote
+    t =     0.05s     Launch com.michen.arcnote
+2026-10-27 11:37:35.619 xcodebuild[9149:67322] [MT] IDELaunchParametersSnapshot: debugger version lookup failed for path '<nil>': noURL
+2026-10-27 11:37:35.619 xcodebuild[9149:67322] [MT] IDELaunchParametersSnapshot: no debugger version
+objc[9277]: Class UIAccessibilityLoaderWebShared is implemented in both /Library/Developer/CoreSimulator/Volumes/iOS_23F73/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebCore.axbundle/WebCore (0x106498310) and /Library/Developer/CoreSimulator/Volumes/iOS_23F73/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebKit.axbundle/WebKit (0x106510398). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+2026-10-27 11:37:35.672 xcodebuild[9149:67322] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+    t =     0.84s         Setting up automation session
+    t =     1.40s         Wait for com.michen.arcnote to idle
+    t =     3.58s Waiting 10.0s for "local-preview.indicator" StaticText to exist
+    t =     4.62s     Checking `Expect predicate `existsNoRetry == 1` for object "local-preview.indicator" StaticText`
+    t =     4.62s         Checking existence of `"local-preview.indicator" StaticText`
+    t =     4.76s Tap "Home" Button
+    t =     4.76s     Wait for com.michen.arcnote to idle
+    t =     4.76s     Find the "Home" Button
+    t =     4.81s     Check for interrupting elements affecting "Home" Button
+    t =     4.87s     Synthesize event
+    t =     5.16s     Wait for com.michen.arcnote to idle
+    t =     6.81s Waiting 10.0s for "home.filter" Button to exist
+    t =     7.86s     Checking `Expect predicate `existsNoRetry == 1` for object "home.filter" Button`
+    t =     7.86s         Checking existence of `"home.filter" Button`
+    t =     7.92s Waiting 10.0s for "home.card.body.preview-note" Any to exist
+    t =     8.96s     Checking `Expect predicate `existsNoRetry == 1` for object "home.card.body.preview-note" Any`
+    t =     8.96s         Checking existence of `"home.card.body.preview-note" Any`
+    t =     9.01s Find the "home.card.body.preview-note" Any
+    t =     9.05s Tap "home.filter" Button
+    t =     9.05s     Wait for com.michen.arcnote to idle
+    t =     9.05s     Find the "home.filter" Button
+    t =     9.09s     Check for interrupting elements affecting "home.filter" Button
+    t =     9.12s     Synthesize event
+    t =     9.41s     Wait for com.michen.arcnote to idle
+    t =    10.62s Waiting 10.0s for "home.sort.Latest Edited" Button to exist
+    t =    11.66s     Checking `Expect predicate `existsNoRetry == 1` for object "home.sort.Latest Edited" Button`
+    t =    11.66s         Checking existence of `"home.sort.Latest Edited" Button`
+    t =    11.71s Find the "home.sort.Latest Edited" Button
+    t =    11.75s Waiting 10.0s for "home.sort.Latest Added" Button to exist
+    t =    12.80s     Checking `Expect predicate `existsNoRetry == 1` for object "home.sort.Latest Added" Button`
+    t =    12.80s         Checking existence of `"home.sort.Latest Added" Button`
+    t =    12.84s Find the "home.sort.Latest Added" Button
+    t =    12.88s Waiting 10.0s for "home.sort.Rarity-High Low" Button to exist
+    t =    13.93s     Checking `Expect predicate `existsNoRetry == 1` for object "home.sort.Rarity-High Low" Button`
+    t =    13.93s         Checking existence of `"home.sort.Rarity-High Low" Button`
+    t =    13.99s Find the "home.sort.Rarity-High Low" Button
+    t =    14.04s Waiting 10.0s for "home.sort.Rarity-Low High" Button to exist
+    t =    15.08s     Checking `Expect predicate `existsNoRetry == 1` for object "home.sort.Rarity-Low High" Button`
+    t =    15.08s         Checking existence of `"home.sort.Rarity-Low High" Button`
+    t =    15.14s Find the "home.sort.Rarity-Low High" Button
+    t =    15.19s Find the Target Application 'com.michen.arcnote'
+    t =    15.28s Added attachment named 'review-home-sort-menu'
+    t =    15.28s Waiting 10.0s for "home.sort.Latest Added" Button to exist
+    t =    16.33s     Checking `Expect predicate `existsNoRetry == 1` for object "home.sort.Latest Added" Button`
+    t =    16.33s         Checking existence of `"home.sort.Latest Added" Button`
+    t =    16.37s Tap "home.sort.Latest Added" Button
+    t =    16.37s     Wait for com.michen.arcnote to idle
+    t =    16.38s     Find the "home.sort.Latest Added" Button
+    t =    16.42s     Check for interrupting elements affecting "home.sort.Latest Added" Button
+    t =    16.44s     Synthesize event
+    t =    16.74s     Wait for com.michen.arcnote to idle
+    t =    18.18s Find the "home.filter" Button
+    t =    18.22s Waiting 10.0s for "home.card.body.preview-note" Any to exist
+    t =    19.27s     Checking `Expect predicate `existsNoRetry == 1` for object "home.card.body.preview-note" Any`
+    t =    19.27s         Checking existence of `"home.card.body.preview-note" Any`
+    t =    19.31s Find the "home.card.body.preview-note" Any
+    t =    19.36s Tap "home.filter" Button
+    t =    19.36s     Wait for com.michen.arcnote to idle
+    t =    19.36s     Find the "home.filter" Button
+    t =    19.40s     Check for interrupting elements affecting "home.filter" Button
+    t =    19.43s     Synthesize event
+    t =    19.72s     Wait for com.michen.arcnote to idle
+    t =    20.84s Waiting 10.0s for "home.sort.Latest Edited" Button to exist
+    t =    21.88s     Checking `Expect predicate `existsNoRetry == 1` for object "home.sort.Latest Edited" Button`
+    t =    21.88s         Checking existence of `"home.sort.Latest Edited" Button`
+    t =    21.93s Tap "home.sort.Latest Edited" Button
+    t =    21.93s     Wait for com.michen.arcnote to idle
+    t =    21.93s     Find the "home.sort.Latest Edited" Button
+    t =    21.97s     Check for interrupting elements affecting "home.sort.Latest Edited" Button
+    t =    22.00s     Synthesize event
+    t =    22.29s     Wait for com.michen.arcnote to idle
+    t =    23.72s Find the "home.filter" Button
+    t =    23.77s Tear Down
+Test Case '-[ArcNoteUITests.ArcNoteUITests testNativeReviewSortUsesSystemMenuWithoutExpandingThePage]' passed (24.030 seconds).
+Test Suite 'ArcNoteUITests' passed at 2026-10-27 11:37:59.327.
+	 Executed 1 test, with 0 failures (0 unexpected) in 24.030 (24.031) seconds
+Test Suite 'ArcNoteUITests.xctest' passed at 2026-10-27 11:37:59.327.
+	 Executed 1 test, with 0 failures (0 unexpected) in 24.030 (24.031) seconds
+Test Suite 'Selected tests' passed at 2026-10-27 11:37:59.327.
+	 Executed 1 test, with 0 failures (0 unexpected) in 24.030 (24.032) seconds
+2026-10-27 11:37:59.346 xcodebuild[9149:67322] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-10-27 11:37:59.346 xcodebuild[9149:67322] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-10-27 11:37:59.354 xcodebuild[9149:67322] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-10-27 11:37:59.354 xcodebuild[9149:67322] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-10-27 11:37:59.612 xcodebuild[9149:67322] [MT] IDETestOperationsObserverDebug: 26.335 elapsed -- Testing started completed.
+2026-10-27 11:37:59.612 xcodebuild[9149:67322] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-27 11:37:59.612 xcodebuild[9149:67322] [MT] IDETestOperationsObserverDebug: 26.335 sec, +26.335 sec -- end
+
+Test session results, code coverage, and logs:
+	/tmp/chorai-review-sort-light.xcresult
+
+** TEST EXECUTE SUCCEEDED **
+
+Testing started

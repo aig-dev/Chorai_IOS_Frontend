@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Chorai · 真实 iOS App 逐页复核</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#faf9f6;color:#153b37;font:15px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif}header,footer{max-width:1200px;margin:auto;padding:28px 24px}h1{margin:8px 0;font-size:30px;letter-spacing:-.7px}p{margin:8px 0;color:#586d64}.eyebrow{font-size:11px;letter-spacing:2px}.controls{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:22px}select,button{font:inherit;color:inherit;background:#fff;border:1px solid #d9dfd7;border-radius:20px;padding:9px 16px;min-height:44px}select{max-width:100%}button{cursor:pointer}button[aria-pressed=true]{background:#153b37;color:white}button:disabled{opacity:.4;cursor:default}.count{font-size:12px}.comparison{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px;max-width:1100px;padding:8px 24px 36px;margin:auto}.comparison.single{grid-template-columns:minmax(0,500px);justify-content:center}figure{margin:0;min-width:0}figcaption{font-weight:600;margin-bottom:10px}figcaption small{font-weight:400;font-size:12px;color:#586d64;display:block}img{width:100%;display:block;border:1px solid #d9dfd7;border-radius:24px}a{color:inherit}footer{border-top:1px solid #d9dfd7;font-size:13px}.dark{background:#242329;color:#bfdbcf}.dark p,.dark small{color:#a2b5ac}.dark button,.dark select{color:#bfdbcf;background:#35363b;border-color:#4c514f}.dark button[aria-pressed=true]{background:#bfdbcf;color:#153b37}.dark img{border-color:#4c514f}.note{max-width:950px;font-size:13px}@media(max-width:650px){header,footer{padding:20px 16px}.comparison{gap:10px;padding:6px 10px 24px}h1{font-size:25px}figcaption{font-size:13px}.controls{gap:8px}}
+</style>
+<header>
+<div class="eyebrow">CHORAI · REAL APP REVIEW · 2026.10.28</div>
+<h1>真实 iOS App，逐页复核</h1>
+<p>这里展示本轮原生 App 的实际运行截图。已有原型与此前截图均保留。</p>
+<div class="controls"><label for="page">页面／状态</label><select id="page"></select><button id="light" aria-pressed="true">浅色</button><button id="dark" aria-pressed="false">深色</button><label><input type="checkbox" id="reference" checked> 对照已有确认稿</label></div>
+<p class="note" id="note"></p><p class="count" id="capture"></p>
+</header>
+<main id="comparison" class="comparison"></main>
+<footer>iPhone 17 Pro · iOS 26.5 · Xcode 27.1。运行的是实际 App 与本地离线样本；截图与点击检查不代表真实登录、AI 生成、消息送达或服务器保存。点击图片可查看原尺寸。<br><a href="../VALIDATION.md">验证结果与边界</a> · <a href="../PAGE-AUDIT.md">逐页实施与功能审计</a> · <a href="evidence.json">截图来源记录</a> · <a href="../../2026-10-26-native-rollout/fidelity/">此前对照记录（历史版本）</a></footer>
+<script src="captures.js"></script>
+<script>
+const shots=window.CHORAI_CAPTURES||[];
+const pages=[...new Map(shots.map(s=>[s.id,s])).values()];
+const picker=document.getElementById('page'),area=document.getElementById('comparison');
+let id='home',theme='light';
+const match=location.hash.slice(1).match(/^(.*)-(light|dark)$/);if(match){id=match[1];theme=match[2]}
+for(const p of pages){const o=document.createElement('option');o.value=p.id;o.textContent=p.label;picker.append(o)}
+if(!pages.some(p=>p.id===id))id=pages[0]?.id;
+function figure(label,url,detail){const f=document.createElement('figure'),c=document.createElement('figcaption'),small=document.createElement('small'),a=document.createElement('a'),im=document.createElement('img');c.textContent=label;small.textContent=detail;c.append(small);a.href=url;a.target='_blank';a.rel='noopener';im.src=url;im.alt=label+' · '+(pages.find(p=>p.id===id)?.label||id);a.append(im);f.append(c,a);return f}
+function render(){let shot=shots.find(s=>s.id===id&&s.theme===theme);if(!shot){shot=shots.find(s=>s.id===id);if(!shot)return;theme=shot.theme}picker.value=id;document.body.classList.toggle('dark',theme==='dark');for(const t of ['light','dark']){const b=document.getElementById(t);b.setAttribute('aria-pressed',t===theme);b.disabled=!shots.some(s=>s.id===id&&s.theme===t)}const showRef=document.getElementById('reference').checked&&shot.reference;area.replaceChildren();area.classList.toggle('single',!showRef);if(showRef)area.append(figure('已有确认稿',shot.reference,shot.referenceLabel||'保留的原始版本'));area.append(figure('当前真实 App',shot.image,shot.label+' · '+(theme==='light'?'浅色':'深色')));document.getElementById('note').textContent=shot.note||'保留现有功能，使用共享原生视觉系统。该页面没有单独确认过的原型截图。';document.getElementById('capture').textContent='实际截图时间：'+new Date(shot.timestamp*1000).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai'})+' · '+shot.build;history.replaceState(null,'','#'+id+'-'+theme)}
+picker.onchange=()=>{id=picker.value;render()};for(const t of ['light','dark'])document.getElementById(t).onclick=()=>{theme=t;render()};document.getElementById('reference').onchange=render;render();
+</script>
+</html>

@@ -518,34 +518,77 @@ func makeMergeTaskRecord(
 
 func waitForControlledJob(
     _ response: ControlledMergeJobResponse,
-    timeoutIterations: Int = 500
+    timeout: Duration = .seconds(5),
+    file: StaticString = #filePath,
+    line: UInt = #line
 ) async {
-    for _ in 0..<timeoutIterations {
-        if await response.isWaiting { return }
-        await Task.yield()
+    await waitForMergeCondition(
+        timeout: timeout,
+        message: "Timed out waiting for controlled Merge GET",
+        file: file,
+        line: line
+    ) {
+        await response.isWaiting
     }
-    XCTFail("Timed out waiting for controlled Merge GET")
 }
 
 func waitForControlledCreate(
     _ response: ControlledMergeCreateResponse,
-    timeoutIterations: Int = 500
+    timeout: Duration = .seconds(5),
+    file: StaticString = #filePath,
+    line: UInt = #line
 ) async {
-    for _ in 0..<timeoutIterations {
-        if await response.isWaiting { return }
-        await Task.yield()
+    await waitForMergeCondition(
+        timeout: timeout,
+        message: "Timed out waiting for controlled Merge create",
+        file: file,
+        line: line
+    ) {
+        await response.isWaiting
     }
-    XCTFail("Timed out waiting for controlled Merge create")
 }
 
 @MainActor
 func waitForMergeStore(
-    timeoutIterations: Int = 500,
+    timeout: Duration = .seconds(5),
+    file: StaticString = #filePath,
+    line: UInt = #line,
     _ predicate: @escaping () -> Bool
 ) async {
-    for _ in 0..<timeoutIterations {
-        if predicate() { return }
-        await Task.yield()
+    await waitForMergeCondition(
+        timeout: timeout,
+        message: "Timed out waiting for Merge store state",
+        file: file,
+        line: line
+    ) {
+        predicate()
     }
-    XCTFail("Timed out waiting for Merge store state")
+}
+
+// An iteration budget can expire before another actor runs under build load.
+// Poll against monotonic elapsed time while suspending this task between checks.
+@MainActor
+func waitForMergeCondition(
+    timeout: Duration = .seconds(5),
+    message: String,
+    file: StaticString = #filePath,
+    line: UInt = #line,
+    _ predicate: () async -> Bool
+) async {
+    let clock = ContinuousClock()
+    let deadline = clock.now.advanced(by: timeout)
+    while !(await predicate()) {
+        guard clock.now < deadline else {
+            XCTFail(message, file: file, line: line)
+            return
+        }
+        do {
+            try await clock.sleep(
+                until: min(deadline, clock.now.advanced(by: .milliseconds(10)))
+            )
+        } catch {
+            XCTFail("Cancelled while waiting: \(message)", file: file, line: line)
+            return
+        }
+    }
 }

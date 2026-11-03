@@ -1,0 +1,86 @@
+[
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "92DE3535-B261-49B5-844F-9BD9B8C241B4",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "CB1EEFBE-05F1-48C4-8A2F-17F622051534.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "auth-interests-before-skip_0_CE7D505A-874F-4006-B4E5-E809A5FAF4E2.png",
+        "timestamp" : 1793714427.107
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "92DE3535-B261-49B5-844F-9BD9B8C241B4",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "4AB1E1D1-27B5-43EF-BC90-8885743A580D.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "auth-signup-password-mismatch_0_E3FE37E3-1A8B-4BA7-9A9E-EE9E053E15EB.png",
+        "timestamp" : 1793714419.827
+      }
+    ],
+    "testIdentifier" : "AuthEntryFlowUITests/testEmailSignupRecoversFromSendFailureAndSkipsInterests()",
+    "testIdentifierURL" : "test://com.apple.xcode/ArcNote/ArcNoteUITests/AuthEntryFlowUITests/testEmailSignupRecoversFromSendFailureAndSkipsInterests"
+  },
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "92DE3535-B261-49B5-844F-9BD9B8C241B4",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "0BAE8CD0-E8E6-4105-B0EB-B5D574773419.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "auth-signup-verification-recovery_0_C8CEFE1A-6081-4015-A0AA-4555EE02AFD8.png",
+        "timestamp" : 1793714464.154
+      }
+    ],
+    "testIdentifier" : "AuthEntryFlowUITests/testRejectedVerificationCodeReturnsToCodeStep()",
+    "testIdentifierURL" : "test://com.apple.xcode/ArcNote/ArcNoteUITests/AuthEntryFlowUITests/testRejectedVerificationCodeReturnsToCodeStep"
+  },
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "92DE3535-B261-49B5-844F-9BD9B8C241B4",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "6F13CADA-ABBB-4548-BF6B-6BD7432C65D4.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "auth-returning-welcome-back_0_6CAB7FDF-0C81-4407-ADE8-2404EC8E9CBB.png",
+        "timestamp" : 1793714474.344
+      }
+    ],
+    "testIdentifier" : "AuthEntryFlowUITests/testReturningLaunchOpensSignInAndBackReturnsToWelcome()",
+    "testIdentifierURL" : "test://com.apple.xcode/ArcNote/ArcNoteUITests/AuthEntryFlowUITests/testReturningLaunchOpensSignInAndBackReturnsToWelcome"
+  },
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "92DE3535-B261-49B5-844F-9BD9B8C241B4",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "9505A965-6568-4112-8764-3014C486ECE0.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "auth-signin-keyboard_0_D7A46E22-4528-41C5-A2E0-5DD8497B0288.png",
+        "timestamp" : 1793714501.352
+      }
+    ],
+    "testIdentifier" : "AuthEntryFlowUITests/testSignInValidationAndOfflineCompletion()",
+    "testIdentifierURL" : "test://com.apple.xcode/ArcNote/ArcNoteUITests/AuthEntryFlowUITests/testSignInValidationAndOfflineCompletion"
+  },
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "92DE3535-B261-49B5-844F-9BD9B8C241B4",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "FE58E4CC-83B1-4714-8694-61AF550B03BD.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "auth-interests-nine-selected_0_337872B6-847A-4D9A-8054-9DA23627FC45.png",
+        "timestamp" : 1793714550.485
+      }
+    ],
+    "testIdentifier" : "AuthEntryFlowUITests/testSignupInterestSelectionStopsAtNineAndContinues()",
+    "testIdentifierURL" : "test://com.apple.xcode/ArcNote/ArcNoteUITests/AuthEntryFlowUITests/testSignupInterestSelectionStopsAtNineAndContinues"
+  }
+]

@@ -40,14 +40,10 @@ struct EditProfileView: View {
 
     var body: some View {
         ZStack {
-            Image("home_bg")
-                .resizable()
-                .aspectRatio(contentMode: .fill)
+            ChoraiBackground()
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
-                navigationHeader
-
                 ScrollView {
                     VStack(spacing: 18) {
                         profileMediaEditor
@@ -59,7 +55,16 @@ struct EditProfileView: View {
                 .scrollDismissesKeyboard(.interactively)
             }
         }
-        .navigationBarHidden(true)
+        .foregroundStyle(ChoraiTheme.ink)
+        .tint(ChoraiTheme.accent)
+        .navigationTitle("Edit Profile")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.visible, for: .navigationBar)
+        .navigationBarBackButtonHidden(true)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) { backButton }
+            ToolbarItem(placement: .navigationBarTrailing) { saveButton }
+        }
         .overlay(alignment: .topLeading) {
             testAnchors
         }
@@ -80,50 +85,32 @@ struct EditProfileView: View {
         }
     }
 
-    private var navigationHeader: some View {
-        HStack(spacing: 8) {
-            Button(action: closeEditor) {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundColor(.white)
-                    .frame(width: 44, height: 44)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .disabled(isSaving)
-            .accessibilityLabel("Back")
-            .accessibilityIdentifier("edit-profile.back")
-
-            Spacer()
-
-            Text("Edit Profile")
-                .font(.system(size: 20, weight: .semibold))
-                .foregroundColor(.white)
-
-            Spacer()
-
-            Button(action: saveUserProfile) {
-                Group {
-                    if isSaving {
-                        ProgressView()
-                            .tint(.white)
-                    } else {
-                        Text("Save")
-                            .font(.system(size: 16, weight: .semibold))
-                    }
-                }
-                .foregroundColor(.white)
-                .frame(minWidth: 44, minHeight: 44)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .disabled(isSaving)
-            .accessibilityLabel("Save")
-            .accessibilityIdentifier("edit-profile.save")
+    private var backButton: some View {
+        Button(action: closeEditor) {
+            Image(systemName: "chevron.left").frame(minWidth: 44, minHeight: 44)
         }
-        .adaptiveContentGutter()
-        .padding(.top, max(layoutMetrics.safeAreaInsets.top, 20))
-        .padding(.bottom, 14)
+        .buttonStyle(.plain)
+        .frame(minWidth: 44, minHeight: 44)
+        .contentShape(Rectangle())
+        .disabled(isSaving)
+        .accessibilityLabel("Back")
+        .accessibilityIdentifier("edit-profile.back")
+    }
+
+    private var saveButton: some View {
+        Button(action: saveUserProfile) {
+            Group {
+                if isSaving { ProgressView() }
+                else { Text("Save").fontWeight(.semibold) }
+            }
+            .frame(minWidth: 44, minHeight: 44)
+        }
+        .buttonStyle(.plain)
+        .frame(minWidth: 44, minHeight: 44)
+        .contentShape(Rectangle())
+        .disabled(isSaving)
+        .accessibilityLabel("Save")
+        .accessibilityIdentifier("edit-profile.save")
     }
 
     private var profileMediaEditor: some View {
@@ -138,18 +125,18 @@ struct EditProfileView: View {
 
                 if hasBackgroundImage {
                     Image(systemName: "camera.fill")
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.subheadline.weight(.semibold))
                         .foregroundColor(.white)
                         .frame(width: 36, height: 36)
                         .background(Color.black.opacity(0.58), in: Circle())
-                        .overlay(Circle().stroke(Color.white.opacity(0.45), lineWidth: 1))
+                        .overlay(Circle().stroke(ChoraiTheme.separator, lineWidth: 1))
                         .padding(12)
                 }
             }
             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .stroke(Color.white.opacity(0.18), lineWidth: 1)
+                    .stroke(ChoraiTheme.separator, lineWidth: 1)
             }
             .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         }
@@ -196,8 +183,8 @@ struct EditProfileView: View {
         ZStack {
             LinearGradient(
                 colors: [
-                    Color(red: 0.22, green: 0.19, blue: 0.42),
-                    Color(red: 0.10, green: 0.12, blue: 0.28)
+                    ChoraiTheme.accent.opacity(0.12),
+                    ChoraiTheme.gold.opacity(0.08)
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
@@ -207,17 +194,17 @@ struct EditProfileView: View {
                 Image(systemName: "photo.badge.plus")
                     .font(.system(size: 25, weight: .medium))
                 Text("Add background photo")
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.subheadline.weight(.semibold))
             }
-            .foregroundColor(.white.opacity(0.88))
+            .foregroundColor(ChoraiTheme.ink)
         }
     }
 
     private var backgroundLoadingSurface: some View {
         ZStack {
-            Color.white.opacity(0.08)
+            ChoraiTheme.surface
             ProgressView()
-                .tint(.white)
+                .tint(ChoraiTheme.ink)
         }
     }
 
@@ -238,15 +225,15 @@ struct EditProfileView: View {
                 avatarContent
                     .frame(width: 72, height: 72)
                     .clipShape(Circle())
-                    .overlay(Circle().stroke(Color.white, lineWidth: 3))
+                    .overlay(Circle().stroke(ChoraiTheme.separator, lineWidth: 1))
                     .shadow(color: .black.opacity(0.25), radius: 8, y: 3)
 
                 Image(systemName: "camera.fill")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.footnote.weight(.semibold))
                     .foregroundColor(.white)
                     .frame(width: 26, height: 26)
                     .background(Color.black.opacity(0.72), in: Circle())
-                    .overlay(Circle().stroke(Color.white.opacity(0.7), lineWidth: 1))
+                    .overlay(Circle().stroke(ChoraiTheme.separator, lineWidth: 1))
             }
             .frame(width: 80, height: 80)
             .contentShape(Circle())
@@ -306,8 +293,8 @@ struct EditProfileView: View {
                         .accessibilityIdentifier("edit-profile.bio")
 
                     Text("\(bio.count)/100")
-                        .font(.system(size: 12))
-                        .foregroundColor(.white.opacity(0.55))
+                        .font(.caption)
+                        .foregroundColor(ChoraiTheme.secondaryInk)
                         .padding(.trailing, 14)
                         .padding(.bottom, 10)
                         .allowsHitTesting(false)
@@ -332,29 +319,12 @@ struct EditProfileView: View {
                     Text(saveErrorMessage)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                .font(.system(size: 13, weight: .medium))
-                .foregroundColor(Color(red: 1.0, green: 0.72, blue: 0.72))
+                .font(.footnote.weight(.medium))
+                .foregroundColor(.red)
                 .accessibilityIdentifier("edit-profile.error")
             }
         }
-        .padding(20)
-        .background {
-            ZStack {
-                if !reduceTransparency {
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .fill(.ultraThinMaterial)
-                }
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(
-                        Color(red: 0.13, green: 0.10, blue: 0.23)
-                            .opacity(reduceTransparency ? 0.94 : 0.62)
-                    )
-            }
-        }
-        .overlay {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(Color.white.opacity(0.12), lineWidth: 1)
-        }
+        .padding(.vertical, 8)
     }
 
     private func profileField<Content: View>(
@@ -366,8 +336,8 @@ struct EditProfileView: View {
                 .profileFieldLabelStyle()
 
             content()
-                .font(.system(size: 17))
-                .foregroundColor(.white)
+                .font(.body)
+                .foregroundColor(ChoraiTheme.ink)
                 .padding(.horizontal, 14)
                 .frame(minHeight: 54)
                 .profileInputSurface(reduceTransparency: reduceTransparency)
@@ -673,17 +643,17 @@ private enum ProfileImageTarget: String, Identifiable {
 
 private extension View {
     func profileFieldLabelStyle() -> some View {
-        font(.system(size: 15, weight: .semibold))
-            .foregroundColor(.white.opacity(0.9))
+        font(.subheadline.weight(.semibold))
+            .foregroundColor(ChoraiTheme.ink)
     }
 
     func profileInputSurface(reduceTransparency: Bool) -> some View {
         background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color.white.opacity(reduceTransparency ? 0.18 : 0.10))
+                .fill(ChoraiTheme.raisedSurface)
                 .overlay {
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                        .stroke(ChoraiTheme.separator, lineWidth: 1)
                 }
         )
     }

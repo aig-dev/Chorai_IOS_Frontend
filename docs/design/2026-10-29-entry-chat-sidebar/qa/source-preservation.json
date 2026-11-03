@@ -1,0 +1,28 @@
+{
+  "baseline_files": 415,
+  "changed_since_turn_start": [
+    "ArcNoteUITests/RootHeaderAlignmentUITests.swift",
+    "ArcNoteUITests/ChatControlSizingUITests.swift",
+    "ArcNote/ExploreView.swift",
+    "ArcNote/ChatView.swift",
+    "ArcNote/SideMenuView.swift",
+    "ArcNote/TabBarView.swift",
+    "ArcNote/HomeView.swift",
+    "Packages/CoreFlow/Tests/CoreFlowTests/SidebarProfileCreditSourceContractTests.swift",
+    "Packages/CoreFlow/Tests/CoreFlowTests/KeyboardLayoutSourceContractTests.swift",
+    "Packages/CoreFlow/Tests/CoreFlowTests/ExploreHeaderSourceContractTests.swift"
+  ],
+  "missing": [],
+  "unchanged_auth_files": [
+    "ArcNote/ContentView.swift",
+    "ArcNote/SignInView.swift",
+    "ArcNote/SignUpView.swift",
+    "ArcNote/AccessGateView.swift"
+  ],
+  "new_asset": "ArcNote/Assets.xcassets/chat-chora-pair.imageset",
+  "verification": "Automated native checks plus light manual operation/video sample and dark actual captures verified. CUA dark coordinate-control interruption documented.",
+  "new_assets": [
+    "ArcNote/Assets.xcassets/chat-chora-pair.imageset/chat-chora-pair.png",
+    "ArcNote/Assets.xcassets/chat-chora-pair.imageset/chat-chora-pair-dark.png"
+  ]
+}

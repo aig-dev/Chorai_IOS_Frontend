@@ -1,0 +1,166 @@
+Command line invocation:
+    /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild test-without-building -project ArcNote.xcodeproj -scheme ArcNoteUITests -destination "platform=iOS Simulator,id=92DE3535-B261-49B5-844F-9BD9B8C241B4" -derivedDataPath /tmp/chorai-ios-reform-derived -clonedSourcePackagesDirPath /Users/didi/Library/Developer/Xcode/DerivedData/ArcNote-aybvwriajptjnqfsotseyzwxdivu/SourcePackages -disableAutomaticPackageResolution -onlyUsePackageVersionsFromResolvedFile -parallel-testing-enabled NO -resultBundlePath /tmp/chorai-ios-fidelity-ui-reader-full-body.xcresult "-only-testing:ArcNoteUITests/ArcNoteUITests/testNativeReformGridReaderAndHomeKeepRealNavigation" CODE_SIGNING_ALLOWED=NO
+
+Build settings from command line:
+    CODE_SIGNING_ALLOWED = NO
+
+Resolve Package Graph
+
+
+Resolved source packages:
+  GoogleSignIn: https://github.com/google/GoogleSignIn-iOS @ 9.0.0
+  CoreFlow: /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/Packages/CoreFlow @ local
+  GoogleUtilities: https://github.com/google/GoogleUtilities.git @ 8.1.0
+  AppAuth: https://github.com/openid/AppAuth-iOS.git @ 2.0.0
+  AppCheck: https://github.com/google/app-check.git @ 11.2.0
+  SwiftyJSON: https://github.com/SwiftyJSON/SwiftyJSON.git @ 5.0.2
+  Alamofire: https://github.com/Alamofire/Alamofire.git @ 5.10.2
+  GTMAppAuth: https://github.com/google/GTMAppAuth.git @ 5.0.0
+  BlockNoteEditor: /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/Packages/BlockNoteEditor @ local
+  Promises: https://github.com/google/promises.git @ 2.4.0
+  GTMSessionFetcher: https://github.com/google/gtm-session-fetcher.git @ 3.5.0
+
+Writing result bundle at path:
+	/tmp/chorai-ios-fidelity-ui-reader-full-body.xcresult
+
+2026-10-26 15:01:32.197 xcodebuild[32146:4558175] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-10-26 15:01:33.274932+0800 ArcNoteUITests-Runner[32274:4558909] [Default] Running tests...
+    t =      nans Interface orientation changed to Portrait
+Test Suite 'Selected tests' started at 2026-10-26 15:01:34.002.
+Test Suite 'ArcNoteUITests.xctest' started at 2026-10-26 15:01:34.003.
+Test Suite 'ArcNoteUITests' started at 2026-10-26 15:01:34.003.
+Test Case '-[ArcNoteUITests.ArcNoteUITests testNativeReformGridReaderAndHomeKeepRealNavigation]' started.
+    t =     0.00s Start Test at 2026-10-26 15:01:34.003
+    t =     0.05s Set Up
+    t =     0.06s Open com.michen.arcnote
+    t =     0.06s     Launch com.michen.arcnote
+2026-10-26 15:01:34.337 xcodebuild[32146:4558175] [MT] IDELaunchParametersSnapshot: debugger version lookup failed for path '<nil>': noURL
+2026-10-26 15:01:34.337 xcodebuild[32146:4558175] [MT] IDELaunchParametersSnapshot: no debugger version
+objc[32274]: Class UIAccessibilityLoaderWebShared is implemented in both /Library/Developer/CoreSimulator/Volumes/iOS_23F73/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebCore.axbundle/WebCore (0x1097a4310) and /Library/Developer/CoreSimulator/Volumes/iOS_23F73/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebKit.axbundle/WebKit (0x109820398). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+2026-10-26 15:01:34.394 xcodebuild[32146:4558175] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+    t =     1.29s         Setting up automation session
+    t =     1.86s         Wait for com.michen.arcnote to idle
+    t =     4.06s Waiting 10.0s for "local-preview.indicator" StaticText to exist
+    t =     5.09s     Checking `Expect predicate `existsNoRetry == 1` for object "local-preview.indicator" StaticText`
+    t =     5.09s         Checking existence of `"local-preview.indicator" StaticText`
+    t =     5.23s Find the Target Application 'com.michen.arcnote'
+    t =     5.35s Added attachment named 'fidelity-explore-deck'
+    t =     5.35s Waiting 5.0s for "explore.browse-mode" Button to exist
+    t =     6.39s     Checking `Expect predicate `existsNoRetry == 1` for object "explore.browse-mode" Button`
+    t =     6.39s         Checking existence of `"explore.browse-mode" Button`
+    t =     6.45s Tap "explore.browse-mode" Button
+    t =     6.45s     Wait for com.michen.arcnote to idle
+    t =     6.46s     Find the "explore.browse-mode" Button
+    t =     6.51s     Check for interrupting elements affecting "explore.browse-mode" Button
+    t =     6.56s     Synthesize event
+    t =     6.85s     Wait for com.michen.arcnote to idle
+    t =     7.68s Waiting 8.0s for "explore.grid.card.preview-field-note" Button to exist
+    t =     8.73s     Checking `Expect predicate `existsNoRetry == 1` for object "explore.grid.card.preview-field-note" Button`
+    t =     8.73s         Checking existence of `"explore.grid.card.preview-field-note" Button`
+    t =     8.81s Find the "explore.grid.card.preview-field-note" Button
+    t =     8.86s Find the Target Application 'com.michen.arcnote'
+    t =     8.95s Added attachment named 'Native reform Grid'
+    t =     8.95s Tap "explore.grid.card.preview-field-note" Button
+    t =     8.95s     Wait for com.michen.arcnote to idle
+    t =     8.95s     Find the "explore.grid.card.preview-field-note" Button
+    t =     9.00s     Check for interrupting elements affecting "explore.grid.card.preview-field-note" Button
+    t =     9.03s     Synthesize event
+    t =     9.32s     Wait for com.michen.arcnote to idle
+    t =     9.72s Waiting 8.0s for "screen.detail.content" Other to exist
+    t =    10.76s     Checking `Expect predicate `existsNoRetry == 1` for object "screen.detail.content" Other`
+    t =    10.76s         Checking existence of `"screen.detail.content" Other`
+    t =    10.83s         Capturing element debug description
+    t =    11.77s     Checking `Expect predicate `existsNoRetry == 1` for object "screen.detail.content" Other`
+    t =    11.77s         Checking existence of `"screen.detail.content" Other`
+    t =    11.82s         Capturing element debug description
+    t =    12.76s     Checking `Expect predicate `existsNoRetry == 1` for object "screen.detail.content" Other`
+    t =    12.76s         Checking existence of `"screen.detail.content" Other`
+    t =    12.83s         Capturing element debug description
+    t =    13.77s     Checking `Expect predicate `existsNoRetry == 1` for object "screen.detail.content" Other`
+    t =    13.77s         Checking existence of `"screen.detail.content" Other`
+    t =    13.84s         Capturing element debug description
+    t =    14.78s     Checking `Expect predicate `existsNoRetry == 1` for object "screen.detail.content" Other`
+    t =    14.78s         Checking existence of `"screen.detail.content" Other`
+    t =    14.84s         Capturing element debug description
+    t =    15.78s     Checking `Expect predicate `existsNoRetry == 1` for object "screen.detail.content" Other`
+    t =    15.78s         Checking existence of `"screen.detail.content" Other`
+    t =    15.85s         Capturing element debug description
+    t =    16.78s     Checking `Expect predicate `existsNoRetry == 1` for object "screen.detail.content" Other`
+    t =    16.78s         Checking existence of `"screen.detail.content" Other`
+    t =    16.83s         Capturing element debug description
+    t =    17.73s     Checking `Expect predicate `existsNoRetry == 1` for object "screen.detail.content" Other`
+    t =    17.73s         Checking existence of `"screen.detail.content" Other`
+    t =    17.80s         Capturing element debug description
+    t =    17.80s     Checking existence of `"screen.detail.content" Other`
+    t =    17.84s Collecting debug information to assist test failure triage
+    t =    17.85s     Requesting snapshot of accessibility hierarchy for app with pid 32281
+    t =    17.88s Checking existence of `"screen.detail.loaded" StaticText`
+    t =    17.91s Find the "Explore" Button
+    t =    18.93s     Find the "Explore" Button (retry 1)
+    t =    19.99s     Find the "Explore" Button (retry 2)
+    t =    20.04s Find the Target Application 'com.michen.arcnote'
+    t =    20.13s Added attachment named 'Native reform reader'
+    t =    20.13s Waiting 5.0s for "The things we notice become the things we care about." StaticText to exist
+    t =    21.17s     Checking `Expect predicate `existsNoRetry == 1` for object "The things we notice become the things we care about." StaticText`
+    t =    21.20s         Checking existence of `"The things we notice become the things we care about." StaticText`
+    t =    21.24s Find the "The things we notice become the things we care about." StaticText
+    t =    21.28s Find the "The things we notice become the things we care about." StaticText
+    t =    21.31s Find the "The things we notice become the things we care about." StaticText
+    t =    21.34s Find the "The things we notice become the things we care about." StaticText
+    t =    21.37s Find the "The things we notice become the things we care about." StaticText
+    t =    21.40s Find the WebView (First Match)
+    t =    21.44s Tap "detail.back" Button
+    t =    21.44s     Wait for com.michen.arcnote to idle
+    t =    21.44s     Find the "detail.back" Button
+    t =    21.46s     Check for interrupting elements affecting "detail.back" Button
+    t =    21.48s     Synthesize event
+    t =    21.77s     Wait for com.michen.arcnote to idle
+    t =    22.16s Waiting 5.0s for "explore.grid.card.preview-field-note" Button to exist
+    t =    23.20s     Checking `Expect predicate `existsNoRetry == 1` for object "explore.grid.card.preview-field-note" Button`
+    t =    23.20s         Checking existence of `"explore.grid.card.preview-field-note" Button`
+    t =    23.30s Find the "explore.browse-mode" Button
+    t =    23.35s Tap "Home" Button
+    t =    23.35s     Wait for com.michen.arcnote to idle
+    t =    23.35s     Find the "Home" Button
+    t =    23.40s     Check for interrupting elements affecting "Home" Button
+    t =    23.44s     Synthesize event
+    t =    23.72s     Wait for com.michen.arcnote to idle
+    t =    24.85s Waiting 5.0s for "note.create" Button to exist
+    t =    25.88s     Checking `Expect predicate `existsNoRetry == 1` for object "note.create" Button`
+    t =    25.88s         Checking existence of `"note.create" Button`
+    t =    25.96s Checking existence of `"Home" NavigationBar`
+    t =    26.00s Find the "note.create" Button
+    t =    26.04s Find the Target Application 'com.michen.arcnote'
+    t =    26.12s Added attachment named 'Native reform Home'
+    t =    26.12s Tap "Explore" Button
+    t =    26.12s     Wait for com.michen.arcnote to idle
+    t =    26.12s     Find the "Explore" Button
+    t =    26.16s     Check for interrupting elements affecting "Explore" Button
+    t =    26.19s     Synthesize event
+    t =    26.47s     Wait for com.michen.arcnote to idle
+    t =    27.94s Waiting 5.0s for "explore.grid.card.preview-field-note" Button to exist
+    t =    28.99s     Checking `Expect predicate `existsNoRetry == 1` for object "explore.grid.card.preview-field-note" Button`
+    t =    28.99s         Checking existence of `"explore.grid.card.preview-field-note" Button`
+    t =    29.05s Find the "explore.browse-mode" Button
+    t =    29.10s Tear Down
+Test Case '-[ArcNoteUITests.ArcNoteUITests testNativeReformGridReaderAndHomeKeepRealNavigation]' passed (29.394 seconds).
+Test Suite 'ArcNoteUITests' passed at 2026-10-26 15:02:03.397.
+	 Executed 1 test, with 0 failures (0 unexpected) in 29.394 (29.394) seconds
+Test Suite 'ArcNoteUITests.xctest' passed at 2026-10-26 15:02:03.398.
+	 Executed 1 test, with 0 failures (0 unexpected) in 29.394 (29.395) seconds
+Test Suite 'Selected tests' passed at 2026-10-26 15:02:03.398.
+	 Executed 1 test, with 0 failures (0 unexpected) in 29.394 (29.396) seconds
+2026-10-26 15:02:03.458 xcodebuild[32146:4558175] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-10-26 15:02:03.461 xcodebuild[32146:4558175] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-10-26 15:02:03.476 xcodebuild[32146:4558175] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-10-26 15:02:03.477 xcodebuild[32146:4558175] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-10-26 15:02:03.749 xcodebuild[32146:4558175] [MT] IDETestOperationsObserverDebug: 31.653 elapsed -- Testing started completed.
+2026-10-26 15:02:03.749 xcodebuild[32146:4558175] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-26 15:02:03.749 xcodebuild[32146:4558175] [MT] IDETestOperationsObserverDebug: 31.653 sec, +31.653 sec -- end
+
+Test session results, code coverage, and logs:
+	/tmp/chorai-ios-fidelity-ui-reader-full-body.xcresult
+
+** TEST EXECUTE SUCCEEDED **
+
+Testing started

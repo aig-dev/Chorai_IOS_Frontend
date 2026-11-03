@@ -144,6 +144,8 @@ final class BlockNoteCardEditorModel: ObservableObject {
             selectionState = selection
 
         case let .bodyFocusChanged(isFocused):
+            // The web body can remain focused with a hardware keyboard or while
+            // iOS changes keyboards. Global keyboard visibility is not focus.
             isBodyFocused = canMutate && isFocused
 
         case let .heightChanged(height):
@@ -193,12 +195,6 @@ final class BlockNoteCardEditorModel: ObservableObject {
     func focusBody() {
         guard canMutate else { return }
         controller.focus()
-    }
-
-    func keyboardDidHide() {
-        guard isBodyFocused else { return }
-        isBodyFocused = false
-        controller.blur()
     }
 
     func dismissKeyboard() {
@@ -290,13 +286,19 @@ final class BlockNoteCardEditorModel: ObservableObject {
 struct BlockNoteCardEditor: View {
     @ObservedObject var model: BlockNoteCardEditorModel
     let minimumHeight: CGFloat
+    let fontScale: Double
+    let fillsWritingPage: Bool
 
     init(
         model: BlockNoteCardEditorModel,
-        minimumHeight: CGFloat = 248
+        minimumHeight: CGFloat = 248,
+        fontScale: Double = 23.0 / 17.0,
+        fillsWritingPage: Bool = false
     ) {
         self.model = model
         self.minimumHeight = max(44, minimumHeight)
+        self.fontScale = fontScale
+        self.fillsWritingPage = fillsWritingPage
     }
 
     var body: some View {
@@ -309,13 +311,6 @@ struct BlockNoteCardEditor: View {
                 editableBody
             }
         }
-        .onReceive(
-            NotificationCenter.default.publisher(
-                for: UIResponder.keyboardWillHideNotification
-            )
-        ) { _ in
-            model.keyboardDidHide()
-        }
         .frame(minHeight: minimumHeight, alignment: .topLeading)
     }
 
@@ -323,6 +318,8 @@ struct BlockNoteCardEditor: View {
         BlockNoteEditorView(
             document: model.initialDocument,
             editable: model.isInitiallyEditable,
+            fontScale: fontScale,
+            minimumWritingHeight: fillsWritingPage ? Double(minimumHeight) : 0,
             controller: model.controller,
             onEvent: { [editorInstanceID = model.editorInstanceID] event in
                 model.receive(event, from: editorInstanceID)
@@ -330,17 +327,14 @@ struct BlockNoteCardEditor: View {
         )
         .id(model.editorInstanceID)
         .frame(height: max(minimumHeight, model.renderedHeight))
-        .simultaneousGesture(
-            TapGesture().onEnded(model.focusBody)
-        )
         .accessibilityIdentifier("cardEditorBodyWebView")
     }
 
     private func readOnlyFallback(_ compatibilityNotice: String) -> some View {
         VStack(alignment: .leading, spacing: 18) {
             Text(model.fallbackMarkdown)
-                .font(.body)
-                .foregroundStyle(.white)
+                .font(.system(.title2, design: .serif))
+                .foregroundStyle(.primary)
                 .frame(maxWidth: .infinity, alignment: .topLeading)
                 .textSelection(.enabled)
                 .accessibilityIdentifier("cardEditorReadOnlyFallback")
@@ -349,11 +343,11 @@ struct BlockNoteCardEditor: View {
 
             Label(compatibilityNotice, systemImage: "lock.shield")
                 .font(.footnote)
-                .foregroundStyle(.white.opacity(0.9))
+                .foregroundStyle(ChoraiTheme.ink.opacity(0.9))
                 .padding(.horizontal, 14)
                 .padding(.vertical, 12)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.black.opacity(0.76))
+                .background(ChoraiTheme.raisedSurface)
                 .clipShape(
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
                 )
@@ -369,8 +363,8 @@ struct BlockNoteCardEditor: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: 18) {
             Text(model.fallbackMarkdown)
-                .font(.body)
-                .foregroundStyle(.white)
+                .font(.system(.title2, design: .serif))
+                .foregroundStyle(.primary)
                 .frame(maxWidth: .infinity, alignment: .topLeading)
                 .textSelection(.enabled)
                 .accessibilityIdentifier("cardEditorBridgeFailureFallback")
@@ -396,11 +390,11 @@ struct BlockNoteCardEditor: View {
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("cardEditorBridgeRetry")
             }
-            .foregroundStyle(.white)
+            .foregroundStyle(ChoraiTheme.ink)
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.black.opacity(0.76))
+            .background(ChoraiTheme.raisedSurface)
             .clipShape(
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
             )

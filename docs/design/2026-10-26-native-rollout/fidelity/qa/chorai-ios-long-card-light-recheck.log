@@ -1,0 +1,134 @@
+Command line invocation:
+    /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild test-without-building -project ArcNote.xcodeproj -scheme ArcNoteUITests -destination "platform=iOS Simulator,id=92DE3535-B261-49B5-844F-9BD9B8C241B4" -derivedDataPath /tmp/chorai-ios-reform-derived -clonedSourcePackagesDirPath /Users/didi/Library/Developer/Xcode/DerivedData/ArcNote-aybvwriajptjnqfsotseyzwxdivu/SourcePackages -disableAutomaticPackageResolution -onlyUsePackageVersionsFromResolvedFile -parallel-testing-enabled NO -resultBundlePath /tmp/chorai-ios-long-card-light-recheck.xcresult "-only-testing:ArcNoteUITests/ArcNoteUITests/testNativeFidelityLongExploreCardStaysInsideScrollingViewport" CODE_SIGNING_ALLOWED=NO
+
+Build settings from command line:
+    CODE_SIGNING_ALLOWED = NO
+
+Resolve Package Graph
+
+
+Resolved source packages:
+  AppCheck: https://github.com/google/app-check.git @ 11.2.0
+  AppAuth: https://github.com/openid/AppAuth-iOS.git @ 2.0.0
+  Alamofire: https://github.com/Alamofire/Alamofire.git @ 5.10.2
+  GoogleUtilities: https://github.com/google/GoogleUtilities.git @ 8.1.0
+  BlockNoteEditor: /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/Packages/BlockNoteEditor @ local
+  CoreFlow: /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/Packages/CoreFlow @ local
+  SwiftyJSON: https://github.com/SwiftyJSON/SwiftyJSON.git @ 5.0.2
+  GTMAppAuth: https://github.com/google/GTMAppAuth.git @ 5.0.0
+  GoogleSignIn: https://github.com/google/GoogleSignIn-iOS @ 9.0.0
+  Promises: https://github.com/google/promises.git @ 2.4.0
+  GTMSessionFetcher: https://github.com/google/gtm-session-fetcher.git @ 3.5.0
+
+Writing result bundle at path:
+	/tmp/chorai-ios-long-card-light-recheck.xcresult
+
+2026-10-26 15:22:31.937 xcodebuild[38779:4606874] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-10-26 15:22:32.858161+0800 ArcNoteUITests-Runner[38883:4607577] [Default] Running tests...
+    t =      nans Interface orientation changed to Portrait
+Test Suite 'Selected tests' started at 2026-10-26 15:22:33.362.
+Test Suite 'ArcNoteUITests.xctest' started at 2026-10-26 15:22:33.363.
+Test Suite 'ArcNoteUITests' started at 2026-10-26 15:22:33.363.
+Test Case '-[ArcNoteUITests.ArcNoteUITests testNativeFidelityLongExploreCardStaysInsideScrollingViewport]' started.
+    t =     0.00s Start Test at 2026-10-26 15:22:33.363
+    t =     0.03s Set Up
+    t =     0.03s Open com.michen.arcnote
+    t =     0.04s     Launch com.michen.arcnote
+2026-10-26 15:22:33.621 xcodebuild[38779:4606874] [MT] IDELaunchParametersSnapshot: debugger version lookup failed for path '<nil>': noURL
+2026-10-26 15:22:33.621 xcodebuild[38779:4606874] [MT] IDELaunchParametersSnapshot: no debugger version
+2026-10-26 15:22:33.671 xcodebuild[38779:4606874] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+objc[38883]: Class UIAccessibilityLoaderWebShared is implemented in both /Library/Developer/CoreSimulator/Volumes/iOS_23F73/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebCore.axbundle/WebCore (0x107e1c310) and /Library/Developer/CoreSimulator/Volumes/iOS_23F73/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebKit.axbundle/WebKit (0x107eb8398). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+    t =     0.88s         Setting up automation session
+    t =     1.50s         Wait for com.michen.arcnote to idle
+    t =     3.66s Waiting 10.0s for "local-preview.indicator" StaticText to exist
+    t =     4.70s     Checking `Expect predicate `existsNoRetry == 1` for object "local-preview.indicator" StaticText`
+    t =     4.71s         Checking existence of `"local-preview.indicator" StaticText`
+    t =     4.86s Waiting 10.0s for "flow.card.preview-field-note" Button to exist
+    t =     5.90s     Checking `Expect predicate `existsNoRetry == 1` for object "flow.card.preview-field-note" Button`
+    t =     5.91s         Checking existence of `"flow.card.preview-field-note" Button`
+    t =     5.97s Swipe left "flow.card.preview-field-note" Button
+    t =     5.97s     Wait for com.michen.arcnote to idle
+    t =     5.97s     Find the "flow.card.preview-field-note" Button
+    t =     6.02s     Check for interrupting elements affecting "flow.card.preview-field-note" Button
+    t =     6.06s     Synthesize event
+    t =     6.51s     Wait for com.michen.arcnote to idle
+    t =     6.52s Waiting 10.0s for "flow.card.preview-field-note-1" Button to exist
+    t =     7.56s     Checking `Expect predicate `existsNoRetry == 1` for object "flow.card.preview-field-note-1" Button`
+    t =     7.56s         Checking existence of `"flow.card.preview-field-note-1" Button`
+    t =     7.64s Checking existence of `"flow.card.preview-field-note-1" Button`
+    t =     7.71s Waiting 10.0s for "flow.previous" Button to exist
+    t =     8.75s     Checking `Expect predicate `existsNoRetry == 1` for object "flow.previous" Button`
+    t =     8.75s         Checking existence of `"flow.previous" Button`
+    t =     8.83s Find the "flow.previous" Button
+    t =     8.90s Find the "flow.deck.scroll" ScrollView
+    t =     8.96s Find the Target Application 'com.michen.arcnote'
+    t =     9.07s Added attachment named 'fidelity-explore-long-card-top'
+    t =     9.07s Find the Window (First Match)
+    t =     9.08s Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =     9.08s Checking existence of `Window at {{0.0, 0.0}, {402.0, 874.0}}`
+    t =     9.08s Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =     9.26s Find the "flow.favorite.preview-field-note-1" Button
+    t =     9.33s Swipe up "flow.deck.scroll" ScrollView
+    t =     9.33s     Wait for com.michen.arcnote to idle
+    t =     9.33s     Find the "flow.deck.scroll" ScrollView
+    t =     9.40s     Check for interrupting elements affecting "flow.deck.scroll" ScrollView
+    t =     9.44s     Synthesize event
+    t =     9.89s     Wait for com.michen.arcnote to idle
+    t =    10.59s Find the "flow.favorite.preview-field-note-1" Button
+    t =    10.69s Find the "flow.favorite.preview-field-note-1" Button
+    t =    10.76s Find the "flow.favorite.preview-field-note-1" Button
+    t =    10.83s Find the "flow.favorite.preview-field-note-1" Button
+    t =    10.90s Find the "flow.favorite.preview-field-note-1" Button
+    t =    10.97s Find the "flow.favorite.preview-field-note-1" Button
+    t =    11.05s Find the "flow.favorite.preview-field-note-1" Button
+    t =    11.12s Find the "flow.deck.scroll" ScrollView
+    t =    11.19s Find the "flow.previous" Button
+    t =    11.27s Find the "flow.previous" Button
+    t =    11.34s Find the Target Application 'com.michen.arcnote'
+    t =    11.44s Added attachment named 'fidelity-explore-long-card-bottom'
+    t =    11.45s Tap "flow.previous" Button
+    t =    11.45s     Wait for com.michen.arcnote to idle
+    t =    11.45s     Find the "flow.previous" Button
+    t =    11.52s     Check for interrupting elements affecting "flow.previous" Button
+    t =    11.56s     Synthesize event
+    t =    11.85s     Wait for com.michen.arcnote to idle
+    t =    11.86s Waiting 10.0s for "flow.card.preview-field-note" Button to exist
+    t =    12.90s     Checking `Expect predicate `existsNoRetry == 1` for object "flow.card.preview-field-note" Button`
+    t =    12.90s         Checking existence of `"flow.card.preview-field-note" Button`
+    t =    13.00s Find the "flow.card.preview-field-note" Button
+    t =    13.07s Waiting 10.0s for "flow.menu.preview-field-note" Button to exist
+    t =    14.11s     Checking `Expect predicate `existsNoRetry == 1` for object "flow.menu.preview-field-note" Button`
+    t =    14.11s         Checking existence of `"flow.menu.preview-field-note" Button`
+    t =    14.19s Find the "flow.menu.preview-field-note" Button
+    t =    14.26s Tap "Home" Button
+    t =    14.26s     Wait for com.michen.arcnote to idle
+    t =    14.26s     Find the "Home" Button
+    t =    14.33s     Check for interrupting elements affecting "Home" Button
+    t =    14.36s     Synthesize event
+    t =    14.65s     Wait for com.michen.arcnote to idle
+    t =    16.33s Waiting 10.0s for "note.create" Button to exist
+    t =    17.37s     Checking `Expect predicate `existsNoRetry == 1` for object "note.create" Button`
+    t =    17.37s         Checking existence of `"note.create" Button`
+    t =    17.45s Find the "note.create" Button
+    t =    17.50s Tear Down
+Test Case '-[ArcNoteUITests.ArcNoteUITests testNativeFidelityLongExploreCardStaysInsideScrollingViewport]' passed (17.777 seconds).
+Test Suite 'ArcNoteUITests' passed at 2026-10-26 15:22:51.140.
+	 Executed 1 test, with 0 failures (0 unexpected) in 17.777 (17.778) seconds
+Test Suite 'ArcNoteUITests.xctest' passed at 2026-10-26 15:22:51.141.
+	 Executed 1 test, with 0 failures (0 unexpected) in 17.777 (17.778) seconds
+Test Suite 'Selected tests' passed at 2026-10-26 15:22:51.141.
+	 Executed 1 test, with 0 failures (0 unexpected) in 17.777 (17.779) seconds
+2026-10-26 15:22:51.163 xcodebuild[38779:4606874] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-10-26 15:22:51.164 xcodebuild[38779:4606874] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-10-26 15:22:51.173 xcodebuild[38779:4606874] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-10-26 15:22:51.173 xcodebuild[38779:4606874] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-10-26 15:22:51.441 xcodebuild[38779:4606874] [MT] IDETestOperationsObserverDebug: 19.596 elapsed -- Testing started completed.
+2026-10-26 15:22:51.441 xcodebuild[38779:4606874] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-26 15:22:51.441 xcodebuild[38779:4606874] [MT] IDETestOperationsObserverDebug: 19.596 sec, +19.596 sec -- end
+
+Test session results, code coverage, and logs:
+	/tmp/chorai-ios-long-card-light-recheck.xcresult
+
+** TEST EXECUTE SUCCEEDED **
+
+Testing started

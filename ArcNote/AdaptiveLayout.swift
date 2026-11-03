@@ -332,13 +332,13 @@ struct AdaptiveSurface<Content: View>: View {
                     cornerRadius: AdaptiveLayoutMetrics.surfaceCornerRadius,
                     style: .continuous
                 )
-                .fill(.ultraThinMaterial.opacity(0.72))
+                .fill(ChoraiTheme.surface)
                 .overlay {
                     RoundedRectangle(
                         cornerRadius: AdaptiveLayoutMetrics.surfaceCornerRadius,
                         style: .continuous
                     )
-                    .stroke(.white.opacity(0.16), lineWidth: 1)
+                    .stroke(ChoraiTheme.separator, lineWidth: 1)
                 }
             }
     }
@@ -364,7 +364,7 @@ struct AdaptiveLayoutFixtureScreen: View {
 
     var body: some View {
         AdaptiveScreen {
-            Color(red: 0.05, green: 0.04, blue: 0.09)
+            ChoraiTheme.background
         } content: { _ in
             ScrollView {
                 VStack(
@@ -381,14 +381,14 @@ struct AdaptiveLayoutFixtureScreen: View {
                                 "\(Int(metrics.horizontalGutter)) pt horizontal gutter"
                             )
                             .font(.footnote)
-                            .foregroundStyle(.white.opacity(0.64))
+                            .foregroundStyle(ChoraiTheme.ink.opacity(0.64))
                         }
                     }
-                    .foregroundStyle(.white)
+                    .foregroundStyle(ChoraiTheme.ink)
                     .accessibilityElement(children: .contain)
                     .accessibilityIdentifier("adaptive-layout.surface")
                 }
-                .foregroundStyle(.white)
+                .foregroundStyle(ChoraiTheme.ink)
                 .adaptiveContentGutter()
                 .padding(.vertical, max(metrics.safeAreaInsets.top, 24))
             }

@@ -1,0 +1,289 @@
+{
+  "latest": [
+    {
+      "theme": "light",
+      "test": "testCardEditorNativeMenuDismissesKeyboardBeforePresentation",
+      "result": "passed",
+      "seconds": 37.56,
+      "log": "chorai-ios-fidelity-ui-light-recheck.log"
+    },
+    {
+      "theme": "light",
+      "test": "testNativeFidelityCardMenusPresentSystemSheets",
+      "result": "passed",
+      "seconds": 37.843,
+      "log": "chorai-ios-fidelity-ui-light-final.log"
+    },
+    {
+      "theme": "light",
+      "test": "testNativeFidelityHomeMenuOpensRealUnboxedEditor",
+      "result": "passed",
+      "seconds": 17.542,
+      "log": "chorai-ios-fidelity-ui-light-final.log"
+    },
+    {
+      "theme": "light",
+      "test": "testNativeFidelityMergeUsesProductionSelectionAndResult",
+      "result": "passed",
+      "seconds": 10.877,
+      "log": "chorai-ios-fidelity-ui-light-final.log"
+    },
+    {
+      "theme": "light",
+      "test": "testNativeFidelitySparkTraversesLoadedIdeasWithoutLeavingItsFlow",
+      "result": "passed",
+      "seconds": 16.642,
+      "log": "chorai-ios-fidelity-ui-light-recheck.log"
+    },
+    {
+      "theme": "light",
+      "test": "testNativeReformColdSidebarCollectionsSelectsLibraryScope",
+      "result": "passed",
+      "seconds": 12.189,
+      "log": "chorai-ios-fidelity-ui-light-final.log"
+    },
+    {
+      "theme": "light",
+      "test": "testNativeReformGridReaderAndHomeKeepRealNavigation",
+      "result": "passed",
+      "seconds": 30.103,
+      "log": "chorai-ios-long-card-light.log"
+    },
+    {
+      "theme": "light",
+      "test": "testCardEditorTopActionsAreDirectAndOrdered",
+      "result": "passed",
+      "seconds": 36.6,
+      "log": "chorai-ios-fidelity-ui-light-recheck.log"
+    },
+    {
+      "theme": "dark",
+      "test": "testCardEditorNativeMenuFitsShortSafeAreaViewport",
+      "result": "passed",
+      "seconds": 30.38,
+      "log": "chorai-ios-fidelity-ui-dark-complete.log"
+    },
+    {
+      "theme": "dark",
+      "test": "testMergeArtifactDiscardRequiresConfirmation",
+      "result": "passed",
+      "seconds": 24.1,
+      "log": "chorai-ios-fidelity-ui-dark-complete.log"
+    },
+    {
+      "theme": "dark",
+      "test": "testNativeFidelityHomeMenuOpensRealUnboxedEditor",
+      "result": "passed",
+      "seconds": 18.335,
+      "log": "chorai-ios-fidelity-ui-dark-complete.log"
+    },
+    {
+      "theme": "dark",
+      "test": "testNativeFidelityMergeUsesProductionSelectionAndResult",
+      "result": "passed",
+      "seconds": 10.823,
+      "log": "chorai-ios-fidelity-ui-dark-complete.log"
+    },
+    {
+      "theme": "dark",
+      "test": "testNativeFidelitySparkTraversesLoadedIdeasWithoutLeavingItsFlow",
+      "result": "passed",
+      "seconds": 16.379,
+      "log": "chorai-ios-fidelity-ui-dark-complete.log"
+    },
+    {
+      "theme": "dark",
+      "test": "testNativeReformGridReaderAndHomeKeepRealNavigation",
+      "result": "passed",
+      "seconds": 29.438,
+      "log": "chorai-ios-long-card-dark-navigation.log"
+    },
+    {
+      "theme": "light",
+      "test": "testNativeFidelityLongExploreCardStaysInsideScrollingViewport",
+      "result": "passed",
+      "seconds": 17.777,
+      "log": "chorai-ios-long-card-light-recheck.log"
+    },
+    {
+      "theme": "dark",
+      "test": "testNativeFidelityLongExploreCardStaysInsideScrollingViewport",
+      "result": "passed",
+      "seconds": 16.848,
+      "log": "chorai-ios-long-card-dark.log"
+    }
+  ],
+  "distinct_tests": 11,
+  "all_latest_passed": true,
+  "history": [
+    {
+      "theme": "light",
+      "log": "chorai-ios-fidelity-ui-light-final.log",
+      "results": [
+        {
+          "test": "testCardEditorNativeMenuDismissesKeyboardBeforePresentation",
+          "result": "failed",
+          "seconds": 23.178
+        },
+        {
+          "test": "testNativeFidelityCardMenusPresentSystemSheets",
+          "result": "passed",
+          "seconds": 37.843
+        },
+        {
+          "test": "testNativeFidelityHomeMenuOpensRealUnboxedEditor",
+          "result": "passed",
+          "seconds": 17.542
+        },
+        {
+          "test": "testNativeFidelityMergeUsesProductionSelectionAndResult",
+          "result": "passed",
+          "seconds": 10.877
+        },
+        {
+          "test": "testNativeFidelitySparkTraversesLoadedIdeasWithoutLeavingItsFlow",
+          "result": "failed",
+          "seconds": 18.316
+        },
+        {
+          "test": "testNativeReformColdSidebarCollectionsSelectsLibraryScope",
+          "result": "passed",
+          "seconds": 12.189
+        },
+        {
+          "test": "testNativeReformGridReaderAndHomeKeepRealNavigation",
+          "result": "passed",
+          "seconds": 25.165
+        }
+      ]
+    },
+    {
+      "theme": "light",
+      "log": "chorai-ios-fidelity-ui-light-recheck.log",
+      "results": [
+        {
+          "test": "testCardEditorNativeMenuDismissesKeyboardBeforePresentation",
+          "result": "passed",
+          "seconds": 37.56
+        },
+        {
+          "test": "testCardEditorTopActionsAreDirectAndOrdered",
+          "result": "passed",
+          "seconds": 36.6
+        },
+        {
+          "test": "testNativeFidelitySparkTraversesLoadedIdeasWithoutLeavingItsFlow",
+          "result": "passed",
+          "seconds": 16.642
+        },
+        {
+          "test": "testNativeReformGridReaderAndHomeKeepRealNavigation",
+          "result": "failed",
+          "seconds": 17.775
+        }
+      ]
+    },
+    {
+      "theme": "light",
+      "log": "chorai-ios-fidelity-ui-reader-full-body.log",
+      "results": [
+        {
+          "test": "testNativeReformGridReaderAndHomeKeepRealNavigation",
+          "result": "passed",
+          "seconds": 29.394
+        }
+      ]
+    },
+    {
+      "theme": "dark",
+      "log": "chorai-ios-fidelity-ui-dark-complete.log",
+      "results": [
+        {
+          "test": "testCardEditorNativeMenuFitsShortSafeAreaViewport",
+          "result": "passed",
+          "seconds": 30.38
+        },
+        {
+          "test": "testMergeArtifactDiscardRequiresConfirmation",
+          "result": "passed",
+          "seconds": 24.1
+        },
+        {
+          "test": "testNativeFidelityHomeMenuOpensRealUnboxedEditor",
+          "result": "passed",
+          "seconds": 18.335
+        },
+        {
+          "test": "testNativeFidelityMergeUsesProductionSelectionAndResult",
+          "result": "passed",
+          "seconds": 10.823
+        },
+        {
+          "test": "testNativeFidelitySparkTraversesLoadedIdeasWithoutLeavingItsFlow",
+          "result": "passed",
+          "seconds": 16.379
+        },
+        {
+          "test": "testNativeReformGridReaderAndHomeKeepRealNavigation",
+          "result": "passed",
+          "seconds": 29.049
+        }
+      ]
+    },
+    {
+      "theme": "light",
+      "log": "chorai-ios-long-card-red.log",
+      "results": [
+        {
+          "test": "testNativeFidelityLongExploreCardStaysInsideScrollingViewport",
+          "result": "failed",
+          "seconds": 11.567
+        }
+      ]
+    },
+    {
+      "theme": "light",
+      "log": "chorai-ios-long-card-light.log",
+      "results": [
+        {
+          "test": "testNativeReformGridReaderAndHomeKeepRealNavigation",
+          "result": "passed",
+          "seconds": 30.103
+        }
+      ]
+    },
+    {
+      "theme": "light",
+      "log": "chorai-ios-long-card-light-recheck.log",
+      "results": [
+        {
+          "test": "testNativeFidelityLongExploreCardStaysInsideScrollingViewport",
+          "result": "passed",
+          "seconds": 17.777
+        }
+      ]
+    },
+    {
+      "theme": "dark",
+      "log": "chorai-ios-long-card-dark.log",
+      "results": [
+        {
+          "test": "testNativeFidelityLongExploreCardStaysInsideScrollingViewport",
+          "result": "passed",
+          "seconds": 16.848
+        }
+      ]
+    },
+    {
+      "theme": "dark",
+      "log": "chorai-ios-long-card-dark-navigation.log",
+      "results": [
+        {
+          "test": "testNativeReformGridReaderAndHomeKeepRealNavigation",
+          "result": "passed",
+          "seconds": 29.438
+        }
+      ]
+    }
+  ]
+}

@@ -108,7 +108,7 @@ final class IOSAccessSourceTests: XCTestCase {
 
             XCTAssertTrue(source.contains("private func handleGoogleLoginResponse"), entry.path)
             XCTAssertTrue(source.contains("let pair = \(entry.pairSource)()"), entry.path)
-            XCTAssertTrue(source.contains("authManager.googleLogin("), entry.path)
+            assertSource(source, matches: #"(?:authManager|AuthManager\.shared)\.googleLogin\("#)
             XCTAssertTrue(source.contains("accessCode: pair.code"), entry.path)
             XCTAssertTrue(source.contains("idempotencyKey: pair.key"), entry.path)
         }
@@ -127,15 +127,26 @@ final class IOSAccessSourceTests: XCTestCase {
         XCTAssertTrue(content.contains("PrivateBetaEntryView"))
         XCTAssertFalse(signup.contains("signup.access-code"))
         XCTAssertFalse(signup.contains("placeholder: \"CRAI-XXXX\""))
+    }
+
+    func testSignupSubmitsEmailCodeOnlyWithValidatedRegistrationAndPendingAccessPair() throws {
+        let signup = try source("ArcNote/SignUpView.swift")
+
         XCTAssertTrue(signup.contains("signup.get-code"))
         XCTAssertTrue(signup.contains("signup.confirm-password"))
-        XCTAssertTrue(signup.contains("password == confirmPassword"))
-        XCTAssertTrue(signup.contains("authManager.register("))
-        XCTAssertTrue(signup.contains("authManager.googleLogin("))
+        XCTAssertTrue(signup.contains("AuthManager.shared.sendVerificationCode(email: email)"))
+        XCTAssertTrue(signup.contains("case .code: showUsername = true"))
+        XCTAssertTrue(signup.contains("case .confirm: createAccount()"))
+        XCTAssertTrue(signup.contains("guard draft.canRegister"))
+        XCTAssertTrue(signup.contains("guard pair.code != nil, pair.key != nil"))
+        XCTAssertTrue(signup.contains("AuthManager.shared.register("))
+        XCTAssertTrue(signup.contains("verificationCode: draft.code"))
         XCTAssertTrue(signup.contains("let appleLoginRequest = AppleLoginRequest("))
         XCTAssertTrue(signup.contains("accessCode: pair.code"))
         XCTAssertTrue(signup.contains("idempotencyKey: pair.key"))
-        XCTAssertTrue(signup.contains("KeychainStore.shared.load()"))
+        XCTAssertTrue(signup.contains("authEntryOverrides?.codeStore ?? KeychainStore.shared"))
+        XCTAssertTrue(signup.contains("codeStore.load()?.trimmingCharacters"))
+        XCTAssertTrue(signup.contains(#"guard response.data.productAccess.status == "allowed""#))
     }
 
     func testPrivateBetaEntryPersistsOnlyAfterCurrentSuccessfulPreflight() throws {
@@ -210,13 +221,18 @@ final class IOSAccessSourceTests: XCTestCase {
         let merge = try source("ArcNote/CoreFlow/MergeLifecycleViews.swift")
 
         XCTAssertTrue(home.contains("private func dismissLibraryTipIfVisible()"))
+        XCTAssertTrue(home.contains("Picker(\"Sort by\", selection: librarySortSelection)"))
+        for bounds in [("private var libraryHeader:", "@ToolbarContentBuilder private var libraryToolbar:"),
+                       ("private var librarySearchHeader:", "private var librarySearchInputBackground:")] {
+            let start = try XCTUnwrap(home.range(of: bounds.0))
+            let end = try XCTUnwrap(home.range(of: bounds.1, range: start.upperBound..<home.endIndex))
+            let header = String(home[start.lowerBound..<end.lowerBound])
+            XCTAssertTrue(header.contains("Menu { librarySortOptions }"))
+            assertSource(header, matches: #"simultaneousGesture\(TapGesture\(\)\.onEnded\s*\{\s*dismissLibraryTipIfVisible\(\)"#)
+        }
         assertSource(
             home,
-            matches: #"dismissLibraryTipIfVisible\(\)\s+showFilterTags\.toggle\(\)"#
-        )
-        assertSource(
-            home,
-            matches: #"dismissLibraryTipIfVisible\(\)\s+selectedSegment = 1"#
+            matches: #"dismissLibraryTipIfVisible\(\)\s+selectedSegment = value"#
         )
         assertSource(
             home,

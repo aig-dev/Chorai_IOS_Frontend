@@ -907,9 +907,7 @@ final class MergeSessionStoreArtifactTests: XCTestCase {
             sleeper: sleeper
         )
         store.start()
-        for _ in 0..<500 where await sleeper.pendingCount == 0 {
-            await Task.yield()
-        }
+        await waitForPendingDraftSleep(sleeper)
 
         store.cancel()
 
@@ -1129,33 +1127,48 @@ actor ControlledDraftMergeService: CoreMergeServing {
 
 func waitForControlledDraftSave(
     _ response: ControlledDraftSaveResponse,
-    timeoutIterations: Int = 500
+    timeout: Duration = .seconds(5),
+    file: StaticString = #filePath,
+    line: UInt = #line
 ) async {
-    for _ in 0..<timeoutIterations {
-        if await response.isWaiting { return }
-        await Task.yield()
+    await waitForMergeCondition(
+        timeout: timeout,
+        message: "Timed out waiting for controlled Merge artifact save",
+        file: file,
+        line: line
+    ) {
+        await response.isWaiting
     }
-    XCTFail("Timed out waiting for controlled Merge artifact save")
 }
 
 func waitForControlledDraftArtifact(
     _ response: ControlledDraftArtifactResponse,
-    timeoutIterations: Int = 500
+    timeout: Duration = .seconds(5),
+    file: StaticString = #filePath,
+    line: UInt = #line
 ) async {
-    for _ in 0..<timeoutIterations {
-        if await response.isWaiting { return }
-        await Task.yield()
+    await waitForMergeCondition(
+        timeout: timeout,
+        message: "Timed out waiting for controlled Merge artifact fetch",
+        file: file,
+        line: line
+    ) {
+        await response.isWaiting
     }
-    XCTFail("Timed out waiting for controlled Merge artifact fetch")
 }
 
 private func waitForPendingDraftSleep(
     _ sleeper: ControlledMergeSleeper,
-    timeoutIterations: Int = 500
+    timeout: Duration = .seconds(5),
+    file: StaticString = #filePath,
+    line: UInt = #line
 ) async {
-    for _ in 0..<timeoutIterations {
-        if await sleeper.pendingCount > 0 { return }
-        await Task.yield()
+    await waitForMergeCondition(
+        timeout: timeout,
+        message: "Timed out waiting for Merge artifact debounce",
+        file: file,
+        line: line
+    ) {
+        await sleeper.pendingCount > 0
     }
-    XCTFail("Timed out waiting for Merge artifact debounce")
 }

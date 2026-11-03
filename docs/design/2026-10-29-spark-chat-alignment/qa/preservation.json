@@ -1,0 +1,30 @@
+{
+  "checked_at": "2026-10-29T08:10:11.963455+00:00",
+  "prototype_files_checked": 402,
+  "prototype_mismatches": [],
+  "changed_prior_sources": [
+    "ArcNote/ChatDetailView.swift",
+    "ArcNote/ExploreView.swift",
+    "ArcNote/HomeView.swift",
+    "ArcNote/TabBarView.swift",
+    "ArcNote/ChatView.swift",
+    "ArcNote/CoreFlow/SparkContinuationViews.swift",
+    "ArcNote.xcodeproj/project.pbxproj"
+  ],
+  "branch": "main",
+  "head": "8fe71f81850ca32aa07773a29ca21b04f1604458",
+  "package_resolved_diff": "",
+  "source_hashes": {
+    "ArcNote/ChatDetailView.swift": "c1b95fb93dc4b63af9d4df56ffa5642b97514230fcbd42adb631c2a3ac9d1e3a",
+    "ArcNote/ExploreView.swift": "7fb686ef088b61d30bb590e1189c9953b213fd37ef85f9451d92a0b09e12d4e3",
+    "ArcNote/HomeView.swift": "548b91adda9f024774ecc7f2584f417f9b2983637ea39780d126ee154f4cb709",
+    "ArcNote/TabBarView.swift": "c0075238bc4087c22490131eec0db4cc68c082adec7c720ac02c7e1385d2643a",
+    "ArcNote/ChatView.swift": "eb67bdd76ac2eacc61942bf92ae62a1fb142b9bc65d47d8ef50aaad1b76e4bde",
+    "ArcNote/CoreFlow/SparkContinuationViews.swift": "dd40473da2eff2c91a5370caadb9b50e3c6f7b5361dfc09f9ec3aaf08db8bfa7",
+    "ArcNote.xcodeproj/project.pbxproj": "127ad88037a3181652556b595285743ccf4a1e3115c148079f21379d7353a512"
+  },
+  "new_test_hashes": {
+    "ArcNoteUITests/ChatControlSizingUITests.swift": "7009e4c9517edb6951fab52e2e9efa909c4ee14489df52f948ab770d2d9aeedd",
+    "ArcNoteUITests/RootHeaderAlignmentUITests.swift": "ec16249bc2d40b92df0b3c8d5f66758e71f7f2c8d18df43381e18a9b87a5b258"
+  }
+}

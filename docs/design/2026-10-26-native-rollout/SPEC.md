@@ -1,0 +1,13 @@
+# Chorai native frontend rollout · approved 2026-10-26
+
+User authorization: “ok。大概意思都有了。开始全部落地吧，把iOS的前端全部改掉”. This follows the accepted V1–V8 native prototypes. Existing design approval is sufficient to begin implementation; no second design approval gate is needed.
+
+Implement the approved system throughout the real app, not by embedding the demo application. Keep native iOS 16+ support. On iOS 26+ use genuine SwiftUI Liquid Glass for navigation/controls; older OS and Reduce Transparency use native materials/opaque surfaces. Follow system light/dark: light warm paper `FAF9F6`, surface `FFFFFC`, forest ink `153B37`, gold `846838`; dark `242329`, surface `2C2C31`, ink `BFDBCF`, gold `D6B378`. Content remains readable and quiet. Use system Dynamic Type and SF Symbols, 44pt targets, Reduce Motion support.
+
+Explore supports large swipe cards and compact two-column Grid sharing the same data and favorite state. Left skips; right explicitly collects then advances only on success; provide previous/review and undo as in the approved prototype. Explicit collection in a reader stays on the note. Grid hides Chora and its reserved space. Valid tiers keep the original colored corner brush, fine border, Roman numeral and name; detail restores the matching static Chora. Use the approved original sprites, V Exceptional green-gold variant, and six established colors. Do not change rate thresholds, DTO defaults, ownership, permissions, or growth rules.
+
+Home retains Notes/Collections, search, sort/filter, note creation, importing, editing and existing Merge sources. Preserve existing tab names Explore/Home/Chat. Writing remains a single body without a title field, private by default. Preserve the BlockNote document bridge, snapshot/save validation, undo, selection and media flows. Theme the actual embedded editor without modifying vendored resources. Spark retains source relationships and return/resume; Merge retains 2–8 source constraints, fixed anchor, background queue, result editing, accept/discard, recovery and conflict states.
+
+Apply the same system to authentication/access, profile/social, settings/privacy, invitation/credit, Chora identity/growth, notifications, chat, search, trash, share/report/comment/link and Discovery Path. Preserve service methods and all error/loading/empty states. No production API use, API contract change, feature removal, default public-scope change or fake service success. Local debug fixture stays explicit and isolated.
+
+Preserve original V1–V8 artifacts and pre-existing work. No branch creation/switch, commit or push as part of this task. Source baseline saved under `/tmp/chorai-ios-reform-baseline/`. Native AGENTS.md governs implementation.

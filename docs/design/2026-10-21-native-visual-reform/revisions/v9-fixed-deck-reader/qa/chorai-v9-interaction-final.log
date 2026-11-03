@@ -1,0 +1,252 @@
+Command line invocation:
+    /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild test-without-building -project ChoraiPrototypeUITests.xcodeproj -scheme ChoraiPrototypeUITests -destination "platform=iOS Simulator,id=92DE3535-B261-49B5-844F-9BD9B8C241B4" -derivedDataPath /Users/didi/Library/Caches/ChoraiReview/v9-tests -parallel-testing-enabled NO "-only-testing:ChoraiPrototypeUITests/ReviewV9Tests/testFixedSummaryReaderHistoryAndSearch" -resultBundlePath /tmp/chorai-v9-interaction-final.xcresult CODE_SIGNING_ALLOWED=NO
+
+Build settings from command line:
+    CODE_SIGNING_ALLOWED = NO
+
+Writing result bundle at path:
+	/tmp/chorai-v9-interaction-final.xcresult
+
+2026-10-27 11:47:55.248 xcodebuild[14178:102937] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-10-27 11:47:55.867502+0800 ChoraiPrototypeUITests-Runner[14182:103058] [Default] Running tests...
+    t =      nans Interface orientation changed to Portrait
+Test Suite 'Selected tests' started at 2026-10-27 11:47:56.272.
+Test Suite 'ChoraiPrototypeUITests.xctest' started at 2026-10-27 11:47:56.272.
+Test Suite 'ReviewV9Tests' started at 2026-10-27 11:47:56.272.
+Test Case '-[ChoraiPrototypeUITests.ReviewV9Tests testFixedSummaryReaderHistoryAndSearch]' started.
+    t =     0.00s Start Test at 2026-10-27 11:47:56.273
+    t =     0.02s Set Up
+    t =     0.02s Terminate com.chorai.nativeprototype.v9:0
+    t =     0.02s Open com.chorai.nativeprototype.v9
+    t =     0.02s     Launch com.chorai.nativeprototype.v9
+    t =     0.11s         Setting up automation session
+objc[14182]: Class UIAccessibilityLoaderWebShared is implemented in both /Library/Developer/CoreSimulator/Volumes/iOS_23F73/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebCore.axbundle/WebCore (0x1082e4310) and /Library/Developer/CoreSimulator/Volumes/iOS_23F73/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebKit.axbundle/WebKit (0x108360398). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+    t =     0.58s         Wait for com.chorai.nativeprototype.v9 to idle
+    t =     2.02s Waiting 8.0s for "v9.explore.position" Any to exist
+    t =     3.07s     Checking `Expect predicate `existsNoRetry == 1` for object "v9.explore.position" Any`
+    t =     3.07s         Checking existence of `"v9.explore.position" Any`
+    t =     3.14s Find the "v9.explore.card" Any
+    t =     3.17s Find the Window (First Match)
+    t =     3.17s Find the "v9.card.collect" Any
+    t =     3.21s Find the "v9.card.collect" Button
+    t =     3.24s Find the "Like sample" Button
+    t =     3.26s Find the "Like sample" Button
+    t =     3.28s Find the "Comments sample" Button
+    t =     3.31s Find the "Comments sample" Button
+    t =     3.33s Checking existence of `"Previous" Button`
+    t =     3.34s Checking existence of `"← Skip · Collect →" StaticText`
+    t =     3.36s Press "v9.explore.summary" Any[0.50, 0.50] for 0.1 seconds, then drag to "v9.explore.summary" Any[0.50, 0.50] -> (30.0, 0.0) with velocity of 500.00 pixels per second, and then hold for 0.0 seconds 
+    t =     3.36s     Wait for com.chorai.nativeprototype.v9 to idle
+    t =     3.37s     Find the "v9.explore.summary" Any
+    t =     3.39s     Check for interrupting elements affecting "v9.explore.summary" Button
+    t =     3.42s     Synthesize event
+    t =     3.42s         Find the "v9.explore.summary" Button
+    t =     3.45s         Find the "v9.explore.summary" Button
+    t =     3.48s         Find the "v9.explore.summary" Button
+    t =     3.51s         Find the "v9.explore.summary" Button
+    t =     3.55s         Find the "v9.explore.summary" Button
+    t =     3.93s     Wait for com.chorai.nativeprototype.v9 to idle
+    t =     3.93s Checking existence of `"v9.reader" Any`
+    t =     3.97s Waiting 5.0s for "v9.explore.position" Any to exist
+    t =     5.01s     Checking `Expect predicate `existsNoRetry == 1` for object "v9.explore.position" Any`
+    t =     5.01s         Checking existence of `"v9.explore.position" Any`
+    t =     6.11s Checking `Expect predicate `label == "1 / 8"` for object "v9.explore.position" Any`
+    t =     6.11s     Find the "v9.explore.position" Any
+    t =     6.16s Press "v9.explore.summary" Button[0.50, 0.50] for 0.1 seconds, then drag to "v9.explore.summary" Button[0.50, 0.50] -> (-30.0, 0.0) with velocity of 500.00 pixels per second, and then hold for 0.0 seconds 
+    t =     6.16s     Wait for com.chorai.nativeprototype.v9 to idle
+    t =     6.17s     Find the "v9.explore.summary" Button
+    t =     6.20s     Check for interrupting elements affecting "v9.explore.summary" Button
+    t =     6.22s     Synthesize event
+    t =     6.22s         Find the "v9.explore.summary" Button
+    t =     6.25s         Find the "v9.explore.summary" Button
+    t =     6.29s         Find the "v9.explore.summary" Button
+    t =     6.32s         Find the "v9.explore.summary" Button
+    t =     6.35s         Find the "v9.explore.summary" Button
+    t =     6.73s     Wait for com.chorai.nativeprototype.v9 to idle
+    t =     6.73s Checking existence of `"v9.reader" Any`
+    t =     6.78s Waiting 5.0s for "v9.explore.position" Any to exist
+    t =     7.83s     Checking `Expect predicate `existsNoRetry == 1` for object "v9.explore.position" Any`
+    t =     7.83s         Checking existence of `"v9.explore.position" Any`
+    t =     8.92s Checking `Expect predicate `label == "1 / 8"` for object "v9.explore.position" Any`
+    t =     8.92s     Find the "v9.explore.position" Any
+    t =     8.97s Press "v9.explore.summary" Button[0.50, 0.50] for 0.1 seconds, then drag to "v9.explore.summary" Button[0.50, 0.50] -> (0.0, 30.0) with velocity of 500.00 pixels per second, and then hold for 0.0 seconds 
+    t =     8.97s     Wait for com.chorai.nativeprototype.v9 to idle
+    t =     8.97s     Find the "v9.explore.summary" Button
+    t =     9.00s     Check for interrupting elements affecting "v9.explore.summary" Button
+    t =     9.02s     Synthesize event
+    t =     9.02s         Find the "v9.explore.summary" Button
+    t =     9.05s         Find the "v9.explore.summary" Button
+    t =     9.08s         Find the "v9.explore.summary" Button
+    t =     9.11s         Find the "v9.explore.summary" Button
+    t =     9.14s         Find the "v9.explore.summary" Button
+    t =     9.52s     Wait for com.chorai.nativeprototype.v9 to idle
+    t =     9.53s Checking existence of `"v9.reader" Any`
+    t =     9.57s Waiting 5.0s for "v9.explore.position" Any to exist
+    t =    10.60s     Checking `Expect predicate `existsNoRetry == 1` for object "v9.explore.position" Any`
+    t =    10.60s         Checking existence of `"v9.explore.position" Any`
+    t =    11.68s Checking `Expect predicate `label == "1 / 8"` for object "v9.explore.position" Any`
+    t =    11.68s     Find the "v9.explore.position" Any
+    t =    11.72s Swipe left "v9.explore.summary" Button
+    t =    11.72s     Wait for com.chorai.nativeprototype.v9 to idle
+    t =    11.72s     Find the "v9.explore.summary" Button
+    t =    11.75s     Check for interrupting elements affecting "v9.explore.summary" Button
+    t =    11.78s     Synthesize event
+    t =    12.22s     Wait for com.chorai.nativeprototype.v9 to idle
+    t =    12.22s Waiting 5.0s for "v9.explore.position" Any to exist
+    t =    13.26s     Checking `Expect predicate `existsNoRetry == 1` for object "v9.explore.position" Any`
+    t =    13.26s         Checking existence of `"v9.explore.position" Any`
+    t =    14.33s Checking `Expect predicate `label == "2 / 8"` for object "v9.explore.position" Any`
+    t =    14.33s     Find the "v9.explore.position" Any
+    t =    14.38s Find the "v9.explore.card" Any
+    t =    14.41s Tap "v9.explore.summary" Any
+    t =    14.41s     Wait for com.chorai.nativeprototype.v9 to idle
+    t =    14.41s     Find the "v9.explore.summary" Any
+    t =    14.44s     Check for interrupting elements affecting "v9.explore.summary" Button
+    t =    14.47s     Synthesize event
+    t =    14.75s     Wait for com.chorai.nativeprototype.v9 to idle
+    t =    15.61s Waiting 5.0s for "v9.reader" Any to exist
+    t =    16.65s     Checking `Expect predicate `existsNoRetry == 1` for object "v9.reader" Any`
+    t =    16.65s         Checking existence of `"v9.reader" Any`
+    t =    16.70s Find the "Explore" Button
+    t =    17.73s     Find the "Explore" Button (retry 1)
+    t =    18.78s     Find the "Explore" Button (retry 2)
+    t =    18.80s Find the StaticText (First Match)
+    t =    18.82s Swipe up ScrollView (First Match)
+    t =    18.82s     Wait for com.chorai.nativeprototype.v9 to idle
+    t =    18.82s     Find the ScrollView (First Match)
+    t =    18.84s     Check for interrupting elements affecting "v9.reader" ScrollView
+    t =    18.85s     Synthesize event
+    t =    19.29s     Wait for com.chorai.nativeprototype.v9 to idle
+    t =    20.50s Find the "I still make lists. I still pull weeds. But I no longer mistake a tidy system for a living one. The point is to keep something growing." StaticText
+    t =    20.54s Find the "I still make lists. I still pull weeds. But I no longer mistake a tidy system for a living one. The point is to keep something growing." StaticText
+    t =    20.57s Find the "I still make lists. I still pull weeds. But I no longer mistake a tidy system for a living one. The point is to keep something growing." StaticText
+    t =    20.59s Find the "I still make lists. I still pull weeds. But I no longer mistake a tidy system for a living one. The point is to keep something growing." StaticText
+    t =    20.61s Find the "I still make lists. I still pull weeds. But I no longer mistake a tidy system for a living one. The point is to keep something growing." StaticText
+    t =    20.63s Find the "I still make lists. I still pull weeds. But I no longer mistake a tidy system for a living one. The point is to keep something growing." StaticText
+    t =    20.65s Find the "I still make lists. I still pull weeds. But I no longer mistake a tidy system for a living one. The point is to keep something growing." StaticText
+    t =    20.68s Find the "I still make lists. I still pull weeds. But I no longer mistake a tidy system for a living one. The point is to keep something growing." StaticText
+    t =    20.70s Waiting 5.0s for Button (First Match) to exist
+    t =    21.74s     Checking `Expect predicate `existsNoRetry == 1` for object Button (First Match)`
+    t =    21.74s         Checking existence of `Button (First Match)`
+    t =    21.76s Tap Button (First Match)
+    t =    21.76s     Wait for com.chorai.nativeprototype.v9 to idle
+    t =    21.76s     Find the Button (First Match)
+    t =    21.78s     Check for interrupting elements affecting "BackButton" Button
+    t =    21.80s     Synthesize event
+    t =    22.09s     Wait for com.chorai.nativeprototype.v9 to idle
+    t =    22.83s Waiting 5.0s for "v9.explore.position" Any to exist
+    t =    23.87s     Checking `Expect predicate `existsNoRetry == 1` for object "v9.explore.position" Any`
+    t =    23.87s         Checking existence of `"v9.explore.position" Any`
+    t =    24.95s Checking `Expect predicate `label == "2 / 8"` for object "v9.explore.position" Any`
+    t =    24.95s     Find the "v9.explore.position" Any
+    t =    25.01s Swipe right "v9.explore.summary" Any
+    t =    25.01s     Wait for com.chorai.nativeprototype.v9 to idle
+    t =    25.01s     Find the "v9.explore.summary" Any
+    t =    25.04s     Check for interrupting elements affecting "v9.explore.summary" Button
+    t =    25.06s     Synthesize event
+    t =    25.50s     Wait for com.chorai.nativeprototype.v9 to idle
+    t =    25.51s Waiting 5.0s for "v9.explore.position" Any to exist
+    t =    26.55s     Checking `Expect predicate `existsNoRetry == 1` for object "v9.explore.position" Any`
+    t =    26.55s         Checking existence of `"v9.explore.position" Any`
+    t =    27.64s Checking `Expect predicate `label == "3 / 8"` for object "v9.explore.position" Any`
+    t =    27.64s     Find the "v9.explore.position" Any
+    t =    27.69s Tap "v9.explore.history" Any
+    t =    27.69s     Wait for com.chorai.nativeprototype.v9 to idle
+    t =    27.69s     Find the "v9.explore.history" Any
+    t =    27.72s     Check for interrupting elements affecting "v9.explore.history" Button
+    t =    27.75s     Synthesize event
+    t =    28.04s     Wait for com.chorai.nativeprototype.v9 to idle
+    t =    28.46s Waiting 5.0s for "v9.history.item.photo" Any to exist
+    t =    29.50s     Checking `Expect predicate `existsNoRetry == 1` for object "v9.history.item.photo" Any`
+    t =    29.50s         Checking existence of `"v9.history.item.photo" Any`
+    t =    29.57s Tap "v9.history.item.photo" Any
+    t =    29.57s     Wait for com.chorai.nativeprototype.v9 to idle
+    t =    29.57s     Find the "v9.history.item.photo" Any
+    t =    29.62s     Check for interrupting elements affecting "v9.history.item.photo" Button
+    t =    29.66s     Synthesize event
+    t =    29.95s     Wait for com.chorai.nativeprototype.v9 to idle
+    t =    30.37s Waiting 5.0s for "v9.explore.position" Any to exist
+    t =    31.41s     Checking `Expect predicate `existsNoRetry == 1` for object "v9.explore.position" Any`
+    t =    31.41s         Checking existence of `"v9.explore.position" Any`
+    t =    32.49s Checking `Expect predicate `label == "1 / 8"` for object "v9.explore.position" Any`
+    t =    32.49s     Find the "v9.explore.position" Any
+    t =    32.53s Find the "v9.resume" Any
+    t =    32.56s Tap "v9.resume" Any
+    t =    32.56s     Wait for com.chorai.nativeprototype.v9 to idle
+    t =    32.56s     Find the "v9.resume" Any
+    t =    32.59s     Check for interrupting elements affecting "v9.resume" Button
+    t =    32.62s     Synthesize event
+    t =    32.90s     Wait for com.chorai.nativeprototype.v9 to idle
+    t =    32.91s Waiting 5.0s for "v9.explore.position" Any to exist
+    t =    33.92s     Checking `Expect predicate `existsNoRetry == 1` for object "v9.explore.position" Any`
+    t =    33.92s         Checking existence of `"v9.explore.position" Any`
+    t =    35.02s Checking `Expect predicate `label == "3 / 8"` for object "v9.explore.position" Any`
+    t =    35.02s     Find the "v9.explore.position" Any
+    t =    35.07s Tap "v9.search.open" Any
+    t =    35.07s     Wait for com.chorai.nativeprototype.v9 to idle
+    t =    35.07s     Find the "v9.search.open" Any
+    t =    35.09s     Check for interrupting elements affecting "v9.search.open" Other
+    t =    35.12s     Synthesize event
+    t =    35.41s     Wait for com.chorai.nativeprototype.v9 to idle
+    t =    36.13s Waiting 5.0s for SearchField (First Match) to exist
+    t =    37.14s     Checking `Expect predicate `existsNoRetry == 1` for object SearchField (First Match)`
+    t =    37.14s         Checking existence of `SearchField (First Match)`
+    t =    37.20s Tap SearchField (First Match)
+    t =    37.20s     Wait for com.chorai.nativeprototype.v9 to idle
+    t =    37.20s     Find the SearchField (First Match)
+    t =    37.22s     Check for interrupting elements affecting "Search notes and ideas" SearchField
+    t =    37.25s     Synthesize event
+    t =    37.53s     Wait for com.chorai.nativeprototype.v9 to idle
+    t =    38.44s Type 'garden' into "Search notes and ideas" SearchField
+    t =    38.44s     Wait for com.chorai.nativeprototype.v9 to idle
+    t =    38.45s     Find the "Search notes and ideas" SearchField
+    t =    38.49s     Check for interrupting elements affecting "Search notes and ideas" SearchField
+    t =    38.51s     Synthesize event
+    t =    38.81s     Wait for com.chorai.nativeprototype.v9 to idle
+    t =    39.11s Waiting 5.0s for "v9.search.result.essay" Any to exist
+    t =    40.12s     Checking `Expect predicate `existsNoRetry == 1` for object "v9.search.result.essay" Any`
+    t =    40.12s         Checking existence of `"v9.search.result.essay" Any`
+    t =    40.21s Tap "v9.search.result.essay" Any
+    t =    40.21s     Wait for com.chorai.nativeprototype.v9 to idle
+    t =    40.21s     Find the "v9.search.result.essay" Any
+    t =    40.28s     Check for interrupting elements affecting "v9.search.result.essay" Button
+    t =    40.32s     Synthesize event
+    t =    40.61s     Wait for com.chorai.nativeprototype.v9 to idle
+    t =    41.00s Waiting 5.0s for "v9.reader" Any to exist
+    t =    42.04s     Checking `Expect predicate `existsNoRetry == 1` for object "v9.reader" Any`
+    t =    42.04s         Checking existence of `"v9.reader" Any`
+    t =    42.08s Waiting 5.0s for Button (First Match) to exist
+    t =    43.12s     Checking `Expect predicate `existsNoRetry == 1` for object Button (First Match)`
+    t =    43.12s         Checking existence of `Button (First Match)`
+    t =    43.15s Tap Button (First Match)
+    t =    43.15s     Wait for com.chorai.nativeprototype.v9 to idle
+    t =    43.15s     Find the Button (First Match)
+    t =    43.17s     Check for interrupting elements affecting "BackButton" Button
+    t =    43.19s     Synthesize event
+    t =    43.49s     Wait for com.chorai.nativeprototype.v9 to idle
+    t =    44.23s Waiting 5.0s for "v9.explore.position" Any to exist
+    t =    45.24s     Checking `Expect predicate `existsNoRetry == 1` for object "v9.explore.position" Any`
+    t =    45.24s         Checking existence of `"v9.explore.position" Any`
+    t =    46.33s Checking `Expect predicate `label == "3 / 8"` for object "v9.explore.position" Any`
+    t =    46.33s     Find the "v9.explore.position" Any
+    t =    46.39s Tear Down
+    t =    46.39s     Terminate com.chorai.nativeprototype.v9:14190
+Test Case '-[ChoraiPrototypeUITests.ReviewV9Tests testFixedSummaryReaderHistoryAndSearch]' passed (47.582 seconds).
+Test Suite 'ReviewV9Tests' passed at 2026-10-27 11:48:43.855.
+	 Executed 1 test, with 0 failures (0 unexpected) in 47.582 (47.583) seconds
+Test Suite 'ChoraiPrototypeUITests.xctest' passed at 2026-10-27 11:48:43.856.
+	 Executed 1 test, with 0 failures (0 unexpected) in 47.582 (47.584) seconds
+Test Suite 'Selected tests' passed at 2026-10-27 11:48:43.856.
+	 Executed 1 test, with 0 failures (0 unexpected) in 47.582 (47.585) seconds
+2026-10-27 11:48:43.889 xcodebuild[14178:102937] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-10-27 11:48:43.890 xcodebuild[14178:102937] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-10-27 11:48:44.154 xcodebuild[14178:102937] [MT] IDETestOperationsObserverDebug: 48.957 elapsed -- Testing started completed.
+2026-10-27 11:48:44.154 xcodebuild[14178:102937] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-27 11:48:44.154 xcodebuild[14178:102937] [MT] IDETestOperationsObserverDebug: 48.957 sec, +48.957 sec -- end
+
+Test session results, code coverage, and logs:
+	/tmp/chorai-v9-interaction-final.xcresult
+
+** TEST EXECUTE SUCCEEDED **
+
+Testing started

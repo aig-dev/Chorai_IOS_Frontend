@@ -99,7 +99,7 @@ struct WebViewPage: View {
             
         }
         .ignoresSafeArea(.all)
-        .background(Color.black)
+        .background(ChoraiTheme.background)
         .onAppear {
             print("URL: \(url.absoluteString)")
         }

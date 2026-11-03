@@ -1,0 +1,15 @@
+{
+  "device": "iPhone 17 Pro",
+  "runtime": "iOS 26.5",
+  "size": "1206x2622",
+  "sources": [
+    "/tmp/chorai-ios-fidelity-ui-light-final.xcresult",
+    "/tmp/chorai-ios-fidelity-ui-light-recheck.xcresult",
+    "/tmp/chorai-ios-fidelity-ui-reader-full-body.xcresult",
+    "/tmp/chorai-ios-fidelity-ui-dark-complete.xcresult",
+    "/tmp/chorai-ios-long-card-light.xcresult",
+    "/tmp/chorai-ios-long-card-light-recheck.xcresult",
+    "/tmp/chorai-ios-long-card-dark.xcresult",
+    "/tmp/chorai-ios-long-card-dark-navigation.xcresult"
+  ]
+}

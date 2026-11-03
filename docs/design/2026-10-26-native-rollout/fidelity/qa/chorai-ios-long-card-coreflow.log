@@ -1,0 +1,78 @@
+Building for debugging...
+[Planning deferred tasks]
+[28 / 52]
+[29 / 53] CoreFlow
+[39 / 98]
+[44 / 98]
+[48 / 98]
+[52 / 98]
+[55 / 98]
+[60 / 98]
+[61 / 98]
+[62 / 98]
+[63 / 98]
+[74 / 98] CoreFlow
+[75 / 98] CoreFlow
+[82 / 98] CoreFlow
+[88 / 99] CoreFlowTests-product
+[100 / 145]
+[105 / 145]
+[110 / 145]
+[112 / 145]
+[114 / 145]
+[115 / 145]
+[117 / 145]
+[118 / 145]
+[119 / 145]
+[120 / 145]
+[121 / 145]
+[123 / 145]
+[134 / 145] CoreFlowTests-product
+/Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/Packages/CoreFlow/Tests/CoreFlowTests/SparkSessionStoreInteractionTests.swift:144:45: warning: backward matching of the unlabeled trailing closure is deprecated; label the argument with 'onFavoriteSucceeded' to suppress this warning [#TrailingClosureMatching]
+142 |         var favoritedAssetIDs: [String] = []
+143 | 
+144 |         harness.store.toggleFavoriteCurrent { favoritedAssetIDs.append($0) }
+    |                                             `- warning: backward matching of the unlabeled trailing closure is deprecated; label the argument with 'onFavoriteSucceeded' to suppress this warning [#TrailingClosureMatching]
+145 |         harness.store.toggleFavoriteCurrent()
+146 | 
+
+CoreFlow.SparkSessionStore.toggleFavoriteCurrent:2:24: note: 'toggleFavoriteCurrent(onFavoriteMutationSucceeded:onFavoriteSucceeded:)' declared here
+1 | class SparkSessionStore {
+2 | @MainActor public func toggleFavoriteCurrent(onFavoriteMutationSucceeded: ((String, Bool, Int) -> Void)? = nil, onFavoriteSucceeded: ((String) -> Void)? = nil)}
+  |                        `- note: 'toggleFavoriteCurrent(onFavoriteMutationSucceeded:onFavoriteSucceeded:)' declared here
+3 | 
+
+[#TrailingClosureMatching]: <https://docs.swift.org/compiler/documentation/diagnostics/trailing-closure-matching>
+[139 / 145] CoreFlowTests-product
+[141 / 145] CoreFlowTests-product
+[145 / 145] CoreFlowTests-product
+Build complete! (16.18 sec)
+Test Suite 'Selected tests' started at 2026-10-26 15:20:40.398.
+Test Suite 'CoreFlowTests.xctest' started at 2026-10-26 15:20:40.399.
+Test Suite 'FlowCardPresentationSourceContractTests' started at 2026-10-26 15:20:40.399.
+Test Case '-[CoreFlowTests.FlowCardPresentationSourceContractTests testExploreFlowCardUsesApprovedCompactNativeEngagementIcons]' started.
+Test Case '-[CoreFlowTests.FlowCardPresentationSourceContractTests testExploreFlowCardUsesApprovedCompactNativeEngagementIcons]' passed (0.003 seconds).
+Test Case '-[CoreFlowTests.FlowCardPresentationSourceContractTests testExploreFlowCardUsesBodyWithoutRenderingLegacyTitle]' started.
+Test Case '-[CoreFlowTests.FlowCardPresentationSourceContractTests testExploreFlowCardUsesBodyWithoutRenderingLegacyTitle]' passed (0.002 seconds).
+Test Case '-[CoreFlowTests.FlowCardPresentationSourceContractTests testExploreMenusKeepTheOriginalMutationBoundary]' started.
+Test Case '-[CoreFlowTests.FlowCardPresentationSourceContractTests testExploreMenusKeepTheOriginalMutationBoundary]' passed (0.001 seconds).
+Test Case '-[CoreFlowTests.FlowCardPresentationSourceContractTests testFlowAvatarCanonicalizesRelativeResourceURLBeforeLoading]' started.
+Test Case '-[CoreFlowTests.FlowCardPresentationSourceContractTests testFlowAvatarCanonicalizesRelativeResourceURLBeforeLoading]' passed (0.002 seconds).
+Test Case '-[CoreFlowTests.FlowCardPresentationSourceContractTests testFlowDeckUsesAtMostTwoTruthfulNoninteractiveBackplates]' started.
+Test Case '-[CoreFlowTests.FlowCardPresentationSourceContractTests testFlowDeckUsesAtMostTwoTruthfulNoninteractiveBackplates]' passed (0.001 seconds).
+Test Case '-[CoreFlowTests.FlowCardPresentationSourceContractTests testFlowGlassUIFixtureReusesExistingAvatarArtifact]' started.
+Test Case '-[CoreFlowTests.FlowCardPresentationSourceContractTests testFlowGlassUIFixtureReusesExistingAvatarArtifact]' passed (0.011 seconds).
+Test Case '-[CoreFlowTests.FlowCardPresentationSourceContractTests testFlowUsesReadableNativeSurfaceWithAccessibilityFallbacks]' started.
+Test Case '-[CoreFlowTests.FlowCardPresentationSourceContractTests testFlowUsesReadableNativeSurfaceWithAccessibilityFallbacks]' passed (0.001 seconds).
+Test Case '-[CoreFlowTests.FlowCardPresentationSourceContractTests testGridAndDeckShareLiveStoreAndHideDecorativeChora]' started.
+Test Case '-[CoreFlowTests.FlowCardPresentationSourceContractTests testGridAndDeckShareLiveStoreAndHideDecorativeChora]' passed (0.004 seconds).
+Test Case '-[CoreFlowTests.FlowCardPresentationSourceContractTests testOwnedFlowCardOmitsFavoriteControl]' started.
+Test Case '-[CoreFlowTests.FlowCardPresentationSourceContractTests testOwnedFlowCardOmitsFavoriteControl]' passed (0.001 seconds).
+Test Case '-[CoreFlowTests.FlowCardPresentationSourceContractTests testRatedGridKeepsBoundedSummaryAuthorAndActionsInsideV8LevelSurface]' started.
+Test Case '-[CoreFlowTests.FlowCardPresentationSourceContractTests testRatedGridKeepsBoundedSummaryAuthorAndActionsInsideV8LevelSurface]' passed (0.001 seconds).
+Test Suite 'FlowCardPresentationSourceContractTests' passed at 2026-10-26 15:20:40.427.
+	 Executed 10 tests, with 0 failures (0 unexpected) in 0.027 (0.027) seconds
+Test Suite 'CoreFlowTests.xctest' passed at 2026-10-26 15:20:40.427.
+	 Executed 10 tests, with 0 failures (0 unexpected) in 0.027 (0.027) seconds
+Test Suite 'Selected tests' passed at 2026-10-26 15:20:40.427.
+	 Executed 10 tests, with 0 failures (0 unexpected) in 0.027 (0.029) seconds

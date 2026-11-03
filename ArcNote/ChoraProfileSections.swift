@@ -1,6 +1,7 @@
 import CoreFlow
 import SwiftUI
 struct ChoraSoulSourcesSection: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject var noteImportStore: NoteImportStore
     @ObservedObject var notionStore: NotionSourceStore
     let notionOAuthCoordinator: any NotionOAuthCoordinating
@@ -12,7 +13,8 @@ struct ChoraSoulSourcesSection: View {
     var body: some View {
         ChoraSectionSurface(
             title: "Soul Sources",
-            identifier: "chora.sources.section"
+            identifier: "chora.sources.section",
+            openLayout: true
         ) {
             VStack(spacing: 0) {
                 ChoraDisclosureRow(
@@ -23,7 +25,7 @@ struct ChoraSoulSourcesSection: View {
                     identifier: "chora.sources.localNotes",
                     statusIdentifier: localNotesStatusIdentifier
                 ) {
-                    withAnimation(.easeInOut(duration: 0.2)) {
+                    withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
                         localNotesExpanded.toggle()
                     }
                 }
@@ -35,7 +37,7 @@ struct ChoraSoulSourcesSection: View {
                 }
 
                 Divider()
-                    .background(Color.white.opacity(0.16))
+                    .overlay(ChoraiTheme.separator)
                     .padding(.vertical, 8)
 
                 ChoraDisclosureRow(
@@ -46,7 +48,7 @@ struct ChoraSoulSourcesSection: View {
                     identifier: "chora.sources.notion",
                     statusIdentifier: notionStatusIdentifier
                 ) {
-                    withAnimation(.easeInOut(duration: 0.2)) {
+                    withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
                         notionExpanded.toggle()
                     }
                     if notionExpanded,
@@ -188,7 +190,7 @@ private struct LocalNotesExpandedContent: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            SettingsOutlineButton(title: "Choose Files") {
+            ChoraActionButton(title: "Choose Files") {
                 showsDocumentPicker = true
             }
             .disabled(store.phase == .submitting || store.phase == .reconciling)
@@ -198,12 +200,12 @@ private struct LocalNotesExpandedContent: View {
                 HStack {
                     Text(file.filename)
                         .font(.subheadline)
-                        .foregroundColor(.white)
+                        .foregroundColor(ChoraiTheme.ink)
                         .fixedSize(horizontal: false, vertical: true)
                     Spacer(minLength: 8)
                     Text(file.byteCount == 0 ? "Empty" : formatText(file.format))
                         .font(.caption)
-                        .foregroundColor(.white.opacity(0.58))
+                        .foregroundColor(ChoraiTheme.secondaryInk)
                 }
                 .accessibilityElement(children: .combine)
                 .accessibilityIdentifier(
@@ -237,57 +239,57 @@ private struct LocalNotesExpandedContent: View {
             if let error = localErrorText {
                 Text(error)
                     .font(.footnote)
-                    .foregroundColor(Color(red: 1, green: 0.56, blue: 0.58))
+                    .foregroundColor(.red)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("chora.sources.localNotes.inlineError")
             }
 
             if store.canCancelCurrentJob {
-                SettingsOutlineButton(title: "Cancel Import", foregroundColor: Color(red: 1, green: 0.5, blue: 0.54)) {
+                ChoraActionButton(title: "Cancel Import", foregroundColor: .red) {
                     showsCancelConfirmation = true
                 }
                 .accessibilityIdentifier("chora.sources.localNotes.cancel")
             } else if store.phase == .cancelling {
                 Text("Cancelling import…")
                     .font(.footnote)
-                    .foregroundColor(.white.opacity(0.65))
+                    .foregroundColor(ChoraiTheme.secondaryInk)
                     .accessibilityIdentifier("chora.sources.localNotes.cancelling")
             } else if store.canRetrySubmission {
-                SettingsOutlineButton(title: "Retry") { store.retry() }
+                ChoraActionButton(title: "Retry") { store.retry() }
                     .accessibilityIdentifier("chora.sources.localNotes.retry")
             } else if store.phase == .failed(
                 .preflight(code: "file_metadata_unavailable")
             ) {
                 Text("Choose the file again to retry.")
                     .font(.footnote)
-                    .foregroundColor(.white.opacity(0.65))
+                    .foregroundColor(ChoraiTheme.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier(
                         "chora.sources.localNotes.reselect"
                     )
             } else if store.canReload, let actorID = store.actorID {
-                SettingsOutlineButton(title: "Retry Loading") {
+                ChoraActionButton(title: "Retry Loading") {
                     Task { await store.load(actorID: actorID) }
                 }
                 .accessibilityIdentifier("chora.sources.localNotes.reload")
             } else if store.needsFileReselectionForRetry {
                 Text("Choose the original files again to reconcile this import.")
                     .font(.footnote)
-                    .foregroundColor(.white.opacity(0.65))
+                    .foregroundColor(ChoraiTheme.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("chora.sources.localNotes.reselect")
             } else if store.phase == .submitting || store.phase == .reconciling {
                 Text("Submitting files…")
                     .font(.footnote)
-                    .foregroundColor(.white.opacity(0.65))
+                    .foregroundColor(ChoraiTheme.secondaryInk)
                     .accessibilityIdentifier("chora.sources.localNotes.submitting")
             } else if !store.selectedFiles.isEmpty {
-                SettingsOutlineButton(title: "Start Import") { store.start() }
+                ChoraActionButton(title: "Start Import") { store.start() }
                     .accessibilityIdentifier("chora.sources.localNotes.start")
             } else {
                 Text("Choose Markdown or HTML files to start a local import.")
                     .font(.footnote)
-                    .foregroundColor(.white.opacity(0.55))
+                    .foregroundColor(ChoraiTheme.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -329,9 +331,9 @@ private struct LocalNotesExpandedContent: View {
 
     private func countRow(_ title: String, value: Int) -> some View {
         HStack {
-            Text(title).foregroundColor(.white.opacity(0.62))
+            Text(title).foregroundColor(ChoraiTheme.secondaryInk)
             Spacer()
-            Text("\(value)").foregroundColor(.white)
+            Text("\(value)").foregroundColor(ChoraiTheme.ink)
         }
         .font(.subheadline)
         .accessibilityElement(children: .ignore)
@@ -343,12 +345,12 @@ private struct LocalNotesExpandedContent: View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
             Text(item.originalFilename)
                 .font(.subheadline)
-                .foregroundColor(.white)
+                .foregroundColor(ChoraiTheme.ink)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 8)
                         Text(itemStatusText(item.status))
                 .font(.caption)
-                .foregroundColor(.white.opacity(0.58))
+                .foregroundColor(ChoraiTheme.secondaryInk)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .accessibilityElement(children: .combine)
@@ -389,7 +391,7 @@ private struct NotionExpandedContent: View {
             if let error = store.inlineError {
                 Text(errorText(error))
                     .font(.footnote)
-                    .foregroundColor(Color(red: 1, green: 0.56, blue: 0.58))
+                    .foregroundColor(.red)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("chora.sources.notion.error")
             }
@@ -398,25 +400,26 @@ private struct NotionExpandedContent: View {
                 HStack(spacing: 10) {
                     TextField("Search pages", text: $query)
                         .textFieldStyle(.plain)
-                        .foregroundColor(.white)
+                        .foregroundColor(ChoraiTheme.ink)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 10)
                         .background(
                             RoundedRectangle(cornerRadius: 12)
-                                .fill(Color.white.opacity(0.1))
+                                .fill(ChoraiTheme.surface)
                         )
                         .accessibilityIdentifier("chora.sources.notion.search")
                     Button("Search") {
                         store.searchPages(query: query.isEmpty ? nil : query)
                     }
-                    .foregroundColor(.white)
+                    .frame(minWidth: 44, minHeight: 44)
+                    .choraiGlassButton()
                     .accessibilityIdentifier("chora.sources.notion.search.submit")
                 }
 
                 if store.pagesPhase == .loading {
                     ProgressView("Loading pages…")
-                        .tint(.white)
-                        .foregroundColor(.white.opacity(0.65))
+                        .tint(ChoraiTheme.ink)
+                        .foregroundColor(ChoraiTheme.secondaryInk)
                 } else {
                     ForEach(store.pages) { page in
                         Button {
@@ -433,13 +436,15 @@ private struct NotionExpandedContent: View {
                                      ? "Selected"
                                      : "Select")
                                     .font(.caption)
-                                    .foregroundColor(.white.opacity(0.6))
+                                    .foregroundColor(ChoraiTheme.secondaryInk)
                                 Text(page.title)
                                     .fixedSize(horizontal: false, vertical: true)
                                 Spacer(minLength: 0)
                             }
                             .font(.subheadline)
-                            .foregroundColor(.white)
+                            .foregroundColor(ChoraiTheme.ink)
+                            .frame(minHeight: 44)
+                            .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                         .accessibilityIdentifier("chora.sources.notion.page.\(page.id)")
@@ -458,7 +463,7 @@ private struct NotionExpandedContent: View {
                         Text(pageSyncText(status.status))
                     }
                     .font(.caption)
-                    .foregroundColor(.white.opacity(0.62))
+                    .foregroundColor(ChoraiTheme.secondaryInk)
                     .accessibilityElement(children: .combine)
                     .accessibilityLabel("Notion page \(status.pageID)")
                     .accessibilityValue(pageSyncText(status.status))
@@ -466,7 +471,7 @@ private struct NotionExpandedContent: View {
                 }
 
                 if !store.selectedPageIDs.isEmpty {
-                    SettingsOutlineButton(
+                    ChoraActionButton(
                         title: store.isImporting ? "Importing…" : "Import Selected"
                     ) {
                         store.startImport()
@@ -475,7 +480,7 @@ private struct NotionExpandedContent: View {
                     .accessibilityIdentifier("chora.sources.notion.import")
                 }
 
-                SettingsOutlineButton(title: "Disconnect", foregroundColor: Color(red: 1, green: 0.5, blue: 0.54)) {
+                ChoraActionButton(title: "Disconnect", foregroundColor: .red) {
                     showsDisconnectConfirmation = true
                 }
                 .disabled(store.isDisconnecting)
@@ -484,26 +489,26 @@ private struct NotionExpandedContent: View {
             } else {
                 switch store.status?.state.knownValue {
                 case .disconnected:
-                    SettingsOutlineButton(title: "Connect Notion") {
+                    ChoraActionButton(title: "Connect Notion") {
                         store.connect()
                     }
                     .accessibilityIdentifier("chora.sources.notion.connect")
                 case .connecting:
                     Text("Connecting…")
                         .font(.subheadline)
-                        .foregroundColor(.white.opacity(0.65))
+                        .foregroundColor(ChoraiTheme.secondaryInk)
                         .accessibilityIdentifier("chora.sources.notion.connecting")
                 case .connected:
                     EmptyView()
                 case nil:
-                    SettingsOutlineButton(title: "Retry") { store.reloadStatus() }
+                    ChoraActionButton(title: "Retry") { store.reloadStatus() }
                         .accessibilityIdentifier("chora.sources.notion.retryStatus")
                 }
 
                 if store.authorizationRequest != nil {
                     Text("Continue in the secure Notion sign-in window.")
                         .font(.footnote)
-                        .foregroundColor(.white.opacity(0.55))
+                        .foregroundColor(ChoraiTheme.secondaryInk)
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityIdentifier("chora.sources.notion.authorizationReady")
                 }
@@ -522,7 +527,7 @@ private struct NotionExpandedContent: View {
         if let receipt = store.importReceipt {
             Text("Job \(receipt.jobID)")
                 .font(.footnote)
-                .foregroundColor(.white.opacity(0.65))
+                .foregroundColor(ChoraiTheme.secondaryInk)
                 .accessibilityLabel("Notion import receipt")
                 .accessibilityValue(receipt.jobID)
                 .accessibilityIdentifier("chora.sources.notion.import.receipt")
@@ -530,7 +535,7 @@ private struct NotionExpandedContent: View {
         if let job = store.importJob {
             Text(importStatusText(job.status))
                 .font(.subheadline.weight(.medium))
-                .foregroundColor(.white)
+                .foregroundColor(ChoraiTheme.ink)
                 .accessibilityIdentifier("chora.sources.notion.import.\(job.status.knownValue == nil ? "unknown" : job.status.rawValue)")
             notionCount("Imported", value: job.imported, id: "imported")
             notionCount("Updated", value: job.updated, id: "updated")
@@ -538,7 +543,7 @@ private struct NotionExpandedContent: View {
             ForEach(job.failures, id: \.pageID) { failure in
                 Text("\(failure.pageID): \(failure.reason)")
                     .font(.footnote)
-                    .foregroundColor(Color(red: 1, green: 0.56, blue: 0.58))
+                    .foregroundColor(.red)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityLabel("Notion page \(failure.pageID) failed")
                     .accessibilityValue(failure.reason)
@@ -550,7 +555,7 @@ private struct NotionExpandedContent: View {
     private func notionCount(_ title: String, value: Int, id: String) -> some View {
         HStack { Text(title); Spacer(); Text("\(value)") }
             .font(.footnote)
-            .foregroundColor(.white.opacity(0.72))
+            .foregroundColor(ChoraiTheme.secondaryInk)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(title)
             .accessibilityValue("\(value)")
@@ -585,16 +590,15 @@ struct ChoraField: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(label)
                 .font(.subheadline.weight(.medium))
-                .foregroundColor(.white)
+                .foregroundColor(ChoraiTheme.ink)
             TextField(placeholder, text: $text)
                 .font(.body)
-                .foregroundColor(.white)
+                .foregroundColor(ChoraiTheme.ink)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 14)
                 .background(
                     RoundedRectangle(cornerRadius: 12)
-                        .fill(Color.white.opacity(0.1))
-                        .cardHighlightEffect()
+                        .fill(ChoraiTheme.surface)
                 )
                 .accessibilityLabel(label)
                 .accessibilityIdentifier(identifier)
@@ -612,22 +616,15 @@ struct ChoraGrowthBar: View {
                 Text(dimension.displayName ?? "Unavailable")
                 Spacer()
                 Text(valueText)
-                    .foregroundColor(.white.opacity(0.62))
+                    .foregroundColor(ChoraiTheme.secondaryInk)
             }
             .font(.subheadline)
-            .foregroundColor(.white)
+            .foregroundColor(ChoraiTheme.ink)
 
-            GeometryReader { proxy in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(Color.white.opacity(0.12))
-                    if let value {
-                        Capsule()
-                            .fill(Color.white.opacity(0.78))
-                            .frame(width: proxy.size.width * value / 12)
-                    }
-                }
-            }
-            .frame(height: 6)
+            ProgressView(value: min(12, max(0, value ?? 0)), total: 12)
+                .progressViewStyle(.linear)
+                .tint(ChoraiTheme.gold)
+                .accessibilityHidden(true)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(dimension.displayName ?? "Growth dimension")
@@ -647,38 +644,43 @@ struct ChoraGrowthBar: View {
 struct ChoraSectionSurface<Content: View>: View {
     let title: String
     let identifier: String?
+    let openLayout: Bool
     @ViewBuilder let content: Content
 
     init(
         title: String,
         identifier: String? = nil,
+        openLayout: Bool = false,
         @ViewBuilder content: () -> Content
     ) {
         self.title = title
         self.identifier = identifier
+        self.openLayout = openLayout
         self.content = content()
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text(title)
-                .font(.title3.weight(.semibold))
-                .foregroundColor(.white)
+                .font(openLayout ? .system(.title2, design: .serif).weight(.semibold) : .title3.weight(.semibold))
+                .foregroundColor(ChoraiTheme.ink)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier(identifier ?? "chora.section.\(title)")
             content
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(20)
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color.white.opacity(0.1))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color.white.opacity(0.1), lineWidth: 1)
-                )
-                .cardHighlightEffect()
-        )
+        .padding(openLayout ? 0 : 20)
+        .background {
+            if !openLayout {
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(ChoraiTheme.surface)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(ChoraiTheme.separator, lineWidth: 1)
+                    )
+                    .cardHighlightEffect()
+            }
+        }
     }
 }
 
@@ -688,10 +690,10 @@ struct ChoraLoadingRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            ProgressView().tint(.white)
+            ProgressView().tint(ChoraiTheme.ink)
             Text(text)
                 .font(.subheadline)
-                .foregroundColor(.white.opacity(0.65))
+                .foregroundColor(ChoraiTheme.secondaryInk)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .accessibilityElement(children: .combine)
@@ -708,7 +710,7 @@ struct ChoraInlineError: View {
         VStack(alignment: .leading, spacing: 12) {
             Text(text)
                 .font(.subheadline)
-                .foregroundColor(Color(red: 1, green: 0.62, blue: 0.64))
+                .foregroundColor(.red)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier(identifier)
             SettingsOutlineButton(title: "Retry", action: retry)
@@ -729,18 +731,22 @@ private struct ChoraDisclosureRow: View {
     var body: some View {
         Button(action: action) {
             HStack(alignment: .center, spacing: 16) {
-                Image(imageName)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: 24, height: 24)
-                    .foregroundColor(.white)
+                Group {
+                    if imageName == "notes" {
+                        Image(systemName: "doc.text").font(.title3)
+                    } else {
+                        Image(imageName).renderingMode(.template).resizable().scaledToFit()
+                    }
+                }
+                .frame(width: 24, height: 24)
+                .foregroundStyle(ChoraiTheme.ink)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(title)
                         .font(.body.weight(.medium))
-                        .foregroundColor(.white)
+                        .foregroundColor(ChoraiTheme.ink)
                     Text(summary)
                         .font(.subheadline)
-                        .foregroundColor(.white.opacity(0.55))
+                        .foregroundColor(ChoraiTheme.secondaryInk)
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityIdentifier(
                             statusIdentifier ?? "\(identifier).summary"
@@ -748,11 +754,12 @@ private struct ChoraDisclosureRow: View {
                 }
                 Spacer(minLength: 8)
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(.gray)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundColor(ChoraiTheme.secondaryInk)
                     .rotationEffect(.degrees(isExpanded ? 90 : 0))
             }
             .padding(.vertical, 8)
+            .frame(minHeight: 44)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -760,5 +767,22 @@ private struct ChoraDisclosureRow: View {
         .accessibilityLabel(title)
         .accessibilityValue("\(isExpanded ? "Expanded" : "Collapsed"), \(summary)")
         .accessibilityIdentifier(identifier)
+    }
+}
+
+/// Chora-only presentation of existing actions; data and mutation callbacks stay in the stores.
+struct ChoraActionButton: View {
+    let title: String
+    var foregroundColor: Color = ChoraiTheme.ink
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+                .frame(minHeight: 44)
+        }
+        .foregroundStyle(foregroundColor)
+        .choraiGlassButton()
     }
 }

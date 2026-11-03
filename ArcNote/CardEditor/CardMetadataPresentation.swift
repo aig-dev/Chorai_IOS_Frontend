@@ -7,13 +7,13 @@ struct CardMetadataTagCapsuleStyle: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .foregroundStyle(.white)
+            .foregroundStyle(ChoraiTheme.ink)
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
             .frame(maxWidth: maximumWidth)
             .background(
                 Capsule(style: .continuous)
-                    .fill(Color(red: 0.2, green: 0.1, blue: 0.3))
+                    .fill(ChoraiTheme.raisedSurface)
             )
     }
 }
@@ -90,14 +90,14 @@ struct CardMetadataRelatedRow: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(title.isEmpty ? "Related note" : title)
                     .font(.callout.weight(.semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(ChoraiTheme.ink)
                     .lineLimit(1)
 
                 HTMLTextRenderer(
                     htmlContent: previewHTML ?? "",
                     maxLines: 2,
                     font: .footnote,
-                    foregroundColor: .white.opacity(0.7)
+                    foregroundColor: ChoraiTheme.secondaryInk
                 )
             }
 

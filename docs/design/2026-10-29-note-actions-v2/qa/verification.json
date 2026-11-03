@@ -1,0 +1,37 @@
+{
+  "scope": "Offline HTML design prototype, not native or service verification",
+  "browser_verified": [
+    "Spark and ordinary Explore share note renderer",
+    "Full reader opens from Spark card",
+    "Local comment input and send update sample state",
+    "Reader bookmark reflects on the same grid card",
+    "Direct card Spark uses clicked Leo note",
+    "Detail menu Spark uses Ada note and retains Leo history",
+    "Failed Spark retains current Ada source and results",
+    "Floating note context menu opens at card",
+    "Context menu View opens ordinary full reader",
+    "Dark Spark visual inspected",
+    "Home long press opens owner menu",
+    "Home remove confirmation Cancel preserves note",
+    "Home right Edit opens full-page local editor illustration",
+    "Collections right Edit unavailable",
+    "Collections left action is remove from collection",
+    "Dark Home edit shortcut shown"
+  ],
+  "static_and_agent_checks": [
+    "Inline script syntax",
+    "Resource targets",
+    "Menu permission branches",
+    "Full-swipe does not remove",
+    "Vertical movement cancels long press",
+    "Comment reply target and visibility semantics"
+  ],
+  "not_verified": [
+    "Native gesture physics or haptics",
+    "Live authentication",
+    "Real Spark generation",
+    "Server persistence",
+    "Chat empty-state implementation"
+  ],
+  "chat_images": 3
+}

@@ -1,0 +1,13 @@
+{
+  "mascot": {
+    "generated_source": "/Users/didi/.codex/generated_images/01a15770-3cc1-7f20-8739-43d2dc35eeb3/exec-07f7aab8-c8db-44d2-b0b0-83ba30274081.png",
+    "local": "prototype/public/chorai-assets/chora.png",
+    "purpose": "single transparent Almond-reference welcome review artwork",
+    "sha256": "b786525b1f8f46afccecec2f3b4e27b17f3b3eb4caad213d3779c1051a6d8016"
+  },
+  "audio": {
+    "local": "prototype/public/chorai-assets/welcome-beats.wav",
+    "origin": "original synthesized three-beat PCM sound; not copied from ChatGPT",
+    "physical_haptics_implemented": false
+  }
+}

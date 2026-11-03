@@ -1,351 +1,168 @@
 import SwiftUI
 import CoreFlow
 
-struct DataItem: Identifiable {
-    var id: String
-    var title: String
-    var size: CGFloat
-    var color: Color
-    var offset = CGSize.zero
-    var isSelected = false
-    var isMultiSelected = false
-    
-    init(from option: InterestSelectionOption) {
-        self.id = option.value
-        self.title = option.value
-        self.size = CGFloat.random(in: 100...140) // 随机大小
-        self.color = Self.getRandomColor()
-        self.isMultiSelected = option.isSelected
-    }
-    
-    // 获取随机颜色
-    private static func getRandomColor() -> Color {
-        let colors: [Color] = [.blue, .purple, .green, .orange, .pink, .red, .cyan, .yellow, .mint, .indigo, .teal, .brown]
-        return colors.randomElement() ?? .blue
-    }
-}
-
+/// The store remains the only selection owner. Layout never changes a choice.
 struct ChooseInterestsView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var showTabBar = false
-
     @StateObject private var store: InterestSelectionStore
-    @StateObject private var authManager = AuthManager.shared
-    @State private var interests: [DataItem] = []
-    @State private var isLayoutComplete = false
+    private let actorID: String?
+    private let onComplete: (() -> Void)?
 
     init(
-        service: any CoreInterestSelectionServing = NetworkCoreInterestSelectionService()
+        service: any CoreInterestSelectionServing = NetworkCoreInterestSelectionService(),
+        actorID: String? = nil,
+        onComplete: (() -> Void)? = nil
     ) {
-        _store = StateObject(
-            wrappedValue: InterestSelectionStore(service: service)
-        )
+        _store = StateObject(wrappedValue: InterestSelectionStore(service: service))
+        self.actorID = actorID
+        self.onComplete = onComplete
     }
 
     var body: some View {
-        GeometryReader { geometry in
-            ZStack {
-                // 背景图片
-                Image("home_bg")
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .frame(width: geometry.size.width, height: geometry.size.height)
-                    .ignoresSafeArea(.all)
-                
-                ScrollView {
-                    VStack(spacing: 0) {
-                        // 顶部状态栏和跳过按钮
-                        HStack {
-                            Spacer()
-                            Button(action: store.skip) {
-                                HStack(spacing: 4) {
-                                    Text("skip")
-                                        .font(.system(size: 16, weight: .medium))
-                                        .foregroundColor(.white)
-                                    Image(systemName: "arrow.right")
-                                        .font(.system(size: 14, weight: .medium))
-                                        .foregroundColor(.white)
-                                }
-                            }
-                            .disabled(store.isSaving)
-                            .accessibilityIdentifier("interests.skip")
-                        }
-                        .adaptiveContentGutter()
-                        .padding(.top, 60)
-                
-                // 标题区域
-                VStack(spacing: 12) {
-                    Text("Choose Your Interests")
-                        .font(.system(size: 28, weight: .bold))
-                        .foregroundColor(.white)
-                        .multilineTextAlignment(.center)
-                    
-                    Text("This will help us recommend content and connect you with like-minded users")
-                        .font(.system(size: 16, weight: .regular))
-                        .foregroundColor(.white.opacity(0.8))
-                        .multilineTextAlignment(.center)
-                        .lineLimit(2)
-                }
-                .padding(.horizontal, 30)
-                .padding(.top, 20)
-                
-                Spacer()
-                
-                // 加载状态和错误处理
-                if store.phase == .loading {
-                    VStack(spacing: 20) {
-                        ProgressView()
-                            .scaleEffect(1.5)
-                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                        
-                        Text("Loading interests...")
-                            .font(.system(size: 16, weight: .medium))
-                            .foregroundColor(.white.opacity(0.8))
-                    }
-                    .frame(height: 400)
+        ScrollView {
+            VStack(spacing: 22) {
+                AuthEntryHeading(
+                    title: "Follow your curiosity",
+                    subtitle: dynamicTypeSize.isAccessibilitySize
+                        ? "Choose up to \(InterestSelectionStore.maximumSelectionCount) interests."
+                        : "Choose up to \(InterestSelectionStore.maximumSelectionCount) things you love. You can skip this."
+                )
+
+                if store.phase == .idle || store.phase == .loading {
+                    ProgressView("Loading interests…")
+                        .frame(maxWidth: .infinity, minHeight: 180)
                 } else if let error = loadErrorMessage {
-                    VStack(spacing: 20) {
-                        Image(systemName: "exclamationmark.triangle")
-                            .font(.system(size: 40))
-                            .foregroundColor(.red)
-                        
-                        Text("Failed to load interests")
-                            .font(.system(size: 16, weight: .medium))
-                            .foregroundColor(.white)
-                        
-                        Text(error)
-                            .font(.system(size: 14))
-                            .foregroundColor(.white.opacity(0.7))
-                            .multilineTextAlignment(.center)
-                        
-                        Button("Retry") {
-                            loadInterests()
-                        }
-                        .accessibilityIdentifier("interests.retry")
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundColor(.white)
-                        .adaptiveContentGutter()
-                        .padding(.vertical, 10)
-                        .background(
-                            RoundedRectangle(cornerRadius: 20)
-                                .fill(Color.white.opacity(0.2))
-                        )
+                    VStack(alignment: .leading, spacing: 12) {
+                        Label("Couldn’t load interests", systemImage: "wifi.exclamationmark")
+                            .font(.headline)
+                        Text(error).foregroundStyle(ChoraiTheme.secondaryInk)
+                        Button("Retry", action: loadInterests)
+                            .buttonStyle(.bordered)
+                            .frame(minHeight: 44)
+                            .accessibilityIdentifier("interests.retry")
                     }
+                    .accessibilityElement(children: .contain)
                     .accessibilityIdentifier("interests.load-error")
-                    .frame(height: 400)
                 } else {
-                    // 兴趣气泡区域 - 完全使用 BubbleView 的实现
-                    ZStack {
-                    ForEach(Array(interests.enumerated()), id: \.element.id) { index, item in
-                        ZStack {
-                            Circle()
-                                .fill(
-                                    item.isMultiSelected ? 
-                                    LinearGradient(
-                                        gradient: Gradient(colors: [
-                                            Color.white.opacity(0.2),
-                                            Color.white.opacity(0.2)
-                                        ]),
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    ) :
-                                    LinearGradient(
-                                        gradient: Gradient(colors: [
-                                            Color.gray.opacity(0.2),
-                                            Color.gray.opacity(0.2)
-                                        ]),
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
-                                .frame(width: item.size)
-                                // 上高光
-                                .overlay(
-                                    Circle()
-                                        .stroke(Color.white, lineWidth: 1.5)
-                                        .offset(x: -1, y: 1)
-                                        .mask(
-                                            Circle()
-                                                .fill(
-                                                    LinearGradient(
-                                                        colors: [Color.clear, Color.white],
-                                                        startPoint: .topTrailing,
-                                                        endPoint: UnitPoint(x: -0.5, y: 0.9)
-                                                    )
-                                                )
-                                        )
-                                        .opacity(item.isMultiSelected ? 1 : 0)
-                                )
-                                // 下高光
-                                .overlay(
-                                    Circle()
-                                        .stroke(Color.white, lineWidth: 1)
-                                        .offset(x: -1, y: 1)
-                                        .mask(
-                                            Circle()
-                                                .fill(
-                                                    LinearGradient(
-                                                        colors: [Color.white, Color.clear],
-                                                        startPoint: .bottom,
-                                                        endPoint: UnitPoint(x: 1, y: 0.05)
-                                                    )
-                                                )
-                                        )
-                                        .opacity(item.isMultiSelected ? 1 : 0)
-                                )
-                                .shadow(
-                                    color: item.isMultiSelected ? Color.white.opacity(0.4) : Color.black.opacity(0.2),
-                                    radius: item.isMultiSelected ? 15 : 8,
-                                    x: 0,
-                                    y: item.isMultiSelected ? 8 : 4
-                                )
-                                .scaleEffect(item.isMultiSelected ? 1.2 : 1.0)
-                            
-                            Text(item.title)
-                                .font(.system(size: min(item.size * 0.18, 14), weight: .semibold))
-                                .foregroundColor(item.isMultiSelected ? .white : .white)
-                                .shadow(color: item.isMultiSelected ? Color.white.opacity(0.8) : Color.black.opacity(0.7), radius: 2, x: 0, y: 1)
-                        }
-                        .offset(item.offset)
-                        .animation(.spring(response: 0.5, dampingFraction: 0.75), value: item.offset)
-                        .animation(.spring(response: 0.5, dampingFraction: 0.75), value: item.isMultiSelected)
-                        .accessibilityElement(children: .combine)
-                        .accessibilityIdentifier("interests.option.\(index)")
-                        .accessibilityValue(item.isMultiSelected ? "selected" : "not selected")
-                        .onTapGesture {
-                            let wasMultiSelected = interests[index].isMultiSelected
-                            store.toggle(item.id)
-                            syncSelectionFromStore()
-                            
-                            DispatchQueue.main.async {
-                                if wasMultiSelected {
-                                    layoutBubblesAfterDeselection()
-                                } else {
-                                    layoutBubblesAfterSelection()
+                    InterestPillLayout(spacing: 8) {
+                        ForEach(Array(store.options.enumerated()), id: \.element.value) { index, option in
+                            Button {
+                                store.toggle(option.value)
+                            } label: {
+                                HStack(spacing: 8) {
+                                    Text(option.value)
+                                        .multilineTextAlignment(.leading)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                    Image(systemName: option.isSelected ? "checkmark" : "plus")
+                                        .font(.caption.weight(.semibold))
+                                        .accessibilityHidden(true)
                                 }
+                                .font(.subheadline.weight(.medium))
+                                .foregroundStyle(option.isSelected ? ChoraiTheme.onAccent : ChoraiTheme.ink)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 8)
+                                .frame(minWidth: 44, minHeight: 44)
+                                .background(option.isSelected ? ChoraiTheme.accent : ChoraiTheme.surface, in: Capsule())
+                                .overlay(Capsule().strokeBorder(ChoraiTheme.separator, lineWidth: option.isSelected ? 0 : 1))
                             }
+                            .buttonStyle(AuthPressButtonStyle())
+                            .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: option.isSelected)
+                            .opacity(!option.isSelected && selectionLimitReached ? 0.45 : 1)
+                            .disabled(store.isSaving || (!option.isSelected && selectionLimitReached))
+                            .accessibilityIdentifier("interests.option.\(index)")
+                            .accessibilityValue(option.isSelected ? "selected" : "not selected")
+                            .accessibilityAddTraits(option.isSelected ? .isSelected : [])
                         }
                     }
-                    }
-                    .scaleEffect(isLayoutComplete ? 1.0 : 0.1)
-                    .opacity(isLayoutComplete ? 1.0 : 0.0)
-                    .animation(.easeInOut(duration: 1.0), value: isLayoutComplete)
-                    .frame(height: 400)
+                    .padding(.top, 14)
                 }
-                
-                Spacer()
-                
-                // 趋势话题区域
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Trending Topics")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundColor(.white)
-                        .adaptiveContentGutter()
-                    
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 12) {
-                            ForEach(0..<3, id: \.self) { _ in
-                                Button(action: {
-                                    // 点击逻辑
-                                }) {
-                                    Text("Trending Topics")
-                                        .font(.system(size: 14, weight: .medium))
-                                        .foregroundColor(.white)
-                                        .padding(.horizontal, 16)
-                                        .padding(.vertical, 8)
-                                        .background(
-                                            RoundedRectangle(cornerRadius: 20)
-                                                .fill(Color.gray.opacity(0.3))
-                                        )
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 20)
-                                                .stroke(Color.white.opacity(0.3), lineWidth: 1)
-                                        )
-                                }
-                            }
-                        }
-                        .adaptiveContentGutter()
-                    }
-                }
-                .padding(.top, 20)
-                
-                Spacer()
 
                 if let error = saveErrorMessage {
                     Text(error)
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(.white)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 30)
-                        .padding(.bottom, 12)
+                        .font(.callout)
+                        .foregroundStyle(.red)
                         .accessibilityIdentifier("interests.save-error")
                 }
-
-                // 底部按钮
-                HStack(spacing: 40) {
-                    Button(action: resetSelection) {
-                        Text("Reset")
-                            .font(.system(size: 18, weight: .medium))
-                            .foregroundColor(.white)
-                    }
-                    
-                    Button(action: store.save) {
-                        ZStack {
-                            Circle()
-                                .stroke(Color.white, lineWidth: 2)
-                                .frame(width: 80, height: 80)
-                            
-                            if store.isSaving {
-                                ProgressView()
-                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                    .scaleEffect(0.8)
-                            } else {
-                                Text("Next")
-                                    .font(.system(size: 18, weight: .medium))
-                                    .foregroundColor(.white)
-                            }
-                        }
-                    }
-                    .disabled(!store.canSave)
-                    .accessibilityIdentifier("interests.next")
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.bottom, max(30, geometry.safeAreaInsets.bottom + 10))
-                    }
-                    .frame(minHeight: geometry.size.height - geometry.safeAreaInsets.top - geometry.safeAreaInsets.bottom)
-                }
-                .frame(width: geometry.size.width)
             }
+            .adaptiveContentGutter()
+            .padding(.vertical, 20)
         }
-        .ignoresSafeArea(.all)
+        .safeAreaInset(edge: .top) {
+            HStack {
+                Button("Reset", action: store.reset)
+                    .font(.subheadline.weight(.medium))
+                    .frame(minWidth: 44, minHeight: 44)
+                    .disabled(store.isSaving || store.selectedDomains.isEmpty)
+                    .opacity(store.selectedDomains.isEmpty ? 0 : 1)
+                    .accessibilityHidden(store.selectedDomains.isEmpty)
+                    .accessibilityIdentifier("interests.reset")
+                Spacer()
+                Button("Skip", action: store.skip)
+                    .font(.subheadline.weight(.medium))
+                    .frame(minWidth: 44, minHeight: 44)
+                    .disabled(store.isSaving)
+                    .accessibilityIdentifier("interests.skip")
+            }
+            .overlay {
+                if !dynamicTypeSize.isAccessibilitySize {
+                    Text("chorai")
+                        .font(.subheadline.weight(.semibold))
+                        .accessibilityHidden(true)
+                        .allowsHitTesting(false)
+                }
+            }
+            .adaptiveContentGutter()
+            .background(ChoraiTheme.background)
+        }
+        .safeAreaInset(edge: .bottom) {
+            VStack(spacing: 12) {
+                Text(selectionSummary)
+                    .font(.footnote.monospacedDigit())
+                    .foregroundStyle(ChoraiTheme.secondaryInk)
+                AuthPrimaryButton(
+                    title: "Continue",
+                    isLoading: store.isSaving,
+                    enabled: store.canSave,
+                    loadingTitle: "Saving interests…",
+                    identifier: "interests.next",
+                    action: store.save
+                )
+            }
+            .adaptiveContentGutter()
+            .padding(.top, 12)
+            .padding(.bottom, 12)
+            .background(ChoraiTheme.background)
+        }
+        .authEntryPage()
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("screen.interests")
-        .navigationBarHidden(true)
+        .toolbar(.hidden, for: .navigationBar)
         .navigationBarBackButtonHidden(true)
-        .navigationDestination(isPresented: $showTabBar) {
-            TabBarView()
-        }
-        .onAppear {
-            loadInterests()
-        }
-        .onChange(of: store.options) { newOptions in
-            reconcileInterests(with: newOptions)
-        }
+        .navigationDestination(isPresented: $showTabBar) { TabBarView() }
+        .onAppear(perform: loadInterests)
         .onChange(of: store.phase) { phase in
-            if phase == .saved || phase == .skipped {
+            guard phase == .saved || phase == .skipped else { return }
+            if let onComplete {
+                onComplete()
+            } else {
                 showTabBar = true
             }
         }
     }
-    
-    // MARK: - 加载兴趣数据
-    private func loadInterests() {
-        store.load(actorID: authManager.currentUser?.id ?? "")
+
+    private var selectionLimitReached: Bool {
+        store.selectedDomains.count >= InterestSelectionStore.maximumSelectionCount
     }
-    
-    // 重置选择
-    private func resetSelection() {
-        store.reset()
-        syncSelectionFromStore()
-        layoutBubblesAfterDeselection()
+
+    private var selectionSummary: String {
+        let count = store.selectedDomains.count
+        return count == 0 ? "Choose up to \(InterestSelectionStore.maximumSelectionCount)" : "\(count) selected"
+    }
+
+    private func loadInterests() {
+        store.load(actorID: actorID ?? AuthManager.shared.currentUser?.id ?? "")
     }
 
     private var loadErrorMessage: String? {
@@ -355,567 +172,70 @@ struct ChooseInterestsView: View {
 
     private var saveErrorMessage: String? {
         guard case .failed(.save, let error) = store.phase else { return nil }
-        return "Couldn't save interests. \(message(for: error))"
+        return "Couldn’t save interests. \(message(for: error))"
     }
 
     private func message(for error: InterestSelectionError) -> String {
         switch error {
-        case .invalidActor:
-            return "Your session is missing. Please sign in again."
-        case .transport:
-            return "Check your connection and try again."
-        }
-    }
-
-    private func reconcileInterests(
-        with options: [InterestSelectionOption]
-    ) {
-        guard !options.isEmpty else {
-            interests = []
-            isLayoutComplete = false
-            return
-        }
-
-        if interests.map(\.id) == options.map(\.value) {
-            syncSelectionFromStore()
-            return
-        }
-
-        interests = options.map(DataItem.init(from:))
-        layoutBubbles()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            isLayoutComplete = true
-        }
-    }
-
-    private func syncSelectionFromStore() {
-        let selected = Set(store.selectedDomains.map { $0.lowercased() })
-        for index in interests.indices {
-            let isSelected = selected.contains(interests[index].id.lowercased())
-            interests[index].isMultiSelected = isSelected
-            if !isSelected {
-                interests[index].isSelected = false
-            }
-        }
-    }
-    
-    // 点击后的轻量级布局调整
-    private func layoutBubblesAfterSelection() {
-        for iteration in 0..<80 {
-            for i in 0..<interests.count {
-                var forceX: CGFloat = 0
-                var forceY: CGFloat = 0
-                
-                for j in 0..<interests.count {
-                    if i != j {
-                        let dx = interests[j].offset.width - interests[i].offset.width
-                        let dy = interests[j].offset.height - interests[i].offset.height
-                        let distance = sqrt(dx * dx + dy * dy)
-                        
-                        if distance > 0 {
-                            let iSize = interests[i].isMultiSelected ? interests[i].size * 1.2 : interests[i].size
-                            let jSize = interests[j].isMultiSelected ? interests[j].size * 1.2 : interests[j].size
-                            let minDistance = (iSize + jSize) / 2
-                            let overlap = minDistance - distance
-                            
-                            if overlap > 0 {
-                                let force = overlap / distance
-                                forceX -= dx * force * 0.7
-                                forceY -= dy * force * 0.7
-                            } else {
-                                let gap = distance - minDistance
-                                if gap > 5 && gap < 25 {
-                                    let attractionForce = (gap - 5) / 20 * 0.04
-                                    forceX += dx * attractionForce
-                                    forceY += dy * attractionForce
-                                }
-                            }
-                        }
-                    }
-                }
-                
-                let centerDistance = sqrt(interests[i].offset.width * interests[i].offset.width + 
-                                        interests[i].offset.height * interests[i].offset.height)
-                if centerDistance > 120 {
-                    let centerForce = 0.015
-                    forceX -= interests[i].offset.width * centerForce
-                    forceY -= interests[i].offset.height * centerForce
-                }
-                
-                applyBoundaryConstraints(for: i, forceX: &forceX, forceY: &forceY)
-                
-                let stepSize = 0.15 * (1.0 - Double(iteration) / 80.0)
-                interests[i].offset.width += forceX * stepSize
-                interests[i].offset.height += forceY * stepSize
-            }
-        }
-        
-        quickFixOverlaps()
-        compactLayout()
-    }
-    
-    // 取消选择后的强紧凑化布局
-    private func layoutBubblesAfterDeselection() {
-        for iteration in 0..<100 {
-            for i in 0..<interests.count {
-                var forceX: CGFloat = 0
-                var forceY: CGFloat = 0
-                
-                for j in 0..<interests.count {
-                    if i != j {
-                        let dx = interests[j].offset.width - interests[i].offset.width
-                        let dy = interests[j].offset.height - interests[i].offset.height
-                        let distance = sqrt(dx * dx + dy * dy)
-                        
-                        if distance > 0 {
-                            let iSize = interests[i].isMultiSelected ? interests[i].size * 1.2 : interests[i].size
-                            let jSize = interests[j].isMultiSelected ? interests[j].size * 1.2 : interests[j].size
-                            let minDistance = (iSize + jSize) / 2
-                            let overlap = minDistance - distance
-                            
-                            if overlap > 0 {
-                                let force = overlap / distance
-                                forceX -= dx * force * 1.0
-                                forceY -= dy * force * 1.0
-                            } else {
-                                let gap = distance - minDistance
-                                if gap > 0 && gap < 30 {
-                                    let attractionForce = (30 - gap) / 30 * 0.04
-                                    forceX += dx * attractionForce
-                                    forceY += dy * attractionForce
-                                }
-                            }
-                        }
-                    }
-                }
-                
-                let centerDistance = sqrt(interests[i].offset.width * interests[i].offset.width + 
-                                        interests[i].offset.height * interests[i].offset.height)
-                if centerDistance > 100 {
-                    let centerForce = 0.02
-                    forceX -= interests[i].offset.width * centerForce
-                    forceY -= interests[i].offset.height * centerForce
-                }
-                
-                applyBoundaryConstraints(for: i, forceX: &forceX, forceY: &forceY)
-                
-                let stepSize = 0.2 * (1.0 - Double(iteration) / 100.0)
-                interests[i].offset.width += forceX * stepSize
-                interests[i].offset.height += forceY * stepSize
-            }
-        }
-        
-        quickFixOverlaps()
-        gentleCompactLayout()
-    }
-    
-    // 温和的紧凑化布局
-    private func gentleCompactLayout() {
-        for iteration in 0..<40 {
-            for i in 0..<interests.count {
-                var forceX: CGFloat = 0
-                var forceY: CGFloat = 0
-                
-                for j in 0..<interests.count {
-                    if i != j {
-                        let dx = interests[j].offset.width - interests[i].offset.width
-                        let dy = interests[j].offset.height - interests[i].offset.height
-                        let distance = sqrt(dx * dx + dy * dy)
-                        
-                        if distance > 0 {
-                            let iSize = interests[i].isMultiSelected ? interests[i].size * 1.2 : interests[i].size
-                            let jSize = interests[j].isMultiSelected ? interests[j].size * 1.2 : interests[j].size
-                            let minDistance = (iSize + jSize) / 2
-                            let gap = distance - minDistance
-                            
-                            if gap > 10 && gap < 50 {
-                                let compactForce = (gap - 10) / 40 * 0.03
-                                forceX += dx * compactForce
-                                forceY += dy * compactForce
-                            }
-                        }
-                    }
-                }
-                
-                let stepSize = 0.08 * (1.0 - Double(iteration) / 40.0)
-                interests[i].offset.width += forceX * stepSize
-                interests[i].offset.height += forceY * stepSize
-            }
-        }
-    }
-    
-    // 快速修复重叠
-    private func quickFixOverlaps() {
-        for _ in 0..<30 {
-            var hasOverlap = false
-            
-            for i in 0..<interests.count {
-                for j in (i+1)..<interests.count {
-                    let dx = interests[j].offset.width - interests[i].offset.width
-                    let dy = interests[j].offset.height - interests[i].offset.height
-                    let distance = sqrt(dx * dx + dy * dy)
-                    
-                    let iSize = interests[i].isMultiSelected ? interests[i].size * 1.2 : interests[i].size
-                    let jSize = interests[j].isMultiSelected ? interests[j].size * 1.2 : interests[j].size
-                    let minDistance = (iSize + jSize) / 2
-                    
-                    if distance < minDistance {
-                        hasOverlap = true
-                        
-                        let overlap = minDistance - distance
-                        let moveDistance = overlap / 2
-                        
-                        if distance > 0 {
-                            let moveX = (dx / distance) * moveDistance
-                            let moveY = (dy / distance) * moveDistance
-                            
-                            interests[i].offset.width -= moveX
-                            interests[i].offset.height -= moveY
-                            interests[j].offset.width += moveX
-                            interests[j].offset.height += moveY
-                        } else {
-                            let randomAngle = Double.random(in: 0..<2 * Double.pi)
-                            let moveX = cos(randomAngle) * moveDistance
-                            let moveY = sin(randomAngle) * moveDistance
-                            
-                            interests[i].offset.width -= moveX
-                            interests[i].offset.height -= moveY
-                            interests[j].offset.width += moveX
-                            interests[j].offset.height += moveY
-                        }
-                    }
-                }
-            }
-            
-            if !hasOverlap {
-                break
-            }
-        }
-    }
-    
-    // 使用力导向算法布局气泡
-    private func layoutBubbles() {
-        guard interests.count > 0 else { return }
-        
-        let sortedData = interests.enumerated().sorted { $0.element.size > $1.element.size }
-        let sortedIndices = sortedData.map { $0.offset }
-        
-        interests[sortedIndices[0]].offset = CGSize.zero
-        
-        for i in 1..<sortedIndices.count {
-            let currentIndex = sortedIndices[i]
-            
-            let bestPosition = findBestPosition(for: currentIndex, existingBubbles: Array(sortedIndices.prefix(i)))
-            interests[currentIndex].offset = bestPosition
-        }
-        
-        for iteration in 0..<500 {
-            for i in 0..<interests.count {
-                var forceX: CGFloat = 0
-                var forceY: CGFloat = 0
-                
-                for j in 0..<interests.count {
-                    if i != j {
-                        let dx = interests[j].offset.width - interests[i].offset.width
-                        let dy = interests[j].offset.height - interests[i].offset.height
-                        let distance = sqrt(dx * dx + dy * dy)
-                        
-                        if distance > 0 {
-                            let iSize = interests[i].isMultiSelected ? interests[i].size * 1.2 : interests[i].size
-                            let jSize = interests[j].isMultiSelected ? interests[j].size * 1.2 : interests[j].size
-                            let minDistance = (iSize + jSize) / 2
-                            let overlap = minDistance - distance
-                            
-                            if overlap > 0 {
-                                let force = overlap / distance
-                                forceX -= dx * force * 0.8
-                                forceY -= dy * force * 0.8
-                            } else {
-                                let gap = distance - minDistance
-                                if gap > 5 && gap < 25 {
-                                    let attractionForce = (gap - 5) / 20 * 0.04
-                                    forceX += dx * attractionForce
-                                    forceY += dy * attractionForce
-                                }
-                            }
-                        }
-                    }
-                }
-                
-                let centerDistance = sqrt(interests[i].offset.width * interests[i].offset.width + 
-                                        interests[i].offset.height * interests[i].offset.height)
-                if centerDistance > 120 {
-                    let centerForce = 0.02
-                    forceX -= interests[i].offset.width * centerForce
-                    forceY -= interests[i].offset.height * centerForce
-                }
-                
-                applyBoundaryConstraints(for: i, forceX: &forceX, forceY: &forceY)
-                
-                let stepSize = 0.3 * (1.0 - Double(iteration) / 500.0)
-                interests[i].offset.width += forceX * stepSize
-                interests[i].offset.height += forceY * stepSize
-            }
-        }
-        
-        fixOverlaps()
-        centerLayout()
-    }
-    
-    // 修复重叠的气泡
-    private func fixOverlaps() {
-        var hasOverlap = true
-        var maxIterations = 100
-        
-        while hasOverlap && maxIterations > 0 {
-            hasOverlap = false
-            maxIterations -= 1
-            
-            for i in 0..<interests.count {
-                for j in (i+1)..<interests.count {
-                    let dx = interests[j].offset.width - interests[i].offset.width
-                    let dy = interests[j].offset.height - interests[i].offset.height
-                    let distance = sqrt(dx * dx + dy * dy)
-                    
-                    let iSize = interests[i].isMultiSelected ? interests[i].size * 1.2 : interests[i].size
-                    let jSize = interests[j].isMultiSelected ? interests[j].size * 1.2 : interests[j].size
-                    let minDistance = (iSize + jSize) / 2
-                    
-                    if distance < minDistance {
-                        hasOverlap = true
-                        
-                        let overlap = minDistance - distance
-                        let moveDistance = overlap / 2
-                        
-                        if distance > 0 {
-                            let moveX = (dx / distance) * moveDistance
-                            let moveY = (dy / distance) * moveDistance
-                            
-                            interests[i].offset.width -= moveX
-                            interests[i].offset.height -= moveY
-                            interests[j].offset.width += moveX
-                            interests[j].offset.height += moveY
-                        } else {
-                            let randomAngle = Double.random(in: 0..<2 * Double.pi)
-                            let moveX = cos(randomAngle) * moveDistance
-                            let moveY = sin(randomAngle) * moveDistance
-                            
-                            interests[i].offset.width -= moveX
-                            interests[i].offset.height -= moveY
-                            interests[j].offset.width += moveX
-                            interests[j].offset.height += moveY
-                        }
-                    }
-                }
-            }
-        }
-    }
-    
-    // 为新的气泡找到最佳位置
-    private func findBestPosition(for bubbleIndex: Int, existingBubbles: [Int]) -> CGSize {
-        let newBubbleSize = interests[bubbleIndex].size
-        var bestPosition = CGSize.zero
-        var minTotalDistance: CGFloat = .infinity
-        
-        for angle in stride(from: 0.0, to: 2.0 * Double.pi, by: Double.pi / 16.0) {
-            for distance in stride(from: 30, to: 250, by: 15) {
-                let candidatePosition = CGSize(
-                    width: cos(angle) * CGFloat(distance),
-                    height: sin(angle) * CGFloat(distance)
-                )
-                
-                var totalDistance: CGFloat = 0
-                var isValid = true
-                
-                for existingIndex in existingBubbles {
-                    let existingPosition = interests[existingIndex].offset
-                    let dx = candidatePosition.width - existingPosition.width
-                    let dy = candidatePosition.height - existingPosition.height
-                    let distance = sqrt(dx * dx + dy * dy)
-                    let minRequiredDistance = (newBubbleSize + interests[existingIndex].size) / 2 + 5
-                    
-                    if distance < minRequiredDistance {
-                        isValid = false
-                        break
-                    }
-                    
-                    totalDistance += distance
-                }
-                
-                if isValid && totalDistance < minTotalDistance {
-                    minTotalDistance = totalDistance
-                    bestPosition = candidatePosition
-                }
-            }
-        }
-        
-        return bestPosition
-    }
-    
-    // 应用边界约束
-    private func applyBoundaryConstraints(for index: Int, forceX: inout CGFloat, forceY: inout CGFloat) {
-        let itemSize = interests[index].isMultiSelected ? interests[index].size * 1.2 : interests[index].size
-        let halfSize = itemSize / 2
-        
-        var minY: CGFloat = .infinity
-        var maxY: CGFloat = -.infinity
-        var minX: CGFloat = .infinity
-        var maxX: CGFloat = -.infinity
-        
-        for item in interests {
-            let itemY = item.offset.height
-            let itemX = item.offset.width
-            let itemHalfSize = (item.isMultiSelected ? item.size * 1.2 : item.size) / 2
-            minY = min(minY, itemY - itemHalfSize)
-            maxY = max(maxY, itemY + itemHalfSize)
-            minX = min(minX, itemX - itemHalfSize)
-            maxX = max(maxX, itemX + itemHalfSize)
-        }
-        
-        let layoutHeight = maxY - minY
-        let layoutWidth = maxX - minX
-        let targetHeight: CGFloat = 380
-        let targetWidth: CGFloat = 450
-        
-        if layoutHeight > targetHeight {
-            let compressionForce = 0.008
-            if interests[index].offset.height > 0 {
-                forceY -= compressionForce
-            } else {
-                forceY += compressionForce
-            }
-        }
-        
-        if layoutWidth > targetWidth {
-            let compressionForce = 0.008
-            if interests[index].offset.width > 0 {
-                forceX -= compressionForce
-            } else {
-                forceX += compressionForce
-            }
-        }
-        
-        let topThreshold = minY + 60
-        let bottomThreshold = maxY - 60
-        let currentY = interests[index].offset.height
-        
-        if currentY - halfSize < topThreshold {
-            let alignmentForce = 0.025
-            forceY -= alignmentForce
-            
-            let topRowY = minY + halfSize
-            let yDiff = topRowY - currentY
-            if abs(yDiff) < 30 {
-                forceY += yDiff * 0.01
-            }
-        } else if currentY + halfSize > bottomThreshold {
-            let alignmentForce = 0.025
-            forceY += alignmentForce
-            
-            let bottomRowY = maxY - halfSize
-            let yDiff = bottomRowY - currentY
-            if abs(yDiff) < 30 {
-                forceY += yDiff * 0.01
-            }
-        }
-        
-        let leftThreshold = minX + 60
-        let rightThreshold = maxX - 60
-        let currentX = interests[index].offset.width
-        
-        if currentX - halfSize < leftThreshold {
-            let alignmentForce = 0.025
-            forceX -= alignmentForce
-        } else if currentX + halfSize > rightThreshold {
-            let alignmentForce = 0.025
-            forceX += alignmentForce
-        }
-        
-        let maxRange: CGFloat = 250
-        if abs(currentX) > maxRange {
-            let boundaryForce = 0.04
-            if currentX > 0 {
-                forceX -= boundaryForce
-            } else {
-                forceX += boundaryForce
-            }
-        }
-        
-        if abs(currentY) > maxRange {
-            let boundaryForce = 0.04
-            if currentY > 0 {
-                forceY -= boundaryForce
-            } else {
-                forceY += boundaryForce
-            }
-        }
-    }
-    
-    // 将整个布局居中
-    private func centerLayout() {
-        var minX: CGFloat = .infinity
-        var maxX: CGFloat = -.infinity
-        var minY: CGFloat = .infinity
-        var maxY: CGFloat = -.infinity
-        
-        for item in interests {
-            let itemSize = item.isMultiSelected ? item.size * 1.2 : item.size
-            let left = item.offset.width - itemSize / 2
-            let right = item.offset.width + itemSize / 2
-            let top = item.offset.height - itemSize / 2
-            let bottom = item.offset.height + itemSize / 2
-            
-            minX = min(minX, left)
-            maxX = max(maxX, right)
-            minY = min(minY, top)
-            maxY = max(maxY, bottom)
-        }
-        
-        let centerX = (minX + maxX) / 2
-        let centerY = (minY + maxY) / 2
-        
-        for i in 0..<interests.count {
-            interests[i].offset.width -= centerX
-            interests[i].offset.height -= centerY
-        }
-    }
-    
-    // 额外的紧凑化布局
-    private func compactLayout() {
-        for iteration in 0..<30 {
-            for i in 0..<interests.count {
-                var forceX: CGFloat = 0
-                var forceY: CGFloat = 0
-                
-                for j in 0..<interests.count {
-                    if i != j {
-                        let dx = interests[j].offset.width - interests[i].offset.width
-                        let dy = interests[j].offset.height - interests[i].offset.height
-                        let distance = sqrt(dx * dx + dy * dy)
-                        
-                        if distance > 0 {
-                            let iSize = interests[i].isMultiSelected ? interests[i].size * 1.2 : interests[i].size
-                            let jSize = interests[j].isMultiSelected ? interests[j].size * 1.2 : interests[j].size
-                            let minDistance = (iSize + jSize) / 2
-                            let gap = distance - minDistance
-                            
-                            if gap > 8 && gap < 40 {
-                                let compactForce = (gap - 8) / 32 * 0.02
-                                forceX += dx * compactForce
-                                forceY += dy * compactForce
-                            }
-                        }
-                    }
-                }
-                
-                let stepSize = 0.06 * (1.0 - Double(iteration) / 30.0)
-                interests[i].offset.width += forceX * stepSize
-                interests[i].offset.height += forceY * stepSize
-            }
+        case .invalidActor: return "Your session is missing. Please sign in again."
+        case .transport: return "Check your connection and try again."
         }
     }
 }
 
-#Preview {
-    ChooseInterestsView()
-} 
+private struct InterestPillLayout: Layout {
+    let spacing: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        arrangement(width: proposal.width ?? .infinity, subviews: subviews).size
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let frames = arrangement(width: bounds.width, subviews: subviews).frames
+        for (subview, frame) in zip(subviews, frames) {
+            subview.place(
+                at: CGPoint(x: bounds.minX + frame.minX, y: bounds.minY + frame.minY),
+                anchor: .topLeading,
+                proposal: ProposedViewSize(frame.size)
+            )
+        }
+    }
+
+    private func arrangement(width: CGFloat, subviews: Subviews) -> (frames: [CGRect], size: CGSize) {
+        var rows: [[CGSize]] = []
+        var row: [CGSize] = []
+        var rowWidth: CGFloat = 0
+
+        for subview in subviews {
+            let ideal = subview.sizeThatFits(.unspecified)
+            let size = ideal.width <= width
+                ? ideal
+                : subview.sizeThatFits(ProposedViewSize(width: width, height: nil))
+            if !row.isEmpty, rowWidth + spacing + size.width > width {
+                rows.append(row)
+                row = []
+                rowWidth = 0
+            }
+            rowWidth += (row.isEmpty ? 0 : spacing) + size.width
+            row.append(size)
+        }
+        if !row.isEmpty { rows.append(row) }
+
+        var frames: [CGRect] = []
+        var y: CGFloat = 0
+        var usedWidth: CGFloat = 0
+        for row in rows {
+            let rowWidth = row.reduce(0) { $0 + $1.width } + CGFloat(row.count - 1) * spacing
+            let rowHeight = row.map(\.height).max() ?? 0
+            var x: CGFloat = 0
+            for size in row {
+                frames.append(CGRect(origin: CGPoint(x: x, y: y + (rowHeight - size.height) / 2), size: size))
+                x += size.width + spacing
+            }
+            usedWidth = max(usedWidth, rowWidth)
+            y += rowHeight + spacing
+        }
+
+        return (frames, CGSize(width: width.isFinite ? width : usedWidth, height: max(0, y - spacing)))
+    }
+}

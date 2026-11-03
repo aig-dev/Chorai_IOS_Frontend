@@ -35,9 +35,7 @@ struct SparkView: View {
     var body: some View {
         ZStack {
             // 背景图片
-            Image("home_bg")
-                .resizable()
-                .aspectRatio(contentMode: .fill)
+            ChoraiBackground()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .clipped()
                 .ignoresSafeArea()
@@ -50,19 +48,19 @@ struct SparkView: View {
                     }) {
                         Image(systemName: "chevron.left")
                             .font(.title2)
-                            .foregroundColor(.white)
+                            .foregroundColor(ChoraiTheme.ink)
                     }
                     
                     Spacer()
                     
                     // Spark 标题
                     HStack(spacing: 8) {
-                        Image("menu_spark")
+                        Image(systemName: "sparkles")
                             .resizable().frame(width: 28, height: 28)
                         
                         Text("Spark")
                             .font(.system(size: 20, weight: .semibold))
-                            .foregroundColor(.white)
+                            .foregroundColor(ChoraiTheme.ink)
                     }
                     
                     Spacer()
@@ -86,7 +84,7 @@ struct SparkView: View {
                         VStack(alignment: .leading, spacing: 20) {
                             Text("Source Notes")
                                 .font(.system(size: 24, weight: .bold))
-                                .foregroundColor(.white)
+                                .foregroundColor(ChoraiTheme.ink)
                             
                             SourceNoteCard(cardDetail: cardDetailManager.cardDetail)
                         }
@@ -97,7 +95,7 @@ struct SparkView: View {
                         VStack(alignment: .leading, spacing: 20) {
                             Text("Inspired Notes")
                                 .font(.system(size: 24, weight: .bold))
-                                .foregroundColor(.white)
+                                .foregroundColor(ChoraiTheme.ink)
                             
                             // 扇形滑动切换的卡片
                             ZStack {
@@ -234,11 +232,7 @@ struct SparkView: View {
                     }
                 }
         )
-        .overlay(
-            CommentPopupView()
-        )
         .popupMenu(isPresented: $showPopupMenu, layout: popupMenuLayout, cardData: currentMenuCardData)
-        .linkPopup()
         #if DEBUG
         .overlay(alignment: .topLeading) {
             sparkAutomationAnchors
@@ -298,7 +292,7 @@ struct SparkView: View {
             }
         }
         .font(.system(size: 1))
-        .foregroundColor(.white.opacity(0.01))
+        .foregroundColor(ChoraiTheme.ink.opacity(0.01))
         .frame(width: 1, height: 1)
     }
     #endif
@@ -493,10 +487,10 @@ struct InspiredNoteCardWrapper: View {
             // 加载状态
             VStack {
                 ProgressView()
-                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                    .progressViewStyle(CircularProgressViewStyle(tint: ChoraiTheme.accent))
                 Text("Generating related content...")
                     .font(.system(size: 16, weight: .medium))
-                    .foregroundColor(.white.opacity(0.7))
+                    .foregroundColor(ChoraiTheme.secondaryInk)
                     .padding(.top, 16)
             }
             .frame(height: 300)
@@ -515,10 +509,10 @@ struct InspiredNoteCardWrapper: View {
             VStack {
                 Image(systemName: "sparkles")
                     .font(.system(size: 48))
-                    .foregroundColor(.white.opacity(0.5))
+                    .foregroundColor(ChoraiTheme.secondaryInk)
                 Text("No related content available")
                     .font(.system(size: 16, weight: .medium))
-                    .foregroundColor(.white.opacity(0.7))
+                    .foregroundColor(ChoraiTheme.secondaryInk)
                     .padding(.top, 16)
             }
             .frame(height: 300)
@@ -556,13 +550,13 @@ struct SourceNoteCard: View {
     
     private var sourceTopLeftHighlight: some View {
         RoundedRectangle(cornerRadius: 16)
-            .stroke(Color.white, lineWidth: 1)
+            .stroke(ChoraiTheme.ink, lineWidth: 1)
             .offset(x: 0, y: -1)
             .mask(
                 RoundedRectangle(cornerRadius: 16)
                     .fill(
                         RadialGradient(
-                            colors: [Color.white, Color.clear],
+                            colors: [ChoraiTheme.ink, Color.clear],
                             center: .topLeading,
                             startRadius: 10,
                             endRadius: 35
@@ -573,13 +567,13 @@ struct SourceNoteCard: View {
     
     private var sourceBottomRightHighlight: some View {
         RoundedRectangle(cornerRadius: 16)
-            .stroke(Color.white, lineWidth: 1)
+            .stroke(ChoraiTheme.ink, lineWidth: 1)
             .offset(x: 0, y: 0)
             .mask(
                 RoundedRectangle(cornerRadius: 16)
                     .fill(
                         RadialGradient(
-                            colors: [Color.white, Color.clear],
+                            colors: [ChoraiTheme.ink, Color.clear],
                             center: .bottomTrailing,
                             startRadius: 10,
                             endRadius: 35
@@ -590,13 +584,13 @@ struct SourceNoteCard: View {
     
     private var sourceTopEdgeHighlight: some View {
         RoundedRectangle(cornerRadius: 16)
-            .stroke(Color.white, lineWidth: 1)
+            .stroke(ChoraiTheme.ink, lineWidth: 1)
             .offset(x: 0, y: -1)
             .mask(
                 RoundedRectangle(cornerRadius: 16)
                     .fill(
                         LinearGradient(
-                            colors: [Color.white, Color.clear],
+                            colors: [ChoraiTheme.ink, Color.clear],
                             startPoint: .top,
                             endPoint: UnitPoint(x: 0, y: 0.05)
                         )
@@ -606,13 +600,13 @@ struct SourceNoteCard: View {
     
     private var sourceBottomEdgeHighlight: some View {
         RoundedRectangle(cornerRadius: 16)
-            .stroke(Color.white, lineWidth: 1)
+            .stroke(ChoraiTheme.ink, lineWidth: 1)
             .offset(x: 0, y: 1)
             .mask(
                 RoundedRectangle(cornerRadius: 16)
                     .fill(
                         LinearGradient(
-                            colors: [Color.white, Color.clear],
+                            colors: [ChoraiTheme.ink, Color.clear],
                             startPoint: .bottom,
                             endPoint: UnitPoint(x: 1, y: 0.05)
                         )
@@ -634,11 +628,11 @@ struct SourceNoteCard: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(cardDetail?.author?.userName ?? "Unknown User")
                         .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(.white)
+                        .foregroundColor(ChoraiTheme.ink)
                     
                     Text(formatDate(cardDetail?.createdAt ?? ""))
                         .font(.system(size: 12, weight: .regular))
-                        .foregroundColor(.white.opacity(0.7))
+                        .foregroundColor(ChoraiTheme.secondaryInk)
                 }
                 
                 Spacer()
@@ -648,11 +642,11 @@ struct SourceNoteCard: View {
             if let cardDetail = cardDetail {
                 HTMLTextRenderer(htmlContent: cardDetail.content, maxLines: 5)
                     .font(.system(size: 17, weight: .regular))
-                    .foregroundColor(.white.opacity(0.9))
+                    .foregroundColor(ChoraiTheme.ink.opacity(0.9))
             } else {
                 Text("Loading content...")
                     .font(.system(size: 17, weight: .regular))
-                    .foregroundColor(.white.opacity(0.7))
+                    .foregroundColor(ChoraiTheme.secondaryInk)
             }
             
             // 底部标签 横向滚动视图
@@ -661,12 +655,12 @@ struct SourceNoteCard: View {
                     ForEach(cardDetail?.tags ?? [], id: \.self) { tag in
                         Text(tag)
                             .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(.white)
+                            .foregroundColor(ChoraiTheme.ink)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 6)
                             .background(
                                 RoundedRectangle(cornerRadius: 15)
-                                    .fill(Color.white.opacity(0.2))
+                                    .fill(ChoraiTheme.ink.opacity(0.2))
                             )
                             .lineLimit(1)
                     }
@@ -704,13 +698,13 @@ struct InspiredNoteCard: View {
     
     private var topLeftHighlight: some View {
         RoundedRectangle(cornerRadius: 16)
-            .stroke(Color.white, lineWidth: 1)
+            .stroke(ChoraiTheme.ink, lineWidth: 1)
             .offset(x: 0, y: -1)
             .mask(
                 RoundedRectangle(cornerRadius: 16)
                     .fill(
                         RadialGradient(
-                            colors: [Color.white, Color.clear],
+                            colors: [ChoraiTheme.ink, Color.clear],
                             center: .topLeading,
                             startRadius: 10,
                             endRadius: 35
@@ -721,13 +715,13 @@ struct InspiredNoteCard: View {
     
     private var bottomRightHighlight: some View {
         RoundedRectangle(cornerRadius: 16)
-            .stroke(Color.white, lineWidth: 1)
+            .stroke(ChoraiTheme.ink, lineWidth: 1)
             .offset(x: 0, y: 0)
             .mask(
                 RoundedRectangle(cornerRadius: 16)
                     .fill(
                         RadialGradient(
-                            colors: [Color.white, Color.clear],
+                            colors: [ChoraiTheme.ink, Color.clear],
                             center: .bottomTrailing,
                             startRadius: 10,
                             endRadius: 35
@@ -738,13 +732,13 @@ struct InspiredNoteCard: View {
     
     private var topEdgeHighlight: some View {
         RoundedRectangle(cornerRadius: 16)
-            .stroke(Color.white, lineWidth: 1)
+            .stroke(ChoraiTheme.ink, lineWidth: 1)
             .offset(x: 0, y: -1)
             .mask(
                 RoundedRectangle(cornerRadius: 16)
                     .fill(
                         LinearGradient(
-                            colors: [Color.white, Color.clear],
+                            colors: [ChoraiTheme.ink, Color.clear],
                             startPoint: .top,
                             endPoint: UnitPoint(x: 0, y: 0.05)
                         )
@@ -754,13 +748,13 @@ struct InspiredNoteCard: View {
     
     private var bottomEdgeHighlight: some View {
         RoundedRectangle(cornerRadius: 16)
-            .stroke(Color.white, lineWidth: 1)
+            .stroke(ChoraiTheme.ink, lineWidth: 1)
             .offset(x: 0, y: 1)
             .mask(
                 RoundedRectangle(cornerRadius: 16)
                     .fill(
                         LinearGradient(
-                            colors: [Color.white, Color.clear],
+                            colors: [ChoraiTheme.ink, Color.clear],
                             startPoint: .bottom,
                             endPoint: UnitPoint(x: 1, y: 0.05)
                         )
@@ -790,11 +784,11 @@ struct InspiredNoteCard: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(card.author?.username ?? AuthManager.shared.currentUser?.username ?? "AI Generated")
                         .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(.white)
+                        .foregroundColor(ChoraiTheme.ink)
                     
                     Text(formatDate(card.createdAt))
                         .font(.system(size: 12, weight: .regular))
-                        .foregroundColor(.white.opacity(0.7))
+                        .foregroundColor(ChoraiTheme.secondaryInk)
                 }
                 
                 Spacer()
@@ -826,7 +820,7 @@ struct InspiredNoteCard: View {
                     }) {
                         Image(systemName: "ellipsis")
                             .font(.title3)
-                            .foregroundColor(.white)
+                            .foregroundColor(ChoraiTheme.ink)
                     }
                 }
             }
@@ -836,7 +830,7 @@ struct InspiredNoteCard: View {
             VStack(alignment: .leading, spacing: 12) {
                 HTMLTextRenderer(htmlContent: card.content, maxLines: 10)
                     .font(.system(size: 17, weight: .regular))
-                    .foregroundColor(.white.opacity(0.9))
+                    .foregroundColor(ChoraiTheme.ink.opacity(0.9))
                 
                 Spacer()
             }
@@ -853,12 +847,12 @@ struct InspiredNoteCard: View {
                         ForEach(card.tags, id: \.self) { tag in
                             Text(tag)
                                 .font(.system(size: 12, weight: .medium))
-                                .foregroundColor(.white)
+                                .foregroundColor(ChoraiTheme.ink)
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 6)
                                 .background(
                                     RoundedRectangle(cornerRadius: 15)
-                                        .fill(Color.white.opacity(0.1))
+                                        .fill(ChoraiTheme.ink.opacity(0.1))
                                 )
                                 .lineLimit(1)
                         }
@@ -880,7 +874,7 @@ struct InspiredNoteCard: View {
                                     .frame(width: 18, height: 18)
                                 Text("\(relatedCardsManager.getFavoriteCount(for: card.id))")
                                     .font(.system(size: 14, weight: .medium))
-                                    .foregroundColor(.white.opacity(0.8))
+                                    .foregroundColor(ChoraiTheme.secondaryInk)
                             }
                         }
                     }
@@ -899,7 +893,7 @@ struct InspiredNoteCard: View {
                                     .frame(width: 18, height: 18)
                                 Text("\(relatedCardsManager.getLikeCount(for: card.id))")
                                     .font(.system(size: 14, weight: .medium))
-                                    .foregroundColor(.white.opacity(0.8))
+                                    .foregroundColor(ChoraiTheme.secondaryInk)
                             }
                         }
                         
@@ -921,12 +915,12 @@ struct InspiredNoteCard: View {
 //    var body: some View {
 //        Text(text)
 //            .font(.system(size: 12, weight: .medium))
-//            .foregroundColor(.white)
+//            .foregroundColor(ChoraiTheme.ink)
 //            .padding(.horizontal, 12)
 //            .padding(.vertical, 6)
 //            .background(
 //                RoundedRectangle(cornerRadius: 15)
-//                    .fill(Color.white.opacity(0.1))
+//                    .fill(ChoraiTheme.ink.opacity(0.1))
 //            )
 //    }
 //}

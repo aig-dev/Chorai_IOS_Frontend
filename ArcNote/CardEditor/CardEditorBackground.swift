@@ -8,6 +8,7 @@ enum CardEditorBackgroundSource: Equatable {
 }
 
 struct CardEditorBackground<Content: View>: View {
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.colorSchemeContrast) private var contrast
 
@@ -40,8 +41,13 @@ struct CardEditorBackground<Content: View>: View {
         contrast == .increased ? 0.30 : 0.20
     }
 
+    @ViewBuilder
     var body: some View {
-        content()
+        if background == .none {
+            content()
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+        } else {
+            content()
             .padding(.horizontal, 8)
             .padding(.vertical, 10)
             .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -49,13 +55,8 @@ struct CardEditorBackground<Content: View>: View {
             .background {
                 backgroundLayer
                     .clipShape(paneShape)
-                    .shadow(
-                        color: Color.black.opacity(paneShadowOpacity),
-                        radius: 18,
-                        x: 0,
-                        y: 10
-                    )
             }
+        }
     }
 
     private var backgroundLayer: some View {
@@ -66,8 +67,8 @@ struct CardEditorBackground<Content: View>: View {
                     .clipped()
                     .accessibilityHidden(true)
 
-                Color.black
-                    .opacity(veilOpacity)
+                (colorScheme == .dark ? Color.black : Color.white)
+                    .opacity(colorScheme == .dark ? veilOpacity : 0.72)
                     .accessibilityHidden(true)
                     .allowsHitTesting(false)
             }

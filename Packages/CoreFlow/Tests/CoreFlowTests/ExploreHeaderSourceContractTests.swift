@@ -17,7 +17,7 @@ final class ExploreHeaderSourceContractTests: XCTestCase {
         )
         let header = String(explore[menuButtonEnd..<searchButtonStart])
 
-        XCTAssertTrue(header.contains("Text(\"Explore\")"))
+        XCTAssertTrue(header.contains("Text(isSearchMode ? \"Search\" : \"Explore\")"))
         XCTAssertFalse(header.contains("Text(\"Flow\")"))
         XCTAssertFalse(header.contains("Circle()"))
     }

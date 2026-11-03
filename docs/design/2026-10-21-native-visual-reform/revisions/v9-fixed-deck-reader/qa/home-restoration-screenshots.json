@@ -1,0 +1,14 @@
+[
+  {
+    "file": "v9-home-restored-dark.png",
+    "sourceResult": "/tmp/chorai-v9-home-restored.xcresult",
+    "test": "ReviewV9Tests/testHomeRetainsApprovedLayoutAndEditorInBothThemes()",
+    "device": "iPhone 17 Pro"
+  },
+  {
+    "file": "v9-home-restored-light.png",
+    "sourceResult": "/tmp/chorai-v9-home-restored.xcresult",
+    "test": "ReviewV9Tests/testHomeRetainsApprovedLayoutAndEditorInBothThemes()",
+    "device": "iPhone 17 Pro"
+  }
+]

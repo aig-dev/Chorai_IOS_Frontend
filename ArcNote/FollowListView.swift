@@ -29,26 +29,25 @@ struct FollowListView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                Image("home_bg")
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
+                ChoraiBackground()
                     .ignoresSafeArea(edges: .bottom)
 
                 VStack(spacing: 0) {
                     content
-                        .padding(.top, 56)
                 }
             }
-            .toolbarBackground(.hidden, for: .navigationBar)
-            .toolbarColorScheme(.dark, for: .navigationBar)
+            .navigationTitle(kind == .followers ? "Followers" : "Following")
+            .navigationBarTitleDisplayMode(.inline)
+            .tint(ChoraiTheme.accent)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button {
                         dismiss()
                     } label: {
                         Image(systemName: "chevron.left")
-                            .font(.system(size: 20, weight: .medium))
-                            .foregroundColor(.white)
+                            .font(.title3.weight(.medium))
+                            .foregroundColor(ChoraiTheme.ink)
+                    .frame(minWidth: 44, minHeight: 44)
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Back")
@@ -56,8 +55,8 @@ struct FollowListView: View {
 
                 ToolbarItem(placement: .principal) {
                     Text(kind == .followers ? "Followers" : "Following")
-                        .font(.system(size: 20, weight: .semibold))
-                        .foregroundColor(.white)
+                        .font(.title3.weight(.semibold))
+                        .foregroundColor(ChoraiTheme.ink)
                 }
             }
             .overlay(alignment: .topLeading) {
@@ -90,7 +89,7 @@ struct FollowListView: View {
         case .loading, .idle:
             Spacer()
             ProgressView()
-                .tint(.white)
+                .tint(ChoraiTheme.ink)
             Spacer()
 
         case .privateList:
@@ -134,13 +133,13 @@ struct FollowListView: View {
                         }
 
                     Divider()
-                        .background(Color.white.opacity(0.15))
+                        .background(ChoraiTheme.surface)
                         .padding(.leading, 84)
                 }
 
                 if store.phase == .loadingMore {
                     ProgressView()
-                        .tint(.white)
+                        .tint(ChoraiTheme.ink)
                         .padding(.vertical, 18)
                 }
             }
@@ -154,16 +153,16 @@ struct FollowListView: View {
     ) -> some View {
         VStack(spacing: 10) {
             Text(failureMessage(operation))
-                .font(.system(size: 14, weight: .medium))
-                .foregroundColor(.white.opacity(0.75))
+                .font(.subheadline.weight(.medium))
+                .foregroundColor(ChoraiTheme.secondaryInk)
                 .multilineTextAlignment(.center)
                 .accessibilityIdentifier("follow-list.error")
 
             Button("Try Again") {
                 retry(operation)
             }
-            .font(.system(size: 14, weight: .medium))
-            .foregroundColor(.white)
+            .font(.subheadline.weight(.medium))
+            .foregroundColor(ChoraiTheme.ink)
         }
         .padding(.horizontal, 24)
         .padding(.vertical, 14)
@@ -210,14 +209,14 @@ struct FollowListView: View {
 
                     VStack(alignment: .leading, spacing: 3) {
                         Text(actor.username)
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundColor(.white)
+                            .font(.body.weight(.semibold))
+                            .foregroundColor(ChoraiTheme.ink)
                             .lineLimit(1)
 
                         if let bio = actor.bio, !bio.isEmpty {
                             Text(bio)
-                                .font(.system(size: 13))
-                                .foregroundColor(.white.opacity(0.62))
+                                .font(.footnote)
+                                .foregroundColor(ChoraiTheme.secondaryInk)
                                 .lineLimit(1)
                         }
                     }
@@ -235,18 +234,18 @@ struct FollowListView: View {
                     Group {
                         if isMutating(actor.actorID) {
                             ProgressView()
-                                .tint(.black)
+                                .tint(actor.isFollowing ? ChoraiTheme.ink : ChoraiTheme.onAccent)
                                 .frame(width: 54)
                         } else {
                             Text(actor.isFollowing ? "Following" : "Follow")
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundColor(.black)
+                                .font(.subheadline.weight(.medium))
+                                .foregroundColor(actor.isFollowing ? ChoraiTheme.ink : ChoraiTheme.onAccent)
                         }
                     }
                     .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(Capsule().fill(Color.white))
+                    .frame(minHeight: 44)
                 }
+                .choraiGlassButton(prominent: !actor.isFollowing)
                 .disabled(isMutating(actor.actorID))
                 .accessibilityIdentifier("follow-list.follow.\(actor.actorID)")
             }
@@ -286,12 +285,12 @@ struct FollowListView: View {
     ) -> some View {
         VStack(spacing: 8) {
             Text(title)
-                .font(.system(size: 16, weight: .medium))
-                .foregroundColor(.white.opacity(0.78))
+                .font(.body.weight(.medium))
+                .foregroundColor(ChoraiTheme.secondaryInk)
             if let detail {
                 Text(detail)
-                    .font(.system(size: 13))
-                    .foregroundColor(.white.opacity(0.58))
+                    .font(.footnote)
+                    .foregroundColor(ChoraiTheme.secondaryInk)
                     .multilineTextAlignment(.center)
             }
         }

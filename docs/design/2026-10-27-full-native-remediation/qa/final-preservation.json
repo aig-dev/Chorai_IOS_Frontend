@@ -1,0 +1,15 @@
+{
+  "checked_at": "2026-10-28T09:40:39.303225+00:00",
+  "source_files": 411,
+  "changes_after_build14": [],
+  "network_api_auth_files": 30,
+  "network_api_auth_changes": [],
+  "prototype_manifest_files": 402,
+  "prototype_mismatches": [],
+  "package_resolved_diff": "",
+  "git_diff_check_exit_code": 0,
+  "git_diff_check_output": "",
+  "branch": "main",
+  "head": "8fe71f81850ca32aa07773a29ca21b04f1604458",
+  "working_tree": "Contains preserved and current intentional uncommitted frontend migration; not claimed clean"
+}

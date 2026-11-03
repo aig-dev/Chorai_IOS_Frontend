@@ -18,8 +18,8 @@ struct CardEditorAmbientBackdrop: View {
                     ZStack {
                         RadialGradient(
                             colors: [
-                                Color(red: 0.44, green: 0.25, blue: 0.88)
-                                    .opacity(0.34),
+                                ChoraiTheme.gold
+                                    .opacity(0.035),
                                 Color.clear,
                             ],
                             center: upperLightCenter,
@@ -29,8 +29,8 @@ struct CardEditorAmbientBackdrop: View {
 
                         RadialGradient(
                             colors: [
-                                Color(red: 0.14, green: 0.30, blue: 0.70)
-                                    .opacity(0.28),
+                                ChoraiTheme.accent
+                                    .opacity(0.025),
                                 Color.clear,
                             ],
                             center: lowerLightCenter,

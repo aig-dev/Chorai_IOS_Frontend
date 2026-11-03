@@ -1,6 +1,7 @@
 import Combine
 import CoreFlow
 import SwiftUI
+import UIKit
 
 // MARK: 评论弹窗管理器
 class CommentPopupManager: ObservableObject {
@@ -11,20 +12,20 @@ class CommentPopupManager: ObservableObject {
     @Published var isSubmitting = false
     @Published var showErrorAlert = false
     @Published var errorMessage = ""
-    
+
     // Callback for when a comment is created
     var onCommentCreated: ((String) -> Void)?
-    
+
     static let shared = CommentPopupManager()
     private var commentManager = CommentManager()
     private var currentCardId: String?
-    
+
     private init() {
         // 监听评论管理器的数据变化
         commentManager.$comments
             .assign(to: \.comments, on: self)
             .store(in: &cancellables)
-        
+
         commentManager.$isLoading
             .assign(to: \.isLoading, on: self)
             .store(in: &cancellables)
@@ -32,7 +33,7 @@ class CommentPopupManager: ObservableObject {
         commentManager.$loadedCommentCount
             .assign(to: \.loadedCommentCount, on: self)
             .store(in: &cancellables)
-        
+
         // 设置评论数量变化回调
         commentManager.onCommentCountChanged = { cardId, newCount in
             print("评论数量变化回调: cardId=\(cardId), newCount=\(newCount)")
@@ -44,23 +45,32 @@ class CommentPopupManager: ObservableObject {
             )
         }
     }
-    
+
     private var cancellables = Set<AnyCancellable>()
-    
+
 //    func show() {
 //        isShowing = true
 //    }
-    
+
     func hide() {
         isShowing = false
     }
-    
+
     func show(for cardId: String) {
         currentCardId = cardId
+        #if DEBUG
+        if CommentPresentationFixture.isEnabled {
+            comments = CommentPresentationFixture.comments(for: cardId)
+            loadedCommentCount = comments.count
+            isLoading = false
+            isShowing = true
+            return
+        }
+        #endif
         isShowing = true
         commentManager.loadComments(for: cardId, refresh: true)
     }
-    
+
     func addComment(
         _ content: String,
         parentCommentId: String? = nil,
@@ -73,7 +83,7 @@ class CommentPopupManager: ObservableObject {
             return
         }
         isSubmitting = true
-        
+
         commentManager.createComment(
             for: cardId,
             content: trimmedContent,
@@ -88,7 +98,7 @@ class CommentPopupManager: ObservableObject {
                     completion?(true)
                 case .failure(let error):
                     print("评论发布失败: \(error.localizedDescription)")
-                    
+
                     // 检查是否是未授权错误
                     if case .unauthorized = error {
                         self.hide()
@@ -106,17 +116,23 @@ class CommentPopupManager: ObservableObject {
             }
         }
     }
-    
+
     func loadMoreComments() {
+        #if DEBUG
+        guard !CommentPresentationFixture.isEnabled else { return }
+        #endif
         guard currentCardId != nil else { return }
         commentManager.loadMoreComments()
     }
-    
+
     func refreshComments() {
+        #if DEBUG
+        guard !CommentPresentationFixture.isEnabled else { return }
+        #endif
         guard currentCardId != nil else { return }
         commentManager.refreshComments()
     }
-    
+
     // MARK: - 移除评论（用于拉黑后移除）
     func removeComment(commentId: String) {
         commentManager.removeComment(commentId: commentId)
@@ -126,252 +142,59 @@ class CommentPopupManager: ObservableObject {
 // MARK: - 评论弹窗视图
 struct CommentPopupView: View {
     @ObservedObject private var manager = CommentPopupManager.shared
+
+    var body: some View {
+        ChoraiNativeSheetPresenter(
+            isPresented: $manager.isShowing,
+            detents: [.medium(), .large()],
+            initialDetent: .medium
+        ) { onFocus in
+            CommentSheetContent(onFocus: onFocus)
+        }
+            .frame(width: 0, height: 0)
+    }
+}
+
+private struct CommentSheetContent: View {
+    @ObservedObject private var manager = CommentPopupManager.shared
     @State private var commentText = ""
     @State private var isPrivateMode = false
     @State private var replyTarget: CommentModel?
-    @State private var slideOffset: CGFloat = 0
     @FocusState private var isTextFieldFocused: Bool
-    
-    var body: some View {
-//        if manager.isShowing {
-            ZStack {
-                // 背景遮罩
-                if manager.isShowing {
-                    Color.black.opacity(0.5)
-                        .ignoresSafeArea()
-                        .onTapGesture {
+    let onFocus: () -> Void
+
+    var body: some View { commentSheet }
+
+    private var commentSheet: some View {
+        NavigationStack {
+            commentList
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    composer
+                }
+                .background(ChoraiTheme.background.ignoresSafeArea())
+                .foregroundStyle(ChoraiTheme.ink)
+                .navigationTitle("Comments")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") {
                             isTextFieldFocused = false
                             manager.hide()
                         }
-                }
-                
-                // 弹窗内容
-                GeometryReader { geometry in
-                    let sheetHeight = min(
-                        max(geometry.size.height * 0.6, 280),
-                        geometry.size.height
-                    )
-                    let hiddenOffset = sheetHeight + geometry.safeAreaInsets.bottom
-
-                    VStack(spacing: 0) {
-                        #if DEBUG
-                        Text("Comment popup")
-                            .font(.system(size: 1))
-                            .foregroundColor(.white.opacity(0.01))
-                            .frame(width: 1, height: 1)
-                            .accessibilityIdentifier("comment.popup")
-                        #endif
-
-                        // 弹窗头部
-                        HStack {
-                            Text("Comment")
-                                .font(.system(size: 18, weight: .semibold))
-                                .foregroundColor(.white)
-                            
-                            Spacer()
-                            
-                            Button(action: {
-                                isTextFieldFocused = false
-                                manager.hide()
-                            }) {
-                                Image(systemName: "xmark")
-                                    .font(.system(size: 16, weight: .medium))
-                                    .foregroundColor(.white)
-                            }
-                        }
-                        .adaptiveContentGutter()
-                        .padding(.top, 20)
-                        .padding(.bottom, 16)
-                        .frame(height: 60) // 固定头部高度
-                        
-                        // 评论列表
-                        ScrollView(.vertical, showsIndicators: true) {
-                                LazyVStack(spacing: 16) {
-                                    // 加载状态
-                                    if manager.isLoading && manager.comments.isEmpty {
-                                        VStack {
-                                            ProgressView()
-                                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                                .scaleEffect(1.2)
-                                            Text("Loading comments...")
-                                                .font(.system(size: 14, weight: .medium))
-                                                .foregroundColor(.white.opacity(0.7))
-                                                .padding(.top, 10)
-                                        }
-                                        .frame(maxWidth: .infinity)
-                                        .padding(.vertical, 40)
-                                    } else {
-                                        ForEach(manager.comments) { comment in
-                                            CommentRowView(comment: comment) { selectedComment in
-                                                enterReplyMode(for: selectedComment)
-                                            }
-                                                .id(comment.id)
-                                                .accessibilityIdentifier("comment.row.\(comment.id)")
-                                        }
-
-                                        if !manager.comments.isEmpty {
-                                            Color.clear
-                                                .frame(height: 1)
-                                                .id("comment-load-more-\(manager.loadedCommentCount)")
-                                                .onAppear {
-                                                    manager.loadMoreComments()
-                                                }
-                                                .accessibilityHidden(true)
-                                        }
-                                        
-                                        // 加载更多指示器
-                                        if manager.isLoading && !manager.comments.isEmpty {
-                                            HStack {
-                                                Spacer()
-                                                ProgressView()
-                                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                                    .scaleEffect(0.8)
-                                                Text("Loading more...")
-                                                    .font(.system(size: 12, weight: .medium))
-                                                    .foregroundColor(.white.opacity(0.7))
-                                                    .padding(.leading, 8)
-                                                Spacer()
-                                            }
-                                            .padding(.vertical, 20)
-                                        }
-                                    }
-                                }
-                                .adaptiveContentGutter()
-                                .padding(.top, 10)
-                                .padding(.bottom, 20)
-                            }
-                            .scrollDismissesKeyboard(.interactively)
-                            .frame(maxHeight: .infinity)
-                            .clipped()
-                            .refreshable {
-                                manager.refreshComments()
-                            }
-                        
-                        // 评论输入框
-                        VStack(spacing: 8) {
-                            if let replyTarget {
-                                HStack(spacing: 8) {
-                                    Text("Replying to \(replyTarget.user.displayName)")
-                                        .font(.system(size: 12, weight: .medium))
-                                        .foregroundColor(.white.opacity(0.72))
-                                        .lineLimit(1)
-                                    Spacer()
-                                    Button(action: exitReplyMode) {
-                                        Image(systemName: "xmark.circle.fill")
-                                            .font(.system(size: 18))
-                                            .foregroundColor(.white.opacity(0.65))
-                                    }
-                                    .accessibilityLabel("Cancel reply")
-                                    .accessibilityIdentifier("comment.reply.cancel")
-                                }
-                            }
-
-                            HStack(spacing: 12) {
-                                Button(action: {
-                                    guard !isReplyPrivacyLocked else { return }
-                                    isPrivateMode.toggle()
-                                }) {
-                                    Image(isPrivateMode ? "secret_active" : "secret")
-                                        .resizable()
-                                        .aspectRatio(contentMode: .fit)
-                                        .frame(width: 30, height: 30)
-                                        .frame(width: 44, height: 44)
-                                }
-                                .buttonStyle(.plain)
-                                .accessibilityLabel(isPrivateMode ? "Private comment" : "Public comment")
-                                .accessibilityValue(isPrivateMode ? "Visible only to you and the card author" : "Visible to card readers")
-                                .accessibilityHint(isReplyPrivacyLocked ? "Replies to a private thread stay private" : "Double tap to change comment privacy")
-                                .accessibilityIdentifier("comment.visibility.toggle")
-
-                                HStack(spacing: 12) {
-                                    TextField(composerPlaceholder, text: $commentText)
-                                        .textFieldStyle(PlainTextFieldStyle())
-                                        .foregroundColor(.white)
-                                        .padding(.vertical, 12)
-                                        .placeholder(when: commentText.isEmpty) {
-                                            Text(composerPlaceholder)
-                                                .foregroundColor(Color(red: 0.627, green: 0.627, blue: 0.627))
-                                        }
-                                        .focused($isTextFieldFocused)
-                                        .accessibilityIdentifier("comment.input")
-
-                                    Button(action: submitComment) {
-                                        Image("send")
-                                            .resizable()
-                                            .frame(width: 40, height: 40)
-                                    }
-                                    .accessibilityIdentifier("comment.send")
-                                    .disabled(trimmedCommentText.isEmpty || manager.isSubmitting)
-                                }
-                                .padding(.leading, 16)
-                                .padding(.trailing, 2)
-                                .padding(.vertical, 2)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 15)
-                                        .background(.ultraThinMaterial)
-                                        .roundedButtonHighlightEffect(cornerRadius: 30)
-                                )
-                                .cornerRadius(30)
-                            }
-                        }
-                        .padding(.top, 10)
-                        .adaptiveContentGutter()
-                        .padding(.bottom, 24)
-                        .frame(minHeight: 80)
-                    }
-                    .frame(maxWidth: geometry.size.width, maxHeight: sheetHeight)
-                    .background(
-                        RoundedRectangle(cornerRadius: 16)
-                            .background(.ultraThinMaterial)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 16)
-                                    .stroke(Color.white.opacity(0.1), lineWidth: 1)
-                            )
-                            .cardHighlightEffect()
-                            .cornerRadius(16)
-                    )
-                    .clipShape(
-                        RoundedCorner(radius: 20, corners: [.topLeft, .topRight])
-                    )
-                    .accessibilityIdentifier("adaptive-layout.comment-surface")
-                    .position(
-                        x: geometry.size.width / 2,
-                        y: geometry.size.height - sheetHeight / 2
-                    )
-                    .offset(y: slideOffset)
-                    .opacity(manager.isShowing ? 1 : 0)
-                    .allowsHitTesting(manager.isShowing)
-                    .animation(.easeInOut(duration: 0.4), value: slideOffset)
-                    .onChange(of: manager.isShowing) { isShowing in
-                        if isShowing {
-                            slideOffset = hiddenOffset
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) {
-                                guard manager.isShowing else { return }
-                                withAnimation(.easeInOut(duration: 0.4)) {
-                                    slideOffset = 0
-                                }
-                            }
-                        } else {
-                            withAnimation(.easeInOut(duration: 0.4)) {
-                                slideOffset = hiddenOffset
-                            }
-                        }
-                    }
-                    .onChange(of: geometry.size) { _ in
-                        if !manager.isShowing {
-                            slideOffset = hiddenOffset
-                        }
-                    }
-                    .onAppear {
-                        slideOffset = manager.isShowing ? 0 : hiddenOffset
+                        .accessibilityIdentifier("comment.close")
                     }
                 }
-
-                .onChange(of: manager.isShowing) { isShowing in
-                    if !isShowing {
-                        resetComposer()
-                    }
+                .overlay(alignment: .topLeading) {
+                    #if DEBUG
+                    Text("Comment popup")
+                        .font(.system(size: 1))
+                        .foregroundColor(ChoraiTheme.ink.opacity(0.01))
+                        .frame(width: 1, height: 1)
+                        .accessibilityIdentifier("comment.popup")
+                    #endif
                 }
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("adaptive-layout.comment-surface")
                 .alert("Error", isPresented: $manager.showErrorAlert) {
                     Button("OK") {
                         manager.showErrorAlert = false
@@ -379,8 +202,141 @@ struct CommentPopupView: View {
                 } message: {
                     Text(manager.errorMessage)
                 }
+        }
+        .tint(ChoraiTheme.accent)
+        .onChange(of: isTextFieldFocused) { isFocused in
+            if isFocused {
+                onFocus()
             }
-//        }
+        }
+    }
+
+    private var commentList: some View {
+        ScrollView(.vertical, showsIndicators: true) {
+            LazyVStack(spacing: 24) {
+                if manager.isLoading && manager.comments.isEmpty {
+                    VStack(spacing: 12) {
+                        ProgressView()
+                        Text("Loading comments…")
+                            .font(.subheadline)
+                            .foregroundStyle(ChoraiTheme.secondaryInk)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 40)
+                } else {
+                    ForEach(manager.comments) { comment in
+                        CommentRowView(comment: comment) { selectedComment in
+                            enterReplyMode(for: selectedComment)
+                        }
+                        .id(comment.id)
+                        .accessibilityElement(children: .contain)
+                        .accessibilityIdentifier("comment.row.\(comment.id)")
+                    }
+
+                    if !manager.comments.isEmpty {
+                        Color.clear
+                            .frame(height: 1)
+                            .id("comment-load-more-\(manager.loadedCommentCount)")
+                            .onAppear {
+                                manager.loadMoreComments()
+                            }
+                            .accessibilityHidden(true)
+                    }
+
+                    if manager.isLoading && !manager.comments.isEmpty {
+                        HStack(spacing: 8) {
+                            ProgressView()
+                            Text("Loading more…")
+                                .font(.caption)
+                                .foregroundStyle(ChoraiTheme.secondaryInk)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                    }
+                }
+            }
+            .adaptiveContentGutter()
+            .padding(.top, 20)
+            .padding(.bottom, 24)
+        }
+        .scrollDismissesKeyboard(.interactively)
+        .refreshable {
+            manager.refreshComments()
+        }
+    }
+
+    private var composer: some View {
+        VStack(spacing: 0) {
+            Divider().overlay(ChoraiTheme.separator)
+
+            VStack(spacing: 4) {
+                if let replyTarget {
+                    HStack(spacing: 8) {
+                        Text("Replying to \(replyTarget.user.displayName)")
+                            .font(.caption)
+                            .foregroundStyle(ChoraiTheme.secondaryInk)
+                            .lineLimit(1)
+                        Spacer()
+                        Button(action: exitReplyMode) {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.body)
+                                .frame(minWidth: 44, minHeight: 44)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Cancel reply")
+                        .accessibilityIdentifier("comment.reply.cancel")
+                    }
+                }
+
+                HStack(alignment: .bottom, spacing: 10) {
+                    Button(action: {
+                        guard !isReplyPrivacyLocked else { return }
+                        isPrivateMode.toggle()
+                    }) {
+                        Image(systemName: isPrivateMode ? "lock.fill" : "globe")
+                            .font(.body.weight(.medium))
+                            .frame(minWidth: 44, minHeight: 44)
+                    }
+                    .choraiGlassButton()
+                    .disabled(isReplyPrivacyLocked)
+                    .accessibilityLabel(isPrivateMode ? "Private comment" : "Public comment")
+                    .accessibilityValue(isPrivateMode ? "Visible only to you and the card author" : "Visible to card readers")
+                    .accessibilityHint(isReplyPrivacyLocked ? "Replies to a private thread stay private" : "Double tap to change comment privacy")
+                    .accessibilityIdentifier("comment.visibility.toggle")
+
+                    TextField(composerPlaceholder, text: $commentText, axis: .vertical)
+                        .font(.body)
+                        .lineLimit(1...5)
+                        .textFieldStyle(.plain)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                        .frame(minHeight: 44)
+                        .choraiGlassSurface(cornerRadius: 24)
+                        .focused($isTextFieldFocused)
+                        .accessibilityIdentifier("comment.input")
+
+                    Button(action: submitComment) {
+                        Group {
+                            if manager.isSubmitting {
+                                ProgressView()
+                            } else {
+                                Image(systemName: "arrow.up")
+                                    .font(.body.weight(.semibold))
+                            }
+                        }
+                        .foregroundStyle(ChoraiTheme.onAccent)
+                        .frame(minWidth: 44, minHeight: 44)
+                    }
+                    .choraiGlassButton(prominent: true)
+                    .accessibilityLabel("Send comment")
+                    .accessibilityIdentifier("comment.send")
+                    .disabled(trimmedCommentText.isEmpty || manager.isSubmitting)
+                }
+            }
+            .adaptiveContentGutter()
+            .padding(.vertical, 12)
+        }
+        .background(ChoraiTheme.background)
     }
 
     private var trimmedCommentText: String {
@@ -429,12 +385,7 @@ struct CommentPopupView: View {
         isTextFieldFocused = false
     }
 
-    private func resetComposer() {
-        commentText = ""
-        replyTarget = nil
-        isPrivateMode = false
-        isTextFieldFocused = false
-    }
+
 }
 
 // MARK: 评论行视图
@@ -442,11 +393,11 @@ struct CommentRowView: View {
     let comment: CommentModel
     let isSubComment: Bool
     let onReply: (CommentModel) -> Void
-    
+
     @State private var showActionSheet = false
     @State private var showReport = false
     @State private var cancellables = Set<AnyCancellable>()
-    
+
     init(
         comment: CommentModel,
         isSubComment: Bool = false,
@@ -456,7 +407,7 @@ struct CommentRowView: View {
         self.isSubComment = isSubComment
         self.onReply = onReply
     }
-    
+
     // 检查是否是当前用户的评论
     private var isCurrentUserComment: Bool {
         guard let currentUserId = AuthManager.shared.currentUser?.id else {
@@ -464,48 +415,50 @@ struct CommentRowView: View {
         }
         return comment.user.id == currentUserId
     }
-    
+
     var body: some View {
-        VStack(alignment: .leading, spacing: isSubComment ? 4 : 12) {
+        VStack(alignment: .leading, spacing: 12) {
             // 评论内容
             HStack(alignment: .top, spacing: 12) {
                 avatarView
-                    .frame(width: 40, height: 40)
+                    .frame(width: isSubComment ? 32 : 40, height: isSubComment ? 32 : 40)
                     .clipShape(Circle())
                     .accessibilityLabel("\(comment.user.displayName) avatar")
-                
+
                 VStack(alignment: .leading, spacing: 8) {
                     // 用户名和时间
                     HStack {
                         Text(comment.user.displayName)
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundColor(.white)
-                        
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundColor(ChoraiTheme.ink)
+
                         Spacer()
-                        
+
                         if !isCurrentUserComment {
                             Button(action: {
                                 showActionSheet = true
                             }) {
                                 Image(systemName: "ellipsis")
-                                    .font(.system(size: 16, weight: .medium))
-                                    .foregroundColor(.white.opacity(0.7))
+                                    .font(.body.weight(.medium))
+                                    .foregroundColor(ChoraiTheme.secondaryInk)
+                                    .frame(minWidth: 44, minHeight: 44)
                             }
+                            .buttonStyle(.plain)
                             .accessibilityLabel("Comment actions")
                             .accessibilityIdentifier("comment.actions.\(comment.id)")
                         }
                     }
-                    
+
                     // 评论内容
                     Text(comment.content)
-                        .font(.system(size: 14, weight: .regular))
-                        .foregroundColor(.white.opacity(0.9))
+                        .font(.body)
+                        .foregroundColor(ChoraiTheme.ink)
                         .multilineTextAlignment(.leading)
                         .accessibilityIdentifier("comment.content.\(comment.id)")
-                    
+
                     HStack(spacing: 10) {
                         if comment.visibility == .privateComment {
-                            Image("secret_active")
+                            Image(systemName: "lock.fill")
                                 .resizable()
                                 .aspectRatio(contentMode: .fit)
                                 .frame(width: 14, height: 14)
@@ -513,14 +466,13 @@ struct CommentRowView: View {
                         }
 
                         Text(formatDate(comment.createdAt))
-                            .font(.system(size: 12, weight: .regular))
-                            .foregroundColor(.white.opacity(0.6))
+                            .font(.caption.weight(.regular))
+                            .foregroundColor(ChoraiTheme.secondaryInk)
 
                         Button(action: { onReply(comment) }) {
-                            Image("comment")
-                                .resizable()
-                                .frame(width: 16, height: 16)
-                                .foregroundColor(.white.opacity(0.72))
+                            Text("Reply")
+                                .font(.caption.weight(.medium))
+                                .foregroundColor(ChoraiTheme.secondaryInk)
                                 .frame(minWidth: 44, minHeight: 44, alignment: .leading)
                         }
                         .buttonStyle(.plain)
@@ -529,14 +481,21 @@ struct CommentRowView: View {
                     }
                 }
             }
-            
+
             if !comment.replies.isEmpty {
-                VStack(spacing: 8) {
+                VStack(spacing: 16) {
                     ForEach(comment.replies) { subComment in
                         CommentRowView(comment: subComment, isSubComment: true, onReply: onReply)
                     }
                 }
-                .padding(.leading, 52) // 缩进对齐
+                .padding(.leading, 24)
+                .overlay(alignment: .leading) {
+                    Rectangle()
+                        .fill(ChoraiTheme.separator)
+                        .frame(width: 1)
+                        .padding(.leading, 8)
+                        .accessibilityHidden(true)
+                }
             }
         }
         .confirmationDialog("", isPresented: $showActionSheet, titleVisibility: .hidden) {
@@ -583,14 +542,14 @@ struct CommentRowView: View {
         }
         return URL(string: APIConfiguration.resourceURLString(rawValue))
     }
-    
+
     // MARK: - 拉黑用户
     private func blockUser() {
         guard AuthManager.shared.currentUser != nil else {
             return
         }
-        
-        
+
+
         NetworkManager.shared.blockUser(blockedActorId: comment.user.id)
             .receive(on: DispatchQueue.main)
             .sink(
@@ -609,7 +568,7 @@ struct CommentRowView: View {
             )
             .store(in: &cancellables)
     }
-    
+
     // MARK: 日期格式化方法
     private func formatDate(_ dateString: String) -> String {
         CommentTimestamp.displayText(for: dateString)
@@ -626,44 +585,48 @@ struct CommentButton: View {
     let cardsManager: RecommendedCardsManager?
     let useRelatedCardsManager: Bool
     let iconSize: CGFloat
+    let countFont: Font
     @State private var staticCommentCount: Int = 0
-    
+
     init(cardId: String, cardsManager: RecommendedCardsManager) {
         self.cardId = cardId
         self.cardsManager = cardsManager
         self.useRelatedCardsManager = false
         self.iconSize = 20
+        self.countFont = .subheadline.weight(.medium)
         self.staticCommentCount = 0
     }
-    
+
     init(cardId: String, relatedCardsManager: RelatedCardsManager) {
         self.cardId = cardId
         self.cardsManager = nil
         self.useRelatedCardsManager = true
         self.iconSize = 20
+        self.countFont = .subheadline.weight(.medium)
         self.staticCommentCount = 0
     }
-    
-    init(cardId: String, commentCount: Int = 0, iconSize: CGFloat = 20) {
+
+    init(cardId: String, commentCount: Int = 0, iconSize: CGFloat = 20, countFont: Font = .subheadline.weight(.medium)) {
         self.cardId = cardId
         self.cardsManager = nil
         self.useRelatedCardsManager = false
         self.iconSize = iconSize
+        self.countFont = countFont
         self.staticCommentCount = commentCount
     }
-    
+
     var body: some View {
         Button(action: {
             manager.show(for: cardId)
         }) {
             HStack(spacing: 4) {
-                Image("comment")
+                Image(systemName: "bubble")
                     .resizable()
                     .aspectRatio(contentMode: .fit)
                     .frame(width: iconSize, height: iconSize)
                 Text("\(displayCommentCount)")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(.white.opacity(0.8))
+                    .font(countFont)
+                    .foregroundColor(ChoraiTheme.ink)
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("CommentCountChanged"))) { notification in
@@ -676,7 +639,7 @@ struct CommentButton: View {
             }
         }
     }
-    
+
     private var displayCommentCount: Int {
         if let cardsManager = cardsManager {
             return cardsManager.getCommentCount(for: cardId)
@@ -690,4 +653,57 @@ struct CommentButton: View {
 
 #Preview {
     CommentPopupView()
-} 
+}
+
+#if DEBUG
+/// Presentation-only fixture. Its ordinary network session is still intercepted
+/// by LocalPreviewURLProtocol; no request can fall through to a live service.
+enum CommentPresentationFixture {
+    static var isEnabled: Bool {
+        LocalDevelopmentPreview.isEnabled
+            && ProcessInfo.processInfo.arguments.contains("--ui-test-comment-presentation")
+    }
+
+    static func comments(for cardID: String) -> [CommentModel] {
+        [
+            CommentModel(
+                id: "fixture-comment-public", cardId: cardID,
+                content: "Leaving room for an unfinished thought makes it easier to join the conversation.",
+                createdAt: "2026-10-26T09:00:00Z", updatedAt: nil,
+                user: CommentUser(id: "fixture-reader", username: "Mira Chen", avatarUrl: nil),
+                replies: []
+            ),
+            CommentModel(
+                id: "fixture-comment-private", cardId: cardID,
+                visibility: .privateComment,
+                content: "A private question for the author.",
+                createdAt: "2026-10-26T10:00:00Z", updatedAt: nil,
+                user: CommentUser(id: "fixture-reader-2", username: "Leo Park", avatarUrl: nil),
+                replies: []
+            )
+        ]
+    }
+}
+
+struct CommentPresentationFixtureScreen: View {
+    @State private var showsSpark = false
+
+    var body: some View {
+        NavigationStack {
+            DetailView(cardId: "preview-field-note")
+                .toolbar {
+                    ToolbarItem(placement: .bottomBar) {
+                        Button("Open Spark fixture") { showsSpark = true }
+                            .accessibilityIdentifier("comment.fixture.open-spark")
+                    }
+                }
+                .sheet(isPresented: $showsSpark) {
+                    NavigationStack {
+                        SparkContinuationView.fidelityFixture()
+                    }
+                }
+        }
+        .tint(ChoraiTheme.accent)
+    }
+}
+#endif

@@ -136,22 +136,29 @@ import UIKit
 import WebKit
 
 public struct BlockNoteEditorView: UIViewRepresentable {
+    @Environment(\.colorScheme) private var colorScheme
     public typealias UIViewType = WKWebView
     public typealias Coordinator = BlockNoteEditorCoordinator
 
     private let document: BlockNoteInitialDocument
     private let editable: Bool
+    private let fontScale: Double
+    private let minimumWritingHeight: Double
     private let controller: BlockNoteEditorController
     private let onEvent: @MainActor (BlockNoteEditorEvent) -> Void
 
     public init(
         document: BlockNoteInitialDocument,
         editable: Bool,
+        fontScale: Double = 23.0 / 17.0,
+        minimumWritingHeight: Double = 0,
         controller: BlockNoteEditorController,
         onEvent: @escaping @MainActor (BlockNoteEditorEvent) -> Void
     ) {
         self.document = document
         self.editable = editable
+        self.fontScale = fontScale
+        self.minimumWritingHeight = minimumWritingHeight
         self.controller = controller
         self.onEvent = onEvent
     }
@@ -166,11 +173,18 @@ public struct BlockNoteEditorView: UIViewRepresentable {
     }
 
     public func makeUIView(context: Context) -> WKWebView {
-        context.coordinator.makeWebView()
+        let webView = context.coordinator.makeWebView(
+            fontScale: fontScale,
+            minimumWritingHeight: minimumWritingHeight
+        )
+        webView.overrideUserInterfaceStyle = colorScheme == .dark ? .dark : .light
+        return webView
     }
 
     public func updateUIView(_ webView: WKWebView, context: Context) {
         context.coordinator.updateEventHandler(onEvent)
+        context.coordinator.updateMinimumWritingHeight(minimumWritingHeight)
+        webView.overrideUserInterfaceStyle = colorScheme == .dark ? .dark : .light
     }
 
     public static func dismantleUIView(_ webView: WKWebView, coordinator: Coordinator) {

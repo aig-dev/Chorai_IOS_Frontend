@@ -99,14 +99,14 @@ struct CardEditorFormattingBar: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .foregroundStyle(.white)
+            .foregroundStyle(ChoraiTheme.ink)
             .disabled(!isTagEntryEnabled)
             .accessibilityLabel("Add Tag")
             .accessibilityHint("Adds a tag to this note")
             .accessibilityIdentifier("cardEditorAddTag")
 
             Divider()
-                .overlay(Color.white.opacity(0.18))
+                .overlay(ChoraiTheme.ink.opacity(0.18))
                 .frame(height: 28)
 
             ScrollView(.horizontal, showsIndicators: false) {
@@ -147,13 +147,13 @@ struct CardEditorFormattingBar: View {
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
                         .fill(
                             selected
-                                ? ZenVisualTokens.accent.opacity(0.34)
+                                ? ChoraiTheme.selection
                                 : Color.clear
                         )
                 }
         }
         .buttonStyle(.plain)
-        .foregroundStyle(selected ? .white : .white.opacity(0.74))
+        .foregroundStyle(selected ? ChoraiTheme.accent : ChoraiTheme.secondaryInk)
         .disabled(!model.canPerform(command))
         .accessibilityLabel(command.accessibilityLabel)
         .accessibilityValue(selected ? "selected" : "not selected")

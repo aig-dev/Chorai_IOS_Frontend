@@ -72,7 +72,8 @@ final class LibraryCardPreviewSourceContractTests: XCTestCase {
         )
 
         XCTAssertTrue(surface.contains("fallback()"))
-        XCTAssertTrue(surface.contains("levelStyle.materialAccentColor"))
+        XCTAssertTrue(surface.contains("ChoraiCardLevel(rate: rate).color"))
+        XCTAssertTrue(surface.contains("ChoraiLevelBrush(rate: rate)"))
         XCTAssertTrue(surface.contains("rateTreatment"))
         XCTAssertFalse(surface.contains("CardLevelMaterial("))
         XCTAssertFalse(surface.contains("style.materialAssetName"))
@@ -109,14 +110,12 @@ final class LibraryCardPreviewSourceContractTests: XCTestCase {
         XCTAssertTrue(mergeArtifactController.contains("store.artifact?.presentation.rate"))
         XCTAssertTrue(
             home.contains(
-                "backgroundMediaRef: card.backgroundMediaRef,\n"
-                    + "                rate: card.rate"
+                "backgroundMediaRef: card.backgroundMediaRef, rate: card.rate"
             )
         )
         XCTAssertTrue(
             home.contains(
-                "backgroundMediaRef: backgroundMediaRef,\n"
-                    + "                rate: rate"
+                "backgroundMediaRef: backgroundMediaRef, rate: rate"
             )
         )
         XCTAssertTrue(
@@ -153,8 +152,10 @@ final class LibraryCardPreviewSourceContractTests: XCTestCase {
         }
 
         XCTAssertTrue(
-            mergeArtifactSurface.contains("Text(controller.levelStyle.label)")
+            mergeArtifactSurface.contains("ChoraiLevelBadge(")
         )
+        XCTAssertTrue(mergeArtifactSurface.contains("rate: controller.store.artifactDraft?.rate"))
+        XCTAssertTrue(mergeArtifactSurface.contains("?? controller.store.artifact?.presentation.rate"))
         XCTAssertTrue(
             mergeArtifactSurface.contains(
                 ".accessibilityLabel(controller.levelStyle.label)"
@@ -184,7 +185,7 @@ final class LibraryCardPreviewSourceContractTests: XCTestCase {
 
         XCTAssertTrue(
             compactBadge.contains(
-                ".foregroundStyle(levelStyle.materialAccentColor??.white)"
+                ".foregroundStyle(levelStyle.materialAccentColor??ChoraiTheme.ink)"
             )
         )
         XCTAssertTrue(compactBadge.contains("CardLevelMaterial("))
@@ -208,7 +209,7 @@ final class LibraryCardPreviewSourceContractTests: XCTestCase {
             home.components(
                 separatedBy: "contentJSON: favorite.contentJSON"
             ).count - 1,
-            2
+            3
         )
     }
 
@@ -259,7 +260,7 @@ final class LibraryCardPreviewSourceContractTests: XCTestCase {
             home.components(
                 separatedBy: "backgroundMediaRef: favorite.backgroundMediaRef"
             ).count - 1,
-            2
+            3
         )
 
         let manager = try source(at: "ArcNote/HomeCardsManager.swift")
@@ -325,7 +326,8 @@ final class LibraryCardPreviewSourceContractTests: XCTestCase {
             flowModels.components(
                 separatedBy: "backgroundMediaRef: backgroundMediaRef"
             ).count - 1,
-            2
+            3, // Like, favorite, and committed owned-card metadata copies preserve media.
+            "Every metadata-only FlowCard copy must retain its authored background"
         )
 
         let flowService = try source(

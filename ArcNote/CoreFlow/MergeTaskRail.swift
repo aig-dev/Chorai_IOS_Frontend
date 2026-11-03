@@ -123,11 +123,11 @@ struct MergeTaskRail: View {
                 ZStack {
                     railShell
 
-                    Image("menu_merge")
+                    Image(systemName: "arrow.triangle.merge")
                         .resizable()
                         .scaledToFit()
                         .frame(width: 21, height: 21)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(ChoraiTheme.ink)
 
                     MergeTaskActivityRing(
                         isActive: hasActiveTask,
@@ -139,6 +139,7 @@ struct MergeTaskRail: View {
                         .offset(x: -13, y: 13)
                 }
                 .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel(
@@ -155,10 +156,10 @@ struct MergeTaskRail: View {
             if summaries.count > 1 {
                 Text(String(summaries.count))
                     .font(.system(size: 10, weight: .bold, design: .rounded))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(ChoraiTheme.onAccent)
                     .frame(minWidth: 18, minHeight: 18)
                     .background(Circle().fill(aggregateAccent))
-                    .overlay(Circle().stroke(Color.white.opacity(0.72)))
+                    .overlay(Circle().stroke(ChoraiTheme.ink.opacity(0.72)))
                     .offset(x: 5, y: -5)
                     .allowsHitTesting(false)
                     .accessibilityLabel(String(summaries.count))
@@ -173,20 +174,8 @@ struct MergeTaskRail: View {
     }
 
     private var railShell: some View {
-        Circle()
-            .fill(reduceTransparency
-                ? AnyShapeStyle(ZenVisualTokens.opaqueCardFill)
-                : AnyShapeStyle(.ultraThinMaterial))
-            .overlay(
-                Circle()
-                    .fill(ZenVisualTokens.glassTint.opacity(
-                        reduceTransparency ? 0 : 0.52
-                    ))
-            )
-            .overlay(
-                Circle().stroke(Color.white.opacity(0.16), lineWidth: 1)
-            )
-            .shadow(color: Color.black.opacity(0.28), radius: 12, y: 7)
+        Circle().fill(Color.clear)
+            .choraiGlassSurface(cornerRadius: 24)
     }
 
     @ViewBuilder
@@ -194,19 +183,19 @@ struct MergeTaskRail: View {
         if hasFailedTask {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.system(size: 10, weight: .bold))
-                .foregroundStyle(.white, aggregateAccent)
+                .foregroundStyle(ChoraiTheme.ink, aggregateAccent)
                 .frame(width: 17, height: 17)
                 .background(Circle().fill(aggregateAccent))
         } else if hasCompleteTask {
             Image(systemName: "checkmark")
                 .font(.system(size: 10, weight: .bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(ChoraiTheme.ink)
                 .frame(width: 17, height: 17)
                 .background(Circle().fill(aggregateAccent))
         } else if hasRecoveringTask {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.system(size: 10, weight: .bold))
-                .foregroundStyle(.white, aggregateAccent)
+                .foregroundStyle(ChoraiTheme.ink, aggregateAccent)
                 .frame(width: 17, height: 17)
                 .background(Circle().fill(aggregateAccent))
         }
@@ -243,7 +232,7 @@ struct MergeTaskRail: View {
                     )
                     .overlay(
                         Circle().stroke(
-                            Color.white.opacity(0.16),
+                            ChoraiTheme.ink.opacity(0.16),
                             lineWidth: 1
                         )
                     )
@@ -263,7 +252,7 @@ struct MergeTaskRail: View {
                             weight: .bold,
                             design: .rounded
                         ))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(ChoraiTheme.onAccent)
                         .frame(width: 16, height: 16)
                         .background(Circle().fill(ZenVisualTokens.accent))
                         .offset(x: 3, y: -3)
@@ -273,6 +262,7 @@ struct MergeTaskRail: View {
                 width: MergeTaskRailLayout.taskHeight,
                 height: MergeTaskRailLayout.taskHeight
             )
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel(
@@ -749,7 +739,7 @@ private struct MergeTaskStateGlyph: View {
             case .working, .committing:
                 Text(String(number))
                     .font(.system(size: 15, weight: .bold, design: .rounded))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(ChoraiTheme.ink)
                 MergeTaskActivityRing(
                     isActive: true,
                     reduceMotion: reduceMotion,
@@ -758,7 +748,7 @@ private struct MergeTaskStateGlyph: View {
             case .complete:
                 Image(systemName: "checkmark")
                     .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(ChoraiTheme.ink)
             case .recovering:
                 Image(systemName: "exclamationmark.triangle.fill")
                     .font(.system(size: 15, weight: .semibold))
@@ -916,7 +906,7 @@ private struct MergeTaskRailRouteFixtureScreen: View {
                                         .frame(width: 56, height: 56)
                                     Image(systemName: "plus")
                                         .font(.system(size: 24, weight: .medium))
-                                        .foregroundStyle(.white)
+                                        .foregroundStyle(ChoraiTheme.ink)
                                 }
                             }
                             .buttonStyle(.plain)
@@ -1110,7 +1100,7 @@ private struct MergeWorkingCancelFixtureScreen: View {
                     .environmentObject(coordinator)
             } else {
                 Text("Cancelled")
-                    .foregroundStyle(.white)
+                    .foregroundStyle(ChoraiTheme.ink)
             }
         }
         .overlay(alignment: .topTrailing) {
@@ -1365,7 +1355,7 @@ private struct MergeRootLifecycleFixtureScreen: View {
                 .frame(minWidth: 44, minHeight: 44)
                 .accessibilityIdentifier("merge.lifecycle.resolve-stale-actor-1")
             }
-            .foregroundStyle(.white)
+            .foregroundStyle(ChoraiTheme.ink)
         }
         .overlay(alignment: .topLeading) {
             VStack(spacing: 1) {
@@ -1563,7 +1553,7 @@ private func mergeFixtureAnchor(
 ) -> some View {
     Text(value)
         .font(.system(size: 1))
-        .foregroundStyle(.white.opacity(0.01))
+        .foregroundStyle(ChoraiTheme.ink.opacity(0.01))
         .frame(width: 1, height: 1)
         .accessibilityIdentifier(identifier)
 }

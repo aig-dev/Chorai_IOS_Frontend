@@ -16,6 +16,7 @@ public struct FlowCard: Identifiable, Equatable, Sendable {
     public let id: String
     public let title: String?
     public let content: String
+    public let contentJSON: String?
     public let backgroundMediaRef: String?
     public let contentHash: String?
     public let tags: [String]
@@ -37,6 +38,7 @@ public struct FlowCard: Identifiable, Equatable, Sendable {
         id: String,
         title: String?,
         content: String,
+        contentJSON: String? = nil,
         backgroundMediaRef: String? = nil,
         contentHash: String?,
         tags: [String],
@@ -57,6 +59,7 @@ public struct FlowCard: Identifiable, Equatable, Sendable {
         self.id = id
         self.title = title
         self.content = content
+        self.contentJSON = contentJSON
         self.backgroundMediaRef = backgroundMediaRef
         self.contentHash = contentHash
         self.tags = tags
@@ -75,11 +78,34 @@ public struct FlowCard: Identifiable, Equatable, Sendable {
         self.isOwner = isOwner
     }
 
+    func applyingOwnedAction(_ commit: OwnedCardActionCommit) -> FlowCard {
+        guard id == commit.cardID, isOwner else { return self }
+        var updatedPublic = isPublic
+        var updatedPinned = isPinned
+        var updatedPinnedAt = pinnedAt
+        switch commit {
+        case .visibility(_, let isPublic): updatedPublic = isPublic
+        case .pin(_, let isPinned, let pinnedAt):
+            updatedPinned = isPinned
+            updatedPinnedAt = pinnedAt
+        case .removed: return self
+        }
+        return FlowCard(
+            id: id, title: title, content: content, contentJSON: contentJSON,
+            backgroundMediaRef: backgroundMediaRef, contentHash: contentHash,
+            tags: tags, isPublic: updatedPublic, createdAt: createdAt, updatedAt: updatedAt,
+            favoriteCount: favoriteCount, likeCount: likeCount, commentCount: commentCount,
+            rate: rate, isFavorited: isFavorited, isLiked: isLiked,
+            isPinned: updatedPinned, pinnedAt: updatedPinnedAt, author: author, isOwner: isOwner
+        )
+    }
+
     public func replacingLike(with state: CardLikeState) -> FlowCard {
         FlowCard(
             id: id,
             title: title,
             content: content,
+            contentJSON: contentJSON,
             backgroundMediaRef: backgroundMediaRef,
             contentHash: contentHash,
             tags: tags,
@@ -107,6 +133,7 @@ public struct FlowCard: Identifiable, Equatable, Sendable {
             id: id,
             title: title,
             content: content,
+            contentJSON: contentJSON,
             backgroundMediaRef: backgroundMediaRef,
             contentHash: contentHash,
             tags: tags,
@@ -186,5 +213,19 @@ public enum FlowSwipeResolver {
         }
 
         return predictedEndTranslation > 0 ? .advanceRight : .advanceLeft
+    }
+}
+
+/// A committed favorite state shared between detail, library, and Explore.
+/// Missing counts are allowed when an endpoint returns only the action result.
+public struct CardFavoriteState: Equatable, Sendable {
+    public let cardID: String
+    public let isFavorited: Bool
+    public let favoriteCount: Int?
+
+    public init(cardID: String, isFavorited: Bool, favoriteCount: Int?) {
+        self.cardID = cardID
+        self.isFavorited = isFavorited
+        self.favoriteCount = favoriteCount
     }
 }

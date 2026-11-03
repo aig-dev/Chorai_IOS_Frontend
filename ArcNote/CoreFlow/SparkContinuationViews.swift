@@ -1,4 +1,5 @@
 import CoreFlow
+import Combine
 import SwiftUI
 import UIKit
 
@@ -6,11 +7,7 @@ struct SparkContinuationView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var systemDynamicTypeSize
     @StateObject private var store: SparkSessionStore
-    @StateObject private var likeStore = CardLikeStore(
-        state: CardLikeState(cardID: "", isLiked: false, likeCount: 0),
-        service: NetworkCoreCardLikeService(),
-        onCommit: CardEngagementCenter.shared.publish
-    )
+    @StateObject private var likeStore: CardLikeStore
     @State private var showPopupMenu = false
     @State private var currentMenuCard: UserCard?
     @State private var menuCardIsOwned = false
@@ -19,6 +16,10 @@ struct SparkContinuationView: View {
     @State private var showDetail = false
     @State private var showAuthor = false
     @State private var presentationRevision = 0
+    @State private var showsOfflineFixtureNotice = false
+#if DEBUG
+    private var usesOfflineFixture = false
+#endif
 
     private let actorID: String
     private let rootCardID: String
@@ -35,6 +36,11 @@ struct SparkContinuationView: View {
         self.rootCardID = cardID
         self.onboardingStore = onboardingStore
         self.contextualTipStore = contextualTipStore
+        _likeStore = StateObject(wrappedValue: CardLikeStore(
+            state: CardLikeState(cardID: "", isLiked: false, likeCount: 0),
+            service: NetworkCoreCardLikeService(),
+            onCommit: CardEngagementCenter.shared.publish
+        ))
         let scope = ProcessInfo.processInfo.environment[
             "CHORAI_UI_TEST_SPARK_SESSION_SCOPE"
         ]
@@ -52,41 +58,147 @@ struct SparkContinuationView: View {
         )
     }
 
+#if DEBUG
+    /// Uses the production view and state machine with process-local fixture services.
+    static func fidelityFixture() -> SparkContinuationView {
+        SparkContinuationView(fidelityService: SparkFidelityService())
+    }
+
+    private init(fidelityService service: SparkFidelityService) {
+        actorID = SparkFidelityService.actorID
+        rootCardID = SparkFidelityService.sourceID
+        onboardingStore = nil
+        contextualTipStore = nil
+        usesOfflineFixture = true
+        let session = SparkSessionStore(
+            actorID: SparkFidelityService.actorID,
+            rootSourceAssetID: SparkFidelityService.sourceID,
+            service: service,
+            persistence: SparkFidelityMemoryPersistence()
+        )
+        _store = StateObject(wrappedValue: session)
+        _likeStore = StateObject(wrappedValue: CardLikeStore(
+            state: CardLikeState(cardID: "", isLiked: false, likeCount: 0),
+            service: SparkFidelityLikeService(),
+            onCommit: { state in
+                service.applyLikeState(state)
+                session.applyLikeState(state)
+            }
+        ))
+    }
+#endif
+
+    private var allowsNetworkNavigation: Bool {
+#if DEBUG
+        !usesOfflineFixture
+#else
+        true
+#endif
+    }
+
+    private var allowsNativeMenuPresentation: Bool {
+        if allowsNetworkNavigation { return true }
+#if DEBUG
+        return usesOfflineFixture
+            && LocalDevelopmentPreview.isEnabled
+            && ProcessInfo.processInfo.arguments.contains("--ui-test-spark-native-menus")
+#else
+        return false
+#endif
+    }
+
     var body: some View {
         ZStack {
             sparkAtmosphere
 
-            VStack(spacing: 14) {
+            VStack(spacing: 0) {
                 header
-                if let onboardingStore {
-                    OnboardingGuideLine(
-                        store: onboardingStore,
-                        allowedStates: [
-                            "product_spark_intro",
-                            "product_spark_results",
-                            "product_save_material"
-                        ]
-                    )
+                    .padding(.horizontal, 16)
+                    .padding(.top, 6)
+                    .padding(.bottom, 12)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 18) {
+                        SparkChainRail(
+                            nodes: store.chain,
+                            activeActivityID: store.activeActivityID,
+                            showsPendingNode: store.phase == .triggering || store.phase == .reconciling,
+                            isInteractionLocked: store.isInteractionLocked,
+                            onOpenRoot: {
+                                dismissSparkFavoriteTipIfVisible()
+                                openDetail(rootCardID)
+                            },
+                            onSelect: { nodeID in
+                                dismissSparkFavoriteTipIfVisible()
+                                store.selectNode(activityID: nodeID)
+                            }
+                        )
+                        if let onboardingStore {
+                            OnboardingGuideLine(
+                                store: onboardingStore,
+                                allowedStates: ["product_spark_intro", "product_spark_results", "product_save_material"]
+                            )
+                        }
+                        sourceStrip
+#if DEBUG
+                        if usesOfflineFixture {
+                            Label("Sample results · no AI request", systemImage: "sparkles")
+                                .font(.caption.weight(.medium))
+                                .foregroundStyle(ChoraiTheme.secondaryInk)
+                                .accessibilityIdentifier("spark.fixture.offline")
+                        }
+#endif
+                        if store.currentResult != nil {
+                            HStack(alignment: .firstTextBaseline) {
+                                Text((activeNode?.chainDepth ?? 0) == 0 ? "Related ideas" : "A little further")
+                                    .font(.title3.weight(.semibold))
+                                Spacer()
+                            }
+                        }
+                        phaseContent.id(screenStateIdentifier)
+                    }
+                    .padding(.horizontal, 22)
+                    .padding(.top, 8)
+                    .padding(.bottom, 24)
                 }
-                sourceStrip
-                phaseContent
-                    .id(screenStateIdentifier)
             }
             .id(presentationRevision)
-            .adaptiveContentGutter()
-            .padding(.top, 8)
-            .padding(.bottom, 18)
-            .foregroundStyle(.white)
+            .foregroundStyle(ChoraiTheme.ink)
 
             automationAnchors
                 .id(automationStateIdentity)
         }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if let result = store.currentResult {
+                Button {
+                    dismissSparkFavoriteTipIfVisible()
+                    store.sparkCurrentDeeper()
+                } label: {
+                    HStack(spacing: 12) {
+                        Label("Continue Spark", systemImage: "sparkles")
+                        Spacer()
+                        Image(systemName: "arrow.right")
+                    }
+                    .font(.headline)
+                    .padding(.horizontal, 24)
+                    .frame(maxWidth: .infinity, minHeight: 58)
+                    .foregroundStyle(ChoraiTheme.onAccent)
+                    .background(ChoraiTheme.accent, in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .disabled(store.phase != .loaded || store.isInteractionLocked)
+                .accessibilityIdentifier("spark.continue.\(result.id)")
+                .padding(.horizontal, 22)
+                .padding(.vertical, 12)
+                .background(.regularMaterial)
+            }
+        }
         .navigationBarHidden(true)
         .navigationBarBackButtonHidden(true)
-        .preferredColorScheme(.dark)
-        .overlay {
-            CommentPopupView()
-                .environment(\.colorScheme, .light)
+
+        .alert("Offline Spark preview", isPresented: $showsOfflineFixtureNotice) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text("This fixture uses sample notes. Favorites and likes stay in memory; profiles, full-note routes, comments and sharing require the live app.")
         }
         .popupMenu(
             isPresented: $showPopupMenu,
@@ -94,8 +206,30 @@ struct SparkContinuationView: View {
             cardData: currentMenuCard,
             isOwnCard: menuCardIsOwned,
             isSparkEnabled: store.phase == .loaded,
-            onSpark: store.sparkCurrentDeeper
+            onSpark: store.sparkCurrentDeeper,
+            onRouteDismissed: { dismissal in
+                if case .editor(let cardID) = dismissal.route {
+                    store.refreshOwnedCardAfterEditing(cardID: cardID)
+                }
+            },
+            ownedCardActionRefresh: store.ownedCardActionRefresh,
+            ownedCardActionRefreshInFlight: store.isRefreshingOwnedCard,
+            onOwnedCardActionCommitted: applyOwnedCardAction
         )
+        .alert("Couldn’t refresh this note", isPresented: Binding(
+            get: { store.ownedCardRefreshFailure != nil },
+            set: { if !$0 { store.dismissOwnedCardRefreshFailure() } }
+        ), presenting: store.ownedCardRefreshFailure) { cardID in
+            Button("Retry") { store.refreshOwnedCardAfterEditing(cardID: cardID) }
+            Button("Cancel", role: .cancel) { store.dismissOwnedCardRefreshFailure() }
+        } message: { _ in
+            Text("The last confirmed status is still shown. Try again to load your changes.")
+        }
+        .onChange(of: store.ownedCardActionRefresh?.id) { _ in
+            guard let cardID = currentMenuCard?.id else { return }
+            currentMenuCard = store.results.first(where: { $0.id == cardID })?.card.asUserCard
+                ?? (store.sourceCard?.id == cardID ? store.sourceCard?.asUserCard : nil)
+        }
         .navigationDestination(isPresented: $showDetail) {
             if let cardID = selectedDetailCardID {
                 DetailView(cardId: cardID)
@@ -125,6 +259,15 @@ struct SparkContinuationView: View {
                 )
             )
         }
+        .onReceive(NotificationCenter.default.publisher(for: .choraiFavoriteChanged)) { notification in
+            guard let cardID = notification.userInfo?["cardID"] as? String,
+                  let isFavorited = notification.userInfo?["isFavorited"] as? Bool else { return }
+            store.applyFavoriteState(CardFavoriteState(
+                cardID: cardID,
+                isFavorited: isFavorited,
+                favoriteCount: notification.userInfo?["count"] as? Int
+            ))
+        }
         .onReceive(CardEngagementCenter.shared.likes) { state in
             store.applyLikeState(state)
             likeStore.applyCommitted(state)
@@ -151,114 +294,95 @@ struct SparkContinuationView: View {
     }
 
     private var sparkAtmosphere: some View {
-        ZStack {
-            ZenVisualTokens.background
-            RadialGradient(
-                colors: [
-                    ZenVisualTokens.accent.opacity(0.16),
-                    Color.clear
-                ],
-                center: .topTrailing,
-                startRadius: 20,
-                endRadius: 360
-            )
-            LinearGradient(
-                colors: [Color.clear, Color.black.opacity(0.2)],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        }
-        .ignoresSafeArea()
+        ChoraiBackground()
     }
 
     private var header: some View {
-        HStack(spacing: 10) {
-            Button {
-                dismissSparkFavoriteTipIfVisible()
-                dismiss()
-            } label: {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 18, weight: .semibold))
-                    .frame(width: 44, height: 44)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Back")
-            .accessibilityIdentifier("spark.back")
-
-            Image("menu_spark")
-                .resizable()
-                .scaledToFit()
-                .frame(width: 25, height: 25)
-                .accessibilityHidden(true)
-
-            SparkChainRail(
-                nodes: store.chain,
-                activeActivityID: store.activeActivityID,
-                showsPendingNode: store.phase == .triggering
-                    || store.phase == .reconciling,
-                isInteractionLocked: store.isInteractionLocked,
-                onSelect: { nodeID in
+        ZStack {
+            Text("Spark").font(.headline).foregroundStyle(.primary)
+            HStack {
+                Button {
                     dismissSparkFavoriteTipIfVisible()
-                    store.selectNode(activityID: nodeID)
+                    dismiss()
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 18, weight: .semibold))
+                        .frame(width: 44, height: 44)
                 }
-            )
+                .buttonStyle(.plain)
+                .choraiGlassSurface(cornerRadius: 22)
+                .accessibilityLabel("Back")
+                .accessibilityIdentifier("spark.back")
+                Spacer()
+                if let result = store.currentResult {
+                    headerMenu(for: result.card)
+                    .buttonStyle(.plain)
+                    .choraiGlassSurface(cornerRadius: 22)
+                    .accessibilityLabel("Note actions")
+                    .accessibilityIdentifier("spark.header.menu")
+                }
+            }
         }
         .frame(minHeight: 44)
     }
 
     @ViewBuilder
+    private func headerMenu(for card: FlowCard) -> some View {
+        if allowsNativeMenuPresentation {
+            NativeCardActionsMenu(
+                cardData: card.asUserCard,
+                layout: (card.isOwner || card.author?.id == actorID) ? .grid3x3 : .grid3x2,
+                isOwnCard: card.isOwner || card.author?.id == actorID,
+                isSparkEnabled: store.phase == .loaded,
+                onPrepare: { openMenu(card) },
+                onSpark: store.sparkCurrentDeeper
+            ) {
+                Image(systemName: "ellipsis").frame(width: 44, height: 44)
+            }
+        } else {
+            Button { openMenu(card) } label: {
+                Image(systemName: "ellipsis").frame(width: 44, height: 44)
+            }
+        }
+    }
+
+    @ViewBuilder
     private var sourceStrip: some View {
         if let card = store.sourceCard {
-            HStack(spacing: 8) {
-                if let author = card.author {
-                    Button {
-                        dismissSparkFavoriteTipIfVisible()
-                        openAuthor(author.id)
-                    } label: {
-                        HStack(spacing: 6) {
-                            SparkAvatar(author: author, size: 24)
-                            Text(author.username)
-                                .font(.caption.weight(.semibold))
-                                .lineLimit(1)
-                        }
-                        .frame(minHeight: 44)
+            Button {
+                dismissSparkFavoriteTipIfVisible()
+                openDetail(card.id)
+            } label: {
+                HStack(spacing: 12) {
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(ChoraiTheme.gold)
+                        .frame(width: 3, height: 44)
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(card.isOwner ? "FROM YOUR NOTE" : "FROM \((card.author?.username ?? "CHORAI").uppercased())")
+                            .font(.caption2.weight(.semibold))
+                            .tracking(1)
+                            .foregroundStyle(ChoraiTheme.secondaryInk)
+                        Text(FlowTextPreview.make(card.content))
+                            .font(.subheadline)
+                            .lineLimit(2)
+                            .multilineTextAlignment(.leading)
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Open source author")
-                } else {
-                    SparkAvatar(author: nil, size: 24)
-                        .accessibilityHidden(true)
-                }
-
-                Text(FlowTextPreview.make(card.content))
-                    .font(.caption)
-                    .foregroundStyle(Color.white.opacity(0.56))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
                     .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .padding(.horizontal, 12)
-            .frame(minHeight: 44)
-            .background(
-                Capsule()
-                    .fill(Color.white.opacity(0.055))
-                    .overlay(
-                        Capsule()
-                            .stroke(Color.white.opacity(0.1), lineWidth: 1)
-                    )
-            )
-            .accessibilityElement(children: .contain)
-        } else {
-            Capsule()
-                .fill(Color.white.opacity(0.055))
-                .frame(height: 44)
-                .overlay(alignment: .leading) {
-                    Capsule()
-                        .fill(Color.white.opacity(0.08))
-                        .frame(width: 190, height: 10)
-                        .padding(.leading, 14)
+                    Image(systemName: "arrow.up.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(ChoraiTheme.gold)
                 }
+                .padding(15)
+                .frame(maxWidth: .infinity, minHeight: 74)
+                .background(ChoraiTheme.surface, in: RoundedRectangle(cornerRadius: 18))
+                .overlay(RoundedRectangle(cornerRadius: 18).stroke(ChoraiTheme.separator, lineWidth: 1))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Read source note")
+        } else {
+            RoundedRectangle(cornerRadius: 18)
+                .fill(ChoraiTheme.raisedSurface)
+                .frame(height: 74)
                 .accessibilityHidden(true)
         }
     }
@@ -320,23 +444,6 @@ struct SparkContinuationView: View {
         if let result = store.currentResult {
             VStack(spacing: 8) {
                 ZStack {
-                    if store.nextResult != nil {
-                        RoundedRectangle(
-                            cornerRadius: ZenVisualTokens.cardRadius,
-                            style: .continuous
-                        )
-                        .fill(ZenVisualTokens.cardFill.opacity(0.72))
-                        .overlay(
-                            RoundedRectangle(
-                                cornerRadius: ZenVisualTokens.cardRadius,
-                                style: .continuous
-                            )
-                            .stroke(Color.white.opacity(0.08), lineWidth: 1)
-                        )
-                        .offset(y: 11)
-                        .scaleEffect(0.968)
-                        .accessibilityHidden(true)
-                    }
 
                     SparkResultCard(
                         result: result,
@@ -344,6 +451,9 @@ struct SparkContinuationView: View {
                         isLikeMutationInFlight: likeStore.isMutating,
                         likeErrorMessage: likeErrorMessage(for: result.card.id),
                         allowsSparkDeeper: store.phase == .loaded,
+                        allowsNetworkNavigation: allowsNetworkNavigation,
+                        allowsNativeMenuPresentation: allowsNativeMenuPresentation,
+                        isMenuCardOwned: result.card.isOwner || result.card.author?.id == actorID,
                         forcesAccessibleAppearance: usesAccessibilityEvidenceMode,
                         onNext: {
                             dismissSparkFavoriteTipIfVisible()
@@ -355,7 +465,14 @@ struct SparkContinuationView: View {
                                 onboardingState: onboardingStore?.contextualTipState,
                                 targetIsVisible: !result.card.isOwner
                             )
-                            store.toggleFavoriteCurrent { assetID in
+                            store.toggleFavoriteCurrent(onFavoriteMutationSucceeded: { cardID, isFavorited, count in
+                                guard allowsNetworkNavigation else { return }
+                                NotificationCenter.default.post(
+                                    name: .choraiFavoriteChanged,
+                                    object: nil,
+                                    userInfo: ["cardID": cardID, "isFavorited": isFavorited, "count": count]
+                                )
+                            }) { assetID in
                                 onboardingStore?.receive(
                                     .sparkResultSaved(assetID: assetID)
                                 )
@@ -374,9 +491,9 @@ struct SparkContinuationView: View {
                             openDetail(result.card.id)
                         },
                         onOpenAuthor: {
-                            dismissSparkFavoriteTipIfVisible()
-                            if let authorID = result.card.author?.id {
-                                openAuthor(authorID)
+                            if let author = result.card.author {
+                                dismissSparkFavoriteTipIfVisible()
+                                openAuthor(author.id)
                             }
                         },
                         onOpenMenu: {
@@ -389,6 +506,29 @@ struct SparkContinuationView: View {
                     .id(result.id)
                 }
 
+                HStack {
+                    Button {
+                        dismissSparkFavoriteTipIfVisible()
+                        store.previous()
+                    } label: {
+                        Label("Previous", systemImage: "chevron.left")
+                            .frame(minHeight: 44)
+                    }
+                    .disabled(store.visibleIndex == 0 || store.isInteractionLocked)
+                    .accessibilityIdentifier("spark.previous")
+                    Spacer()
+                    Button {
+                        dismissSparkFavoriteTipIfVisible()
+                        store.advance()
+                    } label: {
+                        Label("Next idea", systemImage: "chevron.right")
+                            .frame(minHeight: 44)
+                    }
+                    .disabled(store.nextResult == nil || store.isInteractionLocked)
+                    .accessibilityIdentifier("spark.next")
+                }
+                .font(.subheadline.weight(.medium))
+                .buttonStyle(.plain)
                 noticeView
             }
         }
@@ -426,13 +566,13 @@ struct SparkContinuationView: View {
         case .saveFailed:
             Text("Favorite failed. Try again.")
                 .font(.footnote)
-                .foregroundStyle(Color.white.opacity(0.72))
+                .foregroundStyle(ChoraiTheme.secondaryInk)
                 .frame(minHeight: 44)
                 .accessibilityIdentifier("spark.save.failed")
         case .moreFailed:
             Text("More results paused.")
                 .font(.footnote)
-                .foregroundStyle(Color.white.opacity(0.72))
+                .foregroundStyle(ChoraiTheme.secondaryInk)
                 .frame(minHeight: 44)
         case nil:
             EmptyView()
@@ -465,7 +605,7 @@ struct SparkContinuationView: View {
                 )
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
         .allowsHitTesting(false)
     }
 
@@ -512,26 +652,53 @@ struct SparkContinuationView: View {
     ) -> some View {
         Text(value)
             .font(.system(size: 1))
-            .foregroundStyle(Color.white.opacity(0.01))
+            .foregroundStyle(ChoraiTheme.ink.opacity(0.01))
             .frame(width: 1, height: 1)
             .id("\(identifier)::\(value)")
             .accessibilityIdentifier(identifier)
     }
 
     private func openDetail(_ cardID: String) {
+        guard allowsNetworkNavigation else {
+            showsOfflineFixtureNotice = true
+            return
+        }
         selectedDetailCardID = cardID
         showDetail = true
     }
 
     private func openAuthor(_ authorID: String) {
+        guard allowsNetworkNavigation else {
+            showsOfflineFixtureNotice = true
+            return
+        }
         selectedAuthorID = authorID
         showAuthor = true
     }
 
+    private func applyOwnedCardAction(_ commit: OwnedCardActionCommit) {
+        let removedSource: Bool
+        if case .removed(let cardID) = commit {
+            removedSource = cardID == rootCardID || cardID == store.sourceCard?.id
+        } else {
+            removedSource = false
+        }
+        store.applyOwnedCardAction(commit)
+        if currentMenuCard?.id == commit.cardID {
+            currentMenuCard = store.results.first(where: { $0.id == commit.cardID })?.card.asUserCard
+                ?? (store.sourceCard?.id == commit.cardID ? store.sourceCard?.asUserCard : nil)
+        }
+        if removedSource { dismiss() }
+    }
+
     private func openMenu(_ card: FlowCard) {
+        guard allowsNativeMenuPresentation else {
+            showsOfflineFixtureNotice = true
+            return
+        }
+        dismissSparkFavoriteTipIfVisible()
         currentMenuCard = card.asUserCard
-        menuCardIsOwned = card.author?.id == actorID
-        showPopupMenu = true
+        menuCardIsOwned = card.isOwner || card.author?.id == actorID
     }
 }
 
@@ -540,49 +707,39 @@ private struct SparkChainRail: View {
     let activeActivityID: String?
     let showsPendingNode: Bool
     let isInteractionLocked: Bool
+    let onOpenRoot: () -> Void
     let onSelect: (String) -> Void
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
+            HStack(spacing: 9) {
+                Button(action: onOpenRoot) {
+                    Image(systemName: "doc.text").frame(width: 44, height: 44)
+                }
+                .buttonStyle(.plain)
+                .choraiGlassSurface(cornerRadius: 22)
+                .accessibilityLabel("Read original source")
                 ForEach(displayedNodes) { node in
-                    Button {
-                        onSelect(node.activityID)
-                    } label: {
-                        ZStack {
-                            Circle()
-                                .fill(
-                                    node.activityID == activeActivityID
-                                        ? ZenVisualTokens.accent.opacity(0.3)
-                                        : Color.white.opacity(0.065)
-                                )
-                            Circle()
-                                .stroke(
-                                    node.activityID == activeActivityID
-                                        ? ZenVisualTokens.accent
-                                        : Color.white.opacity(0.16),
-                                    lineWidth: 1
-                                )
+                    Image(systemName: "chevron.right")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(ChoraiTheme.secondaryInk)
+                        .accessibilityHidden(true)
+                    Button { onSelect(node.activityID) } label: {
+                        HStack(spacing: 6) {
                             Text("\(node.chainDepth + 1)")
-                                .font(.caption2.weight(.semibold))
-                                .foregroundStyle(
-                                    Color.white.opacity(
-                                        node.activityID == activeActivityID ? 1 : 0.5
-                                    )
-                                )
+                                .font(.caption.weight(.semibold).monospacedDigit())
+                            Text(node.chainDepth == 0 ? "First Spark" : "Deeper")
+                                .font(.subheadline.weight(.medium))
                         }
-                        .frame(width: 32, height: 32)
-                        .frame(width: 44, height: 44)
-                        .contentShape(Rectangle())
+                        .padding(.horizontal, 13)
+                        .frame(minHeight: 44)
+                        .foregroundStyle(node.activityID == activeActivityID ? ChoraiTheme.onAccent : ChoraiTheme.ink)
+                        .background(node.activityID == activeActivityID ? ChoraiTheme.accent : ChoraiTheme.surface, in: Capsule())
                     }
                     .buttonStyle(.plain)
                     .disabled(isInteractionLocked)
-                    .accessibilityLabel(
-                        "\(node.sourcePreview), depth \(node.chainDepth)"
-                    )
-                    .accessibilityValue(
-                        node.activityID == activeActivityID ? "Current" : "Ancestor"
-                    )
+                    .accessibilityLabel("\(node.sourcePreview), depth \(node.chainDepth)")
+                    .accessibilityValue(node.activityID == activeActivityID ? "Current" : "Ancestor")
                     .accessibilityIdentifier("spark.chain.\(node.activityID)")
                 }
 
@@ -600,7 +757,7 @@ private struct SparkChainRail: View {
                             )
                         Text("\(pendingDepth + 1)")
                             .font(.caption2.weight(.semibold))
-                            .foregroundStyle(Color.white.opacity(0.72))
+                            .foregroundStyle(ChoraiTheme.secondaryInk)
                     }
                         .frame(width: 32, height: 32)
                         .frame(width: 44, height: 44)
@@ -646,6 +803,9 @@ private struct SparkResultCard: View {
     let isLikeMutationInFlight: Bool
     let likeErrorMessage: String?
     let allowsSparkDeeper: Bool
+    let allowsNetworkNavigation: Bool
+    let allowsNativeMenuPresentation: Bool
+    let isMenuCardOwned: Bool
     let forcesAccessibleAppearance: Bool
     let onNext: () -> Void
     let onToggleFavorite: () -> Void
@@ -664,6 +824,31 @@ private struct SparkResultCard: View {
     @State private var dragOffset: CGSize = .zero
     @State private var isResolvingGesture = false
     @State private var isHorizontalSwipeCommitted = false
+
+    @ViewBuilder
+    private var resultMenu: some View {
+        if allowsNativeMenuPresentation {
+            NativeCardActionsMenu(
+                cardData: result.card.asUserCard,
+                layout: isMenuCardOwned ? .grid3x3 : .grid3x2,
+                isOwnCard: isMenuCardOwned,
+                isSparkEnabled: allowsSparkDeeper,
+                onPrepare: onOpenMenu,
+                onSpark: onSparkDeeper
+            ) {
+                menuLabel
+            }
+        } else {
+            Button(action: onOpenMenu) { menuLabel }
+        }
+    }
+
+    private var menuLabel: some View {
+        Image(systemName: "ellipsis")
+            .font(.body.weight(.semibold))
+            .frame(width: 44, height: 44)
+            .contentShape(Rectangle())
+    }
 
     private var isSparkFavoriteTipVisible: Bool {
         contextualTipStore?.isVisible(
@@ -700,46 +885,37 @@ private struct SparkResultCard: View {
 
                 Spacer()
 
-                HStack(spacing: 2) {
-                    Button(action: onOpenMenu) {
-                        Image(systemName: "ellipsis")
-                            .font(.body.weight(.semibold))
-                            .frame(width: 44, height: 44)
-                            .contentShape(Rectangle())
-                    }
+                if let bucketLabel {
+                    Text(bucketLabel.capitalized)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(ChoraiTheme.gold)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(ChoraiTheme.gold.opacity(0.09), in: Capsule())
+                }
+
+                resultMenu
                     .buttonStyle(.plain)
                     .accessibilityLabel("More actions")
                     .accessibilityIdentifier("spark.menu.\(result.id)")
-
-                    Button(action: onSparkDeeper) {
-                        Image("menu_spark")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 22, height: 22)
-                            .frame(width: 44, height: 44)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(!allowsSparkDeeper)
-                    .accessibilityLabel("Continue Spark")
-                    .accessibilityIdentifier("spark.continue.\(result.id)")
-                }
             }
 
-            if let bucketLabel {
-                Text(bucketLabel)
-                    .font(.caption2.weight(.semibold))
-                    .tracking(0.7)
-                    .foregroundStyle(ZenVisualTokens.accent.opacity(0.82))
-            }
+            ChoraiLevelBadge(rate: result.card.rate, compact: true)
 
             tappableContent
+            Button(action: onOpenCard) {
+                Label("Read full note", systemImage: "arrow.up.right")
+                    .font(.subheadline.weight(.medium))
+                    .frame(minHeight: 44)
+            }
+            .buttonStyle(.plain)
+            Divider()
             engagementFooter
 
             if let likeErrorMessage {
                 Text(likeErrorMessage)
                     .font(.footnote)
-                    .foregroundStyle(Color.white.opacity(0.72))
+                    .foregroundStyle(ChoraiTheme.secondaryInk)
                     .accessibilityIdentifier("spark.like.error.\(result.id)")
             }
         }
@@ -752,6 +928,7 @@ private struct SparkResultCard: View {
                 style: .continuous
             )
         )
+        .choraiCardLevel(rate: result.card.rate)
         .offset(x: dragOffset.width)
         .rotationEffect(
             reduceMotion ? .zero : .degrees(Double(dragOffset.width / 42))
@@ -761,10 +938,13 @@ private struct SparkResultCard: View {
 
     private var tappableContent: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(FlowTextPreview.make(result.card.content))
-                .font(.system(size: 17, weight: .regular, design: .rounded))
+            Text(LibraryCardPreviewParser.parse(
+                content: result.card.content,
+                contentJSON: result.card.contentJSON
+            ).text)
+                .font(.system(.title3, design: .serif))
                 .lineSpacing(5)
-                .lineLimit(dynamicTypeSize.isAccessibilitySize ? 5 : 7)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? 7 : 9)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             if !result.card.tags.isEmpty {
@@ -776,7 +956,7 @@ private struct SparkResultCard: View {
                             .padding(.horizontal, 10)
                             .frame(minHeight: 28)
                             .background(
-                                Capsule().fill(Color.white.opacity(0.08))
+                                Capsule().fill(ChoraiTheme.ink.opacity(0.08))
                             )
                     }
                 }
@@ -784,7 +964,6 @@ private struct SparkResultCard: View {
         }
         .frame(
             maxWidth: .infinity,
-            maxHeight: .infinity,
             alignment: .topLeading
         )
         .contentShape(Rectangle())
@@ -862,14 +1041,18 @@ private struct SparkResultCard: View {
             .accessibilityLabel("Comments")
             .accessibilityValue("\(result.card.commentCount)")
             .accessibilityIdentifier("spark.comment.\(result.id)")
+            #if DEBUG
+            .disabled(!allowsNetworkNavigation && !CommentPresentationFixture.isEnabled)
+            #else
+            .disabled(!allowsNetworkNavigation)
+            #endif
             .simultaneousGesture(
                 TapGesture().onEnded { _ in
                     dismissSparkFavoriteTipIfVisible()
                 }
             )
         }
-        .padding(.bottom, -18)
-        .foregroundStyle(Color.white.opacity(0.58))
+        .foregroundStyle(ChoraiTheme.secondaryInk)
     }
 
     private var cardBackground: some View {
@@ -879,7 +1062,7 @@ private struct SparkResultCard: View {
         )
         .fill(
             reduceTransparency
-                ? Color(red: 0.09, green: 0.075, blue: 0.15)
+                ? ChoraiTheme.surface
                 : ZenVisualTokens.cardFill
         )
         .overlay(
@@ -889,7 +1072,7 @@ private struct SparkResultCard: View {
             )
             .stroke(
                 contrast == .increased
-                    ? Color.white.opacity(0.44)
+                    ? ChoraiTheme.ink.opacity(0.44)
                     : ZenVisualTokens.cardBorder,
                 lineWidth: 1
             )
@@ -1029,11 +1212,11 @@ private struct SparkAvatar: View {
 
     private var placeholder: some View {
         Circle()
-            .fill(Color.white.opacity(0.09))
+            .fill(ChoraiTheme.ink.opacity(0.09))
             .overlay(
-                Image(systemName: "person.fill")
-                    .font(.system(size: size * 0.42))
-                    .foregroundStyle(Color.white.opacity(0.6))
+                Text(author?.username.split(separator: " ").prefix(2).compactMap(\.first).map(String.init).joined() ?? "C")
+                    .font(.system(size: size * 0.36, weight: .medium))
+                    .foregroundStyle(ChoraiTheme.secondaryInk)
             )
     }
 }
@@ -1056,11 +1239,20 @@ private struct SparkCount: View {
         self.iconSize = iconSize
     }
 
+    private var symbol: String {
+        switch image {
+        case "favorite_active": "bookmark.fill"
+        case "favorite": "bookmark"
+        case "like_active": "heart.fill"
+        case "like": "heart"
+        default: "bubble.right"
+        }
+    }
+
     var body: some View {
         HStack(spacing: 6) {
-            Image(image)
-                .resizable()
-                .scaledToFit()
+            Image(systemName: symbol)
+                .font(.system(size: iconSize - 3, weight: .regular))
                 .frame(width: iconSize, height: iconSize)
             Text("\(count)")
                 .font(.system(size: 15, weight: .medium, design: .rounded))
@@ -1068,7 +1260,7 @@ private struct SparkCount: View {
         }
         .frame(minWidth: 44, minHeight: 44)
         .contentShape(Rectangle())
-        .foregroundStyle(Color.white.opacity(0.56))
+        .foregroundStyle(ChoraiTheme.secondaryInk)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(count) \(label)")
     }
@@ -1084,16 +1276,16 @@ private struct SparkDeckSkeleton: View {
         .overlay(
             VStack(alignment: .leading, spacing: 18) {
                 HStack {
-                    Circle().fill(Color.white.opacity(0.08)).frame(width: 28, height: 28)
-                    Capsule().fill(Color.white.opacity(0.08)).frame(width: 94, height: 10)
+                    Circle().fill(ChoraiTheme.ink.opacity(0.08)).frame(width: 28, height: 28)
+                    Capsule().fill(ChoraiTheme.ink.opacity(0.08)).frame(width: 94, height: 10)
                     Spacer()
                 }
-                Capsule().fill(Color.white.opacity(0.08)).frame(width: 72, height: 9)
+                Capsule().fill(ChoraiTheme.ink.opacity(0.08)).frame(width: 72, height: 9)
                 RoundedRectangle(cornerRadius: 6)
-                    .fill(Color.white.opacity(0.08))
+                    .fill(ChoraiTheme.ink.opacity(0.08))
                     .frame(height: 16)
                 RoundedRectangle(cornerRadius: 6)
-                    .fill(Color.white.opacity(0.065))
+                    .fill(ChoraiTheme.ink.opacity(0.065))
                     .frame(maxWidth: 250)
                     .frame(height: 16)
                 Spacer()
@@ -1116,18 +1308,17 @@ private struct SparkLoadingVeil: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            Image("menu_spark")
-                .resizable()
-                .scaledToFit()
+            Image(systemName: "sparkles")
+                .font(.body.weight(.medium))
                 .frame(width: 26, height: 26)
             if isChecking {
                 Text("Checking Spark")
                     .font(.caption.weight(.medium))
             }
         }
-        .foregroundStyle(Color.white.opacity(0.76))
+        .foregroundStyle(ChoraiTheme.secondaryInk)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.black.opacity(0.34))
+        .background(ChoraiTheme.surface.opacity(0.82))
         .clipShape(
             RoundedRectangle(
                 cornerRadius: ZenVisualTokens.cardRadius,
@@ -1145,9 +1336,8 @@ private struct SparkCompactState: View {
 
     var body: some View {
         VStack(spacing: 14) {
-            Image("menu_spark")
-                .resizable()
-                .scaledToFit()
+            Image(systemName: "sparkles")
+                .font(.body.weight(.medium))
                 .frame(width: 38, height: 38)
                 .opacity(0.72)
             Text(title)
@@ -1156,17 +1346,16 @@ private struct SparkCompactState: View {
             if let message {
                 Text(message)
                     .font(.footnote)
-                    .foregroundStyle(Color.white.opacity(0.52))
+                    .foregroundStyle(ChoraiTheme.ink.opacity(0.52))
                     .multilineTextAlignment(.center)
             }
             if let action {
                 Button(action: action) {
-                    Image("menu_spark")
-                        .resizable()
-                        .scaledToFit()
+                    Image(systemName: "sparkles")
+                .font(.body.weight(.medium))
                         .frame(width: 22, height: 22)
                         .frame(width: 44, height: 44)
-                        .background(Circle().fill(Color.white.opacity(0.08)))
+                        .background(Circle().fill(ChoraiTheme.ink.opacity(0.08)))
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Retry Spark")
@@ -1188,9 +1377,8 @@ private struct SparkFailureNotice: View {
                 .lineLimit(2)
             if canRetry {
                 Button(action: retry) {
-                    Image("menu_spark")
-                        .resizable()
-                        .scaledToFit()
+                    Image(systemName: "sparkles")
+                .font(.body.weight(.medium))
                         .frame(width: 18, height: 18)
                         .frame(width: 44, height: 44)
                 }
@@ -1200,6 +1388,162 @@ private struct SparkFailureNotice: View {
         }
         .padding(.leading, 14)
         .padding(.trailing, canRetry ? 4 : 14)
-        .background(Capsule().fill(Color.black.opacity(0.72)))
+        .background(Capsule().fill(ChoraiTheme.raisedSurface))
     }
 }
+
+#if DEBUG
+// Offline fidelity data: the approved V8 Model's first source and its Nia/Leo
+// Spark results. These services cannot access the transport or durable storage.
+private final class SparkFidelityService: CoreSparkServing {
+    static let actorID = "fixture-spark-actor"
+    static let sourceID = "fixture-spark-source"
+    private static let resultIDs = ["fixture-spark-nia", "fixture-spark-leo"]
+    private var cards: [String: FlowCard]
+    private var activities: [String: SparkActivityPage] = [:]
+
+    init() {
+        let source = Self.makeCard(
+            id: Self.sourceID, content: "Some ideas need a little room.\n\nI used to think a good note was a finished thought. Now I think it is a place to return to. A sentence, a question, something noticed on the way home.\n\nWhat if we leave the edges open? Give an idea enough space to meet another one. Let the connection arrive before the conclusion.\n\nToday, I’m keeping the unfinished things.",
+            authorID: Self.actorID, author: "You", tags: ["Writing", "Ideas"], owned: true
+        )
+        let nia = Self.makeCard(
+            id: "fixture-spark-nia", content: "Leave a little unfinished.\n\nA line from my notebook after a long conversation. Sharing an idea before it is polished can give someone else a place to begin.",
+            authorID: "fixture-spark-author-nia", author: "Nia Bell", tags: ["Writing", "Ideas"]
+        )
+        let leo = Self.makeCard(
+            id: "fixture-spark-leo", content: "A garden is never quite finished.\n\nPerhaps knowledge works the same way. We keep what is growing, make room for what is next, and learn to see a path where there wasn’t one before.\n\nThinking together is a way of tending it.\n\nLast winter I stopped sorting every note into a perfect folder. I began leaving small paths instead: a question beside an observation, a passage beside a drawing. The connections were uneven, but they were mine.\n\nA useful garden has more than one pace. There are places to pause and places to pass through. Some ideas need a season before they become useful; others give something back the day you put them in the ground.\n\nWhen a friend adds a different view, the whole arrangement changes. What looked like a dead end becomes a place to sit. A familiar sentence opens onto another person’s experience.\n\nI still make lists. I still pull weeds. But I no longer mistake a tidy system for a living one. The point is to keep something growing.",
+            authorID: "fixture-spark-author-leo", author: "Leo Park", tags: ["Design", "Connections"]
+        )
+        cards = Dictionary(uniqueKeysWithValues: [source, nia, leo].map { ($0.id, $0) })
+    }
+
+    func card(assetID: String) -> AnyPublisher<FlowCard, CoreSparkError> {
+        guard let card = cards[assetID] else { return failure(.notFound) }
+        return value(card)
+    }
+
+    func trigger(sourceAssetID: String, parentActivityID: String?) -> AnyPublisher<SparkActivityPage, CoreSparkError> {
+        guard cards[sourceAssetID] != nil else { return failure(.notFound) }
+        if let parentActivityID, activities[parentActivityID] == nil { return failure(.notFound) }
+        let parent = parentActivityID.flatMap { activities[$0] }
+        let activityID = "fixture-spark-activity-\(activities.count + 1)"
+        // Reusing sample notes is intentional; no generated content or AI request is implied.
+        let results = (Self.resultIDs + [Self.sourceID])
+            .filter { $0 != sourceAssetID }
+            .compactMap { cards[$0] }
+            .map { SparkResult(card: $0, bucket: .related, score: 1, resultID: "\(activityID)-\($0.id)") }
+        let page = SparkActivityPage(
+            activityID: activityID,
+            parentActivityID: parentActivityID,
+            rootActivityID: parent?.rootActivityID ?? activityID,
+            chainDepth: (parent?.chainDepth).map { $0 + 1 } ?? 0,
+            sourceAssetID: sourceAssetID,
+            groups: [.related: results],
+            createdAt: Date(timeIntervalSince1970: 1_792_534_400)
+        )
+        activities[activityID] = page
+        return value(page)
+    }
+
+    func activityResults(activityID: String) -> AnyPublisher<SparkActivityPage, CoreSparkError> {
+        guard let page = activities[activityID] else { return failure(.notFound) }
+        return value(SparkActivityPage(
+            activityID: page.activityID, parentActivityID: page.parentActivityID,
+            rootActivityID: page.rootActivityID, chainDepth: page.chainDepth,
+            sourceAssetID: page.sourceAssetID,
+            groups: page.groups.mapValues { results in
+                results.map { SparkResult(card: cards[$0.id] ?? $0.card, bucket: $0.bucket, score: $0.score, resultID: $0.resultID) }
+            },
+            createdAt: page.createdAt
+        ))
+    }
+
+    func history(sourceAssetID: String, limit: Int) -> AnyPublisher<[SparkHistoryEntry], CoreSparkError> {
+        let history = activities.values.filter { $0.sourceAssetID == sourceAssetID }
+            .sorted { $0.activityID < $1.activityID }
+            .prefix(max(0, limit))
+            .map { SparkHistoryEntry(
+                activityID: $0.activityID, parentActivityID: $0.parentActivityID,
+                sourceAssetID: $0.sourceAssetID, rootActivityID: $0.rootActivityID,
+                chainDepth: $0.chainDepth, createdAt: $0.createdAt ?? .distantPast
+            ) }
+        return value(history)
+    }
+
+    func more(sourceAssetID: String, cursor: String?, limit: Int) -> AnyPublisher<SparkMorePage, CoreSparkError> {
+        value(SparkMorePage(results: [], nextCursor: nil, round: 1, sourceAssetID: sourceAssetID))
+    }
+
+    func favorite(assetID: String, sparkActivityID: String) -> AnyPublisher<Void, CoreSparkError> {
+        guard activities[sparkActivityID] != nil else { return failure(.notFound) }
+        return setFavorite(assetID: assetID, favorited: true)
+    }
+
+    func unfavorite(assetID: String) -> AnyPublisher<Void, CoreSparkError> {
+        setFavorite(assetID: assetID, favorited: false)
+    }
+
+    func applyLikeState(_ state: CardLikeState) {
+        guard let card = cards[state.cardID] else { return }
+        cards[state.cardID] = card.replacingLike(with: state)
+    }
+
+    private func setFavorite(assetID: String, favorited: Bool) -> AnyPublisher<Void, CoreSparkError> {
+        guard let card = cards[assetID], !card.isOwner else { return failure(.forbidden) }
+        let delta = card.isFavorited == favorited ? 0 : (favorited ? 1 : -1)
+        cards[assetID] = card.replacingFavorite(
+            isFavorited: favorited,
+            favoriteCount: max(0, card.favoriteCount + delta)
+        )
+        return value(())
+    }
+
+    private func value<T>(_ value: T) -> AnyPublisher<T, CoreSparkError> {
+        Just(value).setFailureType(to: CoreSparkError.self).eraseToAnyPublisher()
+    }
+
+    private func failure<T>(_ error: CoreSparkError) -> AnyPublisher<T, CoreSparkError> {
+        Fail(error: error).eraseToAnyPublisher()
+    }
+
+    private static func makeCard(
+        id: String, content: String, authorID: String, author: String,
+        tags: [String], owned: Bool = false
+    ) -> FlowCard {
+        FlowCard(
+            id: id, title: nil, content: content, contentHash: nil,
+            tags: tags, isPublic: !owned,
+            createdAt: "2026-10-21T09:00:00Z", updatedAt: "2026-10-21T09:00:00Z",
+            favoriteCount: 0, likeCount: 0, commentCount: 0, rate: 0,
+            isFavorited: false, isLiked: false, isPinned: false, pinnedAt: nil,
+            author: FlowAuthor(id: authorID, username: author, avatarURL: nil),
+            isOwner: owned
+        )
+    }
+}
+
+private actor SparkFidelityLikeService: CoreCardLikeServing {
+    private var likes: [String: Bool] = [:]
+
+    func setLiked(cardID: String, liked: Bool) async throws {
+        likes[cardID] = liked
+    }
+}
+
+private final class SparkFidelityMemoryPersistence: SparkSessionPersisting {
+    private var saved: SparkSessionSnapshot?
+
+    func snapshot(actorID: String, rootSourceAssetID: String) -> SparkSessionSnapshot? {
+        guard saved?.actorID == actorID, saved?.rootSourceAssetID == rootSourceAssetID else { return nil }
+        return saved
+    }
+
+    func save(_ snapshot: SparkSessionSnapshot) { saved = snapshot }
+
+    func remove(actorID: String, rootSourceAssetID: String) {
+        guard saved?.actorID == actorID, saved?.rootSourceAssetID == rootSourceAssetID else { return }
+        saved = nil
+    }
+}
+#endif

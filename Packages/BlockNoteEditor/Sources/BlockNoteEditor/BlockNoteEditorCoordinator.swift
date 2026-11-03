@@ -38,6 +38,26 @@ enum BlockNoteBridgeBootstrap {
     }
 }
 
+enum BlockNoteBodyFocusObservation {
+    static var source: String {
+        """
+        (() => {
+          const report = () => {
+            const root = document.querySelector('.ios-editor-root');
+            const active = document.activeElement;
+            const isFocused = Boolean(root && active && root.contains(active) && active.isContentEditable);
+            window.webkit.messageHandlers.\(BlockNoteEditorProtocol.webKitHandlerName).postMessage({
+              type: 'bodyFocusChanged', isFocused
+            });
+          };
+          const schedule = () => queueMicrotask(report);
+          document.addEventListener('focusin', schedule, true);
+          document.addEventListener('focusout', schedule, true);
+        })();
+        """
+    }
+}
+
 enum BlockNoteNavigationDecision: Equatable {
     case allow
     case cancel
@@ -138,6 +158,9 @@ public final class BlockNoteEditorCoordinator: NSObject {
     private weak var webView: WKWebView?
     private var navigationGate: BlockNoteNavigationGate?
     private var isTornDown = false
+    private var focusObservationRevision = 0
+    private var minimumWritingHeight: Double = 0
+    private var hasFinishedNavigation = false
 
     init(
         document: BlockNoteInitialDocument,
@@ -151,9 +174,27 @@ public final class BlockNoteEditorCoordinator: NSObject {
         super.init()
     }
 
-    func makeWebView() -> WKWebView {
+    func makeWebView(
+        fontScale: Double = 23.0 / 17.0,
+        minimumWritingHeight: Double = 0
+    ) -> WKWebView {
+        self.minimumWritingHeight = BlockNoteEditorAppearance.normalizedMinimumWritingHeight(minimumWritingHeight)
         let userContentController = WKUserContentController()
         BlockNoteBridgeBootstrap.install(in: userContentController)
+        userContentController.addUserScript(WKUserScript(
+            source: BlockNoteBodyFocusObservation.source,
+            injectionTime: .atDocumentEnd,
+            forMainFrameOnly: true,
+            in: BlockNoteBridgeBootstrap.contentWorld
+        ))
+        userContentController.addUserScript(WKUserScript(
+            source: BlockNoteEditorAppearance.installationScript(
+                fontScale: fontScale,
+                minimumWritingHeight: self.minimumWritingHeight
+            ),
+            injectionTime: .atDocumentEnd,
+            forMainFrameOnly: true
+        ))
         userContentController.add(self, name: BlockNoteEditorProtocol.webKitHandlerName)
 
         let configuration = WKWebViewConfiguration()
@@ -201,6 +242,22 @@ public final class BlockNoteEditorCoordinator: NSObject {
         _ handler: @escaping @MainActor (BlockNoteEditorEvent) -> Void
     ) {
         eventHandler = handler
+    }
+
+    func updateMinimumWritingHeight(_ height: Double) {
+        let height = BlockNoteEditorAppearance.normalizedMinimumWritingHeight(height)
+        guard minimumWritingHeight != height else { return }
+        minimumWritingHeight = height
+        applyMinimumWritingHeight()
+    }
+
+    private func applyMinimumWritingHeight() {
+        guard !isTornDown, hasFinishedNavigation, let webView else { return }
+        // This floor comes from SwiftUI's available page, never from the
+        // WebView's content-dependent height. Removing text can shrink again.
+        webView.evaluateJavaScript(
+            BlockNoteEditorAppearance.minimumWritingHeightScript(minimumWritingHeight)
+        )
     }
 
     func teardown() {
@@ -252,15 +309,55 @@ public final class BlockNoteEditorCoordinator: NSObject {
             let data = try JSONEncoder().encode(command)
             let json = String(decoding: data, as: UTF8.self)
             let script = "window.\(BlockNoteEditorProtocol.javaScriptBridgeName).receiveCommand(\(json));"
+            let focusRevision: Int?
+            switch command {
+            case .focus, .blur:
+                focusObservationRevision += 1
+                focusRevision = focusObservationRevision
+            default:
+                focusRevision = nil
+            }
             webView.evaluateJavaScript(script) { [weak self] _, error in
-                guard error != nil else { return }
                 Task { @MainActor in
                     guard let self, !self.isTornDown else { return }
-                    self.apply(self.session.bridgeFailure(code: "javascript_evaluation_failed"))
+                    guard error == nil else {
+                        self.apply(self.session.bridgeFailure(code: "javascript_evaluation_failed"))
+                        return
+                    }
+                    if let focusRevision {
+                        self.reconcileBodyFocus(ifCurrent: focusRevision)
+                    }
                 }
             }
         } catch {
             apply(session.bridgeFailure(code: "command_encoding_failed"))
+        }
+    }
+
+    private func reconcileBodyFocus(ifCurrent revision: Int) {
+        guard !isTornDown,
+              revision == focusObservationRevision,
+              session.state.mutationAllowed,
+              let webView else { return }
+        // Hydration can focus the DOM before the React bridge observes focus.
+        // Repeating focus() then produces no event. Read the real DOM state after
+        // explicit focus/blur instead of treating the command as confirmation.
+        let script = """
+        (() => {
+          const root = document.querySelector('.ios-editor-root');
+          const active = document.activeElement;
+          return Boolean(root && active && root.contains(active) && active.isContentEditable);
+        })();
+        """
+        webView.evaluateJavaScript(script) { [weak self] result, error in
+            Task { @MainActor in
+                guard let self, !self.isTornDown,
+                      revision == self.focusObservationRevision,
+                      self.session.state.mutationAllowed,
+                      error == nil,
+                      let isFocused = result as? Bool else { return }
+                self.apply(self.session.receive(.bodyFocusChanged(isFocused: isFocused)))
+            }
         }
     }
 
@@ -290,7 +387,15 @@ extension BlockNoteEditorCoordinator: WKScriptMessageHandler {
         }
 
         do {
-            apply(session.receive(try decodeMessageBody(message.body)))
+            let decoded = try decodeMessageBody(message.body)
+            if case .bodyFocusChanged = decoded {
+                // DOM focus can change while the document is still hydrating.
+                guard session.state.isBridgeReady else { return }
+                // A genuine newer event takes precedence over an outstanding
+                // command acknowledgement, even if that query finishes later.
+                focusObservationRevision += 1
+            }
+            apply(session.receive(decoded))
         } catch {
             apply(session.malformedMessage())
         }
@@ -306,6 +411,8 @@ extension BlockNoteEditorCoordinator: WKNavigationDelegate {
               ) == true else {
             return
         }
+        hasFinishedNavigation = true
+        applyMinimumWritingHeight()
         apply(session.navigationFinished())
     }
 

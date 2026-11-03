@@ -16,23 +16,43 @@ struct ShareCardView: View {
     }
 
     var body: some View {
-        ZStack {
-            Image("home_bg")
-                .resizable()
-                .scaledToFill()
-                .ignoresSafeArea()
+        NavigationStack {
+            Form {
+                Section {
+                    Text("Share this note as an image.")
+                        .font(.body)
+                    Text("Choose where to send it using the iOS share sheet. Sharing does not change this note’s privacy.")
+                        .font(.footnote)
+                        .foregroundStyle(ChoraiTheme.secondaryInk)
+                    action
+                }
+                .listRowBackground(ChoraiTheme.surface)
 
-            VStack(spacing: 18) {
-                header
-                content
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                action
+                Section("Preview") {
+                    content
+                        .frame(maxWidth: .infinity, minHeight: 160)
+                }
+                .listRowBackground(ChoraiTheme.surface)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .adaptiveContentGutter()
-            .padding(.top, 72)
-            .padding(.bottom, 24)
+            .scrollContentBackground(.hidden)
+            .background(ChoraiTheme.background)
+            .foregroundStyle(ChoraiTheme.ink)
+            .tint(ChoraiTheme.ink)
+            .navigationTitle("Share")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button { dismiss() } label: {
+                        Image(systemName: "xmark")
+                            .frame(minWidth: 44, minHeight: 44)
+                    }
+                    .accessibilityLabel("Close")
+                    .accessibilityIdentifier("share-card.close")
+                }
+            }
         }
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
         .task {
             store.load()
         }
@@ -69,38 +89,12 @@ struct ShareCardView: View {
         )
     }
 
-    private var header: some View {
-        HStack {
-            Button {
-                dismiss()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: 44, height: 44)
-            }
-            .accessibilityLabel("Close")
-            .accessibilityIdentifier("share-card.close")
-
-            Spacer()
-
-            Text("Share")
-                .font(.headline)
-                .foregroundStyle(.white)
-
-            Spacer()
-
-            Color.clear.frame(width: 44, height: 44)
-        }
-        .padding(.top, 8)
-    }
-
     @ViewBuilder
     private var content: some View {
         switch store.phase {
         case .idle, .loading:
             ProgressView()
-                .tint(.white)
+                .tint(ChoraiTheme.ink)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .accessibilityIdentifier("share-card.loading")
         case .ready, .preparingNativeShare:
@@ -112,7 +106,7 @@ struct ShareCardView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 18))
                     .overlay {
                         RoundedRectangle(cornerRadius: 18)
-                            .stroke(Color.white.opacity(0.14), lineWidth: 1)
+                            .stroke(ChoraiTheme.separator, lineWidth: 1)
                     }
                     .accessibilityLabel("Share card preview")
                     .accessibilityIdentifier("share-card.preview")
@@ -133,24 +127,19 @@ struct ShareCardView: View {
             } label: {
                 HStack(spacing: 8) {
                     if store.phase == .preparingNativeShare {
-                        ProgressView().tint(.white)
+                        ProgressView().tint(ChoraiTheme.ink)
                     } else {
-                        Image("menu_share")
+                        Image(systemName: "square.and.arrow.up")
                             .resizable()
                             .scaledToFit()
                             .frame(width: 18, height: 18)
                     }
                     Text("Share")
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(.body.weight(.semibold))
                 }
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity)
-                .frame(minHeight: 48)
-                .background(
-                    Capsule().fill(Color.white.opacity(0.12))
-                )
+                .foregroundStyle(ChoraiTheme.ink)
+                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
             }
-            .buttonStyle(.plain)
             .disabled(store.isBusy)
             .accessibilityIdentifier("share-card.action")
         }
@@ -160,18 +149,18 @@ struct ShareCardView: View {
         VStack(spacing: 14) {
             Text("Share preview unavailable")
                 .font(.headline)
-                .foregroundStyle(.white)
+                .foregroundStyle(ChoraiTheme.ink)
             Text("Your card is unchanged. Try again when the connection is ready.")
                 .font(.footnote)
-                .foregroundStyle(.white.opacity(0.62))
+                .foregroundStyle(ChoraiTheme.secondaryInk)
                 .multilineTextAlignment(.center)
             Button("Try Again") {
                 store.retry()
             }
             .font(.footnote.weight(.semibold))
-            .foregroundStyle(.white)
+            .foregroundStyle(ChoraiTheme.ink)
             .frame(minWidth: 96, minHeight: 40)
-            .background(Capsule().fill(Color.white.opacity(0.12)))
+            .background(Capsule().fill(ChoraiTheme.surface))
             .accessibilityIdentifier("share-card.retry")
             Text(code)
                 .font(.system(size: 1))

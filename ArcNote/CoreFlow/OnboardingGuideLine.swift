@@ -31,13 +31,13 @@ struct OnboardingGuideLine: View {
                     if store.isSending {
                         ProgressView()
                             .controlSize(.small)
-                            .tint(.white.opacity(0.64))
+                            .tint(ChoraiTheme.ink.opacity(0.64))
                     }
                 }
 
                 Text(scene.text)
                     .font(.system(size: 14, weight: .regular, design: .rounded))
-                    .foregroundStyle(.white.opacity(0.82))
+                    .foregroundStyle(ChoraiTheme.ink.opacity(0.82))
                     .lineSpacing(2)
                     .lineLimit(3)
                     .fixedSize(horizontal: false, vertical: true)
@@ -50,7 +50,7 @@ struct OnboardingGuideLine: View {
                             }
                             .buttonStyle(.plain)
                             .font(.system(size: 12, weight: .medium, design: .rounded))
-                            .foregroundStyle(.white.opacity(0.88))
+                            .foregroundStyle(ChoraiTheme.ink.opacity(0.88))
                             .padding(.horizontal, 12)
                             .frame(minHeight: 34)
                             .background(
@@ -73,7 +73,7 @@ struct OnboardingGuideLine: View {
                     }
                     .buttonStyle(.plain)
                     .font(.system(size: 11, design: .rounded))
-                    .foregroundStyle(.white.opacity(0.5))
+                    .foregroundStyle(ChoraiTheme.ink.opacity(0.5))
                     .disabled(store.isSending)
                     .accessibilityLabel("Retry onboarding")
                     .accessibilityIdentifier("onboarding.retry")
@@ -117,7 +117,7 @@ struct OnboardingGuideLine: View {
                             design: .rounded
                         ))
                 }
-                .foregroundStyle(.white.opacity(0.78))
+                .foregroundStyle(ChoraiTheme.ink.opacity(0.78))
                 .padding(.horizontal, 14)
                 .frame(minHeight: 44)
                 .background(
@@ -156,7 +156,7 @@ struct ContextualGuideCallout: View {
         if isVisible {
             Text(tip.copy)
                 .font(.system(size: 13, weight: .medium, design: .rounded))
-                .foregroundStyle(.white.opacity(0.88))
+                .foregroundStyle(ChoraiTheme.ink.opacity(0.88))
                 .lineSpacing(2)
                 .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)

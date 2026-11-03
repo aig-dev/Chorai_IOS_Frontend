@@ -131,7 +131,7 @@ final class MergeTaskRailSourceContractTests: XCTestCase {
         XCTAssertTrue(source.contains("accessibilityReduceMotion"))
         XCTAssertTrue(source.contains("accessibilityReduceTransparency"))
         XCTAssertTrue(source.contains("frame(width: 44, height: 44)"))
-        XCTAssertTrue(source.contains("Image(\"menu_merge\")"))
+        XCTAssertTrue(source.contains("Image(systemName: \"arrow.triangle.merge\")"))
         XCTAssertTrue(source.contains("Image(systemName: \"checkmark\")"))
         XCTAssertTrue(source.contains("accessibilityLabel"))
         XCTAssertTrue(source.contains("accessibilityValue"))

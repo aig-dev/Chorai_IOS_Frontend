@@ -1,0 +1,146 @@
+Command line invocation:
+    /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild test-without-building -project ArcNote.xcodeproj -scheme ArcNoteUITests -destination "platform=iOS Simulator,id=92DE3535-B261-49B5-844F-9BD9B8C241B4" -derivedDataPath /Users/didi/Library/Caches/ChoraiReview/app-derived -parallel-testing-enabled NO "-only-testing:ArcNoteUITests/ArcNoteUITests/testNativeFidelityHomeMenuOpensRealUnboxedEditor" -resultBundlePath /tmp/chorai-review-existing-light.xcresult CODE_SIGNING_ALLOWED=NO
+
+Build settings from command line:
+    CODE_SIGNING_ALLOWED = NO
+
+Resolve Package Graph
+
+
+Resolved source packages:
+  CoreFlow: /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/Packages/CoreFlow @ local
+  AppAuth: https://github.com/openid/AppAuth-iOS.git @ 2.0.0
+  GTMSessionFetcher: https://github.com/google/gtm-session-fetcher.git @ 3.5.0
+  BlockNoteEditor: /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/Packages/BlockNoteEditor @ local
+  SwiftyJSON: https://github.com/SwiftyJSON/SwiftyJSON.git @ 5.0.2
+  Promises: https://github.com/google/promises.git @ 2.4.0
+  GoogleUtilities: https://github.com/google/GoogleUtilities.git @ 8.1.0
+  GTMAppAuth: https://github.com/google/GTMAppAuth.git @ 5.0.0
+  Alamofire: https://github.com/Alamofire/Alamofire.git @ 5.10.2
+  AppCheck: https://github.com/google/app-check.git @ 11.2.0
+  GoogleSignIn: https://github.com/google/GoogleSignIn-iOS @ 9.0.0
+
+Writing result bundle at path:
+	/tmp/chorai-review-existing-light.xcresult
+
+2026-10-27 11:42:39.551 xcodebuild[12377:87178] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-10-27 11:42:40.526877+0800 ArcNoteUITests-Runner[12487:87986] [Default] Running tests...
+    t =      nans Interface orientation changed to Portrait
+Test Suite 'Selected tests' started at 2026-10-27 11:42:41.025.
+Test Suite 'ArcNoteUITests.xctest' started at 2026-10-27 11:42:41.026.
+Test Suite 'ArcNoteUITests' started at 2026-10-27 11:42:41.026.
+Test Case '-[ArcNoteUITests.ArcNoteUITests testNativeFidelityHomeMenuOpensRealUnboxedEditor]' started.
+    t =     0.00s Start Test at 2026-10-27 11:42:41.026
+    t =     0.03s Set Up
+    t =     0.03s Open com.michen.arcnote
+    t =     0.04s     Launch com.michen.arcnote
+2026-10-27 11:42:41.313 xcodebuild[12377:87178] [MT] IDELaunchParametersSnapshot: debugger version lookup failed for path '<nil>': noURL
+2026-10-27 11:42:41.313 xcodebuild[12377:87178] [MT] IDELaunchParametersSnapshot: no debugger version
+2026-10-27 11:42:41.368 xcodebuild[12377:87178] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+objc[12487]: Class UIAccessibilityLoaderWebShared is implemented in both /Library/Developer/CoreSimulator/Volumes/iOS_23F73/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebCore.axbundle/WebCore (0x105f7c310) and /Library/Developer/CoreSimulator/Volumes/iOS_23F73/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebKit.axbundle/WebKit (0x106018398). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+    t =     0.90s         Setting up automation session
+    t =     1.43s         Wait for com.michen.arcnote to idle
+    t =     3.31s Waiting 10.0s for "local-preview.indicator" StaticText to exist
+    t =     4.36s     Checking `Expect predicate `existsNoRetry == 1` for object "local-preview.indicator" StaticText`
+    t =     4.36s         Checking existence of `"local-preview.indicator" StaticText`
+    t =     4.52s Tap "Home" Button
+    t =     4.52s     Wait for com.michen.arcnote to idle
+    t =     4.52s     Find the "Home" Button
+    t =     4.57s     Check for interrupting elements affecting "Home" Button
+    t =     4.61s     Synthesize event
+    t =     4.90s     Wait for com.michen.arcnote to idle
+    t =     6.67s Waiting 5.0s for "Home" NavigationBar to exist
+    t =     7.72s     Checking `Expect predicate `existsNoRetry == 1` for object "Home" NavigationBar`
+    t =     7.72s         Checking existence of `"Home" NavigationBar`
+    t =     7.78s Find the "note.create" Button
+    t =     7.82s Waiting 10.0s for "home.card.menu.preview-note" Button to exist
+    t =     8.86s     Checking `Expect predicate `existsNoRetry == 1` for object "home.card.menu.preview-note" Button`
+    t =     8.86s         Checking existence of `"home.card.menu.preview-note" Button`
+    t =     8.89s Tap "home.card.menu.preview-note" Button
+    t =     8.89s     Wait for com.michen.arcnote to idle
+    t =     8.90s     Find the "home.card.menu.preview-note" Button
+    t =     8.94s     Check for interrupting elements affecting "home.card.menu.preview-note" Button
+    t =     8.97s     Synthesize event
+    t =     9.25s     Wait for com.michen.arcnote to idle
+    t =    10.54s Find the Target Application 'com.michen.arcnote'
+    t =    10.67s Added attachment named 'Fidelity native Home menu'
+    t =    10.67s Waiting 10.0s for "popup-menu.item.edit" Button to exist
+    t =    11.71s     Checking `Expect predicate `existsNoRetry == 1` for object "popup-menu.item.edit" Button`
+    t =    11.71s         Checking existence of `"popup-menu.item.edit" Button`
+    t =    11.78s Tap "popup-menu.item.edit" Button
+    t =    11.78s     Wait for com.michen.arcnote to idle
+    t =    11.78s     Find the "popup-menu.item.edit" Button
+    t =    11.82s     Check for interrupting elements affecting "popup-menu.item.edit" Button
+    t =    11.86s     Synthesize event
+    t =    12.14s     Wait for com.michen.arcnote to idle
+    t =    13.54s Waiting 10.0s for "cardEditorLeadingAction" Button to exist
+    t =    14.58s     Checking `Expect predicate `existsNoRetry == 1` for object "cardEditorLeadingAction" Button`
+    t =    14.58s         Checking existence of `"cardEditorLeadingAction" Button`
+    t =    14.64s Waiting 10.0s for "cardEditorBodyWebView" Any to exist
+    t =    15.68s     Checking `Expect predicate `existsNoRetry == 1` for object "cardEditorBodyWebView" Any`
+    t =    15.68s         Checking existence of `"cardEditorBodyWebView" Any`
+    t =    15.74s Checking existence of `"cardEditorBodyWebView" Any`
+    t =    15.79s Checking existence of `"Note" StaticText`
+    t =    15.81s Find the Target Application 'com.michen.arcnote'
+    t =    15.88s Added attachment named 'Fidelity real editor'
+    t =    15.88s Find the Target Application 'com.michen.arcnote'
+    t =    15.95s Added attachment named 'review-editor-existing'
+    t =    15.95s Find the "cardEditorLeadingAction" Button
+    t =    15.97s Tap "cardEditorLeadingAction" Button
+    t =    15.97s     Wait for com.michen.arcnote to idle
+    t =    15.97s     Find the "cardEditorLeadingAction" Button
+    t =    15.99s     Check for interrupting elements affecting "cardEditorLeadingAction" Button
+    t =    16.01s     Synthesize event
+    t =    16.29s     Wait for com.michen.arcnote to idle
+    t =    16.70s Waiting 5.0s for "note.create" Button to exist
+    t =    17.74s     Checking `Expect predicate `existsNoRetry == 1` for object "note.create" Button`
+    t =    17.74s         Checking existence of `"note.create" Button`
+    t =    17.81s Find the "Home" Button
+    t =    17.85s Waiting 10.0s for "home.card.body.preview-note" Any to exist
+    t =    18.89s     Checking `Expect predicate `existsNoRetry == 1` for object "home.card.body.preview-note" Any`
+    t =    18.89s         Checking existence of `"home.card.body.preview-note" Any`
+    t =    18.93s Tap "home.card.body.preview-note" Any
+    t =    18.93s     Wait for com.michen.arcnote to idle
+    t =    18.93s     Find the "home.card.body.preview-note" Any
+    t =    18.98s     Check for interrupting elements affecting "home.card.body.preview-note" StaticText
+    t =    19.00s     Synthesize event
+    t =    19.29s     Wait for com.michen.arcnote to idle
+    t =    19.77s Waiting 10.0s for "cardEditorLeadingAction" Button to exist
+    t =    20.82s     Checking `Expect predicate `existsNoRetry == 1` for object "cardEditorLeadingAction" Button`
+    t =    20.82s         Checking existence of `"cardEditorLeadingAction" Button`
+    t =    20.86s Find the "Home" Button
+    t =    21.89s     Find the "Home" Button (retry 1)
+    t =    22.94s     Find the "Home" Button (retry 2)
+    t =    22.98s Tap "cardEditorLeadingAction" Button
+    t =    22.98s     Wait for com.michen.arcnote to idle
+    t =    22.98s     Find the "cardEditorLeadingAction" Button
+    t =    23.01s     Check for interrupting elements affecting "cardEditorLeadingAction" Button
+    t =    23.03s     Synthesize event
+    t =    23.32s     Wait for com.michen.arcnote to idle
+    t =    23.71s Waiting 10.0s for "note.create" Button to exist
+    t =    24.75s     Checking `Expect predicate `existsNoRetry == 1` for object "note.create" Button`
+    t =    24.75s         Checking existence of `"note.create" Button`
+    t =    24.81s Find the "note.create" Button
+    t =    24.86s Find the "Home" Button
+    t =    24.89s Tear Down
+Test Case '-[ArcNoteUITests.ArcNoteUITests testNativeFidelityHomeMenuOpensRealUnboxedEditor]' passed (25.184 seconds).
+Test Suite 'ArcNoteUITests' passed at 2026-10-27 11:43:06.210.
+	 Executed 1 test, with 0 failures (0 unexpected) in 25.184 (25.185) seconds
+Test Suite 'ArcNoteUITests.xctest' passed at 2026-10-27 11:43:06.211.
+	 Executed 1 test, with 0 failures (0 unexpected) in 25.184 (25.185) seconds
+Test Suite 'Selected tests' passed at 2026-10-27 11:43:06.211.
+	 Executed 1 test, with 0 failures (0 unexpected) in 25.184 (25.186) seconds
+2026-10-27 11:43:06.241 xcodebuild[12377:87178] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-10-27 11:43:06.241 xcodebuild[12377:87178] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-10-27 11:43:06.253 xcodebuild[12377:87178] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-10-27 11:43:06.253 xcodebuild[12377:87178] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-10-27 11:43:06.520 xcodebuild[12377:87178] [MT] IDETestOperationsObserverDebug: 27.057 elapsed -- Testing started completed.
+2026-10-27 11:43:06.520 xcodebuild[12377:87178] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-27 11:43:06.520 xcodebuild[12377:87178] [MT] IDETestOperationsObserverDebug: 27.057 sec, +27.057 sec -- end
+
+Test session results, code coverage, and logs:
+	/tmp/chorai-review-existing-light.xcresult
+
+** TEST EXECUTE SUCCEEDED **
+
+Testing started

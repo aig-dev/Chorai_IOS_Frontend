@@ -106,6 +106,7 @@ struct NewNoteView: View {
             loadRelatedLinks()
         }
         .cardNavigationHost()
+        .toolbar(.hidden, for: .tabBar)
     }
 
     private func loadExistingCard() {
@@ -306,9 +307,9 @@ private struct CardEditorSessionView: View {
             onRemoveTag: removeTag,
             onRemoveLink: removeOntologyLink,
             onTogglePrivacy: togglePrivacy,
-            onOpenCardActions: cardActionsHandler
+            onOpenCardActions: cardActionsHandler,
+            menuActions: nativeMenuActions
         )
-        .linkPopup()
         .overlay {
             if showCardActions {
                 CardEditorActionBox(
@@ -502,6 +503,26 @@ private struct CardEditorSessionView: View {
     private var cardActionsHandler: (() -> Void)? {
         guard bodyModel.canSave, !isBusy else { return nil }
         return { openCardActions() }
+    }
+
+    private var nativeMenuActions: CardEditorMenuActions {
+        CardEditorMenuActions(
+            isPinned: isPinned,
+            prepare: {
+                completeTagEntry()
+                bodyModel.dismissKeyboard()
+                saveMessage = nil
+                hideSaveFailure()
+            },
+            background: presentBackgroundActions,
+            spark: { performPersistedCardAction(.navigation(CardNavigationRoute.spark)) },
+            merge: { performPersistedCardAction(.navigation(CardNavigationRoute.merge)) },
+            share: { performPersistedCardAction(.notification("ShowCardShare")) },
+            link: addOntologyLink,
+            root: { performPersistedCardAction(.navigation { .root(cardID: $0, type: nil) }) },
+            remove: { showRemoveCardConfirmation = true },
+            togglePin: { performPersistedCardAction(.togglePin) }
+        )
     }
 
     private var editorBackground: CardEditorBackgroundSource {
@@ -1377,12 +1398,12 @@ private struct CardEditorLoadingView: View {
             VStack(spacing: 14) {
                 if isLoading {
                     ProgressView()
-                        .tint(.white)
+                        .tint(ChoraiTheme.accent)
                     Text("Opening note…")
-                        .foregroundStyle(.white.opacity(0.72))
+                        .foregroundStyle(ChoraiTheme.secondaryInk)
                 } else if let errorMessage {
                     Text(errorMessage)
-                        .foregroundStyle(.white.opacity(0.82))
+                        .foregroundStyle(ChoraiTheme.secondaryInk)
                         .multilineTextAlignment(.center)
                     Button("Retry", action: onRetry)
                         .buttonStyle(.borderedProminent)
@@ -1395,7 +1416,7 @@ private struct CardEditorLoadingView: View {
             Button(action: onBack) {
                 Image(systemName: "chevron.left")
                     .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(ChoraiTheme.ink)
                     .frame(width: 44, height: 44)
                     .background(
                         Circle().fill(ZenVisualTokens.background.opacity(0.82))

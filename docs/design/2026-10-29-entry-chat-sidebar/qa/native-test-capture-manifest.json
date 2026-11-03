@@ -1,0 +1,92 @@
+[
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "92DE3535-B261-49B5-844F-9BD9B8C241B4",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "04BC986C-11F0-4969-AFD7-BF34B8AE33A4.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "chat-two-chora-empty_0_62E42202-C3D4-458C-B9E9-2F497788EDF9.png",
+        "timestamp" : 1793267904.095
+      }
+    ],
+    "testIdentifier" : "ChatEmptyStateUITests/testEmptyConversationActionOpensExistingExploreTab()",
+    "testIdentifierURL" : "test://com.apple.xcode/ArcNote/ArcNoteUITests/ChatEmptyStateUITests/testEmptyConversationActionOpensExistingExploreTab"
+  },
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "92DE3535-B261-49B5-844F-9BD9B8C241B4",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "D1BC2FF2-3370-4C9D-A587-DEEB6C46DE17.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "chat-two-chora-accessibility_0_70E535B7-A539-4F4D-B369-96C9F7350876.png",
+        "timestamp" : 1793267919.993
+      }
+    ],
+    "testIdentifier" : "ChatEmptyStateUITests/testEmptyConversationActionRemainsReachableAtAccessibilitySize()",
+    "testIdentifierURL" : "test://com.apple.xcode/ArcNote/ArcNoteUITests/ChatEmptyStateUITests/testEmptyConversationActionRemainsReachableAtAccessibilitySize"
+  },
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "92DE3535-B261-49B5-844F-9BD9B8C241B4",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "67B78CEC-7B8D-4B5D-8B9B-2C94F8DD9CD4.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "sidebar-closed-chat_0_C6EC1B46-4C76-4D40-B8BB-7231C0D31C8B.png",
+        "timestamp" : 1793267965.786
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "92DE3535-B261-49B5-844F-9BD9B8C241B4",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "CA9AA82C-AFBC-40BD-8106-DFE40AD9ECE2.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "sidebar-open-chat_0_53D408A9-D9D1-4220-9CE0-423F82A58F68.png",
+        "timestamp" : 1793267957.75
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "92DE3535-B261-49B5-844F-9BD9B8C241B4",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "EE8F82C4-2D15-4A38-BCC2-1353C4DF3B25.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "sidebar-closed-home_0_EE9AF376-61FE-460F-945E-8920FFFAB8A1.png",
+        "timestamp" : 1793267952.947
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "92DE3535-B261-49B5-844F-9BD9B8C241B4",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "37F6C40B-CEE2-4334-BFCE-52D018FE7ED5.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "sidebar-open-home_0_C5A4AC71-99CC-4F6E-9690-C41BAF3A6C40.png",
+        "timestamp" : 1793267944.849
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "92DE3535-B261-49B5-844F-9BD9B8C241B4",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "C82054A5-D473-494E-99BB-5D7817A26B32.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "sidebar-closed-explore_0_859ADD11-87EA-424C-A0A6-B0FD64DE5F18.png",
+        "timestamp" : 1793267939.338
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "92DE3535-B261-49B5-844F-9BD9B8C241B4",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "4F3944D6-C60E-4DEF-801A-88380EA25775.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "sidebar-open-explore_0_B3C1F3FA-70C8-4B66-B43A-D7CA49425CF1.png",
+        "timestamp" : 1793267931.071
+      }
+    ],
+    "testIdentifier" : "RootHeaderAlignmentUITests/testSidebarDismissalPreservesEachRootViewportAndSettingsReturnsToDrawer()",
+    "testIdentifierURL" : "test://com.apple.xcode/ArcNote/ArcNoteUITests/RootHeaderAlignmentUITests/testSidebarDismissalPreservesEachRootViewportAndSettingsReturnsToDrawer"
+  }
+]

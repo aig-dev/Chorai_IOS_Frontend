@@ -49,7 +49,7 @@ final class MergeBackgroundNavigationSourceContractTests: XCTestCase {
 
         let handler = String(tabBar[start.lowerBound..<end.lowerBound])
         XCTAssertTrue(handler.contains("coordinator.mergeCompleted(cardID:"))
-        XCTAssertTrue(handler.contains("navigationPath.removeLast"))
+        XCTAssertTrue(handler.contains("clearTabNavigationPaths()"))
         XCTAssertTrue(handler.contains("onMyNotesTapped()"))
         XCTAssertFalse(
             handler.contains("navigationPath.append(TabRoute.detail")
@@ -65,11 +65,14 @@ final class MergeBackgroundNavigationSourceContractTests: XCTestCase {
         XCTAssertTrue(home.contains(".onChange(of: committedCardID)"))
         XCTAssertTrue(home.contains("cardsManager.promoteCommittedCard(id:"))
         XCTAssertTrue(home.contains(".onChange(of: refreshID)"))
-        XCTAssertTrue(
-            home.contains(
-                "loadUserCards(refresh: true, sortBy: \"updated_at\", sortOrder: \"desc\")"
-            )
-        )
+        let loadStart = try XCTUnwrap(home.range(of: "private func loadUserCards()"))
+        let loadEnd = try XCTUnwrap(home.range(of: "private func handleOwnedCardActionCommit", range: loadStart.upperBound..<home.endIndex))
+        let load = String(home[loadStart.lowerBound..<loadEnd.lowerBound])
+        XCTAssertTrue(load.contains("let descriptor = selectedSortOption.descriptor"))
+        XCTAssertTrue(load.contains("refresh: true"))
+        XCTAssertTrue(load.contains("sortBy: descriptor.field.apiName"))
+        XCTAssertTrue(load.contains("sortOrder: descriptor.order.apiName"))
+        XCTAssertFalse(load.contains("selectedFilter ="), "A Merge refresh preserves the user's chosen Library sort")
         XCTAssertTrue(home.contains("selectedSegment = 0"))
         XCTAssertTrue(cardsManager.contains("func promoteCommittedCard(id:"))
         XCTAssertTrue(cardsManager.contains("networkManager.getCard(id:"))

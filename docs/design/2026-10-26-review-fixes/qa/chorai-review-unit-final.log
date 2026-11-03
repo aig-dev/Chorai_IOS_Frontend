@@ -1,0 +1,228 @@
+Building for debugging...
+[1 / 5]
+Build complete! (0.31 sec)
+Test Suite 'Selected tests' started at 2026-10-27 11:40:31.246.
+Test Suite 'CoreFlowTests.xctest' started at 2026-10-27 11:40:31.248.
+Test Suite 'CardEditingStoreTests' started at 2026-10-27 11:40:31.248.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testAdoptedLegacyCardIDEnablesCanonicalUnlink]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testAdoptedLegacyCardIDEnablesCanonicalUnlink]' passed (0.003 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testApplyBodyRevisionAtomicallyPreservesNilTitleAndMetadata]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testApplyBodyRevisionAtomicallyPreservesNilTitleAndMetadata]' passed (0.001 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testApplyBodyRevisionDuringSaveKeepsNewerBodyDirty]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testApplyBodyRevisionDuringSaveKeepsNewerBodyDirty]' passed (0.001 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testApplyBodyRevisionPreservesHiddenLegacyTitleAtExactRevision]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testApplyBodyRevisionPreservesHiddenLegacyTitleAtExactRevision]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testApplyBodyRevisionRejectsStaleBodyWithoutMutatingDraft]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testApplyBodyRevisionRejectsStaleBodyWithoutMutatingDraft]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testBackgroundFailureKeepsCommittedRefUntilRetrySucceeds]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testBackgroundFailureKeepsCommittedRefUntilRetrySucceeds]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testBackgroundRetryDoesNotCreateDuplicateCard]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testBackgroundRetryDoesNotCreateDuplicateCard]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testBackgroundRetryUsesCapturedImageAfterNewImageIsStaged]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testBackgroundRetryUsesCapturedImageAfterNewImageIsStaged]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testChangedBootstrapRevisionDoesNotRebaseCommittedRevision]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testChangedBootstrapRevisionDoesNotRebaseCommittedRevision]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testCommitEquivalentHandlesLegacyAndBlocklessObjectBodies]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testCommitEquivalentHandlesLegacyAndBlocklessObjectBodies]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testCommitEquivalentMatchesEditorArrayToServerEnvelope]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testCommitEquivalentMatchesEditorArrayToServerEnvelope]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testCommitEquivalentRejectsBlockOrderContentAndScalarTypeChanges]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testCommitEquivalentRejectsBlockOrderContentAndScalarTypeChanges]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testCommitEquivalentRejectsNilEmptyAndDifferentMalformedJSON]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testCommitEquivalentRejectsNilEmptyAndDifferentMalformedJSON]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testCreateLinkFailureDoesNotPublishLocalRelationship]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testCreateLinkFailureDoesNotPublishLocalRelationship]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testCreateRetryReusesExactRawJSONForCommitEquivalentDraft]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testCreateRetryReusesExactRawJSONForCommitEquivalentDraft]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testCreateRetryReusesLifecycleRequestIDAndExactDraftAfterMutation]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testCreateRetryReusesLifecycleRequestIDAndExactDraftAfterMutation]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testDeleteLinkAllowsEditedCardToBeTargetOfCanonicalEdge]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testDeleteLinkAllowsEditedCardToBeTargetOfCanonicalEdge]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testDeleteLinkFailureRetainsLinkUntilCanonicalSuccess]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testDeleteLinkFailureRetainsLinkUntilCanonicalSuccess]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testDeleteLinkRejectsEdgeUnrelatedToEditedCard]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testDeleteLinkRejectsEdgeUnrelatedToEditedCard]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testDraftAcceptsImageOnlyStructuredDocument]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testDraftAcceptsImageOnlyStructuredDocument]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testDraftRejectsEmptyFallbackAndStructuredBody]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testDraftRejectsEmptyFallbackAndStructuredBody]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testDraftRejectsMalformedStructuredDocument]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testDraftRejectsMalformedStructuredDocument]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testDraftRejectsScalarStructuredDocument]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testDraftRejectsScalarStructuredDocument]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testDraftRejectsSemanticallyEmptyStructuredDocuments]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testDraftRejectsSemanticallyEmptyStructuredDocuments]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testEnsurePersistedKeepsPendingBackgroundFailureVisible]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testEnsurePersistedKeepsPendingBackgroundFailureVisible]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testEnsurePersistedReturnsCreatedIDWithoutOwningPickerPresentation]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testEnsurePersistedReturnsCreatedIDWithoutOwningPickerPresentation]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testEquivalentRevisionDoesNotRebaseAfterUncertainUpdateFailure]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testEquivalentRevisionDoesNotRebaseAfterUncertainUpdateFailure]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testEquivalentRevisionDoesNotRebaseDuringActiveBackgroundWrite]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testEquivalentRevisionDoesNotRebaseDuringActiveBackgroundWrite]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testExistingDirtyNoteSaveUsesUpdate]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testExistingDirtyNoteSaveUsesUpdate]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testFailedPrerequisiteSaveDoesNotCreateLink]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testFailedPrerequisiteSaveDoesNotCreateLink]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testHydratedServerJSONReformatDoesNotMakeEditorSnapshotDirty]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testHydratedServerJSONReformatDoesNotMakeEditorSnapshotDirty]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testHydrateDuringBackgroundFailurePreservesPendingIntentAndRetry]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testHydrateDuringBackgroundFailurePreservesPendingIntentAndRetry]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testHydrateDuringBackgroundWriteKeepsOperationBusyAndRecordsSuccess]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testHydrateDuringBackgroundWriteKeepsOperationBusyAndRecordsSuccess]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testHydrateDuringCreateRetainsCanonicalIDAndNextSaveUpdates]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testHydrateDuringCreateRetainsCanonicalIDAndNextSaveUpdates]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testHydrateDuringLinkFailurePreservesExactRetryPayload]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testHydrateDuringLinkFailurePreservesExactRetryPayload]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testHydrateDuringUpdateKeepsOperationBusyAndConfirmedWriteDirty]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testHydrateDuringUpdateKeepsOperationBusyAndConfirmedWriteDirty]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testHydrateReplacesCanonicalEditorStateWithoutCallingService]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testHydrateReplacesCanonicalEditorStateWithoutCallingService]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testHydrateThenTagEditCapturesStructuredFieldsInUpdate]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testHydrateThenTagEditCapturesStructuredFieldsInUpdate]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testInlineImageUploadFailureDoesNotMutateBody]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testInlineImageUploadFailureDoesNotMutateBody]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testInlineImageUploadReturnsInsertableReferenceWithoutMutatingBody]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testInlineImageUploadReturnsInsertableReferenceWithoutMutatingBody]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testInvalidBackgroundDuringSaveDoesNotReplaceActivePhase]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testInvalidBackgroundDuringSaveDoesNotReplaceActivePhase]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testInvalidBackgroundNeverCallsServiceOrReplacesCommittedRef]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testInvalidBackgroundNeverCallsServiceOrReplacesCommittedRef]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testInvalidLinkReplacesOlderRetryContextAtomically]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testInvalidLinkReplacesOlderRetryContextAtomically]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testLaterBodyRevisionRemainsDirtyAfterEarlierSaveCompletes]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testLaterBodyRevisionRemainsDirtyAfterEarlierSaveCompletes]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testLinkCreationFollowsSuccessfulPrerequisitePersistence]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testLinkCreationFollowsSuccessfulPrerequisitePersistence]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testNewNoteSaveCreatesCanonicalCardOnce]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testNewNoteSaveCreatesCanonicalCardOnce]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testNewNoteSaveRejectsEmptyStructuredDocumentWithoutCreatingCard]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testNewNoteSaveRejectsEmptyStructuredDocumentWithoutCreatingCard]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testReconcileExplicitCreateLinkNotFoundClearsIntentAfterCanonicalAbsence]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testReconcileExplicitCreateLinkNotFoundClearsIntentAfterCanonicalAbsence]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testReconcileFailedCreateLinkReadsCommittedCanonicalLinkAfterLostResponse]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testReconcileFailedCreateLinkReadsCommittedCanonicalLinkAfterLostResponse]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testReconcileFailedDeleteLinkReadsCommittedCanonicalAbsenceAfterLostResponse]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testReconcileFailedDeleteLinkReadsCommittedCanonicalAbsenceAfterLostResponse]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testReconcileFailedRelationshipFetchFailureKeepsRetryContext]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testReconcileFailedRelationshipFetchFailureKeepsRetryContext]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testReconcileFailedRelationshipMutationRefusesBackgroundFailure]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testReconcileFailedRelationshipMutationRefusesBackgroundFailure]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testReconcileFailedRelationshipMutationRefusesDraftFailure]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testReconcileFailedRelationshipMutationRefusesDraftFailure]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testRemovalFailureKeepsCommittedReferenceAndRemovalIntent]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testRemovalFailureKeepsCommittedReferenceAndRemovalIntent]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testRemovalRetryPreservesNewerReplacementIntent]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testRemovalRetryPreservesNewerReplacementIntent]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testRemovalWithoutCommittedBackgroundCancelsLocalReplacement]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testRemovalWithoutCommittedBackgroundCancelsLocalReplacement]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testRemoveAfterUncertainReplacementWithoutOriginalStagesCompensation]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testRemoveAfterUncertainReplacementWithoutOriginalStagesCompensation]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testReplaceLinksPreservesUnsavedDraftAndStagedBackground]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testReplaceLinksPreservesUnsavedDraftAndStagedBackground]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testReplacementSupersedesStagedRemoval]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testReplacementSupersedesStagedRemoval]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testRestoreAfterFailedRemovalPreservesUncertainWriteAndExactRetry]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testRestoreAfterFailedRemovalPreservesUncertainWriteAndExactRetry]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testRestoreAfterFailedReplacementPreservesUncertainWriteAndExactRetry]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testRestoreAfterFailedReplacementPreservesUncertainWriteAndExactRetry]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testRestoreClearsStagedMutationAndKeepsCommittedReference]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testRestoreClearsStagedMutationAndKeepsCommittedReference]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testSaveAcceptsObjectStructuredDocument]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testSaveAcceptsObjectStructuredDocument]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testSaveFailureKeepsNormalizedDraftForExactRetry]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testSaveFailureKeepsNormalizedDraftForExactRetry]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testSaveRejectsEmptyFallbackAndStructuredBodyWithoutCallingService]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testSaveRejectsEmptyFallbackAndStructuredBodyWithoutCallingService]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testSaveRejectsInvalidStructuredDocumentWithoutCallingService]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testSaveRejectsInvalidStructuredDocumentWithoutCallingService]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testServerJSONReformatDoesNotMakeSavedEditorSnapshotDirty]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testServerJSONReformatDoesNotMakeSavedEditorSnapshotDirty]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testStageBackgroundBeforeCardIDOnlyChangesLocalPreview]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testStageBackgroundBeforeCardIDOnlyChangesLocalPreview]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testStageBackgroundRemovalDefersDeleteUntilSave]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testStageBackgroundRemovalDefersDeleteUntilSave]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testStagingBackgroundAfterCreateFailureKeepsDraftRetryable]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testStagingBackgroundAfterCreateFailureKeepsDraftRetryable]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testTagEditDoesNotDiscardStructuredDocument]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testTagEditDoesNotDiscardStructuredDocument]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testUpdateDraftNormalizesTagsWithoutCallingService]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testUpdateDraftNormalizesTagsWithoutCallingService]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditingStoreTests testUpdateRetryReusesExactRawJSONForCommitEquivalentCurrentDraft]' started.
+Test Case '-[CoreFlowTests.CardEditingStoreTests testUpdateRetryReusesExactRawJSONForCommitEquivalentCurrentDraft]' passed (0.000 seconds).
+Test Suite 'CardEditingStoreTests' passed at 2026-10-27 11:40:31.266.
+	 Executed 73 tests, with 0 failures (0 unexpected) in 0.016 (0.019) seconds
+Test Suite 'CardEditorShellSourceContractTests' started at 2026-10-27 11:40:31.266.
+Test Case '-[CoreFlowTests.CardEditorShellSourceContractTests testAmbientLightUsesViewportRelativeCentersInsideTheScene]' started.
+Test Case '-[CoreFlowTests.CardEditorShellSourceContractTests testAmbientLightUsesViewportRelativeCentersInsideTheScene]' passed (0.001 seconds).
+Test Case '-[CoreFlowTests.CardEditorShellSourceContractTests testAppTargetOwnsFocusedCardEditorFiles]' started.
+Test Case '-[CoreFlowTests.CardEditorShellSourceContractTests testAppTargetOwnsFocusedCardEditorFiles]' passed (0.012 seconds).
+Test Case '-[CoreFlowTests.CardEditorShellSourceContractTests testBackgroundActionsUseNativeContextualDialog]' started.
+Test Case '-[CoreFlowTests.CardEditorShellSourceContractTests testBackgroundActionsUseNativeContextualDialog]' passed (0.001 seconds).
+Test Case '-[CoreFlowTests.CardEditorShellSourceContractTests testBackgroundDecorationsNeverEnterTheAccessibilityTree]' started.
+Test Case '-[CoreFlowTests.CardEditorShellSourceContractTests testBackgroundDecorationsNeverEnterTheAccessibilityTree]' passed (0.001 seconds).
+Test Case '-[CoreFlowTests.CardEditorShellSourceContractTests testBackgroundSupportsLocalAndRemoteImagesInsideBodySurface]' started.
+Test Case '-[CoreFlowTests.CardEditorShellSourceContractTests testBackgroundSupportsLocalAndRemoteImagesInsideBodySurface]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditorShellSourceContractTests testBodyAdapterKeepsNativeAndNetworkStateOutsideBridge]' started.
+Test Case '-[CoreFlowTests.CardEditorShellSourceContractTests testBodyAdapterKeepsNativeAndNetworkStateOutsideBridge]' passed (0.003 seconds).
+Test Case '-[CoreFlowTests.CardEditorShellSourceContractTests testCardLinkBridgeEventUsesDedicatedNativeCallback]' started.
+Test Case '-[CoreFlowTests.CardEditorShellSourceContractTests testCardLinkBridgeEventUsesDedicatedNativeCallback]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditorShellSourceContractTests testCompatibilityBlockKeepsFallbackAndFocusTracksWebBody]' started.
+Test Case '-[CoreFlowTests.CardEditorShellSourceContractTests testCompatibilityBlockKeepsFallbackAndFocusTracksWebBody]' passed (0.002 seconds).
+Test Case '-[CoreFlowTests.CardEditorShellSourceContractTests testDebugAppRouteExposesDeterministicCardEditorFixture]' started.
+Test Case '-[CoreFlowTests.CardEditorShellSourceContractTests testDebugAppRouteExposesDeterministicCardEditorFixture]' passed (0.018 seconds).
+Test Case '-[CoreFlowTests.CardEditorShellSourceContractTests testDetailViewConsumesSharedMetadataPresentation]' started.
+Test Case '-[CoreFlowTests.CardEditorShellSourceContractTests testDetailViewConsumesSharedMetadataPresentation]' passed (0.001 seconds).
+Test Case '-[CoreFlowTests.CardEditorShellSourceContractTests testEditorActionBoxFillsRowsFromTheLeadingEdge]' started.
+Test Case '-[CoreFlowTests.CardEditorShellSourceContractTests testEditorActionBoxFillsRowsFromTheLeadingEdge]' passed (0.001 seconds).
+Test Case '-[CoreFlowTests.CardEditorShellSourceContractTests testEditorRespectsMotionTransparencyAndContrastPreferences]' started.
+Test Case '-[CoreFlowTests.CardEditorShellSourceContractTests testEditorRespectsMotionTransparencyAndContrastPreferences]' passed (0.001 seconds).
+Test Case '-[CoreFlowTests.CardEditorShellSourceContractTests testEditorSurfacesUseAccessibilityAwareLiquidGlassFamily]' started.
+Test Case '-[CoreFlowTests.CardEditorShellSourceContractTests testEditorSurfacesUseAccessibilityAwareLiquidGlassFamily]' passed (0.002 seconds).
+Test Case '-[CoreFlowTests.CardEditorShellSourceContractTests testEmptyEditorAssignsRemainingPageHeightToTheRealWritingSurface]' started.
+Test Case '-[CoreFlowTests.CardEditorShellSourceContractTests testEmptyEditorAssignsRemainingPageHeightToTheRealWritingSurface]' passed (0.001 seconds).
+Test Case '-[CoreFlowTests.CardEditorShellSourceContractTests testFatalBridgeFailureUnmountsTheEditorAndRetriesWithANewSession]' started.
+Test Case '-[CoreFlowTests.CardEditorShellSourceContractTests testFatalBridgeFailureUnmountsTheEditorAndRetriesWithANewSession]' passed (0.001 seconds).
+Test Case '-[CoreFlowTests.CardEditorShellSourceContractTests testFloatingControlSymbolsStayInsideFixedHitTargetsAtLargeType]' started.
+Test Case '-[CoreFlowTests.CardEditorShellSourceContractTests testFloatingControlSymbolsStayInsideFixedHitTargetsAtLargeType]' passed (0.002 seconds).
+Test Case '-[CoreFlowTests.CardEditorShellSourceContractTests testInlineImageProgressAndRecoverableMessagesDoNotRequireRetryAction]' started.
+Test Case '-[CoreFlowTests.CardEditorShellSourceContractTests testInlineImageProgressAndRecoverableMessagesDoNotRequireRetryAction]' passed (0.001 seconds).
+Test Case '-[CoreFlowTests.CardEditorShellSourceContractTests testInlineImageSourceUIIsNativeAndCameraSafe]' started.
+Test Case '-[CoreFlowTests.CardEditorShellSourceContractTests testInlineImageSourceUIIsNativeAndCameraSafe]' passed (0.001 seconds).
+Test Case '-[CoreFlowTests.CardEditorShellSourceContractTests testLinkPresentationMetadataSurvivesEveryEditorMapping]' started.
+Test Case '-[CoreFlowTests.CardEditorShellSourceContractTests testLinkPresentationMetadataSurvivesEveryEditorMapping]' passed (0.004 seconds).
+Test Case '-[CoreFlowTests.CardEditorShellSourceContractTests testMetadataRowsShareStylingAndKeepUnlinkInlineAndDirectional]' started.
+Test Case '-[CoreFlowTests.CardEditorShellSourceContractTests testMetadataRowsShareStylingAndKeepUnlinkInlineAndDirectional]' passed (0.006 seconds).
+Test Case '-[CoreFlowTests.CardEditorShellSourceContractTests testNativeMoreMenuPreparesEditingStateOnPresentation]' started.
+Test Case '-[CoreFlowTests.CardEditorShellSourceContractTests testNativeMoreMenuPreparesEditingStateOnPresentation]' passed (0.001 seconds).
+Test Case '-[CoreFlowTests.CardEditorShellSourceContractTests testPhotoAndTagAreFixedBeforeTypedCommandsScrollHorizontally]' started.
+Test Case '-[CoreFlowTests.CardEditorShellSourceContractTests testPhotoAndTagAreFixedBeforeTypedCommandsScrollHorizontally]' passed (0.001 seconds).
+Test Case '-[CoreFlowTests.CardEditorShellSourceContractTests testPlainWritingPagePreservesImageVeilAndContentClipping]' started.
+Test Case '-[CoreFlowTests.CardEditorShellSourceContractTests testPlainWritingPagePreservesImageVeilAndContentClipping]' passed (0.002 seconds).
+Test Case '-[CoreFlowTests.CardEditorShellSourceContractTests testPrematureCardLinkRequestDoesNotFailAppEditorSession]' started.
+Test Case '-[CoreFlowTests.CardEditorShellSourceContractTests testPrematureCardLinkRequestDoesNotFailAppEditorSession]' passed (0.000 seconds).
+Test Case '-[CoreFlowTests.CardEditorShellSourceContractTests testSharedActionBoxOwnsMainstreamSurfaceAndSemanticTiles]' started.
+Test Case '-[CoreFlowTests.CardEditorShellSourceContractTests testSharedActionBoxOwnsMainstreamSurfaceAndSemanticTiles]' passed (0.005 seconds).
+Test Case '-[CoreFlowTests.CardEditorShellSourceContractTests testShellUsesOneSemanticLeadingControlWithoutInlineSave]' started.
+Test Case '-[CoreFlowTests.CardEditorShellSourceContractTests testShellUsesOneSemanticLeadingControlWithoutInlineSave]' passed (0.003 seconds).
+Test Case '-[CoreFlowTests.CardEditorShellSourceContractTests testShellUsesStableBodyTagLinkHierarchyWithoutHeaderOrLazyStack]' started.
+Test Case '-[CoreFlowTests.CardEditorShellSourceContractTests testShellUsesStableBodyTagLinkHierarchyWithoutHeaderOrLazyStack]' passed (0.003 seconds).
+Test Case '-[CoreFlowTests.CardEditorShellSourceContractTests testTagRowReplacesAddCapsuleWithFocusedInlineField]' started.
+Test Case '-[CoreFlowTests.CardEditorShellSourceContractTests testTagRowReplacesAddCapsuleWithFocusedInlineField]' passed (0.005 seconds).
+Test Case '-[CoreFlowTests.CardEditorShellSourceContractTests testTrailingToolsMenuReachesExistingTagAndFormattingWorkflows]' started.
+Test Case '-[CoreFlowTests.CardEditorShellSourceContractTests testTrailingToolsMenuReachesExistingTagAndFormattingWorkflows]' passed (0.002 seconds).
+Test Case '-[CoreFlowTests.CardEditorShellSourceContractTests testUnsupportedSelectionsDisableSelectionCommands]' started.
+Test Case '-[CoreFlowTests.CardEditorShellSourceContractTests testUnsupportedSelectionsDisableSelectionCommands]' passed (0.001 seconds).
+Test Case '-[CoreFlowTests.CardEditorShellSourceContractTests testWritingBodyKeepsStatusCloseAndTagsAfterTheActualDocument]' started.
+Test Case '-[CoreFlowTests.CardEditorShellSourceContractTests testWritingBodyKeepsStatusCloseAndTagsAfterTheActualDocument]' passed (0.001 seconds).
+Test Suite 'CardEditorShellSourceContractTests' passed at 2026-10-27 11:40:31.350.
+	 Executed 31 tests, with 0 failures (0 unexpected) in 0.083 (0.084) seconds
+Test Suite 'LibrarySearchSessionTests' started at 2026-10-27 11:40:31.350.
+Test Case '-[CoreFlowTests.LibrarySearchSessionTests testLibrarySortOptionsKeepTheExistingFilterContract]' started.
+Test Case '-[CoreFlowTests.LibrarySearchSessionTests testLibrarySortOptionsKeepTheExistingFilterContract]' passed (0.000 seconds).
+Test Suite 'LibrarySearchSessionTests' passed at 2026-10-27 11:40:31.351.
+	 Executed 1 test, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'CoreFlowTests.xctest' passed at 2026-10-27 11:40:31.351.
+	 Executed 105 tests, with 0 failures (0 unexpected) in 0.100 (0.103) seconds
+Test Suite 'Selected tests' passed at 2026-10-27 11:40:31.351.
+	 Executed 105 tests, with 0 failures (0 unexpected) in 0.100 (0.105) seconds

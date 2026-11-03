@@ -204,12 +204,12 @@ struct LibrarySearchResultsView: View {
     private var resultSummary: some View {
         HStack(spacing: 8) {
             Text(manager.isLoading ? "Searching…" : resultCountLabel)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(Color.white.opacity(0.82))
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(ChoraiTheme.ink)
 
             Text("for “\(query)”")
-                .font(.system(size: 14, weight: .regular))
-                .foregroundStyle(Color.white.opacity(0.56))
+                .font(.subheadline.weight(.regular))
+                .foregroundStyle(ChoraiTheme.secondaryInk)
                 .lineLimit(1)
 
             Spacer(minLength: 0)
@@ -225,8 +225,8 @@ struct LibrarySearchResultsView: View {
         VStack(spacing: 14) {
             RotatingLoaderView()
             Text("Searching your Library")
-                .font(.system(size: 14, weight: .regular))
-                .foregroundStyle(Color.white.opacity(0.64))
+                .font(.subheadline.weight(.regular))
+                .foregroundStyle(ChoraiTheme.secondaryInk)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 96)
@@ -237,23 +237,23 @@ struct LibrarySearchResultsView: View {
         VStack(spacing: 14) {
             Image(systemName: "exclamationmark.magnifyingglass")
                 .font(.system(size: 34, weight: .light))
-                .foregroundStyle(Color.white.opacity(0.62))
+                .foregroundStyle(ChoraiTheme.secondaryInk)
 
             Text("Search couldn’t be completed")
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(Color.white)
+                .font(.body.weight(.semibold))
+                .foregroundStyle(ChoraiTheme.ink)
 
             Text(error.localizedDescription)
-                .font(.system(size: 13, weight: .regular))
-                .foregroundStyle(Color.white.opacity(0.58))
+                .font(.footnote.weight(.regular))
+                .foregroundStyle(ChoraiTheme.secondaryInk)
                 .multilineTextAlignment(.center)
 
             Button("Try Again", action: onRetry)
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(Color.white)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(ChoraiTheme.ink)
                 .frame(minWidth: 120, minHeight: 44)
                 .background(
-                    Capsule().fill(Color.white.opacity(0.14))
+                    Capsule().fill(ChoraiTheme.surface)
                 )
                 .accessibilityIdentifier("home.search.retry")
         }
@@ -265,15 +265,15 @@ struct LibrarySearchResultsView: View {
         VStack(spacing: 12) {
             Image(systemName: "doc.text.magnifyingglass")
                 .font(.system(size: 38, weight: .light))
-                .foregroundStyle(Color.white.opacity(0.52))
+                .foregroundStyle(ChoraiTheme.secondaryInk)
 
             Text("No Library results")
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(Color.white.opacity(0.82))
+                .font(.body.weight(.semibold))
+                .foregroundStyle(ChoraiTheme.ink)
 
             Text("Try another title or phrase.")
-                .font(.system(size: 14, weight: .regular))
-                .foregroundStyle(Color.white.opacity(0.54))
+                .font(.subheadline.weight(.regular))
+                .foregroundStyle(ChoraiTheme.secondaryInk)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 96)
@@ -305,6 +305,7 @@ struct LibrarySearchResultsView: View {
                 cardId: result.card.id,
                 rate: result.card.rate,
                 authorId: result.author?.id,
+                menuCardData: result.card,
                 onShowMenu: { _ in onShowMenu(result) },
                 onCardTap: onCardTap,
                 onUnfavorite: onUnfavorite,

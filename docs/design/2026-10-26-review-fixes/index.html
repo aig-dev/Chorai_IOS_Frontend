@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#faf9f6">
+  <title>Chorai iOS · 本轮原生修正</title>
+  <link rel="stylesheet" href="./review.css">
+  <script src="./review.js" defer></script>
+</head>
+<body>
+  <header>
+    <a class="wordmark" href="#home-spacing-light">chorai<span>iOS · 本轮审阅</span></a>
+    <a class="archive" href="../2026-10-26-native-rollout/fidelity/">上轮原型 / App 对照 <span aria-hidden="true">↗</span></a>
+  </header>
+  <main>
+    <section class="intro">
+      <p class="eyebrow">HOME & EDITOR · 原生 App 修正</p>
+      <h1>让写作重新占满一页。</h1>
+      <p class="lede">Home 收起多余控件，编辑器回到完整的写作空间。下面直接看 App 的离线样本实拍。</p>
+    </section>
+
+    <a class="proposal-link" href="../2026-10-21-native-visual-reform/revisions/v9-fixed-deck-reader/gallery/">
+      <span class="proposal-index">另一个入口 · V9</span>
+      <span><strong>Explore 大卡片与全页阅读</strong><small>独立原生设计提案 · 可切浅深色、卡片类型与交互状态 · 待你确认</small></span>
+      <span class="proposal-arrow" aria-hidden="true">↗</span>
+    </a>
+
+    <section class="workspace" aria-label="App 实际修正审阅">
+      <aside class="controls">
+        <div class="theme-row"><span>外观</span><div class="theme-toggle" role="group" aria-label="浅深色"><button data-theme="light" aria-pressed="true">☼ 浅色</button><button data-theme="dark" aria-pressed="false">☾ 深色</button></div></div>
+        <nav class="screen-list" aria-label="查看修正状态">
+          <button data-page="home-spacing" aria-pressed="true"><span class="index">01</span><span>Home 排版<small>正文与标签的距离</small></span><span aria-hidden="true">→</span></button>
+          <button data-page="home-sort-menu" aria-pressed="false"><span class="index">02</span><span>原生排序菜单<small>收起横向排序胶囊</small></span><span aria-hidden="true">→</span></button>
+          <button data-page="editor-empty" aria-pressed="false"><span class="index">03</span><span>空白编辑页<small>完整写作空间</small></span><span aria-hidden="true">→</span></button>
+          <button data-page="editor-tools" aria-pressed="false"><span class="index">04</span><span>编辑工具<small>右下角工具入口</small></span><span aria-hidden="true">→</span></button>
+          <button data-page="editor-typed" aria-pressed="false"><span class="index">05</span><span>输入后的正文<small>内容在整页展开</small></span><span aria-hidden="true">→</span></button>
+          <button data-page="editor-keyboard" aria-pressed="false"><span class="index">06</span><span>键盘展开<small>实际输入状态</small></span><span aria-hidden="true">→</span></button>
+          <button data-page="editor-existing" aria-pressed="false"><span class="index">07</span><span>已有笔记<small>保留单一正文</small></span><span aria-hidden="true">→</span></button>
+        </nav>
+        <label class="compare-toggle" id="compare-control"><input type="checkbox" id="compare"><span>与上轮 App 的 Home 对照<small>旧截图保留，展示在左侧</small></span></label>
+        <section class="explanation" aria-live="polite"><p class="eyebrow" id="note-kicker">HOME · 留白与节奏</p><h2 id="note-title">正文与标签，回到同一条笔记里。</h2><p id="note-body">收紧正文下方多余的间距，保留笔记之间的分隔与呼吸。My Notes / Collections 和已有操作含义保持不变。</p></section>
+      </aside>
+
+      <div class="capture-area" id="capture-area">
+        <figure class="capture-figure prior" id="prior-figure" hidden>
+          <figcaption><span>上轮 App</span><small>保留的 fidelity 实拍</small></figcaption>
+          <a id="prior-link" target="_blank" rel="noopener"><img id="prior-capture" width="1206" height="2622" alt="上轮 Home 页面原生实拍"></a>
+          <p class="image-footnote">用于看间距变化；样本日期等动态字段可能不同。</p>
+        </figure>
+        <figure class="capture-figure current">
+          <figcaption><span><i aria-hidden="true"></i> 本轮原生 App</span><small id="capture-label">Home 排版 · 浅色</small></figcaption>
+          <div class="image-wrap" id="image-wrap" aria-busy="true">
+            <a id="capture-link" target="_blank" rel="noopener"><img id="capture" width="1206" height="2622" alt="本轮 Home 排版的 App 离线样本实拍"></a>
+            <div class="image-status" id="image-status" role="status"><span>正在载入原生截图…</span><button id="retry" hidden>重新载入</button></div>
+          </div>
+          <p class="image-footnote">完整原生画面 · 点击图片查看原尺寸</p>
+        </figure>
+      </div>
+    </section>
+
+    <section class="boundaries" aria-label="交付边界">
+      <div><span>这里展示</span><p>真实 App 的离线样本截图。用来检查布局、系统菜单和编辑状态。</p></div>
+      <div><span>另行审阅</span><p>Explore 固定摘要卡与全页阅读在 <a href="../2026-10-21-native-visual-reform/revisions/v9-fixed-deck-reader/gallery/">V9 独立原型</a>中，尚待视觉确认。</p></div>
+      <div><span>能力边界</span><p>沿用项目已有功能，不新增后端能力。离线样本不代表登录、AI、收藏或服务器保存已验证。</p></div>
+    </section>
+  </main>
+  <footer><span>Chorai · 温白墨绿 / 克制学院金</span><nav aria-label="保留资料"><a href="../2026-10-21-native-visual-reform/revisions/v9-fixed-deck-reader/gallery/">V9 设计提案</a><a href="../2026-10-26-native-rollout/fidelity/">上轮对照</a><a href="../2026-10-21-native-visual-reform/revisions/v8-grid-brush/gallery/">V8 原型</a></nav></footer>
+</body>
+</html>

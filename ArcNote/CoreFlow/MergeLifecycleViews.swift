@@ -302,7 +302,10 @@ final class MergeCandidateStore: ObservableObject {
     @Published private(set) var anchorError: String?
 
     private let anchorCardID: String
-    private let network: NetworkManager
+    private let network: NetworkManager?
+    #if DEBUG
+    private var fixtureCards: [MergeCard]?
+    #endif
     private var anchorCancellable: AnyCancellable?
     private var cardsCancellable: AnyCancellable?
     private var searchTask: Task<Void, Never>?
@@ -315,6 +318,17 @@ final class MergeCandidateStore: ObservableObject {
         self.anchorCardID = anchorCardID
         self.network = network
     }
+
+    #if DEBUG
+    init(fixtureAnchor: MergeCard, cards: [MergeCard]) {
+        anchorCardID = fixtureAnchor.id
+        network = nil
+        anchorCard = fixtureAnchor
+        self.cards = cards
+        fixtureCards = cards
+        hasLoaded = true
+    }
+    #endif
 
     func load() {
         guard !hasLoaded else { return }
@@ -341,6 +355,7 @@ final class MergeCandidateStore: ObservableObject {
     }
 
     private func loadAnchor() {
+        guard let network else { return }
         anchorCancellable = network.getCard(id: anchorCardID)
             .receive(on: DispatchQueue.main)
             .sink(
@@ -373,6 +388,16 @@ final class MergeCandidateStore: ObservableObject {
     }
 
     private func loadCards(search: String) {
+        #if DEBUG
+        if let fixtureCards {
+            cards = search.isEmpty ? fixtureCards : fixtureCards.filter {
+                ($0.content + " " + $0.tags.joined(separator: " "))
+                    .localizedCaseInsensitiveContains(search)
+            }
+            return
+        }
+        #endif
+        guard let network else { return }
         isLoadingCards = true
         cardsError = nil
         cardsCancellable?.cancel()
@@ -549,13 +574,13 @@ private struct MergeLifecycleView: View {
                 selectionAction
             }
         }
-        .foregroundStyle(.white)
+        .foregroundStyle(ChoraiTheme.ink)
         .overlay(alignment: .topLeading) {
             automationAnchors
         }
         .navigationBarHidden(true)
         .navigationBarBackButtonHidden(true)
-        .preferredColorScheme(.dark)
+
         .confirmationDialog(
             "Cancel Merge?",
             isPresented: cancelConfirmation,
@@ -618,21 +643,7 @@ private struct MergeLifecycleView: View {
     }
 
     private var atmosphere: some View {
-        ZStack {
-            if reduceTransparency {
-                Color(red: 0.055, green: 0.035, blue: 0.09)
-            } else {
-                Image("home_bg")
-                    .resizable()
-                    .scaledToFill()
-            }
-            LinearGradient(
-                colors: [Color.black.opacity(0.08), Color.black.opacity(0.28)],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        }
-        .ignoresSafeArea()
+        ChoraiBackground()
     }
 
     private var header: some View {
@@ -649,11 +660,13 @@ private struct MergeLifecycleView: View {
             .buttonStyle(.plain)
             .accessibilityLabel("Back")
             .accessibilityIdentifier("merge.back")
+            .choraiGlassSurface(cornerRadius: 22)
 
             Spacer()
 
             Text("Merge")
-                .font(.system(size: 20, weight: .semibold))
+                .font(.headline)
+                .foregroundStyle(.primary)
 
             Spacer()
             Color.clear.frame(width: 44, height: 44)
@@ -712,84 +725,87 @@ private struct MergeLifecycleView: View {
     }
 
     private var selectionContent: some View {
-        VStack(spacing: 0) {
-            if let anchor = candidates.anchorCard {
-                FixedMergeCardView(card: anchor)
-                    .padding(.top, 12)
-                    .accessibilityIdentifier("merge.anchor.card")
-            }
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Bring a few\nideas together.")
+                        .font(.system(.largeTitle, design: .serif).weight(.medium))
+                    Text("Choose from your notes and collections. Your original notes remain intact.")
+                        .font(.subheadline)
+                        .foregroundStyle(ChoraiTheme.secondaryInk)
+                }
+                .padding(.horizontal, 22)
+                .padding(.top, 16)
 
-            Rectangle()
-                .fill(Color.white.opacity(0.18))
-                .frame(height: 1)
-                .adaptiveContentGutter()
-                .padding(.vertical, 16)
+                Text("STARTING NOTE")
+                    .font(.caption2.weight(.semibold)).tracking(1.4)
+                    .foregroundStyle(ChoraiTheme.secondaryInk)
+                    .padding(.horizontal, 22)
+                if let anchor = candidates.anchorCard {
+                    FixedMergeCardView(card: anchor)
+                        .accessibilityIdentifier("merge.anchor.card")
+                }
 
-            searchBar
+                searchBar
 
-            ScrollView {
-                LazyVStack(spacing: 16) {
+                Text("ADD SOURCES")
+                    .font(.caption2.weight(.semibold)).tracking(1.4)
+                    .foregroundStyle(ChoraiTheme.secondaryInk)
+                    .padding(.horizontal, 22)
+                LazyVStack(spacing: 10) {
                     if candidates.isLoadingCards && candidates.cards.isEmpty {
-                        ProgressView()
-                            .tint(.white)
-                            .padding(.top, 70)
+                        ProgressView().tint(ChoraiTheme.accent).padding(.vertical, 32)
                     } else if let error = candidates.cardsError {
                         Text(error)
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.72))
-                            .padding(.top, 70)
+                            .font(.subheadline)
+                            .foregroundStyle(ChoraiTheme.secondaryInk)
+                            .padding(.vertical, 32)
                             .accessibilityIdentifier("merge.cards.error")
                     } else if candidates.cards.isEmpty {
                         Text("No cards")
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.62))
-                            .padding(.top, 70)
+                            .font(.subheadline)
+                            .foregroundStyle(ChoraiTheme.secondaryInk)
+                            .padding(.vertical, 32)
                             .accessibilityIdentifier("merge.cards.empty-message")
                     } else {
                         ForEach(candidates.cards) { card in
                             MergeCardView(
                                 card: card,
-                                isSelected: store.selectedSources.contains {
-                                    $0.assetID == card.id
-                                },
+                                isSelected: store.selectedSources.contains { $0.assetID == card.id },
                                 onToggleSelection: {
                                     dismissMergeTipIfVisible()
                                     store.toggleSelection(card.coreMergeSource)
                                 }
                             )
                             .accessibilityHint(
-                                store.selectedSources.contains {
-                                    $0.assetID == card.id
-                                }
-                                    ? "Remove from Merge"
-                                    : "Select for Merge"
+                                store.selectedSources.contains { $0.assetID == card.id }
+                                    ? "Remove from Merge" : "Select for Merge"
                             )
                         }
                     }
                 }
-                .padding(.top, 18)
-                .padding(.bottom, 18)
             }
-            .scrollDismissesKeyboard(.interactively)
+            .padding(.bottom, 24)
         }
+        .scrollDismissesKeyboard(.interactively)
         .frame(maxHeight: .infinity, alignment: .top)
     }
 
     private var searchBar: some View {
         HStack(spacing: 10) {
             Image(systemName: "magnifyingglass")
-                .foregroundStyle(.white.opacity(0.7))
+                .foregroundStyle(ChoraiTheme.secondaryInk)
 
-            TextField("Search", text: $searchText)
+            TextField("Search notes and collections", text: $searchText)
                 .textFieldStyle(.plain)
-                .foregroundStyle(.white)
+                .foregroundStyle(ChoraiTheme.ink)
                 .focused($isTextInputFocused)
                 .accessibilityIdentifier("merge.search.input")
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
-        .background(MergeSearchSurface())
-        .adaptiveContentGutter()
+        .choraiGlassSurface(cornerRadius: 18)
+        .padding(.horizontal, 22)
     }
 
     private var selectionAction: some View {
@@ -823,31 +839,15 @@ private struct MergeLifecycleView: View {
     }
 
     private var artifactContent: some View {
-        ZStack {
-            Color.black.opacity(reduceTransparency ? 0.72 : 0.58)
-                .ignoresSafeArea()
-                .accessibilityHidden(true)
-
+        Group {
             if store.artifact != nil {
-                MergeArtifactEditorHost(
-                    store: store,
-                    onBack: onBack
-                )
-                .adaptiveContentGutter()
-                .padding(.vertical, 18)
-                .overlay(alignment: .topLeading) {
-                    automationText(
-                        "ready",
-                        identifier: "merge.artifact.ready"
-                    )
-                }
+                MergeArtifactEditorHost(store: store, onBack: onBack)
+                    .overlay(alignment: .topLeading) {
+                        automationText("ready", identifier: "merge.artifact.ready")
+                    }
             }
         }
-        .background {
-            selectionContent
-                .allowsHitTesting(false)
-                .accessibilityHidden(true)
-        }
+        .background { ChoraiBackground() }
     }
 
     private func quietState(
@@ -862,7 +862,7 @@ private struct MergeLifecycleView: View {
                 .frame(width: 54, height: 54)
             Text(label)
                 .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(.white.opacity(0.72))
+                .foregroundStyle(ChoraiTheme.secondaryInk)
             Spacer()
 
             if store.canCancelCanonicalJob {
@@ -892,13 +892,13 @@ private struct MergeLifecycleView: View {
     ) -> some View {
         VStack(spacing: 20) {
             Spacer()
-            Image("menu_merge")
+            Image(systemName: "arrow.triangle.merge")
                 .resizable()
                 .scaledToFit()
                 .frame(width: 52, height: 52)
             Text(label)
                 .font(.system(size: 16, weight: .medium))
-                .foregroundStyle(.white.opacity(0.74))
+                .foregroundStyle(ChoraiTheme.secondaryInk)
             Spacer()
 
             HStack(spacing: 16) {
@@ -957,13 +957,13 @@ private struct MergeLifecycleView: View {
     ) -> some View {
         VStack(spacing: 18) {
             Spacer()
-            Image("menu_merge")
+            Image(systemName: "arrow.triangle.merge")
                 .resizable()
                 .scaledToFit()
                 .frame(width: 54, height: 54)
             Text(label)
                 .font(.system(size: 16, weight: .medium))
-                .foregroundStyle(.white.opacity(0.74))
+                .foregroundStyle(ChoraiTheme.secondaryInk)
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -1006,7 +1006,7 @@ private struct MergeLifecycleView: View {
     ) -> some View {
         Text(value)
             .font(.system(size: 1))
-            .foregroundStyle(.white.opacity(0.01))
+            .foregroundStyle(ChoraiTheme.ink.opacity(0.01))
             .frame(width: 1, height: 1)
             .accessibilityIdentifier(identifier)
     }
@@ -1052,50 +1052,32 @@ private struct MergeSelectionPrimaryAction: View {
     }
 
     var body: some View {
-        Button(action: action) {
-            Text(label)
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(isEnabled ? Color.white : Color.white.opacity(0.46))
-                .frame(maxWidth: .infinity, minHeight: 56)
-                .background {
-                    Capsule()
-                        .fill(
-                            isEnabled
-                                ? LinearGradient(
-                                    colors: [
-                                        Color(red: 0.58, green: 0.28, blue: 0.68),
-                                        Color(red: 0.32, green: 0.22, blue: 0.56),
-                                    ],
-                                    startPoint: .leading,
-                                    endPoint: .trailing
-                                )
-                                : LinearGradient(
-                                    colors: [
-                                        Color.white.opacity(0.10),
-                                        Color.white.opacity(0.07),
-                                    ],
-                                    startPoint: .leading,
-                                    endPoint: .trailing
-                                )
-                        )
-                        .overlay {
-                            Capsule()
-                                .stroke(
-                                    Color.white.opacity(isEnabled ? 0.22 : 0.10),
-                                    lineWidth: 1
-                                )
-                        }
-                }
+        HStack(spacing: 20) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("\(count) selected").font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                Text("2–8 sources").font(.caption)
+                    .foregroundStyle(ChoraiTheme.secondaryInk)
             }
-        .buttonStyle(.plain)
-        .disabled(!isEnabled)
-        .accessibilityLabel(label)
-        .accessibilityIdentifier("merge.action")
-        .adaptiveContentGutter()
-        .padding(.top, 10)
-        .padding(.bottom, 10)
+            Spacer(minLength: 0)
+            Button(action: action) {
+                Label("Create Merge", systemImage: "sparkles")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(isEnabled ? ChoraiTheme.onAccent : ChoraiTheme.secondaryInk)
+                    .padding(.horizontal, 22)
+                    .frame(minHeight: 56)
+                    .background(isEnabled ? ChoraiTheme.accent : ChoraiTheme.raisedSurface, in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .disabled(!isEnabled)
+            .accessibilityLabel(label)
+            .accessibilityIdentifier("merge.action")
+        }
+        .padding(.horizontal, 22)
+        .padding(.vertical, 16)
         .background(MergeSelectionActionDockSurface())
     }
+
 }
 
 private struct MergeSelectionActionDockSurface: View {
@@ -1105,17 +1087,17 @@ private struct MergeSelectionActionDockSurface: View {
     var body: some View {
         ZStack {
             if reduceTransparency {
-                Color(red: 0.055, green: 0.035, blue: 0.09)
+                ChoraiTheme.background
             } else {
                 Rectangle()
                     .fill(.ultraThinMaterial)
-                Color(red: 0.055, green: 0.035, blue: 0.09)
+                ChoraiTheme.background
                     .opacity(0.84)
             }
         }
         .overlay(alignment: .top) {
             Rectangle()
-                .fill(Color.white.opacity(0.08))
+                .fill(ChoraiTheme.ink.opacity(0.08))
                 .frame(height: 1)
         }
         .ignoresSafeArea(edges: .bottom)
@@ -1149,6 +1131,84 @@ private struct MergeArtifactEditorHost: View {
 }
 
 #if DEBUG
+@MainActor
+struct MergeSelectionFidelityFixtureScreen: View {
+    @Environment(\.dismiss) private var dismiss
+    @StateObject private var store: MergeSessionStore
+    @StateObject private var candidates: MergeCandidateStore
+
+    init() {
+        let anchor = MergeCard(
+            id: "merge-fidelity-anchor",
+            versionID: "ver_merge_fidelity_anchor",
+            date: "Today",
+            content: "A slower morning changes the shape of a day. Leave a little room before the first thing begins.",
+            tags: ["Notes", "Everyday"],
+            isUserCard: false,
+            rate: 1
+        )
+        let cards = [
+            MergeCard(
+                id: "merge-fidelity-candidate",
+                versionID: "ver_merge_fidelity_candidate",
+                date: "Yesterday",
+                content: "A room feels generous when its empty spaces have a purpose. The same can be true of an interface.",
+                tags: ["Design", "Space"],
+                isUserCard: true,
+                userName: "Mira",
+                favoriteCount: 12,
+                rate: 4
+            ),
+            MergeCard(
+                id: "merge-fidelity-secondary",
+                versionID: "ver_merge_fidelity_secondary",
+                date: "2 days ago",
+                content: "The notes we return to often begin as small observations, not finished arguments.",
+                tags: ["Writing", "Attention"],
+                isUserCard: false,
+                rate: 6
+            ),
+        ]
+        _candidates = StateObject(
+            wrappedValue: MergeCandidateStore(fixtureAnchor: anchor, cards: cards)
+        )
+        _store = StateObject(wrappedValue: MergeSessionStore(
+            actorID: "fixture-merge-fidelity-actor",
+            anchor: anchor.coreMergeSource,
+            service: MergeArtifactFixtureService(
+                artifact: MergeArtifactFixtureFactory.artifact(
+                    usesLongDocument: false,
+                    includesLossyPassthrough: false
+                ),
+                behavior: .current,
+                operationProbe: MergeArtifactFixtureOperationProbe()
+            ),
+            persistence: MergeArtifactFixturePersistence(),
+            resumePersistedSession: false,
+            pollDelaysNanoseconds: [0],
+            pollDelayJitter: { $0 },
+            maxPollAttempts: 1
+        ))
+    }
+
+    var body: some View {
+        MergeLifecycleView(
+            store: store,
+            candidates: candidates,
+            onBack: dismiss.callAsFunction,
+            onJobAccepted: nil,
+            failureCancellationIntent: .working,
+            onRetryFailure: nil,
+            onCancelFailure: store.cancel,
+            onRemoveFailure: nil,
+            onboardingStore: nil,
+            contextualTipStore: nil
+        )
+        .background(ChoraiTheme.background.ignoresSafeArea())
+        .task { store.start() }
+    }
+}
+
 @MainActor
 struct MergeSelectionVisualFixtureScreen: View {
     @State private var isCandidateSelected = true
@@ -1201,7 +1261,7 @@ struct MergeSelectionVisualFixtureScreen: View {
                 Spacer()
                 Color.clear.frame(width: 44, height: 44)
             }
-            .foregroundStyle(.white)
+            .foregroundStyle(ChoraiTheme.ink)
             .adaptiveContentGutter()
             .padding(.top, 4)
 
@@ -1210,7 +1270,7 @@ struct MergeSelectionVisualFixtureScreen: View {
                 .accessibilityIdentifier("merge.anchor.card")
 
             Rectangle()
-                .fill(Color.white.opacity(0.18))
+                .fill(ChoraiTheme.ink.opacity(0.18))
                 .frame(height: 1)
                 .adaptiveContentGutter()
                 .padding(.vertical, 16)
@@ -1220,7 +1280,7 @@ struct MergeSelectionVisualFixtureScreen: View {
                 Text("Search")
             }
             .font(.system(size: 16))
-            .foregroundStyle(.white.opacity(0.7))
+            .foregroundStyle(ChoraiTheme.secondaryInk)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
@@ -1260,11 +1320,9 @@ struct MergeSelectionVisualFixtureScreen: View {
             maxHeight: .infinity,
             alignment: .top
         )
-        .foregroundStyle(.white)
+        .foregroundStyle(ChoraiTheme.ink)
         .background {
-            Image("home_bg")
-                .resizable()
-                .scaledToFill()
+            ChoraiBackground()
                 .clipped()
                 .ignoresSafeArea()
         }
@@ -1278,7 +1336,7 @@ struct MergeSelectionVisualFixtureScreen: View {
             .accessibilityValue(didMerge ? "merged" : "ready")
         }
         .background(
-            Color(red: 0.055, green: 0.035, blue: 0.09)
+            ChoraiTheme.background
                 .ignoresSafeArea()
         )
     }
@@ -1323,7 +1381,7 @@ struct MergeArtifactVisualFixtureScreen: View {
 
     var body: some View {
         ZStack {
-            Color.black.opacity(0.58)
+            ChoraiTheme.background
                 .ignoresSafeArea()
                 .accessibilityHidden(true)
 
@@ -1332,11 +1390,9 @@ struct MergeArtifactVisualFixtureScreen: View {
                     store: store,
                     onBack: { isPresented = false }
                 )
-                .adaptiveContentGutter()
-                .padding(.vertical, 18)
             } else if isPresented {
                 ProgressView()
-                    .tint(.white)
+                    .tint(ChoraiTheme.accent)
             } else {
                 Button {
                     isPresented = true
@@ -1344,41 +1400,16 @@ struct MergeArtifactVisualFixtureScreen: View {
                     Image(systemName: "square.stack.3d.up")
                         .font(.system(size: 20, weight: .semibold))
                         .frame(width: 52, height: 52)
-                        .background(Color.white.opacity(0.16))
+                        .background(ChoraiTheme.ink.opacity(0.16))
                         .clipShape(Circle())
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(.white)
+                .foregroundStyle(ChoraiTheme.ink)
                 .accessibilityLabel("Complete Merge")
                 .accessibilityValue("1, complete")
                 .accessibilityIdentifier("merge.task-rail")
             }
         }
-        .background {
-            VStack(spacing: 18) {
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .fill(Color.white.opacity(0.08))
-                    .frame(height: 180)
-                    .adaptiveContentGutter()
-
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .fill(Color.white.opacity(0.06))
-                    .frame(height: 250)
-                    .adaptiveContentGutter()
-            }
-            .foregroundStyle(.white)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .padding(.top, 54)
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
-        }
-        .background {
-            Image("home_bg")
-                .resizable()
-                .scaledToFill()
-                .ignoresSafeArea()
-        }
-        .preferredColorScheme(.dark)
         .environment(
             \.sizeCategory,
             ProcessInfo.processInfo.environment[
@@ -1431,7 +1462,7 @@ struct MergeArtifactVisualFixtureScreen: View {
                 )
             }
             .font(.system(size: 1))
-            .foregroundStyle(.white.opacity(0.01))
+            .foregroundStyle(ChoraiTheme.ink.opacity(0.01))
             .frame(width: 1, height: 5)
             .accessibilityElement(children: .contain)
         }
@@ -1865,7 +1896,7 @@ private final class MergeArtifactFixtureOperationProbe: ObservableObject {
 private final class MergeArtifactFixturePersistence: MergeSessionPersisting {
     private var value: MergeSessionSnapshot?
 
-    init(snapshot: MergeSessionSnapshot) {
+    init(snapshot: MergeSessionSnapshot? = nil) {
         value = snapshot
     }
 
@@ -1923,7 +1954,7 @@ private struct MergeLifecycleAction: View {
                         .frame(width: 20, height: 20)
                 }
             }
-            .foregroundStyle(.white)
+            .foregroundStyle(ChoraiTheme.ink)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 16)
             .background(MergeCapsuleSurface(isFilled: isFilled))
@@ -1938,80 +1969,19 @@ private struct MergeCapsuleSurface: View {
 
     var body: some View {
         Capsule()
-            .fill(isFilled ? Color.white.opacity(0.2) : Color.clear)
-            .overlay(highlight(center: .topLeading, endRadius: 35).offset(y: -1))
-            .overlay(highlight(center: .bottomTrailing, endRadius: 35))
-            .overlay(edgeHighlight(start: .top, end: UnitPoint(x: 0, y: 0.05)).offset(y: -1))
-            .overlay(edgeHighlight(start: .bottom, end: UnitPoint(x: 1, y: 0.05)).offset(y: 1))
-    }
-
-    private func highlight(center: UnitPoint, endRadius: CGFloat) -> some View {
-        Capsule()
-            .stroke(Color.white, lineWidth: 1)
-            .mask(
-                Capsule().fill(
-                    RadialGradient(
-                        colors: [Color.white, Color.clear],
-                        center: center,
-                        startRadius: 10,
-                        endRadius: endRadius
-                    )
-                )
-            )
-    }
-
-    private func edgeHighlight(start: UnitPoint, end: UnitPoint) -> some View {
-        Capsule()
-            .stroke(Color.white, lineWidth: 1)
-            .mask(
-                Capsule().fill(
-                    LinearGradient(
-                        colors: [Color.white, Color.clear],
-                        startPoint: start,
-                        endPoint: end
-                    )
-                )
-            )
+            .fill(isFilled ? ChoraiTheme.selection : Color.clear)
+            .choraiGlassSurface(cornerRadius: 28)
     }
 }
 
 private struct MergeSearchSurface: View {
     var body: some View {
-        RoundedRectangle(cornerRadius: 25)
-            .fill(Color(red: 0.2, green: 0.1, blue: 0.3))
-            .overlay(highlight(center: .topLeading).offset(y: -1))
-            .overlay(highlight(center: .bottomTrailing))
-            .overlay(edgeHighlight(start: .top, end: UnitPoint(x: 0, y: 0.05)).offset(y: -1))
-            .overlay(edgeHighlight(start: .bottom, end: UnitPoint(x: 1, y: 0.05)).offset(y: 1))
-    }
-
-    private func highlight(center: UnitPoint) -> some View {
-        RoundedRectangle(cornerRadius: 25)
-            .stroke(Color.white, lineWidth: 1)
-            .mask(
-                RoundedRectangle(cornerRadius: 25).fill(
-                    RadialGradient(
-                        colors: [Color.white, Color.clear],
-                        center: center,
-                        startRadius: 10,
-                        endRadius: 35
-                    )
-                )
-            )
-    }
-
-    private func edgeHighlight(start: UnitPoint, end: UnitPoint) -> some View {
-        RoundedRectangle(cornerRadius: 25)
-            .stroke(Color.white, lineWidth: 1)
-            .mask(
-                RoundedRectangle(cornerRadius: 25).fill(
-                    LinearGradient(
-                        colors: [Color.white, Color.clear],
-                        startPoint: start,
-                        endPoint: end
-                    )
-                )
-            )
+        RoundedRectangle(cornerRadius: 25, style: .continuous)
+            .fill(ChoraiTheme.surface)
+            .overlay {
+                RoundedRectangle(cornerRadius: 25, style: .continuous)
+                    .stroke(ChoraiTheme.separator, lineWidth: 0.8)
+            }
     }
 }
 
@@ -2020,8 +1990,8 @@ private struct MergeEntryLoadingView: View {
 
     var body: some View {
         ZStack {
-            Image("home_bg").resizable().scaledToFill().ignoresSafeArea()
-            ProgressView().tint(.white)
+            ChoraiBackground().ignoresSafeArea()
+            ProgressView().tint(ChoraiTheme.accent)
             VStack {
                 HStack {
                     Button(action: onBack) {
@@ -2038,7 +2008,7 @@ private struct MergeEntryLoadingView: View {
             }
             .adaptiveContentGutter()
         }
-        .foregroundStyle(.white)
+        .foregroundStyle(ChoraiTheme.ink)
         .navigationBarHidden(true)
     }
 }
@@ -2050,12 +2020,12 @@ private struct MergeEntryFailureView: View {
 
     var body: some View {
         ZStack {
-            Image("home_bg").resizable().scaledToFill().ignoresSafeArea()
+            ChoraiBackground().ignoresSafeArea()
             VStack(spacing: 20) {
                 Spacer()
                 Text(message)
                     .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.72))
+                    .foregroundStyle(ChoraiTheme.secondaryInk)
                 MergeLifecycleAction(
                     systemImage: nil,
                     assetImage: "menu_merge",
@@ -2083,7 +2053,7 @@ private struct MergeEntryFailureView: View {
             }
             .adaptiveContentGutter()
         }
-        .foregroundStyle(.white)
+        .foregroundStyle(ChoraiTheme.ink)
         .navigationBarHidden(true)
     }
 }

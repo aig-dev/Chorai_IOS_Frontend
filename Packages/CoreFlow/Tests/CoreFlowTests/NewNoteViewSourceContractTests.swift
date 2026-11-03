@@ -1065,42 +1065,58 @@ final class NewNoteViewSourceContractTests: XCTestCase {
             "Dismissal must not be deferred into the async closure"
         )
 
+        XCTAssertTrue(source.contains("menuActions: nativeMenuActions"))
+        XCTAssertTrue(grid.contains("struct CardEditorNativeMenuButton: UIViewRepresentable"))
+        XCTAssertTrue(grid.contains("actions.prepare()"))
+        XCTAssertTrue(grid.contains("bodyModel.perform(.undo)"))
+        XCTAssertTrue(grid.contains("bodyModel.perform(.redo)"))
+        XCTAssertTrue(source.contains("spark: { performPersistedCardAction(.navigation(CardNavigationRoute.spark)) }"))
+        XCTAssertTrue(source.contains("merge: { performPersistedCardAction(.navigation(CardNavigationRoute.merge)) }"))
+        for identifier in [
+            "cardEditorBackgroundButton", "cardEditorActionSpark", "cardEditorActionMerge",
+            "cardEditorActionShare", "cardEditorActionLink", "cardEditorActionRoot",
+            "cardEditorActionRemove", "cardEditorActionPin",
+        ] {
+            XCTAssertEqual(Self.occurrenceCount("\"\(identifier)\"", in: grid), 1,
+                           "Menu and legacy fixture share one canonical identifier")
+        }
+
         let expectedRows: [[(identifier: String, action: String)]] = [
             [
                 (
-                    identifier: "\"cardEditorBackgroundButton\"",
+                    identifier: "CardEditorActionIdentity.background",
                     action: "dismissThenPerform(onBackground)"
                 ),
                 (
-                    identifier: "\"cardEditorActionSpark\"",
+                    identifier: "CardEditorActionIdentity.spark",
                     action: "dismissThenPerform(onSpark)"
                 ),
                 (
-                    identifier: "\"cardEditorActionMerge\"",
+                    identifier: "CardEditorActionIdentity.merge",
                     action: "dismissThenPerform(onMerge)"
                 ),
             ],
             [
                 (
-                    identifier: "\"cardEditorActionShare\"",
+                    identifier: "CardEditorActionIdentity.share",
                     action: "dismissThenPerform(onShare)"
                 ),
                 (
-                    identifier: "\"cardEditorActionLink\"",
+                    identifier: "CardEditorActionIdentity.link",
                     action: "dismissThenPerform(onLink)"
                 ),
                 (
-                    identifier: "\"cardEditorActionRoot\"",
+                    identifier: "CardEditorActionIdentity.root",
                     action: "dismissThenPerform(onRoot)"
                 ),
             ],
             [
                 (
-                    identifier: "\"cardEditorActionRemove\"",
+                    identifier: "CardEditorActionIdentity.remove",
                     action: "dismissThenPerform(onRemove)"
                 ),
                 (
-                    identifier: "\"cardEditorActionPin\"",
+                    identifier: "CardEditorActionIdentity.pin",
                     action: "dismissThenPerform(onTogglePin)"
                 ),
             ],
@@ -1224,9 +1240,9 @@ final class NewNoteViewSourceContractTests: XCTestCase {
         }
         for identifier in tileIdentifiers {
             XCTAssertEqual(
-                Self.occurrenceCount(identifier, in: grid),
+                Self.occurrenceCount(identifier, in: String(actionGrid)),
                 1,
-                "Editor action identifiers must be globally unique: \(identifier)"
+                "Each exclusive legacy fixture action remains unique: \(identifier)"
             )
         }
         XCTAssertEqual(

@@ -364,7 +364,7 @@ class RecommendedCardsManager: ObservableObject {
                 },
                 receiveValue: { (response: NetworkResponse<FavoriteResponseData>) in
                     if response.success {
-                        print("收藏成功")
+                        NotificationCenter.default.post(name: .choraiFavoriteChanged, object: nil, userInfo: ["cardID": cardId, "isFavorited": true])
                         completion?(true)
                     } else {
                         completion?(false)
@@ -386,7 +386,7 @@ class RecommendedCardsManager: ObservableObject {
                 },
                 receiveValue: { (response: NetworkResponse<EmptyResponseData>) in
                     if response.success {
-                        print("取消收藏成功")
+                        NotificationCenter.default.post(name: .choraiFavoriteChanged, object: nil, userInfo: ["cardID": cardId, "isFavorited": false])
                         completion?(true)
                     } else {
                         completion?(false)

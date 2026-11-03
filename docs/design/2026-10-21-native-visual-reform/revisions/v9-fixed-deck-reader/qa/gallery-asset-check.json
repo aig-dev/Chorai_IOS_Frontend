@@ -1,0 +1,163 @@
+{
+  "checkedAtUTC": "2026-10-27T04:00:50.946784+00:00",
+  "scope": "All 26 PNG paths referenced by gallery/gallery.js; exact expected names and 1206x2622 dimensions. This is a file-integrity check, not a browser or native interaction test.",
+  "count": 26,
+  "images": [
+    {
+      "file": "v9-explore-checklist-dark.png",
+      "width": 1206,
+      "height": 2622,
+      "bytes": 256599
+    },
+    {
+      "file": "v9-explore-checklist-light.png",
+      "width": 1206,
+      "height": 2622,
+      "bytes": 285681
+    },
+    {
+      "file": "v9-explore-code-dark.png",
+      "width": 1206,
+      "height": 2622,
+      "bytes": 259493
+    },
+    {
+      "file": "v9-explore-code-light.png",
+      "width": 1206,
+      "height": 2622,
+      "bytes": 293266
+    },
+    {
+      "file": "v9-explore-collect-dark.png",
+      "width": 1206,
+      "height": 2622,
+      "bytes": 918087
+    },
+    {
+      "file": "v9-explore-collect-light.png",
+      "width": 1206,
+      "height": 2622,
+      "bytes": 957188
+    },
+    {
+      "file": "v9-explore-comparison-dark.png",
+      "width": 1206,
+      "height": 2622,
+      "bytes": 235201
+    },
+    {
+      "file": "v9-explore-comparison-light.png",
+      "width": 1206,
+      "height": 2622,
+      "bytes": 266870
+    },
+    {
+      "file": "v9-explore-essay-dark.png",
+      "width": 1206,
+      "height": 2622,
+      "bytes": 321066
+    },
+    {
+      "file": "v9-explore-essay-light.png",
+      "width": 1206,
+      "height": 2622,
+      "bytes": 348821
+    },
+    {
+      "file": "v9-explore-history-dark.png",
+      "width": 1206,
+      "height": 2622,
+      "bytes": 367896
+    },
+    {
+      "file": "v9-explore-history-light.png",
+      "width": 1206,
+      "height": 2622,
+      "bytes": 443935
+    },
+    {
+      "file": "v9-explore-photo-dark.png",
+      "width": 1206,
+      "height": 2622,
+      "bytes": 1046916
+    },
+    {
+      "file": "v9-explore-photo-light.png",
+      "width": 1206,
+      "height": 2622,
+      "bytes": 1080517
+    },
+    {
+      "file": "v9-explore-quote-dark.png",
+      "width": 1206,
+      "height": 2622,
+      "bytes": 264837
+    },
+    {
+      "file": "v9-explore-quote-light.png",
+      "width": 1206,
+      "height": 2622,
+      "bytes": 295006
+    },
+    {
+      "file": "v9-explore-reference-dark.png",
+      "width": 1206,
+      "height": 2622,
+      "bytes": 288067
+    },
+    {
+      "file": "v9-explore-reference-light.png",
+      "width": 1206,
+      "height": 2622,
+      "bytes": 316142
+    },
+    {
+      "file": "v9-explore-short-dark.png",
+      "width": 1206,
+      "height": 2622,
+      "bytes": 200712
+    },
+    {
+      "file": "v9-explore-short-light.png",
+      "width": 1206,
+      "height": 2622,
+      "bytes": 232481
+    },
+    {
+      "file": "v9-explore-skip-dark.png",
+      "width": 1206,
+      "height": 2622,
+      "bytes": 928758
+    },
+    {
+      "file": "v9-explore-skip-light.png",
+      "width": 1206,
+      "height": 2622,
+      "bytes": 970951
+    },
+    {
+      "file": "v9-reader-essay-dark.png",
+      "width": 1206,
+      "height": 2622,
+      "bytes": 354812
+    },
+    {
+      "file": "v9-reader-essay-light.png",
+      "width": 1206,
+      "height": 2622,
+      "bytes": 363185
+    },
+    {
+      "file": "v9-reader-photo-dark.png",
+      "width": 1206,
+      "height": 2622,
+      "bytes": 1422138
+    },
+    {
+      "file": "v9-reader-photo-light.png",
+      "width": 1206,
+      "height": 2622,
+      "bytes": 1434282
+    }
+  ]
+}

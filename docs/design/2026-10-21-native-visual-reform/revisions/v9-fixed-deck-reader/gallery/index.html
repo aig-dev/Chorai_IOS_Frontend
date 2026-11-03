@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#faf9f6">
+  <title>Chorai · V9 Explore & Reader</title>
+  <link rel="stylesheet" href="./gallery.css">
+  <script src="./gallery.js" defer></script>
+</head>
+<body>
+  <header class="masthead">
+    <a class="wordmark" href="#explore-light-photo-rest" aria-label="Chorai V9 首页">chorai<span>设计审阅 · 09</span></a>
+    <nav class="archive-links" aria-label="审阅资料">
+      <a href="../../../../2026-10-26-review-fixes/">Home / 编辑器实机修正 <span aria-hidden="true">↗</span></a>
+      <a href="../../v8-grid-brush/gallery/">保留的 V8 原型 <span aria-hidden="true">↗</span></a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="intro">
+      <p class="eyebrow"><span class="status-dot"></span> Explore / 阅读详情 · 待确认方案</p>
+      <h1>卡片是入口，<br class="mobile-break">阅读回到整页。</h1>
+      <p class="lede">更大、固定的卡面承载摘要。滑动时给反馈，点开后安心读全文。</p>
+    </section>
+
+    <section class="review" aria-label="交互设计审阅">
+      <div class="preview-column">
+        <div class="preview-topline">
+          <span><span class="live-dot"></span> 原生截图</span>
+          <span id="capture-label">Explore · 图文 · 浅色</span>
+        </div>
+        <div class="phone-wrap">
+          <div class="phone" id="preview" aria-busy="true">
+            <img id="capture" width="1206" height="2622" alt="V9 Explore 图文卡片的 iOS 原生截图" draggable="false">
+            <button class="card-hotspot" id="card-hotspot" aria-label="查看图文笔记的阅读详情设计"></button>
+            <button class="back-hotspot" id="back-hotspot" aria-label="返回之前的 Explore 卡片" hidden></button>
+            <div class="gesture-cue" id="gesture-cue" aria-hidden="true"></div>
+            <div class="image-status" id="image-status" role="status"><span>正在载入原生截图…</span><button id="retry-capture" hidden>重新载入</button></div>
+          </div>
+          <div class="preview-caption"><span id="preview-caption">图文与长文卡片可点开查看阅读设计</span><a id="full-image" target="_blank" rel="noopener">原尺寸 ↗</a></div>
+        </div>
+        <p class="interaction-boundary">这里使用真实原生截图，浏览器只示意点击与滑动状态。连续跟手、回弹与触感请在原生原型中体验。</p>
+      </div>
+
+      <aside class="review-controls" aria-label="切换设计稿">
+        <div class="segmented page-tabs" role="group" aria-label="页面">
+          <button data-screen="explore" aria-pressed="true">Explore</button>
+          <button data-screen="reader" aria-pressed="false">阅读详情</button>
+        </div>
+
+        <div class="appearance-row">
+          <span class="control-label">外观</span>
+          <div class="segmented theme-tabs" role="group" aria-label="浅深色">
+            <button data-theme="light" aria-pressed="true"><span aria-hidden="true">☼</span> 浅色</button>
+            <button data-theme="dark" aria-pressed="false"><span aria-hidden="true">☾</span> 深色</button>
+          </div>
+        </div>
+
+        <section class="control-section">
+          <div class="section-label"><h2>内容样本</h2><span id="sample-count">01 / 08</span></div>
+          <div class="sample-grid" id="sample-grid" role="group" aria-label="内容类型">
+            <button data-card="photo" aria-pressed="true"><span class="sample-mark" aria-hidden="true">◩</span>图文</button>
+            <button data-card="essay" aria-pressed="false"><span class="sample-mark" aria-hidden="true">≋</span>长文</button>
+            <button data-card="quote" aria-pressed="false"><span class="sample-mark" aria-hidden="true">“</span>引语</button>
+            <button data-card="checklist" aria-pressed="false"><span class="sample-mark" aria-hidden="true">☑</span>清单</button>
+            <button data-card="code" aria-pressed="false"><span class="sample-mark code-mark" aria-hidden="true">{ }</span>代码</button>
+            <button data-card="reference" aria-pressed="false"><span class="sample-mark" aria-hidden="true">↗</span>参考链接</button>
+            <button data-card="comparison" aria-pressed="false"><span class="sample-mark" aria-hidden="true">Ⅱ</span>对照</button>
+            <button data-card="short" aria-pressed="false"><span class="sample-mark" aria-hidden="true">—</span>短句</button>
+          </div>
+        </section>
+
+        <section class="control-section" id="state-section">
+          <div class="section-label"><h2>交互状态</h2><span>原生画面回放</span></div>
+          <div class="state-list" role="group" aria-label="Explore 交互状态">
+            <button data-state="rest" aria-pressed="true"><span class="state-no">01</span><span>静止卡面<small>固定摘要，点开读全文</small></span><span aria-hidden="true">↗</span></button>
+            <button data-state="skip" aria-pressed="false"><span class="state-no">02</span><span>向左滑动<small>Skip 只在手势中出现</small></span><span aria-hidden="true">←</span></button>
+            <button data-state="collect" aria-pressed="false"><span class="state-no">03</span><span>向右滑动<small>墨绿 Collect 反馈</small></span><span aria-hidden="true">→</span></button>
+            <button data-state="history" aria-pressed="false"><span class="state-no">04</span><span>回看上一条<small>顶部历史入口，系统半屏页</small></span><span aria-hidden="true">↶</span></button>
+          </div>
+          <p class="microcopy">左右滑状态使用图文样本。也可以直接在静止卡面上横向拖动，演示下一张。</p>
+        </section>
+
+        <section class="design-note" aria-live="polite">
+          <p class="eyebrow" id="note-kicker">EXPLORE · 固定摘要卡</p>
+          <h2 id="note-title">内容变，卡片尺寸不变。</h2>
+          <p id="note-body">图文、长文、清单都占用同一块空间。长内容在摘要处结束，点进正文再完整阅读。移除底部遮罩与常驻操作说明，等级笔触继续保留。</p>
+          <button class="text-action" id="open-reader">看全文阅读设计 <span aria-hidden="true">→</span></button>
+          <button class="text-action" id="return-explore" hidden><span aria-hidden="true">←</span> 回到刚才的卡片</button>
+        </section>
+      </aside>
+    </section>
+
+    <section class="principles" aria-label="本轮设计边界">
+      <article><span class="principle-index">01 / 卡面</span><h2>少一点说明，多一点内容</h2><p>没有底部 Previous 和 Skip / Collect 按钮。摘要不嵌套滚动，历史入口仍然可达。</p></article>
+      <article><span class="principle-index">02 / 阅读</span><h2>正文就是页面</h2><p>阅读页去掉外层卡片，隐藏浏览栏。真实等级、Chora 与作者收在页首，全文自然展开。</p></article>
+      <article><span class="principle-index">03 / 边界</span><h2>重做体验，沿用已有能力</h2><p>收藏、Spark、分享与举报保留原有含义。这份方案只使用离线样本，不代表联网、保存或发布验证。</p></article>
+    </section>
+  </main>
+
+  <footer>
+    <p>V9 独立设计提案 · Explore 与阅读详情尚待视觉确认</p>
+    <nav aria-label="参考文件"><a href="../DESIGN.md">设计说明</a><a href="../../../../2026-10-26-native-rollout/fidelity/">原型 / App 旧版对照</a><a href="../README.md">原生原型与验证边界</a></nav>
+  </footer>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
