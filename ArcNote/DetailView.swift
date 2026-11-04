@@ -13,7 +13,12 @@ struct DetailRelatedNote: Identifiable {
 struct DetailView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var showPopupMenu = false
+    @State private var committedOwnedCardState: OwnedCardActionSnapshot?
+    @State private var ownedCardActionRefresh: OwnedCardActionRefresh?
+    @State private var ownedCardRefreshFailed = false
+    @State private var ownedCardRefreshRequestID: UUID?
     @State private var navigateToUserProfile = false
     @State private var isRelatedNotesExpanded = false
     @State private var contentHeight: CGFloat = 200
@@ -23,6 +28,8 @@ struct DetailView: View {
     @StateObject private var likeStore: CardLikeStore
     @State private var isFavorited = false
     @State private var favoriteCount = 0
+    @State private var isFavoriteLoading = false
+    @State private var favoriteError: String?
     @State private var commentCount = 0
     @State private var cancellables = Set<AnyCancellable>()
     
@@ -53,6 +60,7 @@ struct DetailView: View {
     }
     
     private var isCurrentCardOwned: Bool {
+        guard cardDetailManager.cardDetail?.id == cardId else { return false }
         if let isOwner = cardDetailManager.cardDetail?.isOwner {
             return isOwner
         }
@@ -64,7 +72,7 @@ struct DetailView: View {
     }
     
     private var currentDetailUserCard: UserCard? {
-        guard let detail = cardDetailManager.cardDetail else {
+        guard let detail = cardDetailManager.cardDetail, detail.id == cardId else {
             return nil
         }
         return UserCard(
@@ -74,15 +82,15 @@ struct DetailView: View {
             contentJSON: detail.contentJSON,
             backgroundMediaRef: detail.backgroundMediaRef,
             contentHash: detail.contentHash,
-            isPublic: detail.isPublic,
+            isPublic: committedOwnedCardState?.isPublic ?? detail.isPublic,
             tags: detail.tags,
             createdAt: detail.createdAt,
             updatedAt: detail.updatedAt,
             likeCount: detail.likeCount,
             commentCount: detail.commentCount,
             isLiked: detail.isLiked,
-            isPinned: detail.isPinned ?? false,
-            pinnedAt: detail.pinnedAt,
+            isPinned: committedOwnedCardState?.isPinned ?? detail.isPinned ?? false,
+            pinnedAt: committedOwnedCardState.map { $0.pinnedAt } ?? detail.pinnedAt,
             isFavorited: detail.isFavorited,
             favoriteCount: detail.favoriteCount,
             rate: detail.rate,
@@ -91,6 +99,37 @@ struct DetailView: View {
         )
     }
     
+    private func handleOwnedCardActionCommit(_ commit: OwnedCardActionCommit) {
+        guard commit.cardID == cardId else { return }
+        if case .removed = commit {
+            if cardDetailManager.cardDetail?.id == cardId {
+                cardDetailManager.clearCardDetail()
+            }
+            dismiss()
+            return
+        }
+        guard let card = currentDetailUserCard else { return }
+        var state = committedOwnedCardState ?? OwnedCardActionSnapshot(
+            cardID: card.id, isOwned: isCurrentCardOwned,
+            isPublic: card.isPublic, isPinned: card.isPinned, pinnedAt: card.pinnedAt
+        )
+        switch commit {
+        case .visibility(_, let isPublic): state.isPublic = isPublic
+        case .pin(_, let isPinned, let pinnedAt):
+            state.isPinned = isPinned
+            state.pinnedAt = pinnedAt
+        case .removed: return
+        }
+        // A list/detail projection may lag a successful mutation; use its exact
+        // service receipt immediately without making a second request.
+        committedOwnedCardState = state
+    }
+
+    private func handleOwnedCardRouteDismissal(_ dismissal: CardNavigationDismissal) {
+        guard case .editor(let editedID) = dismissal.route, editedID == cardId else { return }
+        loadCardDetail(refreshOwnedCardActions: true)
+    }
+
     // 关联笔记数据
     @State private var relatedNotes: [CardLinkItem] = []
     @State private var isLoadingLinks = false
@@ -100,149 +139,28 @@ struct DetailView: View {
     var body: some View {
         ZStack {
             // 背景图片
-            Image("home_bg")
-                .resizable()
-                .aspectRatio(contentMode: .fill)
+            ChoraiBackground()
                 .ignoresSafeArea()
             
             VStack(spacing: 0) {
-                // 顶部导航栏
-                HStack {
-                    Button(action: {
-                        dismiss()
-                    }) {
-                        Image(systemName: "chevron.left")
-                            .font(.title2)
-                            .foregroundColor(.white)
-                    }
-                    .accessibilityLabel("Back")
-                    .accessibilityIdentifier("detail.back")
-                    
-                    Spacer()
-                    
-                    Button(action: {
-                        showPopupMenu = true
-                    }) {
-                        Image(systemName: "ellipsis")
-                            .font(.title2)
-                            .foregroundColor(.white)
-                    }
-                    .accessibilityIdentifier("detail.menu.open")
-                }
-                .adaptiveContentGutter()
-                .padding(.bottom, 20)
-                .padding(.top, 60)
-                
                 // 主要内容
                 ScrollView {
                     VStack(alignment: .leading, spacing: 24) {
-                        // 用户资料和Follow按钮
-                        HStack {
-                            Button(action: {
-                                // 导航到UserProfileView
-                                if let userId = cardDetailManager.cardDetail?.author?.actorId {
-                                    print("UserProfileView: userId=\(userId)")
-                                navigateToUserProfile = true
-                                } else {
-                                    print("无法获取用户ID")
-                                }
-                            }) {
-                                Group {
-                                    if let avatarUrl = cardDetailManager.cardDetail?.author?.avatarUrl, !avatarUrl.isEmpty {
-                                        let fullAvatarUrl = APIConfiguration.resourceURLString(avatarUrl)
-                                        
-                                        
-                                        AsyncImage(url: URL(string: fullAvatarUrl)) { image in
-                                    image
-                                        .resizable()
-                                        .aspectRatio(contentMode: .fill)
-                                } placeholder: {
-                                Image("avatar")
-                                    .resizable()
-                                    .aspectRatio(contentMode: .fill)
-                                        }
-                                    } else {
-                                        Image("avatar")
-                                            .resizable()
-                                            .aspectRatio(contentMode: .fill)
-                                    }
-                                }
-                                    .frame(width: 50, height: 50)
-                                    .clipShape(Circle())
-                            }
-                            
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(cardDetailManager.cardDetail?.author?.userName ?? "Unknown User")
-                                    .font(.system(size: 16, weight: .semibold))
-                                    .foregroundColor(.white)
-                                
-                                Text("User")
-                                    .font(.system(size: 14, weight: .regular))
-                                    .foregroundColor(.white.opacity(0.7))
-                            }
-                            
-                            HStack(spacing: 12) {
-                                Button(action: {
-                                    createConversation()
-                                }) {
-                                    Image("send_chat")
-                                        .resizable()
-                                        .frame(width: 35, height: 35)
-                                }
-                                
-                                Button(action: {
-                                    toggleFollow()
-                                }) {
-                                    HStack(spacing: 4) {
-                                        if isFollowLoading {
-                                            ProgressView()
-                                                .progressViewStyle(CircularProgressViewStyle(tint: .black))
-                                                .scaleEffect(0.8)
-                                        } else {
-                                            Text(isFollowing ? "Unfollow" : "Follow")
-                                        .font(.system(size: 14, weight: .medium))
-                                        .foregroundColor(.black)
-                                        }
-                                    }
-                                        .padding(.horizontal, 16)
-                                        .padding(.vertical, 8)
-                                        .background(
-                                            RoundedRectangle(cornerRadius: 16)
-                                                .fill(Color.white)
-                                        )
-                                }
-                                .disabled(isFollowLoading)
-                            }
-                            
-                            Spacer()
-                            
-                        }
-                        .padding(.horizontal, 20)
-                        
-                        // 主文章内容
-                        VStack(alignment: .leading, spacing: 16) {
-                            if let cardDetail = cardDetailManager.cardDetail {
-                                AdaptiveHTMLWebView(htmlContent: cardDetail.content, height: $contentHeight)
-                                    .frame(height: contentHeight)
-                            } else {
-                                Text("...")
-                                    .font(.system(size: 16, weight: .regular))
-                                    .foregroundColor(.white.opacity(0.7))
-                            }
-                        }
-                        .padding(.horizontal, 20)
-                        
+                        readerCard
+                            .padding(.horizontal, 24)
+                            .padding(.top, 18)
+
                         // 时间戳和标签
                         VStack(alignment: .leading, spacing: 12) {
                             HStack {
                                 Text(formatDate(cardDetailManager.cardDetail?.createdAt ?? ""))
                                     .font(.system(size: 14, weight: .regular))
-                                    .foregroundColor(.white.opacity(0.7))
+                                    .foregroundColor(ChoraiTheme.secondaryInk)
                                 
-                                if cardDetailManager.cardDetail?.isPublic == true {
+                                if currentDetailUserCard?.isPublic == true {
                                 Image(systemName: "globe")
                                     .font(.system(size: 14, weight: .medium))
-                                    .foregroundColor(.white.opacity(0.7))
+                                    .foregroundColor(ChoraiTheme.secondaryInk)
                                 }
                                 
                                 Spacer()
@@ -277,7 +195,7 @@ struct DetailView: View {
                                             : "chevron.down"
                                     )
                                     .font(.system(size: 16, weight: .medium))
-                                    .foregroundStyle(.white.opacity(0.7))
+                                    .foregroundStyle(ChoraiTheme.secondaryInk)
                                     .frame(width: 44, height: 44)
                                     .contentShape(Rectangle())
                                 }
@@ -319,7 +237,7 @@ struct DetailView: View {
 
                                         if index < relatedNotes.count - 1 {
                                             Rectangle()
-                                                .fill(Color.white.opacity(0.1))
+                                                .fill(ChoraiTheme.ink.opacity(0.1))
                                                 .frame(height: 1)
                                         }
                                     }
@@ -330,86 +248,59 @@ struct DetailView: View {
                                 )
                             }
                         }
+                        readerEngagement
                     }
-                    .padding(.bottom, 100)
+                    .padding(.bottom, 24)
                 }
                 
-                Spacer()
-                
-                // 底部互动栏
-                VStack(spacing: 8) {
-                    HStack(spacing: 24) {
-                        // 点赞按钮
-                        Button(action: likeStore.toggle) {
-                            HStack(spacing: 6) {
-                            Image(likeStore.state.isLiked ? "like_active" : "like")
-                                .resizable()
-                                .aspectRatio(contentMode: .fit)
-                                .frame(width: 20, height: 20)
-                                Text("\(likeStore.state.likeCount)")
-                                    .font(.system(size: 16, weight: .medium))
-                                    .foregroundColor(.white)
-                            }
-                        }
-                        .disabled(likeStore.isMutating)
-                        .accessibilityLabel(likeStore.state.isLiked ? "Unlike" : "Like")
-                        .accessibilityValue(likeStore.state.isLiked ? "true" : "false")
-                        .accessibilityIdentifier("detail.like.\(cardId)")
-                    
-                    // 评论按钮
-                    CommentButton(cardId: cardId, commentCount: commentCount)
-                        .scaleEffect(1.1)
-                        .accessibilityIdentifier("detail.comment.open")
-                    
-                    // 收藏按钮
-                    if !isCurrentCardOwned {
-                        Button(action: {
-                            toggleFavorite()
-                        }) {
-                            HStack(spacing: 6) {
-                                Image(isFavorited ? "favorite_active" : "favorite")
-                                    .resizable()
-                                    .aspectRatio(contentMode: .fit)
-                                    .frame(width: 25, height: 25)
-                            Text("\(favoriteCount)")
-                                    .font(.system(size: 16, weight: .medium))
-                                    .foregroundColor(.white)
-                            }
-                        }
-                    }
-                    
-                        Spacer()
-                    }
-                    if case .failed = likeStore.phase {
-                        Text("Like failed. Try again.")
-                            .font(.footnote)
-                            .foregroundColor(.white.opacity(0.72))
-                            .accessibilityIdentifier("detail.like.error.\(cardId)")
-                    }
-                }
-                .padding(.horizontal, 20)
-                .padding(.bottom, 30)
+
             }
         }
-        .navigationBarHidden(true)
-        .navigationBarBackButtonHidden(true)
-        .gesture(
-            DragGesture()
-                .onEnded { value in
-                    if value.startLocation.x < 100 && value.translation.width > 100 {
-                            dismiss()
-                        }
+        .foregroundStyle(ChoraiTheme.ink)
+        .tint(ChoraiTheme.accent)
+        .onReceive(NotificationCenter.default.publisher(for: .choraiFavoriteChanged)) { notification in
+            guard notification.userInfo?["cardID"] as? String == cardId,
+                  let saved = notification.userInfo?["isFavorited"] as? Bool else { return }
+            isFavorited = saved
+            if let count = notification.userInfo?["count"] as? Int { favoriteCount = count }
+        }
+        .navigationTitle("Note")
+        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(false)
+        .toolbar {
+            ToolbarItemGroup(placement: .navigationBarTrailing) {
+                if !isCurrentCardOwned {
+                    Button(action: toggleFavorite) {
+                        Image(systemName: isFavorited ? "bookmark.fill" : "bookmark")
+                    }
+                    .disabled(isFavoriteLoading)
+                    .accessibilityLabel(isFavorited ? "Remove from collection" : "Collect note")
                 }
-        )
+                if let card = currentDetailUserCard {
+                    NativeCardActionsMenu(cardData: card, layout: isCurrentCardOwned ? .grid3x3 : .grid2x2, isOwnCard: isCurrentCardOwned) {
+                        Image(systemName: "ellipsis").frame(minWidth: 44, minHeight: 44)
+                    }
+                    .accessibilityLabel("More actions").accessibilityIdentifier("detail.menu.open")
+                    .disabled(cardDetailManager.isLoading)
+                }
+            }
+        }
         .popupMenu(
             isPresented: $showPopupMenu,
             layout: isCurrentCardOwned ? .grid3x3 : .grid2x2,
             cardData: currentDetailUserCard,
-            isOwnCard: isCurrentCardOwned
+            isOwnCard: isCurrentCardOwned,
+            onRouteDismissed: handleOwnedCardRouteDismissal,
+            ownedCardActionRefresh: ownedCardActionRefresh,
+            ownedCardActionRefreshInFlight: ownedCardRefreshRequestID != nil,
+            onOwnedCardActionCommitted: handleOwnedCardActionCommit
         )
-        .overlay(
-            CommentPopupView()
-        )
+        .alert("Couldn’t refresh this note", isPresented: $ownedCardRefreshFailed) {
+            Button("Retry") { loadCardDetail(refreshOwnedCardActions: true) }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("The last confirmed status is still shown. Try again to load your changes.")
+        }
         .navigationDestination(isPresented: $navigateToUserProfile) {
             UserProfileView(actorId: cardDetailManager.cardDetail?.author?.actorId ?? "")
         }
@@ -434,6 +325,9 @@ struct DetailView: View {
             }
         }
         .onChange(of: cardId) { newCardId in
+            committedOwnedCardState = nil
+            ownedCardActionRefresh = nil
+            ownedCardRefreshFailed = false
             if !newCardId.isEmpty {
                 loadCardDetail()
                 
@@ -445,7 +339,7 @@ struct DetailView: View {
                 if cardDetailManager.isLoading {
                     Text("Detail loading")
                         .font(.system(size: 1))
-                        .foregroundColor(.white.opacity(0.01))
+                        .foregroundColor(ChoraiTheme.ink.opacity(0.01))
                         .frame(width: 1, height: 1)
                         .accessibilityIdentifier("screen.detail.loading")
                 } else if cardDetailManager.cardDetail != nil {
@@ -456,18 +350,18 @@ struct DetailView: View {
                             .accessibilityIdentifier("screen.detail.loaded-card-id")
                     }
                     .font(.system(size: 1))
-                    .foregroundColor(.white.opacity(0.01))
+                    .foregroundColor(ChoraiTheme.ink.opacity(0.01))
                     .frame(width: 1, height: 1)
                 } else if cardDetailManager.error != nil {
                     Text("Detail error")
                         .font(.system(size: 1))
-                        .foregroundColor(.white.opacity(0.01))
+                        .foregroundColor(ChoraiTheme.ink.opacity(0.01))
                         .frame(width: 1, height: 1)
                         .accessibilityIdentifier("screen.detail.error")
                 } else {
                     Text("Detail idle")
                         .font(.system(size: 1))
-                        .foregroundColor(.white.opacity(0.01))
+                        .foregroundColor(ChoraiTheme.ink.opacity(0.01))
                         .frame(width: 1, height: 1)
                         .accessibilityIdentifier("screen.detail.content")
                 }
@@ -478,7 +372,7 @@ struct DetailView: View {
             #if DEBUG
             Text(cardId)
                 .font(.system(size: 1))
-                .foregroundColor(.white.opacity(0.01))
+                .foregroundColor(ChoraiTheme.ink.opacity(0.01))
                 .frame(width: 1, height: 1)
                 .accessibilityIdentifier("screen.detail.card-id")
             #endif
@@ -486,16 +380,228 @@ struct DetailView: View {
         .onReceive(CardEngagementCenter.shared.likes) { state in
             likeStore.applyCommitted(state)
         }
+        .toolbar(.hidden, for: .tabBar)
     }
-    
+
+    private var readerEngagement: some View {
+                VStack(spacing: 8) {
+                    HStack(spacing: 24) {
+                        // 点赞按钮
+                        Button(action: likeStore.toggle) {
+                            HStack(spacing: 6) {
+                            Image(systemName: likeStore.state.isLiked ? "heart.fill" : "heart")
+                                .font(.body)
+                                .foregroundStyle(likeStore.state.isLiked ? ChoraiTheme.gold : ChoraiTheme.ink)
+                                Text("\(likeStore.state.likeCount)")
+                                    .font(.system(size: 16, weight: .medium))
+                                    .foregroundColor(ChoraiTheme.ink)
+                            }
+                        }
+                        .frame(minWidth: 44, minHeight: 44)
+                        .disabled(likeStore.isMutating)
+                        .accessibilityLabel(likeStore.state.isLiked ? "Unlike" : "Like")
+                        .accessibilityValue(likeStore.state.isLiked ? "true" : "false")
+                        .accessibilityIdentifier("detail.like.\(cardId)")
+
+                    // 评论按钮
+                    CommentButton(cardId: cardId, commentCount: commentCount)
+                        .scaleEffect(1.1)
+                        .accessibilityIdentifier("detail.comment.open")
+
+                    // 收藏按钮
+                    if !isCurrentCardOwned {
+                        Button(action: {
+                            toggleFavorite()
+                        }) {
+                            HStack(spacing: 6) {
+                                Image(systemName: isFavorited ? "bookmark.fill" : "bookmark")
+                                    .font(.body)
+                                    .foregroundStyle(isFavorited ? ChoraiTheme.gold : ChoraiTheme.ink)
+                            Text("\(favoriteCount)")
+                                    .font(.system(size: 16, weight: .medium))
+                                    .foregroundColor(ChoraiTheme.ink)
+                            }
+                        }
+                        .frame(minWidth: 44, minHeight: 44)
+                        .disabled(isFavoriteLoading)
+                        .accessibilityLabel(isFavorited ? "Unfavorite" : "Favorite")
+                        .accessibilityValue(isFavorited ? "true" : "false")
+                        .accessibilityIdentifier("detail.favorite.\(cardId)")
+                    }
+
+                        Spacer()
+                    }
+                    if let favoriteError {
+                        Text(favoriteError)
+                            .font(.footnote)
+                            .foregroundStyle(ChoraiTheme.secondaryInk)
+                            .accessibilityIdentifier("detail.favorite.error")
+                    }
+                    if case .failed = likeStore.phase {
+                        Text("Like failed. Try again.")
+                            .font(.footnote)
+                            .foregroundColor(ChoraiTheme.secondaryInk)
+                            .accessibilityIdentifier("detail.like.error.\(cardId)")
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 8)
+                .padding(.bottom, 8)
+    }
+
+    private var readerCard: some View {
+        VStack(alignment: .leading, spacing: 22) {
+            if let cardDetail = cardDetailManager.cardDetail {
+                VStack(alignment: .leading, spacing: 4) {
+                    ChoraiReadingIdentity(rate: cardDetail.rate)
+                    readerAuthorRow
+                }
+                AdaptiveHTMLWebView(htmlContent: cardDetail.content, height: $contentHeight)
+                    .frame(height: contentHeight)
+            } else {
+                ProgressView().frame(maxWidth: .infinity, minHeight: 44)
+                    .accessibilityLabel("Loading note")
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("detail.reader.document")
+    }
+
+    private var readerAuthorRow: some View {
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 12) {
+                    readerAuthorButton
+                    HStack(spacing: 12) {
+                        readerMessageButton
+                        readerFollowButton
+                        Spacer(minLength: 0)
+                    }
+                }
+            } else {
+                HStack(spacing: 8) {
+                    readerAuthorButton
+                    readerMessageButton
+                    readerFollowButton
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(ChoraiTheme.secondaryInk)
+    }
+
+    private var readerAuthorButton: some View {
+        Button {
+                guard cardDetailManager.cardDetail?.author?.actorId != nil else { return }
+                navigateToUserProfile = true
+            } label: {
+                HStack(spacing: 8) {
+                    readerAuthorAvatar
+                    Text(readerAuthorName)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(Color.primary)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                }
+                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .frame(minHeight: 44)
+            .accessibilityLabel("Open author, \(readerAuthorName)")
+            .accessibilityIdentifier("detail.author")
+            .disabled(cardDetailManager.cardDetail?.author?.actorId == nil)
+    }
+
+    private var readerMessageButton: some View {
+        Button(action: createConversation) {
+                Group {
+                    if isCreatingConversation { ProgressView().controlSize(.small) }
+                    else { Image(systemName: "bubble.left").font(.subheadline) }
+                }
+                .frame(minWidth: 44, minHeight: 44)
+                .contentShape(Rectangle())
+            }
+            .accessibilityLabel("Message author")
+            .accessibilityIdentifier("detail.author.chat")
+            .disabled(isCreatingConversation || cardDetailManager.cardDetail?.author?.actorId == nil)
+    }
+
+    private var readerFollowButton: some View {
+        Button(action: toggleFollow) {
+                Group {
+                    if isFollowLoading { ProgressView().controlSize(.small) }
+                    else { Text(isFollowing ? "Unfollow" : "Follow").font(.subheadline.weight(.medium)) }
+                }
+                .frame(minWidth: 44, minHeight: 44)
+                .contentShape(Rectangle())
+            }
+            .accessibilityLabel(isFollowing ? "Unfollow author" : "Follow author")
+            .accessibilityValue(isFollowing ? "Following" : "Not following")
+            .accessibilityIdentifier("detail.author.follow")
+            .disabled(isFollowLoading || cardDetailManager.cardDetail?.author?.actorId == nil)
+    }
+
+    private var readerAuthorAvatar: some View {
+        Group {
+            if let rawURL = cardDetailManager.cardDetail?.author?.avatarUrl,
+               !rawURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+               let url = URL(string: APIConfiguration.resourceURLString(rawURL)) {
+                AsyncImage(url: url) { phase in
+                    if case .success(let image) = phase { image.resizable().scaledToFill() }
+                    else { readerAuthorPlaceholder }
+                }
+            } else { readerAuthorPlaceholder }
+        }
+        .frame(width: 34, height: 34)
+        .clipShape(Circle())
+        .accessibilityHidden(true)
+    }
+
+    private var readerAuthorPlaceholder: some View {
+        Text(readerAuthorInitials)
+            .font(.system(size: 11, weight: .medium, design: .rounded))
+            .foregroundStyle(ChoraiTheme.secondaryInk)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(ChoraiTheme.ink.opacity(0.08), in: Circle())
+    }
+
+    private var readerAuthorName: String {
+        let name = cardDetailManager.cardDetail?.author?.userName.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return name.isEmpty ? "Unknown User" : name
+    }
+
+    private var readerAuthorInitials: String {
+        readerAuthorName.split(whereSeparator: \.isWhitespace)
+            .prefix(2).compactMap(\.first).map(String.init).joined().uppercased()
+    }
+
     // MARK: 加载卡片详情
-    private func loadCardDetail() {
-        // 先清空之前的数据，避免显示旧内容
-        cardDetailManager.cardDetail = nil
-        
+    private func loadCardDetail(refreshOwnedCardActions: Bool = false) {
+        // An explicit return from Edit establishes a new metadata authority.
+        // Keep the last confirmed state if that refresh fails.
+        if !refreshOwnedCardActions { cardDetailManager.cardDetail = nil }
+        let refreshRequestID = UUID()
+        if refreshOwnedCardActions { ownedCardRefreshRequestID = refreshRequestID }
+
         cardDetailManager.fetchCardDetail(cardId: cardId) { result in
+            if refreshOwnedCardActions {
+                guard ownedCardRefreshRequestID == refreshRequestID else { return }
+                ownedCardRefreshRequestID = nil
+            }
             switch result {
             case .success(let cardDetail):
+                guard cardDetail.id == cardId else { return }
+                if refreshOwnedCardActions {
+                    let snapshot = OwnedCardActionSnapshot(
+                        cardID: cardDetail.id,
+                        isOwned: cardDetail.isOwner ?? (AuthManager.shared.currentUser.map { cardDetail.author?.actorId == $0.id } ?? false),
+                        isPublic: cardDetail.isPublic, isPinned: cardDetail.isPinned ?? false,
+                        pinnedAt: cardDetail.pinnedAt
+                    )
+                    committedOwnedCardState = snapshot
+                    ownedCardActionRefresh = OwnedCardActionRefresh(snapshot: snapshot)
+                    ownedCardRefreshFailed = false
+                }
                 print("详情加载成功: \(cardDetail.title ?? "")")
                 
                 // 初始化状态
@@ -515,6 +621,7 @@ struct DetailView: View {
                 loadRelatedNotes()
                 checkFollowStatus()
             case .failure(let error):
+                if refreshOwnedCardActions { ownedCardRefreshFailed = true }
                 print("详情加载失败: \(error.localizedDescription)")
             }
         }
@@ -554,8 +661,9 @@ struct DetailView: View {
             print("用户未登录")
             return
         }
-        guard !isCurrentCardOwned else { return }
-        
+        guard !isCurrentCardOwned, !isFavoriteLoading else { return }
+        isFavoriteLoading = true
+        favoriteError = nil
         let networkManager = NetworkManager.shared
         
         if isFavorited {
@@ -564,15 +672,16 @@ struct DetailView: View {
                 .receive(on: DispatchQueue.main)
                 .sink(
                     receiveCompletion: { completion in
-                        if case .failure(let error) = completion {
-                            print("取消收藏失败: \(error)")
-                        }
+                        isFavoriteLoading = false
+                        if case .failure = completion { favoriteError = "Couldn’t update collection. Try again." }
                     },
                     receiveValue: { response in
                         if response.success {
                             self.isFavorited = false
                             self.favoriteCount = max(0, self.favoriteCount - 1)
-                            print("取消收藏成功")
+                            publishFavoriteChange()
+                        } else {
+                            favoriteError = "Couldn’t update collection. Try again."
                         }
                     }
                 )
@@ -583,15 +692,16 @@ struct DetailView: View {
                 .receive(on: DispatchQueue.main)
                 .sink(
                     receiveCompletion: { completion in
-                        if case .failure(let error) = completion {
-                            print("收藏失败: \(error)")
-                        }
+                        isFavoriteLoading = false
+                        if case .failure = completion { favoriteError = "Couldn’t update collection. Try again." }
                     },
                     receiveValue: { response in
                         if response.success {
                             self.isFavorited = true
                             self.favoriteCount += 1
-                            print("收藏成功")
+                            publishFavoriteChange()
+                        } else {
+                            favoriteError = "Couldn’t update collection. Try again."
                         }
                     }
                 )
@@ -599,6 +709,14 @@ struct DetailView: View {
         }
     }
     
+    private func publishFavoriteChange() {
+        NotificationCenter.default.post(
+            name: .choraiFavoriteChanged,
+            object: nil,
+            userInfo: ["cardID": cardId, "isFavorited": isFavorited, "count": favoriteCount]
+        )
+    }
+
     // MARK: 发起会话
     private func createConversation() {
         guard !isCreatingConversation else { return }

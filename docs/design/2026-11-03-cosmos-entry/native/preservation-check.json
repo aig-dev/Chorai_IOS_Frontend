@@ -1,0 +1,25 @@
+{
+  "baseline_files": 567,
+  "unchanged_files": 554,
+  "expected_changed_files": [
+    "ArcNote/ArcNoteApp.swift",
+    "ArcNote/NetworkManager.swift",
+    "ArcNote/ChooseInterestsView.swift",
+    "ArcNote/SignInView.swift",
+    "ArcNote/AuthManager.swift",
+    "ArcNote/SignUpView.swift",
+    "ArcNote/ContentView.swift",
+    "ArcNote/AccessGateView.swift",
+    "ArcNoteUITests/ArcNoteUITests.swift",
+    "Packages/CoreFlow/Sources/CoreFlow/AuthenticationErrors.swift",
+    "Packages/CoreFlow/Tests/CoreFlowTests/AuthenticationErrorsTests.swift",
+    "Packages/CoreFlow/Tests/CoreFlowTests/CoreTabBarSourceContractTests.swift",
+    "Packages/CoreFlow/Tests/CoreFlowTests/IOSAccessSourceTests.swift"
+  ],
+  "missing_files": [],
+  "previous_preview_files": 61,
+  "previous_preview_changed": [],
+  "existing_asset_files": 234,
+  "existing_assets_changed": [],
+  "branch": "main"
+}

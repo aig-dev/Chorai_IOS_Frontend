@@ -31,29 +31,19 @@ final class SparkContinuationSourceContractTests: XCTestCase {
         )
     }
 
-    func testSparkScopesWhiteForegroundStyleAwayFromSharedCommentPopup() throws {
+    func testSparkUsesAdaptiveInkWithoutForcingCommentPopupAppearance() throws {
         let continuation = try source(
             at: "ArcNote/CoreFlow/SparkContinuationViews.swift"
         )
 
         XCTAssertTrue(
-            continuation.contains(
-                ".padding(.bottom, 18)\n            .foregroundStyle(.white)\n\n            automationAnchors"
-            ),
-            "Spark's white foreground style must stay scoped to its screen content"
+            continuation.contains(".foregroundStyle(ChoraiTheme.ink)"),
+            "Spark content follows the shared adaptive foreground"
         )
-        XCTAssertFalse(
-            continuation.contains(
-                "}\n        .foregroundStyle(.white)\n        .navigationBarHidden(true)"
-            ),
-            "A root foreground style leaks into CommentPopupView and changes Explore's material"
-        )
-        XCTAssertTrue(
-            continuation.contains(
-                "CommentPopupView()\n                .environment(\\.colorScheme, .light)"
-            ),
-            "Spark must render the shared comment popup in Explore's app-level Light environment"
-        )
+        XCTAssertFalse(continuation.contains("CommentPopupView()"), "Spark uses the app's single scene-aware comment presenter")
+        XCTAssertTrue(try source(at: "ArcNote/ArcNoteApp.swift").contains(".overlay { CommentPopupView() }"))
+        XCTAssertFalse(continuation.contains(".preferredColorScheme(.dark)"))
+        XCTAssertFalse(continuation.contains(".environment(\\.colorScheme, .light)"))
     }
 
     func testPendingContinuationAppearsAsTheNextNumberedHistoryNode() throws {
@@ -89,21 +79,21 @@ final class SparkContinuationSourceContractTests: XCTestCase {
             "Spark cards must not resurrect the title removed from Flow cards"
         )
         XCTAssertTrue(
-            card.contains("Button(action: onSparkDeeper)"),
-            "Touch users need the same direct Spark action exposed by Flow cards"
+            continuation.contains("Label(\"Continue Spark\", systemImage: \"sparkles\")"),
+            "Touch users retain a direct continuation action in the approved bottom dock"
         )
         XCTAssertTrue(
-            card.contains(
+            continuation.contains(
                 ".accessibilityIdentifier(\"spark.continue.\\(result.id)\")"
             )
         )
         XCTAssertTrue(
-            card.contains(".disabled(!allowsSparkDeeper)"),
+            continuation.contains(".disabled(store.phase != .loaded || store.isInteractionLocked)"),
             "The direct continuation button must follow the loaded state"
         )
         XCTAssertTrue(
             card.contains(
-                ".font(.system(size: 17, weight: .regular, design: .rounded))"
+                ".font(.system(.title3, design: .serif))"
             )
         )
         XCTAssertTrue(card.contains(".lineSpacing(5)"))
@@ -181,7 +171,13 @@ final class SparkContinuationSourceContractTests: XCTestCase {
         let card = try sparkResultCardSource()
 
         XCTAssertTrue(
-            continuation.contains("@StateObject private var likeStore = CardLikeStore(")
+            continuation.contains("@StateObject private var likeStore: CardLikeStore")
+        )
+        XCTAssertTrue(
+            continuation.contains("service: NetworkCoreCardLikeService()")
+        )
+        XCTAssertTrue(
+            continuation.contains("onCommit: CardEngagementCenter.shared.publish")
         )
         XCTAssertTrue(continuation.contains("store.applyLikeState(state)"))
         XCTAssertTrue(card.contains("let isLikeMutationInFlight: Bool"))
@@ -227,6 +223,36 @@ final class SparkContinuationSourceContractTests: XCTestCase {
         XCTAssertFalse(continuation.contains("case .saved"))
         XCTAssertFalse(continuation.contains("spark.save.undo"))
         XCTAssertFalse(continuation.contains("SparkIconNotice"))
+    }
+
+    func testOfflineFidelityRouteInjectsRealSparkStoresWithoutNetworkNavigation() throws {
+        let app = try source(at: "ArcNote/ArcNoteApp.swift")
+        let view = try source(at: "ArcNote/CoreFlow/SparkContinuationViews.swift")
+        XCTAssertTrue(app.contains("--ui-test-spark-fidelity"))
+        XCTAssertTrue(app.contains("SparkContinuationView.fidelityFixture()"))
+        XCTAssertTrue(view.contains("static func fidelityFixture() -> SparkContinuationView"))
+        XCTAssertTrue(view.contains("service: service,\n            persistence: SparkFidelityMemoryPersistence()"))
+        XCTAssertTrue(view.contains("service: SparkFidelityLikeService()"))
+        XCTAssertTrue(view.contains("service.applyLikeState(state)"))
+        XCTAssertTrue(view.contains("session.applyLikeState(state)"))
+        XCTAssertTrue(view.contains("Sample results · no AI request"))
+        XCTAssertTrue(view.contains("spark.fixture.offline"))
+        XCTAssertFalse(view.contains("CommentPopupView()"), "An existing Spark sheet must not own a second competing comment presenter")
+        XCTAssertTrue(view.contains(".disabled(!allowsNetworkNavigation)"))
+        for action in ["openDetail(_ cardID: String)", "openAuthor(_ authorID: String)"] {
+            XCTAssertTrue(view.contains("private func \(action) {\n        guard allowsNetworkNavigation else {"))
+        }
+        XCTAssertTrue(view.contains("private func openMenu(_ card: FlowCard) {\n        guard allowsNativeMenuPresentation else {"))
+        XCTAssertTrue(view.contains("guard allowsNetworkNavigation else { return }\n                                NotificationCenter.default.post"))
+        let fixtureStart = try XCTUnwrap(view.range(of: "#if DEBUG\n// Offline fidelity data"))
+        let fixtures = String(view[fixtureStart.lowerBound...])
+        XCTAssertFalse(fixtures.contains("NetworkCore"))
+        XCTAssertFalse(fixtures.contains("UserDefaults"))
+        XCTAssertTrue(fixtures.contains("private final class SparkFidelityService: CoreSparkServing"))
+        XCTAssertTrue(fixtures.contains("private actor SparkFidelityLikeService: CoreCardLikeServing"))
+        XCTAssertTrue(fixtures.contains("fixture-spark-source"))
+        XCTAssertTrue(fixtures.contains("fixture-spark-nia"))
+        XCTAssertTrue(fixtures.contains("fixture-spark-leo"))
     }
 
     private func sparkResultCardSource() throws -> String {

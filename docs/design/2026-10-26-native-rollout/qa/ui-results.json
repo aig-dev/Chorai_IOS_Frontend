@@ -1,0 +1,21 @@
+{
+  "testCardEditorInlineImageRendersPixelsWithinPhoneViewport": "passed",
+  "testCardEditorLeadingControlChangesFromBackToSaveAndBack": "passed",
+  "testCardEditorShellEmptyHierarchyIsHeaderlessAndAccessible": "passed",
+  "testChoraProfileLoadedFixtureSupportsAccessibilityText": "passed",
+  "testDiscoveryPathFixtureShowsCollectedToOriginOrder": "passed",
+  "testLocalPreviewNavigatesRealTabsWithoutSignIn": "passed",
+  "testMergeArtifactDiscardRequiresConfirmation": "passed",
+  "testMergeSelectionFixtureSelectsWhenTappingCardContent": "passed",
+  "testNativeReformGridReaderAndHomeKeepRealNavigation": "passed",
+  "testNotificationContractFixtureRoute": "passed",
+  "testSettingsOnlyShowsConnectedModules": "passed",
+  "testSignInOnlyShowsSupportedAuthenticationActions": "passed",
+  "testNativeReformColdSidebarCollectionsSelectsLibraryScope": "passed",
+  "testCardEditorInlineImageChooserDismissesKeyboardAndShowsSources": "passed",
+  "testCardEditorShellSupportsAccessibilityTextSize": "passed",
+  "testMergeArtifactAccessibilityTypeKeepsActionsReachable": "passed",
+  "testMergeTaskRailShowsCountAndNumberedStatesWithoutText": "passed",
+  "testMergeTaskRailScrollsToAndSelectsFifthTask": "passed",
+  "testCardLevelVisualMatrixCapturesSixTiers": "passed"
+}

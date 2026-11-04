@@ -1,0 +1,61 @@
+{
+  "frames" : [
+    {
+      "actualSeconds" : 8.6999999999999993,
+      "file" : "sample-022-8.700000s.png",
+      "height" : 2622,
+      "sampleIndex" : 22,
+      "width" : 1206
+    },
+    {
+      "actualSeconds" : 8.7133333333333329,
+      "file" : "sample-023-8.713333s.png",
+      "height" : 2622,
+      "sampleIndex" : 23,
+      "width" : 1206
+    },
+    {
+      "actualSeconds" : 8.7300000000000004,
+      "file" : "sample-024-8.730000s.png",
+      "height" : 2622,
+      "sampleIndex" : 24,
+      "width" : 1206
+    },
+    {
+      "actualSeconds" : 8.7349999999999994,
+      "file" : "sample-025-8.735000s.png",
+      "height" : 2622,
+      "sampleIndex" : 25,
+      "width" : 1206
+    },
+    {
+      "actualSeconds" : 8.7466666666666661,
+      "file" : "sample-026-8.746667s.png",
+      "height" : 2622,
+      "sampleIndex" : 26,
+      "width" : 1206
+    },
+    {
+      "actualSeconds" : 8.7516666666666669,
+      "file" : "sample-027-8.751667s.png",
+      "height" : 2622,
+      "sampleIndex" : 27,
+      "width" : 1206
+    },
+    {
+      "actualSeconds" : 8.7633333333333336,
+      "file" : "sample-028-8.763333s.png",
+      "height" : 2622,
+      "sampleIndex" : 28,
+      "width" : 1206
+    },
+    {
+      "actualSeconds" : 8.7799999999999994,
+      "file" : "sample-029-8.780000s.png",
+      "height" : 2622,
+      "sampleIndex" : 29,
+      "width" : 1206
+    }
+  ],
+  "video" : "\/Users\/didi\/Documents\/ChatGPT\/Chorai_IOS_Frontend\/docs\/design\/2026-10-29-entry-chat-sidebar\/qa\/sidebar-manual-light.mov"
+}

@@ -4,77 +4,11 @@ import Combine
 // MARK: - 圆角按钮高光效果
 extension View {
     func roundedButtonHighlightEffect(cornerRadius: CGFloat = 20) -> some View {
-        self
-            .overlay(roundedButtonTopLeftHighlight(cornerRadius: cornerRadius))
-            .overlay(roundedButtonBottomRightHighlight(cornerRadius: cornerRadius))
-            .overlay(roundedButtonTopEdgeHighlight(cornerRadius: cornerRadius))
-            .overlay(roundedButtonBottomEdgeHighlight(cornerRadius: cornerRadius))
-    }
-    
-    private func roundedButtonTopLeftHighlight(cornerRadius: CGFloat) -> some View {
-        RoundedRectangle(cornerRadius: cornerRadius)
-            .stroke(Color.white.opacity(0.2), lineWidth: 2)
-            .offset(x: 0, y: 0)
-            .mask(
-                RoundedRectangle(cornerRadius: cornerRadius)
-                    .fill(
-                        RadialGradient(
-                            colors: [Color.white, Color.clear],
-                            center: .topLeading,
-                            startRadius: 10,
-                            endRadius: 35
-                        )
-                    )
-            )
-    }
-    
-    private func roundedButtonBottomRightHighlight(cornerRadius: CGFloat) -> some View {
-        RoundedRectangle(cornerRadius: cornerRadius)
-            .stroke(Color.white.opacity(0.2), lineWidth: 2)
-            .offset(x: 0, y: 0)
-            .mask(
-                RoundedRectangle(cornerRadius: cornerRadius)
-                    .fill(
-                        RadialGradient(
-                            colors: [Color.white, Color.clear],
-                            center: .bottomTrailing,
-                            startRadius: 10,
-                            endRadius: 35
-                        )
-                    )
-            )
-    }
-    
-    private func roundedButtonTopEdgeHighlight(cornerRadius: CGFloat) -> some View {
-        RoundedRectangle(cornerRadius: cornerRadius)
-            .stroke(Color.white.opacity(0.2), lineWidth: 1)
-            .offset(x: 0, y: -1)
-            .mask(
-                RoundedRectangle(cornerRadius: cornerRadius)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.white, Color.clear],
-                            startPoint: .top,
-                            endPoint: UnitPoint(x: 0, y: 0.05)
-                        )
-                    )
-            )
-    }
-    
-    private func roundedButtonBottomEdgeHighlight(cornerRadius: CGFloat) -> some View {
-        RoundedRectangle(cornerRadius: cornerRadius)
-            .stroke(Color.white.opacity(0.2), lineWidth: 1)
-            .offset(x: -1, y: 1)
-            .mask(
-                RoundedRectangle(cornerRadius: cornerRadius)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.white, Color.clear],
-                            startPoint: .bottom,
-                            endPoint: UnitPoint(x: 1, y: 0.05)
-                        )
-                    )
-            )
+        overlay {
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .stroke(ChoraiTheme.separator, lineWidth: 0.75)
+                .allowsHitTesting(false)
+        }
     }
 }
 
@@ -103,123 +37,61 @@ struct SettingsView: View {
         self.choraProfileDestination = choraProfileDestination
         self.invitationCreditDestination = invitationCreditDestination
     }
-    
+
     var body: some View {
-        ZStack {
-            // 背景图片
-            Image("home_bg")
-                .resizable()
-                .aspectRatio(contentMode: .fill)
-                .ignoresSafeArea()
-            
-            VStack(spacing: 0) {
-                // 顶部导航栏
-                HStack {
-                    Button(action: {
-                        presentationMode.wrappedValue.dismiss()
-                    }) {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 20, weight: .medium))
-                            .foregroundColor(.white)
-                    }
-                    
-                    Spacer()
-                    
-                    Text("Settings")
-                        .font(.system(size: 24, weight: .bold))
-                        .foregroundColor(.white)
-                    
-                    Spacer()
-                    
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 20, weight: .medium))
-                        .foregroundColor(.clear)
-                        .accessibilityHidden(true)
+        Form {
+            Section {
+                SettingsRow(imageName: "personal", title: "Personal Data", accessibilityIdentifier: "settings.personal-data") {
+                    navigateToEditProfile = true
                 }
-                .adaptiveContentGutter()
-                .padding(.top, 60)
-                .padding(.bottom, 30)
-                
-                ScrollView {
-                    VStack(spacing: 24) {
-                        // 设置选项列表
-                        VStack(spacing: 0) {
-                            SettingsRow(imageName: "personal", title: "Personal Data", accessibilityIdentifier: "settings.personal-data") {
-                                navigateToEditProfile = true
-                            }
-                            
-                            Divider()
-                                .background(Color.white.opacity(0.2))
-
-                            SettingsRow(imageName: "bot", title: "Chora Profile", accessibilityIdentifier: "settings.choraProfile") {
-                                navigateToChoraProfile = true
-                            }
-
-                            Divider()
-                                .background(Color.white.opacity(0.2))
-
-                            SettingsRow(
-                                imageName: "syn",
-                                title: "Invitations & Credits",
-                                subtitle: userProfileManager.isCreditLoading
-                                    ? "Loading…"
-                                    : "\(userProfileManager.creditTotal.formatted()) Credits",
-                                accessibilityIdentifier: "settings.invitation-credits"
-                            ) {
-                                navigateToInvitationCredits = true
-                            }
-
-                            Divider()
-                                .background(Color.white.opacity(0.2))
-                            
-                            SettingsRow(imageName: "account", title: "Account & Privacy", accessibilityIdentifier: "settings.account-privacy") {
-                                navigateToAccountDetails = true
-                            }
-                        }
-                        
-                        .adaptiveContentGutter()
-                        
-                        // 登出按钮
-                        VStack(spacing: 8) {
-                            Button(action: {
-                                showLogoutAlert = true
-                            }) {
-                                Text("Log Out")
-                                    .font(.system(size: 16, weight: .medium))
-                                    .foregroundColor(.white)
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 13)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 30)
-                                            .stroke(Color.white.opacity(0.3), lineWidth: 1)
-                                    )
-                            }
-                            .disabled(isLoggingOut)
-                            .accessibilityIdentifier("settings.logout")
-
-                            if let logoutError {
-                                Text(logoutError)
-                                    .font(.system(size: 12))
-                                    .foregroundColor(.white.opacity(0.65))
-                                    .multilineTextAlignment(.center)
-                                    .accessibilityIdentifier("settings.logout.error")
-                            }
-                        }
-                        .padding(.horizontal, 100)
-                        
-                        // 底部隐私声明
-                        Text("Your notes stay yours. We never sell your data or run ads.")
-                            .font(.system(size: 12, weight: .regular))
-                            .foregroundColor(.gray)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, 40)
-                            .padding(.top, 20)
-                            .accessibilityIdentifier("settings.footer")
-                    }
+                SettingsRow(imageName: "bot", title: "Chora Profile", accessibilityIdentifier: "settings.choraProfile") {
+                    navigateToChoraProfile = true
+                }
+                SettingsRow(
+                    imageName: "syn", title: "Invitations & Credits",
+                    subtitle: userProfileManager.isCreditLoading
+                        ? "Loading…" : "\(userProfileManager.creditTotal.formatted()) Credits",
+                    accessibilityIdentifier: "settings.invitation-credits"
+                ) {
+                    navigateToInvitationCredits = true
+                }
+                SettingsRow(imageName: "account", title: "Account & Privacy", accessibilityIdentifier: "settings.account-privacy") {
+                    navigateToAccountDetails = true
                 }
             }
+            .listRowBackground(ChoraiTheme.surface)
+
+            Section {
+                Button(role: .destructive) { showLogoutAlert = true } label: {
+                    HStack {
+                        Text("Log Out")
+                        Spacer()
+                        if isLoggingOut { ProgressView() }
+                    }
+                    .frame(minHeight: 44)
+                }
+                .disabled(isLoggingOut)
+                .accessibilityIdentifier("settings.logout")
+
+                if let logoutError {
+                    Text(logoutError)
+                        .font(.footnote)
+                        .foregroundStyle(ChoraiTheme.secondaryInk)
+                        .accessibilityIdentifier("settings.logout.error")
+                }
+            } footer: {
+                Text("Your notes stay yours. We never sell your data or run ads.")
+                    .accessibilityIdentifier("settings.footer")
+            }
+            .listRowBackground(ChoraiTheme.surface)
         }
-        .navigationBarHidden(true)
+        .scrollContentBackground(.hidden)
+        .choraiPageBackground()
+        .foregroundStyle(ChoraiTheme.ink)
+        .tint(ChoraiTheme.accent)
+        .navigationTitle("Settings")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.visible, for: .navigationBar)
         .overlay(alignment: .topLeading) {
             VStack(spacing: 0) {
                 Text("Settings loaded")
@@ -276,7 +148,7 @@ struct SettingsView: View {
             }
         }
     }
-    
+
     // MARK: - 执行登出
     private func performLogout() {
         guard !isLoggingOut else { return }
@@ -306,7 +178,7 @@ struct SettingsRow: View {
     let subtitle: String?
     let accessibilityIdentifier: String?
     let action: () -> Void
-    
+
     init(imageName: String, title: String, subtitle: String? = nil, accessibilityIdentifier: String? = nil, action: @escaping () -> Void) {
         self.imageName = imageName
         self.title = title
@@ -314,37 +186,61 @@ struct SettingsRow: View {
         self.accessibilityIdentifier = accessibilityIdentifier
         self.action = action
     }
-    
+
     var body: some View {
         Button(action: action) {
             HStack(spacing: 16) {
-                Image(imageName)
+                Image(systemName: ChoraiSymbols.name(for: imageName))
                     .resizable()
                     .aspectRatio(contentMode: .fit)
                     .frame(width: 24, height: 24)
-                    .foregroundColor(.white)
-                
+                    .foregroundColor(ChoraiTheme.ink)
+
                 Text(title)
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundColor(.white)
-                
+                    .font(.body.weight(.medium))
+                    .foregroundColor(ChoraiTheme.ink)
+
                 Spacer()
-                
+
                 if let subtitle = subtitle {
                     Text(subtitle)
-                        .font(.system(size: 14, weight: .regular))
-                        .foregroundColor(.gray)
+                        .font(.subheadline.weight(.regular))
+                        .foregroundColor(ChoraiTheme.secondaryInk)
                 }
-                
+
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(.gray)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundColor(ChoraiTheme.secondaryInk)
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 16)
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
         .accessibilityIdentifier(accessibilityIdentifier ?? "settings.row.\(title)")
         .accessibilityValue(subtitle ?? "")
+    }
+}
+
+/// Native grouped settings sections share the app's semantic surface tokens.
+struct SettingsFormSection<Content: View>: View {
+    let title: String
+    let identifier: String
+    @ViewBuilder let content: Content
+
+    init(title: String, identifier: String, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.identifier = identifier
+        self.content = content()
+    }
+
+    var body: some View {
+        Section {
+            content
+                .listRowBackground(ChoraiTheme.surface)
+        } header: {
+            Text(title)
+                .accessibilityIdentifier(identifier)
+        }
     }
 }
 
@@ -356,8 +252,9 @@ struct SettingsDestinationHeader: View {
         HStack {
             Button(action: dismiss) {
                 Image(systemName: "chevron.left")
-                    .font(.system(size: 20, weight: .medium))
-                    .foregroundColor(.white)
+                    .font(.title3.weight(.medium))
+                    .foregroundColor(ChoraiTheme.ink)
+                    .frame(minWidth: 44, minHeight: 44)
             }
             .accessibilityLabel("Back")
             .accessibilityIdentifier("settings.destination.back")
@@ -365,39 +262,38 @@ struct SettingsDestinationHeader: View {
             Spacer()
 
             Text(title)
-                .font(.system(size: 22, weight: .bold))
-                .foregroundColor(.white)
+                .font(.title2.weight(.bold))
+                .foregroundColor(ChoraiTheme.ink)
                 .accessibilityIdentifier("settings.destination.title")
 
             Spacer()
 
             Image(systemName: "chevron.left")
-                .font(.system(size: 20, weight: .medium))
+                .font(.title3.weight(.medium))
                 .foregroundColor(.clear)
+                    .frame(minWidth: 44, minHeight: 44)
                 .accessibilityHidden(true)
         }
         .padding(.horizontal, 20)
-        .padding(.top, 60)
+        .padding(.top, 12)
         .padding(.bottom, 30)
     }
 }
 
 struct SettingsOutlineButton: View {
     let title: String
-    var foregroundColor: Color = .white
+    var foregroundColor: Color = ChoraiTheme.ink
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             Text(title)
-                .font(.system(size: 16, weight: .medium))
+                .font(.body.weight(.medium))
                 .foregroundColor(foregroundColor)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 13)
-                .background(
-                    RoundedRectangle(cornerRadius: 30)
-                        .stroke(Color.white.opacity(0.3), lineWidth: 1)
-                )
+                .frame(minHeight: 44)
+                .choraiGlassSurface(cornerRadius: 24)
         }
         .buttonStyle(.plain)
     }
@@ -405,4 +301,58 @@ struct SettingsOutlineButton: View {
 
 #Preview {
     SettingsView()
-} 
+}
+
+/// System symbols for existing navigation/action names; media assets are never routed here.
+enum ChoraiSymbols {
+    static func name(for assetName: String) -> String {
+        switch assetName {
+        case "personal": return "person.crop.circle"
+        case "account": return "lock.shield"
+        case "bot": return "sparkles"
+        case "syn": return "gift"
+        case "send_chat": return "bubble.left.and.bubble.right"
+        case "menu_share": return "square.and.arrow.up"
+        case "menu_report": return "flag"
+        case "menu_spark": return "sparkles"
+        case "menu_merge": return "arrow.triangle.merge"
+        case "menu_link": return "link"
+        case "menu_pin": return "pin"
+        case "menu_private": return "lock"
+        case "menu_remove": return "trash"
+        case "menu_root": return "point.3.connected.trianglepath.dotted"
+        case "menu_view": return "doc.text"
+        case "search": return "magnifyingglass"
+        case "filter": return "line.3.horizontal.decrease"
+        case "settings": return "gearshape"
+        case "notification": return "bell"
+        case "trash": return "trash"
+        case "mynotes": return "doc.text"
+        case "favorites": return "bookmark"
+        case "favorite": return "bookmark"
+        case "favorite_active": return "bookmark.fill"
+        case "collect": return "bookmark"
+        case "collect_active": return "bookmark.fill"
+        case "like": return "heart"
+        case "like_active": return "heart.fill"
+        case "comment": return "bubble"
+        case "pin": return "pin.fill"
+        case "unpin": return "pin.slash"
+        case "public_icon": return "globe"
+        case "private_icon": return "lock"
+        case "edit": return "pencil"
+        case "send": return "arrow.up"
+        case "open": return "arrow.up.right"
+        case "menu": return "line.3.horizontal"
+        case "preference": return "slider.horizontal.3"
+        case "api": return "puzzlepiece.extension"
+        case "help": return "questionmark.circle"
+        case "feedback": return "bubble.left"
+        case "about": return "info.circle"
+        case "update": return "arrow.clockwise"
+        case "check": return "checkmark"
+        case "checkmark_icon": return "checkmark.circle.fill"
+        default: return "circle.grid.2x2"
+        }
+    }
+}

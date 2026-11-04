@@ -37,8 +37,8 @@ struct CardEditorGlassSurface<SurfaceShape: Shape>: View {
         case .writingPlane:
             shape.stroke(
                 contrast == .increased
-                    ? Color.white.opacity(0.42)
-                    : Color.white.opacity(0.25),
+                    ? ChoraiTheme.separator
+                    : ChoraiTheme.separator.opacity(0.7),
                 lineWidth: contrast == .increased ? 1.2 : 0.8
             )
             .mask(
@@ -58,8 +58,8 @@ struct CardEditorGlassSurface<SurfaceShape: Shape>: View {
         case .chrome:
             shape.stroke(
                 contrast == .increased
-                    ? Color.white.opacity(0.34)
-                    : Color.white.opacity(0.16),
+                    ? ChoraiTheme.separator
+                    : ChoraiTheme.separator.opacity(0.6),
                 lineWidth: contrast == .increased ? 1.4 : 0.8
             )
         }
@@ -73,8 +73,7 @@ struct CardEditorGlassSurface<SurfaceShape: Shape>: View {
             switch style {
             case .writingPlane:
                 shape
-                    .fill(Color.clear)
-                    .glassEffect(.clear.interactive(), in: shape)
+                    .fill(ChoraiTheme.surface.opacity(0.94))
                     .mask {
                         ZStack {
                             shape.fill(Color.white).padding(1.4)

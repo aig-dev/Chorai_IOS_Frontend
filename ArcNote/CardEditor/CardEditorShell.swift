@@ -28,6 +28,8 @@ struct CardEditorShell: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @FocusState private var isTagInputFocused: Bool
     @ObservedObject var bodyModel: BlockNoteCardEditorModel
+    @State private var writingStatusHeight: CGFloat = 20
+    @State private var footerHeight: CGFloat = 67
 
     let tags: [String]
     let links: [CardEditorLinkItem]
@@ -48,6 +50,7 @@ struct CardEditorShell: View {
     let onRemoveLink: (CardEditorLinkItem) -> Void
     let onTogglePrivacy: () -> Void
     let onOpenCardActions: (() -> Void)?
+    let menuActions: CardEditorMenuActions?
 
     init(
         bodyModel: BlockNoteCardEditorModel,
@@ -69,7 +72,8 @@ struct CardEditorShell: View {
         onRemoveTag: @escaping (String) -> Void,
         onRemoveLink: @escaping (CardEditorLinkItem) -> Void,
         onTogglePrivacy: @escaping () -> Void,
-        onOpenCardActions: (() -> Void)? = nil
+        onOpenCardActions: (() -> Void)? = nil,
+        menuActions: CardEditorMenuActions? = nil
     ) {
         self.bodyModel = bodyModel
         self.tags = tags
@@ -91,19 +95,43 @@ struct CardEditorShell: View {
         self.onRemoveLink = onRemoveLink
         self.onTogglePrivacy = onTogglePrivacy
         self.onOpenCardActions = onOpenCardActions
+        self.menuActions = menuActions
     }
 
     var body: some View {
-        ZStack(alignment: .top) {
-            CardEditorAmbientBackdrop()
-                .contentShape(Rectangle())
-                .onTapGesture(perform: completeTagEntry)
+        VStack(spacing: 0) {
+            CardEditorFloatingControls(
+                bodyModel: bodyModel,
+                isPublic: isPublic,
+                isMetadataEditable: isMetadataEditable,
+                leadingControlState: leadingControlState,
+                onInteraction: completeTagEntry,
+                onLeadingControl: onLeadingControl,
+                onTogglePrivacy: onTogglePrivacy,
+                onOpenCardActions: onOpenCardActions,
+                menuActions: menuActions
+            )
+            .padding(.bottom, 14)
 
             GeometryReader { viewport in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 14) {
+                        VStack(alignment: .leading, spacing: 6) {
+                            writingStatus
+                                .background {
+                                    GeometryReader { geometry in
+                                        Color.clear.preference(
+                                            key: CardEditorPageHeightKey.self,
+                                            value: [.status: geometry.size.height]
+                                        )
+                                    }
+                                }
                             CardEditorBackground(background: background) {
-                                BlockNoteCardEditor(model: bodyModel)
+                                BlockNoteCardEditor(
+                                    model: bodyModel,
+                                    minimumHeight: minimumWritingHeight(in: viewport.size.height),
+                                    fillsWritingPage: true
+                                )
                             }
                             .simultaneousGesture(
                                 TapGesture().onEnded {
@@ -112,48 +140,32 @@ struct CardEditorShell: View {
                             )
                             .accessibilityElement(children: .contain)
                             .accessibilityIdentifier("cardEditorContent")
+                        }
 
-                            CardEditorTagRow(
-                                tags: tags,
-                                isEditable: isMetadataEditable,
-                                isAddingTag: isAddingTag,
-                                prefersKeyboardTagAction: bodyModel.isBodyFocused,
-                                tagInput: $tagInput,
-                                isTagInputFocused: $isTagInputFocused,
-                                onBeginTag: onBeginTag,
-                                onCompleteTag: completeTagEntry,
-                                onInteraction: completeTagEntry,
-                                onRemove: onRemoveTag
-                            )
-                            .accessibilityElement(children: .contain)
-                            .accessibilityIdentifier("cardEditorTagsRow")
-
-                            if !links.isEmpty {
-                                CardEditorLinkRow(
-                                    links: links,
-                                    unlinkingLinkID: unlinkingLinkID,
-                                    isRemovalEnabled: isMetadataEditable
-                                        && isLinkRemovalEnabled,
-                                    onInteraction: completeTagEntry,
-                                    onRemove: onRemoveLink
-                                )
-                                    .accessibilityElement(children: .contain)
-                                    .accessibilityIdentifier("cardEditorLinksRow")
-                            }
-
-                            if isInlineImageProcessing || saveMessage != nil {
-                                editorStatus
+                        editorFooter
+                            .background {
+                                GeometryReader { geometry in
+                                    Color.clear.preference(
+                                        key: CardEditorPageHeightKey.self,
+                                        value: [.footer: geometry.size.height]
+                                    )
+                                }
                             }
                     }
-                    .adaptiveContentGutter()
-                    .padding(.top, 56)
-                    .padding(.bottom, 96)
+                    .padding(.horizontal, 27)
+                    .padding(.top, 6)
+                    .padding(.bottom, 20)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .frame(minHeight: viewport.size.height, alignment: .top)
                     .background {
                         CardEditorBlankTapSurface(action: completeTagEntry)
                             .allowsHitTesting(isAddingTag)
                     }
+                }
+                .clipped()
+                .onPreferenceChange(CardEditorPageHeightKey.self) { heights in
+                    if let height = heights[.status] { writingStatusHeight = height }
+                    if let height = heights[.footer] { footerHeight = height }
                 }
                 .scrollDismissesKeyboard(.interactively)
                 .simultaneousGesture(
@@ -169,16 +181,8 @@ struct CardEditorShell: View {
                 )
             }
 
-            CardEditorFloatingControls(
-                isPublic: isPublic,
-                isMetadataEditable: isMetadataEditable,
-                leadingControlState: leadingControlState,
-                onInteraction: completeTagEntry,
-                onLeadingControl: onLeadingControl,
-                onTogglePrivacy: onTogglePrivacy,
-                onOpenCardActions: onOpenCardActions
-            )
         }
+        .background { ChoraiBackground() }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if bodyModel.isBodyFocused {
                 CardEditorFormattingBar(
@@ -204,17 +208,115 @@ struct CardEditorShell: View {
         )
     }
 
+    private func minimumWritingHeight(in viewportHeight: CGFloat) -> CGFloat {
+        // Every note opens as a full writing page, including existing short notes.
+        // The real editor grows beyond this minimum when its document is longer.
+        // Status/body gap (6), body/footer gap (14), and page insets (6 + 20).
+        // Footer measurements include its divider, tags, links, and save status.
+        return max(248, viewportHeight - writingStatusHeight - footerHeight - 6 - 14 - 26)
+    }
+
+    private var editorFooter: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Divider()
+                .padding(.top, 8)
+
+            HStack(spacing: 12) {
+                CardEditorTagRow(
+                    tags: tags,
+                    isEditable: isMetadataEditable,
+                    isAddingTag: isAddingTag,
+                    prefersKeyboardTagAction: bodyModel.isBodyFocused,
+                    tagInput: $tagInput,
+                    isTagInputFocused: $isTagInputFocused,
+                    onBeginTag: onBeginTag,
+                    onCompleteTag: completeTagEntry,
+                    onInteraction: completeTagEntry,
+                    onRemove: onRemoveTag
+                )
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("cardEditorTagsRow")
+
+                CardEditorToolsMenuButton(
+                    isTagEntryEnabled: isMetadataEditable
+                        && tags.count < CardEditingTag.maximumCount,
+                    isFormattingEnabled: bodyModel.canMutate,
+                    onPrepare: prepareToolsMenu,
+                    onBeginTag: onBeginTag,
+                    onFormat: focusFormattingTools
+                )
+                .frame(width: 44, height: 44)
+                .disabled(
+                    !((isMetadataEditable && tags.count < CardEditingTag.maximumCount)
+                        || bodyModel.canMutate)
+                )
+                .choraiGlassSurface(cornerRadius: 22)
+            }
+
+            if !links.isEmpty {
+                CardEditorLinkRow(
+                    links: links,
+                    unlinkingLinkID: unlinkingLinkID,
+                    isRemovalEnabled: isMetadataEditable && isLinkRemovalEnabled,
+                    onInteraction: completeTagEntry,
+                    onRemove: onRemoveLink
+                )
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("cardEditorLinksRow")
+            }
+
+            if isInlineImageProcessing || saveMessage != nil {
+                editorStatus
+            }
+        }
+    }
+
+    private func prepareToolsMenu() {
+        completeTagEntry()
+        bodyModel.dismissKeyboard()
+    }
+
+    private func focusFormattingTools() {
+        completeTagEntry()
+        bodyModel.focusBody()
+    }
+
+    private var writingStatus: some View {
+        HStack(spacing: 8) {
+            Circle().fill(ChoraiTheme.ink.opacity(0.55))
+                .frame(width: 5, height: 5)
+            Text(writingStatusLabel)
+            Spacer()
+            Text("\(bodyModel.fallbackMarkdown.split { $0.isWhitespace || $0.isNewline }.count) words")
+                .monospacedDigit()
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .padding(.bottom, 4)
+    }
+
+    private var writingStatusLabel: String {
+        switch leadingControlState {
+        case .save: return "Unsaved changes"
+        case .saving: return "Saving…"
+        case .retry: return "Save needs retry"
+        case .readOnly, .bridgeFailed: return "Read only"
+        case .back: return isPublic ? "Public note" : "Private note"
+        }
+    }
+
     private var editorStatus: some View {
         VStack(alignment: .leading, spacing: 6) {
             if isInlineImageProcessing {
                 HStack(spacing: 8) {
                     ProgressView()
                         .controlSize(.small)
-                        .tint(.white)
+                        .tint(ChoraiTheme.accent)
                     Text("Adding image…")
                         .font(.footnote.weight(.medium))
                 }
-                .foregroundStyle(.white.opacity(0.76))
+                .foregroundStyle(ChoraiTheme.secondaryInk)
                 .accessibilityElement(children: .combine)
                 .accessibilityIdentifier("cardEditorInlineImageProgress")
             }
@@ -222,7 +324,7 @@ struct CardEditorShell: View {
             if let saveMessage {
                 Text(saveMessage)
                     .font(.footnote)
-                    .foregroundStyle(.white.opacity(0.68))
+                    .foregroundStyle(ChoraiTheme.secondaryInk)
                     .accessibilityIdentifier("cardEditorSaveMessage")
             }
         }
@@ -232,6 +334,22 @@ struct CardEditorShell: View {
         guard isAddingTag else { return }
         isTagInputFocused = false
         onCompleteTag()
+    }
+}
+
+private enum CardEditorPageRegion: Hashable {
+    case status
+    case footer
+}
+
+private struct CardEditorPageHeightKey: PreferenceKey {
+    static var defaultValue: [CardEditorPageRegion: CGFloat] { [:] }
+
+    static func reduce(
+        value: inout [CardEditorPageRegion: CGFloat],
+        nextValue: () -> [CardEditorPageRegion: CGFloat]
+    ) {
+        value.merge(nextValue(), uniquingKeysWith: { _, latest in latest })
     }
 }
 
@@ -247,6 +365,7 @@ private struct CardEditorBlankTapSurface: View {
 }
 
 private struct CardEditorFloatingControls: View {
+    @ObservedObject var bodyModel: BlockNoteCardEditorModel
     let isPublic: Bool
     let isMetadataEditable: Bool
     let leadingControlState: CardEditorLeadingControlState
@@ -254,9 +373,13 @@ private struct CardEditorFloatingControls: View {
     let onLeadingControl: () -> Void
     let onTogglePrivacy: () -> Void
     let onOpenCardActions: (() -> Void)?
+    let menuActions: CardEditorMenuActions?
 
     var body: some View {
         ZStack {
+            Text("Note")
+                .font(.headline)
+                .foregroundStyle(.primary)
             Button {
                 onInteraction()
                 onLeadingControl()
@@ -265,7 +388,7 @@ private struct CardEditorFloatingControls: View {
                     if leadingControlState == .saving {
                         ProgressView()
                             .controlSize(.small)
-                            .tint(.white)
+                            .tint(ChoraiTheme.accent)
                     } else {
                         Image(
                             systemName: leadingControlState == .save
@@ -282,14 +405,14 @@ private struct CardEditorFloatingControls: View {
                 .contentShape(Circle())
             }
             .buttonStyle(.plain)
-            .foregroundStyle(.white)
+            .foregroundStyle(ChoraiTheme.ink)
             .frame(maxWidth: .infinity, alignment: .leading)
             .disabled(leadingControlState == .saving)
             .accessibilityLabel(leadingControlState.accessibilityLabel)
             .accessibilityIdentifier("cardEditorLeadingAction")
             .accessibilitySortPriority(3)
 
-            HStack(spacing: 8) {
+            HStack(spacing: 4) {
                 Button {
                     onInteraction()
                     onTogglePrivacy()
@@ -297,36 +420,41 @@ private struct CardEditorFloatingControls: View {
                     Image(systemName: isPublic ? "globe" : "lock")
                         .font(.system(size: 17, weight: .semibold))
                         .frame(width: 44, height: 44)
-                        .background(controlBackground)
-                        .clipShape(Circle())
                         .contentShape(Circle())
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(.white)
+                .foregroundStyle(ChoraiTheme.ink)
                 .disabled(!isMetadataEditable)
                 .accessibilityLabel(isPublic ? "Make Private" : "Make Public")
                 .accessibilityValue(isPublic ? "Public" : "Private")
                 .accessibilityIdentifier("cardEditorPrivacyButton")
                 .accessibilitySortPriority(2)
 
-                Button {
-                    onInteraction()
-                    onOpenCardActions?()
-                } label: {
-                    Image(systemName: "ellipsis")
-                        .font(.system(size: 17, weight: .semibold))
+                Group {
+                    if let menuActions {
+                        CardEditorNativeMenuButton(
+                            actions: menuActions,
+                            bodyModel: bodyModel,
+                            isEnabled: isMetadataEditable,
+                            onPrepare: onInteraction
+                        )
                         .frame(width: 44, height: 44)
-                        .background(controlBackground)
-                        .clipShape(Circle())
-                        .contentShape(Circle())
+                    } else {
+                        Button {
+                            onInteraction()
+                            onOpenCardActions?()
+                        } label: { moreLabel }
+                        .disabled(onOpenCardActions == nil)
+                    }
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(.white)
-                .disabled(onOpenCardActions == nil)
+                .foregroundStyle(ChoraiTheme.ink)
                 .accessibilityLabel("More note actions")
                 .accessibilityIdentifier("cardEditorMoreButton")
                 .accessibilitySortPriority(1)
             }
+            .padding(.horizontal, 6)
+            .choraiGlassSurface(cornerRadius: 24)
             .frame(maxWidth: .infinity, alignment: .trailing)
         }
         .adaptiveContentGutter()
@@ -335,6 +463,13 @@ private struct CardEditorFloatingControls: View {
 
     private var controlBackground: some View {
         CardEditorGlassSurface(shape: Circle(), style: .chrome)
+    }
+
+    private var moreLabel: some View {
+        Image(systemName: "ellipsis")
+            .font(.system(size: 17, weight: .semibold))
+            .frame(width: 44, height: 44)
+            .contentShape(Circle())
     }
 }
 
@@ -483,10 +618,11 @@ struct CardEditorShellFixtureScreen: View {
                     isPublic.toggle()
                     actionRouter.markDirty()
                 },
-                onOpenCardActions: fixtureCardActionsHandler
+                onOpenCardActions: fixtureCardActionsHandler,
+                menuActions: usesTwoRowActionBoxFixture ? nil : fixtureMenuActions
             )
 
-            Color.white
+            ChoraiTheme.ink
                 .opacity(0.001)
                 .frame(width: 1, height: 1)
                 .accessibilityElement(children: .ignore)
@@ -562,6 +698,19 @@ struct CardEditorShellFixtureScreen: View {
             bodyModel.dismissKeyboard()
             showCardActions = true
         }
+    }
+
+    private var fixtureMenuActions: CardEditorMenuActions {
+        CardEditorMenuActions(
+            isPinned: isPinned,
+            prepare: {
+                completeTagEntry()
+                bodyModel.dismissKeyboard()
+            },
+            background: presentFixtureBackgroundActions,
+            spark: {}, merge: {}, share: {}, link: {}, root: {}, remove: {},
+            togglePin: { isPinned.toggle() }
+        )
     }
 
     private var fixtureBackgroundActionContext:

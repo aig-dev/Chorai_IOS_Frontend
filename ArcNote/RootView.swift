@@ -30,18 +30,27 @@ struct RootView: View {
 
     var body: some View {
         ZStack {
-            Image("home_bg")
-                .resizable()
-                .aspectRatio(contentMode: .fill)
+            ChoraiBackground()
                 .ignoresSafeArea()
 
-            VStack(spacing: 0) {
-                header
-                content
+            content
+        }
+        .foregroundStyle(ChoraiTheme.ink)
+        .tint(ChoraiTheme.accent)
+        .navigationTitle("Discovery Path")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.visible, for: .navigationBar)
+        .navigationBarBackButtonHidden(true)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button(action: dismiss.callAsFunction) {
+                    Image(systemName: "chevron.left")
+                        .frame(minWidth: 44, minHeight: 44)
+                }
+                .accessibilityLabel("Back")
+                .accessibilityIdentifier("discovery-path.back")
             }
         }
-        .navigationBarHidden(true)
-        .navigationBarBackButtonHidden(true)
         .overlay(alignment: .topLeading) {
             Text("Discovery Path")
                 .font(.system(size: 1))
@@ -68,24 +77,6 @@ struct RootView: View {
         .task(id: cardId) {
             await store.load(cardID: cardId)
         }
-    }
-
-    private var header: some View {
-        HStack {
-            Button(action: dismiss.callAsFunction) {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 20, weight: .medium))
-                    .foregroundColor(.white)
-                    .frame(minWidth: 44, minHeight: 44)
-            }
-            .accessibilityLabel("Back")
-            .accessibilityIdentifier("discovery-path.back")
-
-            Spacer()
-        }
-        .adaptiveContentGutter()
-        .padding(.top, 60)
-        .padding(.bottom, 24)
     }
 
     @ViewBuilder
@@ -126,14 +117,14 @@ struct RootView: View {
                 if showsEmptyState {
                     VStack(spacing: 10) {
                         Image(systemName: "point.3.connected.trianglepath.dotted")
-                            .font(.system(size: 28, weight: .light))
-                            .foregroundColor(.white.opacity(0.55))
+                            .font(.title.weight(.light))
+                            .foregroundColor(ChoraiTheme.secondaryInk)
                         Text("No discovery path recorded")
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundColor(.white.opacity(0.82))
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundColor(ChoraiTheme.ink)
                         Text("This card was not saved from a Spark journey.")
-                            .font(.system(size: 13))
-                            .foregroundColor(.white.opacity(0.5))
+                            .font(.footnote)
+                            .foregroundColor(ChoraiTheme.secondaryInk)
                             .multilineTextAlignment(.center)
                     }
                     .padding(.vertical, 28)
@@ -142,6 +133,7 @@ struct RootView: View {
                 }
             }
             .adaptiveContentGutter()
+            .padding(.top, 24)
             .padding(.bottom, 40)
         }
     }
@@ -158,31 +150,7 @@ struct RootView: View {
     }
 
     private func openMenu(_ card: DiscoveryPathCard) {
-        let currentActorID = AuthManager.shared.currentUser?.id
-        let isOwner = currentActorID != nil
-            && card.authorActorID == currentActorID
-
-        menuCard = UserCard(
-            id: card.id,
-            title: nil,
-            content: card.content,
-            contentHash: "",
-            isPublic: false,
-            tags: card.tags,
-            createdAt: card.createdAt,
-            updatedAt: card.createdAt,
-            likeCount: 0,
-            commentCount: nil,
-            isLiked: false,
-            isPinned: false,
-            pinnedAt: nil,
-            isFavorited: nil,
-            favoriteCount: nil,
-            rate: card.rate,
-            ownerActorId: card.authorActorID,
-            isOwner: isOwner
-        )
-        showPopupMenu = true
+        menuCard = card.asMenuCard
     }
 
     private func message(for error: DiscoveryPathError) -> String {
@@ -209,7 +177,7 @@ private struct DiscoveryPathTimeline: View {
             DiscoveryPathCardView(
                 card: snapshot.collected,
                 badge: "Collected",
-                badgeColor: Color(red: 0.67, green: 0.42, blue: 1),
+                badgeColor: ChoraiTheme.gold,
                 action: { openCard(snapshot.collected) },
                 onMenu: { openMenu(snapshot.collected) }
             )
@@ -224,7 +192,7 @@ private struct DiscoveryPathTimeline: View {
                     badge: index == snapshot.ancestors.count - 1
                         ? "Origin" : "Step \(node.depth)",
                     badgeColor: index == snapshot.ancestors.count - 1
-                        ? Color.orange : Color.white.opacity(0.65),
+                        ? ChoraiTheme.accent : ChoraiTheme.secondaryInk,
                     action: { openCard(node.card) },
                     onMenu: { openMenu(node.card) }
                 )
@@ -245,24 +213,28 @@ private struct DiscoveryPathTimeline: View {
 
 private struct DiscoveryPathConnector: View {
     var body: some View {
-        VStack(spacing: 4) {
-            Circle()
-                .fill(Color.white.opacity(0.45))
-                .frame(width: 6, height: 6)
+        VStack(spacing: 0) {
             Rectangle()
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            Color.white.opacity(0.32),
-                            Color.white.opacity(0.08)
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
-                .frame(width: 1, height: 34)
+                .fill(ChoraiTheme.separator)
+                .frame(width: 1, height: 24)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.leading, 39)
         .accessibilityHidden(true)
+    }
+}
+
+private extension DiscoveryPathCard {
+    var asMenuCard: UserCard {
+        let actorID = AuthManager.shared.currentUser?.id
+        return UserCard(
+            id: id, title: nil, content: content, contentHash: "", isPublic: false,
+            tags: tags, createdAt: createdAt, updatedAt: createdAt,
+            likeCount: 0, commentCount: nil, isLiked: false, isPinned: false,
+            pinnedAt: nil, isFavorited: nil, favoriteCount: nil, rate: rate,
+            ownerActorId: authorActorID,
+            isOwner: actorID != nil && authorActorID == actorID
+        )
     }
 }
 
@@ -272,31 +244,34 @@ private struct DiscoveryPathCardView: View {
     let badgeColor: Color
     let action: () -> Void
     let onMenu: () -> Void
+    @ScaledMetric(relativeTo: .title3) private var previewFontSize = 20.0
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 18) {
             HStack(spacing: 10) {
                 avatar
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(card.authorName)
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(.white)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundColor(ChoraiTheme.ink)
                         .lineLimit(1)
                     Text(Self.formattedDate(card.createdAt))
-                        .font(.system(size: 12))
-                        .foregroundColor(.white.opacity(0.55))
+                        .font(.caption)
+                        .foregroundColor(ChoraiTheme.secondaryInk)
                 }
 
                 Spacer()
 
-                Button(action: onMenu) {
+                NativeCardActionsMenu(
+                    cardData: card.asMenuCard, layout: .grid2x2,
+                    isOwnCard: card.asMenuCard.isOwner ?? false, onPrepare: onMenu
+                ) {
                     Image(systemName: "ellipsis")
-                        .font(.title3)
-                        .foregroundColor(.white)
+                        .font(.body.weight(.medium))
+                        .foregroundColor(ChoraiTheme.ink)
                         .frame(width: 44, height: 44)
                 }
-                .buttonStyle(.plain)
                 .accessibilityLabel("Card menu")
                 .accessibilityIdentifier("discovery-path.menu.\(card.id)")
             }
@@ -304,11 +279,12 @@ private struct DiscoveryPathCardView: View {
             Button(action: action) {
                 HTMLTextRenderer(
                     htmlContent: card.content,
-                    maxLines: 3,
-                    font: .system(size: 14, weight: .regular),
-                    foregroundColor: .white.opacity(0.9)
+                    maxLines: 4,
+                    font: .system(size: previewFontSize, weight: .regular, design: .serif),
+                    foregroundColor: ChoraiTheme.ink
                 )
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Open \(card.authorName)'s card")
@@ -334,7 +310,7 @@ private struct DiscoveryPathCardView: View {
                 cardBackground
             }
         }
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("discovery-path.card.\(card.id)")
     }
@@ -342,7 +318,7 @@ private struct DiscoveryPathCardView: View {
     @ViewBuilder
     private var avatar: some View {
         if let rawURL = card.avatarURL,
-           let url = URL(string: rawURL) {
+           let url = URL(string: APIConfiguration.resourceURLString(rawURL)) {
             AsyncImage(url: url) { image in
                 image.resizable().scaledToFill()
             } placeholder: {
@@ -357,47 +333,36 @@ private struct DiscoveryPathCardView: View {
 
     private var avatarFallback: some View {
         Circle()
-            .fill(Color.white.opacity(0.12))
+            .fill(ChoraiTheme.surface)
             .overlay(
                 Image(systemName: "person.fill")
-                    .font(.system(size: 15))
-                    .foregroundColor(.white.opacity(0.65))
+                    .font(.subheadline)
+                    .foregroundColor(ChoraiTheme.secondaryInk)
             )
             .frame(width: 40, height: 40)
     }
 
     private var pathRoleChip: some View {
         Text(badge)
-            .font(.system(size: 12, weight: .medium))
+            .font(.caption.weight(.semibold))
             .foregroundColor(badgeColor)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(
-                RoundedRectangle(cornerRadius: 20)
-                    .fill(badgeColor.opacity(0.16))
-            )
+            .padding(.trailing, 6)
             .accessibilityIdentifier("discovery-path.role.\(card.id)")
     }
 
     private func tagChip(_ tag: String) -> some View {
-        Text(tag)
-            .font(.system(size: 12, weight: .medium))
-            .foregroundColor(.white)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(
-                RoundedRectangle(cornerRadius: 20)
-                    .fill(Color.white.opacity(0.1))
-            )
+        Text("#\(tag)")
+            .font(.caption)
+            .foregroundColor(ChoraiTheme.secondaryInk)
             .lineLimit(1)
     }
 
     private var cardBackground: some View {
-        RoundedRectangle(cornerRadius: 16)
-            .fill(.ultraThinMaterial.opacity(0.55))
+        RoundedRectangle(cornerRadius: 24, style: .continuous)
+            .fill(ChoraiTheme.surface)
             .overlay(
-                RoundedRectangle(cornerRadius: 16)
-                    .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .stroke(ChoraiTheme.separator.opacity(0.6), lineWidth: 0.5)
             )
     }
 
@@ -411,10 +376,10 @@ private struct DiscoveryPathLoadingView: View {
         VStack(spacing: 14) {
             ProgressView()
                 .progressViewStyle(.circular)
-                .tint(.white)
+                .tint(ChoraiTheme.ink)
             Text("Loading discovery path…")
-                .font(.system(size: 14, weight: .medium))
-                .foregroundColor(.white.opacity(0.65))
+                .font(.subheadline.weight(.medium))
+                .foregroundColor(ChoraiTheme.secondaryInk)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .accessibilityElement(children: .combine)
@@ -429,21 +394,17 @@ private struct DiscoveryPathFailureView: View {
     var body: some View {
         VStack(spacing: 14) {
             Image(systemName: "exclamationmark.arrow.triangle.2.circlepath")
-                .font(.system(size: 30, weight: .light))
-                .foregroundColor(.white.opacity(0.6))
+                .font(.largeTitle.weight(.light))
+                .foregroundColor(ChoraiTheme.secondaryInk)
             Text(message)
-                .font(.system(size: 14, weight: .medium))
-                .foregroundColor(.white.opacity(0.76))
+                .font(.subheadline.weight(.medium))
+                .foregroundColor(ChoraiTheme.secondaryInk)
                 .multilineTextAlignment(.center)
                 .accessibilityIdentifier("discovery-path.error")
             Button("Try Again", action: retry)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundColor(.white)
-                .padding(.horizontal, 22)
-                .padding(.vertical, 10)
-                .background(
-                    Capsule().stroke(Color.white.opacity(0.28), lineWidth: 1)
-                )
+                .font(.subheadline.weight(.semibold))
+                .frame(minHeight: 44)
+                .choraiGlassButton()
                 .accessibilityIdentifier("discovery-path.retry")
         }
         .padding(.horizontal, 36)

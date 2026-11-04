@@ -39,47 +39,46 @@ struct MergeArtifactEditorSurface: View {
             let layoutViewportHeight = controller.bodyModel.isBodyFocused
                 ? restingViewportHeight
                 : viewportHeight
-            let surfaceVerticalInset: CGFloat = dynamicTypeSize.isAccessibilitySize
-                ? 0
-                : 52
+            let surfaceVerticalInset: CGFloat = 0
             let surfaceHeight = max(
                 0,
                 layoutViewportHeight - surfaceVerticalInset
             )
             let actionAreaHeight: CGFloat = 78
             VStack(spacing: 0) {
+                backAction
+                    .padding(.horizontal, 16)
+                    .padding(.top, 6)
+                    .padding(.bottom, 12)
                 ScrollViewReader { proxy in
                     ScrollView(.vertical, showsIndicators: false) {
-                        VStack(spacing: 0) {
-                            backAction
-
-                            Text("New Insight")
-                                .font(.title3.weight(.medium))
-                                .multilineTextAlignment(.center)
-                                .padding(.top, 2)
-
-                            levelPill
-                                .padding(.top, 12)
+                        VStack(alignment: .leading, spacing: 18) {
+                            Text("A new thought, ready for your voice.")
+                                .font(.system(.title2, design: .serif))
+                            Text("Review the body and tags before keeping this insight.")
+                                .font(.subheadline)
+                                .foregroundStyle(ChoraiTheme.secondaryInk)
+                            HStack {
+                                syncState
+                                Spacer(minLength: 8)
+                                levelPill
+                            }
 
                             editor(
                                 height: editorHeight(in: restingViewportHeight)
                             )
-                            .padding(.top, 16)
                             .id(ScrollTarget.editor)
 
                             tagRow
-                                .padding(.top, 10)
-
-                            syncState
-                                .padding(.top, 6)
 
                             if controller.isConflict {
                                 conflictActions
                                     .padding(.top, 4)
                             }
                         }
-                        .padding(.horizontal, 18)
+                        .padding(.horizontal, 22)
                         .padding(.top, 10)
+                        .padding(.bottom, 24)
                     }
                     .scrollDismissesKeyboard(.interactively)
                     .onChange(of: controller.bodyModel.isBodyFocused) {
@@ -97,32 +96,26 @@ struct MergeArtifactEditorSurface: View {
                         }
                     }
                 }
-                .frame(height: max(0, surfaceHeight - actionAreaHeight))
+                .frame(height: max(0, surfaceHeight - actionAreaHeight - 62))
 
                 mutationActions
-                    .padding(.horizontal, 18)
+                    .padding(.horizontal, 22)
                     .padding(.top, 10)
                     .padding(.bottom, 16)
                     .frame(height: actionAreaHeight, alignment: .top)
+                    .background(.regularMaterial)
             }
             .frame(
                 width: min(geometry.size.width, 680),
                 height: surfaceHeight,
                 alignment: .top
             )
-            .background {
-                CardLevelMaterial(
-                    style: controller.levelStyle,
-                    shape: shape
-                )
-            }
-            .clipShape(shape)
-            .shadow(color: .black.opacity(0.34), radius: 24, y: 12)
+            .background { ChoraiBackground() }
             .frame(
                 maxWidth: .infinity,
                 alignment: .center
             )
-            .frame(height: layoutViewportHeight, alignment: .center)
+            .frame(height: layoutViewportHeight, alignment: .top)
             .onAppear {
                 seedInitialRestingViewport(geometry.size)
             }
@@ -139,7 +132,7 @@ struct MergeArtifactEditorSurface: View {
                 restingViewportObservationGeneration += 1
             }
         }
-        .foregroundStyle(.white)
+        .foregroundStyle(ChoraiTheme.ink)
         .ignoresSafeArea(.keyboard)
         .overlay(alignment: .topLeading) {
             Color.clear
@@ -163,7 +156,7 @@ struct MergeArtifactEditorSurface: View {
     }
 
     private func editorHeight(in viewportHeight: CGFloat) -> CGFloat {
-        min(360, max(180, viewportHeight - 430))
+        min(560, max(260, viewportHeight - 310))
     }
 
     private func restingViewportHeight(for currentSize: CGSize) -> CGFloat {
@@ -263,6 +256,7 @@ struct MergeArtifactEditorSurface: View {
             .accessibilityLabel("Back")
             .accessibilityHint("Minimizes this Merge without discarding edits")
             .accessibilityIdentifier("merge.artifact.back")
+            .choraiGlassSurface(cornerRadius: 22)
 
             Spacer()
 
@@ -270,28 +264,20 @@ struct MergeArtifactEditorSurface: View {
                 .frame(width: 44, height: 44)
                 .accessibilityHidden(true)
         }
+        .overlay {
+            Text("New Insight")
+                .font(.headline)
+                .foregroundStyle(.primary)
+                .allowsHitTesting(false)
+        }
     }
 
     private var levelPill: some View {
-        Text(controller.levelStyle.label)
-            .font(.headline)
-            .lineLimit(1)
-            .minimumScaleFactor(0.72)
-            .padding(.horizontal, 24)
-            .frame(minWidth: 180, minHeight: 44)
-            .background {
-                Capsule(style: .continuous)
-                    .fill(Color.white.opacity(0.13))
-                    .overlay {
-                        Capsule(style: .continuous)
-                            .stroke(
-                                controller.levelStyle.materialAccentColor?
-                                    .opacity(0.72)
-                                    ?? Color.white.opacity(0.28),
-                                lineWidth: 1
-                            )
-                    }
-            }
+        ChoraiLevelBadge(
+            rate: controller.store.artifactDraft?.rate
+                ?? controller.store.artifact?.presentation.rate,
+            compact: true
+        )
             .accessibilityLabel(controller.levelStyle.label)
             .accessibilityIdentifier("merge.artifact.level")
     }
@@ -301,7 +287,8 @@ struct MergeArtifactEditorSurface: View {
             VStack(alignment: .leading, spacing: 12) {
                 BlockNoteCardEditor(
                     model: controller.bodyModel,
-                    minimumHeight: 180
+                    minimumHeight: 180,
+                    fontScale: 1
                 )
 
                 if !controller.unresolvedMediaReferences.isEmpty {
@@ -310,16 +297,18 @@ struct MergeArtifactEditorSurface: View {
                         systemImage: "photo.badge.exclamationmark"
                     )
                     .font(.footnote)
-                    .foregroundStyle(.white.opacity(0.78))
+                    .foregroundStyle(ChoraiTheme.secondaryInk)
                     .padding(12)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.black.opacity(0.18))
+                    .background(ChoraiTheme.raisedSurface)
                     .clipShape(
                         RoundedRectangle(cornerRadius: 12, style: .continuous)
                     )
                     .accessibilityElement(children: .combine)
                 }
             }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
         .scrollDismissesKeyboard(.interactively)
@@ -335,11 +324,13 @@ struct MergeArtifactEditorSurface: View {
             }
         )
         .frame(height: height, alignment: .top)
-        .background(Color.black.opacity(0.10))
+        .background {
+            CardLevelMaterial(style: controller.levelStyle, shape: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        }
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .stroke(Color.white.opacity(0.18), lineWidth: 1)
+                .stroke(ChoraiTheme.ink.opacity(0.18), lineWidth: 1)
         }
         .accessibilityElement(children: .contain)
         .accessibilityValue(
@@ -381,7 +372,7 @@ struct MergeArtifactEditorSurface: View {
                     || controller.isRetryingArtifactDraft {
                     ProgressView()
                         .controlSize(.small)
-                        .tint(.white.opacity(0.78))
+                        .tint(ChoraiTheme.accent)
                         .accessibilityHidden(true)
                 } else {
                     Image(systemName: syncSymbol)
@@ -405,7 +396,7 @@ struct MergeArtifactEditorSurface: View {
                 .buttonStyle(.plain)
                 .font(.footnote.weight(.semibold))
                 .frame(minWidth: 64, minHeight: 44)
-                .background(Color.white.opacity(0.12))
+                .background(ChoraiTheme.ink.opacity(0.12))
                 .clipShape(Capsule(style: .continuous))
                 .accessibilityHint("Retries the same saved Merge draft")
                 .accessibilityIdentifier("merge.artifact.retry-sync")
@@ -444,9 +435,9 @@ struct MergeArtifactEditorSurface: View {
         if controller.isConflict
             || controller.validationMessage != nil
             || controller.store.artifactActionError != nil {
-            return Color(red: 1, green: 0.76, blue: 0.66)
+            return ChoraiTheme.gold
         }
-        return .white.opacity(0.72)
+        return ChoraiTheme.secondaryInk
     }
 
     private var conflictActions: some View {
@@ -456,7 +447,7 @@ struct MergeArtifactEditorSurface: View {
             }
             .buttonStyle(.plain)
             .frame(maxWidth: .infinity, minHeight: 44)
-            .background(Color.white.opacity(0.10))
+            .background(ChoraiTheme.ink.opacity(0.10))
             .clipShape(Capsule(style: .continuous))
 
             Button("Keep my version") {
@@ -464,7 +455,7 @@ struct MergeArtifactEditorSurface: View {
             }
             .buttonStyle(.plain)
             .frame(maxWidth: .infinity, minHeight: 44)
-            .background(Color.white.opacity(0.16))
+            .background(ChoraiTheme.ink.opacity(0.16))
             .clipShape(Capsule(style: .continuous))
         }
         .font(.footnote.weight(.semibold))
@@ -521,7 +512,7 @@ private struct MergeArtifactMutationButton: View {
                 if isBusy {
                     ProgressView()
                         .controlSize(.small)
-                        .tint(.white)
+                        .tint(isFilled ? ChoraiTheme.onAccent : ChoraiTheme.accent)
                 } else if !dynamicTypeSize.isAccessibilitySize {
                     Image(systemName: systemImage)
                         .font(.system(size: 15, weight: .semibold))
@@ -532,19 +523,19 @@ private struct MergeArtifactMutationButton: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.72)
             }
-            .foregroundStyle(.white.opacity(isEnabled || isBusy ? 0.96 : 0.42))
+            .foregroundStyle(isFilled && (isEnabled || isBusy) ? ChoraiTheme.onAccent : ChoraiTheme.ink.opacity(isEnabled || isBusy ? 0.96 : 0.42))
             .frame(maxWidth: .infinity, minHeight: 52)
             .background {
                 Capsule(style: .continuous)
                     .fill(
                         isFilled
-                            ? Color.white.opacity(isEnabled ? 0.19 : 0.08)
-                            : Color.black.opacity(0.08)
+                            ? (isEnabled || isBusy ? ChoraiTheme.accent : ChoraiTheme.raisedSurface)
+                            : ChoraiTheme.raisedSurface
                     )
                     .overlay {
                         Capsule(style: .continuous)
                             .stroke(
-                                Color.white.opacity(isEnabled ? 0.28 : 0.12),
+                                ChoraiTheme.ink.opacity(isEnabled ? 0.28 : 0.12),
                                 lineWidth: 1
                             )
                     }

@@ -2,17 +2,26 @@ import Foundation
 import XCTest
 
 final class FlowCardPresentationSourceContractTests: XCTestCase {
+    func testExploreMenusKeepTheOriginalMutationBoundary() throws {
+        let flow = try flowViewSource()
+        let explore = try String(contentsOf: Self.repositoryRoot.appendingPathComponent("ArcNote/ExploreView.swift"), encoding: .utf8)
+        XCTAssertFalse(flow.contains("layout: card.isOwner ? .grid3x3"), "Explore cannot offer Home-owned delete, pin, or visibility notifications without a card-specific mutation owner")
+        XCTAssertFalse(explore.contains("layout: isCurrentExploreCardOwned ? .grid3x3"), "Search's legacy menu must preserve the same boundary")
+        XCTAssertTrue(flow.contains("layout: .grid2x2"))
+    }
+
     func testExploreFlowCardUsesBodyWithoutRenderingLegacyTitle() throws {
         let source = try flowCardSource()
 
-        XCTAssertTrue(source.contains("Text(FlowTextPreview.make(card.content))"))
+        XCTAssertTrue(source.contains("FlowRichPreview(card: card, compact: false)"))
+        XCTAssertTrue(try flowViewSource().contains("LibraryCardPreviewParser.parse(content: card.content, contentJSON: card.contentJSON)"))
         XCTAssertFalse(
             source.contains("card.title"),
             "Explore cards are titleless even when the API returns a legacy title"
         )
     }
 
-    func testExploreFlowCardUsesUndimmedOpticallyBalancedEngagementIcons() throws {
+    func testExploreFlowCardUsesApprovedCompactNativeEngagementIcons() throws {
         let source = try flowCardSource()
 
         XCTAssertFalse(
@@ -21,17 +30,17 @@ final class FlowCardPresentationSourceContractTests: XCTestCase {
         )
         XCTAssertTrue(
             source.contains(
-                "CommentButton(cardId: card.id, commentCount: card.commentCount, iconSize: 22)"
+                "CommentButton(cardId: card.id, commentCount: card.commentCount, iconSize: 14, countFont: .caption)"
             ),
-            "Comment must use the same 22-point base size as like"
+            "Comment must match the approved 14-point native like icon"
         )
         XCTAssertTrue(
-            source.contains("iconSize: CGFloat = 22"),
-            "Engagement icons must share a 22-point base size"
+            source.contains("iconSize: CGFloat = 14"),
+            "Engagement icons must share the prototype’s 14-point base size"
         )
         XCTAssertTrue(
-            source.contains("iconSize: 24"),
-            "Favorite needs optical compensation for its larger transparent canvas"
+            source.contains(".frame(minWidth: 44, minHeight: 44)"),
+            "Compact native icons must retain a 44-point hit target"
         )
         XCTAssertTrue(
             source.contains(".frame(width: iconSize, height: iconSize)"),
@@ -62,8 +71,8 @@ final class FlowCardPresentationSourceContractTests: XCTestCase {
             "AsyncImage must receive the canonical URL"
         )
         XCTAssertTrue(
-            source.contains(".frame(width: 32, height: 32)"),
-            "The approved Flow avatar is a stable 32-point circle"
+            source.contains(".frame(width: 34, height: 34)"),
+            "The approved Flow avatar is a stable 34-point circle"
         )
         XCTAssertTrue(
             authorButtonSource.contains(".frame(minHeight: 44)"),
@@ -79,12 +88,14 @@ final class FlowCardPresentationSourceContractTests: XCTestCase {
         )
     }
 
-    func testFlowUsesTintedNativeGlassWithAccessibilityFallbacks() throws {
+    func testFlowUsesReadableNativeSurfaceWithAccessibilityFallbacks() throws {
         let source = try flowViewSource()
 
         XCTAssertTrue(source.contains("private struct FlowGlassSurface: View"))
-        XCTAssertTrue(source.contains("shape.fill(.ultraThinMaterial)"))
-        XCTAssertTrue(source.contains("if !reduceTransparency"))
+        XCTAssertTrue(source.contains("shape.fill(ZenVisualTokens.opaqueCardFill)"))
+        XCTAssertTrue(source.contains("guard !reduceTransparency, case .foreground = layer else { return 0 }"))
+        XCTAssertTrue(source.contains("scheme == .dark ? 0.1 : 0.025"))
+        XCTAssertTrue(source.contains("radius: 16, y: 6"))
         XCTAssertTrue(source.contains("ZenVisualTokens.opaqueCardFill"))
         XCTAssertTrue(source.contains("FlowGlassSurface(layer: .foreground)"))
         XCTAssertTrue(source.contains("contrast == .increased"))
@@ -93,11 +104,11 @@ final class FlowCardPresentationSourceContractTests: XCTestCase {
     func testFlowDeckUsesAtMostTwoTruthfulNoninteractiveBackplates() throws {
         let source = try flowViewSource()
 
-        XCTAssertTrue(source.contains("min(2, max(0, store.cards.count - 1))"))
+        XCTAssertTrue(source.contains("min(2, max(0, store.remainingCount - 1))"))
         XCTAssertTrue(source.contains("ForEach(backplateDepths.reversed(), id: \\.self)"))
         XCTAssertTrue(source.contains("FlowDeckBackplate(depth: depth)"))
-        XCTAssertTrue(source.contains(".scaleEffect(depth == 1 ? 0.972 : 0.944)"))
-        XCTAssertTrue(source.contains(".offset(x: depth == 1 ? 7 : 14, y: depth == 1 ? 14 : 28)"))
+        XCTAssertTrue(source.contains(".padding(.horizontal, depth == 1 ? 6 : 12)"))
+        XCTAssertTrue(source.contains(".offset(y: depth == 1 ? 6 : 12)"))
         XCTAssertTrue(source.contains(".allowsHitTesting(false)"))
         XCTAssertTrue(source.contains(".accessibilityHidden(true)"))
     }
@@ -126,6 +137,37 @@ final class FlowCardPresentationSourceContractTests: XCTestCase {
             helperSource.contains("candidate.count > 1"),
             "The reusable avatar prerequisite must reject the root path"
         )
+    }
+
+    func testGridAndDeckShareLiveStoreAndHideDecorativeChora() throws {
+        let source = try flowViewSource()
+        XCTAssertTrue(source.contains("ForEach(Array(store.browsingCards.enumerated())"))
+        XCTAssertTrue(source.contains("store.toggleFavorite(assetID: card.id"))
+        XCTAssertTrue(source.contains(".choraiCardLevel(rate: card.rate, showsChora: false, cornerRadius: 28)"))
+        XCTAssertTrue(source.contains(".choraiCardLevel(rate: card.rate, showsChora: false, cornerRadius: 17)"))
+        XCTAssertTrue(source.contains(".choraiCardLevel(rate: card.rate, showsChora: false, cornerRadius: 8)"))
+        XCTAssertTrue(source.contains("FlowMasonryLayout(columns: typeSize.isAccessibilitySize ? 1 : 2, spacing: 12)"))
+        XCTAssertTrue(source.contains(".onReceive(CardEngagementCenter.shared.favorites)"))
+        XCTAssertTrue(source.contains(".accessibilityHidden(isGrid)"))
+        XCTAssertTrue(source.contains(".accessibilityHidden(!isGrid)"))
+    }
+
+    func testRatedGridKeepsBoundedSummaryAuthorAndActionsInsideV8LevelSurface() throws {
+        let source = try flowViewSource()
+        let start = try XCTUnwrap(source.range(of: "private func ratedTile(_ card: FlowCard)"))
+        let end = try XCTUnwrap(source.range(of: "private func unratedTile(_ card: FlowCard)", range: start.upperBound..<source.endIndex))
+        let tile = String(source[start.lowerBound..<end.lowerBound])
+        XCTAssertTrue(tile.contains(".font(.system(.subheadline, design: .serif))"))
+        XCTAssertTrue(tile.contains(".lineSpacing(3).lineLimit(7)"))
+        XCTAssertTrue(tile.contains("minHeight: 126"))
+        XCTAssertTrue(tile.contains("VStack(alignment: .leading, spacing: 12)"))
+        XCTAssertTrue(tile.contains(".padding(14)"))
+        XCTAssertFalse(tile.contains("FlowRichPreview"), "Rated Grid limits the whole summary rather than each rich block separately")
+        let surface = try XCTUnwrap(tile.range(of: ".choraiCardLevel(rate: card.rate, showsChora: false, cornerRadius: 17)"))
+        for control in ["Open author", "explore.grid.favorite.", "explore.grid.menu."] {
+            let position = try XCTUnwrap(tile.range(of: control))
+            XCTAssertLessThan(position.lowerBound, surface.lowerBound, "Author and both actions must be inside the shared level border")
+        }
     }
 
     private func flowCardSource() throws -> String {

@@ -3,6 +3,7 @@ import SwiftUI
 
 @MainActor
 struct ChoraProfileView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dismiss) private var dismiss
     @StateObject private var profileStore: ChoraProfileStore
     @StateObject private var noteImportStore: NoteImportStore
@@ -73,14 +74,10 @@ struct ChoraProfileView: View {
 
     var body: some View {
         ZStack {
-            Image("home_bg")
-                .resizable()
-                .aspectRatio(contentMode: .fill)
+            ChoraiBackground()
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
-                SettingsDestinationHeader(title: "Chora Profile") { dismiss() }
-
                 ScrollView {
                     VStack(spacing: 24) {
                         ChoraIdentitySection(
@@ -88,11 +85,13 @@ struct ChoraProfileView: View {
                             humanActorID: humanActorID
                         )
 
+                        Divider().overlay(ChoraiTheme.separator)
                         ChoraGrowthSection(
                             store: profileStore,
                             humanActorID: humanActorID
                         )
 
+                        Divider().overlay(ChoraiTheme.separator)
                         ChoraSoulSourcesSection(
                             noteImportStore: noteImportStore,
                             notionStore: notionStore,
@@ -100,6 +99,7 @@ struct ChoraProfileView: View {
                                 notionOAuthHolder.coordinator
                         )
 
+                        Divider().overlay(ChoraiTheme.separator)
                         ChoraChatHistorySection(
                             humanActorID: humanActorID,
                             visibility: chatHistoryDependency,
@@ -107,6 +107,7 @@ struct ChoraProfileView: View {
                         )
                     }
                     .adaptiveContentGutter()
+                    .padding(.top, 24)
                     .padding(.bottom, 36)
                     .opacity(hasAppeared ? 1 : 0)
                     .offset(y: hasAppeared ? 0 : 8)
@@ -122,10 +123,25 @@ struct ChoraProfileView: View {
                 .scrollDismissesKeyboard(.interactively)
             }
         }
-        .navigationBarHidden(true)
+        .foregroundStyle(ChoraiTheme.ink)
+        .tint(ChoraiTheme.accent)
+        .navigationTitle("Chora Profile")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.visible, for: .navigationBar)
+        .navigationBarBackButtonHidden(true)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button(action: dismiss.callAsFunction) {
+                    Image(systemName: "chevron.left")
+                        .frame(minWidth: 44, minHeight: 44)
+                }
+                .accessibilityLabel("Back")
+            }
+        }
+        .toolbar(.hidden, for: .tabBar)
         .accessibilityIdentifier("screen.choraProfile")
         .onAppear {
-            withAnimation(.easeOut(duration: 0.24)) {
+            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.24)) {
                 hasAppeared = true
             }
         }

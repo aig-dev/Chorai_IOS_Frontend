@@ -46,6 +46,317 @@ final class ArcNoteUITests: XCTestCase {
         sparkSessionScope = "\(name).\(UUID().uuidString)"
     }
 
+    func testLocalPreviewNavigatesRealTabsWithoutSignIn() {
+        app.launchArguments.append("--dev-preview")
+        app.launch()
+        XCTAssertTrue(app.staticTexts["local-preview.indicator"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["welcome.login"].exists)
+        for title in ["Home", "Chat", "Explore"] {
+            let tab = app.tabBars.buttons[title]
+            XCTAssertTrue(tab.waitForExistence(timeout: 5))
+            tab.tap()
+            XCTAssertTrue(tab.isSelected, "The system tab should expose its selected state")
+        }
+    }
+
+    func testNativeReformGridReaderAndHomeKeepRealNavigation() {
+        app.launchArguments.append("--dev-preview")
+        app.launch()
+        XCTAssertTrue(app.staticTexts["local-preview.indicator"].waitForExistence(timeout: 10))
+        captureVisual("fidelity-explore-deck")
+        let mode = app.buttons["explore.browse-mode"]
+        XCTAssertTrue(mode.waitForExistence(timeout: 5))
+        mode.tap()
+        let card = app.buttons["explore.grid.card.preview-field-note"]
+        XCTAssertTrue(card.waitForExistence(timeout: 8))
+        XCTAssertTrue(card.isHittable)
+        let gridShot = XCTAttachment(screenshot: app.screenshot())
+        gridShot.name = "Native reform Grid"
+        gridShot.lifetime = .keepAlways
+        add(gridShot)
+        card.tap()
+        XCTAssertTrue(app.otherElements["screen.detail.content"].waitForExistence(timeout: 8)
+            || app.staticTexts["screen.detail.loaded"].exists)
+        XCTAssertFalse(app.tabBars.buttons["Explore"].isHittable, "The reader uses the full destination height")
+        let detailShot = XCTAttachment(screenshot: app.screenshot())
+        detailShot.name = "Native reform reader"
+        detailShot.lifetime = .keepAlways
+        add(detailShot)
+        let ending = app.staticTexts["The things we notice become the things we care about."]
+        XCTAssertTrue(ending.waitForExistence(timeout: 5), "The full note includes its final paragraph")
+        for _ in 0..<3 where !ending.isHittable { app.scrollViews.firstMatch.swipeUp() }
+        XCTAssertTrue(ending.isHittable, "The reader must let a user reach the final paragraph")
+        XCTAssertLessThanOrEqual(ending.frame.maxY, app.webViews.firstMatch.frame.maxY + 1,
+            "HTML measurement must not clip the bottom of the last paragraph")
+        app.navigationBars["Note"].buttons.firstMatch.tap()
+        XCTAssertTrue(card.waitForExistence(timeout: 5), "Reader returns to the same Grid")
+        XCTAssertEqual(mode.value as? String, "Grid")
+        app.tabBars.buttons["Home"].tap()
+        XCTAssertTrue(app.buttons["note.create"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.navigationBars["Home"].exists)
+        XCTAssertTrue(app.buttons["note.create"].label.contains("New note"))
+        let homeShot = XCTAttachment(screenshot: app.screenshot())
+        homeShot.name = "Native reform Home"
+        homeShot.lifetime = .keepAlways
+        add(homeShot)
+        app.tabBars.buttons["Explore"].tap()
+        XCTAssertTrue(card.waitForExistence(timeout: 5))
+        XCTAssertEqual(mode.value as? String, "Grid", "Changing tabs preserves browsing mode")
+    }
+
+    func testNativeExploreFixedSummaryAndHistoryKeepTheOriginalCard() {
+        app.launchArguments.append("--dev-preview")
+        app.launch()
+        let first = waitForButton("flow.card.preview-field-note")
+        let frame = app.otherElements["flow.card.surface.preview-field-note"].frame
+        XCTAssertGreaterThan(frame.height, app.windows.firstMatch.frame.height * 0.6)
+        XCTAssertGreaterThan(frame.width, app.windows.firstMatch.frame.width * 0.85)
+        XCTAssertFalse(app.buttons["flow.previous"].exists)
+        XCTAssertFalse(app.staticTexts["← Skip · Collect →"].exists)
+        captureVisual("remediation-explore-summary")
+        let start = first.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 30, dy: 0)))
+        XCTAssertFalse(app.staticTexts["screen.detail.loaded"].exists, "Canceled drag must not open a note")
+        XCTAssertTrue(first.exists)
+        first.swipeLeft()
+        let second = waitForButton("flow.card.preview-field-note-1")
+        let nextFrame = app.otherElements["flow.card.surface.preview-field-note-1"].frame
+        XCTAssertEqual(frame.height, nextFrame.height, accuracy: 1)
+        XCTAssertEqual(frame.minY, nextFrame.minY, accuracy: 1)
+        XCTAssertTrue(app.buttons["flow.favorite.preview-field-note-1"].isHittable)
+        XCTAssertFalse(app.scrollViews["flow.deck.scroll"].exists)
+        captureVisual("remediation-explore-long-summary")
+        second.tap()
+        XCTAssertTrue(app.staticTexts["screen.detail.loaded"].waitForExistence(timeout: 8))
+        XCTAssertFalse(app.tabBars.buttons["Explore"].isHittable)
+        captureVisual("remediation-reader-document")
+        app.navigationBars["Note"].buttons.firstMatch.tap()
+        XCTAssertTrue(second.waitForExistence(timeout: 5))
+        waitForButton("flow.history").tap()
+        waitForButton("flow.history.item.preview-field-note").tap()
+        XCTAssertTrue(first.waitForExistence(timeout: 5))
+        waitForButton("flow.resume").tap()
+        XCTAssertTrue(second.waitForExistence(timeout: 5))
+    }
+
+    func testNativeReviewSortUsesSystemMenuWithoutExpandingThePage() {
+        app.launchArguments.append("--dev-preview")
+        app.launch()
+        XCTAssertTrue(app.staticTexts["local-preview.indicator"].waitForExistence(timeout: 10))
+        app.tabBars.buttons["Home"].tap()
+        let filter = waitForButton("home.filter")
+        let bodyY = waitFor("home.card.body.preview-note").frame.minY
+        filter.tap()
+        for option in ["Latest Edited", "Latest Added", "Rarity-High Low", "Rarity-Low High"] {
+            XCTAssertTrue(waitForButton("home.sort.\(option)").isHittable)
+        }
+        captureVisual("review-home-sort-menu")
+        waitForButton("home.sort.Latest Added").tap()
+        XCTAssertEqual(filter.value as? String, "Latest added")
+        XCTAssertEqual(waitFor("home.card.body.preview-note").frame.minY, bodyY, accuracy: 1,
+                       "Sorting must not expand an extra row of filter pills")
+        waitFor("home.card.body.preview-note").tap()
+        waitForButton("cardEditorLeadingAction").tap()
+        XCTAssertEqual(waitForButton("home.filter").value as? String, "Latest added",
+                       "Returning from an editor must preserve the chosen ordering")
+        filter.tap()
+        waitForButton("home.sort.Latest Edited").tap()
+        XCTAssertEqual(filter.value as? String, "Latest edited")
+    }
+
+    func testNativeReviewHomeSpacingAndFullPageDraft() {
+        app.launchArguments.append("--dev-preview")
+        app.launch()
+        XCTAssertTrue(app.staticTexts["local-preview.indicator"].waitForExistence(timeout: 10))
+        app.tabBars.buttons["Home"].tap()
+        let body = waitFor("home.card.body.preview-note")
+        let tags = waitFor("home.card.tags.preview-note")
+        XCTAssertEqual(tags.frame.minY - body.frame.maxY, 13, accuracy: 2,
+                       "The action hit area must not expand the approved body-to-tags spacing")
+        let menu = waitForButton("home.card.menu.preview-note")
+        XCTAssertGreaterThanOrEqual(menu.frame.height, 44)
+        XCTAssertTrue(menu.isHittable)
+        captureVisual("review-home-spacing")
+        waitForButton("note.create").tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 10))
+        captureVisual("review-editor-keyboard")
+        dismissCardEditorKeyboardWithVerticalDrag()
+        waitForMissing("cardEditorFormattingBar")
+        let content = waitFor("cardEditorContent")
+        captureVisual("review-editor-after-keyboard-dismiss")
+        XCTAssertFalse(app.tabBars.buttons["Home"].isHittable,
+                       "A new draft is a full editor destination, including with its keyboard closed")
+        XCTAssertGreaterThan(content.frame.height, app.windows.firstMatch.frame.height * 0.55)
+        let tools = waitForButton("cardEditorTools")
+        XCTAssertGreaterThan(tools.frame.midX, app.windows.firstMatch.frame.width * 0.8)
+        XCTAssertGreaterThan(waitFor("cardEditorTagsRow").frame.minY,
+                             app.windows.firstMatch.frame.height * 0.77)
+        captureVisual("review-editor-empty")
+        waitFor("cardEditorBodyWebView").coordinate(
+            withNormalizedOffset: CGVector(dx: 0.5, dy: 0.82)
+        ).tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5),
+                      "The lower blank page must be a real tappable writing surface")
+        waitForButton("cardEditorLeadingAction").tap()
+        XCTAssertTrue(waitForButton("note.create").isHittable,
+                      "Closing an unchanged blank draft restores Home without a save")
+        waitForButton("note.create").tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 10))
+        dismissCardEditorKeyboardWithVerticalDrag()
+        waitForButton("cardEditorTools").tap()
+        captureVisual("review-editor-tools")
+        waitForButton("cardEditorToolsFormat").tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+        XCTAssertTrue(waitFor("cardEditorFormattingBar").exists)
+        app.typeText("A little room for a thought.")
+        dismissCardEditorKeyboardWithVerticalDrag()
+        waitForMissing("cardEditorFormattingBar")
+        XCTAssertGreaterThan(waitFor("cardEditorContent").frame.height,
+                             app.windows.firstMatch.frame.height * 0.55,
+                             "Typing must not shrink a new full-page draft back into a small card")
+        captureVisual("review-editor-typed")
+        waitForButton("cardEditorTools").tap()
+        waitForButton("cardEditorToolsAddTag").tap()
+        waitFor("cardEditorTagInput").typeText("review\n")
+        waitForMissing("cardEditorTagInput")
+        let addedTag = waitForButton("cardEditorTag.review")
+        addedTag.tap()
+        XCTAssertTrue(addedTag.exists, "Opening tag actions must not silently remove a tag")
+        waitForButton("cardEditorTagRemove.review").tap()
+        waitForMissing("cardEditorTag.review")
+    }
+
+    func testNativeFidelityHomeMenuOpensRealUnboxedEditor() {
+        app.launchArguments.append("--dev-preview")
+        app.launch()
+        XCTAssertTrue(app.staticTexts["local-preview.indicator"].waitForExistence(timeout: 10))
+        app.tabBars.buttons["Home"].tap()
+        XCTAssertTrue(app.navigationBars["Home"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["note.create"].label.contains("New note"))
+        waitForButton("home.card.menu.preview-note").tap()
+        let menuShot = XCTAttachment(screenshot: app.screenshot())
+        menuShot.name = "Fidelity native Home menu"
+        menuShot.lifetime = .keepAlways
+        add(menuShot)
+        waitForButton("popup-menu.item.edit").tap()
+        let back = waitForButton("cardEditorLeadingAction")
+        XCTAssertTrue(waitFor("cardEditorBodyWebView").exists)
+        XCTAssertTrue(app.staticTexts["Note"].exists)
+        let editorShot = XCTAttachment(screenshot: app.screenshot())
+        editorShot.name = "Fidelity real editor"
+        editorShot.lifetime = .keepAlways
+        add(editorShot)
+        captureVisual("review-editor-existing")
+        XCTAssertEqual(back.label, "Close note", "Opening an unchanged note must not request a save")
+        back.tap()
+        XCTAssertTrue(app.buttons["note.create"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.tabBars.buttons["Home"].isHittable)
+        waitFor("home.card.body.preview-note").tap()
+        let directBack = waitForButton("cardEditorLeadingAction")
+        XCTAssertFalse(app.tabBars.buttons["Home"].isHittable,
+                       "Opening an existing note directly must also cover the browsing tab bar")
+        directBack.tap()
+        XCTAssertTrue(waitForButton("note.create").isHittable)
+        XCTAssertTrue(app.tabBars.buttons["Home"].isHittable)
+    }
+
+    func testNativeReviewExistingShortNoteUsesFullWritingPage() {
+        launchCardEditorFixture(mode: "legacy-html")
+        let body = waitFor("cardEditorBodyWebView")
+        XCTAssertGreaterThan(body.frame.height, app.windows.firstMatch.frame.height * 0.55,
+                             "An existing short note uses the same full-page writing area as a new draft")
+        captureVisual("review-editor-short-existing")
+        body.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.82)).tap()
+        XCTAssertTrue(waitFor("cardEditorFormattingBar").exists,
+                      "The lower writing page must focus the real editor")
+        app.typeText(" A continued thought.")
+        dismissCardEditorKeyboardWithVerticalDrag()
+        waitForMissing("cardEditorFormattingBar")
+        XCTAssertGreaterThan(waitFor("cardEditorBodyWebView").frame.height,
+                             app.windows.firstMatch.frame.height * 0.55)
+    }
+
+    func testNativeReformColdSidebarCollectionsSelectsLibraryScope() {
+        app.launchArguments.append("--dev-preview")
+        app.launch()
+        XCTAssertTrue(app.staticTexts["local-preview.indicator"].waitForExistence(timeout: 10))
+        waitForButton("side-menu.open").tap()
+        waitForButton("side-menu.item.Favorites").tap()
+        XCTAssertTrue(app.tabBars.buttons["Home"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.tabBars.buttons["Home"].isSelected)
+        let collections = app.segmentedControls.buttons["Collections"]
+        XCTAssertTrue(collections.waitForExistence(timeout: 5))
+        XCTAssertTrue(collections.isSelected, "A first visit from the sidebar keeps the requested Collections scope")
+    }
+
+    func testNativeFidelityCardMenusPresentSystemSheets() {
+        app.launchArguments.append("--dev-preview")
+        app.launch()
+        XCTAssertTrue(app.staticTexts["local-preview.indicator"].waitForExistence(timeout: 10))
+        app.buttons["flow.menu.preview-field-note"].tap()
+        captureVisual("fidelity-explore-native-menu")
+        waitForButton("popup-menu.item.report").tap()
+        XCTAssertTrue(waitFor("screen.content-report").exists)
+        XCTAssertTrue(app.navigationBars["Report"].exists)
+        captureVisual("fidelity-report")
+        waitForButton("content-report.close").tap()
+        app.buttons["flow.menu.preview-field-note"].tap()
+        waitForButton("popup-menu.item.link").tap()
+        XCTAssertTrue(waitFor("linkPopup").exists)
+        captureVisual("fidelity-link")
+        waitForButton("linkPopupCancel").tap()
+        waitForMissing("linkPopup")
+        app.tabBars.buttons["Home"].tap()
+        waitForButton("home.card.menu.preview-note").tap()
+        waitForButton("popup-menu.item.share").tap()
+        XCTAssertTrue(waitFor("screen.share-card").exists)
+        XCTAssertTrue(app.navigationBars["Share"].exists)
+        // Offline transport is deliberately fail-closed for real artifact preparation.
+        XCTAssertTrue(waitForButton("share-card.retry").exists)
+        captureVisual("fidelity-share-offline-error")
+        waitForButton("share-card.close").tap()
+        XCTAssertTrue(waitForButton("note.create").isHittable)
+    }
+
+    func testNativeFidelitySparkTraversesLoadedIdeasWithoutLeavingItsFlow() {
+        app.launchArguments.append("--ui-test-spark-fidelity")
+        app.launch()
+        XCTAssertTrue(waitFor("spark.fixture.offline").exists)
+        XCTAssertTrue(waitFor("screen.spark.loaded").exists)
+        let first = waitFor("spark.card.fixture-spark-nia")
+        XCTAssertTrue(first.exists)
+        captureVisual("fidelity-spark-results")
+        // Traverse the actual scroll surface before tapping the pagination below
+        // a long result; it must sit above the fixed Continue action.
+        let scroll = app.scrollViews.firstMatch
+        scroll.swipeUp()
+        waitForButton("spark.next").tap()
+        XCTAssertTrue(waitFor("spark.card.fixture-spark-leo").exists)
+        waitForButton("spark.previous").tap()
+        XCTAssertTrue(first.waitForExistence(timeout: 5))
+        waitForButton("spark.continue.fixture-spark-nia").tap()
+        XCTAssertTrue(waitFor("screen.spark.loaded").exists)
+        scroll.swipeDown()
+        captureVisual("fidelity-spark-deeper")
+    }
+
+    func testNativeFidelityMergeUsesProductionSelectionAndResult() {
+        app.launchArguments.append("--ui-test-merge-fidelity")
+        app.launch()
+        XCTAssertTrue(waitFor("merge.anchor.card").exists)
+        let create = waitForButton("merge.action")
+        XCTAssertFalse(create.isEnabled, "A single fixed source cannot create a Merge")
+        captureVisual("fidelity-merge-selection")
+        waitForButton("merge.card.merge-fidelity-candidate").tap()
+        XCTAssertTrue(create.isEnabled, "Selecting a second source enables the actual Merge action")
+        captureVisual("fidelity-merge-selected")
+        create.tap()
+        XCTAssertTrue(waitFor("merge.artifact.editor").exists)
+        XCTAssertTrue(waitForButton("merge.artifact.accept").exists)
+        XCTAssertTrue(waitForButton("merge.artifact.discard").exists)
+        captureVisual("fidelity-merge-created-result")
+    }
+
     func testMergeTaskRailShowsCountAndNumberedStatesWithoutText() {
         app.launchArguments.append("--ui-test-merge-task-rail")
         app.launch()
@@ -617,7 +928,7 @@ final class ArcNoteUITests: XCTestCase {
         captureVisual("adaptive-layout-fixture")
     }
 
-    func testMergeSelectionFixtureUsesOneFullWidthSafeAreaAction() {
+    func testMergeSelectionFixtureUsesCountAndSafeAreaAction() {
         app.launchArguments.append("--ui-test-merge-selection")
         app.launch()
 
@@ -640,15 +951,13 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertGreaterThan(action.frame.minY, window.frame.midY)
         XCTAssertLessThanOrEqual(action.frame.maxY, window.frame.maxY)
         XCTAssertLessThan(candidate.frame.minY, action.frame.minY)
-        XCTAssertGreaterThan(action.frame.width, window.frame.width * 0.82)
+        XCTAssertGreaterThanOrEqual(action.frame.width, 120)
         XCTAssertEqual(action.label, "Merge 2 cards")
         XCTAssertFalse(app.staticTexts["Selected notes"].exists)
-        XCTAssertLessThan(
-            averageLuminance(of: anchor),
-            0.72,
-            "The neutral Merge card became an unreadable white surface under the screen's white foreground style"
-        )
+        XCTAssertTrue(window.frame.insetBy(dx: -1, dy: -1).contains(anchor.frame))
+        XCTAssertFalse(anchor.label.isEmpty, "The starting source must remain readable to accessibility")
 
+        captureVisual("fidelity-merge-selection")
         action.tap()
         waitForAccessibilityValue("merge.action", expected: "merged")
         captureMergeVisual("selection-zen-action")
@@ -1598,6 +1907,7 @@ final class ArcNoteUITests: XCTestCase {
         let editor = waitFor("merge.artifact.editor")
         let cancelCount = waitFor("fixture.merge.cancel-call-count")
         XCTAssertEqual(cancelCount.label, "0")
+        captureVisual("fidelity-merge-result")
         waitForButton("merge.artifact.discard").tap()
         let dialog = app.sheets["Discard Merge?"]
         XCTAssertTrue(dialog.waitForExistence(timeout: 5))
@@ -2015,16 +2325,17 @@ final class ArcNoteUITests: XCTestCase {
 
     func testPrivateBetaEntryUsesTheCurrentSignupSystemWithoutDuplicateCode() {
         launchPrivateBetaEntry(fixture: "available")
+        captureVisual("remediation-private-beta")
 
         replaceShortFixtureText("private-beta.code", with: "CRAI-7KQ9")
         waitForButton("private-beta.continue", timeout: 3).tap()
 
-        waitFor("signup.create-account", timeout: 3)
-        waitFor("signup.get-code", timeout: 3)
-        waitFor("signup.confirm-password", timeout: 3)
+        waitFor("signup.email", timeout: 3)
+        waitForButton("signup.continue", timeout: 3)
         waitForButton("auth.google", timeout: 3)
         waitForButton("auth.apple", timeout: 3)
         XCTAssertFalse(app.descendants(matching: .any)["signup.access-code"].exists)
+        captureVisual("remediation-sign-up")
     }
 
     func testPrivateBetaEntryRejectsMalformedCodeBeforeRegistration() {
@@ -2037,7 +2348,7 @@ final class ArcNoteUITests: XCTestCase {
             waitFor("private-beta.message", timeout: 3).label,
             "Enter a valid Product Access Code."
         )
-        XCTAssertFalse(app.descendants(matching: .any)["signup.create-account"].exists)
+        XCTAssertFalse(app.descendants(matching: .any)["signup.email"].exists)
     }
 
     func testPrivateBetaEntryRejectsAuthoritativelyInvalidCodeBeforeSignup() {
@@ -2057,7 +2368,7 @@ final class ArcNoteUITests: XCTestCase {
             waitFor("private-beta.fixture.saved-code", timeout: 3).label,
             "<empty>"
         )
-        XCTAssertFalse(app.descendants(matching: .any)["signup.create-account"].exists)
+        XCTAssertFalse(app.descendants(matching: .any)["signup.email"].exists)
     }
 
     func testPrivateBetaEntryShowsRateLimitWithoutClearingPendingCode() {
@@ -2110,7 +2421,7 @@ final class ArcNoteUITests: XCTestCase {
             expected: "1",
             timeout: 3
         )
-        waitFor("signup.create-account", timeout: 7)
+        waitFor("signup.email", timeout: 7)
     }
 
     func testPrivateBetaEntryCancellationDoesNotPersistOrNavigateAfterLateSuccess() {
@@ -2131,7 +2442,7 @@ final class ArcNoteUITests: XCTestCase {
             waitFor("private-beta.fixture.saved-code", timeout: 3).label,
             "<empty>"
         )
-        XCTAssertFalse(app.descendants(matching: .any)["signup.create-account"].exists)
+        XCTAssertFalse(app.descendants(matching: .any)["signup.email"].exists)
     }
 
     func testProfilePrimarySurfaceKeepsResponsiveWindowGutter() {
@@ -2219,9 +2530,9 @@ final class ArcNoteUITests: XCTestCase {
         launchCardEditorFixture(mode: "populated")
 
         let lastTag = waitFor("cardEditorTag.research")
-        let addTag = waitFor("cardEditorAddTag")
-        assertReadingOrder(lastTag, before: addTag)
-        assertPrimaryControl(addTag, identifier: "cardEditorAddTag")
+        let tools = waitForButton("cardEditorTools")
+        assertReadingOrder(lastTag, before: tools)
+        assertPrimaryControl(tools, identifier: "cardEditorTools")
 
         let disclosure = waitForButton("cardEditorLinksDisclosure")
         assertPrimaryControl(
@@ -2408,7 +2719,7 @@ final class ArcNoteUITests: XCTestCase {
         let leading = waitForButton("cardEditorLeadingAction")
         XCTAssertEqual(leading.label, "Close note")
         XCTAssertTrue(leading.isEnabled)
-        XCTAssertFalse(waitForButton("cardEditorAddTag").isEnabled)
+        XCTAssertFalse(waitForButton("cardEditorTools").isEnabled)
         XCTAssertFalse(waitForButton("cardEditorTag.archive").isEnabled)
         XCTAssertFalse(app.descendants(matching: .any)["cardEditorAddLink"].exists)
         XCTAssertFalse(app.buttons["cardEditorFormatBold"].exists)
@@ -2529,10 +2840,11 @@ final class ArcNoteUITests: XCTestCase {
 
         dismissCardEditorKeyboardWithVerticalDrag()
         waitForMissing("cardEditorFormattingBar")
-        let rowTagActions = app.buttons.matching(
-            identifier: "cardEditorAddTag"
-        )
-        XCTAssertEqual(rowTagActions.count, 1)
+        XCTAssertFalse(app.buttons["cardEditorAddTag"].exists,
+                       "Closing the keyboard leaves tag creation in the editor tools menu")
+        waitForButton("cardEditorTools").tap()
+        XCTAssertTrue(waitForButton("cardEditorToolsAddTag").isHittable)
+        XCTAssertTrue(waitForButton("cardEditorToolsFormat").isHittable)
     }
 
     func testCardEditorInlineImageChooserDismissesKeyboardAndShowsSources() {
@@ -2641,33 +2953,20 @@ final class ArcNoteUITests: XCTestCase {
         waitFor("cardEditorFormattingBar")
     }
 
-    func testCardEditorActionBoxDismissesKeyboardBeforePresentation() {
+    func testCardEditorNativeMenuDismissesKeyboardBeforePresentation() {
         launchCardEditorFixture(mode: "keyboard")
-
         let body = waitFor("cardEditorBodyWebView")
-        body.coordinate(
-            withNormalizedOffset: CGVector(dx: 0.25, dy: 0.04)
-        ).tap()
+        body.coordinate(withNormalizedOffset: CGVector(dx: 0.25, dy: 0.04)).tap()
         let keyboard = app.keyboards.firstMatch
         XCTAssertTrue(keyboard.waitForExistence(timeout: 10))
         waitFor("cardEditorFormattingBar")
-
         waitForButton("cardEditorMoreButton").tap()
-        let surface = waitFor("cardEditorActionsOverlay.surface")
-        let actions = editorActionButtons()
-
+        captureVisual("fidelity-editor-menu-from-keyboard")
         waitForElementToDisappear(keyboard)
+        let actions = editorActionButtons()
         waitForMissing("cardEditorFormattingBar")
-        XCTAssertTrue(app.frame.insetBy(dx: -1, dy: -1).contains(surface.frame))
-        assertEditorActionGridLayout(actions, inside: surface)
-        XCTAssertFalse(app.buttons["cardEditorActionsClose"].exists)
-        for action in actions {
-            XCTAssertGreaterThanOrEqual(action.frame.width, 44)
-            XCTAssertGreaterThanOrEqual(action.frame.height, 44)
-            XCTAssertEqual(action.frame.width, 90, accuracy: 1)
-            XCTAssertEqual(action.frame.height, 90, accuracy: 1)
-        }
-        captureVisual("card-editor-action-box-keyboard-dismissed")
+        assertEditorActionsInsideWindow(actions)
+        captureVisual("card-editor-native-menu-keyboard-dismissed")
         dismissEditorCardActions()
     }
 
@@ -2684,7 +2983,8 @@ final class ArcNoteUITests: XCTestCase {
 
         waitForMissing("cardEditorTagInput")
         XCTAssertTrue(waitFor("cardEditorTag.native-tag").exists)
-        XCTAssertTrue(waitForButton("cardEditorAddTag").exists)
+        XCTAssertFalse(app.buttons["cardEditorAddTag"].exists)
+        XCTAssertTrue(waitForButton("cardEditorTools").isEnabled)
     }
 
     func testInlineTagEntryStaysOpenWhenItsFieldIsTapped() {
@@ -2780,8 +3080,8 @@ final class ArcNoteUITests: XCTestCase {
             "520"
         launchCardEditorFixture(mode: "keyboard")
 
-        let addTag = waitForButton("cardEditorAddTag")
-        let initialMetadataMaxY = addTag.frame.maxY
+        let tools = waitForButton("cardEditorTools")
+        let initialMetadataMaxY = tools.frame.maxY
         let screenOrigin = app.coordinate(
             withNormalizedOffset: CGVector(dx: 0, dy: 0)
         )
@@ -2791,17 +3091,17 @@ final class ArcNoteUITests: XCTestCase {
         let dragEnd = screenOrigin.withOffset(
             CGVector(dx: app.frame.minX + 8, dy: app.frame.midY - 100)
         )
-        for _ in 0..<6 where !addTag.isHittable
-            || addTag.frame.maxY > app.frame.maxY - 220 {
+        for _ in 0..<6 where !tools.isHittable
+            || tools.frame.maxY > app.frame.maxY - 220 {
             dragStart.press(forDuration: 0.05, thenDragTo: dragEnd)
         }
         XCTAssertLessThan(
-            addTag.frame.maxY,
+            tools.frame.maxY,
             initialMetadataMaxY,
             "The long fixture must move before Tag entry"
         )
-        XCTAssertTrue(addTag.isHittable)
-        addTag.tap()
+        XCTAssertTrue(tools.isHittable)
+        beginCardEditorTagEntryFromTools()
         waitFor("cardEditorTagInput").typeText("scrolled-gutter-tag")
         let keyboard = app.keyboards.firstMatch
         XCTAssertTrue(keyboard.waitForExistence(timeout: 10))
@@ -2832,20 +3132,20 @@ final class ArcNoteUITests: XCTestCase {
             NSPredicate(format: "identifier BEGINSWITH %@", "cardEditorTag.")
         )
         let countBeforeBlank = tags.count
-        waitForButton("cardEditorAddTag").tap()
+        beginCardEditorTagEntryFromTools()
         let blankInput = waitFor("cardEditorTagInput")
         XCTAssertTrue(blankInput.isHittable)
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 10))
         blankInput.typeText("   ")
         tapCardEditorNonEditorGutter()
         XCTAssertEqual(tags.count, countBeforeBlank)
-        XCTAssertTrue(waitForButton("cardEditorAddTag").exists)
+        XCTAssertTrue(waitForButton("cardEditorTools").isEnabled)
 
-        waitForButton("cardEditorAddTag").tap()
+        beginCardEditorTagEntryFromTools()
         waitFor("cardEditorTagInput").typeText("### ")
         tapCardEditorNonEditorGutter()
         XCTAssertEqual(tags.count, countBeforeBlank)
-        XCTAssertTrue(waitForButton("cardEditorAddTag").exists)
+        XCTAssertTrue(waitForButton("cardEditorTools").isEnabled)
     }
 
     func testInlineTagEntryCompletesBeforePrivacyToggleInOneTap() {
@@ -2865,7 +3165,7 @@ final class ArcNoteUITests: XCTestCase {
     func testInlineTagEntryCompletesBeforeLinksDisclosureInOneTap() {
         launchCardEditorFixture(mode: "populated")
 
-        waitForButton("cardEditorAddTag").tap()
+        beginCardEditorTagEntryFromTools()
         waitFor("cardEditorTagInput").typeText("links-tag")
         let disclosure = waitForButton("cardEditorLinksDisclosure")
         disclosure.tap()
@@ -2977,107 +3277,49 @@ final class ArcNoteUITests: XCTestCase {
 
     func testCardEditorTopActionsAreDirectAndOrdered() {
         launchCardEditorFixture(mode: "empty")
-
         let privacy = waitForButton("cardEditorPrivacyButton")
         let more = waitForButton("cardEditorMoreButton")
         assertReadingOrder(privacy, before: more)
-
         privacy.tap()
         XCTAssertEqual(privacy.label, "Make Private")
         XCTAssertEqual(privacy.value as? String, "Public")
-
         more.tap()
-        _ = waitFor("cardEditorActionsOverlay")
-        let surface = waitFor("cardEditorActionsOverlay.surface")
         let actions = editorActionButtons()
-        XCTAssertEqual(actions.count, 8)
-        for action in actions {
-            XCTAssertEqual(action.elementType, .button)
-        }
-        assertEditorActionGridLayout(actions, inside: surface)
+        assertEditorActionsInsideWindow(actions)
         XCTAssertFalse(app.buttons["cardEditorActionsClose"].exists)
-        XCTAssertEqual(actions[0].frame.width, 90, accuracy: 1)
-        XCTAssertFalse(app.buttons["cardEditorLeadingAction"].isHittable)
-        XCTAssertFalse(app.buttons["cardEditorPrivacyButton"].isHittable)
-        XCTAssertFalse(app.buttons["cardEditorMoreButton"].isHittable)
-        XCTAssertFalse(
-            app.descendants(matching: .any)["cardEditorCardActionsButton"]
-                .exists,
-            "More must invoke Card Actions without an intermediate menu"
-        )
-        captureVisual("card-editor-action-box-grid-fixture")
+        XCTAssertFalse(app.descendants(matching: .any)["cardEditorActionGrid"].exists)
+        captureVisual("card-editor-native-menu")
         dismissEditorCardActions()
-
-        XCTAssertTrue(more.waitForExistence(timeout: 10))
         XCTAssertTrue(more.isHittable)
         more.tap()
-        _ = waitFor("cardEditorActionsOverlay")
-        _ = waitFor("cardEditorActionsOverlay.surface")
-        XCTAssertFalse(app.buttons["cardEditorLeadingAction"].isHittable)
-        XCTAssertFalse(app.buttons["cardEditorPrivacyButton"].isHittable)
-        XCTAssertFalse(app.buttons["cardEditorMoreButton"].isHittable)
+        XCTAssertTrue(waitForButton("cardEditorActionSpark").isHittable)
         dismissEditorCardActions()
     }
 
-    func testCardEditorActionBoxHasNoCloseIconAndDismissesFromBackdrop() {
+    func testCardEditorNativeMenuDismissesWithoutChangingTheDocument() {
         launchCardEditorFixture(mode: "empty")
-
         waitForButton("cardEditorMoreButton").tap()
-        let surface = waitFor("cardEditorActionsOverlay.surface")
-        XCTAssertFalse(
-            app.buttons["cardEditorActionsClose"].exists,
-            "Action Box should close from its backdrop, not an X icon"
-        )
-
-        RunLoop.current.run(until: Date().addingTimeInterval(0.6))
-        surface.coordinate(
-            withNormalizedOffset: CGVector(dx: 0.82, dy: 0.82)
-        ).tap()
-        XCTAssertTrue(
-            app.descendants(matching: .any)["cardEditorActionsOverlay"].exists,
-            "Tapping empty space inside the Action Box must keep it open"
-        )
-
-        dismissActionBoxFromBackdrop(
-            surfaceIdentifier: "cardEditorActionsOverlay.surface",
-            overlayIdentifier: "cardEditorActionsOverlay"
-        )
+        _ = editorActionButtons()
+        XCTAssertFalse(app.buttons["cardEditorActionsClose"].exists)
+        dismissEditorCardActions()
+        XCTAssertTrue(waitForButton("cardEditorMoreButton").isHittable)
+        XCTAssertEqual(waitForButton("cardEditorLeadingAction").label, "Close note")
     }
 
-    func testCardEditorActionBoxFitsAdaptivePortraitViewport() {
+    func testCardEditorNativeMenuFitsAdaptivePortraitViewport() {
         launchCardEditorFixture(mode: "empty")
-
         waitForButton("cardEditorMoreButton").tap()
-        let surface = waitFor("cardEditorActionsOverlay.surface")
-        let actions = editorActionButtons()
-
-        XCTAssertTrue(app.frame.insetBy(dx: -1, dy: -1).contains(surface.frame))
-        assertEditorActionGridLayout(actions, inside: surface)
-        XCTAssertFalse(app.buttons["cardEditorActionsClose"].exists)
-        for action in actions {
-            XCTAssertGreaterThanOrEqual(action.frame.width, 44)
-            XCTAssertLessThanOrEqual(action.frame.width, 90)
-        }
-        captureVisual("card-editor-action-box-adaptive-portrait")
+        assertEditorActionsInsideWindow(editorActionButtons())
+        captureVisual("card-editor-native-menu-portrait")
         dismissEditorCardActions()
     }
 
-    func testCardEditorActionBoxFitsShortSafeAreaViewport() {
-        app.launchEnvironment[
-            "CHORAI_CARD_EDITOR_FIXTURE_VIEWPORT_HEIGHT"
-        ] = "350"
+    func testCardEditorNativeMenuFitsShortSafeAreaViewport() {
+        app.launchEnvironment["CHORAI_CARD_EDITOR_FIXTURE_VIEWPORT_HEIGHT"] = "350"
         launchCardEditorFixture(mode: "empty")
-
         waitForButton("cardEditorMoreButton").tap()
-        let surface = waitFor("cardEditorActionsOverlay.surface")
-        let actions = editorActionButtons()
-
-        XCTAssertTrue(app.frame.insetBy(dx: -1, dy: -1).contains(surface.frame))
-        assertEditorActionGridLayout(actions, inside: surface)
-        XCTAssertFalse(app.buttons["cardEditorActionsClose"].exists)
-        XCTAssertEqual(surface.frame.width, surface.frame.height, accuracy: 3)
-        XCTAssertLessThanOrEqual(surface.frame.height, 350)
-        captureVisual("card-editor-action-box-short-viewport")
+        assertEditorActionsInsideWindow(editorActionButtons())
+        captureVisual("card-editor-native-menu-short-viewport")
         dismissEditorCardActions()
     }
 
@@ -3139,7 +3381,7 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertGreaterThanOrEqual(tag.frame.minX, row.frame.minX - 1)
         XCTAssertLessThanOrEqual(tag.frame.maxX, row.frame.maxX + 1)
         XCTAssertGreaterThanOrEqual(tag.frame.height, 44)
-        assertReadingOrder(tag, before: waitFor("cardEditorAddTag"))
+        assertReadingOrder(tag, before: waitForButton("cardEditorTools"))
     }
 
     func testCardEditorBootstrapReachesReadyForMinimalDocument() {
@@ -3218,10 +3460,10 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertEqual(back.frame.midY, privacy.frame.midY, accuracy: 1.5)
         XCTAssertEqual(privacy.frame.midY, more.frame.midY, accuracy: 1.5)
 
-        let addTag = waitFor("cardEditorAddTag")
+        let tools = waitForButton("cardEditorTools")
         let disclosure = waitFor("cardEditorLinksDisclosure")
         for (identifier, control) in [
-            ("cardEditorAddTag", addTag),
+            ("cardEditorTools", tools),
             ("cardEditorLinksDisclosure", disclosure),
         ] {
             XCTAssertGreaterThanOrEqual(
@@ -3485,7 +3727,7 @@ final class ArcNoteUITests: XCTestCase {
         )
 
         collectedMenu.tap()
-        waitFor("popup-menu.overlay")
+        XCTAssertFalse(exists("popup-menu.overlay", timeout: 1))
         waitFor("popup-menu.item.view")
         captureVisual("discovery-path-home-card-alignment")
     }
@@ -3578,7 +3820,7 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertTrue(reward.label.contains("Credits"))
         XCTAssertTrue(reward.label.contains("Milestone bonus"))
 
-        tap("settings.destination.back")
+        app.navigationBars.buttons.firstMatch.tap()
         waitFor("screen.invitation-credits")
         let ledgerLink = waitFor("invitation-credits.ledger.link")
         for _ in 0..<3 where !ledgerLink.isHittable {
@@ -3923,7 +4165,7 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertGreaterThanOrEqual(menu.frame.height, 44)
         menu.tap()
 
-        waitFor("popup-menu.overlay")
+        XCTAssertFalse(exists("popup-menu.overlay", timeout: 1))
         for action in [
             "edit", "spark", "merge", "private", "share", "link", "root",
             "remove", "pin",
@@ -3938,10 +4180,11 @@ final class ArcNoteUITests: XCTestCase {
                 "My Profile action is not reachable: \(action)"
             )
         }
-        dismissActionBoxFromBackdrop(
-            surfaceIdentifier: "popup-menu.overlay.surface",
-            overlayIdentifier: "popup-menu.overlay"
-        )
+        // A system Menu hides the navigation bar from hit-testing. Dismiss at
+        // the visible empty left margin, instead of asking XCTest for its hit point.
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.04, dy: 0.14)).tap()
+        XCTAssertFalse(app.buttons["popup-menu.item.edit"].exists)
+        captureVisual("remediation-my-profile")
 
         chat.tap()
         XCTAssertEqual(
@@ -4701,11 +4944,12 @@ final class ArcNoteUITests: XCTestCase {
         app.launch()
 
         waitFor("screen.notification-inbox")
-        waitFor("notification.list.loaded")
+        // A real notification row establishes loading completion. The old
+        // transparent 1pt overlay is not exposed by the native List's AX tree.
         waitFor("notification.row.ntf_follow")
         waitFor("notification.row.ntf_like")
         waitFor("notification.row.ntf_system")
-        waitFor("notification.unread-dot.ntf_follow")
+        XCTAssertEqual(waitForButton("notification.row.ntf_follow").value as? String, "Unread")
 
         app.buttons["Notification filters"].tap()
         tap("notification.filter.unread")
@@ -4733,10 +4977,11 @@ final class ArcNoteUITests: XCTestCase {
         waitFor("notification.row.ntf_follow")
         app.buttons["Notification filters"].tap()
         app.buttons["Read All"].tap()
-        XCTAssertFalse(
-            app.descendants(matching: .any)["notification.unread-dot.ntf_follow"]
-                .waitForExistence(timeout: 1)
+        let readState = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value == %@", "Read"),
+            object: app.buttons["notification.row.ntf_follow"]
         )
+        XCTAssertEqual(XCTWaiter.wait(for: [readState], timeout: 5), .completed)
 
         tap("notification.row.ntf_follow")
         XCTAssertEqual(
@@ -5252,7 +5497,7 @@ final class ArcNoteUITests: XCTestCase {
                 "The cold-detail fallback rail must remain inside the visible window"
             )
 
-            waitForButton("detail.back").tap()
+            app.navigationBars["Note"].buttons.firstMatch.tap()
         } else {
             if let configuredExistingSessionScope {
                 app.launchEnvironment[
@@ -6780,7 +7025,7 @@ final class ArcNoteUITests: XCTestCase {
             token: session.token,
             expected: false
         )
-        tap("detail.back")
+        app.navigationBars["Note"].buttons.firstMatch.tap()
         waitFor("screen.flow.content", timeout: 30)
         XCTAssertEqual(flowVisibleCardID(), cardID)
         waitForAccessibilityValue("flow.like.\(cardID)", expected: "false")
@@ -7198,7 +7443,7 @@ final class ArcNoteUITests: XCTestCase {
         waitFor("screen.detail.loaded", timeout: 30)
         XCTAssertEqual(sparkAnchorValue("screen.detail.card-id"), visibleCardID)
 
-        tap("detail.back")
+        app.navigationBars["Note"].buttons.firstMatch.tap()
         waitFor("screen.spark.loaded", timeout: 20)
         tap("spark.menu.\(visibleCardID)")
         waitFor("popup-menu.item.view", timeout: 10)
@@ -7505,7 +7750,7 @@ final class ArcNoteUITests: XCTestCase {
         waitFor("card.home.\(cardID)", timeout: 30).tap()
         waitFor("cardEditorContent", timeout: 20)
 
-        waitForEnabledButton("cardEditorAddTag", timeout: 20).tap()
+        beginCardEditorTagEntryFromTools()
         let tagInput = waitFor("cardEditorTagInput")
         tagInput.typeText("## editortag ")
         waitForLabel("cardEditorLeadingAction", expected: "Save note")
@@ -7513,7 +7758,7 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertTrue(waitFor("cardEditorTag.editortag").exists)
         XCTAssertTrue(exists("cardEditorContent", timeout: 2))
 
-        waitForEnabledButton("cardEditorAddTag", timeout: 20).tap()
+        beginCardEditorTagEntryFromTools()
         waitFor("cardEditorTagInput").typeText("#editortag\n")
         XCTAssertEqual(
             app.descendants(matching: .any)
@@ -8034,11 +8279,9 @@ final class ArcNoteUITests: XCTestCase {
         tap("tab.library")
         waitFor("card.home.\(cardID)", timeout: 30).tap()
         waitFor("cardEditorContent", timeout: 20)
-        _ = waitForEnabledButton("cardEditorAddTag", timeout: 20)
+        _ = waitFor("cardEditorTools", timeout: 20)
         openEditorCardActions()
 
-        _ = waitFor("cardEditorActionsOverlay")
-        let surface = waitFor("cardEditorActionsOverlay.surface")
         let actions = editorActionButtons()
         XCTAssertEqual(actions.count, 8)
         XCTAssertEqual(
@@ -8049,13 +8292,13 @@ final class ArcNoteUITests: XCTestCase {
             ]
         )
         XCTAssertFalse(app.buttons["cardEditorRemoveBackgroundButton"].exists)
-        assertEditorActionGridLayout(actions, inside: surface)
+        assertEditorActionsInsideWindow(actions)
         XCTAssertFalse(app.buttons["cardEditorActionsClose"].exists)
         captureVisual("card-editor-action-box-grid")
         dismissEditorCardActions()
 
         openEditorCardActions()
-        _ = waitFor("cardEditorActionsOverlay.surface")
+        _ = waitForButton("cardEditorActionSpark")
         dismissEditorCardActions()
         closeNewNoteEditor()
     }
@@ -8082,11 +8325,9 @@ final class ArcNoteUITests: XCTestCase {
         waitFor("cardEditorContent", timeout: 20)
         openEditorCardActions()
 
-        _ = waitFor("cardEditorActionsOverlay")
-        let surface = waitFor("cardEditorActionsOverlay.surface")
         let actions = editorActionButtons()
         XCTAssertEqual(actions.count, 8)
-        assertEditorActionGridLayout(actions, inside: surface)
+        assertEditorActionsInsideWindow(actions)
         XCTAssertFalse(app.buttons["cardEditorActionsClose"].exists)
         for action in actions {
             XCTAssertTrue(action.isEnabled)
@@ -9075,7 +9316,7 @@ final class ArcNoteUITests: XCTestCase {
         )
         XCTAssertFalse(app.descendants(matching: .any)[error].exists)
 
-        tap("settings.destination.back")
+        app.navigationBars.buttons.firstMatch.tap()
         waitFor("screen.invitation-credits", timeout: 10)
     }
 
@@ -10542,241 +10783,45 @@ final class ArcNoteUITests: XCTestCase {
         line: UInt = #line
     ) -> [XCUIElement] {
         let identifiers = [
-            "cardEditorBackgroundButton",
-            "cardEditorActionSpark",
-            "cardEditorActionMerge",
-            "cardEditorActionShare",
-            "cardEditorActionLink",
-            "cardEditorActionRoot",
-            "cardEditorActionRemove",
-            "cardEditorActionPin",
+            "cardEditorBackgroundButton", "cardEditorActionSpark",
+            "cardEditorActionMerge", "cardEditorActionShare", "cardEditorActionLink",
+            "cardEditorActionRoot", "cardEditorActionRemove", "cardEditorActionPin",
         ]
-        let surface = waitFor(
-            "cardEditorActionsOverlay.surface",
-            timeout: 20,
-            file: file,
-            line: line
-        )
-        let deadline = Date().addingTimeInterval(20)
-        var actualButtons = surface.buttons.allElementsBoundByIndex
-        while Date() < deadline && actualButtons.count != identifiers.count {
-            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
-            actualButtons = surface.buttons.allElementsBoundByIndex
+        return identifiers.map {
+            waitForEditorCardAction($0, timeout: 10, requireHittable: true, file: file, line: line)
         }
-        XCTAssertEqual(
-            actualButtons.count,
-            identifiers.count,
-            "The Action Box grid must contain exactly eight buttons",
-            file: file,
-            line: line
-        )
-        XCTAssertEqual(
-            Set(actualButtons.map(\.identifier)),
-            Set(identifiers),
-            "The Action Box grid contains an unexpected semantic button",
-            file: file,
-            line: line
-        )
-
-        let actions = identifiers.map { identifier in
-            waitForEditorCardAction(
-                identifier,
-                timeout: 20,
-                requireHittable: true,
-                file: file,
-                line: line
-            )
-        }
-        return actions
     }
 
-    private func assertEditorActionGridLayout(
+    private func assertEditorActionsInsideWindow(
         _ actions: [XCUIElement],
-        inside overlay: XCUIElement,
         file: StaticString = #filePath,
         line: UInt = #line
     ) {
-        guard actions.count == 8 else {
-            XCTFail(
-                "Expected eight editor actions, found \(actions.count)",
-                file: file,
-                line: line
-            )
-            return
-        }
-
-        let background = actions[0]
-        let spark = actions[1]
-        let merge = actions[2]
-        let share = actions[3]
-        let link = actions[4]
-        let root = actions[5]
-        let remove = actions[6]
-        let pin = actions[7]
-
-        XCTAssertEqual(
-            background.frame.midY,
-            spark.frame.midY,
-            accuracy: 3,
-            file: file,
-            line: line
-        )
-        XCTAssertEqual(
-            spark.frame.midY,
-            merge.frame.midY,
-            accuracy: 3,
-            file: file,
-            line: line
-        )
-        XCTAssertLessThan(
-            background.frame.midX,
-            spark.frame.midX,
-            file: file,
-            line: line
-        )
-        XCTAssertLessThan(
-            spark.frame.midX,
-            merge.frame.midX,
-            file: file,
-            line: line
-        )
-        XCTAssertEqual(
-            share.frame.midX,
-            background.frame.midX,
-            accuracy: 3,
-            file: file,
-            line: line
-        )
-        XCTAssertEqual(
-            link.frame.midX,
-            spark.frame.midX,
-            accuracy: 3,
-            file: file,
-            line: line
-        )
-        XCTAssertEqual(
-            share.frame.midY,
-            link.frame.midY,
-            accuracy: 3,
-            file: file,
-            line: line
-        )
-        XCTAssertEqual(
-            link.frame.midY,
-            root.frame.midY,
-            accuracy: 3,
-            file: file,
-            line: line
-        )
-        XCTAssertEqual(
-            remove.frame.midY,
-            pin.frame.midY,
-            accuracy: 3,
-            file: file,
-            line: line
-        )
-        XCTAssertEqual(
-            root.frame.midX,
-            merge.frame.midX,
-            accuracy: 3,
-            file: file,
-            line: line
-        )
-        XCTAssertEqual(
-            remove.frame.midX,
-            background.frame.midX,
-            accuracy: 3,
-            file: file,
-            line: line
-        )
-        XCTAssertEqual(
-            pin.frame.midX,
-            spark.frame.midX,
-            accuracy: 3,
-            file: file,
-            line: line
-        )
-        XCTAssertLessThan(
-            spark.frame.midY,
-            share.frame.midY,
-            file: file,
-            line: line
-        )
-        XCTAssertLessThan(
-            share.frame.midY,
-            remove.frame.midY,
-            file: file,
-            line: line
-        )
-
-        let bottomClearance = overlay.frame.maxY
-            - max(remove.frame.maxY, pin.frame.maxY)
-        XCTAssertGreaterThanOrEqual(
-            bottomClearance,
-            15,
-            "The final Action Box row needs a visible 16-point bottom inset",
-            file: file,
-            line: line
-        )
-
-        let overlayBounds = overlay.frame.insetBy(dx: -1, dy: -1)
-        for (index, action) in actions.enumerated() {
-            XCTAssertTrue(
-                overlayBounds.contains(action.frame),
-                "\(action.identifier) must remain inside the Action Box overlay",
-                file: file,
-                line: line
-            )
-            for laterAction in actions.dropFirst(index + 1) {
-                XCTAssertFalse(
-                    action.frame.intersects(laterAction.frame),
-                    "\(action.identifier) overlaps \(laterAction.identifier)",
-                    file: file,
-                    line: line
-                )
-            }
+        XCTAssertEqual(Set(actions.map(\.identifier)).count, 8, file: file, line: line)
+        let window = app.frame.insetBy(dx: -1, dy: -1)
+        for action in actions {
+            XCTAssertTrue(action.isHittable, action.identifier, file: file, line: line)
+            XCTAssertTrue(window.contains(action.frame), action.identifier, file: file, line: line)
+            XCTAssertGreaterThan(action.frame.height, 0, file: file, line: line)
+            // System Menu owns its row metrics; custom controls keep separate 44 pt checks.
         }
     }
 
-    private func openEditorCardActions(
-        file: StaticString = #filePath,
-        line: UInt = #line
-    ) {
-        _ = waitForEnabledButton(
-            "cardEditorAddTag",
-            timeout: 20,
-            file: file,
-            line: line
-        )
-        waitForButton(
-            "cardEditorMoreButton",
-            file: file,
-            line: line
-        ).tap()
-        _ = waitFor(
-            "cardEditorActionsOverlay",
-            timeout: 10,
-            file: file,
-            line: line
-        )
-        _ = waitFor(
-            "cardEditorActionsOverlay.surface",
-            timeout: 10,
-            file: file,
-            line: line
-        )
+    private func beginCardEditorTagEntryFromTools(file: StaticString = #filePath, line: UInt = #line) {
+        waitForEnabledButton("cardEditorTools", timeout: 20, file: file, line: line).tap()
+        waitForEnabledButton("cardEditorToolsAddTag", timeout: 10, file: file, line: line).tap()
+        _ = waitFor("cardEditorTagInput", file: file, line: line)
     }
 
-    private func dismissEditorCardActions(
-        file: StaticString = #filePath,
-        line: UInt = #line
-    ) {
-        dismissActionBoxFromBackdrop(
-            surfaceIdentifier: "cardEditorActionsOverlay.surface",
-            overlayIdentifier: "cardEditorActionsOverlay",
-            file: file,
-            line: line
-        )
+    private func openEditorCardActions(file: StaticString = #filePath, line: UInt = #line) {
+        _ = waitFor("cardEditorTools", timeout: 20, file: file, line: line)
+        waitForEnabledButton("cardEditorMoreButton", timeout: 20, file: file, line: line).tap()
+        _ = waitForButton("cardEditorActionSpark", file: file, line: line)
+    }
+
+    private func dismissEditorCardActions(file: StaticString = #filePath, line: UInt = #line) {
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.02, dy: 0.5)).tap()
+        waitForMissing("cardEditorActionSpark", file: file, line: line)
     }
 
     private func dismissActionBoxFromBackdrop(

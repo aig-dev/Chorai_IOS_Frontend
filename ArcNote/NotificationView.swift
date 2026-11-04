@@ -2,6 +2,7 @@ import CoreFlow
 import SwiftUI
 
 struct NotificationView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dismiss) private var dismiss
     @StateObject private var store: NotificationInboxStore
     @State private var showFilterTags = false
@@ -29,13 +30,10 @@ struct NotificationView: View {
 
     var body: some View {
         ZStack {
-            Image("home_bg")
-                .resizable()
-                .aspectRatio(contentMode: .fill)
+            ChoraiBackground()
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
-                header
                 if showFilterTags { filterStrip }
                 content
             }
@@ -45,8 +43,26 @@ struct NotificationView: View {
             }
         }
         .accessibilityIdentifier("screen.notification-inbox")
-        .navigationBarHidden(true)
-        .navigationBarBackButtonHidden(true)
+        .foregroundStyle(ChoraiTheme.ink)
+        .tint(ChoraiTheme.accent)
+        .navigationTitle("Notification")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.visible, for: .navigationBar)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.25)) {
+                        showFilterTags.toggle()
+                    }
+                } label: {
+                    Image(systemName: "line.3.horizontal.decrease")
+                        .frame(minWidth: 44, minHeight: 44)
+                }
+                .accessibilityLabel("Notification filters")
+                .accessibilityValue(showFilterTags ? "Expanded" : "Collapsed")
+                .accessibilityIdentifier("notification.filter-toggle")
+            }
+        }
         .navigationDestination(isPresented: actorDestinationPresented) {
             let actorID = selectedActorID ?? ""
             if usesFixtureDestinations {
@@ -119,86 +135,33 @@ struct NotificationView: View {
         )
     }
 
-    private var header: some View {
-        HStack {
-            Button { dismiss() } label: {
-                Image(systemName: "chevron.left")
-                    .font(.title2)
-                    .foregroundColor(.white)
-            }
-
-            Spacer()
-
-            Button {
-                withAnimation(.easeInOut(duration: 0.25)) {
-                    showFilterTags.toggle()
-                }
-            } label: {
-                HStack(spacing: 4) {
-                    Text("Notification")
-                        .font(.system(size: 22, weight: .semibold))
-                    Image(systemName: showFilterTags ? "chevron.up" : "chevron.down")
-                        .font(.system(size: 14, weight: .medium))
-                }
-                .foregroundColor(.white)
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("Notification filters")
-                .accessibilityIdentifier("notification.filter-toggle")
-            }
-            .accessibilityIdentifier("notification.filter-toggle")
-
-            Spacer()
-            Color.clear.frame(width: 30, height: 30)
-        }
-        .adaptiveContentGutter()
-        .padding(.top, 60)
-        .padding(.bottom, 20)
-    }
-
     private var filterStrip: some View {
         VStack(alignment: .trailing, spacing: 8) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 12) {
-                    filterTag(.all, title: "All")
-                    filterTag(.unread, title: "Unread")
-                    filterTag(.activity, title: "Activity")
-                    filterTag(.system, title: "System")
-                }
-                .adaptiveContentGutter()
+            Picker("Notifications", selection: $selectedFilter) {
+                Text("All").tag(NotificationFilter.all)
+                    .accessibilityIdentifier("notification.filter.all")
+                Text("Unread").tag(NotificationFilter.unread)
+                    .accessibilityIdentifier("notification.filter.unread")
+                Text("Activity").tag(NotificationFilter.activity)
+                    .accessibilityIdentifier("notification.filter.activity")
+                Text("System").tag(NotificationFilter.system)
+                    .accessibilityIdentifier("notification.filter.system")
             }
+            .pickerStyle(.segmented)
+            .frame(minHeight: 44)
 
-            Button {
-                store.markAllLoadedRead()
-            } label: {
+            Button { store.markAllLoadedRead() } label: {
                 Text(store.isMarkingAll ? "Reading…" : "Read All")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(.white)
-                    .frame(width: 72)
-                    .padding(.vertical, 10)
-                    .background(
-                        Capsule().fill(Color.purple.opacity(0.45))
-                    )
+                    .font(.subheadline.weight(.medium))
+                    .frame(minWidth: 72, minHeight: 44)
             }
+            .buttonStyle(.borderless)
             .disabled(store.unreadCount == 0 || store.isMarkingAll)
             .opacity(store.unreadCount == 0 ? 0.45 : 1)
             .accessibilityIdentifier("notification.read-all")
-            .padding(.trailing, 20)
         }
-        .padding(.bottom, 10)
-    }
-
-    private func filterTag(
-        _ filter: NotificationFilter,
-        title: String
-    ) -> some View {
-        NotificationFilterTag(
-            title: title,
-            isSelected: selectedFilter == filter
-        ) {
-            selectedFilter = filter
-        }
-        .frame(width: 95)
-        .accessibilityIdentifier("notification.filter.\(filter.rawValue)")
+        .adaptiveContentGutter()
+        .padding(.top, 8)
     }
 
     @ViewBuilder
@@ -226,8 +189,8 @@ struct NotificationView: View {
     private var loadingView: some View {
         VStack(spacing: 10) {
             Spacer()
-            ProgressView().tint(.white).scaleEffect(1.2)
-            Text("Loading…").foregroundColor(.white.opacity(0.8))
+            ProgressView().tint(ChoraiTheme.ink).scaleEffect(1.2)
+            Text("Loading…").foregroundColor(ChoraiTheme.ink)
             Spacer()
         }
     }
@@ -237,15 +200,16 @@ struct NotificationView: View {
             Spacer()
             Image(systemName: "exclamationmark.triangle")
                 .font(.system(size: 40))
-                .foregroundColor(.white.opacity(0.6))
+                .foregroundColor(ChoraiTheme.secondaryInk)
             Text("Loading Failed")
-                .font(.system(size: 18, weight: .medium))
-                .foregroundColor(.white)
+                .font(.headline.weight(.medium))
+                .foregroundColor(ChoraiTheme.ink)
             Text(errorMessage(error))
-                .font(.system(size: 14))
-                .foregroundColor(.white.opacity(0.6))
+                .font(.subheadline)
+                .foregroundColor(ChoraiTheme.secondaryInk)
             Button("Retry") { store.retryLastFailure() }
-                .foregroundColor(.white)
+                .foregroundColor(ChoraiTheme.ink)
+                .frame(minWidth: 88, minHeight: 44)
                 .padding(.top, 10)
             Spacer()
         }
@@ -255,11 +219,11 @@ struct NotificationView: View {
         VStack(spacing: 12) {
             Spacer()
             Image(systemName: "bell.slash")
-                .font(.system(size: 30, weight: .light))
-                .foregroundColor(.white.opacity(0.55))
+                .font(.largeTitle.weight(.light))
+                .foregroundColor(ChoraiTheme.secondaryInk)
             Text("No notifications")
-                .font(.system(size: 16, weight: .medium))
-                .foregroundColor(.white.opacity(0.7))
+                .font(.body.weight(.medium))
+                .foregroundColor(ChoraiTheme.secondaryInk)
                 .accessibilityIdentifier("notification.list.empty")
             Spacer()
         }
@@ -267,55 +231,40 @@ struct NotificationView: View {
     }
 
     private var notificationList: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 24) {
-                Text("Loaded")
-                    .font(.system(size: 1))
-                    .foregroundColor(.clear)
-                    .frame(width: 1, height: 1)
-                    .accessibilityIdentifier("notification.list.loaded")
-
-                ForEach(groupedNotifications, id: \.title) { group in
-                    VStack(alignment: .leading, spacing: 16) {
-                        Text(group.title)
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 20)
-
-                        VStack(spacing: 0) {
-                            ForEach(Array(group.items.enumerated()), id: \.element.id) {
-                                index, notification in
-                                Button { open(notification) } label: {
-                                    NotificationItemView(notification: notification)
-                                }
-                                .buttonStyle(.plain)
-                                .accessibilityIdentifier("notification.row.\(notification.id)")
-                                .onAppear {
-                                    if notification.id == store
-                                        .filteredItems(selectedFilter).last?.id {
-                                        store.loadMore()
-                                    }
-                                }
-
-                                if index < group.items.count - 1 {
-                                    Divider()
-                                        .background(Color.white.opacity(0.1))
-                                        .padding(.leading, 60)
-                                }
+        List {
+            ForEach(groupedNotifications, id: \.title) { group in
+                Section(group.title) {
+                    ForEach(group.items) { notification in
+                        Button { open(notification) } label: {
+                            NotificationItemView(notification: notification)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("notification.row.\(notification.id)")
+                        .accessibilityValue(notification.isRead ? "Read" : "Unread")
+                        .listRowBackground(ChoraiTheme.surface)
+                        .onAppear {
+                            if notification.id == store.filteredItems(selectedFilter).last?.id {
+                                store.loadMore()
                             }
                         }
-                        .padding(.vertical, 15)
-                        .background(notificationCard)
-                        .clipShape(RoundedRectangle(cornerRadius: 16))
-                        .padding(.horizontal, 20)
                     }
                 }
-
-                if store.phase == .loadingMore {
-                    ProgressView().tint(.white).frame(maxWidth: .infinity)
-                }
             }
-            .padding(.bottom, 100)
+            if store.phase == .loadingMore {
+                ProgressView()
+                    .tint(ChoraiTheme.ink)
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                    .listRowBackground(ChoraiTheme.surface)
+            }
+        }
+        .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
+        .overlay(alignment: .topLeading) {
+            Text("Loaded")
+                .font(.system(size: 1))
+                .foregroundStyle(.clear)
+                .frame(width: 1, height: 1)
+                .accessibilityIdentifier("notification.list.loaded")
         }
     }
 
@@ -330,24 +279,15 @@ struct NotificationView: View {
         }
     }
 
-    private var notificationCard: some View {
-        RoundedRectangle(cornerRadius: 16)
-            .fill(Color.white.opacity(0.1))
-            .overlay(
-                RoundedRectangle(cornerRadius: 16)
-                    .stroke(Color.white.opacity(0.17), lineWidth: 1)
-            )
-    }
-
     private var actionError: some View {
         VStack {
             Spacer()
             HStack(spacing: 10) {
                 Image(systemName: "exclamationmark.circle")
                 Text("Couldn’t update notification. Try again.")
-                    .font(.system(size: 14, weight: .medium))
+                    .font(.subheadline.weight(.medium))
             }
-            .foregroundColor(.white)
+            .foregroundColor(ChoraiTheme.ink)
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
             .background(.ultraThinMaterial, in: Capsule())
@@ -416,11 +356,11 @@ struct NotificationView: View {
         identifier: String
     ) -> some View {
         ZStack {
-            Image("home_bg").resizable().scaledToFill().ignoresSafeArea()
+            ChoraiBackground().ignoresSafeArea()
             VStack(spacing: 12) {
-                Text(title).font(.title2).foregroundColor(.white)
+                Text(title).font(.title2).foregroundColor(ChoraiTheme.ink)
                 Text(value)
-                    .foregroundColor(.white.opacity(0.8))
+                    .foregroundColor(ChoraiTheme.ink)
                     .accessibilityIdentifier(identifier)
             }
         }
@@ -435,7 +375,7 @@ struct NotificationItemView: View {
             Group {
                 if !notification.isRead {
                     Circle()
-                        .fill(Color.purple)
+                        .fill(ChoraiTheme.gold)
                         .accessibilityIdentifier("notification.unread-dot.\(notification.id)")
                 } else {
                     Color.clear
@@ -448,17 +388,17 @@ struct NotificationItemView: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(notification.displayText)
-                    .font(.system(size: 16, weight: .regular))
-                    .foregroundColor(.white)
+                    .font(.body.weight(.regular))
+                    .foregroundColor(ChoraiTheme.ink)
                     .lineLimit(3)
                 Text(relativeTime(notification.createdAt))
-                    .font(.system(size: 14))
-                    .foregroundColor(.white.opacity(0.6))
+                    .font(.subheadline)
+                    .foregroundColor(ChoraiTheme.secondaryInk)
             }
             Spacer()
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 12)
+        .padding(.vertical, 8)
+        .frame(minHeight: 44)
         .contentShape(Rectangle())
     }
 
@@ -468,8 +408,8 @@ struct NotificationItemView: View {
             ZStack {
                 Circle().fill(Color.gray.opacity(0.3))
                 Image(systemName: "bell")
-                    .font(.system(size: 18, weight: .medium))
-                    .foregroundColor(.white)
+                    .font(.headline.weight(.medium))
+                    .foregroundColor(ChoraiTheme.ink)
             }
             .frame(width: 40, height: 40)
         } else if let avatarURL = notification.sourceActor?.avatarURL,
@@ -494,35 +434,6 @@ struct NotificationItemView: View {
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .short
         return formatter.localizedString(for: date, relativeTo: Date())
-    }
-}
-
-struct NotificationFilterTag: View {
-    let title: String
-    let isSelected: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Text(title)
-                .font(.system(size: 14, weight: .medium))
-                .foregroundColor(isSelected ? .white : .white.opacity(0.7))
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 10)
-                .background(
-                    RoundedRectangle(cornerRadius: 20)
-                        .fill(
-                            isSelected
-                                ? Color.white.opacity(0.3)
-                                : Color.white.opacity(0.1)
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 20)
-                                .stroke(Color.white.opacity(0.16), lineWidth: 1)
-                        )
-                )
-        }
-        .animation(.easeInOut(duration: 0.2), value: isSelected)
     }
 }
 

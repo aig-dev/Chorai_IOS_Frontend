@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Chorai · 原生入口打磨对照</title>
+  <link rel="stylesheet" href="review.css">
+</head>
+<body>
+  <header class="page-header">
+    <a class="brand" href="../README.md">chorai <span>原生界面记录</span></a>
+    <p class="eyebrow">WELCOME · SIGN IN · SIGN UP</p>
+    <h1>原生入口，打磨对照。</h1>
+    <p class="intro">沿着 Cosmos 的简洁节奏，调整欢迎页构图、输入时的位置关系、按钮反馈与每一步的视觉秩序。</p>
+    <p class="evidence">以下是原生 iOS 运行截图。点图可查看原尺寸；本页是对比记录，不是可操作的登录原型。</p>
+  </header>
+
+  <nav aria-label="查看页面" class="navigation">
+    <a href="#welcome" aria-current="page">欢迎页</a>
+    <a href="#sign-in">登录</a>
+    <a href="#sign-up">注册步骤</a>
+    <a href="#interests">兴趣选择</a>
+    <a href="#large-dark">大字与深色</a>
+    <a href="#manual-dark">深色手动核对</a>
+    <a href="#motion">原生动效实录</a>
+  </nav>
+
+  <main>
+    <section id="welcome" class="review-panel" aria-labelledby="welcome-title">
+      <div class="section-heading"><p class="eyebrow">01 / WELCOME</p><h2 id="welcome-title">让内容形成一个整体。</h2><p>保留居中标题和底部主动作。照片、学院金小纸条与短句形成一组构图，减少彼此割裂的面板感。</p></div>
+      <div class="comparison">
+        <figure hidden data-capture="../captures/device-hub-welcome-light.png"><figcaption><span class="version">前一轮</span><strong>探索介绍</strong><span>Device Hub 原始窗口截图</span></figcaption></figure>
+        <figure hidden data-capture="captures/welcome-discover-light.png"><figcaption><span class="version current">本轮</span><strong>探索介绍</strong><span>更清晰的图文主次与连接关系</span></figcaption></figure>
+      </div>
+      <div class="supplement">
+        <figure hidden data-capture="captures/welcome-library-light.png"><figcaption><span class="version current">本轮</span><strong>笔记与收藏</strong><span>图文对齐延续至第二步</span></figcaption></figure>
+        <figure hidden data-capture="captures/welcome-spark-light.png"><figcaption><span class="version current">本轮</span><strong>从一条想法开始</strong><span>保留第三步的森林色底</span></figcaption></figure>
+      </div>
+      <p class="section-note">静态截图用于查看构图；可切到「原生动效实录」观看最新版录屏，或直接在 Device Hub 中操作。</p>
+    </section>
+
+    <section id="sign-in" class="review-panel" aria-labelledby="sign-in-title" hidden>
+      <div class="section-heading"><p class="eyebrow">02 / SIGN IN</p><h2 id="sign-in-title">输入和继续，保持在一起。</h2><p>让字段、辅助操作和键盘上方的主按钮有更清楚的关系。Google 与 Apple 保留真实品牌标志。</p></div>
+      <div class="comparison">
+        <figure hidden data-capture="../captures/auth-signin-keyboard.png"><figcaption><span class="version">前一轮存档</span><strong>登录 · 键盘展开</strong><span>此张存档早于品牌 Logo 补齐</span></figcaption></figure>
+        <figure hidden data-capture="captures/auth-signin-keyboard.png"><figcaption><span class="version current">本轮</span><strong>登录 · 键盘展开</strong><span>在实际原生输入状态下查看布局</span></figcaption></figure>
+      </div>
+    </section>
+
+    <section id="sign-up" class="review-panel" aria-labelledby="sign-up-title" hidden>
+      <div class="section-heading"><p class="eyebrow">03 / SIGN UP</p><h2 id="sign-up-title">每一步，只突出当前的事。</h2><p>邮箱、验证码、用户名和密码沿用同一套排版。已有的访问码、校验规则和注册流程保持不变。</p></div>
+      <div class="sequence">
+        <figure hidden data-capture="captures/auth-polish-signup-email.png"><figcaption><span class="version current">本轮 · 01</span><strong>邮箱</strong><span>输入与第三方登录入口</span></figcaption></figure>
+        <figure hidden data-capture="captures/auth-polish-signup-code.png"><figcaption><span class="version current">本轮 · 02</span><strong>验证码</strong><span>重发与修改邮箱保持可达</span></figcaption></figure>
+        <figure hidden data-capture="captures/auth-polish-signup-username.png"><figcaption><span class="version current">本轮 · 03</span><strong>用户名</strong><span>同一条输入节奏</span></figcaption></figure>
+        <figure hidden data-capture="captures/auth-polish-signup-password.png"><figcaption><span class="version current">本轮 · 04</span><strong>设置密码</strong><span>输入规则与显示／隐藏操作</span></figcaption></figure>
+        <figure hidden data-capture="captures/auth-polish-signup-confirmation.png"><figcaption><span class="version current">本轮 · 05</span><strong>确认密码</strong><span>最终提交与协议入口</span></figcaption></figure>
+      </div>
+      <p class="section-note">安全输入状态下，系统截图可能隐藏密码和键盘。注册流程自动检查已执行；2026-11-04 又在 Device Hub 展开软件键盘、显示离线样本密码，完成安全输入布局核对。参见「深色手动核对」。</p>
+      <details class="archive"><summary>查看前一轮的恢复与错误状态存档</summary><p>这些存档用于回看原有排版；状态与上方正常输入截图不同，不作同状态逐像素对比。</p><div class="comparison">
+        <figure hidden data-capture="../captures/auth-signup-verification-recovery.png"><figcaption><span class="version">前一轮</span><strong>验证码恢复</strong><span>修改邮箱与重发操作</span></figcaption></figure>
+        <figure hidden data-capture="../captures/auth-signup-password-mismatch.png"><figcaption><span class="version">前一轮</span><strong>两次密码不一致</strong><span>系统截图可能隐藏安全输入内容</span></figcaption></figure>
+      </div></details>
+    </section>
+
+    <section id="interests" class="review-panel" aria-labelledby="interests-title" hidden>
+      <div class="section-heading"><p class="eyebrow">04 / INTERESTS</p><h2 id="interests-title">选择有秩序，完成不费力。</h2><p>兴趣标签稳定左对齐，重置收进顶部，底部突出继续。仍可跳过，沿用现有最多 9 项的规则。</p></div>
+      <div class="comparison">
+        <figure hidden data-capture="../captures/auth-interests-before-skip.png"><figcaption><span class="version">前一轮</span><strong>尚未选择</strong><span>原有标签与底部操作</span></figcaption></figure>
+        <figure hidden data-capture="captures/auth-interests-before-skip.png"><figcaption><span class="version current">本轮</span><strong>尚未选择</strong><span>更稳定的对齐和按钮层级</span></figcaption></figure>
+      </div>
+      <div class="comparison">
+        <figure hidden data-capture="../captures/auth-interests-nine-selected.png"><figcaption><span class="version">前一轮</span><strong>已选择 9 项</strong><span>原有选择上限状态</span></figcaption></figure>
+        <figure hidden data-capture="captures/auth-interests-nine-selected-verified.png"><figcaption><span class="version current">本轮 · 第五遍复核</span><strong>已选择 9 项</strong><span>达到上限后弱化剩余选项，已选项仍可取消</span></figcaption></figure>
+      </div>
+    </section>
+
+    <section id="large-dark" class="review-panel" aria-labelledby="large-dark-title" hidden>
+      <div class="section-heading"><p class="eyebrow">05 / ACCESSIBILITY</p><h2 id="large-dark-title">换一种显示方式，也要清楚。</h2><p>下面单独记录大字号与深色外观下的原生布局，不与普通字号截图混作同条件对比。</p></div>
+      <div class="sequence">
+        <figure hidden data-capture="captures/auth-polish-large-dark-email.png"><figcaption><span class="version current">本轮</span><strong>邮箱 · 大字深色</strong><span>标题、输入与按钮的可读性</span></figcaption></figure>
+        <figure hidden data-capture="captures/auth-polish-large-dark-confirm.png"><figcaption><span class="version current">本轮</span><strong>确认密码 · 大字深色</strong><span>主动作与协议内容的空间</span></figcaption></figure>
+        <figure hidden data-capture="captures/auth-polish-large-dark-interests.png"><figcaption><span class="version current">本轮</span><strong>兴趣 · 大字深色</strong><span>标签换行与底部操作</span></figcaption></figure>
+      </div>
+    </section>
+
+    <section id="manual-dark" class="review-panel" aria-labelledby="manual-dark-title" hidden>
+      <div class="section-heading"><p class="eyebrow">06 / DEVICE HUB · 2026-11-04</p><h2 id="manual-dark-title">在真实输入过程中，再看一遍。</h2><p>普通字号、深色外观，开启减少动态效果和降低透明度。已在 Device Hub 手动走完访问码、注册和跳过兴趣的离线路径，核对键盘上方的主动作与协议。以下保留原始窗口截图，点图可放大。</p></div>
+      <figure hidden data-capture="captures/manual/signin-dark-keyboard.png"><figcaption><span class="version current">手动核对 · 登录</span><strong>邮箱到密码，键盘与主动作同时可见</strong><span>Return 切换焦点；已显示的是固定离线样本密码</span></figcaption></figure>
+      <figure hidden data-capture="captures/manual/signup-confirm-dark-keyboard.png"><figcaption><span class="version current">手动核对 · 确认密码</span><strong>标题、输入、提交和协议完整可读</strong><span>软件键盘已展开；右侧保留深色和减弱效果设置</span></figcaption></figure>
+      <div class="comparison">
+        <figure hidden data-capture="captures/manual/interests-dark.png"><figcaption><span class="version current">手动核对 · 兴趣</span><strong>注册后进入兴趣选择</strong><span>保留原有跳过入口与9项上限</span></figcaption></figure>
+        <figure hidden data-capture="captures/manual/offline-complete-dark.png"><figcaption><span class="version current">手动核对 · 路径结束</span><strong>Skip 后到达离线完成页</strong><span>此状态只证明本地样本路径完成</span></figcaption></figure>
+      </div>
+      <details class="archive"><summary>查看其余深色输入步骤</summary><div class="comparison">
+        <figure hidden data-capture="captures/manual/signup-email-dark.png"><figcaption><span class="version current">手动核对</span><strong>邮箱</strong><span>延续同一套居中输入布局</span></figcaption></figure>
+        <figure hidden data-capture="captures/manual/signup-code-dark.png"><figcaption><span class="version current">手动核对</span><strong>验证码</strong><span>使用固定离线验证码</span></figcaption></figure>
+        <figure hidden data-capture="captures/manual/signup-username-dark.png"><figcaption><span class="version current">手动核对</span><strong>用户名</strong><span>当前步骤与继续操作清楚可见</span></figcaption></figure>
+        <figure hidden data-capture="captures/manual/signup-password-dark.png"><figcaption><span class="version current">手动核对</span><strong>设置密码</strong><span>保留显示／隐藏交互</span></figcaption></figure>
+      </div></details>
+      <p class="section-note">常规深色、安全输入与减弱效果的手动核对已完成；欢迎页转场及中途切换减弱效果也已完成录屏复核。以上没有提交真实邮件、账户注册或第三方授权。</p>
+    </section>
+
+    <section id="motion" class="review-panel" aria-labelledby="motion-title" hidden>
+      <div class="section-heading"><p class="eyebrow">07 / NATIVE MOTION · 2026-11-04</p><h2 id="motion-title">内容在动，操作的位置保持稳定。</h2><p>提交前按反馈把正常翻页从 0.42 秒放慢到 0.58 秒。下面是新版的前进、返回与快速连续点击实录；标题和按钮保持清楚，按钮位置不随内容移动。</p></div>
+      <video class="motion-video" controls playsinline preload="metadata" poster="captures/manual/welcome-motion-slower-058-poster.jpg" aria-label="Chorai 欢迎页放慢至 0.58 秒的原生实录"><source src="captures/manual/welcome-motion-slower-058.mp4" type="video/mp4">当前浏览器无法播放，请<a href="captures/manual/welcome-motion-slower-058.mp4">打开原生录屏</a>。</video>
+      <p class="section-note">录屏来自 iPhone 17 Pro / iOS 26.5 Simulator 的离线样本。本次只调整正常翻页时长，减少动态效果仍为 0.16 秒淡入淡出。<a href="captures/manual/welcome-motion-setting-verified.mp4">此前减弱效果实录</a>独立保留；逐帧证据和历史版本保存在<a href="captures/manual/welcome-motion-review.md">动效验证记录</a>中。</p>
+    </section>
+  </main>
+
+  <footer><p>本地离线样本 · iOS 原生运行截图与录屏 · 2026-11-03—04</p><p>这些画面验证视觉和本地交互，不代表真实邮件送达、第三方授权或生产服务已验收。原设计与前一轮截图独立保留。</p><p>本轮本地打磨与验证已完成：最新两个配置构建通过，认证相关 27 项检查和完整 12 项交互流程通过，后续受影响流程分别重跑。最终动效已录屏复核；各阶段与测试范围见验证记录。</p><a href="PLAN.md">打磨范围</a> · <a href="QA.md">验证结果与范围</a></footer>
+
+  <script>
+    const panels = [...document.querySelectorAll('.review-panel')];
+    const links = [...document.querySelectorAll('.navigation a')];
+    function selectPanel() {
+      const requested = location.hash.slice(1);
+      const selected = panels.some(panel => panel.id === requested) ? requested : 'welcome';
+      panels.forEach(panel => { panel.hidden = panel.id !== selected; });
+      links.forEach(link => {
+        if (link.hash === '#' + selected) link.setAttribute('aria-current', 'page');
+        else link.removeAttribute('aria-current');
+      });
+    }
+    window.addEventListener('hashchange', selectPanel);
+    selectPanel();
+    document.querySelectorAll('figure[data-capture]').forEach(figure => {
+      const source = figure.dataset.capture;
+      const image = new Image();
+      image.alt = [...figure.querySelectorAll('figcaption strong, figcaption span')].map(node => node.textContent).join(' · ');
+      image.decoding = 'async';
+      image.onload = () => {
+        const link = document.createElement('a');
+        link.href = source;
+        link.target = '_blank';
+        link.rel = 'noopener';
+        link.className = 'image-link';
+        link.title = '查看原尺寸截图';
+        link.append(image);
+        figure.append(link);
+        figure.hidden = false;
+      };
+      image.onerror = () => { figure.remove(); };
+      image.src = source;
+    });
+  </script>
+</body>
+</html>

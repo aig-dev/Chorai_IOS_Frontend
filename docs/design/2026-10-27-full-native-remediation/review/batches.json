@@ -1,0 +1,127 @@
+{
+  "publish_ready": true,
+  "batches": [
+    {
+      "id": "core-ui8-light",
+      "manifest": "/tmp/chorai-remediation-core-ui8-light-attachments/manifest.json",
+      "result": "/tmp/chorai-remediation-core-ui8-light.xcresult",
+      "log": "/tmp/chorai-remediation-core-ui8-light.log",
+      "theme": "light",
+      "build": "build8 · Local Simulator"
+    },
+    {
+      "id": "ui9-light",
+      "manifest": "/tmp/chorai-remediation-ui9-light-attachments/manifest.json",
+      "result": "/tmp/chorai-remediation-visual-ui9-light.xcresult",
+      "log": "/tmp/chorai-remediation-visual-ui9-light.log",
+      "theme": "light",
+      "build": "build9 · Local Simulator",
+      "exclude_names": [
+        "remediation-explore-accessibility-size",
+        "remediation-reader-accessibility-size"
+      ],
+      "exclusion_reason": "Explore accessibility metadata overlap observed despite prior bounds test. Replaced only after build10 rerun and visual inspection."
+    },
+    {
+      "id": "recovery-ui9-light",
+      "manifest": "/tmp/chorai-remediation-recovery-ui9-attachments/manifest.json",
+      "result": "/tmp/chorai-remediation-recovery-ui9.xcresult",
+      "log": "/tmp/chorai-remediation-recovery-ui9.log",
+      "theme": "light",
+      "build": "build9 · Local Simulator",
+      "exclude_tests": [
+        "ArcNoteUITests/testNotificationSeenStateRollsBackOnFailureAndRetries()"
+      ]
+    },
+    {
+      "id": "ui10-light",
+      "enabled": true,
+      "manifest": "/tmp/chorai-remediation-ui10-light-attachments/manifest.json",
+      "result": "/tmp/chorai-remediation-ui10-light.xcresult",
+      "log": "/tmp/chorai-remediation-ui10-light.log",
+      "theme": "light",
+      "build": "build10 · Local Simulator",
+      "exclude_tests": [
+        "ArcNoteUITests/testNativeReviewHomeSpacingAndFullPageDraft()"
+      ],
+      "exclusion_reason": "User pause interrupted this test. Three completed tests remain usable; only completed passed outcomes enter the gallery."
+    },
+    {
+      "id": "ui10-dark",
+      "enabled": false,
+      "manifest": "/tmp/chorai-remediation-ui10-dark-attachments/manifest.json",
+      "result": "/tmp/chorai-remediation-ui10-dark.xcresult",
+      "log": "/tmp/chorai-remediation-ui10-dark.log",
+      "theme": "dark",
+      "build": "build10 · Local Simulator"
+    },
+    {
+      "id": "ui10-resume-light",
+      "manifest": "/tmp/chorai-remediation-ui10-resume-light-attachments/manifest.json",
+      "result": "/tmp/chorai-remediation-ui10-resume-light.xcresult",
+      "log": "/tmp/chorai-remediation-ui10-resume-light.log",
+      "theme": "light",
+      "build": "build10 · Local Simulator",
+      "exclude_names": [
+        "remediation-reader-accessibility-size"
+      ],
+      "exclusion_reason": "Root inspected actual AXXXL reader capture and found author truncated beside actions. Exclude until responsive-author correction and fresh capture; Explore AXXXL itself passed visual inspection."
+    },
+    {
+      "id": "ui12-light",
+      "manifest": "/tmp/chorai-remediation-ui12-light-attachments/manifest.json",
+      "result": "/tmp/chorai-remediation-ui12-light.xcresult",
+      "log": "/tmp/chorai-remediation-ui12-light.log",
+      "theme": "light",
+      "build": "build12 · Local Simulator"
+    },
+    {
+      "id": "core-ui12-dark",
+      "manifest": "/tmp/chorai-remediation-core-ui12-dark-attachments/manifest.json",
+      "result": "/tmp/chorai-remediation-core-ui12-dark.xcresult",
+      "log": "/tmp/chorai-remediation-core-ui12-dark.log",
+      "theme": "dark",
+      "build": "build12 · Local Simulator"
+    },
+    {
+      "id": "aux-ui12-dark",
+      "manifest": "/tmp/chorai-remediation-aux-ui12-dark-attachments/manifest.json",
+      "result": "/tmp/chorai-remediation-aux-ui12-dark.xcresult",
+      "log": "/tmp/chorai-remediation-aux-ui12-dark.log",
+      "theme": "dark",
+      "build": "build12 · Local Simulator",
+      "exclude_names": [
+        "remediation-public-profile",
+        "remediation-sign-in"
+      ],
+      "exclusion_reason": "Visual audit confirmed white labels on mint Follow and Sign In controls in dark mode. Exclude until semantic onAccent corrections and fresh capture. Enablement and backend behavior unchanged."
+    },
+    {
+      "id": "editor-ui12-dark",
+      "manifest": "/tmp/chorai-remediation-editor-ui12-dark-attachments/manifest.json",
+      "result": "/tmp/chorai-remediation-editor-ui12-dark.xcresult",
+      "log": "/tmp/chorai-remediation-editor-ui12-dark.log",
+      "theme": "dark",
+      "build": "build12 · Local Simulator"
+    },
+    {
+      "id": "contrast-ui14-dark",
+      "manifest": "/tmp/chorai-remediation-contrast-ui14-dark-attachments/manifest.json",
+      "result": "/tmp/chorai-remediation-contrast-ui14-dark.xcresult",
+      "log": "/tmp/chorai-remediation-contrast-ui14-dark.log",
+      "theme": "dark",
+      "build": "build14 · Local Simulator"
+    },
+    {
+      "id": "contrast-ui14-light",
+      "manifest": "/tmp/chorai-remediation-contrast-ui14-light-attachments/manifest.json",
+      "result": "/tmp/chorai-remediation-contrast-ui14-light.xcresult",
+      "log": "/tmp/chorai-remediation-contrast-ui14-light.log",
+      "theme": "light",
+      "build": "build14 · Local Simulator"
+    }
+  ],
+  "capture_overrides": {},
+  "ignore_names": [],
+  "publication_note": "Final gallery authorized after root verified final builds and corrected Profile/Sign In captures. Original prototypes and prior fidelity artifacts stay unchanged. Source build labels remain per capture."
+}

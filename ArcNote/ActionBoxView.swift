@@ -191,17 +191,12 @@ struct ActionBoxOverlay<Content: View>: View {
     }
 
     private var actionBoxBackground: some View {
-        RoundedRectangle(cornerRadius: 20)
-            .fill(.ultraThinMaterial.opacity(1))
-            .overlay(topLeftHighlight)
-            .overlay(bottomRightHighlight)
-            .overlay(topEdgeHighlight)
-            .overlay(bottomEdgeHighlight)
+        Color.clear.choraiGlassSurface(cornerRadius: 24)
     }
 
     private var topLeftHighlight: some View {
         RoundedRectangle(cornerRadius: 20)
-            .stroke(Color.white, lineWidth: 1)
+            .stroke(ChoraiTheme.separator, lineWidth: 1)
             .offset(x: 0, y: -1)
             .mask(
                 RoundedRectangle(cornerRadius: 20)
@@ -218,7 +213,7 @@ struct ActionBoxOverlay<Content: View>: View {
 
     private var bottomRightHighlight: some View {
         RoundedRectangle(cornerRadius: 20)
-            .stroke(Color.white, lineWidth: 1)
+            .stroke(ChoraiTheme.separator, lineWidth: 1)
             .offset(x: 0, y: 0)
             .mask(
                 RoundedRectangle(cornerRadius: 20)
@@ -235,7 +230,7 @@ struct ActionBoxOverlay<Content: View>: View {
 
     private var topEdgeHighlight: some View {
         RoundedRectangle(cornerRadius: 20)
-            .stroke(Color.white, lineWidth: 1)
+            .stroke(ChoraiTheme.separator, lineWidth: 1)
             .offset(x: 0, y: -1)
             .mask(
                 RoundedRectangle(cornerRadius: 20)
@@ -251,7 +246,7 @@ struct ActionBoxOverlay<Content: View>: View {
 
     private var bottomEdgeHighlight: some View {
         RoundedRectangle(cornerRadius: 20)
-            .stroke(Color.white, lineWidth: 1)
+            .stroke(ChoraiTheme.separator, lineWidth: 1)
             .offset(x: 0, y: 1)
             .mask(
                 RoundedRectangle(cornerRadius: 20)
@@ -305,7 +300,7 @@ struct ActionBoxTile: View {
 
                 Text(text)
                     .font(.system(size: min(scaledLabelSize, 18), weight: .medium))
-                    .foregroundColor(.white)
+                    .foregroundColor(ChoraiTheme.ink)
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
                     .minimumScaleFactor(0.65)
@@ -335,7 +330,7 @@ struct ActionBoxTile: View {
     private var iconView: some View {
         switch icon {
         case let .asset(name):
-            Image(name)
+            Image(systemName: ChoraiSymbols.name(for: name))
                 .resizable()
                 .aspectRatio(contentMode: .fit)
         case let .system(name):

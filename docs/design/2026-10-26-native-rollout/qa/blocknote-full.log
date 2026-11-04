@@ -1,0 +1,185 @@
+Building for debugging...
+[Planning deferred tasks]
+[50 / 84] BlockNoteEditor_BlockNoteEditor
+[51 / 84]
+[53 / 86] CoreFlow
+[63 / 131]
+[65 / 131]
+[74 / 176]
+[77 / 176]
+[83 / 176]
+[86 / 176]
+[90 / 176]
+[94 / 176]
+[97 / 176]
+[99 / 176]
+[100 / 176]
+[110 / 176]
+[117 / 176] CoreFlow
+[119 / 176] CoreFlow
+[123 / 176] CoreFlow
+[124 / 176] CoreFlow
+[125 / 176]
+[127 / 176]
+[133 / 176]
+[135 / 176]
+[135 / 176] CoreFlow
+[137 / 176] CoreFlow
+[140 / 176] CoreFlow
+[140 / 176]
+[141 / 176]
+[142 / 176]
+[151 / 176] BlockNoteEditor
+[159 / 176] BlockNoteEditorTests-product
+[159 / 176] BlockNoteEditor
+[165 / 177] BlockNoteEditor-product
+[166 / 177] BlockNoteEditorTests-product
+[169 / 195]
+[170 / 195]
+[171 / 195]
+[173 / 195]
+[174 / 195]
+[184 / 195] BlockNoteEditorTests-product
+[189 / 195] AllIncludingTests
+[189 / 195] BlockNoteEditorTests-product
+[191 / 195] BlockNoteEditorTests-product
+[193 / 195] BlockNoteEditorTests-product
+Build complete! (29.19 sec)
+Test Suite 'All tests' started at 2026-10-26 12:27:17.972.
+Test Suite 'BlockNoteEditorTests.xctest' started at 2026-10-26 12:27:17.975.
+Test Suite 'BlockNoteAppearanceTests' started at 2026-10-26 12:27:17.975.
+Test Case '-[BlockNoteEditorTests.BlockNoteAppearanceTests testAppearanceDoesNotReplaceTheDocumentOrIssueEditorCommands]' started.
+Test Case '-[BlockNoteEditorTests.BlockNoteAppearanceTests testAppearanceDoesNotReplaceTheDocumentOrIssueEditorCommands]' passed (0.002 seconds).
+Test Case '-[BlockNoteEditorTests.BlockNoteAppearanceTests testBothSystemAppearancesKeepDefaultTextReadable]' started.
+Test Case '-[BlockNoteEditorTests.BlockNoteAppearanceTests testBothSystemAppearancesKeepDefaultTextReadable]' passed (0.000 seconds).
+Test Suite 'BlockNoteAppearanceTests' passed at 2026-10-26 12:27:17.978.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 0.002 (0.003) seconds
+Test Suite 'BlockNoteBridgeSessionTests' started at 2026-10-26 12:27:17.978.
+Test Case '-[BlockNoteEditorTests.BlockNoteBridgeSessionTests testBridgeFailureClearsAllQueuedCommandsAndRejectsCommandsWhileFailed]' started.
+Test Case '-[BlockNoteEditorTests.BlockNoteBridgeSessionTests testBridgeFailureClearsAllQueuedCommandsAndRejectsCommandsWhileFailed]' passed (0.001 seconds).
+Test Case '-[BlockNoteEditorTests.BlockNoteBridgeSessionTests testCompatibilityFailureClearsQueueAndInvalidatesSnapshots]' started.
+Test Case '-[BlockNoteEditorTests.BlockNoteBridgeSessionTests testCompatibilityFailureClearsQueueAndInvalidatesSnapshots]' passed (0.000 seconds).
+Test Case '-[BlockNoteEditorTests.BlockNoteBridgeSessionTests testExistingCardSelectsMergeProfileOnlyForExactAdaptableEnvelope]' started.
+Test Case '-[BlockNoteEditorTests.BlockNoteBridgeSessionTests testExistingCardSelectsMergeProfileOnlyForExactAdaptableEnvelope]' passed (0.010 seconds).
+Test Case '-[BlockNoteEditorTests.BlockNoteBridgeSessionTests testMergeCommittedEnvelopeGetsRuntimeDefaultsAndRoundTripsLosslessly]' started.
+Test Case '-[BlockNoteEditorTests.BlockNoteBridgeSessionTests testMergeCommittedEnvelopeGetsRuntimeDefaultsAndRoundTripsLosslessly]' passed (0.002 seconds).
+Test Case '-[BlockNoteEditorTests.BlockNoteBridgeSessionTests testNavigationForwardsMergeArtifactProfileWithoutChangingStandardDefault]' started.
+Test Case '-[BlockNoteEditorTests.BlockNoteBridgeSessionTests testNavigationForwardsMergeArtifactProfileWithoutChangingStandardDefault]' passed (0.000 seconds).
+Test Case '-[BlockNoteEditorTests.BlockNoteBridgeSessionTests testNavigationSendsInitializeAndQueuedCommandsWaitForValidReady]' started.
+Test Case '-[BlockNoteEditorTests.BlockNoteBridgeSessionTests testNavigationSendsInitializeAndQueuedCommandsWaitForValidReady]' passed (0.001 seconds).
+Test Case '-[BlockNoteEditorTests.BlockNoteBridgeSessionTests testReadOnlyReadyDropsQueuedMutationsButAllowsNonMutatingCommands]' started.
+Test Case '-[BlockNoteEditorTests.BlockNoteBridgeSessionTests testReadOnlyReadyDropsQueuedMutationsButAllowsNonMutatingCommands]' passed (0.000 seconds).
+Test Case '-[BlockNoteEditorTests.BlockNoteBridgeSessionTests testReadySubmitsDrainedCommandsBeforeReentrantReadyCallbackCommands]' started.
+Test Case '-[BlockNoteEditorTests.BlockNoteBridgeSessionTests testReadySubmitsDrainedCommandsBeforeReentrantReadyCallbackCommands]' passed (0.000 seconds).
+Test Suite 'BlockNoteBridgeSessionTests' passed at 2026-10-26 12:27:17.994.
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.015 (0.015) seconds
+Test Suite 'BlockNoteEditorCommandTests' started at 2026-10-26 12:27:17.994.
+Test Case '-[BlockNoteEditorTests.BlockNoteEditorCommandTests testCommandEnumsRejectUnsupportedWireValues]' started.
+Test Case '-[BlockNoteEditorTests.BlockNoteEditorCommandTests testCommandEnumsRejectUnsupportedWireValues]' passed (0.000 seconds).
+Test Case '-[BlockNoteEditorTests.BlockNoteEditorCommandTests testCommandsUseWebRuntimeKeysAndEnumValues]' started.
+Test Case '-[BlockNoteEditorTests.BlockNoteEditorCommandTests testCommandsUseWebRuntimeKeysAndEnumValues]' passed (0.001 seconds).
+Test Case '-[BlockNoteEditorTests.BlockNoteEditorCommandTests testInitializeCarriesExplicitMergeArtifactProfileAndLegacyWireDefaultsStandard]' started.
+Test Case '-[BlockNoteEditorTests.BlockNoteEditorCommandTests testInitializeCarriesExplicitMergeArtifactProfileAndLegacyWireDefaultsStandard]' passed (0.000 seconds).
+Test Case '-[BlockNoteEditorTests.BlockNoteEditorCommandTests testInitializeEncodesExactVersionedEnvelopeIncludingNullDocument]' started.
+Test Case '-[BlockNoteEditorTests.BlockNoteEditorCommandTests testInitializeEncodesExactVersionedEnvelopeIncludingNullDocument]' passed (0.000 seconds).
+Test Suite 'BlockNoteEditorCommandTests' passed at 2026-10-26 12:27:17.996.
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.002 (0.002) seconds
+Test Suite 'BlockNoteEditorControllerTests' started at 2026-10-26 12:27:17.996.
+Test Case '-[BlockNoteEditorTests.BlockNoteEditorControllerTests testCancellationWinsOnceAndLateSnapshotIsIgnored]' started.
+Test Case '-[BlockNoteEditorTests.BlockNoteEditorControllerTests testCancellationWinsOnceAndLateSnapshotIsIgnored]' passed (0.001 seconds).
+Test Case '-[BlockNoteEditorTests.BlockNoteEditorControllerTests testCorrelatedStaleSnapshotFailsOnlyMatchingPendingRequestImmediately]' started.
+Test Case '-[BlockNoteEditorTests.BlockNoteEditorControllerTests testCorrelatedStaleSnapshotFailsOnlyMatchingPendingRequestImmediately]' passed (0.001 seconds).
+Test Case '-[BlockNoteEditorTests.BlockNoteEditorControllerTests testDetachedControllerFailsWithoutCreatingPendingContinuation]' started.
+Test Case '-[BlockNoteEditorTests.BlockNoteEditorControllerTests testDetachedControllerFailsWithoutCreatingPendingContinuation]' passed (0.000 seconds).
+Test Case '-[BlockNoteEditorTests.BlockNoteEditorControllerTests testDetachWinsOnceAndLaterTimeoutHasNoContinuationToResume]' started.
+Test Case '-[BlockNoteEditorTests.BlockNoteEditorControllerTests testDetachWinsOnceAndLaterTimeoutHasNoContinuationToResume]' passed (0.032 seconds).
+Test Case '-[BlockNoteEditorTests.BlockNoteEditorControllerTests testSnapshotCompletesOnlyForItsCorrelatedRequestID]' started.
+Test Case '-[BlockNoteEditorTests.BlockNoteEditorControllerTests testSnapshotCompletesOnlyForItsCorrelatedRequestID]' passed (0.000 seconds).
+Test Case '-[BlockNoteEditorTests.BlockNoteEditorControllerTests testSnapshotTimeoutResumesContinuationExactlyOnce]' started.
+Test Case '-[BlockNoteEditorTests.BlockNoteEditorControllerTests testSnapshotTimeoutResumesContinuationExactlyOnce]' passed (0.008 seconds).
+Test Case '-[BlockNoteEditorTests.BlockNoteEditorControllerTests testTeardownAndCompatibilityFailureResumeEachPendingSnapshotOnce]' started.
+Test Case '-[BlockNoteEditorTests.BlockNoteEditorControllerTests testTeardownAndCompatibilityFailureResumeEachPendingSnapshotOnce]' passed (0.003 seconds).
+Test Suite 'BlockNoteEditorControllerTests' passed at 2026-10-26 12:27:18.043.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.046 (0.047) seconds
+Test Suite 'BlockNoteEditorMessageStateTests' started at 2026-10-26 12:27:18.043.
+Test Case '-[BlockNoteEditorTests.BlockNoteEditorMessageStateTests testAllKnownEventsDecodeAndRoundTripTaggedEnvelopes]' started.
+Test Case '-[BlockNoteEditorTests.BlockNoteEditorMessageStateTests testAllKnownEventsDecodeAndRoundTripTaggedEnvelopes]' passed (0.001 seconds).
+Test Case '-[BlockNoteEditorTests.BlockNoteEditorMessageStateTests testBodyFocusEventsAreForwardedOnlyAfterTheBridgeIsReady]' started.
+Test Case '-[BlockNoteEditorTests.BlockNoteEditorMessageStateTests testBodyFocusEventsAreForwardedOnlyAfterTheBridgeIsReady]' passed (0.000 seconds).
+Test Case '-[BlockNoteEditorTests.BlockNoteEditorMessageStateTests testDocumentChangesAcceptStrictlyIncreasingRevisionsOnly]' started.
+Test Case '-[BlockNoteEditorTests.BlockNoteEditorMessageStateTests testDocumentChangesAcceptStrictlyIncreasingRevisionsOnly]' passed (0.000 seconds).
+Test Case '-[BlockNoteEditorTests.BlockNoteEditorMessageStateTests testEditableFalseSurfacesReadOnlyAfterValidReady]' started.
+Test Case '-[BlockNoteEditorTests.BlockNoteEditorMessageStateTests testEditableFalseSurfacesReadOnlyAfterValidReady]' passed (0.000 seconds).
+Test Case '-[BlockNoteEditorTests.BlockNoteEditorMessageStateTests testMalformedAndUnknownMessagesAreRejectedAndFailStateWithoutReadiness]' started.
+Test Case '-[BlockNoteEditorTests.BlockNoteEditorMessageStateTests testMalformedAndUnknownMessagesAreRejectedAndFailStateWithoutReadiness]' passed (0.000 seconds).
+Test Case '-[BlockNoteEditorTests.BlockNoteEditorMessageStateTests testReadOnlyRequestCardLinkIsRejectedWithoutNativeRequest]' started.
+Test Case '-[BlockNoteEditorTests.BlockNoteEditorMessageStateTests testReadOnlyRequestCardLinkIsRejectedWithoutNativeRequest]' passed (0.000 seconds).
+Test Case '-[BlockNoteEditorTests.BlockNoteEditorMessageStateTests testReadyEditableRequestCardLinkEmitsNativeRequest]' started.
+Test Case '-[BlockNoteEditorTests.BlockNoteEditorMessageStateTests testReadyEditableRequestCardLinkEmitsNativeRequest]' passed (0.000 seconds).
+Test Case '-[BlockNoteEditorTests.BlockNoteEditorMessageStateTests testReadyHandshakeRequiresInitializationAndMatchingVersions]' started.
+Test Case '-[BlockNoteEditorTests.BlockNoteEditorMessageStateTests testReadyHandshakeRequiresInitializationAndMatchingVersions]' passed (0.000 seconds).
+Test Case '-[BlockNoteEditorTests.BlockNoteEditorMessageStateTests testRequestCardLinkBeforeReadyReturnsANonfatalBridgeError]' started.
+Test Case '-[BlockNoteEditorTests.BlockNoteEditorMessageStateTests testRequestCardLinkBeforeReadyReturnsANonfatalBridgeError]' passed (0.000 seconds).
+Test Case '-[BlockNoteEditorTests.BlockNoteEditorMessageStateTests testRequestCardLinkEncodesPayloadFreeEnvelope]' started.
+Test Case '-[BlockNoteEditorTests.BlockNoteEditorMessageStateTests testRequestCardLinkEncodesPayloadFreeEnvelope]' passed (0.000 seconds).
+Test Case '-[BlockNoteEditorTests.BlockNoteEditorMessageStateTests testSnapshotIsRejectedBeforeReadyAndAfterCompatibilityBlock]' started.
+Test Case '-[BlockNoteEditorTests.BlockNoteEditorMessageStateTests testSnapshotIsRejectedBeforeReadyAndAfterCompatibilityBlock]' passed (0.000 seconds).
+Test Case '-[BlockNoteEditorTests.BlockNoteEditorMessageStateTests testStaleSnapshotRetainsRequestCorrelationForImmediateFailure]' started.
+Test Case '-[BlockNoteEditorTests.BlockNoteEditorMessageStateTests testStaleSnapshotRetainsRequestCorrelationForImmediateFailure]' passed (0.000 seconds).
+Test Suite 'BlockNoteEditorMessageStateTests' passed at 2026-10-26 12:27:18.046.
+	 Executed 12 tests, with 0 failures (0 unexpected) in 0.002 (0.003) seconds
+Test Suite 'BlockNoteEditorResourceTests' started at 2026-10-26 12:27:18.046.
+Test Case '-[BlockNoteEditorTests.BlockNoteEditorResourceTests testBundledAtShortcutRequestsTheNativeCardLinkFlow]' started.
+Test Case '-[BlockNoteEditorTests.BlockNoteEditorResourceTests testBundledAtShortcutRequestsTheNativeCardLinkFlow]' passed (0.212 seconds).
+Test Case '-[BlockNoteEditorTests.BlockNoteEditorResourceTests testBundledContentSecurityPolicyAllowsOnlySecureAndLocalObjectStorageImages]' started.
+Test Case '-[BlockNoteEditorTests.BlockNoteEditorResourceTests testBundledContentSecurityPolicyAllowsOnlySecureAndLocalObjectStorageImages]' passed (0.000 seconds).
+Test Case '-[BlockNoteEditorTests.BlockNoteEditorResourceTests testBundledEditorStylesSupportNativeCompositionAndResponsiveImages]' started.
+Test Case '-[BlockNoteEditorTests.BlockNoteEditorResourceTests testBundledEditorStylesSupportNativeCompositionAndResponsiveImages]' passed (0.005 seconds).
+Test Case '-[BlockNoteEditorTests.BlockNoteEditorResourceTests testBundledManifestMatchesSupportedProtocolAndEveryResourceHash]' started.
+Test Case '-[BlockNoteEditorTests.BlockNoteEditorResourceTests testBundledManifestMatchesSupportedProtocolAndEveryResourceHash]' passed (0.005 seconds).
+Test Case '-[BlockNoteEditorTests.BlockNoteEditorResourceTests testManifestDecodesTypedVersionsAndHashes]' started.
+Test Case '-[BlockNoteEditorTests.BlockNoteEditorResourceTests testManifestDecodesTypedVersionsAndHashes]' passed (0.000 seconds).
+Test Case '-[BlockNoteEditorTests.BlockNoteEditorResourceTests testValidationRejectsAResourceWhoseBytesDoNotMatchManifest]' started.
+Test Case '-[BlockNoteEditorTests.BlockNoteEditorResourceTests testValidationRejectsAResourceWhoseBytesDoNotMatchManifest]' passed (0.006 seconds).
+Test Case '-[BlockNoteEditorTests.BlockNoteEditorResourceTests testValidationRejectsUnsupportedProtocolVersionBeforeLoadingEditor]' started.
+Test Case '-[BlockNoteEditorTests.BlockNoteEditorResourceTests testValidationRejectsUnsupportedProtocolVersionBeforeLoadingEditor]' passed (0.000 seconds).
+Test Suite 'BlockNoteEditorResourceTests' passed at 2026-10-26 12:27:18.276.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.229 (0.230) seconds
+Test Suite 'BlockNoteMergeRuntimeTests' started at 2026-10-26 12:27:18.276.
+Test Case '-[BlockNoteEditorTests.BlockNoteMergeRuntimeTests testCommittedMergeCardOpensEditableAndSnapshotsItsEnvelope]' started.
+Test Case '-[BlockNoteEditorTests.BlockNoteMergeRuntimeTests testCommittedMergeCardOpensEditableAndSnapshotsItsEnvelope]' passed (1.628 seconds).
+Test Case '-[BlockNoteEditorTests.BlockNoteMergeRuntimeTests testCompleteStandardCardCanInsertImageWithoutDroppingRuntimeProps]' started.
+Test Case '-[BlockNoteEditorTests.BlockNoteMergeRuntimeTests testCompleteStandardCardCanInsertImageWithoutDroppingRuntimeProps]' passed (0.604 seconds).
+Test Case '-[BlockNoteEditorTests.BlockNoteMergeRuntimeTests testCompleteStandardCardSnapshotPreservesMediaReferenceAndDisplayURL]' started.
+Test Case '-[BlockNoteEditorTests.BlockNoteMergeRuntimeTests testCompleteStandardCardSnapshotPreservesMediaReferenceAndDisplayURL]' passed (0.284 seconds).
+Test Case '-[BlockNoteEditorTests.BlockNoteMergeRuntimeTests testReturnCreatesServerCompatibleBlockIDInRuntimeSnapshot]' started.
+Test Case '-[BlockNoteEditorTests.BlockNoteMergeRuntimeTests testReturnCreatesServerCompatibleBlockIDInRuntimeSnapshot]' passed (0.511 seconds).
+Test Case '-[BlockNoteEditorTests.BlockNoteMergeRuntimeTests testRuntimeInitializationSnapshotAndCodecPreserveMergeImageMediaReference]' started.
+Test Case '-[BlockNoteEditorTests.BlockNoteMergeRuntimeTests testRuntimeInitializationSnapshotAndCodecPreserveMergeImageMediaReference]' passed (0.296 seconds).
+Test Suite 'BlockNoteMergeRuntimeTests' passed at 2026-10-26 12:27:21.600.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 3.323 (3.324) seconds
+Test Suite 'BlockNoteNavigationPolicyTests' started at 2026-10-26 12:27:21.600.
+Test Case '-[BlockNoteEditorTests.BlockNoteNavigationPolicyTests testBootstrapQueueIsInstalledAtDocumentStartForTheMainFrame]' started.
+Test Case '-[BlockNoteEditorTests.BlockNoteNavigationPolicyTests testBootstrapQueueIsInstalledAtDocumentStartForTheMainFrame]' passed (0.000 seconds).
+Test Case '-[BlockNoteEditorTests.BlockNoteNavigationPolicyTests testBootstrapRequiresExactURLWithoutQueryFragmentOrRemoteAuthority]' started.
+Test Case '-[BlockNoteEditorTests.BlockNoteNavigationPolicyTests testBootstrapRequiresExactURLWithoutQueryFragmentOrRemoteAuthority]' passed (0.001 seconds).
+Test Case '-[BlockNoteEditorTests.BlockNoteNavigationPolicyTests testEveryFrameRejectsResourcesOutsideLocalDirectory]' started.
+Test Case '-[BlockNoteEditorTests.BlockNoteNavigationPolicyTests testEveryFrameRejectsResourcesOutsideLocalDirectory]' passed (0.000 seconds).
+Test Case '-[BlockNoteEditorTests.BlockNoteNavigationPolicyTests testOnlyInitialIndexNavigationIsAllowedInMainFrame]' started.
+Test Case '-[BlockNoteEditorTests.BlockNoteNavigationPolicyTests testOnlyInitialIndexNavigationIsAllowedInMainFrame]' passed (0.000 seconds).
+Test Case '-[BlockNoteEditorTests.BlockNoteNavigationPolicyTests testOnlyOneBootstrapDecisionCanBeAuthorizedBeforeCompletion]' started.
+Test Case '-[BlockNoteEditorTests.BlockNoteNavigationPolicyTests testOnlyOneBootstrapDecisionCanBeAuthorizedBeforeCompletion]' passed (0.000 seconds).
+Test Case '-[BlockNoteEditorTests.BlockNoteNavigationPolicyTests testOnlyTheBoundBootstrapNavigationCanCompleteInitialization]' started.
+Test Case '-[BlockNoteEditorTests.BlockNoteNavigationPolicyTests testOnlyTheBoundBootstrapNavigationCanCompleteInitialization]' passed (0.000 seconds).
+Test Case '-[BlockNoteEditorTests.BlockNoteNavigationPolicyTests testSymlinkInsideResourceDirectoryCannotEscapeContainment]' started.
+Test Case '-[BlockNoteEditorTests.BlockNoteNavigationPolicyTests testSymlinkInsideResourceDirectoryCannotEscapeContainment]' passed (0.013 seconds).
+Test Suite 'BlockNoteNavigationPolicyTests' passed at 2026-10-26 12:27:21.615.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.014 (0.015) seconds
+Test Suite 'BlockNoteEditorTests.xctest' passed at 2026-10-26 12:27:21.615.
+	 Executed 52 tests, with 0 failures (0 unexpected) in 3.635 (3.640) seconds
+Test Suite 'All tests' passed at 2026-10-26 12:27:21.615.
+	 Executed 52 tests, with 0 failures (0 unexpected) in 3.635 (3.643) seconds
+◇ Test run started.
+↳ Testing Library Version: 2084
+↳ Target Platform: arm64e-apple-macos14.0
+✔ Test run with 0 tests in 0 suites passed after 0.001 seconds.

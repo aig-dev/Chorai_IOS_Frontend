@@ -17,71 +17,29 @@ struct AccountPrivacyView: View {
     }
 
     var body: some View {
-        ZStack {
-            Image("home_bg")
-                .resizable()
-                .aspectRatio(contentMode: .fill)
-                .ignoresSafeArea()
-
-            VStack(spacing: 0) {
-                SettingsDestinationHeader(
-                    title: "Account & Privacy",
-                    dismiss: dismiss.callAsFunction
-                )
-
-                ScrollView {
-                    VStack(spacing: 24) {
-                        ChoraSectionSurface(
-                            title: "Account",
-                            identifier: "account-privacy.account.section"
-                        ) {
-                            profileValue(
-                                label: "Username",
-                                value: profileManager.userProfile?.username ?? "—"
-                            )
-
-                            Divider().background(Color.white.opacity(0.2))
-
-                            profileValue(
-                                label: "Email",
-                                value: profileManager.userProfile?.email ?? "—"
-                            )
-
-                            Divider().background(Color.white.opacity(0.2))
-
-                            profileValue(
-                                label: "Membership",
-                                value: authManager.membershipDisplayName
-                            )
-                            .accessibilityIdentifier("account-privacy.membership")
-                        }
-
-                        ChoraSectionSurface(
-                            title: "Audience & Visibility",
-                            identifier: "account-privacy.visibility.section"
-                        ) {
-                            privacyContent
-                        }
-
-                        ChoraSectionSurface(
-                            title: "Community",
-                            identifier: "account-privacy.community.section"
-                        ) {
-                            SettingsRow(
-                                imageName: "account",
-                                title: "Blocked Users",
-                                accessibilityIdentifier: "account-privacy.blocked-users"
-                            ) {
-                                navigateToBlockedUsers = true
-                            }
-                        }
-                    }
-                    .adaptiveContentGutter()
-                    .padding(.bottom, 40)
+        Form {
+            SettingsFormSection(title: "Account", identifier: "account-privacy.account.section") {
+                profileValue(label: "Username", value: profileManager.userProfile?.username ?? "—")
+                profileValue(label: "Email", value: profileManager.userProfile?.email ?? "—")
+                profileValue(label: "Membership", value: authManager.membershipDisplayName)
+                    .accessibilityIdentifier("account-privacy.membership")
+            }
+            SettingsFormSection(title: "Audience & Visibility", identifier: "account-privacy.visibility.section") {
+                privacyContent
+            }
+            SettingsFormSection(title: "Community", identifier: "account-privacy.community.section") {
+                SettingsRow(imageName: "account", title: "Blocked Users", accessibilityIdentifier: "account-privacy.blocked-users") {
+                    navigateToBlockedUsers = true
                 }
             }
         }
-        .navigationBarHidden(true)
+        .scrollContentBackground(.hidden)
+        .choraiPageBackground()
+        .foregroundStyle(ChoraiTheme.ink)
+        .tint(ChoraiTheme.accent)
+        .navigationTitle("Account & Privacy")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.visible, for: .navigationBar)
         .navigationDestination(isPresented: $navigateToBlockedUsers) {
             BlockedActorsView()
         }
@@ -126,37 +84,32 @@ struct AccountPrivacyView: View {
 
         case .ready:
             if privacyStore.settings != nil {
-                VStack(spacing: 0) {
+                Group {
                     privacyToggle(
                         .showFollowLists,
                         title: "Show follow lists",
                         description: "Let others see who you follow and who follows you."
                     )
-                    privacyDivider
                     privacyToggle(
                         .allowFollow,
                         title: "Allow follows",
                         description: "Let new people follow your profile."
                     )
-                    privacyDivider
                     privacyToggle(
                         .showEmail,
                         title: "Show email",
                         description: "Display your email on your public profile."
                     )
-                    privacyDivider
                     privacyToggle(
                         .showPhone,
                         title: "Show phone",
                         description: "Display your phone number on your public profile."
                     )
-                    privacyDivider
                     privacyToggle(
                         .showLocation,
                         title: "Show location",
                         description: "Display your location on your public profile."
                     )
-                    privacyDivider
                     privacyToggle(
                         .showBirthday,
                         title: "Show birthday",
@@ -165,10 +118,10 @@ struct AccountPrivacyView: View {
 
                     if privacyStore.savingSetting != nil {
                         HStack(spacing: 10) {
-                            ProgressView().tint(.white)
+                            ProgressView().tint(ChoraiTheme.ink)
                             Text("Saving…")
                                 .font(.subheadline)
-                                .foregroundColor(.white.opacity(0.64))
+                                .foregroundColor(ChoraiTheme.secondaryInk)
                         }
                         .padding(.top, 16)
                         .accessibilityElement(children: .combine)
@@ -192,10 +145,6 @@ struct AccountPrivacyView: View {
         }
     }
 
-    private var privacyDivider: some View {
-        Divider().background(Color.white.opacity(0.16))
-    }
-
     private func privacyToggle(
         _ setting: PrivacySetting,
         title: String,
@@ -212,15 +161,15 @@ struct AccountPrivacyView: View {
             VStack(alignment: .leading, spacing: 5) {
                 Text(title)
                     .font(.body.weight(.medium))
-                    .foregroundColor(.white)
+                    .foregroundColor(ChoraiTheme.ink)
                 Text(description)
                     .font(.subheadline)
-                    .foregroundColor(.white.opacity(0.62))
+                    .foregroundColor(ChoraiTheme.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .padding(.trailing, 8)
         }
-        .toggleStyle(SwitchToggleStyle(tint: .purple))
+        .toggleStyle(SwitchToggleStyle(tint: ChoraiTheme.accent))
         .padding(.vertical, 14)
         .disabled(privacyStore.savingSetting != nil)
         .accessibilityIdentifier("account-privacy.toggle.\(setting.rawValue)")
@@ -248,14 +197,14 @@ struct AccountPrivacyView: View {
     private func profileValue(label: String, value: String) -> some View {
         HStack(spacing: 16) {
             Text(label)
-                .font(.system(size: 15))
-                .foregroundColor(.white.opacity(0.62))
+                .font(.subheadline)
+                .foregroundColor(ChoraiTheme.secondaryInk)
 
             Spacer()
 
             Text(value)
-                .font(.system(size: 15, weight: .medium))
-                .foregroundColor(.white)
+                .font(.subheadline.weight(.medium))
+                .foregroundColor(ChoraiTheme.ink)
                 .lineLimit(1)
         }
     }
@@ -272,42 +221,14 @@ struct BlockedActorsView: View {
     }
 
     var body: some View {
-        ZStack {
-            Image("home_bg")
-                .resizable()
-                .aspectRatio(contentMode: .fill)
-                .ignoresSafeArea()
-
-            VStack(spacing: 0) {
-                HStack {
-                    Button {
-                        dismiss()
-                    } label: {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 20, weight: .medium))
-                            .foregroundColor(.white)
-                    }
-
-                    Spacer()
-
-                    Text("Blocked Users")
-                        .font(.system(size: 22, weight: .bold))
-                        .foregroundColor(.white)
-
-                    Spacer()
-
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 20, weight: .medium))
-                        .foregroundColor(.clear)
-                }
-                .adaptiveContentGutter()
-                .padding(.top, 60)
-                .padding(.bottom, 24)
-
-                content
-            }
+        VStack(spacing: 0) {
+            content
         }
-        .navigationBarHidden(true)
+        .choraiPageBackground()
+        .tint(ChoraiTheme.accent)
+        .navigationTitle("Blocked Users")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.visible, for: .navigationBar)
         .overlay(alignment: .topLeading) {
             Text("Blocked users")
                 .font(.system(size: 1))
@@ -323,13 +244,13 @@ struct BlockedActorsView: View {
         switch store.phase {
         case .idle, .loading:
             Spacer()
-            ProgressView().tint(.white)
+            ProgressView().tint(ChoraiTheme.ink)
             Spacer()
 
         case .empty:
             Text("No blocked users")
-                .font(.system(size: 15, weight: .medium))
-                .foregroundColor(.white.opacity(0.68))
+                .font(.subheadline.weight(.medium))
+                .foregroundColor(ChoraiTheme.secondaryInk)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .accessibilityIdentifier("blocked-users.empty")
 
@@ -349,29 +270,23 @@ struct BlockedActorsView: View {
     }
 
     private var listContent: some View {
-        ScrollView {
-            LazyVStack(spacing: 0) {
-                ForEach(store.items) { actor in
-                    row(actor)
-                        .onAppear {
-                            if actor.actorID == store.items.last?.actorID {
-                                store.loadMore()
-                            }
-                        }
-
-                    Divider()
-                        .background(Color.white.opacity(0.15))
-                        .padding(.leading, 84)
-                }
-
-                if store.phase == .loadingMore {
-                    ProgressView()
-                        .tint(.white)
-                        .padding(.vertical, 18)
-                }
+        List {
+            ForEach(store.items) { actor in
+                row(actor)
+                    .listRowBackground(ChoraiTheme.surface)
+                    .onAppear {
+                        if actor.actorID == store.items.last?.actorID { store.loadMore() }
+                    }
             }
-            .padding(.horizontal, 20)
+            if store.phase == .loadingMore {
+                ProgressView()
+                    .tint(ChoraiTheme.ink)
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                    .listRowBackground(ChoraiTheme.surface)
+            }
         }
+        .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
     }
 
     private func failureBanner(
@@ -380,16 +295,17 @@ struct BlockedActorsView: View {
     ) -> some View {
         VStack(spacing: 10) {
             Text(failureMessage(operation))
-                .font(.system(size: 14, weight: .medium))
-                .foregroundColor(.white.opacity(0.72))
+                .font(.subheadline.weight(.medium))
+                .foregroundColor(ChoraiTheme.secondaryInk)
                 .multilineTextAlignment(.center)
                 .accessibilityIdentifier("blocked-users.error")
 
             Button("Try Again") {
                 retry(operation)
             }
-            .font(.system(size: 14, weight: .medium))
-            .foregroundColor(.white)
+            .font(.subheadline.weight(.medium))
+            .foregroundColor(ChoraiTheme.ink)
+            .frame(minWidth: 88, minHeight: 44)
         }
         .padding(.horizontal, 24)
         .padding(.vertical, 14)
@@ -427,14 +343,14 @@ struct BlockedActorsView: View {
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(actor.username.isEmpty ? "Blocked user" : actor.username)
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(.white)
+                    .font(.body.weight(.semibold))
+                    .foregroundColor(ChoraiTheme.ink)
                     .lineLimit(1)
 
                 if let bio = actor.bio, !bio.isEmpty {
                     Text(bio)
-                        .font(.system(size: 13))
-                        .foregroundColor(.white.opacity(0.62))
+                        .font(.footnote)
+                        .foregroundColor(ChoraiTheme.secondaryInk)
                         .lineLimit(1)
                 }
             }
@@ -447,17 +363,19 @@ struct BlockedActorsView: View {
             } label: {
                 Group {
                     if isUnblocking(actor.actorID) {
-                        ProgressView().tint(.black).frame(width: 55)
+                        ProgressView().tint(ChoraiTheme.ink).frame(width: 55)
                     } else {
                         Text("Unblock")
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundColor(.black)
+                            .font(.subheadline.weight(.medium))
+                            .foregroundColor(ChoraiTheme.ink)
                     }
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
-                .background(Capsule().fill(Color.white))
+                .frame(minHeight: 44)
+                .background(Capsule().fill(ChoraiTheme.raisedSurface))
             }
+            .buttonStyle(.borderless)
             .disabled(isUnblocking(actor.actorID))
             .accessibilityIdentifier("blocked-users.unblock.\(actor.actorID)")
         }

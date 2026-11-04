@@ -1,0 +1,23 @@
+{
+  "recordedAt": "2026-10-27T04:19:30.449858+00:00",
+  "branch": "main",
+  "head": "8fe71f81850ca32aa07773a29ca21b04f1604458",
+  "workingTree": "Contains existing migration and current review changes; not committed or pushed.",
+  "sha256": {
+    "ArcNote/HomeView.swift": "ff89d1cceaf3918b13d99950fd206107e838f20e78dc1f3ef171dc2ca8ba573c",
+    "ArcNote/NewNoteView.swift": "d15ed848c00e720903cb2ec8d07173f435519a3bd482425830e9da7f783b684c",
+    "ArcNote/TabBarView.swift": "e293a5f7f6dfb0a1e8e1c3597de421db166bcf8582249ffb02e013768b63ea79",
+    "ArcNote/CardEditor/BlockNoteCardEditor.swift": "f2c193ce8e98ae1e365151a0772f1075b0099374d48ab4ca70b5f58d59e16317",
+    "ArcNote/CardEditor/CardEditorShell.swift": "04d6b1c82c592ce5a951d091e6b9121b08fb43090aeba1a9812621cbdf8991a9",
+    "ArcNote/CardEditor/CardEditorActionBox.swift": "0f9ae2068c90947f51e3c615f6c609b7cdecba90170c303e8e09179f8a795e6b",
+    "ArcNote/CardEditor/CardEditorMetadataRows.swift": "14a56e139745e4628c13499141f4aac3e9d8f332888554a2fdb44d35da6deb47",
+    "Packages/BlockNoteEditor/Sources/BlockNoteEditor/BlockNoteEditorView.swift": "0c8dbebc922c6aac467304993934146d86f90dce1ef4487d7f66fef8d7b632d1",
+    "Packages/BlockNoteEditor/Sources/BlockNoteEditor/BlockNoteEditorCoordinator.swift": "76f91ac72607de9e809078e72c936cf3cdca640ee34f13abc0b31474dab3a05f",
+    "Packages/BlockNoteEditor/Sources/BlockNoteEditor/BlockNoteEditorAppearance.swift": "1bd2f19c13c3b4b2e934127d9321452d951cf23f1dbe62fcc94d689d45a5cdf1",
+    "Packages/BlockNoteEditor/Tests/BlockNoteEditorTests/BlockNoteFocusRuntimeTests.swift": "d03164fc3b5876f94c8dcb5747d4111f3f1aa09a084d7c71ef84167359199588",
+    "Packages/BlockNoteEditor/Tests/BlockNoteEditorTests/BlockNoteWritingExtentRuntimeTests.swift": "1841fdecdec21eba05d4f9ece68549991e8717498e46da14305fbf979044a829",
+    "Packages/CoreFlow/Tests/CoreFlowTests/CardEditorShellSourceContractTests.swift": "8061604f37b7c3615a8597cf4ef6876d0abb7bf10a8c927f003a9f317c5af737",
+    "Packages/CoreFlow/Tests/CoreFlowTests/LibraryInlineSearchSourceContractTests.swift": "724e650b8e4e6f9f84d5aa748c46111b329d150c450018922786df40e7c44b42",
+    "ArcNoteUITests/ArcNoteUITests.swift": "82857dab8c8d8afd9f9c464eb5f657de01e889aeed329e174ec86ff076ba7a0f"
+  }
+}

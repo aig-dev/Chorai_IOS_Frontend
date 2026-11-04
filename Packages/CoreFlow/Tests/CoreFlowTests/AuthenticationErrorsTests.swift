@@ -124,6 +124,22 @@ final class AuthenticationErrorsTests: XCTestCase {
         )
     }
 
+    func testRegistrationOnlyOffersCodeRecoveryForTheCodeRejection() {
+        XCTAssertTrue(
+            AuthenticationErrorPresentation.registrationRejectsCode(statusCode: 422, errorCode: nil)
+        )
+        XCTAssertFalse(
+            AuthenticationErrorPresentation.registrationRejectsCode(
+                statusCode: 422, errorCode: "PRODUCT_ACCESS_REQUIRED"
+            )
+        )
+        XCTAssertFalse(
+            AuthenticationErrorPresentation.registrationRejectsCode(
+                statusCode: 422, errorCode: "RATE_LIMIT_EXCEEDED"
+            )
+        )
+    }
+
     func testVerificationCodePresentationDoesNotExposeServerText() {
         XCTAssertEqual(
             AuthenticationErrorPresentation.verificationCodeMessage(

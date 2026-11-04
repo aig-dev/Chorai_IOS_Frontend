@@ -1,0 +1,31 @@
+{
+  "baseline_files": 547,
+  "protected_files": 6,
+  "protected_changed": [],
+  "prototype_manifests": {
+    "v3-color-study": {
+      "files": 53,
+      "changed": []
+    },
+    "v4-rich-cards": {
+      "files": 101,
+      "changed": []
+    },
+    "v5-explore-grid": {
+      "files": 36,
+      "changed": []
+    },
+    "v6-feature-journeys": {
+      "files": 78,
+      "changed": []
+    },
+    "v7-card-levels": {
+      "files": 59,
+      "changed": []
+    },
+    "v8-grid-brush": {
+      "files": 75,
+      "changed": []
+    }
+  }
+}

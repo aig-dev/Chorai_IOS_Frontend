@@ -1,0 +1,295 @@
+Command line invocation:
+    /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild test-without-building -project ArcNote.xcodeproj -scheme ArcNoteUITests -destination "platform=iOS Simulator,id=92DE3535-B261-49B5-844F-9BD9B8C241B4" -derivedDataPath /Users/didi/Library/Caches/ChoraiReview/app-derived -parallel-testing-enabled NO "-only-testing:ArcNoteUITests/ArcNoteUITests/testNativeReviewHomeSpacingAndFullPageDraft" -resultBundlePath /tmp/chorai-review-editor-dark.xcresult CODE_SIGNING_ALLOWED=NO
+
+Build settings from command line:
+    CODE_SIGNING_ALLOWED = NO
+
+Resolve Package Graph
+
+
+Resolved source packages:
+  GoogleSignIn: https://github.com/google/GoogleSignIn-iOS @ 9.0.0
+  GTMAppAuth: https://github.com/google/GTMAppAuth.git @ 5.0.0
+  SwiftyJSON: https://github.com/SwiftyJSON/SwiftyJSON.git @ 5.0.2
+  GoogleUtilities: https://github.com/google/GoogleUtilities.git @ 8.1.0
+  Promises: https://github.com/google/promises.git @ 2.4.0
+  CoreFlow: /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/Packages/CoreFlow @ local
+  AppAuth: https://github.com/openid/AppAuth-iOS.git @ 2.0.0
+  AppCheck: https://github.com/google/app-check.git @ 11.2.0
+  Alamofire: https://github.com/Alamofire/Alamofire.git @ 5.10.2
+  GTMSessionFetcher: https://github.com/google/gtm-session-fetcher.git @ 3.5.0
+  BlockNoteEditor: /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/Packages/BlockNoteEditor @ local
+
+Writing result bundle at path:
+	/tmp/chorai-review-editor-dark.xcresult
+
+2026-10-27 11:43:33.243 xcodebuild[12723:90593] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-10-27 11:43:34.610626+0800 ArcNoteUITests-Runner[12838:91413] [Default] Running tests...
+    t =      nans Interface orientation changed to Portrait
+Test Suite 'Selected tests' started at 2026-10-27 11:43:35.341.
+Test Suite 'ArcNoteUITests.xctest' started at 2026-10-27 11:43:35.342.
+Test Suite 'ArcNoteUITests' started at 2026-10-27 11:43:35.342.
+Test Case '-[ArcNoteUITests.ArcNoteUITests testNativeReviewHomeSpacingAndFullPageDraft]' started.
+    t =     0.00s Start Test at 2026-10-27 11:43:35.343
+    t =     0.03s Set Up
+    t =     0.04s Open com.michen.arcnote
+    t =     0.04s     Launch com.michen.arcnote
+2026-10-27 11:43:35.697 xcodebuild[12723:90593] [MT] IDELaunchParametersSnapshot: debugger version lookup failed for path '<nil>': noURL
+2026-10-27 11:43:35.697 xcodebuild[12723:90593] [MT] IDELaunchParametersSnapshot: no debugger version
+2026-10-27 11:43:35.755 xcodebuild[12723:90593] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+objc[12838]: Class UIAccessibilityLoaderWebShared is implemented in both /Library/Developer/CoreSimulator/Volumes/iOS_23F73/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebCore.axbundle/WebCore (0x108a68310) and /Library/Developer/CoreSimulator/Volumes/iOS_23F73/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebKit.axbundle/WebKit (0x108abc398). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+    t =     1.08s         Setting up automation session
+    t =     1.73s         Wait for com.michen.arcnote to idle
+    t =     3.89s Waiting 10.0s for "local-preview.indicator" StaticText to exist
+    t =     4.93s     Checking `Expect predicate `existsNoRetry == 1` for object "local-preview.indicator" StaticText`
+    t =     4.93s         Checking existence of `"local-preview.indicator" StaticText`
+    t =     5.06s Tap "Home" Button
+    t =     5.06s     Wait for com.michen.arcnote to idle
+    t =     5.06s     Find the "Home" Button
+    t =     5.11s     Check for interrupting elements affecting "Home" Button
+    t =     5.17s     Synthesize event
+    t =     5.46s     Wait for com.michen.arcnote to idle
+    t =     7.31s Waiting 10.0s for "home.card.body.preview-note" Any to exist
+    t =     8.35s     Checking `Expect predicate `existsNoRetry == 1` for object "home.card.body.preview-note" Any`
+    t =     8.35s         Checking existence of `"home.card.body.preview-note" Any`
+    t =     8.41s Waiting 10.0s for "home.card.tags.preview-note" Any to exist
+    t =     9.45s     Checking `Expect predicate `existsNoRetry == 1` for object "home.card.tags.preview-note" Any`
+    t =     9.45s         Checking existence of `"home.card.tags.preview-note" Any`
+    t =     9.52s Find the "home.card.tags.preview-note" Any
+    t =     9.56s Find the "home.card.body.preview-note" Any
+    t =     9.60s Waiting 10.0s for "home.card.menu.preview-note" Button to exist
+    t =    10.65s     Checking `Expect predicate `existsNoRetry == 1` for object "home.card.menu.preview-note" Button`
+    t =    10.65s         Checking existence of `"home.card.menu.preview-note" Button`
+    t =    10.71s Find the "home.card.menu.preview-note" Button
+    t =    10.75s Find the "home.card.menu.preview-note" Button
+    t =    10.79s Find the Target Application 'com.michen.arcnote'
+    t =    10.89s Added attachment named 'review-home-spacing'
+    t =    10.89s Waiting 10.0s for "note.create" Button to exist
+    t =    11.93s     Checking `Expect predicate `existsNoRetry == 1` for object "note.create" Button`
+    t =    11.93s         Checking existence of `"note.create" Button`
+    t =    11.98s Tap "note.create" Button
+    t =    11.98s     Wait for com.michen.arcnote to idle
+    t =    11.98s     Find the "note.create" Button
+    t =    12.02s     Check for interrupting elements affecting "note.create" Button
+    t =    12.05s     Synthesize event
+    t =    12.34s     Wait for com.michen.arcnote to idle
+    t =    12.98s Waiting 10.0s for Keyboard (First Match) to exist
+    t =    14.02s     Checking `Expect predicate `existsNoRetry == 1` for object Keyboard (First Match)`
+    t =    14.02s         Checking existence of `Keyboard (First Match)`
+    t =    14.04s Find the Target Application 'com.michen.arcnote'
+    t =    14.13s Added attachment named 'review-editor-keyboard'
+    t =    14.13s Checking existence of `Keyboard (First Match)`
+    t =    14.14s Waiting 10.0s for "cardEditorBodyWebView" Any to exist
+    t =    15.18s     Checking `Expect predicate `existsNoRetry == 1` for object "cardEditorBodyWebView" Any`
+    t =    15.18s         Checking existence of `"cardEditorBodyWebView" Any`
+    t =    15.28s Waiting 10.0s for "cardEditorFormattingBar" Any to exist
+    t =    16.33s     Checking `Expect predicate `existsNoRetry == 1` for object "cardEditorFormattingBar" Any`
+    t =    16.33s         Checking existence of `"cardEditorFormattingBar" Any`
+    t =    16.41s Find the "cardEditorBodyWebView" Any
+    t =    16.47s Find the "cardEditorFormattingBar" Any
+    t =    16.52s Find the Target Application 'com.michen.arcnote'
+    t =    16.54s Find the "cardEditorBodyWebView" WebView
+    t =    16.60s Find the "cardEditorBodyWebView" WebView
+    t =    16.65s Find the "cardEditorBodyWebView" WebView
+    t =    16.71s Press Target Application 'com.michen.arcnote'[0.00, 0.00] -> (201.0, 641.7) for 0.1 seconds, then drag to Target Application 'com.michen.arcnote'[0.00, 0.00] -> (201.0, 545.7) with velocity of 500.00 pixels per second, and then hold for 0.0 seconds 
+    t =    16.71s     Wait for com.michen.arcnote to idle
+    t =    16.71s     Find the Target Application 'com.michen.arcnote'
+    t =    16.73s     Check for interrupting elements affecting "Chorai" Application
+    t =    16.75s     Synthesize event
+    t =    16.75s         Find the Target Application 'com.michen.arcnote'
+    t =    16.77s         Find the Target Application 'com.michen.arcnote'
+    t =    16.79s         Find the Target Application 'com.michen.arcnote'
+    t =    16.81s         Find the Target Application 'com.michen.arcnote'
+    t =    16.83s         Find the Target Application 'com.michen.arcnote'
+    t =    17.32s     Wait for com.michen.arcnote to idle
+    t =    17.80s Find the Target Application 'com.michen.arcnote'
+    t =    18.86s Checking `Expect predicate `BLOCKPREDICATE(0x107e0f450)` for object Keyboard (First Match)`
+    t =    18.86s     Checking existence of `Keyboard (First Match)`
+    t =    19.94s Checking `Expect predicate `exists == 0` for object "cardEditorFormattingBar" Any`
+    t =    19.94s     Checking existence of `"cardEditorFormattingBar" Any`
+    t =    20.01s Waiting 10.0s for "cardEditorContent" Any to exist
+    t =    21.06s     Checking `Expect predicate `existsNoRetry == 1` for object "cardEditorContent" Any`
+    t =    21.06s         Checking existence of `"cardEditorContent" Any`
+    t =    21.11s Find the Target Application 'com.michen.arcnote'
+    t =    21.18s Added attachment named 'review-editor-after-keyboard-dismiss'
+    t =    21.18s Find the "Home" Button
+    t =    22.20s     Find the "Home" Button (retry 1)
+    t =    23.24s     Find the "Home" Button (retry 2)
+    t =    23.29s Find the "cardEditorContent" Any
+    t =    23.34s Find the Window (First Match)
+    t =    23.35s Waiting 10.0s for "cardEditorTools" Button to exist
+    t =    24.39s     Checking `Expect predicate `existsNoRetry == 1` for object "cardEditorTools" Button`
+    t =    24.39s         Checking existence of `"cardEditorTools" Button`
+    t =    24.43s Find the "cardEditorTools" Button
+    t =    24.45s Find the Window (First Match)
+    t =    24.46s Waiting 10.0s for "cardEditorTagsRow" Any to exist
+    t =    25.50s     Checking `Expect predicate `existsNoRetry == 1` for object "cardEditorTagsRow" Any`
+    t =    25.50s         Checking existence of `"cardEditorTagsRow" Any`
+    t =    25.55s Find the "cardEditorTagsRow" Any
+    t =    25.60s Find the Window (First Match)
+    t =    25.60s Find the Target Application 'com.michen.arcnote'
+    t =    25.68s Added attachment named 'review-editor-empty'
+    t =    25.68s Waiting 10.0s for "cardEditorLeadingAction" Button to exist
+    t =    26.72s     Checking `Expect predicate `existsNoRetry == 1` for object "cardEditorLeadingAction" Button`
+    t =    26.72s         Checking existence of `"cardEditorLeadingAction" Button`
+    t =    26.76s Tap "cardEditorLeadingAction" Button
+    t =    26.76s     Wait for com.michen.arcnote to idle
+    t =    26.77s     Find the "cardEditorLeadingAction" Button
+    t =    26.79s     Check for interrupting elements affecting "cardEditorLeadingAction" Button
+    t =    26.81s     Synthesize event
+    t =    27.10s     Wait for com.michen.arcnote to idle
+    t =    27.75s Waiting 10.0s for "note.create" Button to exist
+    t =    28.79s     Checking `Expect predicate `existsNoRetry == 1` for object "note.create" Button`
+    t =    28.79s         Checking existence of `"note.create" Button`
+    t =    28.85s Find the "note.create" Button
+    t =    28.90s Waiting 10.0s for "note.create" Button to exist
+    t =    29.94s     Checking `Expect predicate `existsNoRetry == 1` for object "note.create" Button`
+    t =    29.94s         Checking existence of `"note.create" Button`
+    t =    30.01s Tap "note.create" Button
+    t =    30.01s     Wait for com.michen.arcnote to idle
+    t =    30.01s     Find the "note.create" Button
+    t =    30.05s     Check for interrupting elements affecting "note.create" Button
+    t =    30.08s     Synthesize event
+    t =    30.37s     Wait for com.michen.arcnote to idle
+    t =    30.74s Waiting 10.0s for "cardEditorTools" Button to exist
+    t =    31.77s     Checking `Expect predicate `existsNoRetry == 1` for object "cardEditorTools" Button`
+    t =    31.77s         Checking existence of `"cardEditorTools" Button`
+    t =    31.82s Tap "cardEditorTools" Button
+    t =    31.82s     Wait for com.michen.arcnote to idle
+    t =    31.82s     Find the "cardEditorTools" Button
+    t =    31.85s     Check for interrupting elements affecting "cardEditorTools" Button
+    t =    31.87s     Synthesize event
+    t =    32.16s     Wait for com.michen.arcnote to idle
+    t =    33.19s Find the Target Application 'com.michen.arcnote'
+    t =    33.29s Added attachment named 'review-editor-tools'
+    t =    33.29s Waiting 10.0s for "cardEditorToolsFormat" Button to exist
+    t =    34.33s     Checking `Expect predicate `existsNoRetry == 1` for object "cardEditorToolsFormat" Button`
+    t =    34.33s         Checking existence of `"cardEditorToolsFormat" Button`
+    t =    34.37s Tap "cardEditorToolsFormat" Button
+    t =    34.37s     Wait for com.michen.arcnote to idle
+    t =    34.37s     Find the "cardEditorToolsFormat" Button
+    t =    34.39s     Check for interrupting elements affecting "cardEditorToolsFormat" Button
+    t =    34.41s     Synthesize event
+    t =    34.69s     Wait for com.michen.arcnote to idle
+    t =    35.77s Waiting 5.0s for Keyboard (First Match) to exist
+    t =    36.81s     Checking `Expect predicate `existsNoRetry == 1` for object Keyboard (First Match)`
+    t =    36.81s         Checking existence of `Keyboard (First Match)`
+    t =    36.83s Waiting 10.0s for "cardEditorFormattingBar" Any to exist
+    t =    37.87s     Checking `Expect predicate `existsNoRetry == 1` for object "cardEditorFormattingBar" Any`
+    t =    37.87s         Checking existence of `"cardEditorFormattingBar" Any`
+    t =    37.97s Checking existence of `"cardEditorFormattingBar" Any`
+    t =    38.03s Type 'A little room for ...' into Target Application 'com.michen.arcnote'
+    t =    38.03s     Wait for com.michen.arcnote to idle
+    t =    38.03s     Find the Target Application 'com.michen.arcnote'
+    t =    38.05s     Check for interrupting elements affecting "Chorai" Application
+    t =    38.07s     Synthesize event
+    t =    38.74s     Wait for com.michen.arcnote to idle
+    t =    38.74s Checking existence of `Keyboard (First Match)`
+    t =    38.76s Waiting 10.0s for "cardEditorBodyWebView" Any to exist
+    t =    39.79s     Checking `Expect predicate `existsNoRetry == 1` for object "cardEditorBodyWebView" Any`
+    t =    39.79s         Checking existence of `"cardEditorBodyWebView" Any`
+    t =    39.89s Waiting 10.0s for "cardEditorFormattingBar" Any to exist
+    t =    40.94s     Checking `Expect predicate `existsNoRetry == 1` for object "cardEditorFormattingBar" Any`
+    t =    40.94s         Checking existence of `"cardEditorFormattingBar" Any`
+    t =    41.02s Find the "cardEditorBodyWebView" Any
+    t =    41.07s Find the "cardEditorFormattingBar" Any
+    t =    41.13s Find the Target Application 'com.michen.arcnote'
+    t =    41.15s Find the "cardEditorBodyWebView" WebView
+    t =    41.20s Find the "cardEditorBodyWebView" WebView
+    t =    41.26s Find the "cardEditorBodyWebView" WebView
+    t =    41.32s Press Target Application 'com.michen.arcnote'[0.00, 0.00] -> (201.0, 391.3) for 0.1 seconds, then drag to Target Application 'com.michen.arcnote'[0.00, 0.00] -> (201.0, 295.3) with velocity of 500.00 pixels per second, and then hold for 0.0 seconds 
+    t =    41.32s     Wait for com.michen.arcnote to idle
+    t =    41.32s     Find the Target Application 'com.michen.arcnote'
+    t =    41.34s     Check for interrupting elements affecting "Chorai" Application
+    t =    41.36s     Synthesize event
+    t =    41.37s         Find the Target Application 'com.michen.arcnote'
+    t =    41.38s         Find the Target Application 'com.michen.arcnote'
+    t =    41.40s         Find the Target Application 'com.michen.arcnote'
+    t =    41.42s         Find the Target Application 'com.michen.arcnote'
+    t =    41.44s         Find the Target Application 'com.michen.arcnote'
+    t =    41.94s     Wait for com.michen.arcnote to idle
+    t =    42.40s Find the Target Application 'com.michen.arcnote'
+    t =    43.45s Checking `Expect predicate `BLOCKPREDICATE(0x107e0d410)` for object Keyboard (First Match)`
+    t =    43.45s     Checking existence of `Keyboard (First Match)`
+    t =    44.54s Checking `Expect predicate `exists == 0` for object "cardEditorFormattingBar" Any`
+    t =    44.54s     Checking existence of `"cardEditorFormattingBar" Any`
+    t =    44.59s Waiting 10.0s for "cardEditorContent" Any to exist
+    t =    45.63s     Checking `Expect predicate `existsNoRetry == 1` for object "cardEditorContent" Any`
+    t =    45.63s         Checking existence of `"cardEditorContent" Any`
+    t =    45.71s Find the "cardEditorContent" Any
+    t =    45.75s Find the Window (First Match)
+    t =    45.76s Find the Target Application 'com.michen.arcnote'
+    t =    45.83s Added attachment named 'review-editor-typed'
+    t =    45.83s Waiting 10.0s for "cardEditorTools" Button to exist
+    t =    46.86s     Checking `Expect predicate `existsNoRetry == 1` for object "cardEditorTools" Button`
+    t =    46.86s         Checking existence of `"cardEditorTools" Button`
+    t =    46.91s Tap "cardEditorTools" Button
+    t =    46.91s     Wait for com.michen.arcnote to idle
+    t =    46.91s     Find the "cardEditorTools" Button
+    t =    46.93s     Check for interrupting elements affecting "cardEditorTools" Button
+    t =    46.95s     Synthesize event
+    t =    47.24s     Wait for com.michen.arcnote to idle
+    t =    48.11s Waiting 10.0s for "cardEditorToolsAddTag" Button to exist
+    t =    49.14s     Checking `Expect predicate `existsNoRetry == 1` for object "cardEditorToolsAddTag" Button`
+    t =    49.14s         Checking existence of `"cardEditorToolsAddTag" Button`
+    t =    49.19s Tap "cardEditorToolsAddTag" Button
+    t =    49.19s     Wait for com.michen.arcnote to idle
+    t =    49.20s     Find the "cardEditorToolsAddTag" Button
+    t =    49.22s     Check for interrupting elements affecting "cardEditorToolsAddTag" Button
+    t =    49.24s     Synthesize event
+    t =    49.53s     Wait for com.michen.arcnote to idle
+    t =    50.69s Waiting 10.0s for "cardEditorTagInput" Any to exist
+    t =    51.72s     Checking `Expect predicate `existsNoRetry == 1` for object "cardEditorTagInput" Any`
+    t =    51.72s         Checking existence of `"cardEditorTagInput" Any`
+    t =    51.79s Type 'review
+' into "cardEditorTagInput" Any
+    t =    51.79s     Wait for com.michen.arcnote to idle
+    t =    51.79s     Find the "cardEditorTagInput" Any
+    t =    51.85s     Check for interrupting elements affecting "cardEditorTagInput" TextField
+    t =    51.87s     Synthesize event
+    t =    52.18s     Wait for com.michen.arcnote to idle
+    t =    53.55s Checking `Expect predicate `exists == 0` for object "cardEditorTagInput" Any`
+    t =    53.55s     Checking existence of `"cardEditorTagInput" Any`
+    t =    53.63s Waiting 10.0s for "cardEditorTag.review" Button to exist
+    t =    54.67s     Checking `Expect predicate `existsNoRetry == 1` for object "cardEditorTag.review" Button`
+    t =    54.67s         Checking existence of `"cardEditorTag.review" Button`
+    t =    54.71s Tap "cardEditorTag.review" Button
+    t =    54.71s     Wait for com.michen.arcnote to idle
+    t =    54.71s     Find the "cardEditorTag.review" Button
+    t =    54.74s     Check for interrupting elements affecting "cardEditorTag.review" Button
+    t =    54.76s     Synthesize event
+    t =    55.05s     Wait for com.michen.arcnote to idle
+    t =    56.17s Checking existence of `"cardEditorTag.review" Button`
+    t =    56.20s Waiting 10.0s for "cardEditorTagRemove.review" Button to exist
+    t =    57.23s     Checking `Expect predicate `existsNoRetry == 1` for object "cardEditorTagRemove.review" Button`
+    t =    57.23s         Checking existence of `"cardEditorTagRemove.review" Button`
+    t =    57.28s Tap "cardEditorTagRemove.review" Button
+    t =    57.28s     Wait for com.michen.arcnote to idle
+    t =    57.28s     Find the "cardEditorTagRemove.review" Button
+    t =    57.31s     Check for interrupting elements affecting "cardEditorTagRemove.review" Button
+    t =    57.33s     Synthesize event
+    t =    57.61s     Wait for com.michen.arcnote to idle
+    t =    60.07s Checking `Expect predicate `exists == 0` for object "cardEditorTag.review" Any`
+    t =    60.08s     Checking existence of `"cardEditorTag.review" Any`
+    t =    60.17s Tear Down
+Test Case '-[ArcNoteUITests.ArcNoteUITests testNativeReviewHomeSpacingAndFullPageDraft]' passed (60.451 seconds).
+Test Suite 'ArcNoteUITests' passed at 2026-10-27 11:44:35.794.
+	 Executed 1 test, with 0 failures (0 unexpected) in 60.451 (60.452) seconds
+Test Suite 'ArcNoteUITests.xctest' passed at 2026-10-27 11:44:35.795.
+	 Executed 1 test, with 0 failures (0 unexpected) in 60.451 (60.453) seconds
+Test Suite 'Selected tests' passed at 2026-10-27 11:44:35.795.
+	 Executed 1 test, with 0 failures (0 unexpected) in 60.451 (60.454) seconds
+2026-10-27 11:44:35.849 xcodebuild[12723:90593] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-10-27 11:44:35.851 xcodebuild[12723:90593] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-10-27 11:44:35.863 xcodebuild[12723:90593] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-10-27 11:44:35.863 xcodebuild[12723:90593] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-10-27 11:44:36.137 xcodebuild[12723:90593] [MT] IDETestOperationsObserverDebug: 62.996 elapsed -- Testing started completed.
+2026-10-27 11:44:36.137 xcodebuild[12723:90593] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-27 11:44:36.137 xcodebuild[12723:90593] [MT] IDETestOperationsObserverDebug: 62.996 sec, +62.996 sec -- end
+
+Test session results, code coverage, and logs:
+	/tmp/chorai-review-editor-dark.xcresult
+
+** TEST EXECUTE SUCCEEDED **
+
+Testing started

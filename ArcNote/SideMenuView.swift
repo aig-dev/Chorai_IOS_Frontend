@@ -1,7 +1,13 @@
 import CoreFlow
 import SwiftUI
+import UIKit
 
 struct SideMenuView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.colorSchemeContrast) private var contrast
     @Binding var isPresented: Bool
     @Environment(\.adaptiveLayoutMetrics) private var adaptiveLayout
     @State private var navigateToNotification = false
@@ -9,13 +15,15 @@ struct SideMenuView: View {
     @State private var navigateToSettings = false
     @State private var navigateToMyProfile = false
     @State private var navigateToHelpReport = false
-    @State private var areFollowCountsVisible = false
+    @State private var pendingLibraryAction: LibraryAction?
+
+    private enum LibraryAction { case notes, favorites }
     @ObservedObject private var userProfileManager: UserProfileManager
     @StateObject private var notificationStore = NotificationInboxStore(
         service: NetworkNotificationService()
     )
     private let loadsDataOnAppear: Bool
-    
+
     // 回调函数
     var onMyNotesTapped: (() -> Void)?
     var onFavoritesTapped: (() -> Void)?
@@ -35,234 +43,49 @@ struct SideMenuView: View {
         self.onMyNotesTapped = onMyNotesTapped
         self.onFavoritesTapped = onFavoritesTapped
     }
-    
+
     var body: some View {
-        ZStack {
-            // 背景遮罩
-            if isPresented {
-                Color.black.opacity(0.5)
-                    .ignoresSafeArea()
-                    .onTapGesture {
-                        withAnimation(.easeInOut(duration: 0.3)) {
-                            isPresented = false
-                        }
-                    }
-            }
-            
-                        // 侧边菜单区域 叠加背景图
-            HStack {
-                ZStack(alignment: .top) {
-                    // 与 Personal Profile 共用背景资源，加载失败时保留默认图。
-                    profileBackground
-                    
-                    // 内容层
-                    VStack(alignment: .leading, spacing: 0) {
-                        // 整体内容容器
-                        VStack(alignment: .leading, spacing: 0) {
-                            // 顶部空白区域（无背景色）
-                            Spacer()
-                                .frame(height: 150)
-                            
-                            // 内容区域（有背景色）
-                            ZStack(alignment: .topLeading) {
-                                // 背景
-                                VStack(alignment: .leading, spacing: 0) {
-                                    Spacer()
-                                        .frame(height: 40) // 为头像预留空间
-                                    
-                                    // 用户资料区域（除头像外）
-                                    VStack(alignment: .leading, spacing: 16) {
-                                        // 用户名
-                                        HStack {
-                                            Text(userProfileManager.userProfile?.username ?? "Loading...")
-                                                .font(.system(size: 20, weight: .semibold))
-                                                .foregroundColor(.white)
-                                        }
-                                        
-                                        // Credit balance
-                                        HStack(spacing: 8) {
-                                            Image("syn").resizable().frame(width: 20, height: 20)
-                                            
-                                            Text(userProfileManager.isCreditLoading ? "--" : "\(userProfileManager.creditTotal)")
-                                                .font(.system(size: 16, weight: .semibold))
-                                                .foregroundColor(.yellow)
-                                            
-                                            Text("Credits")
-                                                .font(.system(size: 16, weight: .medium))
-                                                .foregroundColor(.white)
-                                        }
-                                        .accessibilityElement(children: .ignore)
-                                        .accessibilityLabel(
-                                            userProfileManager.isCreditLoading
-                                                ? "Loading Credits"
-                                                : "\(userProfileManager.creditTotal) Credits"
-                                        )
-                                        .accessibilityIdentifier(
-                                            "side-menu.credit-balance"
-                                        )
-                                        
-                                        // 关注统计
-                                        HStack(spacing: 20) {
-                                            HStack(spacing: 4) {
-                                                Text(userProfileManager.isLoading ? "--" : "\(userProfileManager.userProfile?.followingCount ?? 0)")
-                                                    .font(.system(size: 16, weight: .semibold))
-                                                    .foregroundColor(userProfileManager.isLoading ? .white.opacity(0.7) : .white)
-                                                    .opacity(areFollowCountsVisible ? 1 : 0)
-                                                Text("following")
-                                                    .font(.system(size: 14, weight: .regular))
-                                                    .foregroundColor(.white.opacity(0.7))
-                                            }
-                                            Spacer()
-                                            
-                                            HStack(spacing: 4) {
-                                                Text(userProfileManager.isLoading ? "--" : "\(userProfileManager.userProfile?.followersCount ?? 0)")
-                                                    .font(.system(size: 16, weight: .semibold))
-                                                    .foregroundColor(userProfileManager.isLoading ? .white.opacity(0.7) : .white)
-                                                    .opacity(areFollowCountsVisible ? 1 : 0)
-                                                Text("followers")
-                                                    .font(.system(size: 14, weight: .regular))
-                                                    .foregroundColor(.white.opacity(0.7))
-                                            }
-                                        }
-                                    }
-                                    .padding(.top, 20)
-                                    .padding(.bottom, 20)
-                                    Image("line")
-                                        .resizable()
-                                        .aspectRatio(contentMode: .fit)
-                                        .frame(maxWidth: .infinity)
-                                        .clipped()
-                                    // 导航菜单项
-                                    VStack(spacing: 0) {
-                                        SideMenuItem(imageName: "mynotes", title: "My Notes") {
-                                            // 收起侧边栏并切换到My Notes
-                                            withAnimation(.easeInOut(duration: 0.3)) {
-                                                isPresented = false
-                                            }
-                                            // 延迟执行回调，确保动画完成
-                                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                                                onMyNotesTapped?()
-                                            }
-                                        }
-                                        SideMenuItem(imageName: "favorites", title: "Favorites") {
-                                            // 收起侧边栏并切换到Favorites (AIList)
-                                            withAnimation(.easeInOut(duration: 0.3)) {
-                                                isPresented = false
-                                            }
-                                            // 延迟执行回调，确保动画完成
-                                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                                                onFavoritesTapped?()
-                                            }
-                                        }
-                                        SideMenuItem(
-                                            imageName: "notification",
-                                            title: "Notification",
-                                            accessibilityIdentifier: "side-menu.notification",
-                                            showsUnreadIndicator: notificationStore.unreadCount > 0
-                                        ) {
-                                            navigateToNotification = true
-                                        }
-                                        SideMenuItem(imageName: "trash", title: "Trash") {
-                                            navigateToTrash = true
-                                        }
-                                        SideMenuItem(imageName: "settings", title: "Settings", accessibilityIdentifier: "side-menu.settings") {
-                                            navigateToSettings = true
-                                        }
-                                        SideMenuItem(imageName: "help", title: "Help & Report") {
-                                            navigateToHelpReport = true
-                                        }
-                                    }
-                                    
-                                    Spacer()
-                                }
-                                .padding(.horizontal, 24)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 0)
-//                                        .fill(Color.white.opacity(0.1))
-                                        .background(.ultraThinMaterial.opacity(0.9))
-                                )
-                                .clipShape(
-                                    RoundedCorner(radius: 20, corners: [.topRight, .bottomRight])
-                                )
-                                
-                                // 头像
-                                Button(action: {
-                                    navigateToMyProfile = true
-                                }) {
-                                    Group {
-                                        if let avatarURL = profileResourceURL(
-                                            userProfileManager.userProfile?.avatar
-                                        ) {
-                                            AsyncImage(url: avatarURL) { image in
-                                                image
-                                                    .resizable()
-                                                    .aspectRatio(contentMode: .fill)
-                                            } placeholder: {
-                                                Image("avatar")
-                                                    .resizable()
-                                                    .aspectRatio(contentMode: .fill)
-                                            }
-                                        } else {
-                                            Image("avatar")
-                                                .resizable()
-                                                .aspectRatio(contentMode: .fill)
-                                        }
-                                    }
-                                    .frame(width: 80, height: 80)
-                                    .clipShape(Circle())
-                                    .overlay(
-                                        Circle()
-                                            .stroke(Color.white, lineWidth: 3)
-                                    )
-                                }
-                                .offset(y: -40) // 向上偏移，让头像中心点与内容区域上边框重叠
-                                .padding(.leading, 24) // 靠左对齐，与内容区域左边距一致
-                                .accessibilityIdentifier("side-menu.profile")
-                            }
-                        }
-                    }
-                }
-                .frame(width: adaptiveLayout.drawerWidth)
-                .ignoresSafeArea()
-                .clipped()
-                .offset(x: isPresented ? 0 : -adaptiveLayout.drawerWidth)
-                .accessibilityElement(children: .contain)
-                .accessibilityIdentifier("adaptive-layout.drawer")
-                
-                Spacer()
-            }
-        }
-        .animation(.easeInOut(duration: 0.3), value: isPresented)
-        .task(id: isPresented) {
-            guard isPresented else { return }
-            do {
-                try await Task.sleep(nanoseconds: 300_000_000)
-            } catch {
-                return
-            }
-            guard !Task.isCancelled, isPresented else { return }
-            areFollowCountsVisible = true
-        }
+        // Only the visual layer leaves this navigation host. Destination bindings
+        // remain here so Settings/Profile return to this tab's still-open drawer.
+        SidebarOverlayPresenter(
+            isPresented: isPresented && !hasActiveDestination,
+            drawerWidth: adaptiveLayout.drawerWidth,
+            reduceMotion: reduceMotion,
+            onClose: closeMenu,
+            onDismiss: completeLibrarySelection,
+            content: AnyView(
+                drawerContent
+                    .environment(\.colorScheme, colorScheme)
+                    .environment(\.dynamicTypeSize, dynamicTypeSize)
+                    .environment(\.adaptiveLayoutMetrics, adaptiveLayout)
+            )
+        )
+        .frame(width: 0, height: 0)
         .navigationDestination(isPresented: $navigateToNotification) {
             NotificationView()
+                .toolbar(.hidden, for: .tabBar)
         }
         .navigationDestination(isPresented: $navigateToTrash) {
             TrashView()
+                .toolbar(.hidden, for: .tabBar)
         }
         .navigationDestination(isPresented: $navigateToSettings) {
             SettingsView()
+                .toolbar(.hidden, for: .tabBar)
         }
         .navigationDestination(isPresented: $navigateToMyProfile) {
             MyProfileView(
                 userProfileManager: userProfileManager,
                 loadsDataOnAppear: loadsDataOnAppear
             )
+            .toolbar(.hidden, for: .tabBar)
         }
         .navigationDestination(isPresented: $navigateToHelpReport) {
             WebViewPage(
                 url: ChoraiWebDestination.report,
                 title: "Help & Report"
             )
+            .toolbar(.hidden, for: .tabBar)
         }
         .onAppear {
             // 当侧边栏出现时加载用户资料
@@ -272,7 +95,7 @@ struct SideMenuView: View {
             }
         }
         .onChange(of: isPresented) { isShowing in
-            areFollowCountsVisible = false
+            if isShowing { pendingLibraryAction = nil }
             // 当侧边栏显示时加载用户资料
             if isShowing, loadsDataOnAppear {
                 userProfileManager.fetchCurrentUserProfile()
@@ -281,51 +104,175 @@ struct SideMenuView: View {
         }
     }
 
-    private var profileBackgroundHeight: CGFloat {
-        adaptiveLayout.drawerWidth * (495.0 / 762.0)
+    private var hasActiveDestination: Bool {
+        navigateToNotification || navigateToTrash || navigateToSettings
+            || navigateToMyProfile || navigateToHelpReport
     }
 
-    private var profileBackground: some View {
-        Group {
-            if let backgroundURL = profileResourceURL(
-                userProfileManager.userProfile?.background
-            ) {
-                AsyncImage(url: backgroundURL) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                    case .empty:
-                        fallbackProfileBackground
-                    case .failure:
-                        fallbackProfileBackground
-                    @unknown default:
-                        fallbackProfileBackground
+    private var drawerContent: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                HStack {
+                    Spacer()
+                    Button(action: closeMenu) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 18))
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Close menu")
+                    .accessibilityIdentifier("side-menu.close")
+                }
+                .padding(.horizontal, 12)
+                .padding(.top, 4)
+
+                profileSummary
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 24)
+
+                Divider()
+                    .overlay(ChoraiTheme.separator)
+                    .padding(.horizontal, 24)
+
+                VStack(spacing: 4) {
+                    SideMenuItem(imageName: "mynotes", title: "My Notes") {
+                        selectLibrary(.notes)
+                    }
+                    SideMenuItem(imageName: "favorites", title: "Favorites") {
+                        selectLibrary(.favorites)
+                    }
+                    SideMenuItem(
+                        imageName: "notification",
+                        title: "Notification",
+                        accessibilityIdentifier: "side-menu.notification",
+                        showsUnreadIndicator: notificationStore.unreadCount > 0
+                    ) {
+                        navigateToNotification = true
+                    }
+                    SideMenuItem(imageName: "trash", title: "Trash") {
+                        navigateToTrash = true
+                    }
+                    SideMenuItem(imageName: "settings", title: "Settings", accessibilityIdentifier: "side-menu.settings") {
+                        navigateToSettings = true
+                    }
+                    SideMenuItem(imageName: "help", title: "Help & Report") {
+                        navigateToHelpReport = true
                     }
                 }
-            } else {
-                fallbackProfileBackground
+                .padding(.horizontal, 24)
+                .padding(.vertical, 16)
             }
         }
-        .frame(
-            width: adaptiveLayout.drawerWidth,
-            height: profileBackgroundHeight
-        )
-        .clipped()
-        .overlay {
-            LinearGradient(
-                colors: [.clear, .black.opacity(0.28)],
-                startPoint: .top,
-                endPoint: .bottom
+        .background {
+            if reduceTransparency || contrast == .increased {
+                ChoraiTheme.background.ignoresSafeArea()
+            } else {
+                Rectangle().fill(.regularMaterial).ignoresSafeArea()
+                    .overlay(ChoraiTheme.background.opacity(0.88).ignoresSafeArea())
+            }
+        }
+        .overlay(alignment: .trailing) {
+            ChoraiTheme.separator.opacity(0.55).frame(width: 0.5).ignoresSafeArea()
+        }
+        .foregroundStyle(ChoraiTheme.ink)
+        .tint(ChoraiTheme.accent)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("adaptive-layout.drawer")
+    }
+
+    private var profileSummary: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .center, spacing: 14) {
+                Button {
+                    navigateToMyProfile = true
+                } label: {
+                    Group {
+                        if let avatarURL = profileResourceURL(
+                            userProfileManager.userProfile?.avatar
+                        ) {
+                            AsyncImage(url: avatarURL) { image in
+                                image.resizable().aspectRatio(contentMode: .fill)
+                            } placeholder: {
+                                Image("avatar").resizable().aspectRatio(contentMode: .fill)
+                            }
+                        } else {
+                            Image("avatar").resizable().aspectRatio(contentMode: .fill)
+                        }
+                    }
+                    .frame(width: 60, height: 60)
+                    .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("My profile")
+                .accessibilityIdentifier("side-menu.profile")
+
+                Text(userProfileManager.userProfile?.username ?? "Loading...")
+                    .font(.title3.weight(.semibold))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            HStack(spacing: 8) {
+                Image(systemName: "gift")
+                    .foregroundStyle(ChoraiTheme.gold)
+                Text(creditText)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(ChoraiTheme.gold)
+                Text("Credits")
+            }
+            .font(.subheadline)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(
+                userProfileManager.creditBalance == nil
+                    ? "Loading Credits"
+                    : "\(userProfileManager.creditTotal) Credits"
             )
+            .accessibilityIdentifier("side-menu.credit-balance")
+
+            HStack(alignment: .top, spacing: 24) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(userProfileManager.userProfile.map { "\($0.followingCount ?? 0)" } ?? "--")
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(ChoraiTheme.ink)
+                    Text("following")
+                        .font(.subheadline)
+                        .foregroundStyle(ChoraiTheme.secondaryInk)
+                }
+                .accessibilityElement(children: .combine)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(userProfileManager.userProfile.map { "\($0.followersCount ?? 0)" } ?? "--")
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(ChoraiTheme.ink)
+                    Text("followers")
+                        .font(.subheadline)
+                        .foregroundStyle(ChoraiTheme.secondaryInk)
+                }
+                .accessibilityElement(children: .combine)
+            }
         }
     }
 
-    private var fallbackProfileBackground: some View {
-        Image("side_bg")
-            .resizable()
-            .aspectRatio(contentMode: .fill)
+    private var creditText: String {
+        userProfileManager.creditBalance.map { "\($0.balance)" } ?? "--"
+    }
+
+    private func closeMenu() {
+        isPresented = false
+    }
+
+    private func selectLibrary(_ action: LibraryAction) {
+        pendingLibraryAction = action
+        closeMenu()
+    }
+
+    private func completeLibrarySelection() {
+        guard !isPresented, let action = pendingLibraryAction else { return }
+        pendingLibraryAction = nil
+        switch action {
+        case .notes: onMyNotesTapped?()
+        case .favorites: onFavoritesTapped?()
+        }
     }
 
     private func profileResourceURL(_ rawValue: String?) -> URL? {
@@ -344,6 +291,203 @@ struct SideMenuView: View {
         }
         notificationStore.load(actorID: actorID)
     }
+}
+
+// A scene-bound overlay covers the bars without changing their visibility or
+// safe areas. Its window cannot become key and never owns navigation destinations.
+private struct SidebarOverlayPresenter: UIViewControllerRepresentable {
+    let isPresented: Bool
+    let drawerWidth: CGFloat
+    let reduceMotion: Bool
+    let onClose: () -> Void
+    let onDismiss: () -> Void
+    let content: AnyView
+
+    func makeUIViewController(context: Context) -> SidebarOverlayAnchorController {
+        SidebarOverlayAnchorController()
+    }
+
+    func updateUIViewController(_ controller: SidebarOverlayAnchorController, context: Context) {
+        controller.update(self)
+    }
+
+    static func dismantleUIViewController(_ controller: SidebarOverlayAnchorController, coordinator: ()) {
+        controller.removeOverlay()
+    }
+}
+
+private final class SidebarOverlayAnchorController: UIViewController {
+    private var configuration: SidebarOverlayPresenter?
+    private var overlay: SidebarOverlayController?
+    private var overlayWindow: SidebarOverlayWindow?
+    private weak var presentingWindow: UIWindow?
+    private var previousAccessibilityHidden = false
+    private var isAnchorVisible = false
+    private var isOverlayVisible = false
+    private var transitionID = 0
+
+    override func loadView() {
+        view = UIView()
+        view.backgroundColor = .clear
+        view.isUserInteractionEnabled = false
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        isAnchorVisible = true
+        reconcilePresentation()
+    }
+
+    override func viewDidDisappear(_ animated: Bool) {
+        super.viewDidDisappear(animated)
+        isAnchorVisible = false
+        reconcilePresentation()
+    }
+
+    func update(_ configuration: SidebarOverlayPresenter) {
+        self.configuration = configuration
+        overlay?.update(content: configuration.content, width: configuration.drawerWidth, onClose: configuration.onClose)
+        reconcilePresentation()
+    }
+
+    private func reconcilePresentation() {
+        guard let configuration else { return }
+        let shouldShow = configuration.isPresented && isAnchorVisible && view.window != nil
+        guard shouldShow != isOverlayVisible else { return }
+        isOverlayVisible = shouldShow
+        transitionID += 1
+        let currentTransition = transitionID
+
+        if shouldShow, overlay == nil {
+            guard let sourceWindow = view.window,
+                  let scene = sourceWindow.windowScene else {
+                isOverlayVisible = false
+                return
+            }
+            let controller = SidebarOverlayController(content: configuration.content, width: configuration.drawerWidth, onClose: configuration.onClose)
+            let window = SidebarOverlayWindow(windowScene: scene)
+            window.frame = sourceWindow.frame
+            window.windowLevel = sourceWindow.windowLevel + 1
+            window.backgroundColor = .clear
+            window.rootViewController = controller
+            presentingWindow = sourceWindow
+            previousAccessibilityHidden = sourceWindow.accessibilityElementsHidden
+            sourceWindow.accessibilityElementsHidden = true
+            // Adding UIKit subviews to SwiftUI's root hosting view is unsupported.
+            // A non-key window owns this visual layer without disturbing that view.
+            window.isHidden = false
+            controller.view.layoutIfNeeded()
+            controller.setProgress(isVisible: false)
+            overlay = controller
+            overlayWindow = window
+        }
+        guard let overlay else { return }
+        overlay.setControlsEnabled(shouldShow)
+        let duration = configuration.reduceMotion ? 0 : 0.24
+        UIView.animate(withDuration: duration, delay: 0, options: [.beginFromCurrentState, .curveEaseOut, .allowUserInteraction]) {
+            overlay.setProgress(isVisible: shouldShow)
+        } completion: { [weak self] _ in
+            guard let self, self.transitionID == currentTransition else { return }
+            if !shouldShow {
+                self.removeOverlay()
+                // End the transition before changing the selected tab. No guessed
+                // delay can replay a stale selection after another interaction.
+                DispatchQueue.main.async { [weak self] in
+                    self?.configuration?.onDismiss()
+                }
+            } else {
+                UIAccessibility.post(notification: .screenChanged, argument: nil)
+            }
+        }
+    }
+
+    func removeOverlay() {
+        transitionID += 1
+        overlayWindow?.isHidden = true
+        overlayWindow?.rootViewController = nil
+        overlayWindow = nil
+        overlay = nil
+        if let presentingWindow {
+            presentingWindow.accessibilityElementsHidden = previousAccessibilityHidden
+        }
+        presentingWindow = nil
+        isOverlayVisible = false
+    }
+}
+
+private final class SidebarOverlayWindow: UIWindow {
+    override var canBecomeKey: Bool { false }
+}
+
+private final class SidebarOverlayController: UIViewController {
+    private let dimmer = UIControl()
+    private let drawer = UIView()
+    private let host: UIHostingController<AnyView>
+    private var drawerWidth: CGFloat
+    private var onClose: () -> Void
+
+    init(content: AnyView, width: CGFloat, onClose: @escaping () -> Void) {
+        host = UIHostingController(rootView: content)
+        drawerWidth = width
+        self.onClose = onClose
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.backgroundColor = .clear
+        view.accessibilityViewIsModal = true
+        view.accessibilityIdentifier = "side-menu.presentation"
+        dimmer.backgroundColor = .black
+        dimmer.isAccessibilityElement = false
+        dimmer.addTarget(self, action: #selector(close), for: .touchUpInside)
+        view.addSubview(dimmer)
+        drawer.layer.shadowColor = UIColor.black.cgColor
+        drawer.layer.shadowOpacity = 0.12
+        drawer.layer.shadowRadius = 16
+        drawer.layer.shadowOffset = CGSize(width: 4, height: 0)
+        view.addSubview(drawer)
+        addChild(host)
+        host.view.backgroundColor = .clear
+        host.view.layer.cornerRadius = 22
+        host.view.layer.maskedCorners = [.layerMaxXMinYCorner, .layerMaxXMaxYCorner]
+        host.view.clipsToBounds = true
+        drawer.addSubview(host.view)
+        host.didMove(toParent: self)
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        dimmer.frame = view.bounds
+        // Bounds and center keep layout independent of the animated transform.
+        drawer.bounds = CGRect(x: 0, y: 0, width: drawerWidth, height: view.bounds.height)
+        drawer.center = CGPoint(x: drawerWidth / 2, y: view.bounds.midY)
+        host.view.frame = drawer.bounds
+        drawer.layer.shadowPath = UIBezierPath(rect: drawer.bounds).cgPath
+    }
+
+    func update(content: AnyView, width: CGFloat, onClose: @escaping () -> Void) {
+        host.rootView = content
+        drawerWidth = width
+        self.onClose = onClose
+        view.setNeedsLayout()
+    }
+
+    func setControlsEnabled(_ enabled: Bool) {
+        // The full-window view keeps absorbing input until it is removed.
+        // Only its controls stop accepting taps while the drawer slides away.
+        dimmer.isUserInteractionEnabled = enabled
+        drawer.isUserInteractionEnabled = enabled
+    }
+
+    func setProgress(isVisible: Bool) {
+        dimmer.alpha = isVisible ? 0.22 : 0
+        drawer.transform = isVisible ? .identity : CGAffineTransform(translationX: -drawerWidth - 20, y: 0)
+    }
+
+    @objc private func close() { onClose() }
 }
 
 struct SideMenuItem: View {
@@ -366,31 +510,35 @@ struct SideMenuItem: View {
         self.showsUnreadIndicator = showsUnreadIndicator
         self.action = action
     }
-    
+
     var body: some View {
         Button(action: action) {
             HStack(spacing: 16) {
-                Image(imageName)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: 24, height: 24)
-                    .foregroundColor(.white)
-                
+                Image(systemName: ChoraiSymbols.name(for: imageName))
+                    .font(.body)
+                    .frame(width: 24)
+                    .foregroundColor(ChoraiTheme.ink)
+
                 Text(title)
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundColor(.white)
+                    .font(.body)
+                    .foregroundColor(ChoraiTheme.ink)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 if showsUnreadIndicator {
                     Circle()
-                        .fill(Color.purple)
+                        .fill(ChoraiTheme.gold)
                         .frame(width: 6, height: 6)
                         .accessibilityIdentifier("side-menu.notification-unread")
                 }
-                
+
                 Spacer()
             }
-            .padding(.vertical, 16)
+            .padding(.vertical, 6)
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
+        .accessibilityValue(showsUnreadIndicator ? "Unread notifications" : "")
         .accessibilityIdentifier(accessibilityIdentifier ?? "side-menu.item.\(title)")
     }
 }

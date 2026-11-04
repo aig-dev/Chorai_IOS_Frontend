@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Chorai · 原生页面实拍对照</title>
+  <style>
+    *{box-sizing:border-box}
+    :root{color-scheme:light;--paper:#eeede8;--ink:#173d37;--muted:#627168;--line:#cfd5cd;--surface:#faf9f6;--accent:#846838}
+    body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    button,a{-webkit-tap-highlight-color:transparent}button{font:inherit;cursor:pointer}a{color:inherit;text-underline-offset:4px}
+    button:focus-visible,a:focus-visible{outline:3px solid var(--accent);outline-offset:4px}
+    [hidden]{display:none!important}.wrap{max-width:1370px;margin:auto;padding:38px 34px 54px}
+    .topline{display:flex;justify-content:space-between;align-items:center;gap:20px;flex-wrap:wrap}.eyebrow{font-size:12px;letter-spacing:1.4px;color:var(--muted)}
+    .links{display:flex;gap:8px 22px;flex-wrap:wrap}.links a{display:inline-flex;align-items:center;min-height:44px;font-size:13px}
+    h1{font-size:32px;line-height:1.3;letter-spacing:-.8px;margin:16px 0 12px}.intro{max-width:850px;margin:0 0 26px;color:var(--muted)}
+    .controls{display:flex;justify-content:space-between;align-items:center;gap:18px;flex-wrap:wrap;border-top:1px solid var(--line);padding:20px 0}
+    .tabs,.appearance{display:flex;gap:8px;flex-wrap:wrap}.pill{border:1px solid #c7d0c8;background:#f7f7f2;color:var(--ink);border-radius:999px;min-height:44px;padding:9px 18px;line-height:24px}
+    .pill[aria-selected="true"],.pill[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:#fff}.appearance .pill{padding:9px 16px}
+    .section-intro{display:flex;justify-content:space-between;gap:28px;align-items:flex-start;padding:2px 0 23px;min-height:96px}
+    .section-intro h2{font-size:19px;line-height:1.45;margin:0 0 6px;font-weight:650}.section-intro p{margin:0;max-width:830px;color:var(--muted);font-size:13px}
+    .reference{flex-shrink:0;display:flex;align-items:center;min-height:44px;font-size:13px;white-space:nowrap}
+    .board{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:26px;align-items:start}
+    .board.compare{grid-template-columns:repeat(2,minmax(0,1fr));max-width:846px;margin:auto;gap:42px}
+    figure{margin:0;min-width:0}.figure-top{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin:0 3px 12px}
+    .figure-top h3{margin:0;font-size:17px;font-weight:600}.figure-top span{font-size:12px;color:var(--muted);white-space:nowrap}
+    .capture{position:relative;display:block;width:100%;aspect-ratio:402/874;background:var(--surface);border:1px solid #d5dbd2;border-radius:24px;overflow:hidden;box-shadow:0 14px 36px #173d370c}
+    .capture img{display:block;width:100%;height:auto;min-height:100%;object-fit:contain;position:relative;z-index:1}
+    .capture img[hidden]{display:none}.missing{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;padding:28px;text-align:center;color:var(--muted);font-size:13px;gap:8px}
+    .missing strong{font-size:16px;font-weight:500;color:var(--ink)}.missing span{max-width:230px}.missing:not([hidden]){background:linear-gradient(145deg,#faf9f6,#f0f0eb)}
+    figcaption{padding:12px 3px 0;color:var(--muted);font-size:12px;line-height:1.75}figcaption p{margin:0 0 4px}.original{display:inline-flex;align-items:center;min-height:32px}
+    .footnotes{margin-top:34px;padding-top:22px;border-top:1px solid var(--line);display:grid;grid-template-columns:1fr 1fr;gap:36px;font-size:12px;color:var(--muted)}
+    .footnotes strong{display:block;color:var(--ink);font-size:13px;font-weight:600;margin-bottom:5px}.footnotes p{margin:0}.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}
+    @media(max-width:900px){.wrap{padding:28px 20px 40px}.board{gap:16px}.figure-top{display:block}.figure-top span{display:block;margin-top:2px}.section-intro{display:block;min-height:0}.reference{margin-top:7px}.board.compare{gap:24px}.capture{border-radius:20px}}
+    @media(max-width:620px){.wrap{padding:22px 16px 35px}h1{font-size:27px}.intro{font-size:14px}.topline{gap:5px}.links{gap:16px}.controls{gap:12px}.tabs{gap:6px}.tabs .pill{padding:8px 12px;font-size:14px}.appearance .pill{font-size:13px;padding:6px 16px}.board,.board.compare{grid-template-columns:1fr;max-width:402px;margin:auto;gap:30px}.figure-top{display:flex}.figure-top span{margin:0}.footnotes{grid-template-columns:1fr;gap:20px}.capture{border-radius:22px}}
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <header>
+      <div class="topline">
+        <div class="eyebrow">CHORAI · 原生页面实拍</div>
+        <nav class="links" aria-label="相关审稿页">
+          <a href="index.html">回看抬头方案</a>
+          <a href="spark.html">查看 Spark 原型</a>
+        </nav>
+      </div>
+      <h1>看实际页面，核对每一处比例。</h1>
+      <p class="intro">以下均为原生 App 离线样例的真实截图。可以核对抬头、按钮、输入区与文字大小；截图中的消息和内容是样例，不代表真实消息发送、AI 回复或在线服务验证。</p>
+    </header>
+
+    <div class="controls">
+      <div class="tabs" role="tablist" aria-label="对照内容">
+        <button class="pill" id="tab-roots" type="button" role="tab" aria-selected="true" aria-controls="review-panel" data-view="roots">主页面抬头</button>
+        <button class="pill" id="tab-chat" type="button" role="tab" aria-selected="false" aria-controls="review-panel" tabindex="-1" data-view="chat">聊天输入</button>
+        <button class="pill" id="tab-keyboard" type="button" role="tab" aria-selected="false" aria-controls="review-panel" tabindex="-1" data-view="keyboard">键盘</button>
+        <button class="pill" id="tab-accessibility" type="button" role="tab" aria-selected="false" aria-controls="review-panel" tabindex="-1" data-view="accessibility">大字号</button>
+      </div>
+      <div class="appearance" role="group" aria-label="截图外观">
+        <button class="pill" type="button" aria-pressed="true" data-theme="light">浅色</button>
+        <button class="pill" type="button" aria-pressed="false" data-theme="dark">深色</button>
+      </div>
+    </div>
+
+    <section id="review-panel" role="tabpanel" aria-labelledby="tab-roots">
+      <div class="section-intro">
+        <div><h2 id="section-title">A 方案 · 紧凑抬头已落地</h2><p id="section-copy">三个一级页面并列查看。标题、菜单与主要操作使用统一的紧凑尺度，以下展示的是实际 App 画面。</p></div>
+        <a id="before-root" class="reference" href="qa/chat-root-before.png" target="_blank" rel="noopener">查看调整前的 Chat 首页 ↗</a>
+      </div>
+      <div id="board" class="board"></div>
+    </section>
+
+    <footer class="footnotes">
+      <div><strong>对照依据</strong><p>聊天详情此前没有单独确认过的设计图。这里的“调整前”来自上轮 App 审查截图，不将其当作已批准设计稿。一级页面的深色旧图未纳入本页，因此默认并列展示本轮三个页面；旧版 Chat 首页仅提供已有的浅色截图。</p></div>
+      <div><strong>如何看这些图片</strong><p>每张图片保留完整画面，点击“查看原始截图”可单独放大。页面只切换真实图片，没有用网页重绘 App 控件。键盘前后两张图的样例文字不同，只比较输入区布局、按钮比例和键盘关系。</p></div>
+    </footer>
+    <p id="announcement" class="sr-only" role="status" aria-live="polite"></p>
+    <noscript><p>请启用 JavaScript 切换截图。也可直接查看 <a href="qa/native-root-explore-light.png">Explore 浅色</a>、<a href="qa/native-root-home-light.png">Home 浅色</a>、<a href="qa/native-root-chat-light.png">Chat 浅色</a>。</p></noscript>
+  </main>
+
+  <script>
+    (() => {
+      'use strict';
+      const archive = '../2026-10-27-full-native-remediation/review/images/';
+      const old = {
+        chat: {light:'chat-light-70b02bac0ec7.png',dark:'chat-dark-b0dc085da02b.png'},
+        keyboard: {light:'chat-keyboard-light-9bbabcaffaaf.png',dark:'chat-keyboard-dark-d9b34c782b65.png'},
+        accessibility: {light:'chat-large-idle-light-36e7cdb4d8a8.png',dark:'chat-large-idle-dark-69b4b2a63365.png'}
+      };
+      const sections = {
+        roots: {title:'A 方案 · 紧凑抬头已落地',copy:'三个一级页面并列查看。标题、菜单与主要操作使用统一的紧凑尺度，以下展示的是实际 App 画面。'},
+        chat: {title:'聊天输入 · 调整前后',copy:'重点看底部附件与发送按钮、输入框高度，以及聊天附件文字。两侧都是实际 App 截图；左侧是上轮版本，不是专门批准过的聊天设计稿。',current:'idle',before:'按钮背景较大，附件文字与正文的层级不一致。',after:'按钮与输入区收回紧凑尺度，附件预览使用明确的文字层级。'},
+        keyboard: {title:'键盘 · 调整前后',copy:'重点看输入区与键盘之间的距离、多行文字和操作按钮的对齐。两张图的样例文字不同，只比较布局与比例，不比较消息内容。',current:'keyboard',before:'上轮输入状态，样例文字与右侧不同。',after:'本轮输入状态，查看多行输入下按钮的大小和位置。'},
+        accessibility: {title:'大字号 · 调整前后',copy:'重点看附件文字是否随字号放大，以及按钮是否仍保留稳定比例。这里展示的是系统辅助字号下的真实 App 画面。',current:'accessibility',before:'正文已放大，附件预览仍维持较小的固定字号。',after:'附件文字随系统字号放大并允许换行，操作图标保持稳定比例。'}
+      };
+      let view = 'roots';
+      let theme = 'light';
+      const board = document.getElementById('board');
+      const tabs = [...document.querySelectorAll('[data-view]')];
+      const themes = [...document.querySelectorAll('[data-theme]')];
+
+      function figure(title, tag, source, description) {
+        const item = document.createElement('figure');
+        const heading = document.createElement('div');
+        heading.className = 'figure-top';
+        const name = document.createElement('h3');
+        name.textContent = title;
+        const version = document.createElement('span');
+        version.textContent = tag;
+        heading.append(name, version);
+
+        const frame = document.createElement('div');
+        frame.className = 'capture';
+        const pending = document.createElement('div');
+        pending.className = 'missing';
+        const pendingTitle = document.createElement('strong');
+        pendingTitle.textContent = '正在载入截图';
+        const pendingText = document.createElement('span');
+        pendingText.textContent = '本页只展示实际 App 截图。';
+        pending.append(pendingTitle, pendingText);
+        const image = document.createElement('img');
+        image.alt = `${title}，${theme === 'light' ? '浅色' : '深色'}，${description}`;
+        image.width = 1206;
+        image.height = 2622;
+        image.decoding = 'async';
+        image.addEventListener('load', () => { pending.hidden = true; });
+        image.addEventListener('error', () => {
+          image.hidden = true;
+          pendingTitle.textContent = '截图待补充';
+          pendingText.textContent = '该实际截图尚未加入。不会以网页模拟画面替代。';
+        });
+        image.src = source;
+        frame.append(pending, image);
+
+        const caption = document.createElement('figcaption');
+        const copy = document.createElement('p');
+        copy.textContent = description;
+        const link = document.createElement('a');
+        link.className = 'original';
+        link.href = source;
+        link.target = '_blank';
+        link.rel = 'noopener';
+        link.textContent = '查看原始截图 ↗';
+        caption.append(copy, link);
+        item.append(heading, frame, caption);
+        return item;
+      }
+
+      function render(announce = false) {
+        const section = sections[view];
+        const appearance = theme === 'light' ? '浅色' : '深色';
+        document.getElementById('section-title').textContent = section.title;
+        document.getElementById('section-copy').textContent = section.copy;
+        document.getElementById('before-root').hidden = view !== 'roots';
+        document.getElementById('review-panel').setAttribute('aria-labelledby', 'tab-' + view);
+        board.className = view === 'roots' ? 'board' : 'board compare';
+        board.replaceChildren();
+        tabs.forEach(tab => {
+          const active = tab.dataset.view === view;
+          tab.setAttribute('aria-selected', String(active));
+          tab.tabIndex = active ? 0 : -1;
+        });
+        themes.forEach(button => button.setAttribute('aria-pressed', String(button.dataset.theme === theme)));
+        if (view === 'roots') {
+          [['explore','Explore · 发现'],['home','Home · 笔记'],['chat','Chat · 聊天']].forEach(([key,title]) => {
+            board.append(figure(title, '本轮实拍 · ' + appearance, `qa/native-root-${key}-${theme}.png`, 'A 方案 · 紧凑抬头，保留该页面现有内容与操作。'));
+          });
+        } else {
+          board.append(
+            figure('调整前', '上轮 App · ' + appearance, archive + old[view][theme], section.before),
+            figure('调整后', '本轮 App · ' + appearance, `qa/native-chat-${section.current}-${theme}.png`, section.after)
+          );
+        }
+        if (announce) document.getElementById('announcement').textContent = section.title + '，' + appearance + '截图。';
+      }
+
+      tabs.forEach(tab => tab.addEventListener('click', () => { view = tab.dataset.view; render(true); }));
+      document.querySelector('[role="tablist"]').addEventListener('keydown', event => {
+        const index = tabs.indexOf(document.activeElement);
+        if (index < 0) return;
+        let target;
+        if (event.key === 'ArrowRight') target = (index + 1) % tabs.length;
+        if (event.key === 'ArrowLeft') target = (index + tabs.length - 1) % tabs.length;
+        if (event.key === 'Home') target = 0;
+        if (event.key === 'End') target = tabs.length - 1;
+        if (target === undefined) return;
+        event.preventDefault();
+        view = tabs[target].dataset.view;
+        render(true);
+        tabs[target].focus();
+      });
+      themes.forEach(button => button.addEventListener('click', () => { theme = button.dataset.theme; render(true); }));
+      render();
+    })();
+  </script>
+</body>
+</html>

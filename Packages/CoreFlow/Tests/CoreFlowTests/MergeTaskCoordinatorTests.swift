@@ -2000,11 +2000,14 @@ private func waitForMergeCoordinator(
 
 private func waitForPendingSleep(
     _ sleeper: ControlledMergeSleeper,
-    timeoutIterations: Int = 500
+    timeout: TimeInterval = 3
 ) async {
-    for _ in 0..<timeoutIterations {
+    // A fixed number of yields can expire before the fixture actor is scheduled
+    // while Xcode is compiling. Wait for the actual condition with a deadline.
+    let deadline = Date().addingTimeInterval(timeout)
+    while Date() < deadline {
         if await sleeper.pendingCount > 0 { return }
-        await Task.yield()
+        try? await Task.sleep(nanoseconds: 1_000_000)
     }
     XCTFail("Timed out waiting for Merge poll sleep")
 }

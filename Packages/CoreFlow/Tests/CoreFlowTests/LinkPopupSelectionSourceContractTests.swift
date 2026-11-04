@@ -47,14 +47,14 @@ final class LinkPopupSelectionSourceContractTests: XCTestCase {
         XCTAssertFalse(hideAction.contains("createCardLink"))
         XCTAssertFalse(hideAction.contains("NotificationCenter"))
 
-        XCTAssertTrue(
-            source.contains(
-                "Button(\"Cancel\") {\n"
-                    + "                                isTextFieldFocused = false\n"
-                    + "                                manager.hide()"
-            ),
-            "Cancel must only dismiss the picker"
-        )
+        let closeStart = try XCTUnwrap(source.range(of: "ToolbarItem(placement: .navigationBarTrailing)"))
+        let remainder = source[closeStart.lowerBound...]
+        let closeEnd = try XCTUnwrap(remainder.range(of: ".accessibilityLabel(\"Cancel\")"))
+        let closeAction = remainder[..<closeEnd.lowerBound]
+        XCTAssertTrue(closeAction.contains("isTextFieldFocused = false"))
+        XCTAssertTrue(closeAction.contains("manager.hide()"))
+        XCTAssertFalse(closeAction.contains("linkCard("))
+        XCTAssertTrue(source.contains(".accessibilityIdentifier(\"linkPopupCancel\")"))
     }
 
     func testDefaultModeReturnsOnlyAfterCanonicalLinkSuccess() throws {

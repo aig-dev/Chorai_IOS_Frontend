@@ -31,13 +31,13 @@ private struct LegacyMergeView: View {
     // MARK: 搜索框高光效果
     private var searchBarTopLeftHighlight: some View {
         RoundedRectangle(cornerRadius: 25)
-            .stroke(Color.white, lineWidth: 1)
+            .stroke(ChoraiTheme.ink, lineWidth: 1)
             .offset(x: 0, y: -1)
             .mask(
                 RoundedRectangle(cornerRadius: 25)
                     .fill(
                         RadialGradient(
-                            colors: [Color.white, Color.clear],
+                            colors: [ChoraiTheme.ink, Color.clear],
                             center: .topLeading,
                             startRadius: 10,
                             endRadius: 35
@@ -48,13 +48,13 @@ private struct LegacyMergeView: View {
     
     private var searchBarBottomRightHighlight: some View {
         RoundedRectangle(cornerRadius: 25)
-            .stroke(Color.white, lineWidth: 1)
+            .stroke(ChoraiTheme.ink, lineWidth: 1)
             .offset(x: 0, y: 0)
             .mask(
                 RoundedRectangle(cornerRadius: 25)
                     .fill(
                         RadialGradient(
-                            colors: [Color.white, Color.clear],
+                            colors: [ChoraiTheme.ink, Color.clear],
                             center: .bottomTrailing,
                             startRadius: 10,
                             endRadius: 35
@@ -65,13 +65,13 @@ private struct LegacyMergeView: View {
     
     private var searchBarTopEdgeHighlight: some View {
         RoundedRectangle(cornerRadius: 25)
-            .stroke(Color.white, lineWidth: 1)
+            .stroke(ChoraiTheme.ink, lineWidth: 1)
             .offset(x: 0, y: -1)
             .mask(
                 RoundedRectangle(cornerRadius: 25)
                     .fill(
                         LinearGradient(
-                            colors: [Color.white, Color.clear],
+                            colors: [ChoraiTheme.ink, Color.clear],
                             startPoint: .top,
                             endPoint: UnitPoint(x: 0, y: 0.05)
                         )
@@ -81,13 +81,13 @@ private struct LegacyMergeView: View {
     
     private var searchBarBottomEdgeHighlight: some View {
         RoundedRectangle(cornerRadius: 25)
-            .stroke(Color.white, lineWidth: 1)
+            .stroke(ChoraiTheme.ink, lineWidth: 1)
             .offset(x: 0, y: 1)
             .mask(
                 RoundedRectangle(cornerRadius: 25)
                     .fill(
                         LinearGradient(
-                            colors: [Color.white, Color.clear],
+                            colors: [ChoraiTheme.ink, Color.clear],
                             startPoint: .bottom,
                             endPoint: UnitPoint(x: 1, y: 0.05)
                         )
@@ -113,12 +113,12 @@ private struct LegacyMergeView: View {
                     
                     // Merge 标题
                     HStack(spacing: 8) {
-                            Image("menu_merge")
+                            Image(systemName: "arrow.triangle.merge")
                                 .resizable().frame(width: 28, height: 28)
                         
                         Text("Merge")
                             .font(.system(size: 20, weight: .semibold))
-                            .foregroundColor(.white)
+                            .foregroundColor(ChoraiTheme.ink)
                     }
                     
                     Spacer()
@@ -136,12 +136,12 @@ private struct LegacyMergeView: View {
                         // 加载状态
                         VStack(spacing: 16) {
                             ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                .progressViewStyle(CircularProgressViewStyle(tint: ChoraiTheme.accent))
                                 .scaleEffect(1.2)
                             
                             Text("Loading card...")
                                 .font(.system(size: 16, weight: .medium))
-                                .foregroundColor(.white.opacity(0.8))
+                                .foregroundColor(ChoraiTheme.secondaryInk)
                         }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .padding(.top, 100)
@@ -150,11 +150,11 @@ private struct LegacyMergeView: View {
                         VStack(spacing: 16) {
                             Image(systemName: "exclamationmark.triangle")
                                 .font(.system(size: 48))
-                                .foregroundColor(.white.opacity(0.5))
+                                .foregroundColor(ChoraiTheme.secondaryInk)
                             
                             Text("Failed to load card")
                                 .font(.system(size: 18, weight: .medium))
-                                .foregroundColor(.white.opacity(0.8))
+                                .foregroundColor(ChoraiTheme.secondaryInk)
                         }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .padding(.top, 100)
@@ -163,37 +163,37 @@ private struct LegacyMergeView: View {
                     // 分割线
                     Rectangle()
                         .frame(height: 1)
-                        .foregroundColor(.white.opacity(0.2))
+                        .foregroundColor(ChoraiTheme.ink.opacity(0.2))
                         .adaptiveContentGutter()
                         .padding(.vertical, 20)
                     
                     // 搜索栏
                     HStack {
                         Image(systemName: "magnifyingglass")
-                            .foregroundColor(.white.opacity(0.7))
+                            .foregroundColor(ChoraiTheme.secondaryInk)
                         
                         TextField("", text: $searchText)
-                            .foregroundColor(.white)
+                            .foregroundColor(ChoraiTheme.ink)
                             .textFieldStyle(PlainTextFieldStyle())
                             .focused($isSearchFocused)
                             .accessibilityIdentifier("merge.search.input")
                             .placeholder(when: searchText.isEmpty) {
                                 Text("Please enter your search...")
-                                    .foregroundColor(.white).font(.system(size: 13))
+                                    .foregroundColor(ChoraiTheme.ink).font(.system(size: 13))
                             }
                         
                         Button(action: {
                             // 搜索按钮
                         }) {
                             Image(systemName: "line.3.horizontal")
-                                .foregroundColor(.white.opacity(0.7))
+                                .foregroundColor(ChoraiTheme.secondaryInk)
                         }
                     }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
                     .background(
                         RoundedRectangle(cornerRadius: 25)
-                            .fill(Color(red: 0.2, green: 0.1, blue: 0.3))
+                            .fill(ChoraiTheme.raisedSurface)
                             .overlay(searchBarTopLeftHighlight)
                             .overlay(searchBarBottomRightHighlight)
                             .overlay(searchBarTopEdgeHighlight)
@@ -209,12 +209,12 @@ private struct LegacyMergeView: View {
                                 // 加载状态
                                 VStack(spacing: 16) {
                                     ProgressView()
-                                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                        .progressViewStyle(CircularProgressViewStyle(tint: ChoraiTheme.accent))
                                         .scaleEffect(1.2)
                                     
                                     Text("Searching...")
                                         .font(.system(size: 16, weight: .medium))
-                                        .foregroundColor(.white.opacity(0.8))
+                                        .foregroundColor(ChoraiTheme.secondaryInk)
                                 }
                                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                                 .padding(.top, 100)
@@ -223,11 +223,11 @@ private struct LegacyMergeView: View {
                                 VStack(spacing: 16) {
 //                                    Image(systemName: "doc.text")
 //                                        .font(.system(size: 48))
-//                                        .foregroundColor(.white.opacity(0.5))
+//                                        .foregroundColor(ChoraiTheme.secondaryInk)
                                     
                                     Text(cardsErrorMessage ?? "No linked cards found")
                                         .font(.system(size: 18, weight: .medium))
-                                        .foregroundColor(.white.opacity(0.8))
+                                        .foregroundColor(ChoraiTheme.secondaryInk)
                                         .multilineTextAlignment(.center)
                                         .accessibilityIdentifier(cardsErrorMessage == nil ? "merge.cards.empty-message" : "merge.cards.error")
                                     
@@ -238,12 +238,12 @@ private struct LegacyMergeView: View {
                                 // 加载状态
                                 VStack(spacing: 16) {
                                     ProgressView()
-                                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                        .progressViewStyle(CircularProgressViewStyle(tint: ChoraiTheme.accent))
                                         .scaleEffect(1.2)
                                     
                                     Text("Loading linked cards...")
                                         .font(.system(size: 16, weight: .medium))
-                                        .foregroundColor(.white.opacity(0.8))
+                                        .foregroundColor(ChoraiTheme.secondaryInk)
                                 }
                                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                                 .padding(.top, 100)
@@ -269,9 +269,7 @@ private struct LegacyMergeView: View {
                     .scrollDismissesKeyboard(.interactively)
                 }
             }.background(
-                Image("home_bg")
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
+                ChoraiBackground()
                     .ignoresSafeArea()
             )
             
@@ -283,7 +281,7 @@ private struct LegacyMergeView: View {
                 }) {
                     Text(selectedCards.isEmpty ? "Merge Selected Cards (1)" : "Merge Selected Cards (\(selectedCards.count + 1))")
                         .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(selectedCards.isEmpty ? .white.opacity(0.5) : .white)
+                        .foregroundColor(selectedCards.isEmpty ? ChoraiTheme.ink.opacity(0.5) : ChoraiTheme.ink)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 16)
                         .background(
@@ -308,7 +306,7 @@ private struct LegacyMergeView: View {
                         HStack(spacing: 12) {
                             ForEach(0..<4, id: \.self) { index in
                                 Circle()
-                                    .fill(Color.white)
+                                    .fill(ChoraiTheme.ink)
                                     .frame(width: 20, height: 20)
                                     .scaleEffect(animationPhase == index ? 1.5 : 1.0)
                                     .animation(.easeInOut(duration: 0.3), value: animationPhase)
@@ -333,11 +331,11 @@ private struct LegacyMergeView: View {
                     Spacer()
                     Text(mergeErrorMessage)
                         .font(.system(size: 13, weight: .medium))
-                        .foregroundColor(.white)
+                        .foregroundColor(ChoraiTheme.ink)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 16)
                         .padding(.vertical, 10)
-                        .background(Color.black.opacity(0.55))
+                        .background(ChoraiTheme.raisedSurface)
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                         .adaptiveContentGutter()
                         .padding(.bottom, 92)
@@ -365,7 +363,7 @@ private struct LegacyMergeView: View {
                     }) {
                         Image(systemName: "chevron.left")
                             .font(.title2)
-                            .foregroundColor(.white)
+                            .foregroundColor(ChoraiTheme.ink)
                     }
                     .adaptiveContentGutter()
 //                    .padding(.top, 60)
@@ -415,28 +413,28 @@ private struct LegacyMergeView: View {
         VStack(spacing: 1) {
             Text("loaded")
                 .font(.system(size: 1))
-                .foregroundColor(.white.opacity(0.01))
+                .foregroundColor(ChoraiTheme.ink.opacity(0.01))
                 .accessibilityIdentifier("screen.merge.loaded")
             if let cardDetail = cardDetailManager.cardDetail {
                 Text(cardDetail.id)
                     .font(.system(size: 1))
-                    .foregroundColor(.white.opacity(0.01))
+                    .foregroundColor(ChoraiTheme.ink.opacity(0.01))
                     .accessibilityIdentifier("merge.source.card-id")
             }
             if isLoadingCards {
                 Text("loading")
                     .font(.system(size: 1))
-                    .foregroundColor(.white.opacity(0.01))
+                    .foregroundColor(ChoraiTheme.ink.opacity(0.01))
                     .accessibilityIdentifier("merge.cards.loading")
             } else if selectableCards.isEmpty {
                 Text("empty")
                     .font(.system(size: 1))
-                    .foregroundColor(.white.opacity(0.01))
+                    .foregroundColor(ChoraiTheme.ink.opacity(0.01))
                     .accessibilityIdentifier("merge.cards.empty")
             } else {
                 Text("loaded")
                     .font(.system(size: 1))
-                    .foregroundColor(.white.opacity(0.01))
+                    .foregroundColor(ChoraiTheme.ink.opacity(0.01))
                     .accessibilityIdentifier("merge.cards.loaded")
             }
         }
@@ -825,114 +823,54 @@ struct MergeCardView: View {
     }
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                if card.isUserCard {
-                    mergeCardAvatar
-                    
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(card.userName ?? "Chorai")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundColor(.white)
-                        
-                        Text(card.date)
-                            .font(.system(size: 12, weight: .regular))
-                            .foregroundColor(.white.opacity(0.7))
-                    }
-                } else {
-                    // 普通卡片日期
-                    Text(card.date)
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(.white.opacity(0.8))
-                }
-                
-                Spacer()
-            }
-            
-            LibraryCardContentPreview(
-                content: card.content,
-                contentJSON: card.contentJSON,
-                cardID: card.id,
-                textFont: .system(size: 14, weight: .regular)
-            )
-            
-            VStack(spacing: 12) {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(card.tags, id: \.self) { tag in
-                            Text(tag)
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundColor(.white)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 6)
-                                .background(mergeCardTagBackground)
-                                .lineLimit(1)
-                        }
-                    }
-                    .padding(.horizontal, 1)
-                }
-                
-                if card.isUserCard {
-                    HStack {
-                        Spacer()
-                        HStack(spacing: 4) {
-                            Image("favorite")
-                                .resizable()
-                                .aspectRatio(contentMode: .fit)
-                                .frame(width: 18, height: 18)
-                            Text("\(card.favoriteCount)")
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundColor(.white.opacity(0.8))
-                        }
-                    }
+        HStack(alignment: .top, spacing: 14) {
+            Image(systemName: isSelectable ? (isSelected ? "checkmark.circle.fill" : "circle") : "lock.fill")
+                .font(.system(size: 23, weight: .regular))
+                .foregroundStyle(isSelected || !isSelectable ? ChoraiTheme.accent : ChoraiTheme.secondaryInk)
+                .frame(width: 28, height: 32)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 9) {
+                LibraryCardContentPreview(
+                    content: card.content,
+                    contentJSON: card.contentJSON,
+                    cardID: card.id,
+                    textFont: .system(.body, design: .serif)
+                )
+                HStack(spacing: 6) {
+                    Text(isSelectable ? (card.isUserCard ? (card.userName ?? "Chorai") + " · Collected" : "You · My note") : "Fixed source · " + (card.isUserCard ? (card.userName ?? "Chorai") : "You"))
+                        .font(.caption)
+                        .foregroundStyle(ChoraiTheme.secondaryInk)
+                        .lineLimit(1)
+                    Spacer(minLength: 0)
+                    ChoraiLevelBadge(rate: card.rate, compact: true)
                 }
             }
         }
-        .padding(20)
+        .padding(18)
+        .frame(maxWidth: .infinity, minHeight: 80, alignment: .leading)
         .background {
             LibraryCardBackgroundSurface(
                 backgroundMediaRef: card.backgroundMediaRef,
                 rate: card.rate
             ) {
-                mergeCardBackground
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(isSelected || !isSelectable ? ChoraiTheme.selection : ChoraiTheme.surface)
             }
         }
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(
-                    isSelected
-                        ? Color.white.opacity(0.70)
-                        : Color.clear,
-                    lineWidth: 1.5
-                )
-        }
-        .overlay(alignment: .topTrailing) {
-            if isSelectable, isSelected {
-                Image(systemName: "checkmark")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 26, height: 26)
-                    .background(.black.opacity(0.42), in: Circle())
-                    .overlay {
-                        Circle()
-                            .stroke(Color.white.opacity(0.40), lineWidth: 1)
-                    }
-                    .padding(12)
-                    .accessibilityHidden(true)
-            }
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(isSelected || !isSelectable ? ChoraiTheme.accent.opacity(0.35) : ChoraiTheme.separator, lineWidth: 1)
         }
         .contentShape(Rectangle())
-        .adaptiveContentGutter()
+        .padding(.horizontal, 22)
         .onTapGesture {
             guard isSelectable else { return }
             onToggleSelection()
         }
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("merge.card.\(card.id)")
-        .accessibilityValue(
-            isSelectable ? (isSelected ? "selected" : "unselected") : ""
-        )
+        .accessibilityValue(isSelectable ? (isSelected ? "selected" : "unselected") : "")
         .accessibilityAddTraits(isSelectable ? .isButton : [])
         .accessibilityAction {
             guard isSelectable else { return }
@@ -986,7 +924,7 @@ struct MergeCardView: View {
     private var mergeCardTagBackground: some View {
         RoundedRectangle(cornerRadius: 20)
             .fill(
-                (hasCustomBackground ? Color.black : Color.white)
+                (hasCustomBackground ? ChoraiTheme.background : ChoraiTheme.raisedSurface)
                     .opacity(
                         LibraryCardReadabilityPolicy.tagSurfaceOpacity(
                             hasBackground: hasCustomBackground
@@ -1013,13 +951,13 @@ struct MergeCardView: View {
     // MARK: 标签高光效果
     private var mergeCardTagTopLeftHighlight: some View {
         RoundedRectangle(cornerRadius: 20)
-            .stroke(Color.white, lineWidth: 1)
+            .stroke(ChoraiTheme.ink, lineWidth: 1)
             .offset(x: 0, y: -1)
             .mask(
                 RoundedRectangle(cornerRadius: 20)
                     .fill(
                         RadialGradient(
-                            colors: [Color.white, Color.clear],
+                            colors: [ChoraiTheme.ink, Color.clear],
                             center: .topLeading,
                             startRadius: 5,
                             endRadius: 15
@@ -1030,13 +968,13 @@ struct MergeCardView: View {
     
     private var mergeCardTagBottomRightHighlight: some View {
         RoundedRectangle(cornerRadius: 20)
-            .stroke(Color.white, lineWidth: 1)
+            .stroke(ChoraiTheme.ink, lineWidth: 1)
             .offset(x: 0, y: 0)
             .mask(
                 RoundedRectangle(cornerRadius: 20)
                     .fill(
                         RadialGradient(
-                            colors: [Color.white, Color.clear],
+                            colors: [ChoraiTheme.ink, Color.clear],
                             center: .bottomTrailing,
                             startRadius: 5,
                             endRadius: 15
@@ -1047,13 +985,13 @@ struct MergeCardView: View {
     
     private var mergeCardTagTopEdgeHighlight: some View {
         RoundedRectangle(cornerRadius: 20)
-            .stroke(Color.white, lineWidth: 1)
+            .stroke(ChoraiTheme.ink, lineWidth: 1)
             .offset(x: 0, y: -1)
             .mask(
                 RoundedRectangle(cornerRadius: 20)
                     .fill(
                         LinearGradient(
-                            colors: [Color.white, Color.clear],
+                            colors: [ChoraiTheme.ink, Color.clear],
                             startPoint: .top,
                             endPoint: UnitPoint(x: 0, y: 0.05)
                         )
@@ -1063,13 +1001,13 @@ struct MergeCardView: View {
     
     private var mergeCardTagBottomEdgeHighlight: some View {
         RoundedRectangle(cornerRadius: 20)
-            .stroke(Color.white, lineWidth: 1)
+            .stroke(ChoraiTheme.ink, lineWidth: 1)
             .offset(x: 0, y: 1)
             .mask(
                 RoundedRectangle(cornerRadius: 20)
                     .fill(
                         LinearGradient(
-                            colors: [Color.white, Color.clear],
+                            colors: [ChoraiTheme.ink, Color.clear],
                             startPoint: .bottom,
                             endPoint: UnitPoint(x: 1, y: 0.05)
                         )
@@ -1080,13 +1018,13 @@ struct MergeCardView: View {
     // MARK: 高光效果
     private var topLeftHighlight: some View {
         RoundedRectangle(cornerRadius: 16)
-            .stroke(Color.white, lineWidth: 1)
+            .stroke(ChoraiTheme.ink, lineWidth: 1)
             .offset(x: 0, y: -1)
             .mask(
                 RoundedRectangle(cornerRadius: 16)
                     .fill(
                         RadialGradient(
-                            colors: [Color.white, Color.clear],
+                            colors: [ChoraiTheme.ink, Color.clear],
                             center: .topLeading,
                             startRadius: 10,
                             endRadius: 35
@@ -1097,13 +1035,13 @@ struct MergeCardView: View {
     
     private var bottomRightHighlight: some View {
         RoundedRectangle(cornerRadius: 16)
-            .stroke(Color.white, lineWidth: 1)
+            .stroke(ChoraiTheme.ink, lineWidth: 1)
             .offset(x: 0, y: 0)
             .mask(
                 RoundedRectangle(cornerRadius: 16)
                     .fill(
                         RadialGradient(
-                            colors: [Color.white, Color.clear],
+                            colors: [ChoraiTheme.ink, Color.clear],
                             center: .bottomTrailing,
                             startRadius: 10,
                             endRadius: 35
@@ -1114,13 +1052,13 @@ struct MergeCardView: View {
     
     private var topEdgeHighlight: some View {
         RoundedRectangle(cornerRadius: 16)
-            .stroke(Color.white, lineWidth: 1)
+            .stroke(ChoraiTheme.ink, lineWidth: 1)
             .offset(x: 0, y: -1)
             .mask(
                 RoundedRectangle(cornerRadius: 16)
                     .fill(
                         LinearGradient(
-                            colors: [Color.white, Color.clear],
+                            colors: [ChoraiTheme.ink, Color.clear],
                             startPoint: .top,
                             endPoint: UnitPoint(x: 0, y: 0.05)
                         )
@@ -1130,13 +1068,13 @@ struct MergeCardView: View {
     
     private var bottomEdgeHighlight: some View {
         RoundedRectangle(cornerRadius: 16)
-            .stroke(Color.white, lineWidth: 1)
+            .stroke(ChoraiTheme.ink, lineWidth: 1)
             .offset(x: 0, y: 1)
             .mask(
                 RoundedRectangle(cornerRadius: 16)
                     .fill(
                         LinearGradient(
-                            colors: [Color.white, Color.clear],
+                            colors: [ChoraiTheme.ink, Color.clear],
                             startPoint: .bottom,
                             endPoint: UnitPoint(x: 1, y: 0.05)
                         )

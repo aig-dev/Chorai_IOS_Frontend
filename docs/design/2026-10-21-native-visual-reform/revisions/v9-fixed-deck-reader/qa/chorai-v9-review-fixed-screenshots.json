@@ -1,0 +1,158 @@
+[
+  {
+    "file": "v9-reader-essay-dark.png",
+    "sourceResult": "/tmp/chorai-v9-review-fixed.xcresult",
+    "test": "ReviewV9Tests/testDesignCapturesAndEqualCardFramesInBothThemes()",
+    "device": "iPhone 17 Pro"
+  },
+  {
+    "file": "v9-reader-photo-dark.png",
+    "sourceResult": "/tmp/chorai-v9-review-fixed.xcresult",
+    "test": "ReviewV9Tests/testDesignCapturesAndEqualCardFramesInBothThemes()",
+    "device": "iPhone 17 Pro"
+  },
+  {
+    "file": "v9-explore-history-dark.png",
+    "sourceResult": "/tmp/chorai-v9-review-fixed.xcresult",
+    "test": "ReviewV9Tests/testDesignCapturesAndEqualCardFramesInBothThemes()",
+    "device": "iPhone 17 Pro"
+  },
+  {
+    "file": "v9-explore-collect-dark.png",
+    "sourceResult": "/tmp/chorai-v9-review-fixed.xcresult",
+    "test": "ReviewV9Tests/testDesignCapturesAndEqualCardFramesInBothThemes()",
+    "device": "iPhone 17 Pro"
+  },
+  {
+    "file": "v9-explore-skip-dark.png",
+    "sourceResult": "/tmp/chorai-v9-review-fixed.xcresult",
+    "test": "ReviewV9Tests/testDesignCapturesAndEqualCardFramesInBothThemes()",
+    "device": "iPhone 17 Pro"
+  },
+  {
+    "file": "v9-explore-short-dark.png",
+    "sourceResult": "/tmp/chorai-v9-review-fixed.xcresult",
+    "test": "ReviewV9Tests/testDesignCapturesAndEqualCardFramesInBothThemes()",
+    "device": "iPhone 17 Pro"
+  },
+  {
+    "file": "v9-explore-comparison-dark.png",
+    "sourceResult": "/tmp/chorai-v9-review-fixed.xcresult",
+    "test": "ReviewV9Tests/testDesignCapturesAndEqualCardFramesInBothThemes()",
+    "device": "iPhone 17 Pro"
+  },
+  {
+    "file": "v9-explore-reference-dark.png",
+    "sourceResult": "/tmp/chorai-v9-review-fixed.xcresult",
+    "test": "ReviewV9Tests/testDesignCapturesAndEqualCardFramesInBothThemes()",
+    "device": "iPhone 17 Pro"
+  },
+  {
+    "file": "v9-explore-code-dark.png",
+    "sourceResult": "/tmp/chorai-v9-review-fixed.xcresult",
+    "test": "ReviewV9Tests/testDesignCapturesAndEqualCardFramesInBothThemes()",
+    "device": "iPhone 17 Pro"
+  },
+  {
+    "file": "v9-explore-checklist-dark.png",
+    "sourceResult": "/tmp/chorai-v9-review-fixed.xcresult",
+    "test": "ReviewV9Tests/testDesignCapturesAndEqualCardFramesInBothThemes()",
+    "device": "iPhone 17 Pro"
+  },
+  {
+    "file": "v9-explore-quote-dark.png",
+    "sourceResult": "/tmp/chorai-v9-review-fixed.xcresult",
+    "test": "ReviewV9Tests/testDesignCapturesAndEqualCardFramesInBothThemes()",
+    "device": "iPhone 17 Pro"
+  },
+  {
+    "file": "v9-explore-essay-dark.png",
+    "sourceResult": "/tmp/chorai-v9-review-fixed.xcresult",
+    "test": "ReviewV9Tests/testDesignCapturesAndEqualCardFramesInBothThemes()",
+    "device": "iPhone 17 Pro"
+  },
+  {
+    "file": "v9-explore-photo-dark.png",
+    "sourceResult": "/tmp/chorai-v9-review-fixed.xcresult",
+    "test": "ReviewV9Tests/testDesignCapturesAndEqualCardFramesInBothThemes()",
+    "device": "iPhone 17 Pro"
+  },
+  {
+    "file": "v9-reader-essay-light.png",
+    "sourceResult": "/tmp/chorai-v9-review-fixed.xcresult",
+    "test": "ReviewV9Tests/testDesignCapturesAndEqualCardFramesInBothThemes()",
+    "device": "iPhone 17 Pro"
+  },
+  {
+    "file": "v9-reader-photo-light.png",
+    "sourceResult": "/tmp/chorai-v9-review-fixed.xcresult",
+    "test": "ReviewV9Tests/testDesignCapturesAndEqualCardFramesInBothThemes()",
+    "device": "iPhone 17 Pro"
+  },
+  {
+    "file": "v9-explore-history-light.png",
+    "sourceResult": "/tmp/chorai-v9-review-fixed.xcresult",
+    "test": "ReviewV9Tests/testDesignCapturesAndEqualCardFramesInBothThemes()",
+    "device": "iPhone 17 Pro"
+  },
+  {
+    "file": "v9-explore-collect-light.png",
+    "sourceResult": "/tmp/chorai-v9-review-fixed.xcresult",
+    "test": "ReviewV9Tests/testDesignCapturesAndEqualCardFramesInBothThemes()",
+    "device": "iPhone 17 Pro"
+  },
+  {
+    "file": "v9-explore-skip-light.png",
+    "sourceResult": "/tmp/chorai-v9-review-fixed.xcresult",
+    "test": "ReviewV9Tests/testDesignCapturesAndEqualCardFramesInBothThemes()",
+    "device": "iPhone 17 Pro"
+  },
+  {
+    "file": "v9-explore-short-light.png",
+    "sourceResult": "/tmp/chorai-v9-review-fixed.xcresult",
+    "test": "ReviewV9Tests/testDesignCapturesAndEqualCardFramesInBothThemes()",
+    "device": "iPhone 17 Pro"
+  },
+  {
+    "file": "v9-explore-comparison-light.png",
+    "sourceResult": "/tmp/chorai-v9-review-fixed.xcresult",
+    "test": "ReviewV9Tests/testDesignCapturesAndEqualCardFramesInBothThemes()",
+    "device": "iPhone 17 Pro"
+  },
+  {
+    "file": "v9-explore-reference-light.png",
+    "sourceResult": "/tmp/chorai-v9-review-fixed.xcresult",
+    "test": "ReviewV9Tests/testDesignCapturesAndEqualCardFramesInBothThemes()",
+    "device": "iPhone 17 Pro"
+  },
+  {
+    "file": "v9-explore-code-light.png",
+    "sourceResult": "/tmp/chorai-v9-review-fixed.xcresult",
+    "test": "ReviewV9Tests/testDesignCapturesAndEqualCardFramesInBothThemes()",
+    "device": "iPhone 17 Pro"
+  },
+  {
+    "file": "v9-explore-checklist-light.png",
+    "sourceResult": "/tmp/chorai-v9-review-fixed.xcresult",
+    "test": "ReviewV9Tests/testDesignCapturesAndEqualCardFramesInBothThemes()",
+    "device": "iPhone 17 Pro"
+  },
+  {
+    "file": "v9-explore-quote-light.png",
+    "sourceResult": "/tmp/chorai-v9-review-fixed.xcresult",
+    "test": "ReviewV9Tests/testDesignCapturesAndEqualCardFramesInBothThemes()",
+    "device": "iPhone 17 Pro"
+  },
+  {
+    "file": "v9-explore-essay-light.png",
+    "sourceResult": "/tmp/chorai-v9-review-fixed.xcresult",
+    "test": "ReviewV9Tests/testDesignCapturesAndEqualCardFramesInBothThemes()",
+    "device": "iPhone 17 Pro"
+  },
+  {
+    "file": "v9-explore-photo-light.png",
+    "sourceResult": "/tmp/chorai-v9-review-fixed.xcresult",
+    "test": "ReviewV9Tests/testDesignCapturesAndEqualCardFramesInBothThemes()",
+    "device": "iPhone 17 Pro"
+  }
+]

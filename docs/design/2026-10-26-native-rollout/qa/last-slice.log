@@ -1,0 +1,37 @@
+Building for debugging...
+[2 / 11] CoreFlow
+[4 / 13] CoreFlow
+[10 / 13] CoreFlowTests-product
+[15 / 18] CoreFlowTests-product
+[20 / 23] CoreFlowTests-product
+[26 / 28] CoreFlowTests-product
+[29 / 29] CoreFlow-product
+Build complete! (3.33 sec)
+Test Suite 'Selected tests' started at 2026-10-26 12:38:36.908.
+Test Suite 'CoreFlowTests.xctest' started at 2026-10-26 12:38:36.909.
+Test Suite 'MergeTaskRailSourceContractTests' started at 2026-10-26 12:38:36.909.
+Test Case '-[CoreFlowTests.MergeTaskRailSourceContractTests testAcceptedFailureRetryVisibilityUsesCoordinatorPolicy]' started.
+Test Case '-[CoreFlowTests.MergeTaskRailSourceContractTests testAcceptedFailureRetryVisibilityUsesCoordinatorPolicy]' passed (0.006 seconds).
+Test Case '-[CoreFlowTests.MergeTaskRailSourceContractTests testOneGlobalPortalOwnsRailAcrossEveryNavigationEntry]' started.
+Test Case '-[CoreFlowTests.MergeTaskRailSourceContractTests testOneGlobalPortalOwnsRailAcrossEveryNavigationEntry]' passed (0.019 seconds).
+Test Case '-[CoreFlowTests.MergeTaskRailSourceContractTests testRailIsIconOnlyAccessibleAndReduceMotionAware]' started.
+Test Case '-[CoreFlowTests.MergeTaskRailSourceContractTests testRailIsIconOnlyAccessibleAndReduceMotionAware]' passed (0.002 seconds).
+Test Case '-[CoreFlowTests.MergeTaskRailSourceContractTests testRailUsesMeasuredNewNoteAnchorInsteadOfHardCodedTopSlot]' started.
+Test Case '-[CoreFlowTests.MergeTaskRailSourceContractTests testRailUsesMeasuredNewNoteAnchorInsteadOfHardCodedTopSlot]' passed (0.002 seconds).
+Test Case '-[CoreFlowTests.MergeTaskRailSourceContractTests testRootPortalOwnsMergeLifecycleAndTabBarDoesNot]' started.
+Test Case '-[CoreFlowTests.MergeTaskRailSourceContractTests testRootPortalOwnsMergeLifecycleAndTabBarDoesNot]' passed (0.006 seconds).
+Test Case '-[CoreFlowTests.MergeTaskRailSourceContractTests testWorkingAndFailedCancellationHaveDistinctNonOptionalActions]' started.
+Test Case '-[CoreFlowTests.MergeTaskRailSourceContractTests testWorkingAndFailedCancellationHaveDistinctNonOptionalActions]' passed (0.003 seconds).
+Test Suite 'MergeTaskRailSourceContractTests' passed at 2026-10-26 12:38:36.948.
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.039 (0.039) seconds
+Test Suite 'NativeThemeContrastTests' started at 2026-10-26 12:38:36.948.
+Test Case '-[CoreFlowTests.NativeThemeContrastTests testApprovedReadingAndActionColorsMeetTextContrastInBothAppearances]' started.
+Test Case '-[CoreFlowTests.NativeThemeContrastTests testApprovedReadingAndActionColorsMeetTextContrastInBothAppearances]' passed (0.001 seconds).
+Test Case '-[CoreFlowTests.NativeThemeContrastTests testProfileActionsDoNotPlaceAdaptiveLightInkOnFixedWhite]' started.
+Test Case '-[CoreFlowTests.NativeThemeContrastTests testProfileActionsDoNotPlaceAdaptiveLightInkOnFixedWhite]' passed (0.002 seconds).
+Test Suite 'NativeThemeContrastTests' passed at 2026-10-26 12:38:36.952.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 0.003 (0.003) seconds
+Test Suite 'CoreFlowTests.xctest' passed at 2026-10-26 12:38:36.952.
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.042 (0.043) seconds
+Test Suite 'Selected tests' passed at 2026-10-26 12:38:36.952.
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.042 (0.044) seconds

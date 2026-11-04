@@ -15,12 +15,14 @@ enum AuthSessionPhase: String, Equatable {
 class AuthManager: ObservableObject {
     static let shared = AuthManager()
     private static let foregroundVerificationDebounce: TimeInterval = 2
+    private static let pendingInterestsActorKey = "pending_interests_actor_id"
     
     @Published var isLoggedIn: Bool = false
     @Published var currentUser: User?
     @Published var authToken: String?
     @Published private(set) var sessionPhase: AuthSessionPhase = .signedOut
     @Published private(set) var accessState: AccessState?
+    @Published private(set) var needsInterestSelection = false
     
     private let userDefaults = UserDefaults.standard
     private let networkManager = NetworkManager.shared
@@ -53,6 +55,8 @@ class AuthManager: ObservableObject {
                 return
             }
 
+            needsInterestSelection = userDefaults.string(forKey: Self.pendingInterestsActorKey) == actorId
+
             // 从本地存储加载用户信息
             currentUser = User(
                 id: actorId,
@@ -80,6 +84,7 @@ class AuthManager: ObservableObject {
         username: String,
         createdAt: String
     ) {
+        needsInterestSelection = false
         authToken = token
         isLoggedIn = true
         currentUser = User(
@@ -99,8 +104,16 @@ class AuthManager: ObservableObject {
     func saveUserSession(_ authResponse: AuthResponse) {
         // 保存认证信息
         let userData = authResponse.data
+        let actorID = userData.user.id
+        let pendingActorID = userDefaults.string(forKey: Self.pendingInterestsActorKey)
+        if userData.isNewUser == true || pendingActorID == actorID {
+            userDefaults.set(actorID, forKey: Self.pendingInterestsActorKey)
+            needsInterestSelection = true
+        } else {
+            completeInterestSelection()
+        }
+        networkManager.setAuthToken(userData.token)
         authToken = userData.token
-        isLoggedIn = true
         verifiedToken = userData.token
         sessionPhase = .verified
         applyAccess(userData.productAccess)
@@ -114,12 +127,17 @@ class AuthManager: ObservableObject {
         SessionTokenStore.save(userData.token)
         userDefaults.removeObject(forKey: "auth_token")
         persistUserProjection(user)
-        
-        // 设置网络管理器的认证令牌
-        networkManager.setAuthToken(userData.token)
+
+        isLoggedIn = true
     }
     
+    func completeInterestSelection() {
+        userDefaults.removeObject(forKey: Self.pendingInterestsActorKey)
+        needsInterestSelection = false
+    }
+
     private func clearUserSession(clearCode: Bool = false) {
+        completeInterestSelection()
         sessionVerification?.cancel()
         sessionVerification = nil
         verifiedToken = nil

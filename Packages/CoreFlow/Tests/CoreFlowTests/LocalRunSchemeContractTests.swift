@@ -199,7 +199,11 @@ final class LocalRunSchemeContractTests: XCTestCase {
                     identifier: fileReferenceIdentifier,
                     in: project
                 )
-                return (name, file)
+                // Xcode quotes names containing a hyphen in the OpenStep plist.
+                // Compare the semantic configuration name, as for file paths above.
+                let normalizedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+                    .trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+                return (normalizedName, file)
             }
         )
     }

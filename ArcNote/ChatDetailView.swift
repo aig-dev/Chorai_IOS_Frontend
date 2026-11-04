@@ -11,34 +11,34 @@ class SelectCardPopupManager: ObservableObject {
     @Published var selectedNotes: [NoteCard] = []
     @Published var isLoading: Bool = false
     @Published var errorMessage: String?
-    
+
     static let shared = SelectCardPopupManager()
     private var cancellables = Set<AnyCancellable>()
-    
+
     func show() {
         isShowing = true
         fetchCards()
     }
-    
+
     func hide() {
         isShowing = false
     }
-    
+
     func selectNote(_ note: NoteCard) {
         if !selectedNotes.contains(where: { $0.id == note.id }) {
             selectedNotes.append(note)
         }
     }
-    
+
     func removeNote(_ note: NoteCard) {
         selectedNotes.removeAll { $0.id == note.id }
     }
-    
+
     func fetchCards(searchText: String = "") {
         guard AuthManager.shared.currentUser != nil else {
             return
         }
-        
+
         isLoading = true
         NetworkManager.shared.getUserAllCards(
             searchType: "own+favorited",
@@ -59,7 +59,7 @@ class SelectCardPopupManager: ObservableObject {
         }
         .store(in: &cancellables)
     }
-    
+
     private func convertCards(_ cards: [UserAllCard]) -> [NoteCard] {
         return cards
             .filter { $0.isPublic }
@@ -88,6 +88,8 @@ struct ChatMessage: Identifiable {
 
 // MARK: - 聊天详情视图
 struct ChatDetailView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @EnvironmentObject private var chatHistoryDependency:
         ChatHistoryVisibilityDependency
     @Environment(\.dismiss) private var dismiss
@@ -100,10 +102,10 @@ struct ChatDetailView: View {
     @FocusState private var isTextFieldFocused: Bool
     @ObservedObject private var selectCardManager = SelectCardPopupManager.shared
     @StateObject private var chatDetailManager: ChatDetailManager
-    
+
     let conversationId: String
-    
-    
+
+
     init(
         conversationId: String,
         contactName: String = "Thompson",
@@ -144,45 +146,11 @@ struct ChatDetailView: View {
         }
         return false
     }
-    
 
-    
+
+
     var body: some View {
         VStack(spacing: 0) {
-            // 顶部导航栏
-            HStack {
-                Button(action: {
-                    dismiss()
-                }) {
-                    Image(systemName: "chevron.left")
-                        .font(.title2)
-                        .foregroundColor(.white)
-                }
-                .accessibilityLabel("Back")
-                
-                HStack(spacing: 10) {
-                    ChatAvatarView(
-                        rawValue: chatPartnerAvatar,
-                        size: 40
-                    )
-                    
-                    ChatHeaderIdentity(
-                        name: chatPartnerName,
-                        status: contactStatus,
-                        isTyping: isAgentTyping
-                    )
-                }
-                
-                Spacer()
-                
-                // 占位，保持标题居中
-                Image(systemName: "chevron.left")
-                    .font(.title2)
-                    .foregroundColor(.clear)
-            }
-            .adaptiveContentGutter()
-            .padding(.bottom, 20)
-            
             // 聊天内容
             ScrollViewReader { proxy in
                 ScrollView {
@@ -191,11 +159,11 @@ struct ChatDetailView: View {
                             VStack {
                                 Spacer()
                                 ProgressView()
-                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                    .progressViewStyle(CircularProgressViewStyle(tint: ChoraiTheme.accent))
                                     .scaleEffect(1.2)
                                 Text("Loading conversation...")
-                                    .font(.system(size: 14, weight: .medium))
-                                    .foregroundColor(.white.opacity(0.7))
+                                    .font(.subheadline.weight(.medium))
+                                    .foregroundColor(ChoraiTheme.secondaryInk)
                                     .padding(.top, 10)
                                 Spacer()
                             }
@@ -206,11 +174,11 @@ struct ChatDetailView: View {
                                 VStack {
                                     Spacer()
                                     Text("No messages yet")
-                                        .font(.system(size: 16, weight: .medium))
-                                        .foregroundColor(.white.opacity(0.7))
+                                        .font(.body.weight(.medium))
+                                        .foregroundColor(ChoraiTheme.secondaryInk)
                                     Text("Start a conversation")
-                                        .font(.system(size: 14, weight: .regular))
-                                        .foregroundColor(.white.opacity(0.5))
+                                        .font(.subheadline.weight(.regular))
+                                        .foregroundColor(ChoraiTheme.secondaryInk)
                                         .padding(.top, 5)
                                     Spacer()
                                 }
@@ -232,7 +200,7 @@ struct ChatDetailView: View {
                         }
                     }
                     .adaptiveContentGutter()
-                    .padding(.bottom, selectCardManager.selectedNotes.isEmpty ? 100 : 200) // 为底部输入框和选中notes留出空间
+                    .padding(.vertical, 16)
                 }
                 .scrollDismissesKeyboard(.interactively)
                 .onAppear {
@@ -245,7 +213,10 @@ struct ChatDetailView: View {
                     scrollToBottom(proxy, animated: false)
                 }
             }
-            
+
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            VStack(spacing: 0) {
             // 选中的notes展示区域
             if !selectCardManager.selectedNotes.isEmpty {
                 HStack {
@@ -257,33 +228,35 @@ struct ChatDetailView: View {
 
                                     HTMLTextRenderer(
                                         htmlContent: note.description,
-                                        maxLines: 1
+                                        maxLines: dynamicTypeSize.isAccessibilitySize ? 3 : 1,
+                                        font: .caption,
+                                        foregroundColor: ChoraiTheme.secondaryInk
                                     )
-                                    .font(.system(size: 12, weight: .regular))
-                                    .foregroundColor(.white.opacity(0.72))
-                                    .lineLimit(1)
                                     .accessibilityLabel(note.description)
                                     .accessibilityIdentifier(
                                         "chat.attachment.preview.\(note.id)"
                                     )
-                                    
+
                                     Spacer()
-                                    
+
                                     Button(action: {
                                         selectCardManager.removeNote(note)
                                     }) {
                                         Image(systemName: "xmark")
-                                            .font(.system(size: 12, weight: .medium))
-                                            .foregroundColor(.white.opacity(0.7))
+                                            .font(.system(size: 18, weight: .medium))
+                                            .foregroundColor(ChoraiTheme.secondaryInk)
+                                            .frame(width: 44, height: 44)
                                     }
+                                    .buttonStyle(.plain)
+                                    .accessibilityLabel("Remove attached note")
                                 }
                                 .padding(.horizontal, 16)
                                 .padding(.vertical, 10)
-                                
+
                                 // 间隔线（除了最后一个）
                                 if index < selectCardManager.selectedNotes.count - 1 {
                                     Rectangle()
-                                        .fill(Color.white.opacity(0.2))
+                                        .fill(ChoraiTheme.surface)
                                         .frame(height: 1)
                                         .padding(.leading, 64)
                                         .padding(.trailing, 16)
@@ -293,16 +266,17 @@ struct ChatDetailView: View {
                     }
                     .background(
                         RoundedRectangle(cornerRadius: 12)
-                            .stroke(Color.white.opacity(0.3), lineWidth: 1)
+                            .stroke(ChoraiTheme.separator, lineWidth: 1)
                     )
                     .frame(
                         maxWidth: adaptiveLayout.size.width * 0.8,
                         alignment: .leading
                     )
-                    
+
                     Spacer()
                 }
-                .padding(.bottom, 16)
+                .adaptiveContentGutter()
+                .padding(.bottom, 8)
             }
 
             if case .retryAvailable(let sourceMessageID) = chatDetailManager.agentDeliveryState {
@@ -320,19 +294,19 @@ struct ChatDetailView: View {
                     } label: {
                         HStack(spacing: 7) {
                             Image(systemName: "arrow.clockwise")
-                                .font(.system(size: 13, weight: .semibold))
+                                .font(.footnote.weight(.semibold))
                             Text("Continue \(chatPartnerName)'s reply")
-                                .font(.system(size: 13, weight: .medium))
+                                .font(.footnote.weight(.medium))
                         }
-                        .foregroundColor(.white.opacity(0.9))
+                        .foregroundColor(ChoraiTheme.ink)
                         .padding(.horizontal, 13)
                         .frame(minHeight: 44)
                         .background(
                             Capsule()
-                                .fill(Color.white.opacity(0.08))
+                                .fill(ChoraiTheme.surface)
                                 .overlay(
                                     Capsule()
-                                        .stroke(Color.white.opacity(0.16), lineWidth: 1)
+                                        .stroke(ChoraiTheme.separator, lineWidth: 1)
                                 )
                         )
                     }
@@ -345,33 +319,31 @@ struct ChatDetailView: View {
                 .adaptiveContentGutter()
                 .padding(.bottom, 8)
             }
-            
+
             // 底部输入栏
-            HStack(spacing: 12) {
+            HStack(alignment: .bottom, spacing: 12) {
                 // 附件按钮
                 Button(action: {
                     selectCardManager.show()
                 }) {
-                    Image("notes")
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(width: 24, height: 24)
-                        .foregroundColor(.white.opacity(0.7))
+                    ChatComposerIconLabel(symbol: "doc.text")
                 }
-                
+                .buttonStyle(.plain)
+                .accessibilityLabel("Attach a note")
+                .accessibilityIdentifier("chat.attachment.add")
+
                 // 输入框
-                HStack(spacing: 12) {
-                    TextField("Type a message...", text: $messageText)
+                HStack(alignment: .bottom, spacing: 12) {
+                    TextField("Type a message...", text: $messageText, axis: .vertical)
+                        .lineLimit(1...5)
                         .textFieldStyle(PlainTextFieldStyle())
-                        .foregroundColor(.white)
-                        .padding(.vertical, 12)
+                        .font(.body)
+                        .foregroundColor(ChoraiTheme.ink)
+                        .padding(.vertical, 10)
+                        .frame(minHeight: 44)
                         .accessibilityIdentifier("chat.message.input")
-                        .placeholder(when: messageText.isEmpty) {
-                            Text("Type a message...")
-                                .foregroundColor(Color(red: 0.627, green: 0.627, blue: 0.627)) // A0A0A0
-                        }
                         .focused($isTextFieldFocused)
-                    
+
                     Button(action: {
                         if !messageText.isEmpty {
                             let attachedNotes = selectCardManager.selectedNotes
@@ -383,37 +355,61 @@ struct ChatDetailView: View {
                             selectCardManager.selectedNotes.removeAll()
                         }
                     }) {
-                        Image("send")
-                            .resizable()
-                            .frame(width: 40, height: 40)
+                        ChatComposerIconLabel(symbol: "arrow.up", prominent: true)
                     }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Send message")
                     .accessibilityIdentifier("chat.message.send")
                     .disabled(messageText.isEmpty)
                 }
                 .padding(.leading, 16)
                 .padding(.trailing, 2)
                 .padding(.vertical, 2)
-                .background(
-                    RoundedRectangle(cornerRadius: 15)
-                        .background(.ultraThinMaterial)
-                        .roundedButtonHighlightEffect(cornerRadius: 30)
-                )
-                .cornerRadius(30)
+                .choraiGlassSurface(cornerRadius: 26)
             }
             .adaptiveContentGutter()
             .padding(.bottom, 10)
+            }
+            .padding(.top, 8)
+            .background(ChoraiTheme.background)
         }
-        .navigationBarHidden(true)
+        .foregroundStyle(ChoraiTheme.ink)
+        .tint(ChoraiTheme.accent)
+        .navigationTitle(chatPartnerName)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.visible, for: .navigationBar)
+        .toolbar(.hidden, for: .tabBar)
         .navigationBarBackButtonHidden(true)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button(action: dismiss.callAsFunction) {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 20))
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Back")
+            }
+            ToolbarItem(placement: .principal) {
+                HStack(spacing: 10) {
+                    ChatAvatarView(rawValue: chatPartnerAvatar, size: 32)
+                    ChatHeaderIdentity(name: chatPartnerName, status: contactStatus, isTyping: isAgentTyping)
+                }
+            }
+        }
         .background(
-            Image("home_bg")
-                .resizable()
-                .aspectRatio(contentMode: .fill)
+            ChoraiBackground()
                 .ignoresSafeArea()
         )
-        .overlay(
+        .sheet(isPresented: Binding(
+            get: { selectCardManager.isShowing },
+            set: { if !$0 { selectCardManager.hide() } }
+        )) {
             SelectCardPopupView()
-        )
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+        }
         #if DEBUG
         .overlay(alignment: .topLeading) {
             if let conversation = chatDetailManager.conversation {
@@ -442,17 +438,64 @@ struct ChatDetailView: View {
             chatDetailManager.stopConversationEvents()
         }
     }
-    
+
     private func scrollToBottom(_ proxy: ScrollViewProxy, animated: Bool) {
         guard !chatDetailManager.messages.isEmpty else { return }
         DispatchQueue.main.async {
             if animated {
-                withAnimation(.easeOut(duration: 0.25)) {
+                withAnimation(reduceMotion ? nil : .easeOut(duration: 0.25)) {
                     proxy.scrollTo("chatBottom", anchor: .bottom)
                 }
             } else {
                 proxy.scrollTo("chatBottom", anchor: .bottom)
             }
+        }
+    }
+}
+
+/// A fixed control surface keeps the native glass effect from adding a second
+/// layer of button padding around the minimum touch target.
+private struct ChatComposerIconLabel: View {
+    @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorSchemeContrast) private var contrast
+
+    let symbol: String
+    var prominent = false
+
+    var body: some View {
+        Image(systemName: symbol)
+            .font(.system(size: 20, weight: prominent ? .semibold : .regular))
+            .foregroundStyle(
+                isEnabled
+                    ? (prominent ? ChoraiTheme.onAccent : ChoraiTheme.ink)
+                    : ChoraiTheme.secondaryInk
+            )
+            .frame(width: 44, height: 44)
+            .background { surface }
+            .contentShape(Circle())
+    }
+
+    @ViewBuilder
+    private var surface: some View {
+        if !isEnabled {
+            Circle().fill(ChoraiTheme.raisedSurface)
+        } else if reduceTransparency || contrast == .increased {
+            Circle()
+                .fill(prominent ? ChoraiTheme.accent : ChoraiTheme.surface)
+                .overlay(Circle().stroke(ChoraiTheme.separator, lineWidth: 1))
+        } else if #available(iOS 26.0, *) {
+            Circle()
+                .fill(Color.clear)
+                .glassEffect(
+                    .regular.tint(prominent ? ChoraiTheme.accent : .clear).interactive(),
+                    in: Circle()
+                )
+        } else {
+            Circle()
+                .fill(prominent ? ChoraiTheme.accent : ChoraiTheme.surface)
+                .overlay(Circle().stroke(ChoraiTheme.separator.opacity(0.55), lineWidth: 0.5))
+                .shadow(color: .black.opacity(0.06), radius: 12, y: 4)
         }
     }
 }
@@ -469,11 +512,11 @@ private struct ChatHeaderIdentity: View {
         ZStack(alignment: .leading) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(name)
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(.white)
+                    .font(.headline.weight(.semibold))
+                    .foregroundColor(ChoraiTheme.ink)
 
                 Text(status)
-                    .font(.system(size: 12, weight: .regular))
+                    .font(.caption.weight(.regular))
                     .foregroundColor(.green)
             }
             .opacity(isTyping ? 0 : 1)
@@ -481,16 +524,16 @@ private struct ChatHeaderIdentity: View {
 
             HStack(spacing: 0) {
                 Text("\(name) is typing")
-                    .foregroundColor(.white)
+                    .foregroundColor(ChoraiTheme.ink)
                 Text("…")
-                    .foregroundColor(.white.opacity(0.72))
+                    .foregroundColor(ChoraiTheme.secondaryInk)
                     .opacity(
                         reduceMotion || !isTyping
                             ? 1
                             : (ellipsisIsDimmed ? 0.38 : 1)
                     )
             }
-            .font(.system(size: 16, weight: .semibold))
+            .font(.body.weight(.semibold))
             .lineLimit(1)
             .minimumScaleFactor(0.8)
             .opacity(isTyping ? 1 : 0)
@@ -531,11 +574,12 @@ private struct ChatHeaderIdentity: View {
 
 // MARK: - 选择卡片弹窗视图
 struct SelectCardPopupView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject private var manager = SelectCardPopupManager.shared
     @State private var searchText = ""
     @FocusState private var isSearchFocused: Bool
     @State private var searchWorkItem: DispatchWorkItem?
-    
+
     // 过滤后的卡片
     private var filteredCards: [NoteCard] {
         if searchText.isEmpty {
@@ -547,160 +591,103 @@ struct SelectCardPopupView: View {
             }
         }
     }
-    
+
     var body: some View {
-        if manager.isShowing {
-            ZStack {
-                // 背景遮罩
-                Color.black.opacity(0.1)
-                    .ignoresSafeArea()
-                    .onTapGesture {
+        NavigationStack {
+            VStack(spacing: 0) {
+                HStack(spacing: 10) {
+                    Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+                    TextField("Search cards", text: $searchText)
+                        .textFieldStyle(.plain)
+                        .focused($isSearchFocused)
+                }
+                .padding(.horizontal, 16)
+                .frame(minHeight: 48)
+                .choraiGlassSurface(cornerRadius: 24)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 12)
+
+                ScrollView {
+                    if manager.isLoading {
+                        ProgressView("Loading cards…")
+                            .frame(maxWidth: .infinity).padding(.vertical, 60)
+                    } else if filteredCards.isEmpty {
+                        Label("No cards found", systemImage: "doc.text")
+                            .foregroundStyle(ChoraiTheme.secondaryInk)
+                            .frame(maxWidth: .infinity).padding(.vertical, 60)
+                    } else {
+                        LazyVStack(spacing: 16) {
+                            ForEach(filteredCards) { card in
+                                Button {
+                                    manager.selectNote(card)
+                                    isSearchFocused = false
+                                    manager.hide()
+                                } label: {
+                                    NoteCardView(card: card)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, 20)
+                    }
+                }
+                .scrollDismissesKeyboard(.interactively)
+            }
+            .choraiPageBackground()
+            .navigationTitle("Select Card")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
                         isSearchFocused = false
                         manager.hide()
                     }
-                
-                // 弹窗内容
-                GeometryReader { geometry in
-                    VStack(spacing: 0) {
-                        // 弹窗头部
-                        HStack {
-                            Text("Select Card")
-                                .font(.system(size: 18, weight: .semibold))
-                                .foregroundColor(.white)
-                            
-                            Spacer()
-                            
-                            Button(action: {
-                                isSearchFocused = false
-                                manager.hide()
-                            }) {
-                                Image(systemName: "xmark")
-                                    .font(.system(size: 16, weight: .medium))
-                                    .foregroundColor(.white)
-                            }
-                        }
-                        .padding(.horizontal, 20)
-                        .padding(.top, 20)
-                        .padding(.bottom, 16)
-                        
-                        // 搜索栏
-                        HStack {
-                            TextField("Search cards", text: $searchText)
-                                .textFieldStyle(PlainTextFieldStyle())
-                                .foregroundColor(.white)
-                                .focused($isSearchFocused)
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 12)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 30)
-                                        .fill(.ultraThinMaterial.opacity(0.2))
-                                )
-                        }
-                        .padding(.horizontal, 20)
-                        .padding(.bottom, 16)
-                        
-                        // 卡片列表
-                        ScrollView {
-                            if manager.isLoading {
-                                VStack(spacing: 12) {
-                                    ProgressView()
-                                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                    Text("Loading cards...")
-                                        .font(.system(size: 14, weight: .medium))
-                                        .foregroundColor(.white.opacity(0.7))
-                                }
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 60)
-                            } else if filteredCards.isEmpty {
-                                VStack(spacing: 12) {
-                                    Image(systemName: "doc.text")
-                                        .font(.system(size: 32))
-                                        .foregroundColor(.white.opacity(0.5))
-                                    Text("No cards found")
-                                        .font(.system(size: 14, weight: .medium))
-                                        .foregroundColor(.white.opacity(0.7))
-                                }
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 60)
-                            } else {
-                            LazyVStack(spacing: 16) {
-                                ForEach(filteredCards) { card in
-                                    NoteCardView(card: card)
-                                        .onTapGesture {
-                                            manager.selectNote(card)
-                                            manager.hide()
-                                        }
-                                }
-                            }
-                            .padding(.horizontal, 20)
-                            .padding(.bottom, 20)
-                            }
-                        }
-                        .scrollDismissesKeyboard(.interactively)
-                        .frame(maxHeight: .infinity)
-                    }
-                    .frame(
-                        maxWidth: geometry.size.width,
-                        maxHeight: geometry.size.height * 0.4
-                    )
-                    .background(
-                        RoundedRectangle(cornerRadius: 16)
-                            .background(.ultraThinMaterial)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 16)
-                                    .stroke(Color.white.opacity(0.1), lineWidth: 1)
-                            )
-                            .cardHighlightEffect()
-                            .cornerRadius(16)
-                    )
-                    .clipShape(
-                        RoundedCorner(radius: 20, corners: [.topLeft, .topRight])
-                    )
-                    .position(
-                        x: geometry.size.width / 2,
-                        y: geometry.size.height - (geometry.size.height * 0.4) / 2
-                    )
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .frame(minHeight: 44)
                 }
-                
-                .animation(.easeInOut(duration: 0.3), value: manager.isShowing)
-                .onAppear {
-                    DispatchQueue.main.async {
-                        isSearchFocused = true
-                    }
+            }
+            .onAppear {
+                DispatchQueue.main.async { isSearchFocused = true }
+            }
+            .onChange(of: searchText) { newValue in
+                searchWorkItem?.cancel()
+                let workItem = DispatchWorkItem { [weak manager] in
+                    manager?.fetchCards(searchText: newValue)
                 }
-                .onChange(of: searchText) { newValue in
-                    searchWorkItem?.cancel()
-                    let workItem = DispatchWorkItem { [weak manager] in
-                        manager?.fetchCards(searchText: newValue)
-                    }
-                    searchWorkItem = workItem
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4, execute: workItem)
-                }
+                searchWorkItem = workItem
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4, execute: workItem)
+            }
+            .onDisappear {
+                searchWorkItem?.cancel()
             }
         }
     }
+
 }
 
 // MARK: - 卡片视图
 struct NoteCardView: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let card: NoteCard
-    
+
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             NoteAuthorAvatarView(note: card, size: 28)
-            
+
             VStack(alignment: .leading, spacing: 6) {
                 Text(card.username)
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(.white)
+                    .font(.body.weight(.semibold))
+                    .foregroundColor(ChoraiTheme.ink)
                     .lineLimit(1)
-                
-                HTMLTextRenderer(htmlContent: card.description, maxLines: 2)
-                    .font(.system(size: 12, weight: .regular))
-                    .foregroundColor(.white.opacity(0.6))
+
+                HTMLTextRenderer(
+                    htmlContent: card.description,
+                    maxLines: dynamicTypeSize.isAccessibilitySize ? 3 : 2,
+                    font: .caption,
+                    foregroundColor: ChoraiTheme.secondaryInk
+                )
             }
-            
+
             Spacer()
         }
         .padding(.horizontal, 16)
@@ -711,7 +698,7 @@ struct NoteCardView: View {
                 .fill(Color.clear)
                 .overlay(
                     RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color.white.opacity(0.3), lineWidth: 1)
+                        .stroke(ChoraiTheme.separator, lineWidth: 1)
                 )
         )
     }
@@ -723,39 +710,31 @@ struct ChatMessageView: View {
     let message: ChatMessage
 
     private var messageBubbleWidth: CGFloat {
-        max(0, adaptiveLayout.contentWidth - 122)
+        max(0, adaptiveLayout.contentWidth - 76)
     }
-    
+
     var body: some View {
         VStack(spacing: 8) {
             // 时间戳
             Text(message.timestamp)
-                .font(.system(size: 12, weight: .regular))
-                .foregroundColor(.white.opacity(0.6))
+                .font(.caption.weight(.regular))
+                .foregroundColor(ChoraiTheme.secondaryInk)
                 .frame(maxWidth: .infinity)
             // 消息气泡
             HStack {
                 if message.isFromMe {
-                    HStack(alignment: .top, spacing: 16) {
+                    HStack(alignment: .bottom, spacing: 10) {
                         Spacer()
-                        
+
                         // 消息内容
                         VStack(alignment: .trailing, spacing: 8) {
                             Text(message.content)
-                                .font(.system(size: 16, weight: .regular))
-                                .foregroundColor(.white)
+                                .font(.body.weight(.regular))
+                                .foregroundColor(ChoraiTheme.ink)
                                 .padding(.horizontal, 16)
-                                .padding(.vertical, 18)
-                                .background(
-                                    CustomRoundedCorners(topLeft: 20, topRight: 6, bottomLeft: 20, bottomRight: 20)
-                                        .fill(.ultraThinMaterial.opacity(0.2))
-                                        .overlay(
-                                            CustomRoundedCorners(topLeft: 20, topRight: 6, bottomLeft: 20, bottomRight: 20)
-                                                .stroke(.white.opacity(0.1), lineWidth: 1)
-                                        )
-                                        .customRoundedButtonHighlightEffect(topLeft: 20, topRight: 6, bottomLeft: 20, bottomRight: 20)
-                                )
-                            
+                                .padding(.vertical, 12)
+                                .background(ChoraiTheme.selection, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+
                             // 附件笔记
                             if let attachedNotes = message.attachedNotes {
                                 AttachedNotesBubbleView(
@@ -769,31 +748,31 @@ struct ChatMessageView: View {
                         // 头像
                         ChatAvatarView(
                             rawValue: message.avatarURL,
-                            size: 50,
+                            size: 32,
                             accessibilityIdentifier: "chat.message.avatar.\(message.id)"
                         )
                     }
                 } else {
-                    HStack(alignment: .top, spacing: 16) {
+                    HStack(alignment: .bottom, spacing: 10) {
                         // 头像
                         ChatAvatarView(
                             rawValue: message.avatarURL,
-                            size: 50,
+                            size: 32,
                             accessibilityIdentifier: "chat.message.avatar.\(message.id)"
                         )
-                        
+
                         // 消息内容
                         VStack(alignment: .leading, spacing: 8) {
                             Text(message.content)
-                                .font(.system(size: 16, weight: .regular))
-                                .foregroundColor(.white)
+                                .font(.body.weight(.regular))
+                                .foregroundColor(ChoraiTheme.ink)
                                 .padding(.horizontal, 16)
-                                .padding(.vertical, 18)
+                                .padding(.vertical, 12)
                                 .background(
                                     RoundedRectangle(cornerRadius: 18)
-                                        .fill(Color.gray.opacity(0.3))
+                                        .fill(ChoraiTheme.raisedSurface)
                                 )
-                            
+
                             // 附件笔记
                             if let attachedNotes = message.attachedNotes {
                                 AttachedNotesBubbleView(
@@ -803,12 +782,12 @@ struct ChatMessageView: View {
                             }
                         }
                         .frame(maxWidth: messageBubbleWidth, alignment: .leading)
-                        
+
                         Spacer()
                     }
                 }
             }
-            
+
         }
         .accessibilityValue(message.avatarURL ?? "default")
         .accessibilityIdentifier("chat.message.\(message.id)")
@@ -817,35 +796,39 @@ struct ChatMessageView: View {
 
 // MARK: - 附件卡片列表
 struct AttachedNotesView: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let notes: [NoteCard]
     let maxWidth: CGFloat
-    
+
     var body: some View {
         VStack(spacing: 0) {
             ForEach(Array(notes.enumerated()), id: \.element.id) { index, note in
                 VStack(spacing: 0) {
                     HStack(alignment: .top, spacing: 10) {
                         NoteAuthorAvatarView(note: note, size: 24)
-                        
+
                         VStack(alignment: .leading, spacing: 4) {
                             Text(note.username)
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundColor(.white)
+                                .font(.footnote.weight(.semibold))
+                                .foregroundColor(ChoraiTheme.ink)
                                 .lineLimit(1)
-                            
-                            HTMLTextRenderer(htmlContent: note.description, maxLines: 2)
-                                .font(.system(size: 11, weight: .regular))
-                                .foregroundColor(.white.opacity(0.6))
+
+                            HTMLTextRenderer(
+                                htmlContent: note.description,
+                                maxLines: dynamicTypeSize.isAccessibilitySize ? 3 : 2,
+                                font: .caption2,
+                                foregroundColor: ChoraiTheme.secondaryInk
+                            )
                         }
-                        
+
                         Spacer()
                     }
                     .padding(.horizontal, 12)
                     .padding(.vertical, 10)
-                    
+
                     if index < notes.count - 1 {
                         Rectangle()
-                            .fill(Color.white.opacity(0.2))
+                            .fill(ChoraiTheme.surface)
                             .frame(height: 1)
                             .padding(.leading, 50)
                             .padding(.trailing, 12)
@@ -856,16 +839,17 @@ struct AttachedNotesView: View {
         .frame(maxWidth: maxWidth, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.white.opacity(0.3), lineWidth: 1)
+                .stroke(ChoraiTheme.separator, lineWidth: 1)
         )
     }
 }
 
 // MARK: - 聊天气泡附件列表
 struct AttachedNotesBubbleView: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let notes: [NoteCard]
     let maxWidth: CGFloat
-    
+
     var body: some View {
         VStack(spacing: 0) {
             ForEach(Array(notes.enumerated()), id: \.element.id) { index, note in
@@ -876,27 +860,27 @@ struct AttachedNotesBubbleView: View {
 
                             HTMLTextRenderer(
                                 htmlContent: note.description,
-                                maxLines: 1
+                                maxLines: dynamicTypeSize.isAccessibilitySize ? 3 : 1,
+                                font: .caption,
+                                foregroundColor: ChoraiTheme.ink
                             )
-                                .font(.system(size: 12, weight: .regular))
-                                .foregroundColor(.white)
-                                .lineLimit(1)
                                 .accessibilityLabel(note.description)
                                 .accessibilityIdentifier(
                                     "chat.attachment.preview.\(note.id)"
                                 )
-                            
+
                             Spacer()
                         }
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
+                        .frame(minHeight: 44)
                     }
                     .buttonStyle(PlainButtonStyle())
                     .accessibilityIdentifier("chat.attachment.\(note.id)")
-                    
+
                     if index < notes.count - 1 {
                         Rectangle()
-                            .fill(Color.white.opacity(0.2))
+                            .fill(ChoraiTheme.surface)
                             .frame(height: 1)
                             .padding(.horizontal, 12)
                     }
@@ -906,7 +890,7 @@ struct AttachedNotesBubbleView: View {
         .frame(maxWidth: maxWidth, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.white.opacity(0.3), lineWidth: 1)
+                .stroke(ChoraiTheme.separator, lineWidth: 1)
         )
     }
 }
@@ -957,9 +941,7 @@ struct ChatAvatarView: View {
                     .resizable()
                     .aspectRatio(contentMode: .fill)
             default:
-                Image("logo")
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
+                ChoraiDefaultAvatar()
             }
         }
         .frame(width: size, height: size)
@@ -999,7 +981,7 @@ fileprivate extension View {
 
     private func customTopLeftHighlight(topLeft: CGFloat, topRight: CGFloat, bottomLeft: CGFloat, bottomRight: CGFloat) -> some View {
         CustomRoundedCorners(topLeft: topLeft, topRight: topRight, bottomLeft: bottomLeft, bottomRight: bottomRight)
-            .stroke(Color.white.opacity(0.2), lineWidth: 2)
+            .stroke(ChoraiTheme.separator, lineWidth: 1)
             .mask(
                 CustomRoundedCorners(topLeft: topLeft, topRight: topRight, bottomLeft: bottomLeft, bottomRight: bottomRight)
                     .fill(
@@ -1015,7 +997,7 @@ fileprivate extension View {
 
     private func customBottomRightHighlight(topLeft: CGFloat, topRight: CGFloat, bottomLeft: CGFloat, bottomRight: CGFloat) -> some View {
         CustomRoundedCorners(topLeft: topLeft, topRight: topRight, bottomLeft: bottomLeft, bottomRight: bottomRight)
-            .stroke(Color.white.opacity(0.2), lineWidth: 2)
+            .stroke(ChoraiTheme.separator, lineWidth: 1)
             .mask(
                 CustomRoundedCorners(topLeft: topLeft, topRight: topRight, bottomLeft: bottomLeft, bottomRight: bottomRight)
                     .fill(
@@ -1031,7 +1013,7 @@ fileprivate extension View {
 
     private func customTopEdgeHighlight(topLeft: CGFloat, topRight: CGFloat, bottomLeft: CGFloat, bottomRight: CGFloat) -> some View {
         CustomRoundedCorners(topLeft: topLeft, topRight: topRight, bottomLeft: bottomLeft, bottomRight: bottomRight)
-            .stroke(Color.white.opacity(0.2), lineWidth: 1)
+            .stroke(ChoraiTheme.separator, lineWidth: 1)
             .offset(y: -1)
             .mask(
                 CustomRoundedCorners(topLeft: topLeft, topRight: topRight, bottomLeft: bottomLeft, bottomRight: bottomRight)
@@ -1047,7 +1029,7 @@ fileprivate extension View {
 
     private func customBottomEdgeHighlight(topLeft: CGFloat, topRight: CGFloat, bottomLeft: CGFloat, bottomRight: CGFloat) -> some View {
         CustomRoundedCorners(topLeft: topLeft, topRight: topRight, bottomLeft: bottomLeft, bottomRight: bottomRight)
-            .stroke(Color.white.opacity(0.2), lineWidth: 1)
+            .stroke(ChoraiTheme.separator, lineWidth: 1)
             .offset(x: -1, y: 1)
             .mask(
                 CustomRoundedCorners(topLeft: topLeft, topRight: topRight, bottomLeft: bottomLeft, bottomRight: bottomRight)
@@ -1113,4 +1095,4 @@ struct CustomRoundedCorners: Shape {
 #Preview {
     ChatDetailView(conversationId: "cnv_preview")
 }
- 
+

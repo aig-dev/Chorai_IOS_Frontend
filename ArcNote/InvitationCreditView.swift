@@ -59,35 +59,21 @@ struct InvitationCreditView: View {
     }
 
     var body: some View {
-        ZStack {
-            Image("home_bg")
-                .resizable()
-                .aspectRatio(contentMode: .fill)
-                .ignoresSafeArea()
-
-            VStack(spacing: 0) {
-                SettingsDestinationHeader(
-                    title: "Invitations & Credits",
-                    dismiss: dismiss.callAsFunction
-                )
-
-                ScrollView {
-                    VStack(spacing: 24) {
-                        balanceSection
-                        referralSection
-                        redemptionSection
-                        historySection
-                    }
-                    .adaptiveContentGutter()
-                    .padding(.bottom, 40)
-                }
-                .scrollDismissesKeyboard(.interactively)
-                .refreshable {
-                    await overview.refresh()
-                }
-            }
+        Form {
+            balanceSection
+            referralSection
+            redemptionSection
+            historySection
         }
-        .navigationBarHidden(true)
+        .scrollContentBackground(.hidden)
+        .choraiPageBackground()
+        .scrollDismissesKeyboard(.interactively)
+        .refreshable { await overview.refresh() }
+        .foregroundStyle(ChoraiTheme.ink)
+        .tint(ChoraiTheme.accent)
+        .navigationTitle("Invitations & Credits")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.visible, for: .navigationBar)
         .overlay(alignment: .topLeading) {
             InvitationCreditScreenAnchor(
                 identifier: "screen.invitation-credits",
@@ -116,7 +102,7 @@ struct InvitationCreditView: View {
     }
 
     private var balanceSection: some View {
-        ChoraSectionSurface(
+        SettingsFormSection(
             title: "Balance",
             identifier: "invitation-credits.balance.section"
         ) {
@@ -138,7 +124,7 @@ struct InvitationCreditView: View {
                 }
             case .refreshing:
                 ProgressView()
-                    .tint(.white)
+                    .tint(ChoraiTheme.ink)
                     .accessibilityLabel("Refreshing balance")
                     .accessibilityIdentifier(
                         "invitation-credits.balance.refreshing"
@@ -167,11 +153,11 @@ struct InvitationCreditView: View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
             Text(title)
                 .font(.body)
-                .foregroundColor(.white.opacity(0.68))
+                .foregroundColor(ChoraiTheme.secondaryInk)
             Spacer(minLength: 16)
             Text(value.formatted())
                 .font(.system(size: 30, weight: .semibold, design: .rounded))
-                .foregroundColor(.white)
+                .foregroundColor(ChoraiTheme.ink)
                 .monospacedDigit()
         }
         .accessibilityElement(children: .ignore)
@@ -181,7 +167,7 @@ struct InvitationCreditView: View {
     }
 
     private var referralSection: some View {
-        ChoraSectionSurface(
+        SettingsFormSection(
             title: "Invite",
             identifier: "invitation-credits.referral.section"
         ) {
@@ -208,7 +194,7 @@ struct InvitationCreditView: View {
                             .monospacedDigit()
                     }
                     .font(.subheadline)
-                    .foregroundColor(.white.opacity(0.72))
+                    .foregroundColor(ChoraiTheme.secondaryInk)
                     .accessibilityElement(children: .combine)
                     .accessibilityIdentifier(
                         "invitation-credits.referral.used-count"
@@ -222,7 +208,7 @@ struct InvitationCreditView: View {
                                 .monospacedDigit()
                         }
                         .font(.subheadline)
-                        .foregroundColor(.white.opacity(0.72))
+                        .foregroundColor(ChoraiTheme.secondaryInk)
                         .accessibilityElement(children: .combine)
                         .accessibilityIdentifier(
                             "invitation-credits.referral.next-milestone"
@@ -254,7 +240,7 @@ struct InvitationCreditView: View {
                     if copied {
                         Text("Copied")
                             .font(.footnote.weight(.medium))
-                            .foregroundColor(.white.opacity(0.72))
+                            .foregroundColor(ChoraiTheme.secondaryInk)
                             .frame(maxWidth: .infinity, alignment: .center)
                             .accessibilityIdentifier(
                                 "invitation-credits.referral.copy-status"
@@ -273,7 +259,7 @@ struct InvitationCreditView: View {
                 }
             case .refreshing:
                 ProgressView()
-                    .tint(.white)
+                    .tint(ChoraiTheme.ink)
                     .accessibilityLabel("Refreshing invitation")
                     .accessibilityIdentifier(
                         "invitation-credits.referral.refreshing"
@@ -302,10 +288,10 @@ struct InvitationCreditView: View {
         VStack(alignment: .leading, spacing: 5) {
             Text(label)
                 .font(.caption.weight(.medium))
-                .foregroundColor(.white.opacity(0.5))
+                .foregroundColor(ChoraiTheme.secondaryInk)
             Text(value)
                 .font(.body.weight(.medium))
-                .foregroundColor(.white)
+                .foregroundColor(ChoraiTheme.ink)
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier(identifier)
@@ -313,7 +299,7 @@ struct InvitationCreditView: View {
     }
 
     private var redemptionSection: some View {
-        ChoraSectionSurface(
+        SettingsFormSection(
             title: "Redeem",
             identifier: "invitation-credits.redeem.section"
         ) {
@@ -323,15 +309,16 @@ struct InvitationCreditView: View {
                 HStack(spacing: 12) {
                     Text("Redeem a code")
                         .font(.body.weight(.medium))
-                        .foregroundColor(.white)
+                        .foregroundColor(ChoraiTheme.ink)
                     Spacer()
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(.gray)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundColor(ChoraiTheme.secondaryInk)
                         .rotationEffect(
                             .degrees(isRedeemExpanded ? 90 : 0)
                         )
                 }
+                .frame(minHeight: 44)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -344,7 +331,7 @@ struct InvitationCreditView: View {
             if redemption.pendingIntent != nil {
                 Text("This code still needs to be redeemed.")
                     .font(.subheadline)
-                    .foregroundColor(.white.opacity(0.72))
+                    .foregroundColor(ChoraiTheme.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier(
                         "invitation-credits.redeem.pending"
@@ -356,7 +343,7 @@ struct InvitationCreditView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Invitation code")
                             .font(.subheadline.weight(.medium))
-                            .foregroundColor(.white)
+                            .foregroundColor(ChoraiTheme.ink)
                         TextField(
                             "Enter invitation code",
                             text: Binding(
@@ -365,14 +352,14 @@ struct InvitationCreditView: View {
                             )
                         )
                         .font(.body)
-                        .foregroundColor(.white)
+                        .foregroundColor(ChoraiTheme.ink)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .padding(.horizontal, 16)
                         .padding(.vertical, 14)
                         .background(
                             RoundedRectangle(cornerRadius: 12)
-                                .fill(Color.white.opacity(0.1))
+                                .fill(ChoraiTheme.surface)
                                 .cardHighlightEffect()
                         )
                         .accessibilityLabel("Invitation code")
@@ -417,7 +404,7 @@ struct InvitationCreditView: View {
                 "Code redeemed · \(InvitationCreditPresentation.readable(result.status.canonical))"
             )
             .font(.subheadline.weight(.medium))
-            .foregroundColor(.white)
+            .foregroundColor(ChoraiTheme.ink)
             .fixedSize(horizontal: false, vertical: true)
             .accessibilityIdentifier("invitation-credits.redeem.success")
         case .failed(let error):
@@ -429,7 +416,7 @@ struct InvitationCreditView: View {
                     )
                 )
                 .font(.subheadline)
-                .foregroundColor(Color(red: 1, green: 0.62, blue: 0.64))
+                .foregroundColor(.red)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("invitation-credits.redeem.error")
 
@@ -465,11 +452,10 @@ struct InvitationCreditView: View {
     }
 
     private var historySection: some View {
-        ChoraSectionSurface(
+        SettingsFormSection(
             title: "History",
             identifier: "invitation-credits.history.section"
         ) {
-            VStack(spacing: 0) {
                 NavigationLink {
                     InvitationHistoryView(
                         actorID: actorID,
@@ -481,8 +467,6 @@ struct InvitationCreditView: View {
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("invitation-credits.history.link")
 
-                Divider().background(Color.white.opacity(0.16))
-
                 NavigationLink {
                     InvitationRewardsView(actorID: actorID, store: rewards)
                 } label: {
@@ -491,8 +475,6 @@ struct InvitationCreditView: View {
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("invitation-credits.rewards.link")
 
-                Divider().background(Color.white.opacity(0.16))
-
                 NavigationLink {
                     CreditLedgerView(actorID: actorID, store: ledger)
                 } label: {
@@ -500,7 +482,6 @@ struct InvitationCreditView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("invitation-credits.ledger.link")
-            }
         }
     }
 
@@ -556,11 +537,8 @@ private struct InvitationCreditDisclosureRow: View {
         HStack(spacing: 12) {
             Text(title)
                 .font(.body.weight(.medium))
-                .foregroundColor(.white)
+                .foregroundColor(ChoraiTheme.ink)
             Spacer(minLength: 12)
-            Image(systemName: "chevron.right")
-                .font(.system(size: 14, weight: .medium))
-                .foregroundColor(.gray)
         }
         .padding(.vertical, 14)
         .contentShape(Rectangle())
@@ -576,7 +554,7 @@ struct InvitationCreditInlineError: View {
         VStack(alignment: .leading, spacing: 12) {
             Text(text)
                 .font(.subheadline)
-                .foregroundColor(Color(red: 1, green: 0.62, blue: 0.64))
+                .foregroundColor(.red)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier(identifier)
             SettingsOutlineButton(title: "Retry", action: retry)

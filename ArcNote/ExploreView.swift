@@ -2,6 +2,7 @@ import CoreFlow
 import SwiftUI
 
 struct ExploreView: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Binding var showPopupMenu: Bool
     @Binding var selectedFilter: String
     @Binding var showFilterTags: Bool
@@ -17,7 +18,7 @@ struct ExploreView: View {
     @State private var searchText = ""
     @FocusState private var isSearchFocused: Bool
     @StateObject private var cardsManager = RecommendedCardsManager(autoLoad: false)
-    @StateObject private var flowStore = FlowDeckStore(service: NetworkCoreFlowService())
+    @StateObject private var flowStore = FlowDeckStore(service: NetworkCoreFlowService(), onFavoriteCommitted: CardEngagementCenter.shared.publishFavorite)
     @StateObject private var searchManager = SearchManager.shared
 
     // ExploreView自己的弹窗状态
@@ -70,588 +71,286 @@ struct ExploreView: View {
         }
     }
     
-    // MARK: - 计算属性
-    
-    #if DEBUG
-    private var isUITestSession: Bool {
-        ProcessInfo.processInfo.environment["CHORAI_UI_TEST"] == "1"
-    }
-    #endif
+    @State private var gridMode = false
+    @State private var showsHistory = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private var searchInputBackground: some View {
-        RoundedRectangle(cornerRadius: 30)
-            .fill(.ultraThinMaterial.opacity(0.3))
-            .overlay(searchInputTopLeftHighlight)
-            .overlay(searchInputBottomRightHighlight)
-            .overlay(searchInputTopEdgeHighlight)
-            .overlay(searchInputBottomEdgeHighlight)
-    }
-    
-    private var searchInputTopLeftHighlight: some View {
-        RoundedRectangle(cornerRadius: 30)
-            .stroke(Color.white, lineWidth: 1)
-            .offset(x: 0, y: -1)
-            .mask(
-                RoundedRectangle(cornerRadius: 30)
-                    .fill(
-                        RadialGradient(
-                            colors: [Color.white, Color.clear],
-                            center: .topLeading,
-                            startRadius: 10,
-                            endRadius: 35
-                        )
-                    )
-            )
-    }
-    
-    private var searchInputBottomRightHighlight: some View {
-        RoundedRectangle(cornerRadius: 30)
-            .stroke(Color.white, lineWidth: 1)
-            .offset(x: 0, y: 0)
-            .mask(
-                RoundedRectangle(cornerRadius: 30)
-                    .fill(
-                        RadialGradient(
-                            colors: [Color.white, Color.clear],
-                            center: .bottomTrailing,
-                            startRadius: 10,
-                            endRadius: 35
-                        )
-                    )
-            )
-    }
-    
-    private var searchInputTopEdgeHighlight: some View {
-        RoundedRectangle(cornerRadius: 30)
-            .stroke(Color.white, lineWidth: 1)
-            .offset(x: 0, y: -1)
-            .mask(
-                RoundedRectangle(cornerRadius: 30)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.white, Color.clear],
-                            startPoint: .top,
-                            endPoint: UnitPoint(x: 0, y: 0.05)
-                        )
-                    )
-            )
-    }
-    
-    private var searchInputBottomEdgeHighlight: some View {
-        RoundedRectangle(cornerRadius: 30)
-            .stroke(Color.white, lineWidth: 1)
-            .offset(x: 0, y: 1)
-            .mask(
-                RoundedRectangle(cornerRadius: 30)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.white, Color.clear],
-                            startPoint: .bottom,
-                            endPoint: UnitPoint(x: 1, y: 0.05)
-                        )
-                    )
-            )
-    }
-    
-    // MARK: Background Card Views
-    
-    private var thirdCardBackground: some View {
-        RoundedRectangle(cornerRadius: 16)
-            .fill(Color.white.opacity(0.1))
-            .frame(maxHeight: .infinity)
-            .overlay(thirdCardTopLeftHighlight)
-            .overlay(thirdCardBottomRightHighlight)
-            .overlay(thirdCardTopEdgeHighlight)
-            .overlay(thirdCardBottomEdgeHighlight)
-            .offset(x: 60, y: 32)
-            .opacity(0.2)
-    }
-    
-    private var thirdCardTopLeftHighlight: some View {
-        RoundedRectangle(cornerRadius: 16)
-            .stroke(Color.white.opacity(0.3), lineWidth: 1)
-            .offset(x: 0, y: -1)
-            .mask(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(
-                        RadialGradient(
-                            colors: [Color.white.opacity(0.3), Color.clear],
-                            center: .topLeading,
-                            startRadius: 10,
-                            endRadius: 35
-                        )
-                    )
-            )
-    }
-    
-    private var thirdCardBottomRightHighlight: some View {
-        RoundedRectangle(cornerRadius: 16)
-            .stroke(Color.white.opacity(0.3), lineWidth: 1)
-            .offset(x: 0, y: 0)
-            .mask(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(
-                        RadialGradient(
-                            colors: [Color.white.opacity(0.3), Color.clear],
-                            center: .bottomTrailing,
-                            startRadius: 10,
-                            endRadius: 35
-                        )
-                    )
-            )
-    }
-    
-    private var thirdCardTopEdgeHighlight: some View {
-        RoundedRectangle(cornerRadius: 16)
-            .stroke(Color.white.opacity(0.3), lineWidth: 1)
-            .offset(x: 0, y: -1)
-            .mask(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.white.opacity(0.3), Color.clear],
-                            startPoint: .top,
-                            endPoint: UnitPoint(x: 0, y: 0.05)
-                        )
-                    )
-            )
-    }
-    
-    private var thirdCardBottomEdgeHighlight: some View {
-        RoundedRectangle(cornerRadius: 16)
-            .stroke(Color.white.opacity(0.3), lineWidth: 1)
-            .offset(x: -1, y: 1)
-            .mask(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.white.opacity(0.3), Color.clear],
-                            startPoint: .bottom,
-                            endPoint: UnitPoint(x: 1, y: 0.05)
-                        )
-                    )
-            )
-    }
-    
-    private var secondCardBackground: some View {
-        RoundedRectangle(cornerRadius: 16)
-            .fill(Color.white.opacity(0.1))
-            .frame(maxHeight: .infinity)
-            .overlay(secondCardTopLeftHighlight)
-            .overlay(secondCardBottomRightHighlight)
-            .overlay(secondCardTopEdgeHighlight)
-            .overlay(secondCardBottomEdgeHighlight)
-            .offset(x: 40, y: 14)
-            .opacity(0.2)
-    }
-    
-    private var secondCardTopLeftHighlight: some View {
-        RoundedRectangle(cornerRadius: 16)
-            .stroke(Color.white.opacity(0.4), lineWidth: 1)
-            .offset(x: 0, y: -1)
-            .mask(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(
-                        RadialGradient(
-                            colors: [Color.white.opacity(0.4), Color.clear],
-                            center: .topLeading,
-                            startRadius: 10,
-                            endRadius: 35
-                        )
-                    )
-            )
-    }
-    
-    private var secondCardBottomRightHighlight: some View {
-        RoundedRectangle(cornerRadius: 16)
-            .stroke(Color.white.opacity(0.4), lineWidth: 1)
-            .offset(x: 0, y: 0)
-            .mask(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(
-                        RadialGradient(
-                            colors: [Color.white.opacity(0.4), Color.clear],
-                            center: .bottomTrailing,
-                            startRadius: 10,
-                            endRadius: 35
-                        )
-                    )
-            )
-    }
-    
-    private var secondCardTopEdgeHighlight: some View {
-        RoundedRectangle(cornerRadius: 16)
-            .stroke(Color.white.opacity(0.4), lineWidth: 1)
-            .offset(x: 0, y: -1)
-            .mask(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.white.opacity(0.4), Color.clear],
-                            startPoint: .top,
-                            endPoint: UnitPoint(x: 0, y: 0.05)
-                        )
-                    )
-            )
-    }
-    
-    private var secondCardBottomEdgeHighlight: some View {
-        RoundedRectangle(cornerRadius: 16)
-            .stroke(Color.white.opacity(0.4), lineWidth: 1)
-            .offset(x: -1, y: 1)
-            .mask(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.white.opacity(0.4), Color.clear],
-                            startPoint: .bottom,
-                            endPoint: UnitPoint(x: 1, y: 0.05)
-                        )
-                    )
-            )
-    }
-    
     var body: some View {
         KeyboardStableViewport(isFocused: isSearchFocused) { _ in
-            VStack(spacing: 0) {
-            // 顶部导航栏
-            HStack {
-                if isSearchMode {
-                    // 搜索模式 - 返回按钮
-                    Button(action: {
-                        isSearchFocused = false
-                        withAnimation(.easeInOut(duration: 0.3)) {
-                            isSearchMode = false
-                            searchText = ""
-                            currentSearchIndex = 0
-                            hasSubmittedSearch = false
-                            // 退出搜索模式时清除搜索结果
-                            searchManager.clearSearchResults()
-                        }
-                    }) {
-                        Image(systemName: "chevron.left")
-                            .font(.title2)
-                            .foregroundColor(.white)
-                    }
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("Back")
-                    .accessibilityIdentifier("explore.search.back")
-                    
-                    Spacer()
-                    
-                    // 搜索输入框
-                    HStack {
-                        Image(systemName: "magnifyingglass")
-                            .foregroundColor(.white.opacity(0.7))
-                        
-                        TextField("Please enter your search...", text: $searchText)
-                            .foregroundColor(.white)
-                            .textFieldStyle(PlainTextFieldStyle())
-                            .focused($isSearchFocused)
-                            .accessibilityIdentifier("explore.search.input")
-                            .submitLabel(.search)
-                            .placeholder(when: searchText.isEmpty) {
-                                Text("Please enter your search...")
-                                    .foregroundColor(.white.opacity(0.5))
-                            }
-                            .onSubmit {
-                                // 按回车键时触发搜索
-                                performSearch()
-                            }
-                        
-//                        if !searchText.isEmpty {
-//                            Button(action: {
-//                                searchText = ""
-//                            }) {
-//                                Image(systemName: "xmark.circle.fill")
-//                                    .foregroundColor(.white.opacity(0.7))
-//                            }
-//                        }
-                    }
-                    .padding(.horizontal, 25)
-                    .padding(.vertical, 13)
-                    .frame(maxWidth: 280)
-                    .background(searchInputBackground)
-                    
-                    Spacer()
-                } else {
-                    // 正常模式
-                    Button(action: {
-                        dismissVisibleFlowTip()
-                        withAnimation(.easeInOut(duration: 0.3)) {
-                            showSideMenu = true
-                        }
-                    }) {
-                        Image("menu")
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 24, height: 24)
-                    }
-                    .accessibilityIdentifier("side-menu.open")
-                    
-                    Spacer()
-                    
-                    Text("Explore")
-                        .font(.system(size: 18, weight: .semibold, design: .rounded))
-                        .foregroundColor(.white)
-                    
-                    Spacer()
-                    
-                    Button(action: {
-                        dismissVisibleFlowTip()
-                        withAnimation(.easeInOut(duration: 0.3)) {
-                            isSearchMode = true
-                        }
-                        DispatchQueue.main.async {
-                            isSearchFocused = true
-                        }
-                    }) {
-                        ZStack {
-                            Color.white.opacity(0.01)
-                                .frame(width: 44, height: 44)
-                            Image("search")
-                                .resizable()
-                                .aspectRatio(contentMode: .fit)
-                                .frame(width: 24, height: 24)
-                        }
-                        .accessibilityElement(children: .ignore)
-                        .accessibilityLabel("Search")
-                        .accessibilityIdentifier("explore.search.open")
-                    }
+            VStack(spacing: 12) {
+                if isSearchMode { searchField.adaptiveContentGutter() }
+                else { browseHeading.padding(.horizontal, 14) }
+                if let onboardingStore, onboardingStore.guideScene != nil, !isSearchMode {
+                    OnboardingGuideLine(store: onboardingStore)
                 }
-            }
-            .adaptiveContentGutter()
-            .padding(.top, 60)
-
-            if let onboardingStore,
-               onboardingStore.guideScene != nil,
-               !isSearchMode {
-                OnboardingGuideLine(store: onboardingStore)
-                    .adaptiveContentGutter()
-                    .padding(.top, 8)
-            }
-
-            // 筛选标签
-            if showFilterTags && !isSearchMode {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 12) {
-                        FilterTag(title: "All", isSelected: selectedFilter == "All") {
-                            selectedFilter = "All"
-                        }
-                        .frame(width: 95)
-                        FilterTag(title: "Follow", isSelected: selectedFilter == "Follow") {
-                            selectedFilter = "Follow"
-                        }
-                        .frame(width: 95)
-                        FilterTag(title: "Popular", isSelected: selectedFilter == "Popular") {
-                            selectedFilter = "Popular"
-                        }
-                        .frame(width: 95)
-                        FilterTag(title: "Trending", isSelected: selectedFilter == "Trending") {
-                            selectedFilter = "Trending"
-                        }
-                        .frame(width: 95)
-                    }
-                    .adaptiveContentGutter()
-                }
-                .padding(.top, 10)
-            }
-            
-            // 卡片内容
-            ZStack {
-                if isSearchMode {
-                    // Search keeps the familiar stack; Flow owns its own restrained next-card hint.
-                    thirdCardBackground
-                    secondCardBackground
-                }
-                
-                // 第一张卡片（最顶层）- 有内容的卡片
-                if isSearchMode {
-                    if searchManager.isLoading {
-                        VStack {
-                            RotatingLoaderView()
-                        }
-                        .frame(maxHeight: .infinity)
-                        .accessibilityIdentifier("explore.search.loading")
-                    } else if !searchManager.searchResults.isEmpty {
-                        // 显示搜索结果
-                        if currentSearchIndex < searchManager.searchResults.count {
-                            let currentSearchCard = searchManager.searchResults[currentSearchIndex]
-                            ZStack(alignment: .topLeading) {
-                                PostCard(
-                                    card: convertSearchCardToCard(currentSearchCard),
-                                    cardsManager: cardsManager,
-                                    onShowMenu: { cardData in
-                                        currentExploreCardData = convertCardToUserCard(cardData)
-                                        isCurrentExploreCardOwned = cardData.isOwner
-                                            ?? isOwnedByCurrentUser(authorId: cardData.author?.id)
-                                        showExplorePopupMenu = true
-                                    },
-                                    onSwipe: { translation, isEnded in
-                                        handleSearchSwipe(translation: CGSize(width: translation, height: 0), isEnded: isEnded)
-                                    },
-                                    onAvatarTap: { actorId in
-                                        selectedActorId = actorId
-                                        DispatchQueue.main.async {
-                                            navigateToUserProfile = true
-                                            print("设置 navigateToUserProfile: \(navigateToUserProfile)")
-                                        }
-                                    },
-                                    onCardTap: { cardId in
-                                        print("收到卡片点击回调: cardId=\(cardId)")
-                                        selectedCardId = cardId
-                                        DispatchQueue.main.async {
-                                            navigateToDetail = true
-                                            print("设置 navigateToDetail: \(navigateToDetail)")
-                                        }
-                                    }
-                                )
-                                .opacity(1.0)
-
-                                #if DEBUG
-                                Text("Search results")
-                                    .font(.system(size: 1))
-                                    .foregroundColor(.white.opacity(0.01))
-                                    .frame(width: 1, height: 1)
-                                    .accessibilityIdentifier("explore.search.results")
-
-                                Text(currentSearchCard.id)
-                                    .font(.system(size: 1))
-                                    .foregroundColor(.white.opacity(0.01))
-                                    .frame(width: 1, height: 1)
-                                    .accessibilityIdentifier("explore.search.result.card-id")
-                                #endif
+                if showFilterTags && !isSearchMode {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(["All", "Follow", "Popular", "Trending"], id: \.self) { filter in
+                                FilterTag(title: filter, isSelected: selectedFilter == filter) { selectedFilter = filter }
                             }
                         }
-                    } else if !hasSubmittedSearch {
-                        VStack(spacing: 12) {
-                            Text("Type a keyword")
-                                .font(.system(size: 16, weight: .medium))
-                                .foregroundColor(.white.opacity(0.8))
-                            Text("Press return to search")
-                                .font(.system(size: 13, weight: .regular))
-                                .foregroundColor(.white.opacity(0.6))
-                        }
-                        .frame(maxHeight: .infinity)
-                        .accessibilityIdentifier("explore.search.idle")
-                    } else {
-                        VStack(spacing: 12) {
-                            Text("No results found")
-                                .font(.system(size: 16, weight: .medium))
-                                .foregroundColor(.white.opacity(0.8))
-                            Text("Try another keyword")
-                                .font(.system(size: 13, weight: .regular))
-                                .foregroundColor(.white.opacity(0.6))
-                        }
-                        .frame(maxHeight: .infinity)
-                        .accessibilityIdentifier("explore.search.empty")
                     }
-                } else {
+                }
+                ZStack {
                     FlowDeckView(
                         store: flowStore,
-                        onOpenDetail: { card in
-                            selectedCardId = card.id
-                            navigateToDetail = true
-                        },
+                        isGrid: gridMode,
+                        onOpenDetail: { card in selectedCardId = card.id; navigateToDetail = true },
                         onOpenAuthor: { card in
-                            guard let actorId = card.author?.id else { return }
-                            selectedActorId = actorId
-                            navigateToUserProfile = true
+                            guard let actorID = card.author?.id else { return }
+                            selectedActorId = actorID; navigateToUserProfile = true
                         },
                         onOpenMenu: { card in
                             currentExploreCardData = card.asUserCard
-                            isCurrentExploreCardOwned = isOwnedByCurrentUser(authorId: card.author?.id)
+                            isCurrentExploreCardOwned = card.isOwner || isOwnedByCurrentUser(authorId: card.author?.id)
                             showExplorePopupMenu = true
                         },
-                        onSpark: { card in
-                            onSpark(card.id)
-                        },
-                        onCardVisible: { card in
-                            onFlowCardVisible(card.id)
-                        },
+                        onSpark: { onSpark($0.id) },
+                        onCardVisible: { onFlowCardVisible($0.id) },
                         onCardSaved: onFlowCardSaved,
                         onCardDismissed: onFlowCardDismissed,
                         onboardingStore: onboardingStore,
                         contextualTipStore: contextualTipStore,
                         sparkResumeRootSourceAssetID: sparkResumeRootSourceAssetID
                     )
+                    .opacity(isSearchMode ? 0 : 1)
+                    .allowsHitTesting(!isSearchMode)
+                    .accessibilityHidden(isSearchMode)
+                    if isSearchMode { searchContent.adaptiveContentGutter() }
                 }
             }
-            .contentShape(Rectangle())
-            .onTapGesture {
-                if isSearchMode {
-                    isSearchFocused = false
-                }
-            }
-            .padding(.horizontal, 20)
-            .padding(.top, showFilterTags ? 15 : 15)
-            .padding(.bottom, 150)
+            .padding(.top, gridMode ? 12 : 8).padding(.bottom, 12)
         }
-        }
-        #if DEBUG
-        .overlay(alignment: .topTrailing) {
-            if isUITestSession && !isSearchMode {
-                Button(action: {
-                    dismissVisibleFlowTip()
-                    withAnimation(.easeInOut(duration: 0.3)) {
-                        isSearchMode = true
+        .choraiPageBackground()
+        .navigationTitle(isSearchMode ? "Search" : "Explore")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.visible, for: .navigationBar)
+        .toolbar { exploreToolbar }
+        .sheet(isPresented: $showsHistory) {
+            NavigationStack {
+                List {
+                    ForEach(Array(flowStore.history.enumerated()).reversed(), id: \.element.id) { index, card in
+                        Button {
+                            flowStore.revisitHistory(at: index)
+                            showsHistory = false
+                        } label: {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(FlowTextPreview.make(card.content)).font(.body).lineLimit(3)
+                                Text(card.author?.username ?? "Chorai").font(.caption).foregroundStyle(.secondary)
+                            }.padding(.vertical, 6)
+                        }
+                        .disabled(flowStore.isInteractionLocked)
+                        .accessibilityIdentifier("flow.history.item.\(card.id)")
+                        .listRowBackground(ChoraiTheme.surface)
                     }
-                    DispatchQueue.main.async {
-                        isSearchFocused = true
-                    }
-                }) {
-                    Color.white.opacity(0.01)
-                        .frame(width: 44, height: 44)
                 }
-                .buttonStyle(PlainButtonStyle())
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("Open Explore search")
-                .accessibilityIdentifier("explore.search.open.test-hook")
-                .padding(.top, 60)
-                .padding(.trailing, 20)
+                .scrollContentBackground(.hidden).choraiPageBackground()
+                .navigationTitle("Recently viewed").navigationBarTitleDisplayMode(.inline)
+                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showsHistory = false } } }
             }
+            .presentationDetents([.medium, .large])
         }
-        #endif
         .onAppear {
-            // 设置评论创建回调
-            CommentPopupManager.shared.onCommentCreated = { [weak cardsManager] (cardId: String) in
-                print("收到评论创建通知: cardId=\(cardId)")
-                cardsManager?.incrementCommentCount(for: cardId)
-            }
+            CommentPopupManager.shared.onCommentCreated = { [weak cardsManager] cardID in cardsManager?.incrementCommentCount(for: cardID) }
             #if DEBUG
             publishVisibleRecommendedCardForUITest()
             #endif
         }
         #if DEBUG
-        .onReceive(flowStore.$cards) { _ in
-            publishVisibleRecommendedCardForUITest()
-        }
+        .onReceive(flowStore.$cards) { _ in publishVisibleRecommendedCardForUITest() }
         #endif
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("CloseAllPopups"))) { _ in
-            print("收到关闭所有popup通知")
-            // 关闭所有 popup
-            showExplorePopupMenu = false
-            showFilterTags = false
+            showExplorePopupMenu = false; showFilterTags = false
         }
-        .onChange(of: showFilterTags) { isPresented in
-            if isPresented {
-                dismissVisibleFlowTip()
-            }
-        }
+        .onChange(of: showFilterTags) { if $0 { dismissVisibleFlowTip() } }
         .popupMenu(isPresented: $showExplorePopupMenu, layout: .grid2x2, cardData: currentExploreCardData, isOwnCard: isCurrentExploreCardOwned)
         .navigationDestination(isPresented: $navigateToUserProfile) {
-            if let actorId = selectedActorId {
-                UserProfileView(actorId: actorId)
-            } else {
-                EmptyView()
-            }
+            if let actorID = selectedActorId { UserProfileView(actorId: actorID) }
         }
         .navigationDestination(isPresented: $navigateToDetail) {
-            if let cardId = selectedCardId {
-                DetailView(cardId: cardId)
-            } else {
-                EmptyView()
+            if let cardID = selectedCardId {
+                DetailView(cardId: cardID)
+                    .toolbar(.hidden, for: .tabBar)
             }
+        }
+    }
+
+    @ToolbarContentBuilder
+    private var exploreToolbar: some ToolbarContent {
+        ToolbarItem(placement: .navigationBarLeading) {
+                if isSearchMode {
+                    Button(action: cancelSearch) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 20))
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Back").accessibilityIdentifier("explore.search.back")
+                } else {
+                    Button {
+                        dismissVisibleFlowTip()
+                        showSideMenu = true
+                    } label: {
+                        Image(systemName: "line.3.horizontal")
+                            .font(.system(size: 20))
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Open sidebar").accessibilityIdentifier("side-menu.open")
+                }
+        }
+        ToolbarItem(placement: .principal) {
+            Text(isSearchMode ? "Search" : "Explore")
+                .font(.headline)
+                .foregroundStyle(.primary)
+                #if DEBUG
+                .accessibilityIdentifier(LocalDevelopmentPreview.isEnabled
+                    ? "local-preview.indicator" : "explore.title")
+                #endif
+        }
+        ToolbarItem(placement: .navigationBarTrailing) {
+            if isSearchMode { Button("Cancel", action: cancelSearch) }
+            else {
+                HStack(spacing: 12) {
+                    Button { gridMode.toggle() } label: {
+                        Image(systemName: gridMode ? "rectangle.portrait" : "square.grid.2x2")
+                            .font(.system(size: 20))
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(gridMode ? "Switch to swipe mode" : "Switch to grid mode")
+                    .accessibilityValue(gridMode ? "Grid" : "Cards")
+                    .accessibilityIdentifier("explore.browse-mode")
+                    Button {
+                        dismissVisibleFlowTip(); isSearchMode = true
+                        DispatchQueue.main.async { isSearchFocused = true }
+                    } label: {
+                        Image(systemName: "magnifyingglass")
+                            .font(.system(size: 20))
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Search").accessibilityIdentifier("explore.search.open")
+                }
+            }
+        }
+    }
+
+    private var browseHeading: some View {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
+            : AnyLayout(HStackLayout())
+        return layout {
+            if gridMode { Text("For you").font(.subheadline.weight(.medium)).foregroundStyle(.primary) }
+            else {
+                Label(flowStore.isRevisiting ? "Browsing history" : "For you", systemImage: flowStore.isRevisiting ? "clock.arrow.circlepath" : "sparkle")
+                    .font(.subheadline.weight(.medium)).foregroundStyle(ChoraiTheme.ink)
+            }
+            if !dynamicTypeSize.isAccessibilitySize { Spacer() }
+            HStack(spacing: 8) {
+            if dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 0) }
+            if gridMode {
+                Text("\(flowStore.browsingCards.count) NOTES").font(.caption2).tracking(1.2).foregroundStyle(.secondary)
+            } else {
+                if flowStore.isRevisiting {
+                    Button { flowStore.resumeExploring() } label: {
+                        Image(systemName: "arrow.right.to.line").font(.system(size: 20, weight: .medium))
+                    }
+                        .frame(minWidth: 44, minHeight: 44)
+                        .disabled(flowStore.isInteractionLocked)
+                        .accessibilityLabel("Continue exploring").accessibilityIdentifier("flow.resume")
+                }
+                Button { showsHistory = true } label: {
+                    Image(systemName: "clock.arrow.circlepath").font(.system(size: 20, weight: .medium))
+                }
+                    .frame(width: 44, height: 44)
+                    .disabled(flowStore.history.isEmpty || flowStore.isInteractionLocked)
+                    .accessibilityLabel("Recently viewed").accessibilityIdentifier("flow.history")
+            }
+            }
+        }
+        .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var searchField: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+            TextField("Search notes and ideas", text: $searchText)
+                .focused($isSearchFocused).submitLabel(.search)
+                .accessibilityIdentifier("explore.search.input")
+                .onSubmit(performSearch)
+            if !searchText.isEmpty {
+                Button { searchText = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary) }
+                    .accessibilityLabel("Clear query")
+            }
+        }.padding(14).choraiGlassSurface(cornerRadius: 20)
+    }
+
+    private func cancelSearch() {
+        isSearchFocused = false; isSearchMode = false; searchText = ""
+        currentSearchIndex = 0; hasSubmittedSearch = false; searchManager.clearSearchResults()
+    }
+
+    @ViewBuilder
+    private var searchContent: some View {
+        if searchManager.isLoading {
+            ProgressView("Searching…").frame(maxWidth: .infinity, maxHeight: .infinity).accessibilityIdentifier("explore.search.loading")
+        } else if let error = searchManager.error {
+            VStack(spacing: 16) {
+                Text("Search paused").font(.title3)
+                Text(error.localizedDescription).font(.subheadline).foregroundStyle(ChoraiTheme.secondaryInk)
+                Button("Retry", action: performSearch).buttonStyle(.borderedProminent)
+            }.frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if currentSearchIndex < searchManager.searchResults.count {
+            let card = searchManager.searchResults[currentSearchIndex]
+            GeometryReader { viewport in
+            VStack(spacing: 8) {
+                PostCard(
+                    card: convertSearchCardToCard(card), cardsManager: cardsManager,
+                    onShowMenu: { value in
+                        currentExploreCardData = convertCardToUserCard(value)
+                        isCurrentExploreCardOwned = value.isOwner ?? isOwnedByCurrentUser(authorId: value.author?.id)
+                    },
+                    onSwipe: { translation, ended in handleSearchSwipe(translation: CGSize(width: translation, height: 0), isEnded: ended) },
+                    onAvatarTap: { selectedActorId = $0; navigateToUserProfile = true },
+                    onCardTap: { selectedCardId = $0; navigateToDetail = true },
+                    menuCardData: convertCardToUserCard(convertSearchCardToCard(card))
+                )
+                .frame(height: max(0, viewport.size.height - 52), alignment: .top)
+                .id(card.id)
+                HStack {
+                    Button { currentSearchIndex -= 1 } label: { Image(systemName: "chevron.left").frame(width: 44, height: 44) }
+                        .disabled(currentSearchIndex == 0).accessibilityLabel("Previous result")
+                        .accessibilityIdentifier("explore.search.previous")
+                    Spacer()
+                    Button { currentSearchIndex += 1 } label: { Image(systemName: "chevron.right").frame(width: 44, height: 44) }
+                        .disabled(currentSearchIndex + 1 == searchManager.searchResults.count).accessibilityLabel("Next result")
+                        .accessibilityIdentifier("explore.search.next")
+                }.buttonStyle(.plain)
+            }
+                #if DEBUG
+                .overlay(alignment: .topLeading) {
+                    VStack(spacing: 0) {
+                        Text("Search results").accessibilityIdentifier("explore.search.results")
+                        Text(card.id).accessibilityIdentifier("explore.search.result.card-id")
+                    }.font(.system(size: 1)).opacity(0.01).allowsHitTesting(false)
+                }
+                #endif
+            }
+        } else {
+            VStack(spacing: 12) {
+                Image(systemName: "magnifyingglass").font(.largeTitle).foregroundStyle(ChoraiTheme.secondaryInk)
+                Text(hasSubmittedSearch ? "No results found" : "Follow a question").font(.title3)
+                Text(hasSubmittedSearch ? "Try another keyword." : "Search notes and ideas. Submit to begin.")
+                    .font(.subheadline).foregroundStyle(ChoraiTheme.secondaryInk)
+            }.frame(maxWidth: .infinity, maxHeight: .infinity)
+                .accessibilityIdentifier(hasSubmittedSearch ? "explore.search.empty" : "explore.search.idle")
         }
     }
 
@@ -771,7 +470,7 @@ struct ExploreView: View {
             pinnedAt: card.pinnedAt,
             isFavorited: card.isFavorited,
             favoriteCount: card.favoriteCount,
-            rate: 0, // Card 模型没有 rate 字段，默认为 0
+            rate: card.rate,
             ownerActorId: card.ownerActorId,
             isOwner: card.isOwner
         )
@@ -796,114 +495,21 @@ struct ExploreView: View {
     )
 }
 
-// MARK: - 筛选标签组件
+// Shared by existing filter call sites; theme changes do not alter selection.
 struct FilterTag: View {
     let title: String
     let isSelected: Bool
     let action: () -> Void
-    
     var body: some View {
         Button(action: action) {
-            Text(title)
-                .font(.system(size: 14, weight: .medium))
-                .foregroundColor(isSelected ? .white : .white.opacity(0.7))
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 10)
-                .background(tagBackground)
-        }
-        .animation(.easeInOut(duration: 0.2), value: isSelected)
-    }
-    
-    private var tagBackground: some View {
-        RoundedRectangle(cornerRadius: 20)
-            .fill(isSelected ? Color.white.opacity(0.3) : Color.white.opacity(0.1))
-            .overlay(tagTopLeftHighlight)
-            .overlay(tagBottomRightHighlight)
-            .overlay(tagTopEdgeHighlight)
-            .overlay(tagBottomEdgeHighlight)
-    }
-    
-    private var tagTopLeftHighlight: some View {
-        RoundedRectangle(cornerRadius: 20)
-            .stroke(Color.white, lineWidth: 1)
-            .offset(x: 0, y: -1)
-            .mask(
-                RoundedRectangle(cornerRadius: 20)
-                    .fill(
-                        RadialGradient(
-                            colors: [Color.white, Color.clear],
-                            center: .topLeading,
-                            startRadius: 5,
-                            endRadius: 20
-                        )
-                    )
-            )
-    }
-    
-    private var tagBottomRightHighlight: some View {
-        RoundedRectangle(cornerRadius: 20)
-            .stroke(Color.white, lineWidth: 1)
-            .offset(x: 0, y: 0)
-            .mask(
-                RoundedRectangle(cornerRadius: 20)
-                    .fill(
-                        RadialGradient(
-                            colors: [Color.white, Color.clear],
-                            center: .bottomTrailing,
-                            startRadius: 5,
-                            endRadius: 20
-                        )
-                    )
-            )
-    }
-    
-    private var tagTopEdgeHighlight: some View {
-        RoundedRectangle(cornerRadius: 20)
-            .stroke(Color.white, lineWidth: 1)
-            .offset(x: 0, y: -1)
-            .mask(
-                RoundedRectangle(cornerRadius: 20)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.white, Color.clear],
-                            startPoint: .top,
-                            endPoint: UnitPoint(x: 0, y: 0.05)
-                        )
-                    )
-            )
-    }
-    
-    private var tagBottomEdgeHighlight: some View {
-        RoundedRectangle(cornerRadius: 20)
-            .stroke(Color.white, lineWidth: 1)
-            .offset(x: 0, y: 1)
-            .mask(
-                RoundedRectangle(cornerRadius: 20)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.white, Color.clear],
-                            startPoint: .bottom,
-                            endPoint: UnitPoint(x: 1, y: 0.05)
-                        )
-                    )
-            )
+            Text(title).font(.subheadline.weight(isSelected ? .semibold : .regular))
+                .padding(.horizontal, 16).frame(minHeight: 44)
+                .foregroundStyle(isSelected ? ChoraiTheme.onAccent : ChoraiTheme.ink)
+                .background(isSelected ? ChoraiTheme.accent : ChoraiTheme.raisedSurface, in: Capsule())
+        }.buttonStyle(.plain).accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 
-// MARK: - 旋转加载视图
 struct RotatingLoaderView: View {
-    @State private var isRotating = false
-    
-    var body: some View {
-        Image("Loading")
-            .resizable()
-            .aspectRatio(contentMode: .fit)
-            .frame(width: 60, height: 60)
-            .rotationEffect(.degrees(isRotating ? 360 : 0))
-            .onAppear {
-                withAnimation(.linear(duration: 2.0).repeatForever(autoreverses: false)) {
-                    isRotating = true
-                }
-            }
-    }
-} 
+    var body: some View { ProgressView().controlSize(.large).tint(ChoraiTheme.accent) }
+}

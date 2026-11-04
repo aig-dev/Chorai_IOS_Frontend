@@ -27,6 +27,8 @@ struct ArcNoteApp: App {
     @StateObject private var mergeTaskRailAnchorStore =
         MergeTaskRailAnchorStore()
     #if DEBUG
+    private let isAuthEntryUITestRoute = ProcessInfo.processInfo.arguments
+        .contains("--ui-test-auth-entry")
     private let isAPIMigrationSmoke = APIMigrationSmokeRunner.isRequested
     private let isInterestUITestRoute = ProcessInfo.processInfo.arguments
         .contains("--ui-test-open-interests")
@@ -69,6 +71,10 @@ struct ArcNoteApp: App {
         .contains("--ui-test-card-editor-shell")
     private let isAdaptiveLayoutUITestRoute = ProcessInfo.processInfo.arguments
         .contains("--ui-test-adaptive-layout")
+    private let isSparkFidelityUITestRoute = ProcessInfo.processInfo.arguments
+        .contains("--ui-test-spark-fidelity")
+    private let isMergeFidelityUITestRoute = ProcessInfo.processInfo.arguments
+        .contains("--ui-test-merge-fidelity")
     private let isMergeSelectionUITestRoute = ProcessInfo.processInfo.arguments
         .contains("--ui-test-merge-selection")
     private let isMergeArtifactUITestRoute = ProcessInfo.processInfo.arguments
@@ -106,8 +112,16 @@ struct ArcNoteApp: App {
         configurationLogger.notice(
             "API environment=\(APIConfiguration.environmentLabel, privacy: .public) base_url=\(APIConfiguration.baseURL, privacy: .public)"
         )
-        APIMigrationUITestSeed.applyIfPresent()
-        APIMigrationSmokeRunner.startIfRequested()
+        if isAuthEntryUITestRoute { return }
+        if isMergeFidelityUITestRoute {
+            // The dedicated fidelity route must not seed a live session or start
+            // API smoke work, even when unrelated UI-test environment is present.
+        } else if LocalDevelopmentPreview.isEnabled {
+            LocalDevelopmentPreview.installDisplayProfile()
+        } else {
+            APIMigrationUITestSeed.applyIfPresent()
+            APIMigrationSmokeRunner.startIfRequested()
+        }
         if ProcessInfo.processInfo.arguments.contains("--ui-test-settings")
             || ProcessInfo.processInfo.arguments.contains(
                 "--ui-test-profile-credit-surfaces"
@@ -123,119 +137,171 @@ struct ArcNoteApp: App {
 
     var body: some Scene {
         WindowGroup {
-            AdaptiveLayoutReader { _ in
-                Group {
-                #if DEBUG
-                if isAPIMigrationSmoke {
-                    Color.clear
-                } else if isAdaptiveLayoutUITestRoute {
-                    AdaptiveLayoutFixtureScreen()
-                } else if isMergeSelectionUITestRoute {
-                    MergeSelectionVisualFixtureScreen()
-                } else if isMergeArtifactUITestRoute || isMergeLongArtifactUITestRoute {
-                    MergeArtifactVisualFixtureScreen(
-                        usesLongDocument: isMergeLongArtifactUITestRoute
-                    )
-                } else if isMergeTaskRailUITestRoute {
-                    MergeTaskRailFixtureScreen()
-                } else if isNativeOnboardingUITestRoute {
-                    NativeOnboardingFixtureScreen()
-                } else if isPrivateBetaEntryUITestRoute {
-                    PrivateBetaEntryFixtureScreen()
-                } else if isCardEditorShellUITestRoute {
-                    CardEditorShellFixtureScreen()
-                } else if isSignInUITestRoute {
-                    NavigationStack {
-                        SignInView()
-                    }
-                } else if isChoraProfileUITestRoute {
-                    NavigationStack {
-                        ChoraProfileFixtureScreen()
-                    }
-                } else if isProfileCreditSurfaceUITestRoute {
-                    NavigationStack {
-                        ProfileCreditSurfaceFixtureScreen(
-                            userProfileManager: .shared
-                        )
-                    }
-                } else if isMyProfileActionsUITestRoute {
-                    NavigationStack {
-                        MyProfileActionsFixtureScreen()
-                    }
-                } else if isSettingsUITestRoute {
-                    NavigationStack {
-                        SettingsView(
-                            loadsProfileOnAppear: isLiveProfileSettingsUITestRoute,
-                            choraProfileDestination: {
-                                AnyView(ChoraProfileFixtureScreen())
-                            },
-                            invitationCreditDestination: {
-                                AnyView(InvitationCreditFixtureScreen())
-                            }
-                        )
-                    }
-                } else if isLibraryPreviewUITestRoute {
-                    LibraryCardPreviewFixtureScreen()
-                } else if isLibraryUITestRoute {
-                    NavigationStack {
-                        LibraryFixtureScreen()
-                    }
-                } else if isChatVisibilityUITestRoute {
-                    ChatVisibilityFixtureScreen()
-                } else if isChoraContractUITestRoute {
-                    ChoraProfileContractFixtureView()
-                } else if isInvitationCreditContractUITestRoute {
-                    InvitationCreditContractFixtureView()
-                } else if isDiscoveryPathContractUITestRoute {
-                    DiscoveryPathContractFixtureView()
-                } else if isDiscoveryPathUITestRoute {
-                    NavigationStack {
-                        DiscoveryPathFixtureScreen()
-                    }
-                } else if isInvitationCreditUITestRoute {
-                    NavigationStack {
-                        InvitationCreditFixtureScreen()
-                    }
-                } else if isSignupInvitationUITestRoute {
-                    SignupInvitationFixtureScreen()
-                } else if isNotificationContractUITestRoute {
-                    NotificationContractFixtureView()
-                } else if isNotificationInboxUITestRoute {
-                    NavigationStack {
-                        NotificationView(
-                            service: NotificationInboxFixtureService(),
-                            actorID: "act_fixture",
-                            usesFixtureDestinations: true
-                        )
-                    }
-                } else if isInterestUITestRoute {
-                    NavigationStack {
-                        ChooseInterestsView()
-                    }
-                } else if let profileUITestActorID,
-                          !profileUITestActorID.isEmpty {
-                    NavigationStack {
-                        UserProfileView(actorId: profileUITestActorID)
-                    }
-                } else if let discoveryPathLiveCardID,
-                          !discoveryPathLiveCardID.isEmpty {
-                    NavigationStack {
-                        RootView(cardId: discoveryPathLiveCardID)
-                    }
-                } else {
-                    ContentView()
+            #if DEBUG
+            if isAuthEntryUITestRoute {
+                AdaptiveLayoutReader { _ in
+                    AuthEntryFixtureScreen()
                 }
-                #else
-                ContentView()
-                #endif
-                }
-                .environmentObject(chatHistoryDependency)
-                .globalMergeTaskPortal(
-                    anchorStore: mergeTaskRailAnchorStore
-                )
+            } else {
+                productWindow
             }
+            #else
+            productWindow
+            #endif
         }
     }
+
+    private var productWindow: some View {
+        AdaptiveLayoutReader { _ in
+            rootContent
+        }
+        .overlay { CommentPopupView() }
+        .overlay { LinkPopupPresenter() }
+    }
+
+    @ViewBuilder
+    private var rootContent: some View {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--ui-test-owned-card-actions") {
+            OwnedCardActionFixtureScreen()
+        } else if LinkPresentationFixture.isEnabled {
+            LinkPresentationFixtureScreen()
+        } else if CommentPresentationFixture.isEnabled {
+            CommentPresentationFixtureScreen()
+        } else if isMergeFidelityUITestRoute {
+            // This route owns only in-memory fixtures. Do not install the global
+            // portal that can resume a signed-in actor's persisted network tasks.
+            NavigationStack {
+                MergeSelectionFidelityFixtureScreen()
+            }
+            .tint(ChoraiTheme.accent)
+        } else {
+            productContent
+        }
+        #else
+        productContent
+        #endif
+    }
+
+    private var productContent: some View {
+        Group {
+        #if DEBUG
+        if isSparkFidelityUITestRoute {
+            NavigationStack {
+                SparkContinuationView.fidelityFixture()
+            }
+        } else if LocalDevelopmentPreview.isEnabled {
+            TabBarView()
+        } else if isAPIMigrationSmoke {
+            Color.clear
+        } else if isAdaptiveLayoutUITestRoute {
+            AdaptiveLayoutFixtureScreen()
+        } else if isMergeSelectionUITestRoute {
+            MergeSelectionVisualFixtureScreen()
+        } else if isMergeArtifactUITestRoute || isMergeLongArtifactUITestRoute {
+            MergeArtifactVisualFixtureScreen(
+                usesLongDocument: isMergeLongArtifactUITestRoute
+            )
+        } else if isMergeTaskRailUITestRoute {
+            MergeTaskRailFixtureScreen()
+        } else if isNativeOnboardingUITestRoute {
+            NativeOnboardingFixtureScreen()
+        } else if isPrivateBetaEntryUITestRoute {
+            PrivateBetaEntryFixtureScreen()
+        } else if isCardEditorShellUITestRoute {
+            CardEditorShellFixtureScreen()
+        } else if isSignInUITestRoute {
+            NavigationStack {
+                SignInView()
+            }
+        } else if isChoraProfileUITestRoute {
+            NavigationStack {
+                ChoraProfileFixtureScreen()
+            }
+        } else if isProfileCreditSurfaceUITestRoute {
+            NavigationStack {
+                ProfileCreditSurfaceFixtureScreen(
+                    userProfileManager: .shared
+                )
+            }
+        } else if isMyProfileActionsUITestRoute {
+            NavigationStack {
+                MyProfileActionsFixtureScreen()
+            }
+        } else if isSettingsUITestRoute {
+            NavigationStack {
+                SettingsView(
+                    loadsProfileOnAppear: isLiveProfileSettingsUITestRoute,
+                    choraProfileDestination: {
+                        AnyView(ChoraProfileFixtureScreen())
+                    },
+                    invitationCreditDestination: {
+                        AnyView(InvitationCreditFixtureScreen())
+                    }
+                )
+            }
+        } else if isLibraryPreviewUITestRoute {
+            LibraryCardPreviewFixtureScreen()
+        } else if isLibraryUITestRoute {
+            NavigationStack {
+                LibraryFixtureScreen()
+            }
+        } else if isChatVisibilityUITestRoute {
+            ChatVisibilityFixtureScreen()
+        } else if isChoraContractUITestRoute {
+            ChoraProfileContractFixtureView()
+        } else if isInvitationCreditContractUITestRoute {
+            InvitationCreditContractFixtureView()
+        } else if isDiscoveryPathContractUITestRoute {
+            DiscoveryPathContractFixtureView()
+        } else if isDiscoveryPathUITestRoute {
+            NavigationStack {
+                DiscoveryPathFixtureScreen()
+            }
+        } else if isInvitationCreditUITestRoute {
+            NavigationStack {
+                InvitationCreditFixtureScreen()
+            }
+        } else if isSignupInvitationUITestRoute {
+            SignupInvitationFixtureScreen()
+        } else if isNotificationContractUITestRoute {
+            NotificationContractFixtureView()
+        } else if isNotificationInboxUITestRoute {
+            NavigationStack {
+                NotificationView(
+                    service: NotificationInboxFixtureService(),
+                    actorID: "act_fixture",
+                    usesFixtureDestinations: true
+                )
+            }
+        } else if isInterestUITestRoute {
+            NavigationStack {
+                ChooseInterestsView()
+            }
+        } else if let profileUITestActorID,
+                  !profileUITestActorID.isEmpty {
+            NavigationStack {
+                UserProfileView(actorId: profileUITestActorID)
+            }
+        } else if let discoveryPathLiveCardID,
+                  !discoveryPathLiveCardID.isEmpty {
+            NavigationStack {
+                RootView(cardId: discoveryPathLiveCardID)
+            }
+        } else {
+            ContentView()
+        }
+        #else
+        ContentView()
+        #endif
+        }
+        .tint(ChoraiTheme.accent)
+        .environmentObject(chatHistoryDependency)
+        .globalMergeTaskPortal(
+            anchorStore: mergeTaskRailAnchorStore
+        )
+    }
+
 }
 
 #if DEBUG
@@ -309,7 +375,7 @@ private actor PrivateBetaPreflightFixture: AccessCodePreflighting {
     }
 }
 
-private final class PrivateBetaCodeStoreFixture:
+final class PrivateBetaCodeStoreFixture:
     ObservableObject,
     CodeStoring,
     @unchecked Sendable
@@ -943,10 +1009,7 @@ private struct LibraryFixtureScreen: View {
 
     var body: some View {
         ZStack {
-            Image("home_bg")
-                .resizable()
-                .scaledToFill()
-                .ignoresSafeArea()
+            ChoraiBackground()
 
             HomeView(
                 showSideMenu: $showSideMenu,
@@ -1099,15 +1162,7 @@ private struct LibraryCardPreviewFixtureScreen: View {
 
     var body: some View {
         ZStack {
-            LinearGradient(
-                colors: [
-                    Color(red: 0.11, green: 0.04, blue: 0.18),
-                    Color(red: 0.03, green: 0.07, blue: 0.14),
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
+            ChoraiBackground()
 
             ScrollView {
                 Group {
@@ -4717,6 +4772,33 @@ private final class APIMigrationSmokeRunner {
 
     private static func log(_ message: String) {
         print("\(marker) \(message)")
+    }
+}
+#endif
+
+#if DEBUG
+enum LocalDevelopmentPreview {
+    static var isEnabled: Bool {
+        #if targetEnvironment(simulator)
+        let isSimulator = true
+        #else
+        let isSimulator = false
+        #endif
+        return LocalPreviewPolicy.isEnabled(
+            isDebug: true, isSimulator: isSimulator,
+            compiledEnvironment: Bundle.main.object(forInfoDictionaryKey: APIEnvironment.infoDictionaryKey) as? String,
+            arguments: ProcessInfo.processInfo.arguments,
+            apiOverride: ProcessInfo.processInfo.environment[APIEnvironment.overrideEnvironmentKey]
+        )
+    }
+
+    static func installDisplayProfile() {
+        // A process-local display identity, without authenticating or writing credentials.
+        AuthManager.shared.currentUser = User(
+            id: LocalPreviewFixtures.actorID, username: "Local Preview",
+            email: "preview@example.invalid", avatar: nil, bio: "Offline sample content",
+            credit: 0, createdAt: "2026-01-01T09:00:00Z"
+        )
     }
 }
 #endif

@@ -50,17 +50,16 @@ struct InvitationHistoryView: View {
                 Task { await store.retry() }
             }
         case .ready, .loadingMore:
-            ScrollView {
-                LazyVStack(spacing: 0) {
-                    ForEach(store.items) { record in
-                        invitationRow(record)
-                        InvitationCreditRowDivider()
-                    }
-                    pagination
+            List {
+                ForEach(store.items) { record in
+                    invitationRow(record)
+                        .listRowBackground(ChoraiTheme.surface)
                 }
-                .adaptiveContentGutter()
-                .padding(.bottom, 40)
+                pagination
+                    .listRowBackground(ChoraiTheme.surface)
             }
+            .listStyle(.insetGrouped)
+            .scrollContentBackground(.hidden)
         }
     }
 
@@ -69,7 +68,7 @@ struct InvitationHistoryView: View {
             HStack(alignment: .firstTextBaseline, spacing: 12) {
                 Text("Invited member")
                     .font(.body.weight(.medium))
-                    .foregroundColor(.white)
+                    .foregroundColor(ChoraiTheme.ink)
                 Spacer(minLength: 12)
                 Text(
                     InvitationCreditPresentation.readable(
@@ -77,12 +76,12 @@ struct InvitationHistoryView: View {
                     )
                 )
                 .font(.subheadline.weight(.medium))
-                .foregroundColor(.white.opacity(0.72))
+                .foregroundColor(ChoraiTheme.secondaryInk)
                 .fixedSize(horizontal: false, vertical: true)
             }
             Text(InvitationCreditPresentation.date(record.createdAt))
                 .font(.footnote)
-                .foregroundColor(.white.opacity(0.5))
+                .foregroundColor(ChoraiTheme.secondaryInk)
         }
         .padding(.vertical, 16)
         .accessibilityElement(children: .ignore)
@@ -106,7 +105,7 @@ struct InvitationHistoryView: View {
             }
         } else if store.phase == .loadingMore {
             ProgressView()
-                .tint(.white)
+                .tint(ChoraiTheme.ink)
                 .padding(.vertical, 20)
                 .accessibilityLabel("Loading more invitations")
                 .accessibilityIdentifier("invitation-history.loading-more")
@@ -170,17 +169,16 @@ struct InvitationRewardsView: View {
                 Task { await store.retry() }
             }
         case .ready, .loadingMore:
-            ScrollView {
-                LazyVStack(spacing: 0) {
-                    ForEach(store.items) { reward in
-                        rewardRow(reward)
-                        InvitationCreditRowDivider()
-                    }
-                    pagination
+            List {
+                ForEach(store.items) { reward in
+                    rewardRow(reward)
+                        .listRowBackground(ChoraiTheme.surface)
                 }
-                .adaptiveContentGutter()
-                .padding(.bottom, 40)
+                pagination
+                    .listRowBackground(ChoraiTheme.surface)
             }
+            .listStyle(.insetGrouped)
+            .scrollContentBackground(.hidden)
         }
     }
 
@@ -189,11 +187,11 @@ struct InvitationRewardsView: View {
             HStack(alignment: .firstTextBaseline, spacing: 12) {
                 Text(rewardAmount(reward.amount))
                     .font(.title3.weight(.semibold))
-                    .foregroundColor(.white)
+                    .foregroundColor(ChoraiTheme.ink)
                     .monospacedDigit()
                 Text("Credits")
                     .font(.subheadline.weight(.medium))
-                    .foregroundColor(.white.opacity(0.7))
+                    .foregroundColor(ChoraiTheme.secondaryInk)
                 Spacer(minLength: 12)
                 Text(
                     InvitationCreditPresentation.readable(
@@ -201,7 +199,7 @@ struct InvitationRewardsView: View {
                     )
                 )
                 .font(.subheadline)
-                .foregroundColor(.white.opacity(0.62))
+                .foregroundColor(ChoraiTheme.secondaryInk)
             }
 
             HStack(spacing: 10) {
@@ -212,7 +210,7 @@ struct InvitationRewardsView: View {
                 }
             }
             .font(.footnote)
-            .foregroundColor(.white.opacity(0.5))
+            .foregroundColor(ChoraiTheme.secondaryInk)
         }
         .padding(.vertical, 16)
         .accessibilityElement(children: .ignore)
@@ -250,7 +248,7 @@ struct InvitationRewardsView: View {
             }
         } else if store.phase == .loadingMore {
             ProgressView()
-                .tint(.white)
+                .tint(ChoraiTheme.ink)
                 .padding(.vertical, 20)
                 .accessibilityLabel("Loading more rewards")
                 .accessibilityIdentifier("invitation-rewards.loading-more")
@@ -314,17 +312,16 @@ struct CreditLedgerView: View {
                 Task { await store.retry() }
             }
         case .ready, .loadingMore:
-            ScrollView {
-                LazyVStack(spacing: 0) {
-                    ForEach(store.entries) { entry in
-                        ledgerRow(entry)
-                        InvitationCreditRowDivider()
-                    }
-                    pagination
+            List {
+                ForEach(store.entries) { entry in
+                    ledgerRow(entry)
+                        .listRowBackground(ChoraiTheme.surface)
                 }
-                .adaptiveContentGutter()
-                .padding(.bottom, 40)
+                pagination
+                    .listRowBackground(ChoraiTheme.surface)
             }
+            .listStyle(.insetGrouped)
+            .scrollContentBackground(.hidden)
         }
     }
 
@@ -334,17 +331,17 @@ struct CreditLedgerView: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(InvitationCreditPresentation.action(entry.actionType))
                         .font(.body.weight(.medium))
-                        .foregroundColor(.white)
+                        .foregroundColor(ChoraiTheme.ink)
                         .fixedSize(horizontal: false, vertical: true)
                     Text(InvitationCreditPresentation.readable(entry.category))
                         .font(.footnote)
-                        .foregroundColor(.white.opacity(0.5))
+                        .foregroundColor(ChoraiTheme.secondaryInk)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 12)
                 Text(signedDelta(entry))
                     .font(.title3.weight(.semibold))
-                    .foregroundColor(.white)
+                    .foregroundColor(ChoraiTheme.ink)
                     .monospacedDigit()
             }
 
@@ -364,11 +361,11 @@ struct CreditLedgerView: View {
                     .monospacedDigit()
             }
             .font(.footnote)
-            .foregroundColor(.white.opacity(0.58))
+            .foregroundColor(ChoraiTheme.secondaryInk)
 
             Text(InvitationCreditPresentation.date(entry.createdAt))
                 .font(.footnote)
-                .foregroundColor(.white.opacity(0.44))
+                .foregroundColor(ChoraiTheme.secondaryInk)
         }
         .padding(.vertical, 16)
         .accessibilityElement(children: .ignore)
@@ -444,7 +441,7 @@ struct CreditLedgerView: View {
             }
         } else if store.phase == .loadingMore {
             ProgressView()
-                .tint(.white)
+                .tint(ChoraiTheme.ink)
                 .padding(.vertical, 20)
                 .accessibilityLabel("Loading more credit activity")
                 .accessibilityIdentifier("credit-ledger.loading-more")
@@ -478,18 +475,14 @@ private struct InvitationCreditDetailShell<Content: View>: View {
     }
 
     var body: some View {
-        ZStack {
-            Image("home_bg")
-                .resizable()
-                .aspectRatio(contentMode: .fill)
-                .ignoresSafeArea()
-            VStack(spacing: 0) {
-                SettingsDestinationHeader(title: title, dismiss: dismiss)
-                content
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-        }
-        .navigationBarHidden(true)
+        content
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .choraiPageBackground()
+        .foregroundStyle(ChoraiTheme.ink)
+        .tint(ChoraiTheme.accent)
+        .navigationTitle(title)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.visible, for: .navigationBar)
         .overlay(alignment: .topLeading) {
             InvitationCreditScreenAnchor(
                 identifier: screenIdentifier,
@@ -505,10 +498,10 @@ private struct InvitationCreditDetailLoading: View {
 
     var body: some View {
         VStack(spacing: 12) {
-            ProgressView().tint(.white)
+            ProgressView().tint(ChoraiTheme.ink)
             Text(text)
                 .font(.subheadline)
-                .foregroundColor(.white.opacity(0.65))
+                .foregroundColor(ChoraiTheme.secondaryInk)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .accessibilityElement(children: .combine)
@@ -523,7 +516,7 @@ private struct InvitationCreditDetailEmpty: View {
     var body: some View {
         Text(text)
             .font(.subheadline)
-            .foregroundColor(.white.opacity(0.68))
+            .foregroundColor(ChoraiTheme.secondaryInk)
             .multilineTextAlignment(.center)
             .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, 36)
@@ -541,7 +534,7 @@ private struct InvitationCreditDetailFailure: View {
         VStack(spacing: 14) {
             Text(text)
                 .font(.subheadline)
-                .foregroundColor(Color(red: 1, green: 0.62, blue: 0.64))
+                .foregroundColor(.red)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier(identifier)
@@ -564,14 +557,14 @@ private struct InvitationCreditPaginationFailure: View {
         VStack(spacing: 10) {
             Text(text)
                 .font(.footnote)
-                .foregroundColor(Color(red: 1, green: 0.62, blue: 0.64))
+                .foregroundColor(.red)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier(identifier)
             Button("Retry", action: retry)
                 .font(.footnote.weight(.semibold))
-                .foregroundColor(.white)
-                .frame(minWidth: 88, minHeight: 40)
+                .foregroundColor(ChoraiTheme.ink)
+                .frame(minWidth: 88, minHeight: 44)
                 .accessibilityLabel("Retry loading more")
                 .accessibilityIdentifier("\(identifier).retry")
         }
@@ -582,7 +575,7 @@ private struct InvitationCreditPaginationFailure: View {
 
 private struct InvitationCreditRowDivider: View {
     var body: some View {
-        Divider().background(Color.white.opacity(0.16))
+        Divider().background(ChoraiTheme.surface)
     }
 }
 

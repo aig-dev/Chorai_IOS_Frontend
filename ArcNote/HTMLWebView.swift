@@ -1,343 +1,141 @@
 import SwiftUI
 import WebKit
 
+/// Compact previews keep their existing three-line clipping. Full readers below
+/// use the same typography without clipping or replacing the HTML document.
 struct HTMLWebView: UIViewRepresentable {
+    @Environment(\.colorScheme) private var colorScheme
     let htmlContent: String
     let height: CGFloat
-    
+
     init(htmlContent: String, height: CGFloat = 200) {
         self.htmlContent = htmlContent
         self.height = height
     }
-    
+
     func makeUIView(context: Context) -> WKWebView {
-        let webView = WKWebView()
-        webView.navigationDelegate = context.coordinator
-        webView.isOpaque = false
-        webView.backgroundColor = UIColor.clear
-        webView.scrollView.backgroundColor = UIColor.clear
-        webView.scrollView.isScrollEnabled = false
-        webView.scrollView.bounces = false
-        webView.scrollView.showsVerticalScrollIndicator = false
-        webView.scrollView.showsHorizontalScrollIndicator = false
-        
+        let webView = ChoraiHTMLAppearance.makeWebView()
+        webView.overrideUserInterfaceStyle = colorScheme == .dark ? .dark : .light
         return webView
     }
-    
+
     func updateUIView(_ webView: WKWebView, context: Context) {
-        let htmlString = createStyledHTML(from: htmlContent)
-        webView.loadHTMLString(htmlString, baseURL: nil)
+        webView.overrideUserInterfaceStyle = colorScheme == .dark ? .dark : .light
+        guard context.coordinator.loadedContent != htmlContent else { return }
+        context.coordinator.loadedContent = htmlContent
+        webView.loadHTMLString(
+            ChoraiHTMLAppearance.document(content: htmlContent, isPreview: true),
+            baseURL: nil
+        )
     }
-    
-    func makeCoordinator() -> Coordinator {
-        Coordinator(self)
-    }
-    
-    class Coordinator: NSObject, WKNavigationDelegate {
-        var parent: HTMLWebView
-        
-        init(_ parent: HTMLWebView) {
-            self.parent = parent
-        }
-        
-        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-            // 获取内容高度并调整 WebView 高度
-            webView.evaluateJavaScript("document.body.scrollHeight") { (result, error) in
-                if let _ = result as? CGFloat {
-                    DispatchQueue.main.async {
-                        // 这里可以通知父视图更新高度
-                        // 由于 SwiftUI 的限制，我们使用固定高度
-                    }
-                }
-            }
-        }
-    }
-    
-    private func createStyledHTML(from content: String) -> String {
-        return """
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <style>
-                body {
-                    margin: 0;
-                    padding: 0;
-                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-                    font-size: 16px;
-                    line-height: 1.4;
-                    color: rgba(255, 255, 255, 0.9);
-                    background-color: transparent;
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    max-height: 4.2em;
-                    overflow: hidden;
-                    position: relative;
-                }
-                
-              
-                
-                p {
-                    margin: 0 0 8px 0;
-                    padding: 0;
-                }
-                
-                ul, ol {
-                    margin: 8px 0;
-                    padding-left: 20px;
-                }
-                
-                li {
-                    margin: 4px 0;
-                }
-                
-                h1, h2, h3, h4, h5, h6 {
-                    margin: 12px 0 8px 0;
-                    font-weight: 600;
-                    color: rgba(255, 255, 255, 0.95);
-                }
-                
-                h1 { font-size: 20px; }
-                h2 { font-size: 18px; }
-                h3 { font-size: 17px; }
-                
-                blockquote {
-                    margin: 8px 0;
-                    padding: 8px 12px;
-                    border-left: 3px solid rgba(255, 255, 255, 0.3);
-                    background-color: rgba(255, 255, 255, 0.05);
-                    font-style: italic;
-                }
-                
-                code {
-                    background-color: rgba(255, 255, 255, 0.1);
-                    padding: 2px 4px;
-                    border-radius: 3px;
-                    font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
-                    font-size: 14px;
-                }
-                
-                pre {
-                    background-color: rgba(255, 255, 255, 0.1);
-                    padding: 8px 12px;
-                    border-radius: 6px;
-                    overflow-x: auto;
-                    margin: 8px 0;
-                }
-                
-                pre code {
-                    background-color: transparent;
-                    padding: 0;
-                }
-                
-                a {
-                    color: rgba(255, 255, 255, 0.8);
-                    text-decoration: underline;
-                }
-                
-                img {
-                    max-width: 100%;
-                    height: auto;
-                    border-radius: 4px;
-                    margin: 8px 0;
-                }
-                
-                table {
-                    width: 100%;
-                    border-collapse: collapse;
-                    margin: 8px 0;
-                }
-                
-                th, td {
-                    border: 1px solid rgba(255, 255, 255, 0.2);
-                    padding: 6px 8px;
-                    text-align: left;
-                }
-                
-                th {
-                    background-color: rgba(255, 255, 255, 0.1);
-                    font-weight: 600;
-                }
-                
-                hr {
-                    border: none;
-                    border-top: 1px solid rgba(255, 255, 255, 0.2);
-                    margin: 12px 0;
-                }
-            </style>
-        </head>
-        <body>
-            \(content)
-        </body>
-        </html>
-        """
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    final class Coordinator {
+        var loadedContent: String?
     }
 }
 
-// MARK: - 自适应高度的 HTML WebView
 struct AdaptiveHTMLWebView: UIViewRepresentable {
+    @Environment(\.colorScheme) private var colorScheme
     let htmlContent: String
     @Binding var height: CGFloat
-    
+
     func makeUIView(context: Context) -> WKWebView {
-        let webView = WKWebView()
+        let webView = ChoraiHTMLAppearance.makeWebView()
         webView.navigationDelegate = context.coordinator
+        webView.overrideUserInterfaceStyle = colorScheme == .dark ? .dark : .light
+        return webView
+    }
+
+    func updateUIView(_ webView: WKWebView, context: Context) {
+        context.coordinator.parent = self
+        webView.overrideUserInterfaceStyle = colorScheme == .dark ? .dark : .light
+        guard context.coordinator.loadedContent != htmlContent else { return }
+        context.coordinator.loadedContent = htmlContent
+        webView.loadHTMLString(
+            ChoraiHTMLAppearance.document(content: htmlContent, isPreview: false),
+            baseURL: nil
+        )
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    final class Coordinator: NSObject, WKNavigationDelegate {
+        var parent: AdaptiveHTMLWebView
+        var loadedContent: String?
+        private var contentSizeObservation: NSKeyValueObservation?
+
+        init(_ parent: AdaptiveHTMLWebView) { self.parent = parent }
+
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            updateHeight(webView)
+            // Images may finish after navigation. Observe rendered size rather
+            // than reloading the document each time SwiftUI measures its height.
+            contentSizeObservation = webView.scrollView.observe(\.contentSize, options: [.new]) { [weak self, weak webView] _, _ in
+                guard let webView else { return }
+                self?.updateHeight(webView)
+            }
+        }
+
+        private func updateHeight(_ webView: WKWebView) {
+            webView.evaluateJavaScript("Math.ceil(Math.max(document.body.scrollHeight, document.body.getBoundingClientRect().height))") { [weak self] result, _ in
+                guard let self, let value = result as? NSNumber else { return }
+                let measured = max(CGFloat(value.doubleValue), 50)
+                guard abs(self.parent.height - measured) > 0.5 else { return }
+                DispatchQueue.main.async { [weak self] in self?.parent.height = measured }
+            }
+        }
+    }
+}
+
+private enum ChoraiHTMLAppearance {
+    static func makeWebView() -> WKWebView {
+        let webView = WKWebView()
         webView.isOpaque = false
-        webView.backgroundColor = UIColor.clear
-        webView.scrollView.backgroundColor = UIColor.clear
+        webView.backgroundColor = .clear
+        webView.scrollView.backgroundColor = .clear
         webView.scrollView.isScrollEnabled = false
         webView.scrollView.bounces = false
         webView.scrollView.showsVerticalScrollIndicator = false
         webView.scrollView.showsHorizontalScrollIndicator = false
-        
         return webView
     }
-    
-    func updateUIView(_ webView: WKWebView, context: Context) {
-        let htmlString = createStyledHTML(from: htmlContent)
-        webView.loadHTMLString(htmlString, baseURL: nil)
-    }
-    
-    func makeCoordinator() -> Coordinator {
-        Coordinator(self)
-    }
-    
-    class Coordinator: NSObject, WKNavigationDelegate {
-        var parent: AdaptiveHTMLWebView
-        
-        init(_ parent: AdaptiveHTMLWebView) {
-            self.parent = parent
-        }
-        
-        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-            // 获取内容高度并更新绑定
-            webView.evaluateJavaScript("document.body.scrollHeight") { (result, error) in
-                if let height = result as? CGFloat {
-                    DispatchQueue.main.async {
-                        self.parent.height = max(height, 50) // 最小高度 50
-                    }
-                }
-            }
-        }
-    }
-    
-    private func createStyledHTML(from content: String) -> String {
-        return """
+
+    static func document(content: String, isPreview: Bool) -> String {
+        """
         <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <style>
-                body {
-                    margin: 0;
-                    padding: 0;
-                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-                    font-size: 16px;
-                    line-height: 1.4;
-                    color: rgba(255, 255, 255, 0.9);
-                    background-color: transparent;
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    max-height: 4.2em;
-                    overflow: hidden;
-                    position: relative;
-                }
-                
-                p {
-                    margin: 0 0 8px 0;
-                    padding: 0;
-                }
-                
-                ul, ol {
-                    margin: 8px 0;
-                    padding-left: 20px;
-                }
-                
-                li {
-                    margin: 4px 0;
-                }
-                
-                h1, h2, h3, h4, h5, h6 {
-                    margin: 12px 0 8px 0;
-                    font-weight: 600;
-                    color: rgba(255, 255, 255, 0.95);
-                }
-                
-                h1 { font-size: 20px; }
-                h2 { font-size: 18px; }
-                h3 { font-size: 17px; }
-                
-                blockquote {
-                    margin: 8px 0;
-                    padding: 8px 12px;
-                    border-left: 3px solid rgba(255, 255, 255, 0.3);
-                    background-color: rgba(255, 255, 255, 0.05);
-                    font-style: italic;
-                }
-                
-                code {
-                    background-color: rgba(255, 255, 255, 0.1);
-                    padding: 2px 4px;
-                    border-radius: 3px;
-                    font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
-                    font-size: 14px;
-                }
-                
-                pre {
-                    background-color: rgba(255, 255, 255, 0.1);
-                    padding: 8px 12px;
-                    border-radius: 6px;
-                    overflow-x: auto;
-                    margin: 8px 0;
-                }
-                
-                pre code {
-                    background-color: transparent;
-                    padding: 0;
-                }
-                
-                a {
-                    color: rgba(255, 255, 255, 0.8);
-                    text-decoration: underline;
-                }
-                
-                img {
-                    max-width: 100%;
-                    height: auto;
-                    border-radius: 4px;
-                    margin: 8px 0;
-                }
-                
-                table {
-                    width: 100%;
-                    border-collapse: collapse;
-                    margin: 8px 0;
-                }
-                
-                th, td {
-                    border: 1px solid rgba(255, 255, 255, 0.2);
-                    padding: 6px 8px;
-                    text-align: left;
-                }
-                
-                th {
-                    background-color: rgba(255, 255, 255, 0.1);
-                    font-weight: 600;
-                }
-                
-                hr {
-                    border: none;
-                    border-top: 1px solid rgba(255, 255, 255, 0.2);
-                    margin: 12px 0;
-                }
-            </style>
-        </head>
-        <body>
-            \(content)
-        </body>
-        </html>
+        <html><head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+        :root { color-scheme: light dark; --ink:#153b37; --muted:#586d64; --surface:#f0f0ea; --edge:#d9dfd7; --gold:#846838; }
+        @media (prefers-color-scheme: dark) {
+            :root { --ink:#bfdbcf; --muted:#a2b5ac; --surface:#35363b; --edge:#4c514f; --gold:#d6b378; }
+        }
+        html, body { margin:0; padding:0; background:transparent; width:100%; }
+        /* Contain heading/paragraph margins so the measured body includes the
+           last line. Collapsed margins can otherwise fall outside scrollHeight. */
+        body { display:flow-root; }
+        body { font:-apple-system-body; line-height:1.65; color:\(isPreview ? "var(--ink)" : "CanvasText"); overflow-wrap:anywhere; -webkit-text-size-adjust:100%; }
+        \(isPreview ? "body { max-height:4.95em; overflow:hidden; }" : "html { font:-apple-system-body; } body { font-family:ui-serif,'New York','Songti SC',Georgia,serif; font-size:1.235294rem; line-height:1.6; } p { margin-bottom:24px; }")
+        p { margin:0 0 16px; padding:0; }
+        ul, ol { margin:12px 0; padding-left:24px; }
+        li { margin:5px 0; }
+        h1, h2, h3, h4, h5, h6 { margin:22px 0 12px; color:inherit; font-family:ui-serif,Georgia,serif; line-height:1.25; }
+        h1 { font-size:1.75em; } h2 { font-size:1.45em; } h3 { font-size:1.2em; }
+        blockquote { margin:16px 0; padding:8px 16px; border-left:3px solid var(--gold); color:var(--muted); }
+        code { background:var(--surface); border-radius:4px; padding:2px 4px; font-family:ui-monospace,monospace; font-size:0.88em; }
+        pre { box-sizing:border-box; max-width:100%; overflow-x:auto; padding:16px; border-radius:12px; background:var(--surface); }
+        pre code { padding:0; background:transparent; }
+        a { color:var(--ink); text-decoration:underline; }
+        img, video { display:block; max-width:100%; height:auto; border-radius:12px; margin:16px 0; }
+        table { display:block; overflow-x:auto; max-width:100%; border-collapse:collapse; margin:16px 0; }
+        th, td { border:1px solid var(--edge); padding:8px; text-align:left; }
+        th { background:var(--surface); }
+        hr { border:0; border-top:1px solid var(--edge); margin:20px 0; }
+        \(isPreview ? "" : "p { margin-bottom:24px; } body > :first-child { margin-top:0; }")
+        </style></head><body>\(content)</body></html>
         """
     }
 }

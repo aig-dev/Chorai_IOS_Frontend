@@ -1,0 +1,62 @@
+[
+  {
+    "file": "remediation-reader-document-light.png",
+    "test": "ArcNoteUITests/testNativeExploreFixedSummaryAndHistoryKeepTheOriginalCard()",
+    "source": "/tmp/chorai-remediation-core-ui.xcresult",
+    "device": "iPhone 17 Pro"
+  },
+  {
+    "file": "remediation-explore-long-summary-light.png",
+    "test": "ArcNoteUITests/testNativeExploreFixedSummaryAndHistoryKeepTheOriginalCard()",
+    "source": "/tmp/chorai-remediation-core-ui.xcresult",
+    "device": "iPhone 17 Pro"
+  },
+  {
+    "file": "remediation-explore-summary-light.png",
+    "test": "ArcNoteUITests/testNativeExploreFixedSummaryAndHistoryKeepTheOriginalCard()",
+    "source": "/tmp/chorai-remediation-core-ui.xcresult",
+    "device": "iPhone 17 Pro"
+  },
+  {
+    "file": "review-editor-existing-light.png",
+    "test": "ArcNoteUITests/testNativeFidelityHomeMenuOpensRealUnboxedEditor()",
+    "source": "/tmp/chorai-remediation-core-ui.xcresult",
+    "device": "iPhone 17 Pro"
+  },
+  {
+    "file": "Fidelity real editor-light.png",
+    "test": "ArcNoteUITests/testNativeFidelityHomeMenuOpensRealUnboxedEditor()",
+    "source": "/tmp/chorai-remediation-core-ui.xcresult",
+    "device": "iPhone 17 Pro"
+  },
+  {
+    "file": "Fidelity native Home menu-light.png",
+    "test": "ArcNoteUITests/testNativeFidelityHomeMenuOpensRealUnboxedEditor()",
+    "source": "/tmp/chorai-remediation-core-ui.xcresult",
+    "device": "iPhone 17 Pro"
+  },
+  {
+    "file": "Native reform Home-light.png",
+    "test": "ArcNoteUITests/testNativeReformGridReaderAndHomeKeepRealNavigation()",
+    "source": "/tmp/chorai-remediation-core-ui.xcresult",
+    "device": "iPhone 17 Pro"
+  },
+  {
+    "file": "Native reform reader-light.png",
+    "test": "ArcNoteUITests/testNativeReformGridReaderAndHomeKeepRealNavigation()",
+    "source": "/tmp/chorai-remediation-core-ui.xcresult",
+    "device": "iPhone 17 Pro"
+  },
+  {
+    "file": "Native reform Grid-light.png",
+    "test": "ArcNoteUITests/testNativeReformGridReaderAndHomeKeepRealNavigation()",
+    "source": "/tmp/chorai-remediation-core-ui.xcresult",
+    "device": "iPhone 17 Pro"
+  },
+  {
+    "file": "fidelity-explore-deck-light.png",
+    "test": "ArcNoteUITests/testNativeReformGridReaderAndHomeKeepRealNavigation()",
+    "source": "/tmp/chorai-remediation-core-ui.xcresult",
+    "device": "iPhone 17 Pro"
+  }
+]

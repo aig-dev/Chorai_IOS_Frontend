@@ -143,258 +143,69 @@ struct MyProfileView: View {
         self.companionChatRouter = companionChatRouter
         self.chatDetailFetcher = chatDetailFetcher
     }
-    
-    var body: some View {
-        VStack(spacing: 0) {
-            // 顶部导航栏
-            HStack {
-                Button(action: {
-                    dismiss()
-                }) {
-                    Image(systemName: "chevron.left")
-                        .font(.title2)
-                        .foregroundColor(.white)
-                }
-                
-                Spacer()
-                
-                Text(userProfileManager.userProfile?.username ?? "My Profile")
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundColor(.white)
-                
-                Spacer()
-                
-                // 占位符，保持标题居中
-                Image(systemName: "chevron.left")
-                    .font(.title2)
-                    .foregroundColor(.clear)
-            }
-            .padding(.horizontal, adaptiveLayout.horizontalGutter)
-            .padding(.bottom, 20)
-            
-            // 主要内容
-            ScrollView {
-                VStack(spacing: 0) {
-                    // 顶部间距，为头像留出空间
-                    Spacer().frame(height: 30)
-                    
-                    // 用户资料卡片全屏宽度
-                    ZStack(alignment: .topLeading) {
-                        // 主卡片内容
-                        VStack(spacing: 0) {
-                            // 头像占位空间
-                            HStack {
-                                Spacer().frame(width: 60, height: 15) // 头像占位空间
-                                Spacer()
-                            }
-                            .padding(.horizontal, 20)
-                            .padding(.top, 15)
-                            
-                            // 用户信息区域
-                            VStack(alignment: .leading, spacing: 12) {
-                                HStack {
-                                    if userProfileManager.isLoading {
-                                        Text("Loading...")
-                                            .font(.system(size: 22, weight: .semibold))
-                                            .foregroundColor(.white.opacity(0.7))
-                                    } else {
-                                        Text(userProfileManager.userProfile?.username ?? "User")
-                                            .font(.system(size: 22, weight: .semibold))
-                                            .foregroundColor(.white)
-                                    }
-                                    
-                                    Spacer()
 
-                                    Button(action: createConversation) {
-                                        Image("send_chat")
-                                            .resizable()
-                                            .aspectRatio(contentMode: .fit)
-                                            .frame(width: 24, height: 24)
-                                            .frame(width: 44, height: 44)
-                                            .contentShape(Rectangle())
-                                    }
-                                    .buttonStyle(.plain)
-                                    .accessibilityLabel("Chat")
-                                    .accessibilityIdentifier("my-profile.chat")
-                                }
-                                
-                                // 第二行：统计数据
-                                HStack(spacing: 20) {
-                                    Button {
-                                        followListKind = .following
-                                        showFollowList = true
-                                    } label: {
-                                    HStack(spacing: 4) {
-                                        if userProfileManager.isLoading {
-                                            Text("--")
-                                                .font(.system(size: 19, weight: .bold))
-                                                .foregroundColor(.white.opacity(0.7))
-                                        } else {
-                                            Text("\(userProfileManager.userProfile?.followingCount ?? 0)")
-                                                .font(.system(size: 19, weight: .bold))
-                                                .foregroundColor(.white)
-                                        }
-                                        Text("following")
-                                            .font(.system(size: 17, weight: .regular))
-                                            .foregroundColor(.white.opacity(0.7))
-                                    }
-                                    }
-                                    .buttonStyle(.plain)
-                                    .accessibilityIdentifier("my-profile.following-count")
-                                    
-                                    Spacer()
-                                    Button {
-                                        followListKind = .followers
-                                        showFollowList = true
-                                    } label: {
-                                    HStack(spacing: 4) {
-                                        if userProfileManager.isLoading {
-                                            Text("--")
-                                                .font(.system(size: 19, weight: .bold))
-                                                .foregroundColor(.white.opacity(0.7))
-                                        } else {
-                                            Text("\(userProfileManager.userProfile?.followersCount ?? 0)")
-                                                .font(.system(size: 19, weight: .bold))
-                                                .foregroundColor(.white)
-                                        }
-                                        Text("followers")
-                                            .font(.system(size: 17, weight: .regular))
-                                            .foregroundColor(.white.opacity(0.7))
-                                    }
-                                    }
-                                    .buttonStyle(.plain)
-                                    .accessibilityIdentifier("my-profile.followers-count")
-                                    
-                                }
-                            }
-                            .padding(.horizontal, 20)
-                            .padding(.vertical, 15)
-                            
-                            // 笔记卡片列表 在同一个卡片内
-                            VStack(spacing: 20) {
-                                if cardsManager.isLoading && cardsManager.cards.isEmpty {
-                                    // 加载状态
-                                } else if cardsManager.cards.isEmpty {
-                                    // 空状态
-                                    VStack(spacing: 12) {
-                                        Image(systemName: "doc.text")
-                                            .font(.system(size: 32))
-                                            .foregroundColor(.white.opacity(0.5))
-                                        Text("No notes")
-                                            .font(.system(size: 14, weight: .medium))
-                                            .foregroundColor(.white.opacity(0.7))
-                                    }
-                                    .frame(height: 100)
-                                } else {
-                                    // 真实数据
-                                    ForEach(cardsManager.cards, id: \.id) { card in
-                                        UserPostCard(
-                                            card: card,
-                                            onShowMenu: { cardData in
-                                                // 设置当前卡片数据
-                                                currentMenuCardData = cardData
-                                                popupMenuLayout = .grid3x3
-                                                showPopupMenu = true
-                                            },
-                                            onCardTap: { cardId in
-                                                print("cardId=\(cardId)")
-                                                selectedCardId = cardId
-                                                DispatchQueue.main.async {
-                                                    navigateToDetail = true
-                                                    print("navigateToDetail: \(navigateToDetail)")
-                                                }
-                                            },
-                                            username: userProfileManager.userProfile?.username ?? "User",
-                                            avatarUrl: userProfileManager.userProfile?.avatar,
-                                            disableFavorite: true
-                                        )
-                                        .onAppear {
-                                            print("数据: id=\(card.id), commentCount=\(card.commentCount ?? -1), likeCount=\(card.likeCount)")
-                                        }
-                                    }
-                                }
-                            }
-                            .padding(.horizontal, 20)
-                            .padding(.bottom, 20)
-                        }
-                        .background(
-                            RoundedRectangle(
-                                cornerRadius: AdaptiveLayoutMetrics.surfaceCornerRadius,
-                                style: .continuous
-                            )
-                                .background(.ultraThinMaterial)
-                                .overlay(
-                                    RoundedRectangle(
-                                        cornerRadius: AdaptiveLayoutMetrics.surfaceCornerRadius,
-                                        style: .continuous
-                                    )
-                                        .stroke(Color.white.opacity(0.1), lineWidth: 1)
-                                )
-                                .clipShape(
-                                    RoundedRectangle(
-                                        cornerRadius: AdaptiveLayoutMetrics.surfaceCornerRadius,
-                                        style: .continuous
-                                    )
-                                )
+    var body: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 24) {
+                profileHeader
+                Divider().overlay(ChoraiTheme.separator)
+
+                if cardsManager.isLoading && cardsManager.cards.isEmpty {
+                    ProgressView("Loading notes…")
+                        .frame(maxWidth: .infinity, minHeight: 120)
+                } else if cardsManager.cards.isEmpty {
+                    Label("No notes", systemImage: "doc.text")
+                        .foregroundStyle(ChoraiTheme.secondaryInk)
+                        .frame(maxWidth: .infinity, minHeight: 120)
+                } else {
+                    ForEach(cardsManager.cards, id: \.id) { card in
+                        UserPostCard(
+                            card: card,
+                            onShowMenu: { cardData in
+                                currentMenuCardData = cardData
+                                popupMenuLayout = .grid3x3
+                            },
+                            onCardTap: { cardId in
+                                selectedCardId = cardId
+                                DispatchQueue.main.async { navigateToDetail = true }
+                            },
+                            username: userProfileManager.userProfile?.username ?? "User",
+                            avatarUrl: userProfileManager.userProfile?.avatar,
+                            disableFavorite: true,
+                            ownsMenuActions: true,
+                            onDelete: requestCardDeletion,
+                            onToggleVisibility: toggleCardVisibility,
+                            onTogglePin: toggleCardPin
                         )
-                        .accessibilityElement(children: .contain)
-                        .accessibilityIdentifier("profile.primary-surface")
-                        
-                        // 头像 骑在边框线上
-                        HStack {
-                            Group {
-                                if let avatarUrl = userProfileManager.userProfile?.avatar, !avatarUrl.isEmpty {
-                                    let fullAvatarUrl = APIConfiguration.resourceURLString(avatarUrl)
-                                  
-                                    AsyncImage(url: URL(string: fullAvatarUrl)) { image in
-                                        image
-                                            .resizable()
-                                            .aspectRatio(contentMode: .fill)
-                                    } placeholder: {
-                                        Image("avatar")
-                                            .resizable()
-                                            .aspectRatio(contentMode: .fill)
-                                    }
-                                } else {
-                                    Image("avatar")
-                                        .resizable()
-                                        .aspectRatio(contentMode: .fill)
-                                }
-                            }
-                            .frame(width: 72, height: 72)
-                            .clipShape(Circle())
-                            .overlay(
-                                Circle()
-                                    .stroke(Color.white, lineWidth: 3)
-                            )
-                            .offset(y: -36) // 向上偏移36，使头像中心在卡片上边框
-                            
-                            Spacer()
-                        }
-                        .padding(.leading, 20)
-                        .padding(.trailing, 20)
+                        Divider().overlay(ChoraiTheme.separator)
                     }
-                    .padding(.top, 30)
                 }
-                .adaptiveContentGutter()
+            }
+            .adaptiveContentGutter()
+            .padding(.top, 24)
+            .padding(.bottom, 32)
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("profile.primary-surface")
+        }
+        .choraiPageBackground()
+        .navigationTitle("My Profile")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.visible, for: .navigationBar)
+        .navigationBarBackButtonHidden(true)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button(action: dismiss.callAsFunction) {
+                    Image(systemName: "chevron.left")
+                        .frame(minWidth: 44, minHeight: 44)
+                }
+                .accessibilityLabel("Back")
             }
         }
-        .background(
-            Image("home_bg")
-                .resizable()
-                .aspectRatio(contentMode: .fill)
-                .ignoresSafeArea(.all)
-        )
-        .navigationBarHidden(true)
-        .navigationBarBackButtonHidden(true)
-        .overlay(
-            CommentPopupView()
-        )
         .onAppear {
             guard loadsDataOnAppear else { return }
             // 加载当前用户资料
             userProfileManager.fetchCurrentUserProfile()
-            
+
             cardsManager.loadUserCards(refresh: true)
         }
         .navigationDestination(isPresented: $navigateToDetail) {
@@ -463,7 +274,44 @@ struct MyProfileView: View {
                 viewerActorID: AuthManager.shared.currentUser?.id ?? ""
             )
         }
-        .linkPopup()
+    }
+
+    private var profileHeader: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            HStack(alignment: .center, spacing: 16) {
+                ProfilePortrait(rawURL: userProfileManager.userProfile?.avatar)
+                Text(userProfileManager.isLoading ? "Loading…" : userProfileManager.userProfile?.username ?? "User")
+                    .font(.system(.title, design: .serif).weight(.semibold))
+                    .foregroundStyle(ChoraiTheme.ink)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Button(action: createConversation) {
+                    Image(systemName: "bubble.left.and.bubble.right")
+                        .frame(width: 44, height: 44)
+                }
+                .choraiGlassButton()
+                .accessibilityLabel("Chat")
+                .accessibilityIdentifier("my-profile.chat")
+            }
+            HStack(spacing: 28) {
+                ProfileCountButton(
+                    count: userProfileManager.isLoading ? nil : userProfileManager.userProfile?.followingCount ?? 0,
+                    label: "following",
+                    identifier: "my-profile.following-count"
+                ) {
+                    followListKind = .following
+                    showFollowList = true
+                }
+                ProfileCountButton(
+                    count: userProfileManager.isLoading ? nil : userProfileManager.userProfile?.followersCount ?? 0,
+                    label: "followers",
+                    identifier: "my-profile.followers-count"
+                ) {
+                    followListKind = .followers
+                    showFollowList = true
+                }
+                Spacer(minLength: 0)
+            }
+        }
     }
 
     private var deleteErrorPresented: Binding<Bool> {

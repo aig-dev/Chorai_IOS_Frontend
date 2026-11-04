@@ -20,8 +20,9 @@ final class KeyboardLayoutSourceContractTests: XCTestCase {
         let source = try source(at: "ArcNote/TabBarView.swift")
 
         XCTAssertTrue(source.contains("@StateObject private var keyboardLayout"))
-        XCTAssertTrue(source.contains("if !keyboardLayout.isVisible"))
-        XCTAssertTrue(source.contains("CoreTabBar(selectedTab: $coordinator.selectedTab)"))
+        XCTAssertTrue(source.contains("isTabBarCovered || keyboardLayout.isVisible ? .hidden : .automatic"))
+        XCTAssertTrue(source.contains("for: .tabBar"))
+        XCTAssertFalse(source.contains(".safeAreaInset(edge: .bottom, spacing: 0)"))
     }
 
     func testTopSearchAndFixedFormsDeclareTheirKeyboardPolicies() throws {
@@ -56,7 +57,7 @@ final class KeyboardLayoutSourceContractTests: XCTestCase {
         )
         XCTAssertTrue(signIn.contains("ScrollView"))
         XCTAssertTrue(signIn.contains(".scrollDismissesKeyboard(.interactively)"))
-        XCTAssertTrue(report.contains("ScrollView"))
+        XCTAssertTrue(report.contains("Form {"))
         XCTAssertTrue(report.contains(".scrollDismissesKeyboard(.interactively)"))
     }
 

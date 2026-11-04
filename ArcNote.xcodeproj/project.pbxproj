@@ -137,6 +137,18 @@
 		C0DEF3002F8000010000001C /* CardEditorBackgroundActions.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF3002F8000010000002C /* CardEditorBackgroundActions.swift */; };
 		C0DEF3002F8000010000001D /* AdaptiveLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF3002F8000010000002D /* AdaptiveLayout.swift */; };
 		C0DEF3002F8000010000001E /* CardLevelMaterial.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF3002F8000010000002E /* CardLevelMaterial.swift */; };
+		CC260B260000000000000001 /* ChoraiTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC260A260000000000000001 /* ChoraiTheme.swift */; };
+		CC260B260000000000000002 /* ChoraiCardLevel.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC260A260000000000000002 /* ChoraiCardLevel.swift */; };
+		C70100012F90000100000001 /* CommentPresentationUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C70100012F90000100000002 /* CommentPresentationUITests.swift */; };
+		C70200012F90000100000001 /* OwnedCardActionUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C70200012F90000100000002 /* OwnedCardActionUITests.swift */; };
+		C70300012F90000100000001 /* NativeRemediationVisualTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C70300012F90000100000002 /* NativeRemediationVisualTests.swift */; };
+		C70400012F90000100000001 /* LinkPresentationUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C70400012F90000100000002 /* LinkPresentationUITests.swift */; };
+		C70500012F90000100000001 /* SearchSummaryUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C70500012F90000100000002 /* SearchSummaryUITests.swift */; };
+		C72900012F90000100000001 /* ChatControlSizingUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C72900012F90000100000002 /* ChatControlSizingUITests.swift */; };
+		C72900022F90000100000001 /* RootHeaderAlignmentUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C72900022F90000100000002 /* RootHeaderAlignmentUITests.swift */; };
+		D7B5078DE97E45839CE4A515 /* AuthEntryComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FC8A8D1AD4841DEA9BB285F /* AuthEntryComponents.swift */; };
+		F407155AB485430EA8E25838 /* AuthEntryFixture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 278679923D14405F9158C635 /* AuthEntryFixture.swift */; };
+		F0EDFA46EDB043FE8E8D0479 /* AuthEntryFlowUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5833D7B924E407AADD43A49 /* AuthEntryFlowUITests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -279,6 +291,18 @@
 		C0DEF3002F8000010000002C /* CardEditorBackgroundActions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardEditorBackgroundActions.swift; sourceTree = "<group>"; };
 		C0DEF3002F8000010000002D /* AdaptiveLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdaptiveLayout.swift; sourceTree = "<group>"; };
 		C0DEF3002F8000010000002E /* CardLevelMaterial.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardLevelMaterial.swift; sourceTree = "<group>"; };
+		CC260A260000000000000001 /* ChoraiTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChoraiTheme.swift; sourceTree = "<group>"; };
+		CC260A260000000000000002 /* ChoraiCardLevel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChoraiCardLevel.swift; sourceTree = "<group>"; };
+		C70100012F90000100000002 /* CommentPresentationUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommentPresentationUITests.swift; sourceTree = "<group>"; };
+		C70200012F90000100000002 /* OwnedCardActionUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OwnedCardActionUITests.swift; sourceTree = "<group>"; };
+		C70300012F90000100000002 /* NativeRemediationVisualTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeRemediationVisualTests.swift; sourceTree = "<group>"; };
+		C70400012F90000100000002 /* LinkPresentationUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinkPresentationUITests.swift; sourceTree = "<group>"; };
+		C70500012F90000100000002 /* SearchSummaryUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchSummaryUITests.swift; sourceTree = "<group>"; };
+		C72900012F90000100000002 /* ChatControlSizingUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatControlSizingUITests.swift; sourceTree = "<group>"; };
+		C72900022F90000100000002 /* RootHeaderAlignmentUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootHeaderAlignmentUITests.swift; sourceTree = "<group>"; };
+		4FC8A8D1AD4841DEA9BB285F /* AuthEntryComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthEntryComponents.swift; sourceTree = "<group>"; };
+		278679923D14405F9158C635 /* AuthEntryFixture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthEntryFixture.swift; sourceTree = "<group>"; };
+		E5833D7B924E407AADD43A49 /* AuthEntryFlowUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthEntryFlowUITests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -388,9 +412,13 @@
 				1B4355A42E3118700065FBBB /* TabBarView.swift */,
 				1BF3731A2E30DA7A00255F41 /* ChooseInterestsView.swift */,
 				1BF373182E30D5E100255F41 /* SignInView.swift */,
+				278679923D14405F9158C635 /* AuthEntryFixture.swift */,
+				4FC8A8D1AD4841DEA9BB285F /* AuthEntryComponents.swift */,
 				1BF373162E30D07900255F41 /* SignUpView.swift */,
 				1B48AE342E30967F0090CF86 /* ArcNoteApp.swift */,
 				1B48AE362E30967F0090CF86 /* ContentView.swift */,
+				CC260A260000000000000002 /* ChoraiCardLevel.swift */,
+				CC260A260000000000000001 /* ChoraiTheme.swift */,
 				1B48AE382E3096810090CF86 /* Assets.xcassets */,
 				1B48AE3A2E3096810090CF86 /* Preview Content */,
 			);
@@ -434,6 +462,14 @@
 			isa = PBXGroup;
 			children = (
 				A00000012F50000100000002 /* ArcNoteUITests.swift */,
+				E5833D7B924E407AADD43A49 /* AuthEntryFlowUITests.swift */,
+				C70400012F90000100000002 /* LinkPresentationUITests.swift */,
+				C70500012F90000100000002 /* SearchSummaryUITests.swift */,
+				C70300012F90000100000002 /* NativeRemediationVisualTests.swift */,
+				C72900022F90000100000002 /* RootHeaderAlignmentUITests.swift */,
+				C72900012F90000100000002 /* ChatControlSizingUITests.swift */,
+				C70200012F90000100000002 /* OwnedCardActionUITests.swift */,
+				C70100012F90000100000002 /* CommentPresentationUITests.swift */,
 				A10000012F90000100000002 /* APIEnvironmentTests.swift */,
 			);
 			path = ArcNoteUITests;
@@ -690,6 +726,8 @@
 				1B598C962E7011A000023CC6 /* HTMLWebView.swift in Sources */,
 				1B331DDC2E7D13AA00876A32 /* PublishNoteModels.swift in Sources */,
 				1B48AE372E30967F0090CF86 /* ContentView.swift in Sources */,
+				CC260B260000000000000002 /* ChoraiCardLevel.swift in Sources */,
+				CC260B260000000000000001 /* ChoraiTheme.swift in Sources */,
 				1B055F4E2E4E08EF00896B01 /* ChatDetailView.swift in Sources */,
 				1BD027512E49CB1400D0C2FB /* SideMenuView.swift in Sources */,
 				1B331DD02E7C011300876A32 /* TrashModels.swift in Sources */,
@@ -700,6 +738,8 @@
 				1BF373172E30D07900255F41 /* SignUpView.swift in Sources */,
 				1BEC65D62E97B3CB00075403 /* UserAllCardsModels.swift in Sources */,
 				1BF373192E30D5E100255F41 /* SignInView.swift in Sources */,
+				F407155AB485430EA8E25838 /* AuthEntryFixture.swift in Sources */,
+				D7B5078DE97E45839CE4A515 /* AuthEntryComponents.swift in Sources */,
 				1B846EEB2E82655100A7E621 /* RelatedCardsModels.swift in Sources */,
 				1BD0274B2E48C0B400D0C2FB /* RootView.swift in Sources */,
 				1BD027452E48955A00D0C2FB /* SparkView.swift in Sources */,
@@ -748,6 +788,14 @@
 			buildActionMask = 2147483647;
 			files = (
 				A00000012F50000100000001 /* ArcNoteUITests.swift in Sources */,
+				F0EDFA46EDB043FE8E8D0479 /* AuthEntryFlowUITests.swift in Sources */,
+				C70400012F90000100000001 /* LinkPresentationUITests.swift in Sources */,
+				C70500012F90000100000001 /* SearchSummaryUITests.swift in Sources */,
+				C70300012F90000100000001 /* NativeRemediationVisualTests.swift in Sources */,
+				C72900022F90000100000001 /* RootHeaderAlignmentUITests.swift in Sources */,
+				C72900012F90000100000001 /* ChatControlSizingUITests.swift in Sources */,
+				C70200012F90000100000001 /* OwnedCardActionUITests.swift in Sources */,
+				C70100012F90000100000001 /* CommentPresentationUITests.swift in Sources */,
 				A10000012F90000100000001 /* APIEnvironmentTests.swift in Sources */,
 				A10000012F90000100000003 /* APIEnvironment.swift in Sources */,
 			);
@@ -906,7 +954,6 @@
 				INFOPLIST_KEY_UILaunchStoryboardName = "Launch Screen";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UIUserInterfaceStyle = Light;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -947,7 +994,6 @@
 				INFOPLIST_KEY_UILaunchStoryboardName = "Launch Screen";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UIUserInterfaceStyle = Light;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1087,7 +1133,6 @@
 				INFOPLIST_KEY_UILaunchStoryboardName = "Launch Screen";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UIUserInterfaceStyle = Light;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

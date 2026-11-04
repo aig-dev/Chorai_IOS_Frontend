@@ -1,0 +1,38 @@
+[
+  {
+    "file": "review-editor-typed-dark.png",
+    "sourceResult": "/tmp/chorai-review-editor-dark.xcresult",
+    "test": "ArcNoteUITests/testNativeReviewHomeSpacingAndFullPageDraft()",
+    "device": "iPhone 17 Pro"
+  },
+  {
+    "file": "review-editor-tools-dark.png",
+    "sourceResult": "/tmp/chorai-review-editor-dark.xcresult",
+    "test": "ArcNoteUITests/testNativeReviewHomeSpacingAndFullPageDraft()",
+    "device": "iPhone 17 Pro"
+  },
+  {
+    "file": "review-editor-empty-dark.png",
+    "sourceResult": "/tmp/chorai-review-editor-dark.xcresult",
+    "test": "ArcNoteUITests/testNativeReviewHomeSpacingAndFullPageDraft()",
+    "device": "iPhone 17 Pro"
+  },
+  {
+    "file": "review-editor-after-keyboard-dismiss-dark.png",
+    "sourceResult": "/tmp/chorai-review-editor-dark.xcresult",
+    "test": "ArcNoteUITests/testNativeReviewHomeSpacingAndFullPageDraft()",
+    "device": "iPhone 17 Pro"
+  },
+  {
+    "file": "review-editor-keyboard-dark.png",
+    "sourceResult": "/tmp/chorai-review-editor-dark.xcresult",
+    "test": "ArcNoteUITests/testNativeReviewHomeSpacingAndFullPageDraft()",
+    "device": "iPhone 17 Pro"
+  },
+  {
+    "file": "review-home-spacing-dark.png",
+    "sourceResult": "/tmp/chorai-review-editor-dark.xcresult",
+    "test": "ArcNoteUITests/testNativeReviewHomeSpacingAndFullPageDraft()",
+    "device": "iPhone 17 Pro"
+  }
+]

@@ -34,7 +34,7 @@ final class CardEditingNetworkSourceContractTests: XCTestCase {
             ),
             "Detail ownership must prefer the backend is_owner value"
         )
-        XCTAssertTrue(detailSource.contains("guard !isCurrentCardOwned else { return }"))
+        XCTAssertTrue(detailSource.contains("guard !isCurrentCardOwned, !isFavoriteLoading else { return }"))
     }
 
     func testCardWritePathsUseOptionalTitleParameters() throws {

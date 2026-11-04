@@ -120,6 +120,13 @@ public enum AuthenticationErrorPresentation {
         }
     }
 
+    private static let registrationCodeRejectionMessage =
+        "Verification code is incorrect or expired. Please get a new one."
+
+    public static func registrationRejectsCode(statusCode: Int?, errorCode: String?) -> Bool {
+        registrationMessage(statusCode: statusCode, errorCode: errorCode) == registrationCodeRejectionMessage
+    }
+
     public static func registrationMessage(
         statusCode: Int?,
         errorCode: String?
@@ -140,7 +147,7 @@ public enum AuthenticationErrorPresentation {
             case 409:
                 return "Username or email is already in use. Please try another one."
             case 422:
-                return "Verification code is incorrect or expired. Please get a new one."
+                return registrationCodeRejectionMessage
             case 429:
                 return "Too many attempts. Please wait a moment and try again."
             case let status? where (500...599).contains(status):

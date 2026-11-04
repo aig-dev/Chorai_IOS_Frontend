@@ -9,7 +9,7 @@ struct ChoraIdentitySection: View {
     @State private var showsImagePicker = false
 
     var body: some View {
-        ChoraSectionSurface(title: "Identity", identifier: "chora.identity.section") {
+        ChoraSectionSurface(title: "Identity", identifier: "chora.identity.section", openLayout: true) {
             switch store.phase {
             case .idle, .loading:
                 ChoraLoadingRow(text: "Loading Chora identity…", identifier: "chora.identity.loading")
@@ -37,7 +37,13 @@ struct ChoraIdentitySection: View {
             HStack(spacing: 16) {
                 Button { showsImagePicker = true } label: {
                     avatar.frame(width: 72, height: 72).clipShape(Circle())
-                        .overlay(Circle().stroke(Color.white.opacity(0.22), lineWidth: 1))
+                        .overlay(alignment: .bottomTrailing) {
+                            Image(systemName: "camera.fill")
+                                .font(.caption.weight(.semibold))
+                                .padding(6)
+                                .foregroundStyle(ChoraiTheme.ink)
+                                .background(ChoraiTheme.surface, in: Circle())
+                        }
                 }
                 .buttonStyle(.plain)
                 .accessibilityElement(children: .ignore)
@@ -45,23 +51,22 @@ struct ChoraIdentitySection: View {
                 .accessibilityValue(resolvedAvatarValue ?? "Brand default avatar")
                 .accessibilityIdentifier("chora.identity.avatar")
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(store.identity?.displayName ?? "Chora").font(.title3.weight(.semibold)).foregroundColor(.white)
-                    Text("Your bound companion").font(.subheadline).foregroundColor(.white.opacity(0.58))
+                    Text(store.identity?.displayName ?? "Chora").font(.system(.title2, design: .serif).weight(.semibold)).foregroundColor(ChoraiTheme.ink)
+                    Text("Your bound companion").font(.subheadline).foregroundColor(ChoraiTheme.secondaryInk)
                 }
                 Spacer()
             }
             ChoraField(label: "Display name", placeholder: "Chora", text: .init(get: { store.displayNameDraft }, set: store.setDisplayNameDraft), identifier: "chora.identity.displayName")
             ChoraField(label: "Preferred address", placeholder: "How Chora addresses you", text: .init(get: { store.preferredAddressDraft ?? "" }, set: { store.setPreferredAddressDraft($0.isEmpty ? nil : $0) }), identifier: "chora.identity.preferredAddress")
             ForEach(errors, id: \.0) { field, message in
-                Text(message).font(.footnote).foregroundColor(Color(red: 1, green: 0.56, blue: 0.58))
+                Text(message).font(.footnote).foregroundColor(.red)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("chora.identity.error.\(field)")
             }
-            SettingsOutlineButton(title: store.isSaving ? "Saving…" : "Save") {
+            ChoraActionButton(title: store.isSaving ? "Saving…" : "Save") {
                 store.save()
             }
             .disabled(store.isSaving || store.changedFields.isEmpty)
-            .opacity(store.isSaving || store.changedFields.isEmpty ? 0.55 : 1)
             .accessibilityIdentifier("chora.identity.save")
         }
     }
@@ -71,9 +76,9 @@ struct ChoraIdentitySection: View {
         else if let avatarURL {
             AsyncImage(url: avatarURL) { phase in
                 if let image = phase.image { image.resizable().aspectRatio(contentMode: .fill) }
-                else { Image("logo").resizable().aspectRatio(contentMode: .fill) }
+                else { ChoraiDefaultAvatar() }
             }
-        } else { Image("logo").resizable().aspectRatio(contentMode: .fill) }
+        } else { ChoraiDefaultAvatar() }
     }
 
     private var resolvedAvatarValue: String? {
@@ -111,14 +116,14 @@ struct ChoraGrowthSection: View {
     let humanActorID: String
 
     var body: some View {
-        ChoraSectionSurface(title: "Growth", identifier: "chora.growth.section") {
+        ChoraSectionSurface(title: "Growth", identifier: "chora.growth.section", openLayout: true) {
             switch store.growthPhase {
             case .idle, .loading: ChoraLoadingRow(text: "Loading Growth…", identifier: "chora.growth.loading")
             case .unavailable:
                 ChoraInlineError(text: "Growth is unavailable right now.", identifier: "chora.growth.unavailable") { store.retryGrowth() }
             case .ready:
                 VStack(alignment: .leading, spacing: 16) {
-                    HStack { Text("Stage").foregroundColor(.white.opacity(0.6)); Spacer(); Text(store.growth?.committedStage.displayName ?? "Unavailable").font(.body.weight(.semibold)).foregroundColor(.white).accessibilityIdentifier("chora.growth.stage") }
+                    HStack { Text("Stage").foregroundColor(ChoraiTheme.secondaryInk); Spacer(); Text(store.growth?.committedStage.displayName ?? "Unavailable").font(.body.weight(.semibold)).foregroundColor(ChoraiTheme.ink).accessibilityIdentifier("chora.growth.stage") }
                     ForEach(ChoraGrowthDimension.canonicalRenderOrder, id: \.rawValue) { dimension in
                         ChoraGrowthBar(dimension: dimension, value: store.growth?.dimensions.first { $0.dimension == dimension }?.displayValue)
                     }

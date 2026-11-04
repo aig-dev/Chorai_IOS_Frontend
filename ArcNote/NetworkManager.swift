@@ -51,6 +51,13 @@ class NetworkManager: ObservableObject {
 
         // 配置Alamofire Session
         let configuration = URLSessionConfiguration.default
+        #if DEBUG
+        if LocalDevelopmentPreview.isEnabled {
+            configuration.protocolClasses = [LocalPreviewURLProtocol.self]
+            configuration.urlCache = nil
+            configuration.httpCookieStorage = nil
+        }
+        #endif
         configuration.timeoutIntervalForRequest = 30
         configuration.timeoutIntervalForResource = 60
 
@@ -534,7 +541,8 @@ extension NetworkManager {
             method: .post,
             parameters: parameters,
             responseType: SendVerificationCodeResponse.self,
-            presentsError: false
+            presentsError: false,
+            suppressesPayloadLogging: true
         )
     }
 

@@ -13,6 +13,9 @@ public final class SparkSessionStore: ObservableObject {
     @Published public private(set) var isInteractionLocked = false
     @Published public private(set) var didShowUpwardCue = false
     @Published public private(set) var isMoreExhausted = false
+    @Published public private(set) var ownedCardActionRefresh: OwnedCardActionRefresh?
+    @Published public private(set) var ownedCardRefreshFailure: String?
+    @Published public private(set) var isRefreshingOwnedCard = false
 
     public var currentResult: SparkResult? {
         guard results.indices.contains(visibleIndex) else {
@@ -62,6 +65,8 @@ public final class SparkSessionStore: ObservableObject {
     private var historyCancellable: AnyCancellable?
     private var moreCancellable: AnyCancellable?
     private var interactionCancellable: AnyCancellable?
+    private var ownedCardRefreshCancellable: AnyCancellable?
+    private var ownedCardRefreshGeneration = 0
 
     public init(
         actorID: String,
@@ -121,7 +126,17 @@ public final class SparkSessionStore: ObservableObject {
         prefetchIfNeeded()
     }
 
+    public func previous() {
+        guard !isInteractionLocked,
+              visibleIndex > 0,
+              results.indices.contains(visibleIndex - 1) else { return }
+        visibleIndex -= 1
+        phase = .loaded
+        persistCurrentState()
+    }
+
     public func toggleFavoriteCurrent(
+        onFavoriteMutationSucceeded: ((String, Bool, Int) -> Void)? = nil,
         onFavoriteSucceeded: ((String) -> Void)? = nil
     ) {
         guard
@@ -170,6 +185,7 @@ public final class SparkSessionStore: ObservableObject {
                 case .finished where !receivedValue:
                     self.restoreFavoriteMutation(result)
                 case .finished:
+                    onFavoriteMutationSucceeded?(result.id, nextIsFavorited, nextFavoriteCount)
                     if nextIsFavorited {
                         onFavoriteSucceeded?(result.id)
                     }
@@ -189,6 +205,22 @@ public final class SparkSessionStore: ObservableObject {
         persistCurrentState()
     }
 
+    public func applyFavoriteState(_ state: CardFavoriteState) {
+        results = results.map { result in
+            guard result.card.id == state.cardID else { return result }
+            let count = state.favoriteCount ?? max(0, result.card.favoriteCount + (
+                result.card.isFavorited == state.isFavorited ? 0 : (state.isFavorited ? 1 : -1)
+            ))
+            return SparkResult(
+                card: result.card.replacingFavorite(isFavorited: state.isFavorited, favoriteCount: count),
+                bucket: result.bucket,
+                score: result.score,
+                resultID: result.resultID
+            )
+        }
+        persistCurrentState()
+    }
+
     public func applyLikeState(_ state: CardLikeState) {
         results = results.map { result in
             guard result.id == state.cardID else { return result }
@@ -200,6 +232,82 @@ public final class SparkSessionStore: ObservableObject {
             )
         }
     }
+
+    /// Applies a completed owner action to the visible session, without issuing
+    /// another request or changing the user's current surviving result.
+    public func applyOwnedCardAction(_ commit: OwnedCardActionCommit) {
+        let ownedCards = results.map(\.card) + [sourceCard].compactMap { $0 }
+        guard ownedCards.contains(where: { $0.id == commit.cardID && $0.isOwner }) else { return }
+        let visibleID = currentResult?.id
+        switch commit {
+        case .removed(let cardID):
+            results.removeAll { $0.id == cardID }
+            if sourceCard?.id == cardID { sourceCard = nil }
+            if let visibleID, let index = results.firstIndex(where: { $0.id == visibleID }) {
+                visibleIndex = index
+            } else {
+                visibleIndex = max(0, min(visibleIndex, results.count - 1))
+            }
+            if phase == .loaded && results.isEmpty { phase = .empty }
+        case .visibility, .pin:
+            sourceCard = sourceCard?.applyingOwnedAction(commit)
+            results = results.map { result in
+                SparkResult(
+                    card: result.card.applyingOwnedAction(commit),
+                    bucket: result.bucket, score: result.score, resultID: result.resultID
+                )
+            }
+        }
+        persistCurrentState()
+    }
+
+    /// An explicit return from the editor authorizes a fresh read to supersede
+    /// this surface's previous write receipt. Ordinary replay reads do not do so.
+    public func refreshOwnedCardAfterEditing(cardID: String) {
+        let visibleCards = results.map(\.card) + [sourceCard].compactMap { $0 }
+        guard visibleCards.contains(where: { $0.id == cardID && $0.isOwner }) else { return }
+        ownedCardRefreshGeneration += 1
+        let generation = ownedCardRefreshGeneration
+        ownedCardRefreshFailure = nil
+        isRefreshingOwnedCard = true
+        var receivedCard = false
+        ownedCardRefreshCancellable = service.card(assetID: cardID)
+            .receive(on: DispatchQueue.main)
+            .sink(receiveCompletion: { [weak self] completion in
+                guard let self, self.ownedCardRefreshGeneration == generation else { return }
+                self.isRefreshingOwnedCard = false
+                if case .failure = completion {
+                    self.ownedCardRefreshFailure = cardID
+                } else if !receivedCard {
+                    self.ownedCardRefreshFailure = cardID
+                }
+            }, receiveValue: { [weak self] card in
+                guard let self, self.ownedCardRefreshGeneration == generation else { return }
+                guard card.id == cardID, card.isOwner else { return }
+                receivedCard = true
+                if self.sourceCard?.id == cardID { self.sourceCard = card }
+                self.results = self.results.map { result in
+                    guard result.id == cardID else { return result }
+                    return SparkResult(card: card, bucket: result.bucket, score: result.score, resultID: result.resultID)
+                }
+                self.chain = self.chain.map { node in
+                    guard node.sourceAssetID == cardID else { return node }
+                    return SparkChainNode(
+                        sourceAssetID: node.sourceAssetID, sourcePreview: Self.preview(for: card),
+                        activityID: node.activityID, parentActivityID: node.parentActivityID,
+                        rootActivityID: node.rootActivityID, chainDepth: node.chainDepth,
+                        visibleIndex: node.visibleIndex
+                    )
+                }
+                self.ownedCardActionRefresh = OwnedCardActionRefresh(snapshot: OwnedCardActionSnapshot(
+                    cardID: card.id, isOwned: card.isOwner, isPublic: card.isPublic,
+                    isPinned: card.isPinned, pinnedAt: card.pinnedAt
+                ))
+                self.persistCurrentState()
+            })
+    }
+
+    public func dismissOwnedCardRefreshFailure() { ownedCardRefreshFailure = nil }
 
     public func sparkCurrentDeeper() {
         guard

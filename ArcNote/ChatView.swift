@@ -2,6 +2,7 @@ import SwiftUI
 import Combine
 
 struct ChatView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var chatHistoryDependency:
         ChatHistoryVisibilityDependency
     @Binding var showSideMenu: Bool
@@ -12,17 +13,20 @@ struct ChatView: View {
     @StateObject private var chatManager: ChatManager
     private let humanActorID: String
     private let detailFetcher: any ChatDetailFetching
+    private let onExplore: (() -> Void)?
 
     init(
         showSideMenu: Binding<Bool>,
         humanActorID: String = AuthManager.shared.currentUser?.id ?? "",
         conversationFetcher: any ChatConversationFetching =
             NetworkManager.shared,
-        detailFetcher: any ChatDetailFetching = NetworkManager.shared
+        detailFetcher: any ChatDetailFetching = NetworkManager.shared,
+        onExplore: (() -> Void)? = nil
     ) {
         _showSideMenu = showSideMenu
         self.humanActorID = humanActorID
         self.detailFetcher = detailFetcher
+        self.onExplore = onExplore
         _chatManager = StateObject(
             wrappedValue: ChatManager(
                 humanActorID: humanActorID,
@@ -30,267 +34,103 @@ struct ChatView: View {
             )
         )
     }
-    
-    // MARK: 计算属性
-    
-    private var searchInputBackground: some View {
-        RoundedRectangle(cornerRadius: 30)
-            .fill(.ultraThinMaterial.opacity(0.3))
-            .overlay(searchInputTopLeftHighlight)
-            .overlay(searchInputBottomRightHighlight)
-            .overlay(searchInputTopEdgeHighlight)
-            .overlay(searchInputBottomEdgeHighlight)
-    }
-    
-    private var searchInputTopLeftHighlight: some View {
-        RoundedRectangle(cornerRadius: 30)
-            .stroke(Color.white, lineWidth: 1)
-            .offset(x: 0, y: -1)
-            .mask(
-                RoundedRectangle(cornerRadius: 30)
-                    .fill(
-                        RadialGradient(
-                            colors: [Color.white, Color.clear],
-                            center: .topLeading,
-                            startRadius: 10,
-                            endRadius: 35
-                        )
-                    )
-            )
-    }
-    
-    private var searchInputBottomRightHighlight: some View {
-        RoundedRectangle(cornerRadius: 30)
-            .stroke(Color.white, lineWidth: 1)
-            .offset(x: 0, y: 0)
-            .mask(
-                RoundedRectangle(cornerRadius: 30)
-                    .fill(
-                        RadialGradient(
-                            colors: [Color.white, Color.clear],
-                            center: .bottomTrailing,
-                            startRadius: 10,
-                            endRadius: 35
-                        )
-                    )
-            )
-    }
-    
-    private var searchInputTopEdgeHighlight: some View {
-        RoundedRectangle(cornerRadius: 30)
-            .stroke(Color.white, lineWidth: 1)
-            .offset(x: 0, y: -1)
-            .mask(
-                RoundedRectangle(cornerRadius: 30)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.white, Color.clear],
-                            startPoint: .top,
-                            endPoint: UnitPoint(x: 0, y: 0.05)
-                        )
-                    )
-            )
-    }
-    
-    private var searchInputBottomEdgeHighlight: some View {
-        RoundedRectangle(cornerRadius: 30)
-            .stroke(Color.white, lineWidth: 1)
-            .offset(x: 0, y: 1)
-            .mask(
-                RoundedRectangle(cornerRadius: 30)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.white, Color.clear],
-                            startPoint: .bottom,
-                            endPoint: UnitPoint(x: 1, y: 0.05)
-                        )
-                    )
-            )
-    }
-    
+
     var body: some View {
         KeyboardStableViewport(isFocused: isSearchFocused) { _ in
             VStack(spacing: 0) {
-            // 顶部导航栏
-            ZStack {
                 if isSearchMode {
-                    // 搜索模式
-                    HStack {
-                        Button(action: {
-                            isSearchFocused = false
-                            withAnimation(.easeInOut(duration: 0.3)) {
-                                isSearchMode = false
-                                searchText = ""
-                            }
-                        }) {
-                            Image(systemName: "chevron.left")
-                                .font(.title2)
-                                .foregroundColor(.white)
-                        }
-                        
-                        Spacer()
-                        
-                        // 搜索输入框
-                        HStack {
-                            Image(systemName: "magnifyingglass")
-                                .foregroundColor(.white.opacity(0.7))
-                            
-                            TextField("Please enter your search...", text: $searchText)
-                                .foregroundColor(.white)
-                                .textFieldStyle(PlainTextFieldStyle())
-                                .focused($isSearchFocused)
-                                .accessibilityIdentifier("chat.search.input")
-                                .submitLabel(.search)
-                                .onSubmit {
-                                    isSearchFocused = false
-                                }
-                                .placeholder(when: searchText.isEmpty) {
-                                    Text("Please enter your search...")
-                                        .foregroundColor(.white.opacity(0.5))
-                                }
-                            
-//                            if !searchText.isEmpty {
-//                                Button(action: {
-//                                    searchText = ""
-//                                }) {
-//                                    Image(systemName: "xmark.circle.fill")
-//                                        .foregroundColor(.white.opacity(0.7))
-//                                }
-//                            }
-                        }
-                        .padding(.horizontal, 25)
-                        .padding(.vertical, 13)
-                        .frame(maxWidth: 280)
-                        .background(searchInputBackground)
-                        
-                        Spacer()
+                    HStack(spacing: 10) {
+                        Image(systemName: "magnifyingglass")
+                            .foregroundStyle(ChoraiTheme.secondaryInk)
+                        TextField("Please enter your search...", text: $searchText)
+                            .textFieldStyle(.plain)
+                            .focused($isSearchFocused)
+                            .accessibilityIdentifier("chat.search.input")
+                            .submitLabel(.search)
+                            .onSubmit { isSearchFocused = false }
                     }
-                } else {
-                    // 正常模式
-                    // 左侧按钮
-                    HStack {
-                        Button(action: {
-                            withAnimation(.easeInOut(duration: 0.3)) {
-                                showSideMenu = true
+                    .padding(.horizontal, 16)
+                    .frame(minHeight: 48)
+                    .choraiGlassSurface(cornerRadius: 24)
+                    .adaptiveContentGutter()
+                    .padding(.vertical, 12)
+                }
+
+                GeometryReader { geometry in
+                    ScrollView(showsIndicators: false) {
+                        if chatManager.conversations.isEmpty {
+                            if chatManager.isLoading {
+                                loadingConversations
+                                    .frame(minHeight: geometry.size.height)
+                            } else if let error = chatManager.error {
+                                conversationFailure(error)
+                                    .frame(minHeight: geometry.size.height)
+                            } else {
+                                emptyConversations
+                                    .frame(minHeight: geometry.size.height)
                             }
-                        }) {
-                            Image("menu")
-                                .resizable()
-                                .aspectRatio(contentMode: .fit)
-                                .frame(width: 24, height: 24)
+                        } else {
+                            conversationList
                         }
-                        Spacer()
                     }
-                    // 标题
-                    Text("Message")
-                        .font(.system(size: 22, weight: .semibold))
-                        .foregroundColor(.white)
-                    // 右侧按钮
-                    HStack {
-                        Spacer()
-                        Button(action: {
-                            withAnimation(.easeInOut(duration: 0.3)) {
-                                isSearchMode = true
-                            }
-                            DispatchQueue.main.async {
-                                isSearchFocused = true
-                            }
-                        }) {
-                            Image("search")
-                                .resizable()
-                                .aspectRatio(contentMode: .fit)
-                                .frame(width: 24, height: 24)
-                        }
-                        .accessibilityIdentifier("chat.search")
+                    .scrollDismissesKeyboard(.interactively)
+                    .refreshable {
+                        chatManager.refreshConversations()
                     }
                 }
             }
-            .adaptiveContentGutter()
-            .padding(.top, 60)
-            .padding(.bottom, 18)
-            
-            // 聊天列表
-            ScrollView(showsIndicators: false) {
-                VStack(spacing: 0) {
-                    if chatManager.isLoading && chatManager.conversations.isEmpty {
-                        // 加载状态
-                        VStack {
-                            Spacer()
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                .scaleEffect(1.2)
-                            Text("Loading conversations...")
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundColor(.white.opacity(0.7))
-                                .padding(.top, 10)
-                            Spacer()
-                        }
-                        .frame(height: 200)
-                    } else if chatManager.conversations.isEmpty {
-                        // 空状态
-                        VStack {
-                            Spacer()
-                            Text("No conversations yet")
-                                .font(.system(size: 16, weight: .medium))
-                                .foregroundColor(.white.opacity(0.7))
-                                .padding(.top, 16)
-                            Text("Start a conversation")
-                                .font(.system(size: 14, weight: .regular))
-                                .foregroundColor(.white.opacity(0.5))
-                                .multilineTextAlignment(.center)
-                                .padding(.top, 5)
-                            Spacer()
-                        }
-                        .frame(height: 200)
-                        .accessibilityIdentifier("chat.empty")
-                    } else {
-                        // 对话列表
-                        ForEach(Array(chatManager.conversations.enumerated()), id: \.element.id) { index, conversation in
-                            NavigationLink(destination: ChatDetailView(
-                                conversationId: conversation.id,
-                                contactName: conversation.partner.username ?? conversation.partner.id,
-                                contactStatus: "Online",
-                                contactAvatar: conversation.partner.avatarUrl,
-                                humanActorID: humanActorID,
-                                fetcher: detailFetcher
-                            )) {
-                                ChatListCell(
-                                    avatar: AnyView(
-                                        ChatAvatarView(
-                                            rawValue: conversation.partner.avatarUrl,
-                                            size: 56,
-                                            accessibilityIdentifier:
-                                                "chat.conversation.avatar.\(conversation.id)"
-                                        )
-                                    ),
-                                    title: conversation.partner.username ?? conversation.partner.id,
-                                    subtitle: conversation.lastMessage?.content ?? "No messages yet",
-                                    time: formatConversationTime(conversation.lastMessage?.createdAt ?? conversation.createdAt),
-                                    unreadCount: conversation.unreadCount
-                                )
-                            }
-                            .accessibilityIdentifier("chat.conversation.\(conversation.id)")
-                            
-                            // 分割线（除了最后一个）
-                            if index < chatManager.conversations.count - 1 {
-                                Divider()
-                                    .background(Color.white.opacity(0.12))
-                                    .padding(.leading, 92)
-                            }
-                        }
-                        
-                    }
-                }
-                .padding(.top, 8)
-                .adaptiveContentGutter()
-                .padding(.bottom, 20)
-            }
-            .scrollDismissesKeyboard(.interactively)
-            .refreshable {
-                chatManager.refreshConversations()
-            }
-            Spacer()
         }
+        .choraiPageBackground()
+        .navigationTitle("Chat")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.visible, for: .navigationBar)
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                Text("Chat")
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+            }
+            ToolbarItem(placement: .navigationBarLeading) {
+                if isSearchMode {
+                    Button("Cancel") {
+                        isSearchFocused = false
+                        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
+                            isSearchMode = false
+                            searchText = ""
+                        }
+                    }
+                    .frame(minHeight: 44)
+                } else {
+                    Button {
+                        showSideMenu = true
+                    } label: {
+                        Image(systemName: "line.3.horizontal")
+                            .font(.system(size: 20))
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Open menu")
+                }
+            }
+            ToolbarItem(placement: .navigationBarTrailing) {
+                if !isSearchMode {
+                    Button {
+                        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
+                            isSearchMode = true
+                        }
+                        DispatchQueue.main.async { isSearchFocused = true }
+                    } label: {
+                        Image(systemName: "magnifyingglass")
+                            .font(.system(size: 20))
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Search conversations")
+                    .accessibilityIdentifier("chat.search")
+                }
+            }
         }
         .accessibilityIdentifier("screen.chat.content")
         #if DEBUG
@@ -318,16 +158,153 @@ struct ChatView: View {
             print("收到关闭所有popup通知")
         }
     }
-    
+
+    private var loadingConversations: some View {
+        VStack(spacing: 12) {
+            ProgressView()
+                .tint(ChoraiTheme.accent)
+            Text("Loading conversations...")
+                .font(.subheadline)
+                .foregroundStyle(ChoraiTheme.secondaryInk)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(24)
+        .accessibilityIdentifier("chat.loading")
+    }
+
+    private func conversationFailure(_ error: String) -> some View {
+        VStack(spacing: 16) {
+            Text("Couldn’t load conversations")
+                .font(.headline)
+                .foregroundStyle(ChoraiTheme.ink)
+            Text(error)
+                .font(.subheadline)
+                .foregroundStyle(ChoraiTheme.secondaryInk)
+                .fixedSize(horizontal: false, vertical: true)
+            Button("Try again") {
+                chatManager.refreshConversations()
+            }
+            .frame(minWidth: 100, minHeight: 48)
+            .choraiGlassButton()
+            .accessibilityIdentifier("chat.retry")
+        }
+        .multilineTextAlignment(.center)
+        .frame(maxWidth: .infinity)
+        .adaptiveContentGutter()
+        .padding(.vertical, 24)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("chat.error")
+    }
+
+    private var emptyConversations: some View {
+        VStack(spacing: 0) {
+            Spacer(minLength: 28)
+
+            VStack(spacing: 20) {
+                Image("chat-chora-pair")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 160, height: 110)
+                    .accessibilityHidden(true)
+
+                Text("Your next conversation starts with a note.")
+                    .font(.title2.weight(.semibold))
+                    .foregroundStyle(ChoraiTheme.ink)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("chat.empty.headline")
+
+                Text("Find a note you like, then message its author.")
+                    .font(.body)
+                    .foregroundStyle(ChoraiTheme.secondaryInk)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: 290)
+            }
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: 336)
+
+            Spacer(minLength: 44)
+
+            VStack(spacing: 22) {
+                Text("Your conversations will appear here.")
+                    .font(.footnote)
+                    .foregroundStyle(ChoraiTheme.secondaryInk)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if let onExplore {
+                    Button(action: onExplore) {
+                        Text("Explore notes")
+                            .font(.headline)
+                            .padding(.vertical, 12)
+                            .frame(maxWidth: .infinity, minHeight: 48)
+                            .foregroundStyle(ChoraiTheme.onAccent)
+                            .background(ChoraiTheme.accent, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("chat.empty.explore")
+                }
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .adaptiveContentGutter()
+        .padding(.top, 24)
+        .padding(.bottom, 32)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("chat.empty")
+    }
+
+    private var conversationList: some View {
+        LazyVStack(spacing: 0) {
+            ForEach(Array(chatManager.conversations.enumerated()), id: \.element.id) { index, conversation in
+                NavigationLink(destination: ChatDetailView(
+                    conversationId: conversation.id,
+                    contactName: conversation.partner.username ?? conversation.partner.id,
+                    contactStatus: "Online",
+                    contactAvatar: conversation.partner.avatarUrl,
+                    humanActorID: humanActorID,
+                    fetcher: detailFetcher
+                )) {
+                    ChatListCell(
+                        avatar: AnyView(
+                            ChatAvatarView(
+                                rawValue: conversation.partner.avatarUrl,
+                                size: 56,
+                                accessibilityIdentifier:
+                                    "chat.conversation.avatar.\(conversation.id)"
+                            )
+                        ),
+                        title: conversation.partner.username ?? conversation.partner.id,
+                        subtitle: conversation.lastMessage?.content ?? "No messages yet",
+                        time: formatConversationTime(conversation.lastMessage?.createdAt ?? conversation.createdAt),
+                        unreadCount: conversation.unreadCount
+                    )
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("chat.conversation.\(conversation.id)")
+
+                // 分割线（除了最后一个）
+                if index < chatManager.conversations.count - 1 {
+                    Divider()
+                        .overlay(ChoraiTheme.separator)
+                        .padding(.leading, 72)
+                }
+            }
+
+        }
+        .padding(.top, 8)
+        .adaptiveContentGutter()
+        .padding(.bottom, 20)
+    }
+
     // MARK: - 时间格式化
     private func formatConversationTime(_ dateString: String) -> String {
         guard let date = ChatTimestamp.parse(dateString) else {
             return "Unknown"
         }
-        
+
         let now = Date()
         let calendar = Calendar.current
-        
+
         if calendar.isDateInToday(date) {
             let timeFormatter = DateFormatter()
             timeFormatter.dateFormat = "HH:mm"
@@ -353,7 +330,7 @@ struct ChatListCell: View {
     let subtitle: String
     let time: String
     let unreadCount: Int
-    
+
     init(avatar: AnyView, title: String, subtitle: String, time: String, unreadCount: Int = 0) {
         self.avatar = avatar
         self.title = title
@@ -361,7 +338,7 @@ struct ChatListCell: View {
         self.time = time
         self.unreadCount = unreadCount
     }
-    
+
     var body: some View {
         HStack(alignment: .top, spacing: 16) {
             avatar
@@ -369,18 +346,18 @@ struct ChatListCell: View {
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
                     Text(title)
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundColor(.white)
+                        .font(.headline.weight(.semibold))
+                        .foregroundColor(ChoraiTheme.ink)
                     Spacer()
                     HStack(spacing: 8) {
                         Text(time)
-                            .font(.system(size: 15, weight: .regular))
-                            .foregroundColor(.white.opacity(0.6))
-                        
+                            .font(.subheadline.weight(.regular))
+                            .foregroundColor(ChoraiTheme.secondaryInk)
+
                         // 未读消息数
                         if unreadCount > 0 {
                             Text("\(unreadCount)")
-                                .font(.system(size: 12, weight: .bold))
+                                .font(.caption.weight(.bold))
                                 .foregroundColor(.white)
                                 .frame(minWidth: 20, minHeight: 20)
                                 .background(
@@ -391,13 +368,13 @@ struct ChatListCell: View {
                     }
                 }
                 Text(subtitle)
-                    .font(.system(size: 15, weight: .regular))
-                    .foregroundColor(.white.opacity(0.6))
+                    .font(.subheadline.weight(.regular))
+                    .foregroundColor(ChoraiTheme.secondaryInk)
                     .lineLimit(1)
             }
         }
         .padding(.vertical, 14)
-        .background(Color.clear)
+        .contentShape(Rectangle())
     }
 }
 

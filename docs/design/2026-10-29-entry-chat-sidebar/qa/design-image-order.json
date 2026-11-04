@@ -1,0 +1,29 @@
+{
+  "chat": "selected prior option 3 refined",
+  "auth_images_display_order": [
+    "auth-1.png",
+    "auth-2.png",
+    "auth-3.png",
+    "auth-4.png",
+    "auth-5.png",
+    "auth-6.png"
+  ],
+  "files": {
+    "chat-chora.png": "exec-d2fc7c5d-61b7-4255-9265-ea14b9284a90.png",
+    "auth-1.png": "exec-c8d2dcdc-7888-4624-aad8-73f77f519349.png",
+    "auth-2.png": "exec-408d3673-55ca-463e-8554-b17394343d26.png",
+    "auth-3.png": "exec-572570f7-46cf-4def-ba06-a0c46f3604cd.png",
+    "auth-4.png": "exec-b889c643-6c10-4824-8278-eb26dabf387d.png",
+    "auth-5.png": "exec-e3998035-49f4-4e55-bef1-aeeb2d6129d4.png",
+    "auth-6.png": "exec-00690589-499a-4d69-9120-bc71624c6332.png"
+  },
+  "refinement": {
+    "source_options": [
+      1,
+      2
+    ],
+    "file": "auth-combined-1-2.png",
+    "generated_original": "exec-3507131e-fbab-4e93-b7ae-ea87c9a938f8.png",
+    "status": "design for review; not auth implementation"
+  }
+}

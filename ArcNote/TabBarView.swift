@@ -17,7 +17,7 @@ struct TabBarView: View {
     @State private var showFilterTags = false
     @State private var showSideMenu = false
     @State private var currentMenuCardData: UserCard? = nil
-    @State private var navigationPath = NavigationPath()
+    @State private var navigationPaths: [CoreTab: NavigationPath] = [:]
     @State private var hasRoutedInitialOnboardingState = false
     @State private var libraryCardRouteCoverageDepth = 0
     @State private var isLibrarySurfaceVisible = false
@@ -183,8 +183,8 @@ struct TabBarView: View {
             return
         }
         DispatchQueue.main.async {
-            if directive.clearsNavigationPath, !navigationPath.isEmpty {
-                navigationPath.removeLast(navigationPath.count)
+            if directive.clearsNavigationPath {
+                clearTabNavigationPaths()
             }
 
             switch directive.destination {
@@ -215,7 +215,7 @@ struct TabBarView: View {
 
         return Text(label)
             .font(.system(size: 1))
-            .foregroundColor(.white.opacity(0.01))
+            .foregroundColor(ChoraiTheme.ink.opacity(0.01))
             .frame(width: 1, height: 1)
             .accessibilityIdentifier(identifier)
     }
@@ -288,32 +288,14 @@ struct TabBarView: View {
 
     // MARK: - My Notes 点击处理
     private func onMyNotesTapped() {
-        // 切换到Home页面 (tag = 1)
-        coordinator.selectedTab = .library
-        
-        // 关闭所有 popup
+        coordinator.openLibrary(scope: .notes)
         closeAllPopups()
-        
-        // 通知HomeView切换到NotesList
-        NotificationCenter.default.post(
-            name: NSNotification.Name("SwitchToNotesList"),
-            object: nil
-        )
     }
     
     // MARK: - Favorites 点击处理
     private func onFavoritesTapped() {
-        // 切换到Home页面 (tag = 1)
-        coordinator.selectedTab = .library
-        
-        // 关闭所有 popup
+        coordinator.openLibrary(scope: .collect)
         closeAllPopups()
-        
-        // 通知HomeView切换到AIList
-        NotificationCenter.default.post(
-            name: NSNotification.Name("SwitchToAIList"),
-            object: nil
-        )
     }
     
     // MARK: - 关闭所有 Popup
@@ -371,7 +353,8 @@ struct TabBarView: View {
             )
         }
 
-        navigationPath.append(TabRoute.spark(rootSourceAssetID))
+        navigationPaths[coordinator.selectedTab, default: NavigationPath()]
+            .append(TabRoute.spark(rootSourceAssetID))
     }
 
     private func pruneSparkResumeMetadataIfNeeded(for state: String?) {
@@ -419,9 +402,12 @@ struct TabBarView: View {
     }
 
     private var isLibraryCovered: Bool {
+        isTabBarCovered || showSideMenu
+    }
+
+    private var isTabBarCovered: Bool {
         mergeTaskCoordinator.presentation != nil
             || libraryCardRouteCoverageDepth > 0
-            || showSideMenu
             || shareRoute != nil
             || reportRoute != nil
     }
@@ -445,20 +431,97 @@ struct TabBarView: View {
         onboardingStore.receive(.libraryViewed)
     }
 
-    var body: some View {
-        NavigationStack(path: $navigationPath) {
+    private func navigationPath(for tab: CoreTab) -> Binding<NavigationPath> {
+        Binding(
+            get: { navigationPaths[tab] ?? NavigationPath() },
+            set: { navigationPaths[tab] = $0 }
+        )
+    }
+
+    private func clearTabNavigationPaths() {
+        navigationPaths.removeAll()
+    }
+
+    private func tabNavigationRoot<Content: View>(
+        _ tab: CoreTab,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        NavigationStack(path: navigationPath(for: tab)) {
             ZStack {
-            // 背景图片
-//                Image("home_bg")
-//                    .resizable()
-//                    .aspectRatio(contentMode: .fill)
-//                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-//                    .clipped()
-//                    .ignoresSafeArea()
+                content()
+                // Keep the sidebar's existing destinations in the presenting tab.
+                // Inactive tabs must not also load a hidden copy of the drawer.
+                if coordinator.selectedTab == tab {
+                    SideMenuView(
+                        isPresented: $showSideMenu,
+                        onMyNotesTapped: onMyNotesTapped,
+                        onFavoritesTapped: onFavoritesTapped
+                    )
+                }
+            }
+            .popupMenu(
+                isPresented: Binding(
+                    get: { coordinator.selectedTab == tab && showPopupMenu },
+                    set: { showPopupMenu = $0 }
+                ),
+                layout: .grid2x2,
+                cardData: currentMenuCardData
+            )
+            // Let pushed destinations own their tab visibility. Forcing visible
+            // here also kept the reader's tab bar visible despite its hidden rule.
+            .toolbar(isTabBarCovered || keyboardLayout.isVisible ? .hidden : .automatic, for: .tabBar)
+            #if DEBUG
+            .navigationDestination(isPresented: Binding(
+                    get: { coordinator.selectedTab == tab && navigateToDetailSmoke },
+                    set: { navigateToDetailSmoke = $0 }
+                )) {
+                if let cardId = selectedDetailSmokeCardId {
+                    DetailView(cardId: cardId)
+                        .toolbar(.hidden, for: .tabBar)
+                        .environmentObject(mergeTaskCoordinator)
+                        .environment(
+                            \.cardNavigationMergeCoordinator,
+                            mergeTaskCoordinator
+                        )
+                } else {
+                    EmptyView()
+                }
+            }
+            #endif
+            .navigationDestination(for: TabRoute.self) { route in
+                switch route {
+                case .spark(let cardId):
+                    if let actorID = AuthManager.shared.currentUser?.id {
+                        SparkContinuationView(
+                            cardID: cardId,
+                            actorID: actorID,
+                            onboardingStore: onboardingStore,
+                            contextualTipStore: contextualTipStore
+                        )
+                        .toolbar(.hidden, for: .tabBar)
+                    } else {
+                        EmptyView()
+                    }
+                case .detail(let cardId):
+                    DetailView(cardId: cardId)
+                        .toolbar(.hidden, for: .tabBar)
+                        .environmentObject(mergeTaskCoordinator)
+                        .environment(
+                            \.cardNavigationMergeCoordinator,
+                            mergeTaskCoordinator
+                        )
+                }
+            }
+        }
+    }
+
+    var body: some View {
+        ZStack {
             
             // 主要内容区域 - 全屏显示
             TabView(selection: $coordinator.selectedTab) {
                 // Explore 页面
+                tabNavigationRoot(.flow) {
                 ExploreView(
                     showPopupMenu: $showPopupMenu,
                     selectedFilter: $selectedFilter,
@@ -480,23 +543,20 @@ struct TabBarView: View {
                     contextualTipStore: contextualTipStore,
                     sparkResumeRootSourceAssetID: sparkResumeRootSourceAssetID
                 )
+                }
+                .tabItem { Label("Explore", systemImage: "safari").accessibilityIdentifier("tab.flow") }
                 .tag(CoreTab.flow)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .ignoresSafeArea(.all)
-                .background(
-                    Image("home_bg")
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .clipped()
-                        .ignoresSafeArea(.all)
-                )
+
+                .background(ChoraiTheme.background)
                 
                 // Home 页面
+                tabNavigationRoot(.library) {
                 HomeView(
                     showSideMenu: $showSideMenu,
                     refreshID: coordinator.libraryRefreshID,
                     committedCardID: coordinator.lastMergedCardID,
+                    librarySelectionRequest: coordinator.librarySelectionRequest,
                     onboardingStore: onboardingStore,
                     contextualTipStore: contextualTipStore,
                     isOnboardingLibrarySurfaceActive:
@@ -508,46 +568,31 @@ struct TabBarView: View {
                     onLibrarySurfaceVisibilityChanged:
                         handleLibrarySurfaceVisibilityChanged
                 )
-                    .tag(CoreTab.library)
+                }
+                    .tabItem { Label("Home", systemImage: "square.stack").accessibilityIdentifier("tab.library") }
+                .tag(CoreTab.library)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .ignoresSafeArea(.all)
-                .background(
-                    Image("home_bg")
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .clipped()
-                        .ignoresSafeArea(.all)
-                )
+
+                .background(ChoraiTheme.background)
                 
                 // Chat 页面
-                ChatView(showSideMenu: $showSideMenu)
-                    .tag(CoreTab.chat)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .ignoresSafeArea(.all)
-                .background(
-                    Image("home_bg")
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .clipped()
-                        .ignoresSafeArea(.all)
+                tabNavigationRoot(.chat) {
+                ChatView(
+                    showSideMenu: $showSideMenu,
+                    onExplore: { coordinator.selectedTab = .flow }
                 )
+                }
+                    .tabItem { Label("Chat", systemImage: "bubble.left.and.bubble.right").accessibilityIdentifier("tab.chat") }
+                .tag(CoreTab.chat)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                .background(ChoraiTheme.background)
             }
-            .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
+
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .ignoresSafeArea(.all)
-            .background(
-                Image("home_bg")
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .clipped()
-                    .ignoresSafeArea(.all)
-            )
+
+                .background(ChoraiTheme.background)
             .onAppear {
-                // 禁用 TabView 的侧滑手势
-                UIScrollView.appearance().isScrollEnabled = false
                 #if DEBUG
                 startExploreDetailSmokeIfRequested()
                 #endif
@@ -575,7 +620,7 @@ struct TabBarView: View {
                     .accessibilityIdentifier("onboarding.flow.version")
             }
             .font(.system(size: 1))
-            .foregroundColor(.white.opacity(0.01))
+            .foregroundColor(ChoraiTheme.ink.opacity(0.01))
             .frame(width: 1, height: 1)
             if coordinator.selectedTab == .flow {
                 VStack(alignment: .leading, spacing: 4) {
@@ -623,7 +668,7 @@ struct TabBarView: View {
                     if exploreSearchSmokeInvoked {
                         Text("Explore search invoked")
                             .font(.system(size: 1))
-                            .foregroundColor(.white.opacity(0.01))
+                            .foregroundColor(ChoraiTheme.ink.opacity(0.01))
                             .frame(width: 1, height: 1)
                             .accessibilityIdentifier("explore.search.invoked")
                     }
@@ -631,7 +676,7 @@ struct TabBarView: View {
                     if exploreSearchSmokeInFlight {
                         Text("Explore search loading")
                             .font(.system(size: 1))
-                            .foregroundColor(.white.opacity(0.01))
+                            .foregroundColor(ChoraiTheme.ink.opacity(0.01))
                             .frame(width: 1, height: 1)
                             .accessibilityIdentifier("explore.search.loading")
                     }
@@ -639,7 +684,7 @@ struct TabBarView: View {
                     if exploreSearchSmokeCompleted {
                         Text("Explore search completed")
                             .font(.system(size: 1))
-                            .foregroundColor(.white.opacity(0.01))
+                            .foregroundColor(ChoraiTheme.ink.opacity(0.01))
                             .frame(width: 1, height: 1)
                             .accessibilityIdentifier("explore.search.completed")
                     }
@@ -647,7 +692,7 @@ struct TabBarView: View {
                     if exploreDetailSmokeInvoked {
                         Text("Explore detail invoked")
                             .font(.system(size: 1))
-                            .foregroundColor(.white.opacity(0.01))
+                            .foregroundColor(ChoraiTheme.ink.opacity(0.01))
                             .frame(width: 1, height: 1)
                             .accessibilityIdentifier("explore.card-detail.invoked")
                     }
@@ -655,7 +700,7 @@ struct TabBarView: View {
                     if exploreDetailSmokeInFlight {
                         Text("Explore detail loading")
                             .font(.system(size: 1))
-                            .foregroundColor(.white.opacity(0.01))
+                            .foregroundColor(ChoraiTheme.ink.opacity(0.01))
                             .frame(width: 1, height: 1)
                             .accessibilityIdentifier("explore.card-detail.loading")
                     }
@@ -663,7 +708,7 @@ struct TabBarView: View {
                     if let visibleExploreCardId {
                         Text(visibleExploreCardId)
                             .font(.system(size: 1))
-                            .foregroundColor(.white.opacity(0.01))
+                            .foregroundColor(ChoraiTheme.ink.opacity(0.01))
                             .frame(width: 1, height: 1)
                             .accessibilityIdentifier("explore.visible-card.id")
                     }
@@ -677,36 +722,15 @@ struct TabBarView: View {
             // 全局弹窗 - 最顶层
             // 使用 modifier 方式，不需要额外的 if 语句
             
-            // 侧边菜单
-            SideMenuView(
-                isPresented: $showSideMenu,
-                onMyNotesTapped: {
-                    onMyNotesTapped()
-                },
-                onFavoritesTapped: {
-                    onFavoritesTapped()
-                }
-            )
-            
-            // 评论弹窗
-            CommentPopupView()
         }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            if !keyboardLayout.isVisible && !isLibraryCovered {
-                CoreTabBar(selectedTab: $coordinator.selectedTab)
-                    .adaptiveContentGutter()
-                    .padding(.bottom, 6)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
-        }
-        .animation(.easeOut(duration: 0.2), value: keyboardLayout.isVisible)
+        .tint(ChoraiTheme.accent)
         .overlay(alignment: .top) {
             ZStack(alignment: .top) {
                 #if DEBUG
                 if let cardID = lastCreatedNoteID {
                     Text(cardID)
                         .font(.system(size: 1))
-                        .foregroundStyle(Color.white.opacity(0.01))
+                        .foregroundStyle(ChoraiTheme.ink.opacity(0.01))
                         .frame(width: 1, height: 1)
                         .accessibilityIdentifier("note.created-card-id")
                 }
@@ -714,7 +738,7 @@ struct TabBarView: View {
                 if let cardID = coordinator.lastMergedCardID {
                     Text(cardID)
                         .font(.system(size: 1))
-                        .foregroundStyle(Color.white.opacity(0.01))
+                        .foregroundStyle(ChoraiTheme.ink.opacity(0.01))
                         .frame(width: 1, height: 1)
                         .accessibilityIdentifier("merge.committed-card-id")
                 }
@@ -723,52 +747,12 @@ struct TabBarView: View {
             }
             .padding(.top, 112)
         }
-        .popupMenu(isPresented: $showPopupMenu, layout: .grid2x2, cardData: currentMenuCardData)
-        .linkPopup()
         .environment(\.cardNavigationOnboardingStore, onboardingStore)
         .environment(\.cardNavigationContextualTipStore, contextualTipStore)
         .environment(
             \.cardNavigationRoutePresentationChanged,
             handleLibraryCardRoutePresentationChanged
         )
-        .navigationBarHidden(true)
-        .navigationBarBackButtonHidden(true)
-        #if DEBUG
-        .navigationDestination(isPresented: $navigateToDetailSmoke) {
-            if let cardId = selectedDetailSmokeCardId {
-                DetailView(cardId: cardId)
-                    .environmentObject(mergeTaskCoordinator)
-                    .environment(
-                        \.cardNavigationMergeCoordinator,
-                        mergeTaskCoordinator
-                    )
-            } else {
-                EmptyView()
-            }
-        }
-        #endif
-        .navigationDestination(for: TabRoute.self) { route in
-            switch route {
-            case .spark(let cardId):
-                if let actorID = AuthManager.shared.currentUser?.id {
-                    SparkContinuationView(
-                        cardID: cardId,
-                        actorID: actorID,
-                        onboardingStore: onboardingStore,
-                        contextualTipStore: contextualTipStore
-                    )
-                } else {
-                    EmptyView()
-                }
-            case .detail(let cardId):
-                DetailView(cardId: cardId)
-                    .environmentObject(mergeTaskCoordinator)
-                    .environment(
-                        \.cardNavigationMergeCoordinator,
-                        mergeTaskCoordinator
-                    )
-            }
-        }
         .sheet(item: $shareRoute) { route in
             ShareCardView(cardID: route.cardID)
         }
@@ -825,9 +809,7 @@ struct TabBarView: View {
             mergeTaskCoordinator.minimize()
             onboardingStore.receive(.mergeCommitted(assetID: intent.assetID))
             coordinator.mergeCompleted(cardID: intent.assetID)
-            if !navigationPath.isEmpty {
-                navigationPath.removeLast(navigationPath.count)
-            }
+            clearTabNavigationPaths()
             onMyNotesTapped()
             mergeTaskCoordinator.acknowledgeCommittedCardIntent(
                 jobID: intent.jobID
@@ -862,11 +844,10 @@ struct TabBarView: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NavigateToHome"))) { _ in
-            navigationPath.removeLast(navigationPath.count)
+            clearTabNavigationPaths()
             coordinator.selectedTab = .library
             // 关闭所有 popup
             closeAllPopups()
-        }
         }
         .environmentObject(mergeTaskCoordinator)
         .environment(
@@ -880,6 +861,7 @@ struct TabBarView: View {
 
 // 帖子卡片组件
 struct PostCard: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let card: Card
     @ObservedObject var cardsManager: RecommendedCardsManager
     @State private var offset: CGFloat = 0
@@ -891,15 +873,54 @@ struct PostCard: View {
     var onSwipe: (CGFloat, Bool) -> Void
     var onAvatarTap: ((String) -> Void)? = nil
     var onCardTap: ((String) -> Void)? = nil
+    var menuCardData: UserCard? = nil
+
+    private var isMenuCardOwned: Bool {
+        if let isOwner = card.isOwner { return isOwner }
+        guard let authorID = card.author?.id,
+              let actorID = AuthManager.shared.currentUser?.id else { return false }
+        return authorID == actorID
+    }
+
+    @ViewBuilder
+    private var moreMenu: some View {
+        if let menuCardData {
+            NativeCardActionsMenu(
+                cardData: menuCardData, layout: .grid2x2,
+                isOwnCard: isMenuCardOwned,
+                onPrepare: { onShowMenu(card) }
+            ) {
+                moreMenuLabel
+            }
+        } else {
+            Button {
+                isMenuButtonPressed = true
+                onShowMenu(card)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    isMenuButtonPressed = false
+                }
+            } label: {
+                moreMenuLabel
+            }
+        }
+    }
+
+    private var moreMenuLabel: some View {
+        Image(systemName: "ellipsis")
+            .font(.title3)
+            .foregroundStyle(ChoraiTheme.ink)
+            .frame(width: 44, height: 44)
+            .contentShape(Rectangle())
+    }
     
     private var cardBackground: some View {
         RoundedRectangle(cornerRadius: 16)
-            .background(.ultraThinMaterial.opacity(0.55))
+            .background(ChoraiTheme.surface)
             .cornerRadius(16)
-            .overlay(topLeftHighlight)
-            .overlay(bottomRightHighlight)
-            .overlay(topEdgeHighlight)
-            .overlay(bottomEdgeHighlight)
+
+
+
+
     }
     
     private var topLeftHighlight: some View {
@@ -969,7 +990,7 @@ struct PostCard: View {
     }
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: 18) {
             // 用户信息
             HStack {
                 // 头像
@@ -1001,50 +1022,49 @@ struct PostCard: View {
                                 .aspectRatio(contentMode: .fill)
                         }
                     }
-                        .frame(width: 50, height: 50)
+                        .frame(width: 38, height: 38)
                     .clipShape(Circle())
                 }
                 .buttonStyle(PlainButtonStyle())
+                .frame(minWidth: 44, minHeight: 44)
+                .accessibilityLabel("Open author")
+                .accessibilityIdentifier("explore.search.author.\(card.id)")
                 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(card.author?.username ?? "AI")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(.white)
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(1)
+                        .foregroundColor(ChoraiTheme.ink)
                     
                     Text(formatDate(card.createdAt))
-                        .font(.system(size: 12, weight: .regular))
-                        .foregroundColor(.white.opacity(0.7))
+                        .font(.caption)
+                        .lineLimit(1)
+                        .foregroundColor(ChoraiTheme.ink.opacity(0.7))
                 }
                 
                 Spacer()
                 
-                Button(action: {
-                    isMenuButtonPressed = true
-                    onShowMenu(card)
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                        isMenuButtonPressed = false
-                    }
-                }) {
-                    Image(systemName: "ellipsis")
-                        .font(.title3)
-                        .foregroundColor(.white)
-                }
+                moreMenu
                 .buttonStyle(PlainButtonStyle())
+                .accessibilityLabel("Note actions")
+                .accessibilityIdentifier("explore.search.menu.\(card.id)")
             }
-            .padding(.bottom, 16)
-            
-            // 帖子内容 填充剩余空间
-            VStack(alignment: .leading, spacing: 0) {
-                HTMLWebView(htmlContent: card.content)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                    .allowsHitTesting(false)
-            }
-            .frame(maxHeight: .infinity)
+
+            ChoraiLevelBadge(rate: card.rate, compact: true)
+
+            FlowRichPreview(card: card.asFlowCard, compact: false)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .clipped()
             .contentShape(Rectangle())
             .onTapGesture {
-                // 整个内容区域都可以点击
                 onCardTap?(card.id)
             }
+            .highPriorityGesture(summaryDragGesture)
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isButton)
+            .accessibilityHint("Read full note")
+            .accessibilityIdentifier("explore.search.summary.\(card.id)")
+            .accessibilityAction { onCardTap?(card.id) }
             
             // 底部内容 - 固定在底部
             VStack(spacing: 16) {
@@ -1058,6 +1078,7 @@ struct PostCard: View {
                             Spacer()
                         }
                     }
+                    .accessibilityIdentifier("explore.search.tags.\(card.id)")
                 }
                 
                 // 交互统计
@@ -1068,14 +1089,16 @@ struct PostCard: View {
                             cardsManager.toggleFavorite(for: card.id)
                         }) {
                             HStack(spacing: 4) {
-                                Image(cardsManager.getFavoriteState(for: card.id) ? "favorite_active" : "favorite")
+                                Image(systemName: cardsManager.getFavoriteState(for: card.id) ? "bookmark.fill" : "bookmark")
                                     .resizable()
                                     .aspectRatio(contentMode: .fit)
                                     .frame(width: 26, height: 26)
                                 Text("\(cardsManager.getFavoriteCount(for: card.id))")
                                     .font(.system(size: 14, weight: .medium))
-                                    .foregroundColor(.white.opacity(0.8))
+                                    .foregroundColor(ChoraiTheme.ink.opacity(0.8))
                             }
+                            .frame(minWidth: 44, minHeight: 44)
+                            .contentShape(Rectangle())
                         }
                         .accessibilityElement(children: .combine)
                         .accessibilityLabel("Favorite")
@@ -1091,14 +1114,16 @@ struct PostCard: View {
                             cardsManager.toggleLike(for: card.id)
                         }) {
                             HStack(spacing: 4) {
-                                Image(cardsManager.getLikeState(for: card.id) ? "like_active" : "like")
+                                Image(systemName: cardsManager.getLikeState(for: card.id) ? "heart.fill" : "heart")
                                     .resizable()
                                     .aspectRatio(contentMode: .fit)
                                     .frame(width: 20, height: 20)
                                 Text("\(cardsManager.getLikeCount(for: card.id))")
                                     .font(.system(size: 14, weight: .medium))
-                                    .foregroundColor(.white.opacity(0.8))
+                                    .foregroundColor(ChoraiTheme.ink.opacity(0.8))
                             }
+                            .frame(minWidth: 44, minHeight: 44)
+                            .contentShape(Rectangle())
                         }
                         .disabled(cardsManager.isLikeMutationInFlight(for: card.id))
                         .accessibilityElement(children: .combine)
@@ -1107,62 +1132,27 @@ struct PostCard: View {
                         .accessibilityIdentifier("card.like.\(card.id)")
                         
                         CommentButton(cardId: card.id, cardsManager: cardsManager)
+                            .frame(minWidth: 44, minHeight: 44)
                     }
                 }
 
                 if let error = cardsManager.likeError(for: card.id) {
                     Text(error)
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(.white.opacity(0.72))
+                        .foregroundColor(ChoraiTheme.ink.opacity(0.72))
                         .accessibilityIdentifier("card.like.error.\(card.id)")
                 }
             }
         }
-        .padding(20)
+        .padding(.vertical, 24)
+        .adaptiveContentGutter()
         .frame(maxHeight: .infinity)
-        .background(
-            cardBackground
-        )
+        .choraiCardLevel(rate: card.rate, showsChora: false, cornerRadius: 28)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("explore.search.surface.\(card.id)")
         .offset(x: offset)
         .rotationEffect(.degrees(rotation))
         .scaleEffect(scale)
-        .simultaneousGesture(
-            DragGesture()
-                .onChanged { value in
-                    offset = value.translation.width
-                    rotation = Double(value.translation.width / 10)
-                    scale = 1.0 - abs(value.translation.width) / 1000
-                    onSwipe(value.translation.width, false)
-                }
-                .onEnded { value in
-                    let threshold: CGFloat = 100
-                    if abs(value.translation.width) > threshold {
-                        // 滑动距离足够，切换到下一张
-                        withAnimation(.easeInOut(duration: 0.3)) {
-                            offset = value.translation.width > 0 ? 500 : -500
-                            rotation = value.translation.width > 0 ? 30 : -30
-                            scale = 0.8
-                        }
-                        
-                        // 通知父组件切换卡片
-                        onSwipe(value.translation.width, true)
-                        
-                        // 重置状态
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                            offset = 0
-                            rotation = 0
-                            scale = 1.0
-                        }
-                    } else {
-                        // 滑动距离不够，回到原位
-                        withAnimation(.easeInOut(duration: 0.3)) {
-                            offset = 0
-                            rotation = 0
-                            scale = 1.0
-                        }
-                    }
-                }
-        )
         .onAppear {
             // 点赞状态现在由 RecommendedCardsManager 管理
             #if DEBUG
@@ -1173,6 +1163,28 @@ struct PostCard: View {
             )
             #endif
         }
+    }
+
+    private var summaryDragGesture: some Gesture {
+        DragGesture(minimumDistance: 18)
+            .onChanged { value in
+                guard abs(value.translation.width) > abs(value.translation.height) else { return }
+                offset = value.translation.width
+                rotation = reduceMotion ? 0 : Double(value.translation.width / 34)
+                onSwipe(value.translation.width, false)
+            }
+            .onEnded { value in
+                let decision = ExploreSearchSwipe.resolve(
+                    horizontal: Double(value.translation.width),
+                    vertical: Double(value.translation.height)
+                )
+                if decision != .cancel { onSwipe(value.translation.width, true) }
+                withAnimation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.86)) {
+                    offset = 0
+                    rotation = 0
+                    scale = 1
+                }
+            }
     }
     
     // MARK: - 获取作者信息
@@ -1219,7 +1231,7 @@ struct TagView: View {
     var body: some View {
         Text(text)
             .font(.system(size: 12, weight: .medium))
-            .foregroundColor(.white)
+            .foregroundColor(ChoraiTheme.ink)
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
             .background(

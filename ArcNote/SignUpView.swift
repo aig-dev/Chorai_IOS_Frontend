@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import UIKit
 import Combine
 import CoreFlow
 import GoogleSignIn
@@ -30,548 +31,367 @@ struct SignUpInitialValues {
 }
 
 @MainActor
+private final class SignUpFormState: ObservableObject {
+    struct PendingRequest: Equatable {
+        let id = UUID()
+        let step: RegistrationDraft.Step
+        let loadingTitle: String
+    }
+
+    struct StepError {
+        let step: RegistrationDraft.Step
+        let message: String
+        var recoverCode = false
+    }
+
+    @Published var draft: RegistrationDraft
+    @Published var error: StepError?
+    @Published var pending: PendingRequest?
+
+    init(draft: RegistrationDraft) {
+        self.draft = draft
+    }
+}
+
+@MainActor
 struct SignUpView: View {
-    @Environment(\.dismiss) private var dismiss
-    @State private var showSignIn = false
-    
-    // 添加状态变量来管理输入内容
-    @State private var username = ""
-    @State private var email = ""
-    @State private var code = ""
-    @State private var password = ""
-    @State private var confirmPassword = ""
-    
-    // 验证码相关状态
-    @State private var isCodeSent = false
-    @State private var countdown = 0
-    @State private var isSendingCode = false
-    @State private var showAlert = false
-    @State private var alertMessage = ""
-    
-    // 注册相关状态
-    @State private var showSuccessAlert = false
-    @State private var showChooseInterests = false
-    @State private var showTabBar = false
-    
-    // WebView 相关状态
-    @State private var showTerms = false
-    @State private var showPrivacy = false
-    
-    // 认证管理器
-    @StateObject private var authManager = AuthManager.shared
-    @State private var cancellables = Set<AnyCancellable>()
+    private typealias Step = RegistrationDraft.Step
+    private typealias PendingRequest = SignUpFormState.PendingRequest
+    private typealias StepError = SignUpFormState.StepError
+
+    @Environment(\.authEntryOverrides) private var authEntryOverrides
+    @StateObject private var model: SignUpFormState
+    @State private var showCode = false
+    @State private var showUsername = false
+    @State private var showPassword = false
+    @State private var showConfirmation = false
+    @State private var destination: Destination?
+    @State private var legalPage: LegalPage?
+    @State private var request: AnyCancellable?
     @State private var appleSignInDelegate: AppleSignInDelegate?
-    @State private var isRegistering = false
     @State private var accessKey = "ios-\(UUID().uuidString.lowercased())"
     @State private var accessKeyCode: String?
     private let initialAccessCode: String
 
-    init(
-        initialValues: SignUpInitialValues = .empty
-    ) {
-        _username = State(initialValue: initialValues.username)
-        _email = State(initialValue: initialValues.email)
-        _code = State(initialValue: initialValues.verificationCode)
-        _password = State(initialValue: initialValues.password)
-        _confirmPassword = State(initialValue: initialValues.confirmPassword)
+    private enum Destination: Equatable {
+        case interests(Step), home(Step)
+    }
+
+    private enum LegalPage: String, Identifiable {
+        case terms, privacy
+        var id: String { rawValue }
+        var title: String { self == .terms ? "User Agreement" : "Privacy Policy" }
+        var url: URL {
+            self == .terms
+                ? URL(string: "https://chorai.app/terms")!
+                : URL(string: "https://chorai.app/privacy")!
+        }
+    }
+
+    private var draft: RegistrationDraft {
+        get { model.draft }
+        nonmutating set { model.draft = newValue }
+    }
+
+    private var error: StepError? {
+        get { model.error }
+        nonmutating set { model.error = newValue }
+    }
+
+    private var pending: PendingRequest? {
+        get { model.pending }
+        nonmutating set { model.pending = newValue }
+    }
+
+    init(initialValues: SignUpInitialValues = .empty) {
+        _model = StateObject(wrappedValue: SignUpFormState(draft: RegistrationDraft(
+            email: initialValues.email,
+            code: initialValues.verificationCode,
+            username: initialValues.username,
+            password: initialValues.password,
+            confirmPassword: initialValues.confirmPassword
+        )))
         initialAccessCode = initialValues.accessCode
     }
-    
-    var body: some View {
-        NavigationStack {
-            GeometryReader { geometry in
-                // 主要内容
-                ScrollView {
-                        VStack(spacing: 0) {
-                            // 顶部导航栏
-                            HStack {
-                                Button(action: {
-                                    dismiss()
-                                }) {
-                                    Image(systemName: "arrow.left")
-                                        .font(.title2)
-                                        .foregroundColor(.white)
-                                }
-                                
-                                Spacer()
-                            }
-                            .adaptiveContentGutter()
-                            .padding(.top, 20)
-                            
-                            // 标题
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text("Sign Up")
-                                    .font(.largeTitle)
-                                    .fontWeight(.bold)
-                                    .foregroundColor(.white)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .adaptiveContentGutter()
-                            .padding(.top, 24)
-                            
-                            
-                            // 输入字段
-                            VStack(spacing: 16) {
-                                // Username
-                                InputField(
-                                    icon: "person",
-                                    placeholder: "Username / Email",
-                                    text: $username,
-                                    accessibilityIdentifier: "signup.username"
-                                )
-                                
-                                // Email
-                                InputField(
-                                    icon: "envelope",
-                                    placeholder: "Email",
-                                    text: $email,
-                                    accessibilityIdentifier: "signup.email"
-                                )
-                                
-                                // Code
-                                HStack(spacing: 0) {
-                                    HStack(spacing: 12) {
-                                        Image(systemName: "checkmark")
-                                            .foregroundColor(.gray)
-                                            .frame(width: 20)
-                                        
-                                        TextField("Code", text: $code)
-                                            .foregroundColor(.white)
-                                            .accentColor(.white)
-                                            .placeholder(when: code.isEmpty) {
-                                                Text("Code")
-                                                    .foregroundColor(.white.opacity(0.6))
-                                            }
-                                        
-                                        Spacer()
-                                    }
-                                    .padding(.horizontal, 16)
-                                    .frame(height: 50)
-                                    
-                                    Rectangle()
-                                        .frame(width: 1, height: 20)
-                                        .foregroundColor(.gray.opacity(0.3))
-                                        .padding(.horizontal, 16)
-                                    
-                                    Button(action: {
-                                        sendVerificationCode()
-                                    }) {
-                                        if isSendingCode {
-                                            ProgressView()
-                                                .scaleEffect(0.8)
-                                                .progressViewStyle(CircularProgressViewStyle(tint: .teal))
-                                        } else if countdown > 0 {
-                                            Text("\(countdown)s")
-                                                .foregroundColor(.gray)
-                                        } else {
-                                            Text("Get Code")
-                                                .foregroundColor(.teal)
-                                        }
-                                    }
-                                    .disabled(isSendingCode || countdown > 0 || email.isEmpty)
-                                    .font(.subheadline)
-                                    .padding(.trailing, 16)
-                                    .frame(height: 50)
-                                    .accessibilityIdentifier("signup.get-code")
-                                }
-                                .background(
-                                    RoundedRectangle(cornerRadius: 28) // 增加圆角使其更椭圆
-                                        .fill(Color.clear) // 透明背景
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 28)
-                                                .stroke(Color.white.opacity(0.3), lineWidth: 1) // 白色半透明边框
-                                        )
-                                )
-                                
-                                // Password
-                                InputField(
-                                    icon: "lock",
-                                    placeholder: "Password",
-                                    text: $password,
-                                    accessibilityIdentifier: "signup.password"
-                                )
-                                
-                                // Confirm Password
-                                InputField(
-                                    icon: "checkmark",
-                                    placeholder: "Confirm Password",
-                                    text: $confirmPassword,
-                                    accessibilityIdentifier: "signup.confirm-password"
-                                )
-                            }
-                            .adaptiveContentGutter()
-                            .padding(.top, 24)
 
-                            // 创建账户按钮
-                            Button(action: {
-                                createAccount()
-                            }) {
-                                HStack {
-                                    if isRegistering {
-                                        ProgressView()
-                                            .scaleEffect(0.8)
-                                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                    }
-                                    Text(
-                                        isRegistering
-                                            ? "Create..."
-                                            : "CREATE ACCOUNT"
-                                    )
-                                        .font(.headline)
-                                        .fontWeight(.bold)
-                                        .foregroundColor(.white)
-                                }
-                                .frame(maxWidth: .infinity)
-                                .frame(height: 62)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 32)
-                                        .fill(.ultraThinMaterial)
-                                        // 左上角高光
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 32)
-                                                .stroke(Color.white, lineWidth: 2)
-                                                .offset(x: 0, y: 0)
-                                                .mask(
-                                                    RoundedRectangle(cornerRadius: 32)
-                                                        .fill(
-                                                            RadialGradient(
-                                                                colors: [Color.white, Color.clear],
-                                                                center: .topLeading,
-                                                                startRadius: 10,
-                                                                endRadius: 35
-                                                            )
-                                                        )
-                                                )
-                                        )
-                                        // 右下角高光
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 32)
-                                                .stroke(Color.white, lineWidth: 2)
-                                                .offset(x: 0, y: 0)
-                                                .mask(
-                                                    RoundedRectangle(cornerRadius: 32)
-                                                        .fill(
-                                                            RadialGradient(
-                                                                colors: [Color.white, Color.clear],
-                                                                center: .bottomTrailing,
-                                                                startRadius: 10,
-                                                                endRadius: 35
-                                                            )
-                                                        )
-                                                )
-                                        )
-                                        // 上面边缘高光
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 32)
-                                                .stroke(Color.white, lineWidth: 1)
-                                                .offset(x: 0, y: -1)
-                                                .mask(
-                                                    RoundedRectangle(cornerRadius: 32)
-                                                        .fill(
-                                                            LinearGradient(
-                                                                colors: [Color.white, Color.clear],
-                                                                startPoint: .top,
-                                                                endPoint: UnitPoint(x: 0, y: 0.05)
-                                                            )
-                                                        )
-                                                )
-                                        )
-                                        // 下面边缘高光
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 32)
-                                                .stroke(Color.white, lineWidth: 1)
-                                                .offset(x: -1, y: 1)
-                                                .mask(
-                                                    RoundedRectangle(cornerRadius: 32)
-                                                        .fill(
-                                                            LinearGradient(
-                                                                colors: [Color.white, Color.clear],
-                                                                startPoint: .bottom,
-                                                                endPoint: UnitPoint(x: 1, y: 0.05)
-                                                            )
-                                                        )
-                                                )
-                                        )
-                                )
-                            }
-                            .disabled(
-                                isRegistering
-                            )
-                            .accessibilityIdentifier("signup.create-account")
-                            .adaptiveContentGutter()
-                            .padding(.top, 24)
-                            
-                            // 用户协议提示
-                            VStack(spacing: 4) {
-                                Text("By continuing, you agree to our")
-                                    .foregroundColor(.gray)
-                                +
-                                Text(" [User Agreement](arcnote://terms) ")
-                                    .foregroundColor(.white)
-                                    .fontWeight(.medium)
-                                    .underline()
-                                +
-                                Text("and acknowledge that you understand the")
-                                    .foregroundColor(.gray)
-                                +
-                                Text(" [Privacy Policy](arcnote://privacy) ")
-                                    .foregroundColor(.white)
-                                    .fontWeight(.medium)
-                                    .underline()
-                            }
-                            .font(.caption)
-                            .multilineTextAlignment(.center)
-                            .adaptiveContentGutter()
-                            .padding(.top, 12)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .tint(.white)
-                            .onOpenURL { url in
-                                if url.scheme == "arcnote" {
-                                    switch url.host {
-                                    case "terms":
-                                        print("打开 Terms")
-                                        showTerms = true
-                                    case "privacy":
-                                        print("打开 Privacy")
-                                        showPrivacy = true
-                                    default:
-                                        print("\(url.host ?? "nil")")
-                                    }
-                                }
-                            }
-                    
-                            // 已有账户链接
-                            HStack {
-                                Text("Already have an account? ")
-                                    .foregroundColor(.gray)
-                                + Text("Sign In")
-                                    .foregroundColor(.white)
-                                    .fontWeight(.semibold)
-                            }
-                            .font(.subheadline)
-                            .padding(.top, 16)
-                            .onTapGesture {
-                                showSignIn = true
-                            }
-                            
-                            Spacer(minLength: 8)
-                            
-                            // 分隔线
-                            HStack {
-                                Rectangle()
-                                    .frame(height: 1)
-                                    .foregroundColor(.gray.opacity(0.3))
-                                
-                                Text("Or sign up with")
-                                    .font(.caption)
-                                    .foregroundColor(.gray)
-                                    .padding(.horizontal, 16)
-                                
-                                Rectangle()
-                                    .frame(height: 1)
-                                    .foregroundColor(.gray.opacity(0.3))
-                            }
-                            .adaptiveContentGutter()
-                            .padding(.top, 20)
-                            
-                            // 社交登录图标
-                            SocialLoginRow(
-                                googleAction: {
-                                    signInWithGoogle()
-                                },
-                                appleAction: {
-                                    signInWithApple()
-                                }
-                            )
-                            .padding(.top, 16)
-                            .padding(.bottom, max(32, geometry.safeAreaInsets.bottom + 20))
-                        }
-                        .frame(minHeight: geometry.size.height)
-                    }
-                    .scrollDismissesKeyboard(.interactively)
-            }
-            .background(
-                Image("login_bg")
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .ignoresSafeArea(.all)
-            )
-        .navigationBarHidden(true)
-        .navigationBarBackButtonHidden(true)
-        .toolbar(.hidden, for: .navigationBar)
-        .gesture(
-            DragGesture()
-                .onEnded { value in
-                    if value.translation.width > 100 && abs(value.translation.height) < 50 {
-                        dismiss()
-                    }
+    var body: some View {
+        page(.email)
+            .navigationDestination(isPresented: $showCode) { codePage }
+            .onAppear {
+                let code = initialAccessCode.trimmingCharacters(in: .whitespacesAndNewlines)
+                if (9...64).contains(code.count) {
+                    codeStore.save(code)
                 }
-        )
-        .navigationDestination(isPresented: $showSignIn) {
-            SignInView()
+            }
+    }
+
+    private var codePage: some View {
+        page(.code)
+            .navigationDestination(isPresented: $showUsername) { usernamePage }
+    }
+
+    private var usernamePage: some View {
+        page(.username)
+            .navigationDestination(isPresented: $showPassword) { passwordPage }
+    }
+
+    private var passwordPage: some View {
+        page(.password)
+            .navigationDestination(isPresented: $showConfirmation) { page(.confirm) }
+    }
+
+    private func page(_ step: Step) -> some View {
+        SignUpStepPage(
+            model: model,
+            step: step,
+            text: fieldBinding(step),
+            subtitle: subtitle(step),
+            onSubmit: { advance(from: step) },
+            onRecoverCode: returnToCode
+        ) {
+            switch step {
+            case .email:
+                AuthProviderButtons(
+                    google: signInWithGoogle,
+                    apple: signInWithApple,
+                    disabled: pending != nil
+                )
+                .padding(.top, 12)
+            case .code:
+                codeActions
+            default:
+                EmptyView()
+            }
+
+        } footer: {
+            if step == .confirm { legalNotice }
         }
-        .navigationDestination(isPresented: $showChooseInterests) {
+        .navigationDestination(isPresented: destinationBinding(.interests(step))) {
             ChooseInterestsView()
         }
-        .navigationDestination(isPresented: $showTabBar) {
+        .navigationDestination(isPresented: destinationBinding(.home(step))) {
             TabBarView()
         }
-        .navigationDestination(isPresented: $showTerms) {
-            WebViewPage(
-                url: URL(string: "https://chorai.app/terms")!,
-                title: "Terms of Service"
-            )
+        .onDisappear {
+            if pending?.step == step { cancelRequest() }
+            if error?.step == step { error = nil }
         }
-        .navigationDestination(isPresented: $showPrivacy) {
-            WebViewPage(
-                url: URL(string: "https://chorai.app/privacy")!,
-                title: "Privacy Policy"
-            )
-        }
-        .alert("Notice", isPresented: $showAlert) {
-            Button("OK") { }
-        } message: {
-            Text(alertMessage)
-        }
-        .alert("Registration Successful", isPresented: $showSuccessAlert) {
-            Button("OK") {
-                // 这个弹窗现在不会显示，因为直接跳转到兴趣选择页面
-            }
-        } message: {
-            Text("Congratulations! Your account has been successfully created. You can now start using ArcNote.")
-        }
-        .onAppear {
-            let code = initialAccessCode.trimmingCharacters(
-                in: .whitespacesAndNewlines
-            )
-            if (9...64).contains(code.count) {
-                KeychainStore.shared.save(code)
-            }
-        }
-        }
-    }
-    
-    // MARK: - 发送验证码
-    private func sendVerificationCode() {
-        guard !email.isEmpty else {
-            showAlert(message: "Please enter email address")
-            return
-        }
-        
-        guard isValidEmail(email) else {
-            showAlert(message: "Please enter a valid email address")
-            return
-        }
-        
-        isSendingCode = true
-        
-        authManager.sendVerificationCode(email: email)
-            .receive(on: DispatchQueue.main)
-            .sink(
-                receiveCompletion: { completion in
-                    isSendingCode = false
-                    if case .failure(let error) = completion {
-                        handleVerificationCodeError(error)
-                    }
-                },
-                receiveValue: { response in
-                    if response.success {
-                        isCodeSent = true
-                        startCountdown()
-                        showAlert(message: response.message ?? "Verification code has been sent to your email")
-                    } else {
-                        showAlert(
-                            message: AuthenticationErrorPresentation.verificationCodeMessage(
-                                statusCode: nil,
-                                errorCode: response.errorCode
-                            )
-                        )
-                    }
-                }
-            )
-            .store(in: &cancellables)
     }
 
-    private func handleVerificationCodeError(_ error: NetworkError) {
-        switch error {
-        case .serverError(let statusCode, _):
-            showAlert(
-                message: AuthenticationErrorPresentation.verificationCodeMessage(
-                    statusCode: statusCode,
-                    errorCode: nil
-                )
-            )
-        case .api(let statusCode, let errorCode, _):
-            showAlert(
-                message: AuthenticationErrorPresentation.verificationCodeMessage(
-                    statusCode: statusCode,
-                    errorCode: errorCode
-                )
-            )
-        case .networkError:
-            showAlert(message: "Network connection failed, please check your network settings")
-        case .timeout:
-            showAlert(message: "Request timeout, please try again later")
-        case .decodingError:
-            showAlert(message: "The server returned an unexpected response. Please try again later.")
-        default:
-            showAlert(message: "Verification code could not be sent. Please try again.")
+    private var codeActions: some View {
+        VStack(spacing: 3) {
+            ViewThatFits {
+                HStack(spacing: 16) { resendButton; changeEmailButton }
+                VStack(spacing: 0) { resendButton; changeEmailButton }
+            }
+            Text("Check your spam folder if it hasn’t arrived.")
+                .font(.caption)
+                .foregroundStyle(ChoraiTheme.secondaryInk)
+                .multilineTextAlignment(.center)
         }
     }
-    
-    // MARK: - 创建账户
+
+    private var resendButton: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            let seconds = draft.resendSeconds(at: context.date)
+            Button(seconds > 0 ? "Resend code in \(seconds)s" : "Resend code") {
+                guard draft.resendSeconds(at: .now) == 0 else { return }
+                sendVerificationCode(from: .code)
+            }
+            .frame(minHeight: 44)
+            .disabled(seconds > 0 || pending != nil)
+            .accessibilityIdentifier("signup.get-code")
+        }
+        .font(.footnote.weight(.medium))
+    }
+
+    private var changeEmailButton: some View {
+        Button("Change email") {
+            cancelRequest()
+            showCode = false
+        }
+        .font(.footnote.weight(.medium))
+        .frame(minHeight: 44)
+        .accessibilityIdentifier("signup.change-email")
+    }
+
+    private var legalNotice: some View {
+        Text("By continuing, you agree to our [User Agreement](arcnote://terms) and acknowledge our [Privacy Policy](arcnote://privacy).")
+            .font(.caption2)
+            .foregroundStyle(ChoraiTheme.secondaryInk)
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
+            .environment(\.openURL, OpenURLAction { url in
+                guard url.scheme == "arcnote", let host = url.host, let page = LegalPage(rawValue: host) else {
+                    return .systemAction
+                }
+                legalPage = page
+                return .handled
+            })
+            .sheet(item: $legalPage) { page in
+                NavigationStack {
+                    Group {
+                        if authEntryOverrides != nil {
+                            Text("Legal page preview is unavailable offline.")
+                                .padding(24)
+                        } else {
+                            WebViewPage(url: page.url, title: page.title)
+                        }
+                    }
+                    .navigationTitle(page.title)
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { legalPage = nil }
+                        }
+                    }
+                }
+            }
+    }
+
+    private func subtitle(_ step: Step) -> String {
+        switch step {
+        case .email: return "Use your email to get started."
+        case .code: return "Enter the code sent to \(draft.email)"
+        case .username: return "Choose a username with at least 2 characters."
+        case .password: return "At least 8 characters, with a letter and a number."
+        case .confirm: return "Enter it once more."
+        }
+    }
+
+    private func fieldBinding(_ step: Step) -> Binding<String> {
+        let keyPath: WritableKeyPath<RegistrationDraft, String>
+        switch step {
+        case .email: keyPath = \.email
+        case .code: keyPath = \.code
+        case .username: keyPath = \.username
+        case .password: keyPath = \.password
+        case .confirm: keyPath = \.confirmPassword
+        }
+        return Binding(
+            get: { draft[keyPath: keyPath] },
+            set: {
+                guard draft[keyPath: keyPath] != $0 else { return }
+                if error?.step == step { error = nil }
+                draft[keyPath: keyPath] = $0
+            }
+        )
+    }
+
+    private func advance(from step: Step) {
+        guard pending == nil, draft.canContinue(step) else { return }
+        error = nil
+        switch step {
+        case .email:
+            if draft.codeWasSent { showCode = true }
+            else { sendVerificationCode(from: .email) }
+        case .code: showUsername = true
+        case .username: showPassword = true
+        case .password: showConfirmation = true
+        case .confirm: createAccount()
+        }
+    }
+
+    private func sendVerificationCode(from step: Step) {
+        guard pending == nil, draft.canContinue(.email) else { return }
+        let email = draft.email
+        let operation = PendingRequest(step: step, loadingTitle: "Sending code…")
+        pending = operation
+        error = nil
+
+        let publisher = authEntryOverrides?.sendVerificationCode(email)
+            ?? AuthManager.shared.sendVerificationCode(email: email)
+        request = publisher.receive(on: DispatchQueue.main).sink(
+            receiveCompletion: { completion in
+                guard pending == operation else { return }
+                cancelRequest()
+                if case .failure(let failure) = completion {
+                    showError(message(for: failure, sendingCode: true), on: step)
+                }
+            },
+            receiveValue: { response in
+                guard pending == operation, draft.email == email else { return }
+                cancelRequest()
+                if response.success {
+                    draft.markCodeSent(to: email, at: .now)
+                    if step == .email { showCode = true }
+                } else {
+                    showError(AuthenticationErrorPresentation.verificationCodeMessage(
+                        statusCode: nil, errorCode: response.errorCode
+                    ), on: step)
+                }
+            }
+        )
+    }
+
     private func createAccount() {
-        guard !isRegistering else { return }
-        guard username.trimmingCharacters(in: .whitespacesAndNewlines).count >= 2,
-              isValidEmail(email),
-              code.count == 6,
-              password.count >= 8,
-              isStrongPassword(password),
-              password == confirmPassword else {
-            showAlert(message: "Check your account details and try again.")
+        guard pending == nil else { return }
+        guard draft.password == draft.confirmPassword else {
+            showError("Your passwords don’t match. Try again.", on: .confirm)
+            return
+        }
+        guard draft.canRegister else {
+            showError("Check your account details and try again.", on: .confirm)
             return
         }
 
         let pair = currentAccessPair()
         guard pair.code != nil, pair.key != nil else {
-            showAlert(
-                message: "Enter a Product Access Code before creating an account."
-            )
+            showError("Enter a Product Access Code before creating an account.", on: .confirm)
             return
         }
 
-        isRegistering = true
-        authManager.register(
-            username: username,
-            email: email,
-            password: password,
-            verificationCode: code,
+        let operation = PendingRequest(step: .confirm, loadingTitle: "Creating account…")
+        pending = operation
+        let publisher = authEntryOverrides?.register(
+            draft.username, draft.email, draft.password, draft.code, pair.code, pair.key
+        ) ?? AuthManager.shared.register(
+            username: draft.username,
+            email: draft.email,
+            password: draft.password,
+            verificationCode: draft.code,
             accessCode: pair.code,
             idempotencyKey: pair.key
         )
-        .receive(on: DispatchQueue.main)
-        .sink(
+        request = publisher.receive(on: DispatchQueue.main).sink(
             receiveCompletion: { completion in
-                isRegistering = false
-                if case .failure(let error) = completion {
-                    handleRegistrationError(error)
+                guard pending == operation else { return }
+                cancelRequest()
+                if case .failure(let failure) = completion {
+                    showError(message(for: failure), on: .confirm, recoverCode: isCodeRejection(failure))
                 }
             },
             receiveValue: { response in
-                isRegistering = false
-                routeAfterAuth(response)
+                guard pending == operation else { return }
+                cancelRequest()
+                routeAfterAuth(response, from: .confirm)
             }
         )
-        .store(in: &cancellables)
+    }
+
+    private func returnToCode() {
+        cancelRequest()
+        error = nil
+        draft.code = ""
+        showConfirmation = false
+        showPassword = false
+        showUsername = false
+    }
+
+    private func cancelRequest() {
+        pending = nil
+        request?.cancel()
+        request = nil
+        appleSignInDelegate = nil
+    }
+
+    private var codeStore: any CodeStoring {
+        authEntryOverrides?.codeStore ?? KeychainStore.shared
     }
 
     private func currentAccessPair() -> (code: String?, key: String?) {
-        let code = KeychainStore.shared.load()?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let code,
-              (9...64).contains(code.count) else {
-            return (nil, nil)
-        }
+        let code = codeStore.load()?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let code, (9...64).contains(code.count) else { return (nil, nil) }
         if accessKeyCode != code {
             accessKeyCode = code
             accessKey = "ios-\(UUID().uuidString.lowercased())"
@@ -579,223 +399,420 @@ struct SignUpView: View {
         return (code, accessKey)
     }
 
-    private func routeAfterAuth(_ response: AuthResponse) {
+    private func destinationBinding(_ value: Destination) -> Binding<Bool> {
+        Binding(
+            get: { destination == value },
+            set: { if !$0, destination == value { destination = nil } }
+        )
+    }
+
+    private func routeAfterAuth(_ response: AuthResponse, from step: Step = .email) {
         guard response.data.productAccess.status == "allowed" else { return }
-        if response.data.isNewUser == true {
-            showChooseInterests = true
-        } else {
-            showTabBar = true
+        if let overrides = authEntryOverrides {
+            overrides.onAuthenticated(.signUp)
+            return
         }
+        destination = response.data.isNewUser == true ? .interests(step) : .home(step)
     }
-    
-    // MARK: - 开始倒计时
-    private func startCountdown() {
-        countdown = 60
-        Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { timer in
-            Task { @MainActor in
-                if countdown > 0 {
-                    countdown -= 1
-                } else {
-                    timer.invalidate()
-                }
-            }
-        }
-    }
-    
-    // MARK: - 显示提示信息
-    private func showAlert(message: String) {
-        alertMessage = message
-        showAlert = true
-    }
-    
-    // MARK: 验证邮箱格式
-    private func isValidEmail(_ email: String) -> Bool {
-        let emailRegex = "^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$"
-        let emailPredicate = NSPredicate(format: "SELF MATCHES %@", emailRegex)
-        return emailPredicate.evaluate(with: email)
-    }
-    
-    // MARK: 验证密码强度
-    private func isStrongPassword(_ password: String) -> Bool {
-        let hasLetter = password.rangeOfCharacter(from: .letters) != nil
-        let hasNumber = password.rangeOfCharacter(from: .decimalDigits) != nil
-        return hasLetter && hasNumber
-    }
-    
-    // MARK: 处理注册错误
-    private func handleRegistrationError(_ error: NetworkError) {
+
+    private func isCodeRejection(_ error: NetworkError) -> Bool {
         switch error {
-        case .serverError(let statusCode, _):
-            showAlert(
-                message: AuthenticationErrorPresentation.registrationMessage(
-                    statusCode: statusCode,
-                    errorCode: nil
-                )
-            )
-        case .api(let statusCode, let errorCode, _):
-            showAlert(
-                message: AuthenticationErrorPresentation.registrationMessage(
-                    statusCode: statusCode,
-                    errorCode: errorCode
-                )
-            )
-        case .networkError:
-            showAlert(message: "Network connection failed, please check your network settings")
-        case .timeout:
-            showAlert(message: "Request timeout, please try again later")
-        case .decodingError:
-            showAlert(message: "The server returned an unexpected response. Please try again later.")
-        default:
-            showAlert(message: "Registration failed. Please try again.")
+        case .serverError(let status, _):
+            return AuthenticationErrorPresentation.registrationRejectsCode(statusCode: status, errorCode: nil)
+        case .api(let status, let code, _):
+            return AuthenticationErrorPresentation.registrationRejectsCode(statusCode: status, errorCode: code)
+        default: return false
         }
     }
-    
-    // MARK: - Google登录
+
+    private func message(for error: NetworkError, sendingCode: Bool = false) -> String {
+        let serviceMessage = sendingCode
+            ? AuthenticationErrorPresentation.verificationCodeMessage
+            : AuthenticationErrorPresentation.registrationMessage
+        switch error {
+        case .serverError(let status, _): return serviceMessage(status, nil)
+        case .api(let status, let code, _): return serviceMessage(status, code)
+        case .networkError: return "Connection unavailable. Try again when you’re back online."
+        case .timeout: return "Request timed out. Please try again."
+        case .decodingError: return "The server returned an unexpected response. Please try again later."
+        default:
+            return sendingCode
+                ? "Verification code could not be sent. Please try again."
+                : "Registration failed. Please try again."
+        }
+    }
+
+    private func showError(_ message: String, on step: Step, recoverCode: Bool = false) {
+        error = StepError(step: step, message: message, recoverCode: recoverCode)
+    }
+
     private func signInWithGoogle() {
+        guard pending == nil else { return }
+        if let overrides = authEntryOverrides {
+            overrides.onAuthenticated(.signUp)
+            return
+        }
         guard let presentingViewController = UIApplication.shared.connectedScenes
             .compactMap({ $0 as? UIWindowScene })
             .flatMap({ $0.windows })
             .first(where: { $0.isKeyWindow })?.rootViewController else {
-            print("无法获取presenting view controller")
             return
         }
-        
-        GIDSignIn.sharedInstance.signIn(withPresenting: presentingViewController) { result, error in
-            if let error = error {
-                print("Google登录失败: \(error.localizedDescription)")
-                return
-            }
-            
-            guard let user = result?.user else {
-                print("无法获取Google用户信息")
-                return
-            }
-            
-            print("Google登录成功")
-            
-            guard let idToken = user.idToken?.tokenString else {
-                print("无法获取ID Token")
-                return
-            }
-            
+
+        let operation = beginProviderRequest()
+        GIDSignIn.sharedInstance.signIn(withPresenting: presentingViewController) { result, failure in
             DispatchQueue.main.async {
-                self.handleGoogleLoginResponse(idToken: idToken)
+                guard pending == operation else { return }
+                guard let idToken = result?.user.idToken?.tokenString else {
+                    cancelRequest()
+                    let canceled = (failure as NSError?)?.code == GIDSignInError.canceled.rawValue
+                    if !canceled {
+                        showError("Google sign in failed. Please try again.", on: .email)
+                    }
+                    return
+                }
+                handleGoogleLoginResponse(idToken: idToken, operation: operation)
             }
         }
     }
-    
-    // MARK: - 处理Google登录响应
-    private func handleGoogleLoginResponse(idToken: String) {
+
+    private func handleGoogleLoginResponse(idToken: String, operation: PendingRequest) {
         let pair = currentAccessPair()
         guard pair.code != nil, pair.key != nil else {
-            showAlert(
-                message: "Enter a Product Access Code before creating an account."
-            )
+            showMissingProviderAccessCode()
             return
         }
-        authManager.googleLogin(
-            idToken: idToken,
-            accessCode: pair.code,
-            idempotencyKey: pair.key
+        finishProviderRequest(
+            AuthManager.shared.googleLogin(
+                idToken: idToken,
+                accessCode: pair.code,
+                idempotencyKey: pair.key
+            ),
+            operation: operation
         )
-            .receive(on: DispatchQueue.main)
-            .sink(
-                receiveCompletion: { completion in
-                    if case .failure(let error) = completion {
-                        print("后端Google登录失败: \(error.localizedDescription)")
-                        handleRegistrationError(error)
-                    }
-                },
-                receiveValue: { authResponse in
-                    print("后端Google登录成功")
-                    routeAfterAuth(authResponse)
-                }
-            )
-            .store(in: &cancellables)
     }
-    
-    // MARK: - Apple登录
+
     private func signInWithApple() {
-        let request = ASAuthorizationAppleIDProvider().createRequest()
-        request.requestedScopes = [.fullName, .email]
-        
+        guard pending == nil else { return }
+        if let overrides = authEntryOverrides {
+            overrides.onAuthenticated(.signUp)
+            return
+        }
+
+        let operation = beginProviderRequest()
+        let appleRequest = ASAuthorizationAppleIDProvider().createRequest()
+        appleRequest.requestedScopes = [.fullName, .email]
+
         appleSignInDelegate = AppleSignInDelegate { result in
             DispatchQueue.main.async {
+                guard pending == operation else { return }
                 switch result {
                 case .success(let authorization):
-                    print("Apple授权成功")
-                    if let appleIDCredential = authorization.credential as? ASAuthorizationAppleIDCredential {
-                        print("Apple登录成功")
-                        
-                        guard let identityToken = appleIDCredential.identityToken,
-                              let identityTokenString = String(data: identityToken, encoding: .utf8) else {
-                            print("无法获取Identity Token")
-                            return
-                        }
-                        
-                        guard let authorizationCode = appleIDCredential.authorizationCode,
-                              let authorizationCodeString = String(data: authorizationCode, encoding: .utf8) else {
-                            print("无法获取Authorization Code")
-                            return
-                        }
-                        
-                        let appleUserInfo = AppleUserInfo(
-                            name: AppleName(
-                                firstName: appleIDCredential.fullName?.givenName ?? "",
-                                lastName: appleIDCredential.fullName?.familyName ?? ""
-                            )
-                        )
-                        
-                        let pair = currentAccessPair()
-                        guard pair.code != nil, pair.key != nil else {
-                            showAlert(
-                                message: "Enter a Product Access Code before creating an account."
-                            )
-                            return
-                        }
-                        let appleLoginRequest = AppleLoginRequest(
-                            identityToken: identityTokenString,
-                            authorizationCode: authorizationCodeString,
-                            userInfo: appleUserInfo,
-                            accessCode: pair.code,
-                            idempotencyKey: pair.key
-                        )
-                        
-                        self.handleAppleLoginResponse(request: appleLoginRequest)
-                    } else {
-                        print("无法获取Apple ID凭证")
+                    guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential,
+                          let identityToken = credential.identityToken,
+                          let identityTokenString = String(data: identityToken, encoding: .utf8),
+                          let authorizationCode = credential.authorizationCode,
+                          let authorizationCodeString = String(data: authorizationCode, encoding: .utf8) else {
+                        cancelRequest()
+                        showError("Apple sign in failed. Please try again.", on: .email)
+                        return
                     }
-                case .failure(let error):
-                    print("Apple登录失败: \(error.localizedDescription)")
-                    showAlert(message: "Apple sign in failed, please try again")
+
+                    let appleUserInfo = AppleUserInfo(
+                        name: AppleName(
+                            firstName: credential.fullName?.givenName ?? "",
+                            lastName: credential.fullName?.familyName ?? ""
+                        )
+                    )
+                    let pair = currentAccessPair()
+                    guard pair.code != nil, pair.key != nil else {
+                        showMissingProviderAccessCode()
+                        return
+                    }
+                    let appleLoginRequest = AppleLoginRequest(
+                        identityToken: identityTokenString,
+                        authorizationCode: authorizationCodeString,
+                        userInfo: appleUserInfo,
+                        accessCode: pair.code,
+                        idempotencyKey: pair.key
+                    )
+                    finishProviderRequest(
+                        AuthManager.shared.appleLogin(request: appleLoginRequest),
+                        operation: operation
+                    )
+                case .failure(let failure):
+                    cancelRequest()
+                    if (failure as? ASAuthorizationError)?.code != .canceled {
+                        showError("Apple sign in failed. Please try again.", on: .email)
+                    }
                 }
             }
         }
-        
-        let authorizationController = ASAuthorizationController(authorizationRequests: [request])
+
+        let authorizationController = ASAuthorizationController(authorizationRequests: [appleRequest])
         authorizationController.delegate = appleSignInDelegate
         authorizationController.performRequests()
     }
-    
-    // MARK: - 处理Apple登录响应
-    private func handleAppleLoginResponse(request: AppleLoginRequest) {
-        authManager.appleLogin(request: request)
-            .receive(on: DispatchQueue.main)
-            .sink(
-                receiveCompletion: { completion in
-                    if case .failure(let error) = completion {
-                        print("后端Apple登录失败: \(error.localizedDescription)")
-                        handleRegistrationError(error)
-                    }
-                },
-                receiveValue: { authResponse in
-                    print("后端Apple登录成功")
-                    routeAfterAuth(authResponse)
-                }
-            )
-            .store(in: &cancellables)
+
+    private func beginProviderRequest() -> PendingRequest {
+        let operation = PendingRequest(step: .email, loadingTitle: "Signing in…")
+        pending = operation
+        error = nil
+        return operation
     }
-    
+
+    private func showMissingProviderAccessCode() {
+        cancelRequest()
+        showError("Enter a Product Access Code before creating an account.", on: .email)
+    }
+
+    private func finishProviderRequest(
+        _ publisher: AnyPublisher<AuthResponse, NetworkError>,
+        operation: PendingRequest
+    ) {
+        request = publisher.receive(on: DispatchQueue.main).sink(
+            receiveCompletion: { completion in
+                guard pending == operation else { return }
+                cancelRequest()
+                if case .failure(let failure) = completion {
+                    showError(message(for: failure), on: .email)
+                }
+            },
+            receiveValue: { response in
+                guard pending == operation else { return }
+                cancelRequest()
+                routeAfterAuth(response)
+            }
+        )
+    }
+
+}
+
+@MainActor
+private struct SignUpStepPage<Extras: View, Footer: View>: View {
+    @ObservedObject var model: SignUpFormState
+    let step: RegistrationDraft.Step
+    @Binding var text: String
+    let subtitle: String
+    let onSubmit: () -> Void
+    let onRecoverCode: () -> Void
+    @ViewBuilder let extras: () -> Extras
+    @ViewBuilder let footer: () -> Footer
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    private enum InputFocus { case plain, secure }
+    @FocusState private var focusedInput: InputFocus?
+    @ScaledMetric(relativeTo: .title) private var inputSize = 29.0
+    @State private var passwordVisible = false
+
+    private var isPassword: Bool { step == .password || step == .confirm }
+    private var busy: Bool { model.pending?.step == step }
+    private var enabled: Bool { model.pending == nil && model.draft.canContinue(step) }
+    private var stepError: SignUpFormState.StepError? {
+        model.error?.step == step ? model.error : nil
+    }
+
+    private var title: String {
+        switch step {
+        case .email: return "Enter your email address"
+        case .code: return "Check your inbox"
+        case .username: return "What should we call you?"
+        case .password: return "Create your password"
+        case .confirm: return "Confirm your password"
+        }
+    }
+
+    private var placeholder: String {
+        switch step {
+        case .email: return "Email address"
+        case .code: return "Email code"
+        case .username: return "Username"
+        case .password: return "Password"
+        case .confirm: return "Confirm password"
+        }
+    }
+
+    private var fieldIdentifier: String {
+        switch step {
+        case .email: return "signup.email"
+        case .code: return "signup.code"
+        case .username: return "signup.username"
+        case .password: return "signup.password"
+        case .confirm: return "signup.confirm-password"
+        }
+    }
+
+    private var progress: Int {
+        switch step {
+        case .email: return 2
+        case .code: return 3
+        case .username: return 4
+        case .password: return 5
+        case .confirm: return 6
+        }
+    }
+
+    var body: some View {
+        GeometryReader { geometry in
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(spacing: 0) {
+                        AuthEntryHeading(title: title, subtitle: subtitle)
+                            .accessibilityIdentifier("signup.step.\(step.rawValue)")
+                            .padding(.top, 26)
+                        input
+                            .padding(.top, inputSpacing(in: geometry.size.height))
+                            .padding(.bottom, step == .email ? 12 : 24)
+                        if let stepError {
+                            VStack(spacing: 4) {
+                                Text(stepError.message)
+                                    .font(.footnote)
+                                    .foregroundStyle(Color.red)
+                                    .multilineTextAlignment(.center)
+                                    .accessibilityIdentifier("signup.error")
+
+                                if stepError.recoverCode {
+                                    Button("Back to email code", action: onRecoverCode)
+                                        .font(.footnote.weight(.semibold))
+                                        .frame(minHeight: 44)
+                                        .accessibilityIdentifier("signup.recover-code")
+                                }
+                            }
+                            .id("signup.error")
+                            .padding(.bottom, 20)
+                        }
+                        extras()
+                        if dynamicTypeSize.isAccessibilitySize && step == .confirm {
+                            footer()
+                                .padding(.top, 24)
+                        }
+                    }
+                    .frame(maxWidth: 460)
+                    .padding(.horizontal, 22)
+                    .padding(.bottom, 16)
+                    .frame(maxWidth: .infinity)
+                }
+                .onChange(of: stepError?.message) { message in
+                    guard let message else { return }
+                    proxy.scrollTo("signup.error", anchor: .center)
+                    UIAccessibility.post(notification: .announcement, argument: message)
+                }
+            }
+        }
+        .scrollDismissesKeyboard(.interactively)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            VStack(spacing: 10) {
+                AuthPrimaryButton(
+                    title: step == .confirm ? "Create account" : "Continue",
+                    isLoading: busy,
+                    enabled: enabled,
+                    loadingTitle: model.pending?.loadingTitle ?? (step == .confirm ? "Creating account…" : "Sending code…"),
+                    identifier: step == .confirm ? "signup.create-account" : "signup.continue",
+                    action: submit
+                )
+                if !dynamicTypeSize.isAccessibilitySize {
+                    footer()
+                }
+            }
+            .frame(maxWidth: 460)
+            .padding(.horizontal, 22)
+            .padding(.top, 10)
+            .padding(.bottom, 12)
+            .frame(maxWidth: .infinity)
+            .background(ChoraiTheme.background)
+        }
+        .authEntryPage()
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.visible, for: .navigationBar)
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                AuthProgress(step: progress)
+            }
+        }
+        .onChange(of: busy) { working in
+            if working { focusedInput = nil }
+        }
+        .task {
+            // Delay focus until the native push finishes; a canceled push also cancels this task.
+            do {
+                try await Task.sleep(nanoseconds: reduceMotion ? 50_000_000 : 370_000_000)
+                guard !busy else { return }
+                focusCurrentInput()
+            } catch {}
+        }
+    }
+
+    private func inputSpacing(in availableHeight: CGFloat) -> CGFloat {
+        // The keyboard changes the available viewport. Focus alone never moves the field.
+        if dynamicTypeSize.isAccessibilitySize { return 24 }
+        return min(112, max(28, availableHeight * 0.19))
+    }
+
+    private func focusCurrentInput() {
+        focusedInput = isPassword && !passwordVisible ? .secure : .plain
+    }
+
+    private var input: some View {
+        HStack(spacing: 4) {
+            Group {
+                if isPassword && !passwordVisible {
+                    SecureField(placeholder, text: $text)
+                        .focused($focusedInput, equals: .secure)
+                        .textContentType(.newPassword)
+                } else {
+                    TextField(placeholder, text: $text)
+                        .focused($focusedInput, equals: .plain)
+                        .keyboardType(step == .email ? .emailAddress : .default)
+                        .textContentType(contentType)
+                }
+            }
+            .font(dynamicTypeSize.isAccessibilitySize
+                ? .body
+                : .system(size: step == .email ? inputSize * 27 / 29 : inputSize))
+            .tracking(step == .code && !text.isEmpty ? 6 : -0.7)
+            .multilineTextAlignment(isPassword ? .leading : .center)
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+            .submitLabel(step == .confirm ? .go : .continue)
+            .onSubmit(submit)
+            .disabled(busy)
+            .accessibilityLabel(placeholder)
+            .accessibilityIdentifier(fieldIdentifier)
+
+            if isPassword {
+                Button {
+                    passwordVisible.toggle()
+                    focusCurrentInput()
+                } label: {
+                    Image(systemName: passwordVisible ? "eye" : "eye.slash")
+                        .font(.system(size: 20))
+                        .foregroundStyle(ChoraiTheme.secondaryInk)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(AuthPressButtonStyle())
+                .disabled(busy)
+                .accessibilityLabel(passwordVisible ? "Hide password" : "Show password")
+            }
+        }
+        .frame(minHeight: 52)
+    }
+
+    private var contentType: UITextContentType? {
+        switch step {
+        case .email: return .emailAddress
+        case .code: return .oneTimeCode
+        case .username: return .username
+        case .password, .confirm: return .newPassword
+        }
+    }
+
+    private func submit() {
+        guard enabled else { return }
+        focusedInput = nil
+        onSubmit()
+    }
 }
 
 // 输入字段组件
@@ -811,34 +828,41 @@ struct InputField: View {
         self._text = text
         self.accessibilityIdentifier = accessibilityIdentifier
     }
-    
+
+    private var isPassword: Bool { placeholder.localizedCaseInsensitiveContains("password") }
+
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: icon)
-                .foregroundColor(.gray)
-                .frame(width: 20)
-            
-            TextField(placeholder, text: $text)
-                .foregroundColor(.white)
-                .accentColor(.white)
-                .modifier(OptionalAccessibilityIdentifier(identifier: accessibilityIdentifier))
-                .placeholder(when: text.isEmpty) {
-                    Text(placeholder)
-                        .foregroundColor(.white.opacity(0.6))
+                .foregroundStyle(ChoraiTheme.secondaryInk)
+                .frame(width: 22)
+                .accessibilityHidden(true)
+            Group {
+                if isPassword {
+                    SecureField(placeholder, text: $text)
+                        .textContentType(accessibilityIdentifier?.hasPrefix("signup.") == true ? .newPassword : .password)
+                } else {
+                    TextField(placeholder, text: $text)
+                        .keyboardType(placeholder.localizedCaseInsensitiveContains("email") ? .emailAddress : .default)
+                        .textContentType(placeholder.localizedCaseInsensitiveContains("email") ? .emailAddress : .username)
                 }
-            
-            Spacer()
+            }
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+            .font(.body)
+            .foregroundStyle(ChoraiTheme.ink)
+            .tint(ChoraiTheme.accent)
+            .modifier(OptionalAccessibilityIdentifier(identifier: accessibilityIdentifier))
         }
-        .padding(.horizontal, 16)
-        .frame(height: 50)
-        .background(
-            RoundedRectangle(cornerRadius: 28) // 增加圆角使其更椭圆
-                .fill(Color.clear) // 透明背景
-                .overlay(
-                    RoundedRectangle(cornerRadius: 28)
-                        .stroke(Color.white.opacity(0.3), lineWidth: 1) // 白色半透明边框
-                )
-        )
+        .padding(.horizontal, 18)
+        .padding(.vertical, 15)
+        .frame(minHeight: 52)
+        .background(ChoraiTheme.surface, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(ChoraiTheme.separator, lineWidth: 0.75)
+                .allowsHitTesting(false)
+        }
     }
 }
 
@@ -861,7 +885,7 @@ extension View {
         when shouldShow: Bool,
         alignment: Alignment = .leading,
         @ViewBuilder placeholder: () -> Content) -> some View {
-        
+
         ZStack(alignment: alignment) {
             placeholder().opacity(shouldShow ? 1 : 0)
             self
@@ -871,6 +895,8 @@ extension View {
 
 struct SignUpView_Previews: PreviewProvider {
     static var previews: some View {
-        SignUpView()
+        NavigationStack {
+            SignUpView()
+        }
     }
-} 
+}

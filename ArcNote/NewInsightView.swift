@@ -60,12 +60,12 @@ struct NewInsightView: View {
                 VStack(spacing: 12) {
                     Text(titleText)
                         .font(.system(size: 24, weight: .bold))
-                        .foregroundColor(.white)
+                        .foregroundColor(ChoraiTheme.ink)
                     
                     Text(levelStyle.label)
                         .font(.subheadline.weight(.medium))
                         .foregroundStyle(
-                            levelStyle.materialAccentColor ?? .white
+                            levelStyle.materialAccentColor ?? ChoraiTheme.ink
                         )
                         .padding(.horizontal, 16)
                         .padding(.vertical, 6)
@@ -82,7 +82,7 @@ struct NewInsightView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     TextEditor(text: $contentText)
                         .font(.system(size: 16, weight: .regular))
-                        .foregroundColor(.white)
+                        .foregroundColor(ChoraiTheme.ink)
                         .scrollContentBackground(.hidden)
                         .background(Color.clear)
                         .frame(height: 230)
@@ -94,7 +94,7 @@ struct NewInsightView: View {
                         .fill(Color.clear)
                         .overlay(
                             RoundedRectangle(cornerRadius: 16)
-                                .stroke(Color.white.opacity(0.3), lineWidth: 1)
+                                .stroke(ChoraiTheme.ink.opacity(0.3), lineWidth: 1)
                         )
                 )
                 
@@ -108,7 +108,7 @@ struct NewInsightView: View {
                             HStack(spacing: 6) {
                                 Text(tag)
                                     .font(.system(size: 14, weight: .medium))
-                                    .foregroundColor(.white)
+                                    .foregroundColor(ChoraiTheme.ink)
                                     .lineLimit(1)
                                 
                                 Button(action: {
@@ -118,14 +118,14 @@ struct NewInsightView: View {
                                 }) {
                                     Image(systemName: "xmark")
                                         .font(.system(size: 10, weight: .bold))
-                                        .foregroundColor(.white.opacity(0.7))
+                                        .foregroundColor(ChoraiTheme.secondaryInk)
                                 }
                             }
                             .padding(.horizontal, 12)
                             .padding(.vertical, 6)
                             .background(
                                 Capsule()
-                                    .fill(Color.white.opacity(0.2))
+                                    .fill(ChoraiTheme.ink.opacity(0.2))
                             )
                         }
                         
@@ -133,7 +133,7 @@ struct NewInsightView: View {
                             HStack(spacing: 6) {
                                 TextField("", text: $newTagText)
                                     .font(.system(size: 14, weight: .medium))
-                                    .foregroundColor(.white)
+                                    .foregroundColor(ChoraiTheme.ink)
                                     .textFieldStyle(PlainTextFieldStyle())
                                     .frame(width: 80)
                                 
@@ -146,14 +146,14 @@ struct NewInsightView: View {
                                 }) {
                                     Image(systemName: "checkmark")
                                         .font(.system(size: 10, weight: .bold))
-                                        .foregroundColor(.white)
+                                        .foregroundColor(ChoraiTheme.ink)
                                 }
                             }
                             .padding(.horizontal, 12)
                             .padding(.vertical, 6)
                             .background(
                                 Capsule()
-                                    .fill(Color.white.opacity(0.2))
+                                    .fill(ChoraiTheme.ink.opacity(0.2))
                             )
                         } else {
                             Button(action: {
@@ -161,11 +161,11 @@ struct NewInsightView: View {
                             }) {
                                 Image(systemName: "plus")
                                     .font(.system(size: 14, weight: .bold))
-                                    .foregroundColor(.white)
+                                    .foregroundColor(ChoraiTheme.ink)
                                     .frame(width: 24, height: 24)
                                     .background(
                                         Capsule()
-                                            .fill(Color.white.opacity(0.2))
+                                            .fill(ChoraiTheme.ink.opacity(0.2))
                                     )
                                 Spacer()
                             }
@@ -186,7 +186,7 @@ struct NewInsightView: View {
                             Text("Discard")
                                 .font(.system(size: 16, weight: .semibold))
                         }
-                        .foregroundColor(.white)
+                        .foregroundColor(ChoraiTheme.ink)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 16)
                         .background(
@@ -206,7 +206,7 @@ struct NewInsightView: View {
                         HStack(spacing: 8) {
                             if isConfirming {
                                 ProgressView()
-                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                    .progressViewStyle(CircularProgressViewStyle(tint: ChoraiTheme.accent))
                                     .scaleEffect(0.8)
                             } else {
                                 Image(systemName: "checkmark")
@@ -215,12 +215,12 @@ struct NewInsightView: View {
                             Text(isConfirming ? "Confirming..." : "Accept")
                                 .font(.system(size: 16, weight: .semibold))
                         }
-                        .foregroundColor(.white)
+                        .foregroundColor(ChoraiTheme.ink)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 16)
                         .background(
                             Capsule()
-                                .fill(Color.white.opacity(0.2))
+                                .fill(ChoraiTheme.ink.opacity(0.2))
                                 .overlay(acceptButtonTopLeftHighlight)
                                 .overlay(acceptButtonBottomRightHighlight)
                                 .overlay(acceptButtonTopEdgeHighlight)
@@ -261,12 +261,12 @@ struct NewInsightView: View {
             VStack(spacing: 1) {
                 Text("loaded")
                     .font(.system(size: 1))
-                    .foregroundColor(.white.opacity(0.01))
+                    .foregroundColor(ChoraiTheme.ink.opacity(0.01))
                     .accessibilityIdentifier("screen.new-insight.loaded")
                 if let jobId = previewData?.data.jobId, !jobId.isEmpty {
                     Text(jobId)
                         .font(.system(size: 1))
-                        .foregroundColor(.white.opacity(0.01))
+                        .foregroundColor(ChoraiTheme.ink.opacity(0.01))
                         .accessibilityIdentifier("new-insight.job-id")
                 }
             }
@@ -349,13 +349,13 @@ struct NewInsightView: View {
     // MARK: 取消按钮高光效果
     private var discardButtonTopLeftHighlight: some View {
         Capsule()
-            .stroke(Color.white, lineWidth: 1)
+            .stroke(ChoraiTheme.ink, lineWidth: 1)
             .offset(x: 0, y: -1)
             .mask(
                 Capsule()
                     .fill(
                         RadialGradient(
-                            colors: [Color.white, Color.clear],
+                            colors: [ChoraiTheme.ink, Color.clear],
                             center: .topLeading,
                             startRadius: 10,
                             endRadius: 35
@@ -366,13 +366,13 @@ struct NewInsightView: View {
     
     private var discardButtonBottomRightHighlight: some View {
         Capsule()
-            .stroke(Color.white, lineWidth: 1)
+            .stroke(ChoraiTheme.ink, lineWidth: 1)
             .offset(x: 0, y: 0)
             .mask(
                 Capsule()
                     .fill(
                         RadialGradient(
-                            colors: [Color.white, Color.clear],
+                            colors: [ChoraiTheme.ink, Color.clear],
                             center: .bottomTrailing,
                             startRadius: 10,
                             endRadius: 35
@@ -383,13 +383,13 @@ struct NewInsightView: View {
     
     private var discardButtonTopEdgeHighlight: some View {
         Capsule()
-            .stroke(Color.white, lineWidth: 1)
+            .stroke(ChoraiTheme.ink, lineWidth: 1)
             .offset(x: 0, y: -1)
             .mask(
                 Capsule()
                     .fill(
                         LinearGradient(
-                            colors: [Color.white, Color.clear],
+                            colors: [ChoraiTheme.ink, Color.clear],
                             startPoint: .top,
                             endPoint: UnitPoint(x: 0, y: 0.05)
                         )
@@ -399,13 +399,13 @@ struct NewInsightView: View {
     
     private var discardButtonBottomEdgeHighlight: some View {
         Capsule()
-            .stroke(Color.white, lineWidth: 1)
+            .stroke(ChoraiTheme.ink, lineWidth: 1)
             .offset(x: 0, y: 1)
             .mask(
                 Capsule()
                     .fill(
                         LinearGradient(
-                            colors: [Color.white, Color.clear],
+                            colors: [ChoraiTheme.ink, Color.clear],
                             startPoint: .bottom,
                             endPoint: UnitPoint(x: 1, y: 0.05)
                         )
@@ -416,13 +416,13 @@ struct NewInsightView: View {
     // MARK: 确认按钮高光效果
     private var acceptButtonTopLeftHighlight: some View {
         Capsule()
-            .stroke(Color.white, lineWidth: 1)
+            .stroke(ChoraiTheme.ink, lineWidth: 1)
             .offset(x: 0, y: -1)
             .mask(
                 Capsule()
                     .fill(
                         RadialGradient(
-                            colors: [Color.white, Color.clear],
+                            colors: [ChoraiTheme.ink, Color.clear],
                             center: .topLeading,
                             startRadius: 10,
                             endRadius: 35
@@ -433,13 +433,13 @@ struct NewInsightView: View {
     
     private var acceptButtonBottomRightHighlight: some View {
         Capsule()
-            .stroke(Color.white, lineWidth: 1)
+            .stroke(ChoraiTheme.ink, lineWidth: 1)
             .offset(x: 0, y: 0)
             .mask(
                 Capsule()
                     .fill(
                         RadialGradient(
-                            colors: [Color.white, Color.clear],
+                            colors: [ChoraiTheme.ink, Color.clear],
                             center: .bottomTrailing,
                             startRadius: 10,
                             endRadius: 35
@@ -450,13 +450,13 @@ struct NewInsightView: View {
     
     private var acceptButtonTopEdgeHighlight: some View {
         Capsule()
-            .stroke(Color.white, lineWidth: 1)
+            .stroke(ChoraiTheme.ink, lineWidth: 1)
             .offset(x: 0, y: -1)
             .mask(
                 Capsule()
                     .fill(
                         LinearGradient(
-                            colors: [Color.white, Color.clear],
+                            colors: [ChoraiTheme.ink, Color.clear],
                             startPoint: .top,
                             endPoint: UnitPoint(x: 0, y: 0.05)
                         )
@@ -466,13 +466,13 @@ struct NewInsightView: View {
     
     private var acceptButtonBottomEdgeHighlight: some View {
         Capsule()
-            .stroke(Color.white, lineWidth: 1)
+            .stroke(ChoraiTheme.ink, lineWidth: 1)
             .offset(x: 0, y: 1)
             .mask(
                 Capsule()
                     .fill(
                         LinearGradient(
-                            colors: [Color.white, Color.clear],
+                            colors: [ChoraiTheme.ink, Color.clear],
                             startPoint: .bottom,
                             endPoint: UnitPoint(x: 1, y: 0.05)
                         )

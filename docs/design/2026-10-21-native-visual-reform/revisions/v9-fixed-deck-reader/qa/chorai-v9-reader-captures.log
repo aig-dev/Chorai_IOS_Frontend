@@ -1,0 +1,80 @@
+Command line invocation:
+    /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild test-without-building -project docs/design/2026-10-21-native-visual-reform/revisions/v9-fixed-deck-reader/prototype/UITests/ChoraiPrototypeUITests.xcodeproj -scheme ChoraiPrototypeUITests -destination "platform=iOS Simulator,id=92DE3535-B261-49B5-844F-9BD9B8C241B4" -derivedDataPath /Users/didi/Library/Caches/ChoraiReview/v9-tests -parallel-testing-enabled NO "-only-testing:ChoraiPrototypeUITests/ReviewV9Tests/testReaderDesignCapturesInBothThemes" -resultBundlePath /tmp/chorai-v9-reader-captures.xcresult CODE_SIGNING_ALLOWED=NO
+
+Build settings from command line:
+    CODE_SIGNING_ALLOWED = NO
+
+Writing result bundle at path:
+	/tmp/chorai-v9-reader-captures.xcresult
+
+2026-10-27 11:59:05.207 xcodebuild[18390:130990] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-10-27 11:59:06.677939+0800 ChoraiPrototypeUITests-Runner[18404:131311] [Default] Running tests...
+    t =      nans Interface orientation changed to Portrait
+Test Suite 'Selected tests' started at 2026-10-27 11:59:07.483.
+Test Suite 'ChoraiPrototypeUITests.xctest' started at 2026-10-27 11:59:07.484.
+Test Suite 'ReviewV9Tests' started at 2026-10-27 11:59:07.484.
+Test Case '-[ChoraiPrototypeUITests.ReviewV9Tests testReaderDesignCapturesInBothThemes]' started.
+    t =     0.00s Start Test at 2026-10-27 11:59:07.485
+    t =     0.05s Set Up
+    t =     0.05s Terminate com.chorai.nativeprototype.v9:0
+    t =     0.05s Open com.chorai.nativeprototype.v9
+    t =     0.05s     Launch com.chorai.nativeprototype.v9
+    t =     0.17s         Setting up automation session
+objc[18404]: Class UIAccessibilityLoaderWebShared is implemented in both /Library/Developer/CoreSimulator/Volumes/iOS_23F73/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebCore.axbundle/WebCore (0x1067c4310) and /Library/Developer/CoreSimulator/Volumes/iOS_23F73/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebKit.axbundle/WebKit (0x106860398). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+    t =     0.73s         Wait for com.chorai.nativeprototype.v9 to idle
+    t =     2.68s Waiting 8.0s for "v9.reader" Any to exist
+    t =     3.69s     Checking `Expect predicate `existsNoRetry == 1` for object "v9.reader" Any`
+    t =     3.69s         Checking existence of `"v9.reader" Any`
+    t =     3.76s Find the Application 'com.chorai.nativeprototype.v9'
+    t =     3.87s Added attachment named 'v9-reader-photo-light'
+    t =     3.87s Terminate com.chorai.nativeprototype.v9:18410
+    t =     4.91s Open com.chorai.nativeprototype.v9
+    t =     4.91s     Launch com.chorai.nativeprototype.v9
+    t =     4.99s         Setting up automation session
+    t =     5.38s         Wait for com.chorai.nativeprototype.v9 to idle
+    t =     6.82s Waiting 8.0s for "v9.reader" Any to exist
+    t =     7.85s     Checking `Expect predicate `existsNoRetry == 1` for object "v9.reader" Any`
+    t =     7.85s         Checking existence of `"v9.reader" Any`
+    t =     7.91s Find the Application 'com.chorai.nativeprototype.v9'
+    t =     8.00s Added attachment named 'v9-reader-essay-light'
+    t =     8.00s Terminate com.chorai.nativeprototype.v9:18422
+    t =     9.04s Open com.chorai.nativeprototype.v9
+    t =     9.04s     Launch com.chorai.nativeprototype.v9
+    t =     9.14s         Setting up automation session
+    t =     9.54s         Wait for com.chorai.nativeprototype.v9 to idle
+    t =    10.96s Waiting 8.0s for "v9.reader" Any to exist
+    t =    11.99s     Checking `Expect predicate `existsNoRetry == 1` for object "v9.reader" Any`
+    t =    11.99s         Checking existence of `"v9.reader" Any`
+    t =    12.06s Find the Application 'com.chorai.nativeprototype.v9'
+    t =    12.16s Added attachment named 'v9-reader-photo-dark'
+    t =    12.16s Terminate com.chorai.nativeprototype.v9:18442
+    t =    13.19s Open com.chorai.nativeprototype.v9
+    t =    13.19s     Launch com.chorai.nativeprototype.v9
+    t =    13.29s         Setting up automation session
+    t =    13.70s         Wait for com.chorai.nativeprototype.v9 to idle
+    t =    15.12s Waiting 8.0s for "v9.reader" Any to exist
+    t =    16.14s     Checking `Expect predicate `existsNoRetry == 1` for object "v9.reader" Any`
+    t =    16.14s         Checking existence of `"v9.reader" Any`
+    t =    16.19s Find the Application 'com.chorai.nativeprototype.v9'
+    t =    16.28s Added attachment named 'v9-reader-essay-dark'
+    t =    16.28s Tear Down
+    t =    16.28s     Terminate com.chorai.nativeprototype.v9:18464
+Test Case '-[ChoraiPrototypeUITests.ReviewV9Tests testReaderDesignCapturesInBothThemes]' passed (17.396 seconds).
+Test Suite 'ReviewV9Tests' passed at 2026-10-27 11:59:24.881.
+	 Executed 1 test, with 0 failures (0 unexpected) in 17.396 (17.397) seconds
+Test Suite 'ChoraiPrototypeUITests.xctest' passed at 2026-10-27 11:59:24.881.
+	 Executed 1 test, with 0 failures (0 unexpected) in 17.396 (17.397) seconds
+Test Suite 'Selected tests' passed at 2026-10-27 11:59:24.881.
+	 Executed 1 test, with 0 failures (0 unexpected) in 17.396 (17.398) seconds
+2026-10-27 11:59:24.907 xcodebuild[18390:130990] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-10-27 11:59:24.909 xcodebuild[18390:130990] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-10-27 11:59:25.170 xcodebuild[18390:130990] [MT] IDETestOperationsObserverDebug: 20.072 elapsed -- Testing started completed.
+2026-10-27 11:59:25.170 xcodebuild[18390:130990] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-27 11:59:25.170 xcodebuild[18390:130990] [MT] IDETestOperationsObserverDebug: 20.072 sec, +20.072 sec -- end
+
+Test session results, code coverage, and logs:
+	/tmp/chorai-v9-reader-captures.xcresult
+
+** TEST EXECUTE SUCCEEDED **
+
+Testing started

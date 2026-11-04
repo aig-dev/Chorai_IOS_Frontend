@@ -1,0 +1,32 @@
+[
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "92DE3535-B261-49B5-844F-9BD9B8C241B4",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "9A17170B-FE74-4480-A723-EA78B01EA4E3.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "auth-returning-welcome-back_0_A60C98A9-C08A-44E3-9D90-5855D328F5F2.png",
+        "timestamp" : 1793725103.773
+      }
+    ],
+    "testIdentifier" : "AuthEntryFlowUITests/testReturningLaunchOpensSignInAndBackReturnsToWelcome()",
+    "testIdentifierURL" : "test://com.apple.xcode/ArcNote/ArcNoteUITests/AuthEntryFlowUITests/testReturningLaunchOpensSignInAndBackReturnsToWelcome"
+  },
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "92DE3535-B261-49B5-844F-9BD9B8C241B4",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "94577B21-5DBD-486F-9CE0-D4149530623D.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "auth-interests-nine-selected_0_6A36DBA7-A407-40DB-8FB7-6E7A3A799209.png",
+        "timestamp" : 1793725151.792
+      }
+    ],
+    "testIdentifier" : "AuthEntryFlowUITests/testSignupInterestSelectionStopsAtNineAndContinues()",
+    "testIdentifierURL" : "test://com.apple.xcode/ArcNote/ArcNoteUITests/AuthEntryFlowUITests/testSignupInterestSelectionStopsAtNineAndContinues"
+  }
+]

@@ -5,6 +5,37 @@ import XCTest
 
 @MainActor
 final class SparkSessionStoreInteractionTests: XCTestCase {
+    func testPreviousRevisitsLoadedResultAndPersistsPositionWithoutServiceMutation() async {
+        let harness = makeHarness()
+        await loadRoot(harness, resultCount: 5)
+        harness.store.advance()
+        XCTAssertEqual(harness.store.currentResult?.id, "ast_result_2")
+        let triggerCount = harness.service.triggerCalls.count
+        let moreCount = harness.service.moreCalls.count
+
+        let pendingFavorite = harness.service.enqueueFavorite()
+        harness.store.toggleFavoriteCurrent()
+        harness.store.previous()
+        XCTAssertEqual(harness.store.currentResult?.id, "ast_result_2", "A pending mutation keeps its result stable")
+        pendingFavorite.send(())
+        pendingFavorite.send(completion: .finished)
+        await settle()
+
+        harness.store.previous()
+        harness.store.previous()
+        XCTAssertEqual(harness.store.visibleIndex, 0)
+        XCTAssertEqual(harness.store.currentResult?.id, "ast_result_1")
+        XCTAssertEqual(harness.store.phase, .loaded)
+        XCTAssertEqual(harness.store.results[1].card.isFavorited, true)
+        XCTAssertEqual(harness.service.triggerCalls.count, triggerCount)
+        XCTAssertEqual(harness.service.moreCalls.count, moreCount)
+        XCTAssertEqual(
+            harness.persistence.snapshot(actorID: "act_user", rootSourceAssetID: "ast_root")?
+                .nodes.first?.visibleIndex,
+            0
+        )
+    }
+
     func testTriggeredPageFiltersCurrentSourceResult() async {
         let harness = makeHarness()
         let cardSubject = harness.service.enqueueCard()
@@ -158,6 +189,49 @@ final class SparkSessionStoreInteractionTests: XCTestCase {
         XCTAssertFalse(harness.store.isInteractionLocked)
     }
 
+    func testFavoriteMutationBroadcastWaitsForConfirmedFavoriteAndUnfavorite() async {
+        let harness = makeHarness()
+        await loadRoot(harness, resultCount: 1)
+        var committed: [String] = []
+        let favorite = harness.service.enqueueFavorite()
+        harness.store.toggleFavoriteCurrent(onFavoriteMutationSucceeded: { id, saved, count in
+            committed.append("\(id):\(saved):\(count)")
+        })
+        XCTAssertTrue(committed.isEmpty, "Optimistic UI must not broadcast a server commit")
+        favorite.send(())
+        await settle()
+        XCTAssertTrue(committed.isEmpty, "A value without finished completion is not committed")
+        favorite.send(completion: .finished)
+        await settle()
+        XCTAssertEqual(committed, ["ast_result_1:true:1"])
+
+        let unfavorite = harness.service.enqueueUnfavorite()
+        harness.store.toggleFavoriteCurrent(onFavoriteMutationSucceeded: { id, saved, count in
+            committed.append("\(id):\(saved):\(count)")
+        })
+        unfavorite.send(())
+        unfavorite.send(completion: .finished)
+        await settle()
+        XCTAssertEqual(committed, ["ast_result_1:true:1", "ast_result_1:false:0"])
+    }
+
+    func testFailedOrEmptyFavoriteNeverBroadcastsACommit() async {
+        let harness = makeHarness()
+        await loadRoot(harness, resultCount: 1)
+        var commits = 0
+        let failed = harness.service.enqueueFavorite()
+        harness.store.toggleFavoriteCurrent(onFavoriteMutationSucceeded: { _, _, _ in commits += 1 })
+        failed.send(completion: .failure(.server))
+        await settle()
+        XCTAssertEqual(commits, 0)
+        let empty = harness.service.enqueueFavorite()
+        harness.store.toggleFavoriteCurrent(onFavoriteMutationSucceeded: { _, _, _ in commits += 1 })
+        empty.send(completion: .finished)
+        await settle()
+        XCTAssertEqual(commits, 0)
+        XCTAssertEqual(harness.store.currentResult?.card.isFavorited, false)
+    }
+
     func testFooterFavoriteFailureRestoresExactVisibleResult() async {
         let harness = makeHarness()
         await loadRoot(harness, resultCount: 3)
@@ -172,6 +246,20 @@ final class SparkSessionStoreInteractionTests: XCTestCase {
         XCTAssertEqual(harness.store.visibleIndex, 0)
         XCTAssertEqual(harness.store.notice, .saveFailed)
         XCTAssertFalse(harness.store.isInteractionLocked)
+    }
+
+    func testDetailFavoriteCommitUpdatesMatchingSparkResultWithoutMovingItsPosition() async {
+        let harness = makeHarness()
+        await loadRoot(harness, resultCount: 3)
+        harness.store.applyFavoriteState(CardFavoriteState(cardID: "ast_result_1", isFavorited: true, favoriteCount: 4))
+        XCTAssertEqual(harness.store.visibleIndex, 0)
+        XCTAssertEqual(harness.store.currentResult?.card.isFavorited, true)
+        XCTAssertEqual(harness.store.currentResult?.card.favoriteCount, 4)
+        XCTAssertEqual(harness.store.results[1].card.favoriteCount, 0)
+        harness.store.applyFavoriteState(CardFavoriteState(cardID: "ast_result_1", isFavorited: false, favoriteCount: nil))
+        XCTAssertEqual(harness.store.currentResult?.card.favoriteCount, 3)
+        harness.store.applyFavoriteState(CardFavoriteState(cardID: "ast_result_1", isFavorited: false, favoriteCount: nil))
+        XCTAssertEqual(harness.store.currentResult?.card.favoriteCount, 3, "Duplicate commits must not decrement twice")
     }
 
     func testLikeCommitUpdatesMatchingResultWithoutMovingDeck() async {
@@ -478,6 +566,93 @@ final class SparkSessionStoreInteractionTests: XCTestCase {
         service: MockCoreSparkService,
         persistence: InMemorySparkSessionPersistence
     )
+
+    func testCommittedOwnedMetadataUpdatesOnlyMatchingResultWithoutNewRequests() async {
+        let harness = makeHarness()
+        await loadRoot(harness, resultCount: 2, firstResultIsOwner: true)
+        let original = harness.store.currentResult!
+        let other = harness.store.results[1]
+        let requests = harness.service.triggerCalls.count
+
+        harness.store.applyOwnedCardAction(.visibility(cardID: original.id, isPublic: false))
+        harness.store.applyOwnedCardAction(.pin(cardID: original.id, isPinned: true, pinnedAt: "confirmed-date"))
+
+        XCTAssertFalse(harness.store.currentResult!.card.isPublic)
+        XCTAssertTrue(harness.store.currentResult!.card.isPinned)
+        XCTAssertEqual(harness.store.currentResult!.card.pinnedAt, "confirmed-date")
+        XCTAssertEqual(harness.store.currentResult!.card.content, original.card.content)
+        XCTAssertEqual(harness.store.currentResult!.resultID, original.resultID)
+        XCTAssertEqual(harness.store.results[1], other)
+        XCTAssertEqual(harness.service.triggerCalls.count, requests)
+        XCTAssertEqual(harness.store.phase, .loaded)
+    }
+
+    func testCommittedRemovalKeepsTheVisibleSurvivorAndPersistsItsPosition() async {
+        let harness = makeHarness()
+        await loadRoot(harness, resultCount: 5, firstResultIsOwner: true)
+        harness.store.advance()
+        let visibleID = harness.store.currentResult!.id
+        let requests = harness.service.triggerCalls.count
+
+        harness.store.applyOwnedCardAction(.removed(cardID: "ast_result_1"))
+
+        XCTAssertEqual(harness.store.results.map(\.id), ["ast_result_2", "ast_result_3", "ast_result_4", "ast_result_5"])
+        XCTAssertEqual(harness.store.currentResult?.id, visibleID)
+        XCTAssertEqual(harness.store.visibleIndex, 0)
+        XCTAssertEqual(harness.store.phase, .loaded)
+        XCTAssertEqual(harness.service.triggerCalls.count, requests)
+        XCTAssertEqual(harness.persistence.snapshot(actorID: "act_user", rootSourceAssetID: "ast_root")?.nodes.first?.visibleIndex, 0)
+    }
+
+    func testCommittedRemovalOfLastOwnedResultShowsEmptyAndDoesNotAffectOtherCards() async {
+        let harness = makeHarness()
+        await loadRoot(harness, resultCount: 1, firstResultIsOwner: true)
+        harness.store.applyOwnedCardAction(.removed(cardID: "unknown"))
+        XCTAssertEqual(harness.store.results.count, 1)
+        harness.store.applyOwnedCardAction(.removed(cardID: "ast_result_1"))
+        XCTAssertTrue(harness.store.results.isEmpty)
+        XCTAssertNil(harness.store.currentResult)
+        XCTAssertEqual(harness.store.phase, .empty)
+        XCTAssertNotNil(harness.store.sourceCard)
+    }
+
+    func testEditorReturnRefreshReplacesStaleReceiptAndRetainsResultPosition() async {
+        let harness = makeHarness()
+        await loadRoot(harness, resultCount: 5, firstResultIsOwner: true)
+        harness.store.applyOwnedCardAction(.visibility(cardID: "ast_result_1", isPublic: false))
+        harness.store.advance()
+        let currentID = harness.store.currentResult?.id
+        let refresh = harness.service.enqueueCard()
+        harness.store.refreshOwnedCardAfterEditing(cardID: "ast_result_1")
+        refresh.send(card("ast_result_1", isOwner: true))
+        refresh.send(completion: .finished)
+        await settle()
+        XCTAssertTrue(harness.store.results[0].card.isPublic)
+        XCTAssertEqual(harness.store.currentResult?.id, currentID)
+        XCTAssertEqual(harness.store.ownedCardActionRefresh?.snapshot.cardID, "ast_result_1")
+        XCTAssertEqual(harness.store.ownedCardActionRefresh?.snapshot.isPublic, true)
+        XCTAssertNil(harness.store.ownedCardRefreshFailure)
+    }
+
+    func testFailedEditorReturnRefreshRetainsConfirmedStateAndCanRetry() async {
+        let harness = makeHarness()
+        await loadRoot(harness, resultCount: 2, firstResultIsOwner: true)
+        harness.store.applyOwnedCardAction(.visibility(cardID: "ast_result_1", isPublic: false))
+        let failed = harness.service.enqueueCard()
+        harness.store.refreshOwnedCardAfterEditing(cardID: "ast_result_1")
+        failed.send(completion: .failure(.offline))
+        await settle()
+        XCTAssertFalse(harness.store.results[0].card.isPublic)
+        XCTAssertEqual(harness.store.ownedCardRefreshFailure, "ast_result_1")
+        XCTAssertNil(harness.store.ownedCardActionRefresh)
+        let retry = harness.service.enqueueCard()
+        harness.store.refreshOwnedCardAfterEditing(cardID: "ast_result_1")
+        retry.send(card("ast_result_1", isOwner: true))
+        retry.send(completion: .finished)
+        await settle()
+        XCTAssertTrue(harness.store.results[0].card.isPublic)
+        XCTAssertNil(harness.store.ownedCardRefreshFailure)
+    }
 
     private func makeHarness() -> Harness {
         let service = MockCoreSparkService()

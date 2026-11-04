@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import CoreFlow
 import UIKit
 
 // MARK: - Link数据模型
@@ -11,7 +12,7 @@ struct LinkItem: Identifiable {
     let username: String
     let authorId: String?
     let labels: [String]
-    
+
     init(id: String, avatar: String, title: String, description: String, username: String, authorId: String? = nil, labels: [String] = []) {
         self.id = id
         self.avatar = avatar
@@ -37,10 +38,10 @@ class LinkPopupManager: ObservableObject {
     @Published var isLinking = false
     @Published var showErrorAlert = false
     @Published var errorMessage = ""
-    
+
     // 选择回调
     var onCardSelected: ((LinkItem) -> Void)?
-    
+
     private var cancellables = Set<AnyCancellable>()
     private var currentCardId: String? = nil
     private var searchType: String = "own+favorite" // 默认搜索类型
@@ -52,9 +53,9 @@ class LinkPopupManager: ObservableObject {
     private var linkRequestCancellable: AnyCancellable?
     private var searchRequestID = UUID()
     private var searchRequestCancellable: AnyCancellable?
-    
+
     static let shared = LinkPopupManager()
-    
+
     private init() {
         // 监听搜索文本变化
         $searchText
@@ -64,7 +65,7 @@ class LinkPopupManager: ObservableObject {
             }
             .store(in: &cancellables)
     }
-    
+
     func show(
         cardId: String? = nil,
         isInitiatingCardOwned: Bool = true,
@@ -92,7 +93,7 @@ class LinkPopupManager: ObservableObject {
         // 打开时获取初始数据（不带关键词）
         searchCards(keyword: "")
     }
-    
+
     func hide() {
         linkRequestCancellable?.cancel()
         linkRequestCancellable = nil
@@ -112,7 +113,7 @@ class LinkPopupManager: ObservableObject {
         navigateAfterLink = true
         onNavigate = nil
     }
-    
+
     // MARK: - Link 卡片
     func linkCard(linkItem: LinkItem) {
         guard !isLinking else { return }
@@ -128,13 +129,13 @@ class LinkPopupManager: ObservableObject {
             guard let currentActorId = AuthManager.shared.currentUser?.id else {
                 return
             }
-            
+
             isLinking = true
-            
+
             // card_id 必须属于发起用户的卡片
             let actualCardId: String
             let actualLinkedCardId: String
-            
+
             if isInitiatingCardOwned {
                 // 发起卡片属于当前用户
                 actualCardId = cardId
@@ -146,13 +147,13 @@ class LinkPopupManager: ObservableObject {
                 actualLinkedCardId = cardId
                 print("开始关联卡片own: cardId=\(actualCardId), linkedCardId=\(actualLinkedCardId)")
             }
-            
+
             let linkRequest = LinkRequest(linkedCardId: actualLinkedCardId)
             let requestPresentationID = presentationID
             let shouldNavigate = navigateAfterLink
             let navigate = onNavigate
             let selectionCallback = onCardSelected
-            
+
             linkRequestCancellable = NetworkManager.shared.createCardLink(
                 cardId: actualCardId,
                 reques: linkRequest,
@@ -203,7 +204,7 @@ class LinkPopupManager: ObservableObject {
                                         : .detail(linkItem.id)
                                 )
                             }
-                            
+
                             // 调用回调
                             selectionCallback?(linkItem)
                         } else {
@@ -219,10 +220,18 @@ class LinkPopupManager: ObservableObject {
             onCardSelected?(linkItem)
         }
     }
-    
+
     // 搜索卡片
     private func searchCards(keyword: String) {
         guard isShowing else { return }
+
+        #if DEBUG
+        if LinkPresentationFixture.isEnabled {
+            isLoading = false
+            linkItems = LinkPresentationFixture.items(matching: keyword)
+            return
+        }
+        #endif
 
         searchRequestCancellable?.cancel()
         searchRequestCancellable = nil
@@ -235,12 +244,12 @@ class LinkPopupManager: ObservableObject {
             print("用户未登录")
             return
         }
-        
+
         isLoading = true
-        
+
         // 根据关键词决定搜索类型
         let searchValue = keyword.isEmpty ? "" : keyword
-        
+
         searchRequestCancellable = NetworkManager.shared.getUserAllCards(
             searchType: searchType,
             search: searchValue,
@@ -274,7 +283,7 @@ class LinkPopupManager: ObservableObject {
                     allCards.append(contentsOf: response.data.favoritedCards)
                     allCards.append(contentsOf: response.data.likedCards)
                     allCards.append(contentsOf: response.data.linkedCards)
-                    
+
                     self.linkItems = allCards.map { card in
                         LinkItem(
                             id: card.id,
@@ -292,189 +301,135 @@ class LinkPopupManager: ObservableObject {
             }
         )
     }
-    
+
+    var pickerTitle: String {
+        presentationMode == .selectionOnly ? "Choose a note" : "Link"
+    }
+
+    var candidateHeading: String {
+        isInitiatingCardOwned ? "Your notes and collections" : "Choose one of your notes"
+    }
+
+    var candidateExplanation: String {
+        if presentationMode == .selectionOnly { return "Select a note to continue." }
+        return isInitiatingCardOwned
+            ? "Connect this note to one of your notes or a collected note."
+            : "The connection belongs to your selected note; the other author’s note stays unchanged."
+    }
+
     // 过滤后的Link项目
     var filteredItems: [LinkItem] {
         return linkItems
     }
-    
+
 }
 
 // MARK: - Link弹窗视图
 struct LinkPopupView: View {
     @ObservedObject private var manager = LinkPopupManager.shared
-    @Environment(\.adaptiveLayoutMetrics) private var adaptiveLayout
     @FocusState private var isTextFieldFocused: Bool
-    
+
     var body: some View {
-        if manager.isShowing {
-            ZStack {
-                Color.black.opacity(0.5)
-                    .ignoresSafeArea(.all)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .onTapGesture {
-                        isTextFieldFocused = false
-                        manager.hide()
+        NavigationStack {
+            Form {
+                Section {
+                    HStack(spacing: 10) {
+                        Image(systemName: "magnifyingglass")
+                            .foregroundStyle(ChoraiTheme.secondaryInk)
+                        TextField("Search notes", text: $manager.searchText)
+                            .focused($isTextFieldFocused)
+                            .submitLabel(.search)
+                            .accessibilityIdentifier("linkPopupSearch")
                     }
-                
-                // 弹窗内容
-                GeometryReader { geometry in
-                    let popupWidth = max(
-                        0,
-                        geometry.size.width
-                            - (adaptiveLayout.horizontalGutter * 2)
-                    )
-
-                    VStack(spacing: 0) {
-                        // 弹窗头部
-//                        HStack {
-//                            Text("Link")
-//                                .font(.system(size: 18, weight: .semibold))
-//                                .foregroundColor(.white)
-//                            
-//                            Spacer()
-//                            
-//                            Button(action: {
-//                                isTextFieldFocused = false
-//                                manager.hide()
-//                            }) {
-//                                Image(systemName: "xmark")
-//                                    .font(.system(size: 16, weight: .medium))
-//                                    .foregroundColor(.white)
-//                            }
-//                        }
-//                        .padding(.horizontal, 20)
-//                        .padding(.top, 20)
-//                        .padding(.bottom, 16)
-//                        
-                        // 搜索栏
-                        HStack {
-                            TextField("Design", text: $manager.searchText)
-                                .textFieldStyle(PlainTextFieldStyle())
-                                .foregroundColor(.white)
-                                .focused($isTextFieldFocused)
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 12)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 30)
-                                        .fill(.ultraThinMaterial.opacity(0.1))
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 30)
-                                                .stroke(Color.white.opacity(0.2), lineWidth: 1)
-                                        )
-                                )
-                                .accessibilityIdentifier("linkPopupSearch")
-                            
-                            Button("Cancel") {
-                                isTextFieldFocused = false
-                                manager.hide()
-                            }
-                            .font(.system(size: 16, weight: .medium))
-                            .foregroundColor(.white)
-                            .padding(.leading, 12)
-                        }
-                        .adaptiveContentGutter()
-                        .padding(.vertical, 16)
-
-                        if manager.showErrorAlert {
-                            Text(manager.errorMessage)
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundColor(.red.opacity(0.85))
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .adaptiveContentGutter()
-                                .padding(.bottom, 8)
-                                .accessibilityIdentifier("linkPopupError")
-                        }
-                        
-                        // Link列表
-                        ScrollView {
-                            LazyVStack(spacing: 0) {
-                                if manager.isLoading {
-                                    // 加载状态
-                                    VStack(spacing: 12) {
-                                        ProgressView()
-                                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                        Text("Loading...")
-                                            .font(.system(size: 14, weight: .medium))
-                                            .foregroundColor(.white.opacity(0.7))
-                                    }
-                                    .frame(height: 100)
-                                } else if manager.filteredItems.isEmpty {
-                                    // 空状态
-                                    VStack(spacing: 12) {
-                                        Image(systemName: "doc.text")
-                                            .font(.system(size: 32))
-                                            .foregroundColor(.white.opacity(0.5))
-                                        Text("No cards found")
-                                            .font(.system(size: 14, weight: .medium))
-                                            .foregroundColor(.white.opacity(0.7))
-                                    }
-                                    .frame(height: 100)
-                                } else {
-                                    // 数据列表
-                                    ForEach(Array(manager.filteredItems.enumerated()), id: \.element.id) { index, item in
-                                        VStack(spacing: 0) {
-                                            Button {
-                                                manager.linkCard(linkItem: item)
-                                            } label: {
-                                                LinkItemView(item: item)
-                                            }
-                                                .buttonStyle(.plain)
-                                                .accessibilityIdentifier(
-                                                    "linkPopupCard.\(item.id)"
-                                                )
-                                            
-                                            // 分割线（除了最后一个）
-                                            if index < manager.filteredItems.count - 1 {
-                                                Rectangle()
-                                                    .fill(Color.white.opacity(0.2))
-                                                    .frame(height: 1)
-                                                    .adaptiveContentGutter()
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            .padding(.bottom, 20)
-                        }
-                        .scrollDismissesKeyboard(.interactively)
-                        .frame(maxHeight: .infinity)
-                    }
-                    .frame(
-                        maxWidth: popupWidth,
-                        maxHeight: geometry.size.height * 0.55
-                    )
-                    .background(
-                        RoundedRectangle(cornerRadius: 20)
-                            .background(.ultraThinMaterial.opacity(0.8))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 20)
-                                    .stroke(Color.white.opacity(0.1), lineWidth: 1)
-                            )
-                            .cardHighlightEffect()
-                            .cornerRadius(20)
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: 20))
-                    .overlay(alignment: .topLeading) {
-                        Text("Link cards")
-                            .font(.system(size: 1))
-                            .foregroundColor(.white.opacity(0.01))
-                            .frame(width: 1, height: 1)
-                            .accessibilityIdentifier("linkPopup")
-                    }
-                    .position(x: geometry.size.width / 2, y: geometry.size.height / 2.8)
-                    .transition(.scale.combined(with: .opacity))
+                    .frame(minHeight: 44)
                 }
-                
-                .animation(.easeInOut(duration: 0.3), value: manager.isShowing)
-                .onAppear {
-                    DispatchQueue.main.async {
-                        isTextFieldFocused = true
+                .listRowBackground(ChoraiTheme.surface)
+
+                Section {
+                    if manager.isLoading {
+                        HStack(spacing: 12) {
+                            ProgressView().tint(ChoraiTheme.ink)
+                            Text("Loading…")
+                        }
+                        .frame(minHeight: 60)
+                    } else if manager.filteredItems.isEmpty {
+                        Label("No cards found", systemImage: "doc.text")
+                            .foregroundStyle(ChoraiTheme.secondaryInk)
+                            .frame(minHeight: 60)
+                    } else {
+                        ForEach(manager.filteredItems) { item in
+                            Button {
+                                isTextFieldFocused = false
+                                manager.linkCard(linkItem: item)
+                            } label: {
+                                HStack(spacing: 12) {
+                                    LinkItemView(item: item)
+                                    Image(systemName: "link")
+                                        .font(.title3)
+                                        .foregroundStyle(ChoraiTheme.gold)
+                                        .accessibilityHidden(true)
+                                }
+                                .frame(minHeight: 44)
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(manager.isLinking)
+                            .accessibilityIdentifier("linkPopupCard.\(item.id)")
+                        }
                     }
+                } header: {
+                    Text(manager.candidateHeading)
+                } footer: {
+                    Text(manager.candidateExplanation)
+                        .foregroundStyle(ChoraiTheme.secondaryInk)
+                }
+                .listRowBackground(ChoraiTheme.surface)
+
+                if manager.isLinking {
+                    Section {
+                        HStack(spacing: 12) {
+                            ProgressView().tint(ChoraiTheme.gold)
+                            Text("Connecting…")
+                        }
+                    }
+                    .listRowBackground(ChoraiTheme.surface)
+                }
+                if manager.showErrorAlert {
+                    Section {
+                        Text(manager.errorMessage)
+                            .font(.subheadline)
+                            .foregroundStyle(.red)
+                            .accessibilityIdentifier("linkPopupError")
+                    }
+                    .listRowBackground(ChoraiTheme.surface)
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .ignoresSafeArea(.container, edges: .all)
+            .scrollContentBackground(.hidden)
+            .background(ChoraiTheme.background)
+            .foregroundStyle(ChoraiTheme.ink)
+            .tint(ChoraiTheme.ink)
+            .scrollDismissesKeyboard(.interactively)
+            .navigationTitle(manager.pickerTitle)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        isTextFieldFocused = false
+                        manager.hide()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .frame(minWidth: 44, minHeight: 44)
+                    }
+                    .accessibilityLabel("Cancel")
+                    .accessibilityIdentifier("linkPopupCancel")
+                }
+            }
+        }
+        .overlay(alignment: .topLeading) {
+            Text("Link cards")
+                .font(.system(size: 1))
+                .foregroundStyle(.clear)
+                .frame(width: 1, height: 1)
+                .accessibilityIdentifier("linkPopup")
         }
     }
 }
@@ -482,177 +437,47 @@ struct LinkPopupView: View {
 // MARK: - Link项目视图
 struct LinkItemView: View {
     let item: LinkItem
-    
+
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            // 头像
-            if !item.avatar.isEmpty {
-                AsyncImage(url: URL(string: item.avatar)) { image in
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                } placeholder: {
-                    Circle()
-                        .fill(Color.white.opacity(0.2))
-                        .overlay(
-                            Text(String(item.username.prefix(1)).uppercased())
-                                .font(.system(size: 20, weight: .bold))
-                                .foregroundColor(.white)
-                        )
-                }
-                .frame(width: 50, height: 50)
-                .clipShape(Circle())
-            } else {
-                // 默认头像
-                Circle()
-                    .fill(Color.white.opacity(0.2))
-                    .frame(width: 50, height: 50)
-                    .overlay(
-                        Text(String(item.username.prefix(1)).uppercased())
-                            .font(.system(size: 20, weight: .bold))
-                            .foregroundColor(.white)
-                    )
+        VStack(alignment: .leading, spacing: 6) {
+            HTMLTextRenderer(htmlContent: item.description, maxLines: 3)
+                .font(.body)
+                .foregroundColor(ChoraiTheme.ink)
+            Text(item.username)
+                .font(.caption)
+                .foregroundStyle(ChoraiTheme.secondaryInk)
+            if !item.labels.isEmpty {
+                Text(item.labels.map { "#" + $0 }.joined(separator: "  "))
+                    .font(.caption)
+                    .foregroundStyle(ChoraiTheme.secondaryInk)
+                    .lineLimit(1)
             }
-            
-            // 内容区域
-            VStack(alignment: .leading, spacing: 8) {
-                // 第一行：用户名
-                Text(item.username)
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(.white)
-                
-                // 第二行：内容
-                HTMLTextRenderer(htmlContent: item.description, maxLines: 4)
-                    .font(.system(size: 14, weight: .regular))
-                    .foregroundColor(.white.opacity(0.7))
-                
-                // 标签
-                if !item.labels.isEmpty {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
-                            ForEach(item.labels, id: \.self) { label in
-                                Text(label)
-                                    .font(.system(size: 12, weight: .medium))
-                                    .foregroundColor(.white)
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 6)
-                                    .background(linkItemTagBackground)
-                                    .lineLimit(1)
-                            }
-                        }
-                        .padding(.horizontal, 1) // 添加一点内边距，避免标签贴边
-                    }
-                }
-            }
-            
-            Spacer()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 20)
-        .padding(.vertical, 16)
-    }
-    
-    // MARK: 标签背景样式
-    private var linkItemTagBackground: some View {
-        RoundedRectangle(cornerRadius: 15)
-            .fill(Color.white.opacity(0.2))
-            .overlay(linkItemTagTopLeftHighlight)
-            .overlay(linkItemTagBottomRightHighlight)
-            .overlay(linkItemTagTopEdgeHighlight)
-            .overlay(linkItemTagBottomEdgeHighlight)
-    }
-    
-    // MARK: 标签高光
-    private var linkItemTagTopLeftHighlight: some View {
-        RoundedRectangle(cornerRadius: 15)
-            .stroke(Color.white, lineWidth: 1)
-            .offset(x: 0, y: -1)
-            .mask(
-                RoundedRectangle(cornerRadius: 15)
-                    .fill(
-                        RadialGradient(
-                            colors: [Color.white, Color.clear],
-                            center: .topLeading,
-                            startRadius: 5,
-                            endRadius: 20
-                        )
-                    )
-            )
-    }
-    
-    private var linkItemTagBottomRightHighlight: some View {
-        RoundedRectangle(cornerRadius: 15)
-            .stroke(Color.white, lineWidth: 1)
-            .offset(x: 0, y: 0)
-            .mask(
-                RoundedRectangle(cornerRadius: 15)
-                    .fill(
-                        RadialGradient(
-                            colors: [Color.white, Color.clear],
-                            center: .bottomTrailing,
-                            startRadius: 5,
-                            endRadius: 20
-                        )
-                    )
-            )
-    }
-    
-    private var linkItemTagTopEdgeHighlight: some View {
-        RoundedRectangle(cornerRadius: 15)
-            .stroke(Color.white, lineWidth: 1)
-            .offset(x: 0, y: -1)
-            .mask(
-                RoundedRectangle(cornerRadius: 15)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.white, Color.clear],
-                            startPoint: .top,
-                            endPoint: UnitPoint(x: 0, y: 0.05)
-                        )
-                    )
-            )
-    }
-    
-    private var linkItemTagBottomEdgeHighlight: some View {
-        RoundedRectangle(cornerRadius: 15)
-            .stroke(Color.white, lineWidth: 1)
-            .offset(x: 0, y: 1)
-            .mask(
-                RoundedRectangle(cornerRadius: 15)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.white, Color.clear],
-                            startPoint: .bottom,
-                            endPoint: UnitPoint(x: 1, y: 0.05)
-                        )
-                    )
-            )
+        .padding(.vertical, 5)
     }
 }
 
-// MARK: - Link弹窗Modifier
-struct LinkPopupModifier: ViewModifier {
+/// Installed once at the app root, while callbacks stay with the manager's origin.
+struct LinkPopupPresenter: View {
     @ObservedObject private var manager = LinkPopupManager.shared
-    
-    func body(content: Content) -> some View {
-        content
-            .overlay(
-                Group {
-                    if manager.isShowing {
-                        LinkPopupView()
-                            .transition(.opacity.combined(with: .opacity))
-                    }
-                }
-                .animation(.easeInOut(duration: 0.3), value: manager.isShowing)
-                .ignoresSafeArea(.container, edges: .all)
-            )
-    }
-}
 
-// MARK: - View Extension
-extension View {
-    func linkPopup() -> some View {
-        self.modifier(LinkPopupModifier())
+    private var isPresented: Binding<Bool> {
+        Binding(
+            get: { manager.isShowing },
+            set: { if !$0 { manager.hide() } }
+        )
+    }
+
+    var body: some View {
+        ChoraiNativeSheetPresenter(
+            isPresented: isPresented,
+            detents: [.large()],
+            initialDetent: .large
+        ) { _ in
+            LinkPopupView()
+        }
+        .frame(width: 0, height: 0)
     }
 }
 
@@ -660,15 +485,90 @@ extension View {
     ZStack {
         Color.black
             .ignoresSafeArea()
-        
+
         VStack {
             Text("Test Content")
-                .foregroundColor(.white)
-            
+                .foregroundColor(ChoraiTheme.ink)
+
             Button("Show Link Popup") {
                 LinkPopupManager.shared.show()
             }
         }
     }
-    .linkPopup()
-} 
+    .overlay { LinkPopupPresenter() }
+}
+
+#if DEBUG
+enum LinkPresentationFixture {
+    static var isEnabled: Bool {
+        LocalDevelopmentPreview.isEnabled
+            && ProcessInfo.processInfo.arguments.contains("--ui-test-link-presentation")
+    }
+
+    static func items(matching keyword: String) -> [LinkItem] {
+        let items = [
+            LinkItem(id: "fixture-link-note", avatar: "", title: "", description: "A note about an unfinished thought.", username: "You", authorId: LocalPreviewFixtures.actorID, labels: ["Writing"]),
+            LinkItem(id: "fixture-link-collected", avatar: "", title: "", description: "Attention is a kind of generosity.", username: "Mira Chen", authorId: "preview-author", labels: ["Attention"])
+        ]
+        guard !keyword.isEmpty else { return items }
+        return items.filter { $0.description.localizedCaseInsensitiveContains(keyword) }
+    }
+}
+
+/// Exercises the production picker and its existing selection-only callback.
+/// Both origins use the same app-root presenter; the second is already a sheet.
+struct LinkPresentationFixtureScreen: View {
+    @State private var showsOriginSheet = false
+    @State private var rootSelection = "none"
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Button("Choose a note") { openSelection() }
+                        .accessibilityIdentifier("link.fixture.open-root")
+                    Button("Open sheet origin") { showsOriginSheet = true }
+                        .accessibilityIdentifier("link.fixture.open-origin-sheet")
+                }
+                Text(rootSelection)
+                    .accessibilityIdentifier("link.fixture.root-selection")
+            }
+            .navigationTitle("Link presentation fixture")
+            .sheet(isPresented: $showsOriginSheet) {
+                LinkPresentationFixtureOriginSheet()
+            }
+        }
+    }
+
+    private func openSelection() {
+        LinkPopupManager.shared.onCardSelected = { rootSelection = $0.id }
+        LinkPopupManager.shared.show(mode: .selectionOnly)
+    }
+}
+
+private struct LinkPresentationFixtureOriginSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var selection = "none"
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Button("Choose a note") {
+                    LinkPopupManager.shared.onCardSelected = { selection = $0.id }
+                    LinkPopupManager.shared.show(mode: .selectionOnly)
+                }
+                .accessibilityIdentifier("link.fixture.open-from-sheet")
+                Text(selection)
+                    .accessibilityIdentifier("link.fixture.sheet-selection")
+            }
+            .navigationTitle("Sheet origin")
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done", action: dismiss.callAsFunction)
+                        .accessibilityIdentifier("link.fixture.close-origin-sheet")
+                }
+            }
+        }
+    }
+}
+#endif

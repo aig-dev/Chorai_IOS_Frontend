@@ -1,0 +1,1139 @@
+Command line invocation:
+    /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild test -project prototype/UITests/ChoraiPrototypeUITests.xcodeproj -scheme ChoraiPrototypeUITests -destination "platform=iOS Simulator,id=92DE3535-B261-49B5-844F-9BD9B8C241B4" -derivedDataPath /tmp/chorai-v8-ui-derived -resultBundlePath /tmp/chorai-v8-ui.xcresult "-only-testing:ChoraiPrototypeUITests/CardLevelJourneyTests" CODE_SIGNING_ALLOWED=NO
+
+Build settings from command line:
+    CODE_SIGNING_ALLOWED = NO
+
+Writing result bundle at path:
+	/tmp/chorai-v8-ui.xcresult
+
+ComputePackagePrebuildTargetDependencyGraph
+
+Prepare packages
+
+CreateBuildRequest
+
+SendProjectDescription
+
+CreateBuildOperation
+
+ComputeTargetDependencyGraph
+note: Building targets in dependency order
+note: Target dependency graph (1 target)
+    Target 'ChoraiPrototypeUITests' in project 'ChoraiPrototypeUITests' (no dependencies)
+
+GatherProvisioningInputs
+
+CreateBuildDescription
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -v -E -dM -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.1.sdk -x c -c /dev/null
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc --version
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ld -version_details
+
+Build description signature: b0368972f1189bd61049a1d728c5468e
+Build description path: /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/XCBuildData/b0368972f1189bd61049a1d728c5468e.xcbuilddata
+CreateBuildDirectory /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests/ChoraiPrototypeUITests.xcodeproj
+    builtin-create-build-directory /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules
+
+CreateBuildDirectory /tmp/chorai-v8-ui-derived/ModuleCache.noindex
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests/ChoraiPrototypeUITests.xcodeproj
+    builtin-create-build-directory /tmp/chorai-v8-ui-derived/ModuleCache.noindex
+
+CreateBuildDirectory /tmp/chorai-v8-ui-derived/CompilationCache.noindex
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests/ChoraiPrototypeUITests.xcodeproj
+    builtin-create-build-directory /tmp/chorai-v8-ui-derived/CompilationCache.noindex
+
+CreateBuildDirectory /tmp/chorai-v8-ui-derived/Build/Products
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests/ChoraiPrototypeUITests.xcodeproj
+    builtin-create-build-directory /tmp/chorai-v8-ui-derived/Build/Products
+
+CreateBuildDirectory /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests/ChoraiPrototypeUITests.xcodeproj
+    builtin-create-build-directory /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex
+
+ClangStatCache /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang-stat-cache /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.1.sdk /tmp/chorai-v8-ui-derived/SDKStatCaches.noindex/iphonesimulator27.1-24A94232-35d3147121984ba087c28d913653d626.sdkstatcache
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests/ChoraiPrototypeUITests.xcodeproj
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang-stat-cache /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.1.sdk -o /tmp/chorai-v8-ui-derived/SDKStatCaches.noindex/iphonesimulator27.1-24A94232-35d3147121984ba087c28d913653d626.sdkstatcache
+
+CreateBuildDirectory /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests/ChoraiPrototypeUITests.xcodeproj
+    builtin-create-build-directory /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator
+
+CreateBuildDirectory /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/PrecompiledHeaders
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests/ChoraiPrototypeUITests.xcodeproj
+    builtin-create-build-directory /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/PrecompiledHeaders
+
+CreateBuildDirectory /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ExplicitPrecompiledModules
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests/ChoraiPrototypeUITests.xcodeproj
+    builtin-create-build-directory /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ExplicitPrecompiledModules
+
+CreateBuildDirectory /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests/ChoraiPrototypeUITests.xcodeproj
+    builtin-create-build-directory /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules
+
+CreateBuildDirectory /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/EagerLinkingTBDs/Debug-iphonesimulator
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests/ChoraiPrototypeUITests.xcodeproj
+    builtin-create-build-directory /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/EagerLinkingTBDs/Debug-iphonesimulator
+
+WriteAuxiliaryFile /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests-336a337a8fe80c1e3902a9a1e3ceeada-VFS-iphonesimulator/all-product-headers.yaml
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests/ChoraiPrototypeUITests.xcodeproj
+    write-file /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests-336a337a8fe80c1e3902a9a1e3ceeada-VFS-iphonesimulator/all-product-headers.yaml
+
+WriteAuxiliaryFile /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/empty-ChoraiPrototypeUITests.plist (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests
+    write-file /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/empty-ChoraiPrototypeUITests.plist
+
+WriteAuxiliaryFile /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/ProductTypeInfoPlistAdditions.plist (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests
+    write-file /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/ProductTypeInfoPlistAdditions.plist
+
+WriteAuxiliaryFile /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/x86_64/ChoraiPrototypeUITests.SwiftConstValuesFileList (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests
+    write-file /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/x86_64/ChoraiPrototypeUITests.SwiftConstValuesFileList
+
+WriteAuxiliaryFile /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/x86_64/ChoraiPrototypeUITests.LinkFileList (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests
+    write-file /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/x86_64/ChoraiPrototypeUITests.LinkFileList
+
+WriteAuxiliaryFile /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/x86_64/ChoraiPrototypeUITests.SwiftFileList (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests
+    write-file /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/x86_64/ChoraiPrototypeUITests.SwiftFileList
+
+WriteAuxiliaryFile /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/arm64/ChoraiPrototypeUITests_const_extract_protocols.json (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests
+    write-file /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/arm64/ChoraiPrototypeUITests_const_extract_protocols.json
+
+WriteAuxiliaryFile /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/x86_64/ChoraiPrototypeUITests_const_extract_protocols.json (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests
+    write-file /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/x86_64/ChoraiPrototypeUITests_const_extract_protocols.json
+
+WriteAuxiliaryFile /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/arm64/ChoraiPrototypeUITests.SwiftFileList (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests
+    write-file /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/arm64/ChoraiPrototypeUITests.SwiftFileList
+
+WriteAuxiliaryFile /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/x86_64/ChoraiPrototypeUITests-OutputFileMap.json (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests
+    write-file /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/x86_64/ChoraiPrototypeUITests-OutputFileMap.json
+
+WriteAuxiliaryFile /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/arm64/ChoraiPrototypeUITests.LinkFileList (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests
+    write-file /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/arm64/ChoraiPrototypeUITests.LinkFileList
+
+WriteAuxiliaryFile /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/arm64/ChoraiPrototypeUITests.SwiftConstValuesFileList (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests
+    write-file /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/arm64/ChoraiPrototypeUITests.SwiftConstValuesFileList
+
+WriteAuxiliaryFile /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/arm64/ChoraiPrototypeUITests-OutputFileMap.json (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests
+    write-file /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/arm64/ChoraiPrototypeUITests-OutputFileMap.json
+
+WriteAuxiliaryFile /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/ChoraiPrototypeUITests.hmap (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests
+    write-file /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/ChoraiPrototypeUITests.hmap
+
+WriteAuxiliaryFile /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/ChoraiPrototypeUITests.DependencyMetadataFileList (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests
+    write-file /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/ChoraiPrototypeUITests.DependencyMetadataFileList
+
+WriteAuxiliaryFile /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/ChoraiPrototypeUITests-project-headers.hmap (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests
+    write-file /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/ChoraiPrototypeUITests-project-headers.hmap
+
+WriteAuxiliaryFile /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/ChoraiPrototypeUITests.DependencyStaticMetadataFileList (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests
+    write-file /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/ChoraiPrototypeUITests.DependencyStaticMetadataFileList
+
+WriteAuxiliaryFile /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/ChoraiPrototypeUITests-own-target-headers.hmap (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests
+    write-file /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/ChoraiPrototypeUITests-own-target-headers.hmap
+
+WriteAuxiliaryFile /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/ChoraiPrototypeUITests-generated-files.hmap (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests
+    write-file /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/ChoraiPrototypeUITests-generated-files.hmap
+
+WriteAuxiliaryFile /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/ChoraiPrototypeUITests-all-target-headers.hmap (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests
+    write-file /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/ChoraiPrototypeUITests-all-target-headers.hmap
+
+WriteAuxiliaryFile /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/ChoraiPrototypeUITests-all-non-framework-target-headers.hmap (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests
+    write-file /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/ChoraiPrototypeUITests-all-non-framework-target-headers.hmap
+
+MkDir /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator/ChoraiPrototypeUITests-Runner.app/PlugIns/ChoraiPrototypeUITests.xctest (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests
+    /bin/mkdir -p /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator/ChoraiPrototypeUITests-Runner.app/PlugIns/ChoraiPrototypeUITests.xctest
+
+ProcessInfoPlistFile /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator/ChoraiPrototypeUITests-Runner.app/PlugIns/ChoraiPrototypeUITests.xctest/Info.plist /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/empty-ChoraiPrototypeUITests.plist (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests
+    builtin-infoPlistUtility /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/empty-ChoraiPrototypeUITests.plist -producttype com.apple.product-type.bundle.ui-testing -expandbuildsettings -format binary -platform iphonesimulator -additionalcontentfile /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/ProductTypeInfoPlistAdditions.plist -o /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator/ChoraiPrototypeUITests-Runner.app/PlugIns/ChoraiPrototypeUITests.xctest/Info.plist
+
+SwiftDriver ChoraiPrototypeUITests normal x86_64 com.apple.xcode.tools.swift.compiler (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests
+    builtin-SwiftDriver -- /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name ChoraiPrototypeUITests -Onone @/tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/x86_64/ChoraiPrototypeUITests.SwiftFileList -module-alias Testing\=_Testing_Unavailable -plugin-path /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing -enable-bare-slash-regex -enable-experimental-feature DebugDescriptionMacro -sdk /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.1.sdk -target x86_64-apple-ios26.0-simulator -g -module-cache-path /tmp/chorai-v8-ui-derived/ModuleCache.noindex -Xfrontend -serialize-debugging-options -enable-testing -index-store-path /tmp/chorai-v8-ui-derived/Index.noindex/DataStore -swift-version 5 -I /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator -Isystem /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib -F /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator -F /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks -F /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.1.sdk/Developer/Library/Frameworks -c -j10 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc /tmp/chorai-v8-ui-derived/SDKStatCaches.noindex/iphonesimulator27.1-24A94232-35d3147121984ba087c28d913653d626.sdkstatcache -output-file-map /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/x86_64/ChoraiPrototypeUITests-OutputFileMap.json -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path /tmp/chorai-v8-ui-derived/ModuleCache.noindex -sdk-module-cache-path /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules -emit-dependencies -emit-module -emit-module-path /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/x86_64/ChoraiPrototypeUITests.swiftmodule -serialize-diagnostics -dependency-scan-serialize-diagnostics-path /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/x86_64/ChoraiPrototypeUITests-dependency-scan.dia -validate-clang-modules-once -clang-build-session-file /tmp/chorai-v8-ui-derived/ModuleCache.noindex/Session.modulevalidation -Xcc -fmodules-prune-interval\=86400 -Xcc -fmodules-prune-after\=345600 -emit-const-values -const-gather-protocols-list /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/x86_64/ChoraiPrototypeUITests_const_extract_protocols.json -Xcc -iquote -Xcc /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/ChoraiPrototypeUITests-generated-files.hmap -Xcc -I/tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/ChoraiPrototypeUITests-own-target-headers.hmap -Xcc -I/tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/ChoraiPrototypeUITests-all-target-headers.hmap -Xcc -iquote -Xcc /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/ChoraiPrototypeUITests-project-headers.hmap -Xcc -I/tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator/include -Xcc -I/tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/DerivedSources-normal/x86_64 -Xcc -I/tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/DerivedSources/x86_64 -Xcc -I/tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/DerivedSources -emit-objc-header -emit-objc-header-path /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/x86_64/ChoraiPrototypeUITests-Swift.h -working-directory /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests -experimental-emit-module-separately -disable-cmo
+
+SwiftDriver ChoraiPrototypeUITests normal arm64 com.apple.xcode.tools.swift.compiler (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests
+    builtin-SwiftDriver -- /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name ChoraiPrototypeUITests -Onone @/tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/arm64/ChoraiPrototypeUITests.SwiftFileList -module-alias Testing\=_Testing_Unavailable -plugin-path /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing -enable-bare-slash-regex -enable-experimental-feature DebugDescriptionMacro -sdk /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.1.sdk -target arm64-apple-ios26.0-simulator -g -module-cache-path /tmp/chorai-v8-ui-derived/ModuleCache.noindex -Xfrontend -serialize-debugging-options -enable-testing -index-store-path /tmp/chorai-v8-ui-derived/Index.noindex/DataStore -swift-version 5 -I /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator -Isystem /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib -F /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator -F /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks -F /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.1.sdk/Developer/Library/Frameworks -c -j10 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc /tmp/chorai-v8-ui-derived/SDKStatCaches.noindex/iphonesimulator27.1-24A94232-35d3147121984ba087c28d913653d626.sdkstatcache -output-file-map /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/arm64/ChoraiPrototypeUITests-OutputFileMap.json -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path /tmp/chorai-v8-ui-derived/ModuleCache.noindex -sdk-module-cache-path /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules -emit-dependencies -emit-module -emit-module-path /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/arm64/ChoraiPrototypeUITests.swiftmodule -serialize-diagnostics -dependency-scan-serialize-diagnostics-path /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/arm64/ChoraiPrototypeUITests-dependency-scan.dia -validate-clang-modules-once -clang-build-session-file /tmp/chorai-v8-ui-derived/ModuleCache.noindex/Session.modulevalidation -Xcc -fmodules-prune-interval\=86400 -Xcc -fmodules-prune-after\=345600 -emit-const-values -const-gather-protocols-list /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/arm64/ChoraiPrototypeUITests_const_extract_protocols.json -Xcc -iquote -Xcc /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/ChoraiPrototypeUITests-generated-files.hmap -Xcc -I/tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/ChoraiPrototypeUITests-own-target-headers.hmap -Xcc -I/tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/ChoraiPrototypeUITests-all-target-headers.hmap -Xcc -iquote -Xcc /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/ChoraiPrototypeUITests-project-headers.hmap -Xcc -I/tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator/include -Xcc -I/tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/DerivedSources-normal/arm64 -Xcc -I/tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/DerivedSources/arm64 -Xcc -I/tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/DerivedSources -emit-objc-header -emit-objc-header-path /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/arm64/ChoraiPrototypeUITests-Swift.h -working-directory /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests -experimental-emit-module-separately -disable-cmo
+
+SwiftExplicitDependencyGeneratePcm x86_64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/_AvailabilityInternal-CPQWV7NOFZ1HM3Z1HXF74IABA.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/SwiftShims-A6K2OX0758TH827SPIHT01IHA.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/_Builtin_float-4X9QRQ4Y53P5D25V4YFSPH0V.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/_Builtin_stdarg-BHQ87SRVO145WR122Q46U024W.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/_Builtin_stdbool-67BOWJ10SJRTP7PHH0VIJYKK9.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/DeveloperToolsSupport-295NLL5MZEG91UOJG1TEK569L.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/ptrcheck-2IVRG09WO8QSGRENLASCQHFQ4.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/SwiftShims-CPZW250IPRL8JJCQNE7IQH72B.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/_SwiftConcurrencyShims-EX2GL57M0F69MGLJC0BM15U3T.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/ptrauth-AZB0GNJBRUKU0TRGOQ3HIC8LN.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/ptrauth-2Y82EN0R8MVLOP08XKJCPIDB5.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/_Builtin_stdarg-85WN58IKGP0W5QO9ROPEBQ4E8.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/_SwiftConcurrencyShims-3W9XZNSL05MWMHWORXZJXB6RL.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/ptrcheck-76Q2VMIPCIX3E7ZLK670NT4ES.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/DeveloperToolsSupport-76NU8Y1B1ROK2DE0WJTPV2CIF.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/_Builtin_stdbool-18P3MXNI8VFVG7A0URKSHRS1P.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/_Builtin_float-CQACGX5S2I23WIFC554TFELB8.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/_Builtin_stddef-16VSABRMIV9OCTUEV661TQ2YL.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/_AvailabilityInternal-9LOX3N107CRQ6M4V9OZPSLHGB.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/_DarwinFoundation1-56KZVUEBAEIDQFUEJ0U1VVDDE.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/_Builtin_stddef-8UPBEKQRV2LBYT9J1QZ6NPW05.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/_DarwinFoundation1-23BBADJJ6HDODTP22SAJTWXYR.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/_Builtin_limits-5M39E9BUQ0BNJ2LDVK0AOGY93.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/_DarwinFoundation2-3HLWFY4KERXEW6NZIBSMHQOBC.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/_Builtin_limits-1AXJAV673PSFRRW07RA4S77XQ.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/_DarwinFoundation2-1YR0BQJH2XA96Q8L16BAVEMX1.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/string_h-7ETAOQEG13N6LDU9MCGIVGN4J.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/_Builtin_stdint-681BF512XPDAEDWWYF6KVX5LJ.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/_Builtin_tgmath-2D9EHS8KDCKZCC1PB4LK6OSK5.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/sys_types-634ZZUURTE5HS7SE1TCPG7EV6.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/_Builtin_stdatomic-7ITWZT8PJWBYETK2A7Z4G4KMM.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/_DarwinFoundation3-DUFSUX0ZD2CMKFAGIPCJR3HJM.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/sys_types-DPM1CMEYGNW8IHILOYLMLB62Q.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/string_h-DPEXSNI0BX85UTA3P1XVE2PA4.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/_Builtin_tgmath-B0LZ87QR1X7ECYJ34O4QUKTT9.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/_Builtin_stdint-3BXVSWZ5WTKQB3GKCQRXK9GI4.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/_DarwinFoundation3-23OIBQDYBWSEZ7DHOW82KNMHR.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/_Builtin_stdatomic-2SKVWUR76HCB2VANOQ9MZ68E8.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/_Builtin_intrinsics-9SM6YKMGEB7APA7USOT5K8XZ.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/_Builtin_inttypes-70EQLEHTJZUWJLM42VJFJ10FG.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/_Builtin_intrinsics-43QKMH6S4OH9VJ3TXQHSCJ2BL.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/Darwin-5TPB8KWXZ7UASTRTJ750NPSTH.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/_Builtin_inttypes-25CB1RQBRSXI6VT1QM6ZX5C8M.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/Darwin-38SQT968GDIWVIG85JY5MHX1Q.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/simd-5EGRD4MGRKIDMBCX9F796YDY.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/simd-EZNDMXTN6JKH2G2KZFYI948YQ.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/ObjectiveC-B78AXZWWEDEBEF662BX5OVA7A.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/MachO-EYU8FICL04RZD2J7KW5M0Y7PN.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/ObjectiveC-F4VI0OVZPD4D2K7LPUQ3GACWW.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/MachO-F1DOJKV4E5KIVSUBL790N69EA.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/os_object-6PVQ5VSI18M421C7KFXO3O8VF.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/Spatial-69ANYYW3N35K0ILRCFG9SEOK0.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/os_object-BOFBA8RK9AB0W11822Y887OLH.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/os_workgroup-24BCWVFUFTAAW9T6BC22B2JZY.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/os_workgroup-1TFJ4GAUZPBH57F7J1BPH28FK.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/Dispatch-9NAN2VJGWH9J2VU2JWRN6T3X3.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/Dispatch-5YQDJSAMKBJOV5K4NQUBPQ480.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/CoreFoundation-9XUL8104ORQYMA35ZBWLA2B2U.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/XPC-P0XJ2MVQLR3OYP0LPTFU56CN.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/Spatial-F4D0S1R5CWVH3D7J34BW5CFSU.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/XPC-CRXLT7R9BJSRWJ5T9JMKNIMI7.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/CoreFoundation-213EZ2OQF0KSNT5VRDTZACEQO.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/os-CQ2RUXO9T1LWZGIUE6ZFXEE2S.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/CFNetwork-5NPBHRPFJN1Y4KT4UF36DKMGI.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/CoreGraphics-B2XE0J5Y1SKMEUW37F4S30EUX.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/Security-21WRIQI18FUFG5CKP27OXMKI3.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/os-1EMSAK14HNOMGXDKN7OKATOD7.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/CFNetwork-A64A3KA3KWKG83LYXTY64R6VG.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/Security-68YT7CFKENFQGIOR29I0OEHGA.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/CoreGraphics-7EBH0BPSVSABVUVYE2W6HDT20.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/Foundation-ATVU58XF2YOPZDETZWH3R81X1.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/ImageIO-3YT44V65SB4FGJKDPB98E50FJ.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/CoreText-6EAY8WZXISG922WPJCL6ELVX5.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/Foundation-9ZSULG1JMNY9CN8PWEX8YXNEI.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/CoreText-A0VEQSWDX9R1XYG95YDDOFGMA.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/ImageIO-1H6KEOZJQM06599JNF5QIPFPT.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/DataDetection-640IS6AOIRQJTPABLFXZX2CLW.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/UIUtilities-SPAXEUSPRDVVKZF4Q3HETAM7.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/OpenGLES-DJ9ZCHCO8Z9QQ6SQY8R2D74HZ.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/Accessibility-D2NHUQCHKOTD6LS3HTPLU77R7.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/FileProvider-712LMMFAU0QRWEX74R57WII1Z.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/IOSurface-A5AY5UCZHAO582D6P408NAYRI.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/CoreTransferable-DFSIBJDTZWD0IY80DRPBISF6U.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/UserNotifications-1CFPWXWDZVMRM00JD165J5GFA.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/UniformTypeIdentifiers-38ESBKPVJY2SCDI65OOZMLBDH.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/Symbols-2VRA32XO8IIS82LC5FCBKBG56.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/UniformTypeIdentifiers-5XE6UTTWO5H3T4X3O0DID6QJ8.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/Symbols-2WZDATWQINUTHRSP317VY8C8T.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/OSLog-DFBFKBBR74O5ME87DHCNSLWWA.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/UserNotifications-A3RN7XP4J6B0VM4W8PJK23WB5.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/OpenGLES-CRCABVKXEC7N9BJ7G6FRJXFBS.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/Metal-C3ABY9A29N5285Y08UP14PL2O.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/Accessibility-8IOD4WFEXTEU0Z7X5RQIZPSLF.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/IOSurface-2OXO4Y4UU56C58B75Y21FFZSI.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/FileProvider-68YNU7W1P4D7KYGJ8PT9IZEFY.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/_LocationEssentials-7PMQH485VHYPW4YXFQ2Z6W2TX.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/CoreTransferable-639TVOPZUKUOONEMVR8V5DVY9.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/OSLog-4084M4H5SI6ZD0LMOTIN8UP2L.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/UIUtilities-36VUACPBRD0Q22LQU0E750FF3.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/DataDetection-2XC00ADAHQ4LYCELS2I0G88G7.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/_LocationEssentials-1YBHKTO954BXSP7P11SUGG0HR.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/Metal-504M4ZN1P5AK2OXFTTSLF2S62.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/CoreLocation-4RGNHQNIE1S6FYBXY5VWXJ5H1.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/CoreLocation-5IBWWFSZ15VK6H035KU1LSCQK.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/CoreVideo-68N91BSNPPHU8ZTXZPFFRNWCX.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/CoreMotion-5O6FWV5L275UWFOJH6LX8Q5RZ.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/CoreMotion-84C7DTP4XU0X4VZDEP9U91URO.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/CoreVideo-54YVMSPJ64MDEICHMMBDGZ1TW.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/CoreImage-4YGCRJR7TQ44PN93YO7QEZWX7.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/QuartzCore-6QTHDCGFILLCYPQ0354TF5GI6.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/CoreImage-BMYU9M9KPMZ3U64Z0TX6PL0U.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/QuartzCore-50PKP04F25PI7JHAHYVRNS3FU.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/SwiftUICore-6QYBADTZDHBSXPBPEKSZWG9NN.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/UIKit-5H6OZL232SKTPKBLB5BJNC97I.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/SwiftUICore-AP9C2UEZH6I9QZKDUE6QI274K.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules/UIKit-4CQN6OZG9AHVKJDSM85V9WSJW.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules/XCUIAutomation-84XRWFG57N8IE99Z71G55LY59.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules/XCUIAutomation-511HKVDO2341H2T732NW6P6KL.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules/XCTest-986XBQQ6YSI53E4RPL1F7KVG2.pcm
+
+SwiftExplicitDependencyCompileModuleFromInterface x86_64 /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules/XCUIAutomation-1ZEHTK4XXCRXQ.swiftmodule
+
+SwiftExplicitDependencyCompileModuleFromInterface arm64 /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules/XCUIAutomation-17738XZ7DOUGQ.swiftmodule
+
+SwiftExplicitDependencyGeneratePcm arm64 /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules/XCTest-5M7SU2V2X2SIB96XZ645ZMMI0.pcm
+
+SwiftExplicitDependencyCompileModuleFromInterface x86_64 /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules/XCTest-V3P6JCS9H9GJ.swiftmodule
+
+SwiftExplicitDependencyCompileModuleFromInterface arm64 /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules/XCTest-9LZPNGFEA7C8.swiftmodule
+
+SwiftEmitModule normal arm64 Emitting\ module\ for\ ChoraiPrototypeUITests (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+
+SwiftCompile normal arm64 (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests
+    
+
+SwiftCompile normal arm64 Compiling\ CardLevelJourneyTests.swift /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests/CardLevelJourneyTests.swift (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+
+SwiftCompile normal arm64 /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests/CardLevelJourneyTests.swift (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests
+    builtin-SwiftPerFileCompile CardLevelJourneyTests.swift
+
+SwiftCompile normal arm64 Compiling\ JourneyInteractionTests.swift /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests/JourneyInteractionTests.swift (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+
+SwiftCompile normal arm64 /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests/JourneyInteractionTests.swift (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests
+    builtin-SwiftPerFileCompile JourneyInteractionTests.swift
+
+SwiftCompile normal arm64 Compiling\ PrototypeNavigationTests.swift /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests/PrototypeNavigationTests.swift (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+
+SwiftCompile normal arm64 /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests/PrototypeNavigationTests.swift (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests
+    builtin-SwiftPerFileCompile PrototypeNavigationTests.swift
+
+SwiftEmitModule normal x86_64 Emitting\ module\ for\ ChoraiPrototypeUITests (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+
+SwiftCompile normal x86_64 (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests
+    
+
+SwiftCompile normal x86_64 Compiling\ PrototypeNavigationTests.swift /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests/PrototypeNavigationTests.swift (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+
+SwiftCompile normal x86_64 /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests/PrototypeNavigationTests.swift (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests
+    builtin-SwiftPerFileCompile PrototypeNavigationTests.swift
+
+SwiftCompile normal x86_64 Compiling\ JourneyInteractionTests.swift /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests/JourneyInteractionTests.swift (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+
+SwiftCompile normal x86_64 /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests/JourneyInteractionTests.swift (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests
+    builtin-SwiftPerFileCompile JourneyInteractionTests.swift
+
+SwiftCompile normal x86_64 Compiling\ CardLevelJourneyTests.swift /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests/CardLevelJourneyTests.swift (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+
+SwiftCompile normal x86_64 /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests/CardLevelJourneyTests.swift (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests
+    builtin-SwiftPerFileCompile CardLevelJourneyTests.swift
+
+SwiftDriverJobDiscovery normal x86_64 Emitting module for ChoraiPrototypeUITests (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+
+SwiftDriver\ Compilation\ Requirements ChoraiPrototypeUITests normal x86_64 com.apple.xcode.tools.swift.compiler (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests
+    builtin-Swift-Compilation-Requirements -- /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name ChoraiPrototypeUITests -Onone @/tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/x86_64/ChoraiPrototypeUITests.SwiftFileList -module-alias Testing\=_Testing_Unavailable -plugin-path /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing -enable-bare-slash-regex -enable-experimental-feature DebugDescriptionMacro -sdk /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.1.sdk -target x86_64-apple-ios26.0-simulator -g -module-cache-path /tmp/chorai-v8-ui-derived/ModuleCache.noindex -Xfrontend -serialize-debugging-options -enable-testing -index-store-path /tmp/chorai-v8-ui-derived/Index.noindex/DataStore -swift-version 5 -I /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator -Isystem /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib -F /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator -F /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks -F /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.1.sdk/Developer/Library/Frameworks -c -j10 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc /tmp/chorai-v8-ui-derived/SDKStatCaches.noindex/iphonesimulator27.1-24A94232-35d3147121984ba087c28d913653d626.sdkstatcache -output-file-map /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/x86_64/ChoraiPrototypeUITests-OutputFileMap.json -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path /tmp/chorai-v8-ui-derived/ModuleCache.noindex -sdk-module-cache-path /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules -emit-dependencies -emit-module -emit-module-path /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/x86_64/ChoraiPrototypeUITests.swiftmodule -serialize-diagnostics -dependency-scan-serialize-diagnostics-path /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/x86_64/ChoraiPrototypeUITests-dependency-scan.dia -validate-clang-modules-once -clang-build-session-file /tmp/chorai-v8-ui-derived/ModuleCache.noindex/Session.modulevalidation -Xcc -fmodules-prune-interval\=86400 -Xcc -fmodules-prune-after\=345600 -emit-const-values -const-gather-protocols-list /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/x86_64/ChoraiPrototypeUITests_const_extract_protocols.json -Xcc -iquote -Xcc /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/ChoraiPrototypeUITests-generated-files.hmap -Xcc -I/tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/ChoraiPrototypeUITests-own-target-headers.hmap -Xcc -I/tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/ChoraiPrototypeUITests-all-target-headers.hmap -Xcc -iquote -Xcc /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/ChoraiPrototypeUITests-project-headers.hmap -Xcc -I/tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator/include -Xcc -I/tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/DerivedSources-normal/x86_64 -Xcc -I/tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/DerivedSources/x86_64 -Xcc -I/tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/DerivedSources -emit-objc-header -emit-objc-header-path /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/x86_64/ChoraiPrototypeUITests-Swift.h -working-directory /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests -experimental-emit-module-separately -disable-cmo
+
+Copy /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator/ChoraiPrototypeUITests.swiftmodule/x86_64-apple-ios-simulator.swiftmodule /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/x86_64/ChoraiPrototypeUITests.swiftmodule (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -strip-unsigned-binaries -strip-deterministic -strip-tool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/strip -resolve-src-symlinks -rename /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/x86_64/ChoraiPrototypeUITests.swiftmodule /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator/ChoraiPrototypeUITests.swiftmodule/x86_64-apple-ios-simulator.swiftmodule
+
+Copy /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator/ChoraiPrototypeUITests.swiftmodule/x86_64-apple-ios-simulator.swiftdoc /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/x86_64/ChoraiPrototypeUITests.swiftdoc (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -strip-unsigned-binaries -strip-deterministic -strip-tool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/strip -resolve-src-symlinks -rename /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/x86_64/ChoraiPrototypeUITests.swiftdoc /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator/ChoraiPrototypeUITests.swiftmodule/x86_64-apple-ios-simulator.swiftdoc
+
+Copy /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator/ChoraiPrototypeUITests.swiftmodule/x86_64-apple-ios-simulator.abi.json /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/x86_64/ChoraiPrototypeUITests.abi.json (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -strip-unsigned-binaries -strip-deterministic -strip-tool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/strip -resolve-src-symlinks -rename /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/x86_64/ChoraiPrototypeUITests.abi.json /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator/ChoraiPrototypeUITests.swiftmodule/x86_64-apple-ios-simulator.abi.json
+
+SwiftDriverJobDiscovery normal arm64 Emitting module for ChoraiPrototypeUITests (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+
+Copy /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator/ChoraiPrototypeUITests.swiftmodule/Project/x86_64-apple-ios-simulator.swiftsourceinfo /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/x86_64/ChoraiPrototypeUITests.swiftsourceinfo (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -strip-unsigned-binaries -strip-deterministic -strip-tool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/strip -resolve-src-symlinks -rename /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/x86_64/ChoraiPrototypeUITests.swiftsourceinfo /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator/ChoraiPrototypeUITests.swiftmodule/Project/x86_64-apple-ios-simulator.swiftsourceinfo
+
+SwiftDriver\ Compilation\ Requirements ChoraiPrototypeUITests normal arm64 com.apple.xcode.tools.swift.compiler (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests
+    builtin-Swift-Compilation-Requirements -- /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name ChoraiPrototypeUITests -Onone @/tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/arm64/ChoraiPrototypeUITests.SwiftFileList -module-alias Testing\=_Testing_Unavailable -plugin-path /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing -enable-bare-slash-regex -enable-experimental-feature DebugDescriptionMacro -sdk /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.1.sdk -target arm64-apple-ios26.0-simulator -g -module-cache-path /tmp/chorai-v8-ui-derived/ModuleCache.noindex -Xfrontend -serialize-debugging-options -enable-testing -index-store-path /tmp/chorai-v8-ui-derived/Index.noindex/DataStore -swift-version 5 -I /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator -Isystem /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib -F /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator -F /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks -F /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.1.sdk/Developer/Library/Frameworks -c -j10 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc /tmp/chorai-v8-ui-derived/SDKStatCaches.noindex/iphonesimulator27.1-24A94232-35d3147121984ba087c28d913653d626.sdkstatcache -output-file-map /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/arm64/ChoraiPrototypeUITests-OutputFileMap.json -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path /tmp/chorai-v8-ui-derived/ModuleCache.noindex -sdk-module-cache-path /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules -emit-dependencies -emit-module -emit-module-path /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/arm64/ChoraiPrototypeUITests.swiftmodule -serialize-diagnostics -dependency-scan-serialize-diagnostics-path /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/arm64/ChoraiPrototypeUITests-dependency-scan.dia -validate-clang-modules-once -clang-build-session-file /tmp/chorai-v8-ui-derived/ModuleCache.noindex/Session.modulevalidation -Xcc -fmodules-prune-interval\=86400 -Xcc -fmodules-prune-after\=345600 -emit-const-values -const-gather-protocols-list /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/arm64/ChoraiPrototypeUITests_const_extract_protocols.json -Xcc -iquote -Xcc /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/ChoraiPrototypeUITests-generated-files.hmap -Xcc -I/tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/ChoraiPrototypeUITests-own-target-headers.hmap -Xcc -I/tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/ChoraiPrototypeUITests-all-target-headers.hmap -Xcc -iquote -Xcc /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/ChoraiPrototypeUITests-project-headers.hmap -Xcc -I/tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator/include -Xcc -I/tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/DerivedSources-normal/arm64 -Xcc -I/tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/DerivedSources/arm64 -Xcc -I/tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/DerivedSources -emit-objc-header -emit-objc-header-path /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/arm64/ChoraiPrototypeUITests-Swift.h -working-directory /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests -experimental-emit-module-separately -disable-cmo
+
+Copy /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator/ChoraiPrototypeUITests.swiftmodule/arm64-apple-ios-simulator.swiftmodule /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/arm64/ChoraiPrototypeUITests.swiftmodule (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -strip-unsigned-binaries -strip-deterministic -strip-tool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/strip -resolve-src-symlinks -rename /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/arm64/ChoraiPrototypeUITests.swiftmodule /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator/ChoraiPrototypeUITests.swiftmodule/arm64-apple-ios-simulator.swiftmodule
+
+Copy /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator/ChoraiPrototypeUITests.swiftmodule/arm64-apple-ios-simulator.swiftdoc /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/arm64/ChoraiPrototypeUITests.swiftdoc (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -strip-unsigned-binaries -strip-deterministic -strip-tool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/strip -resolve-src-symlinks -rename /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/arm64/ChoraiPrototypeUITests.swiftdoc /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator/ChoraiPrototypeUITests.swiftmodule/arm64-apple-ios-simulator.swiftdoc
+
+Copy /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator/ChoraiPrototypeUITests.swiftmodule/arm64-apple-ios-simulator.abi.json /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/arm64/ChoraiPrototypeUITests.abi.json (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -strip-unsigned-binaries -strip-deterministic -strip-tool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/strip -resolve-src-symlinks -rename /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/arm64/ChoraiPrototypeUITests.abi.json /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator/ChoraiPrototypeUITests.swiftmodule/arm64-apple-ios-simulator.abi.json
+
+SwiftMergeGeneratedHeaders /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/DerivedSources/ChoraiPrototypeUITests-Swift.h /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/arm64/ChoraiPrototypeUITests-Swift.h /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/x86_64/ChoraiPrototypeUITests-Swift.h (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests
+    builtin-swiftHeaderTool -arch arm64 /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/arm64/ChoraiPrototypeUITests-Swift.h -arch x86_64 /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/x86_64/ChoraiPrototypeUITests-Swift.h -o /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/DerivedSources/ChoraiPrototypeUITests-Swift.h
+
+Copy /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator/ChoraiPrototypeUITests.swiftmodule/Project/arm64-apple-ios-simulator.swiftsourceinfo /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/arm64/ChoraiPrototypeUITests.swiftsourceinfo (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -strip-unsigned-binaries -strip-deterministic -strip-tool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/strip -resolve-src-symlinks -rename /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/arm64/ChoraiPrototypeUITests.swiftsourceinfo /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator/ChoraiPrototypeUITests.swiftmodule/Project/arm64-apple-ios-simulator.swiftsourceinfo
+
+SwiftDriverJobDiscovery normal x86_64 Compiling CardLevelJourneyTests.swift (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+
+SwiftDriverJobDiscovery normal arm64 Compiling CardLevelJourneyTests.swift (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+
+SwiftDriverJobDiscovery normal arm64 Compiling JourneyInteractionTests.swift (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+
+SwiftDriverJobDiscovery normal x86_64 Compiling JourneyInteractionTests.swift (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+
+SwiftDriverJobDiscovery normal x86_64 Compiling PrototypeNavigationTests.swift (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+
+SwiftDriver\ Compilation ChoraiPrototypeUITests normal x86_64 com.apple.xcode.tools.swift.compiler (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests
+    builtin-Swift-Compilation -- /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name ChoraiPrototypeUITests -Onone @/tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/x86_64/ChoraiPrototypeUITests.SwiftFileList -module-alias Testing\=_Testing_Unavailable -plugin-path /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing -enable-bare-slash-regex -enable-experimental-feature DebugDescriptionMacro -sdk /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.1.sdk -target x86_64-apple-ios26.0-simulator -g -module-cache-path /tmp/chorai-v8-ui-derived/ModuleCache.noindex -Xfrontend -serialize-debugging-options -enable-testing -index-store-path /tmp/chorai-v8-ui-derived/Index.noindex/DataStore -swift-version 5 -I /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator -Isystem /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib -F /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator -F /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks -F /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.1.sdk/Developer/Library/Frameworks -c -j10 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc /tmp/chorai-v8-ui-derived/SDKStatCaches.noindex/iphonesimulator27.1-24A94232-35d3147121984ba087c28d913653d626.sdkstatcache -output-file-map /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/x86_64/ChoraiPrototypeUITests-OutputFileMap.json -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path /tmp/chorai-v8-ui-derived/ModuleCache.noindex -sdk-module-cache-path /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules -emit-dependencies -emit-module -emit-module-path /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/x86_64/ChoraiPrototypeUITests.swiftmodule -serialize-diagnostics -dependency-scan-serialize-diagnostics-path /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/x86_64/ChoraiPrototypeUITests-dependency-scan.dia -validate-clang-modules-once -clang-build-session-file /tmp/chorai-v8-ui-derived/ModuleCache.noindex/Session.modulevalidation -Xcc -fmodules-prune-interval\=86400 -Xcc -fmodules-prune-after\=345600 -emit-const-values -const-gather-protocols-list /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/x86_64/ChoraiPrototypeUITests_const_extract_protocols.json -Xcc -iquote -Xcc /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/ChoraiPrototypeUITests-generated-files.hmap -Xcc -I/tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/ChoraiPrototypeUITests-own-target-headers.hmap -Xcc -I/tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/ChoraiPrototypeUITests-all-target-headers.hmap -Xcc -iquote -Xcc /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/ChoraiPrototypeUITests-project-headers.hmap -Xcc -I/tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator/include -Xcc -I/tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/DerivedSources-normal/x86_64 -Xcc -I/tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/DerivedSources/x86_64 -Xcc -I/tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/DerivedSources -emit-objc-header -emit-objc-header-path /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/x86_64/ChoraiPrototypeUITests-Swift.h -working-directory /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests -experimental-emit-module-separately -disable-cmo
+
+Ld /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/x86_64/Binary/ChoraiPrototypeUITests normal x86_64 (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -Xlinker -reproducible -target x86_64-apple-ios26.0-simulator -bundle -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.1.sdk -Os -Xlinker -no_warn_duplicate_libraries -L/tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/EagerLinkingTBDs/Debug-iphonesimulator -L/tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator -L/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib -F/tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/EagerLinkingTBDs/Debug-iphonesimulator -F/tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator -iframework /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks -iframework /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.1.sdk/Developer/Library/Frameworks -filelist /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/x86_64/ChoraiPrototypeUITests.LinkFileList -Xlinker -rpath -Xlinker @loader_path/Frameworks -Xlinker -dead_strip -Xlinker -object_path_lto -Xlinker /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/x86_64/ChoraiPrototypeUITests_lto.o -rdynamic -Xlinker -objc_abi_version -Xlinker 2 -Xlinker -dependency_info -Xlinker /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/x86_64/ChoraiPrototypeUITests_dependency_info.dat -fobjc-link-runtime -L/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/iphonesimulator -L/usr/lib/swift -Xlinker -add_ast_path -Xlinker /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/x86_64/ChoraiPrototypeUITests.swiftmodule -Xlinker -needed_framework -Xlinker XCTest -framework XCTest -Xlinker -needed-lXCTestSwiftSupport -lXCTestSwiftSupport -o /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/x86_64/Binary/ChoraiPrototypeUITests
+
+SwiftDriverJobDiscovery normal arm64 Compiling PrototypeNavigationTests.swift (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+
+SwiftDriver\ Compilation ChoraiPrototypeUITests normal arm64 com.apple.xcode.tools.swift.compiler (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests
+    builtin-Swift-Compilation -- /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name ChoraiPrototypeUITests -Onone @/tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/arm64/ChoraiPrototypeUITests.SwiftFileList -module-alias Testing\=_Testing_Unavailable -plugin-path /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing -enable-bare-slash-regex -enable-experimental-feature DebugDescriptionMacro -sdk /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.1.sdk -target arm64-apple-ios26.0-simulator -g -module-cache-path /tmp/chorai-v8-ui-derived/ModuleCache.noindex -Xfrontend -serialize-debugging-options -enable-testing -index-store-path /tmp/chorai-v8-ui-derived/Index.noindex/DataStore -swift-version 5 -I /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator -Isystem /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib -F /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator -F /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks -F /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.1.sdk/Developer/Library/Frameworks -c -j10 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc /tmp/chorai-v8-ui-derived/SDKStatCaches.noindex/iphonesimulator27.1-24A94232-35d3147121984ba087c28d913653d626.sdkstatcache -output-file-map /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/arm64/ChoraiPrototypeUITests-OutputFileMap.json -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path /tmp/chorai-v8-ui-derived/ModuleCache.noindex -sdk-module-cache-path /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules -emit-dependencies -emit-module -emit-module-path /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/arm64/ChoraiPrototypeUITests.swiftmodule -serialize-diagnostics -dependency-scan-serialize-diagnostics-path /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/arm64/ChoraiPrototypeUITests-dependency-scan.dia -validate-clang-modules-once -clang-build-session-file /tmp/chorai-v8-ui-derived/ModuleCache.noindex/Session.modulevalidation -Xcc -fmodules-prune-interval\=86400 -Xcc -fmodules-prune-after\=345600 -emit-const-values -const-gather-protocols-list /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/arm64/ChoraiPrototypeUITests_const_extract_protocols.json -Xcc -iquote -Xcc /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/ChoraiPrototypeUITests-generated-files.hmap -Xcc -I/tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/ChoraiPrototypeUITests-own-target-headers.hmap -Xcc -I/tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/ChoraiPrototypeUITests-all-target-headers.hmap -Xcc -iquote -Xcc /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/ChoraiPrototypeUITests-project-headers.hmap -Xcc -I/tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator/include -Xcc -I/tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/DerivedSources-normal/arm64 -Xcc -I/tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/DerivedSources/arm64 -Xcc -I/tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/DerivedSources -emit-objc-header -emit-objc-header-path /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/arm64/ChoraiPrototypeUITests-Swift.h -working-directory /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests -experimental-emit-module-separately -disable-cmo
+
+Ld /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/arm64/Binary/ChoraiPrototypeUITests normal arm64 (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -Xlinker -reproducible -target arm64-apple-ios26.0-simulator -bundle -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.1.sdk -Os -Xlinker -no_warn_duplicate_libraries -L/tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/EagerLinkingTBDs/Debug-iphonesimulator -L/tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator -L/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib -F/tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/EagerLinkingTBDs/Debug-iphonesimulator -F/tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator -iframework /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks -iframework /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.1.sdk/Developer/Library/Frameworks -filelist /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/arm64/ChoraiPrototypeUITests.LinkFileList -Xlinker -rpath -Xlinker @loader_path/Frameworks -Xlinker -dead_strip -Xlinker -object_path_lto -Xlinker /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/arm64/ChoraiPrototypeUITests_lto.o -rdynamic -Xlinker -objc_abi_version -Xlinker 2 -Xlinker -dependency_info -Xlinker /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/arm64/ChoraiPrototypeUITests_dependency_info.dat -fobjc-link-runtime -L/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/iphonesimulator -L/usr/lib/swift -Xlinker -add_ast_path -Xlinker /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/arm64/ChoraiPrototypeUITests.swiftmodule -Xlinker -needed_framework -Xlinker XCTest -framework XCTest -Xlinker -needed-lXCTestSwiftSupport -lXCTestSwiftSupport -o /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/arm64/Binary/ChoraiPrototypeUITests
+
+CreateUniversalBinary /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator/ChoraiPrototypeUITests-Runner.app/PlugIns/ChoraiPrototypeUITests.xctest/ChoraiPrototypeUITests normal arm64\ x86_64 (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/lipo -create /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/arm64/Binary/ChoraiPrototypeUITests /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/x86_64/Binary/ChoraiPrototypeUITests -output /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator/ChoraiPrototypeUITests-Runner.app/PlugIns/ChoraiPrototypeUITests.xctest/ChoraiPrototypeUITests
+
+CopySwiftLibs /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator/ChoraiPrototypeUITests-Runner.app/PlugIns/ChoraiPrototypeUITests.xctest (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests
+    builtin-swiftStdLibTool --copy --verbose --scan-executable /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator/ChoraiPrototypeUITests-Runner.app/PlugIns/ChoraiPrototypeUITests.xctest/ChoraiPrototypeUITests --scan-folder /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator/ChoraiPrototypeUITests-Runner.app/PlugIns/ChoraiPrototypeUITests.xctest/Frameworks --scan-folder /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator/ChoraiPrototypeUITests-Runner.app/PlugIns/ChoraiPrototypeUITests.xctest/PlugIns --scan-folder /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator/ChoraiPrototypeUITests-Runner.app/PlugIns/ChoraiPrototypeUITests.xctest/SystemExtensions --scan-folder /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator/ChoraiPrototypeUITests-Runner.app/PlugIns/ChoraiPrototypeUITests.xctest/Extensions --platform iphonesimulator --toolchain /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --destination /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator/ChoraiPrototypeUITests-Runner.app/PlugIns/ChoraiPrototypeUITests.xctest/Frameworks --strip-bitcode --scan-executable /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/libXCTestSwiftSupport.dylib --strip-bitcode-tool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/bitcode_strip --emit-dependency-info /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/SwiftStdLibToolInputDependencies.dep --filter-for-swift-os
+Ignoring --strip-bitcode because --sign was not passed
+
+ExtractAppIntentsMetadata (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsmetadataprocessor --toolchain-dir /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --module-name ChoraiPrototypeUITests --sdk-root /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.1.sdk --xcode-version 27A9275 --platform-family iOS --deployment-target 26.0 --bundle-identifier com.chorai.prototypeUITests --output /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator/ChoraiPrototypeUITests-Runner.app/PlugIns/ChoraiPrototypeUITests.xctest --target-triple arm64-apple-ios26.0-simulator --target-triple x86_64-apple-ios26.0-simulator --binary-file /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator/ChoraiPrototypeUITests-Runner.app/PlugIns/ChoraiPrototypeUITests.xctest/ChoraiPrototypeUITests --dependency-file /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/arm64/ChoraiPrototypeUITests_dependency_info.dat --dependency-file /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/x86_64/ChoraiPrototypeUITests_dependency_info.dat --stringsdata-file /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/arm64/ExtractedAppShortcutsMetadata.stringsdata --stringsdata-file /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/x86_64/ExtractedAppShortcutsMetadata.stringsdata --source-file-list /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/arm64/ChoraiPrototypeUITests.SwiftFileList --source-file-list /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/x86_64/ChoraiPrototypeUITests.SwiftFileList --metadata-file-list /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/ChoraiPrototypeUITests.DependencyMetadataFileList --static-metadata-file-list /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/ChoraiPrototypeUITests.DependencyStaticMetadataFileList --swift-const-vals-list /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/arm64/ChoraiPrototypeUITests.SwiftConstValuesFileList --swift-const-vals-list /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/Objects-normal/x86_64/ChoraiPrototypeUITests.SwiftConstValuesFileList --compile-time-extraction --deployment-aware-processing --no-app-shortcuts-localization
+2026-10-26 12:06:43.779 appintentsmetadataprocessor[56940:4082343] Starting appintentsmetadataprocessor export
+2026-10-26 12:06:43.786 appintentsmetadataprocessor[56940:4082343] warning: Metadata extraction skipped, no AppIntents.framework dependency found
+
+GenerateDSYMFile /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator/ChoraiPrototypeUITests-Runner.app/PlugIns/ChoraiPrototypeUITests.xctest.dSYM /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator/ChoraiPrototypeUITests-Runner.app/PlugIns/ChoraiPrototypeUITests.xctest/ChoraiPrototypeUITests (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests
+    export PATH\=/Applications/Xcode.app/Contents/SharedFrameworks/SwiftBuild.framework/Versions/A/PlugIns/SWBBuildService.bundle/Contents/PlugIns/SWBUniversalPlatformPlugin.bundle/Contents/Frameworks/SWBUniversalPlatform.framework/Resources:/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin:/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/local/bin:/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/libexec:/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/usr/bin:/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/usr/local/bin:/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/bin:/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/local/bin:/Applications/Xcode.app/Contents/Developer/usr/bin:/Applications/Xcode.app/Contents/Developer/usr/local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/pkg/env/global/bin:/Library/Apple/usr/bin:/Applications/ChatGPT.app/Contents/Resources/codex-cli/codex-path:/Users/didi/.codex/tmp/arg0-macos/codex-arg0CmULCn:/Users/didi/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/Users/didi/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/Applications/ChatGPT.app/Contents/Resources:/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/dsymutil /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator/ChoraiPrototypeUITests-Runner.app/PlugIns/ChoraiPrototypeUITests.xctest/ChoraiPrototypeUITests -o /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator/ChoraiPrototypeUITests-Runner.app/PlugIns/ChoraiPrototypeUITests.xctest.dSYM
+
+AppIntentsSSUTraining (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsnltrainingprocessor --infoplist-path /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator/ChoraiPrototypeUITests-Runner.app/PlugIns/ChoraiPrototypeUITests.xctest/Info.plist --temp-dir-path /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/ssu --bundle-id com.chorai.prototypeUITests --product-path /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator/ChoraiPrototypeUITests-Runner.app/PlugIns/ChoraiPrototypeUITests.xctest --extracted-metadata-path /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator/ChoraiPrototypeUITests-Runner.app/PlugIns/ChoraiPrototypeUITests.xctest/Metadata.appintents --metadata-file-list /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ChoraiPrototypeUITests.build/Debug-iphonesimulator/ChoraiPrototypeUITests.build/ChoraiPrototypeUITests.DependencyMetadataFileList --source-file /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator/ChoraiPrototypeUITests-Runner.app/PlugIns/ChoraiPrototypeUITests.xctest/Info.plist --archive-ssu-assets
+2026-10-26 12:06:43.811 appintentsnltrainingprocessor[56942:4082346] Parsing options for appintentsnltrainingprocessor
+2026-10-26 12:06:43.812 appintentsnltrainingprocessor[56942:4082346] Starting AppIntents SSU YAML Generation
+2026-10-26 12:06:43.813 appintentsnltrainingprocessor[56942:4082346] No AppShortcuts found - Skipping.
+
+MkDir /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator/ChoraiPrototypeUITests-Runner.app (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests
+    /bin/mkdir -p /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator/ChoraiPrototypeUITests-Runner.app
+
+Copy /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator/ChoraiPrototypeUITests-Runner.app/PkgInfo /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Xcode/Agents/XCTRunner.app/PkgInfo (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -strip-unsigned-binaries -strip-deterministic -strip-tool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/strip -resolve-src-symlinks /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Xcode/Agents/XCTRunner.app/PkgInfo /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator/ChoraiPrototypeUITests-Runner.app
+
+CopyPlistFile /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator/ChoraiPrototypeUITests-Runner.app/Info.plist /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Xcode/Agents/XCTRunner.app/Info.plist (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests
+    builtin-copyPlist --validate --convert xml1 --macro-expansion WRAPPEDPRODUCTNAME ChoraiPrototypeUITests-Runner --macro-expansion WRAPPEDPRODUCTBUNDLEIDENTIFIER com.chorai.prototypeUITests.xctrunner --macro-expansion TESTPRODUCTNAME ChoraiPrototypeUITests --macro-expansion TESTPRODUCTBUNDLEIDENTIFIER com.chorai.prototypeUITests --copy-value UIDeviceFamily /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator/ChoraiPrototypeUITests-Runner.app/PlugIns/ChoraiPrototypeUITests.xctest/Info.plist --outdir /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator/ChoraiPrototypeUITests-Runner.app -- /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Xcode/Agents/XCTRunner.app/Info.plist
+
+CopyAndPreserveArchs /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator/ChoraiPrototypeUITests-Runner.app/ChoraiPrototypeUITests-Runner (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/lipo /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Xcode/Agents/XCTRunner.app/XCTRunner -output /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator/ChoraiPrototypeUITests-Runner.app/ChoraiPrototypeUITests-Runner -extract arm64 -extract x86_64
+
+RegisterExecutionPolicyException /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator/ChoraiPrototypeUITests-Runner.app/PlugIns/ChoraiPrototypeUITests.xctest (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests
+    builtin-RegisterExecutionPolicyException /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator/ChoraiPrototypeUITests-Runner.app/PlugIns/ChoraiPrototypeUITests.xctest
+
+Touch /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator/ChoraiPrototypeUITests-Runner.app/PlugIns/ChoraiPrototypeUITests.xctest (in target 'ChoraiPrototypeUITests' from project 'ChoraiPrototypeUITests')
+    cd /Users/didi/Documents/ChatGPT/Chorai_IOS_Frontend/docs/design/2026-10-21-native-visual-reform/revisions/v8-grid-brush/prototype/UITests
+    /usr/bin/touch -c /tmp/chorai-v8-ui-derived/Build/Products/Debug-iphonesimulator/ChoraiPrototypeUITests-Runner.app/PlugIns/ChoraiPrototypeUITests.xctest
+
+PruneExplicitPrecompiledModules /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/ExplicitPrecompiledModules
+
+PruneExplicitPrecompiledModules /tmp/chorai-v8-ui-derived/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules
+
+PruneExplicitPrecompiledModules /tmp/chorai-v8-ui-derived/SDKExplicitPrecompiledModules
+
+2026-10-26 12:06:44.435 xcodebuild[56758:4081562] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-10-26 12:06:45.766997+0800 ChoraiPrototypeUITests-Runner[56978:4082662] [Default] Running tests...
+    t =      nans Interface orientation changed to Portrait
+Test Suite 'Selected tests' started at 2026-10-26 12:06:46.682.
+Test Suite 'ChoraiPrototypeUITests.xctest' started at 2026-10-26 12:06:46.682.
+Test Suite 'CardLevelJourneyTests' started at 2026-10-26 12:06:46.682.
+Test Case '-[ChoraiPrototypeUITests.CardLevelJourneyTests testExplicitDetailCollectionUpdatesItsGridCardAndSharedCollection]' started.
+    t =     0.00s Start Test at 2026-10-26 12:06:46.683
+    t =     0.12s Set Up
+    t =     0.13s Open com.chorai.nativeprototype.v8
+    t =     0.13s     Launch com.chorai.nativeprototype.v8
+    t =     0.13s         Terminate com.chorai.nativeprototype.v8:55974
+objc[56978]: Class UIAccessibilityLoaderWebShared is implemented in both /Library/Developer/CoreSimulator/Volumes/iOS_23F73/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebCore.axbundle/WebCore (0x109df8310) and /Library/Developer/CoreSimulator/Volumes/iOS_23F73/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebKit.axbundle/WebKit (0x109e70398). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+    t =     1.29s         Setting up automation session
+    t =     1.77s         Wait for com.chorai.nativeprototype.v8 to idle
+    t =     3.61s Waiting 3.0s for "journey.levels.collect.basic" Button to exist
+    t =     4.63s     Checking `Expect predicate `existsNoRetry == 1` for object "journey.levels.collect.basic" Button`
+    t =     4.63s         Checking existence of `"journey.levels.collect.basic" Button`
+    t =     4.71s Checking existence of `"journey.levels.collect.basic" Button`
+    t =     4.75s Find the "journey.levels.collect.basic" Button
+    t =     4.79s Find the "journey.levels.collect.basic" Button
+    t =     4.82s Waiting 3.0s for "journey.levels.open.basic" Button to exist
+    t =     5.86s     Checking `Expect predicate `existsNoRetry == 1` for object "journey.levels.open.basic" Button`
+    t =     5.86s         Checking existence of `"journey.levels.open.basic" Button`
+    t =     5.90s Checking existence of `"journey.levels.open.basic" Button`
+    t =     5.93s Find the "journey.levels.open.basic" Button
+    t =     5.96s Checking existence of `"journey.levels.open.basic" Button`
+    t =     5.98s Find the "journey.levels.open.basic" Button
+    t =     6.01s Tap "journey.levels.open.basic" Button
+    t =     6.01s     Wait for com.chorai.nativeprototype.v8 to idle
+    t =     6.02s     Find the "journey.levels.open.basic" Button
+    t =     6.04s     Check for interrupting elements affecting "journey.levels.open.basic" Button
+    t =     6.08s     Synthesize event
+    t =     6.48s     Wait for com.chorai.nativeprototype.v8 to idle
+    t =     6.89s Waiting 4.0s for "journey.levels.reader.card.basic" Any to exist
+    t =     7.92s     Checking `Expect predicate `existsNoRetry == 1` for object "journey.levels.reader.card.basic" Any`
+    t =     7.92s         Checking existence of `"journey.levels.reader.card.basic" Any`
+    t =     7.99s Checking existence of `"journey.levels.grade.basic" Any`
+    t =     8.04s Find the "journey.levels.grade.basic" Any
+    t =     8.09s Find the "journey.levels.grade.basic" Other
+    t =     8.14s Get all elements bound by index for: Descendants matching type StaticText
+    t =     8.19s Find the StaticText (Element at index 0)
+    t =     8.24s Find the StaticText (Element at index 1)
+    t =     8.29s Waiting 3.0s for "journey.levels.reader.collect" Button to exist
+    t =     9.32s     Checking `Expect predicate `existsNoRetry == 1` for object "journey.levels.reader.collect" Button`
+    t =     9.32s         Checking existence of `"journey.levels.reader.collect" Button`
+    t =     9.37s Checking existence of `"journey.levels.reader.collect" Button`
+    t =     9.40s Find the "journey.levels.reader.collect" Button
+    t =     9.43s Checking existence of `"journey.levels.reader.collect" Button`
+    t =     9.46s Find the "journey.levels.reader.collect" Button
+    t =     9.50s Find the Application 'com.chorai.nativeprototype.v8'
+    t =     9.52s Press Application 'com.chorai.nativeprototype.v8'[0.92, 0.76] for 0.1 seconds, then drag to Application 'com.chorai.nativeprototype.v8'[0.92, 0.30] with velocity of 500.00 pixels per second, and then hold for 0.0 seconds 
+    t =     9.52s     Wait for com.chorai.nativeprototype.v8 to idle
+    t =     9.53s     Find the Application 'com.chorai.nativeprototype.v8'
+    t =     9.56s     Check for interrupting elements affecting "Chorai Journeys V8" Application
+    t =     9.59s     Synthesize event
+    t =     9.59s         Find the Application 'com.chorai.nativeprototype.v8'
+    t =     9.62s         Find the Application 'com.chorai.nativeprototype.v8'
+    t =     9.65s         Find the Application 'com.chorai.nativeprototype.v8'
+    t =     9.68s         Find the Application 'com.chorai.nativeprototype.v8'
+    t =     9.71s         Find the Application 'com.chorai.nativeprototype.v8'
+    t =    10.85s     Wait for com.chorai.nativeprototype.v8 to idle
+    t =    11.26s Checking existence of `"journey.levels.reader.collect" Button`
+    t =    11.30s Find the "journey.levels.reader.collect" Button
+    t =    11.33s Find the "journey.levels.reader.collect" Button
+    t =    11.37s Waiting 3.0s for "journey.levels.reader.collect" Button to exist
+    t =    12.40s     Checking `Expect predicate `existsNoRetry == 1` for object "journey.levels.reader.collect" Button`
+    t =    12.41s         Checking existence of `"journey.levels.reader.collect" Button`
+    t =    12.45s Checking existence of `"journey.levels.reader.collect" Button`
+    t =    12.48s Find the "journey.levels.reader.collect" Button
+    t =    12.51s Checking existence of `"journey.levels.reader.collect" Button`
+    t =    12.54s Find the "journey.levels.reader.collect" Button
+    t =    12.57s Tap "journey.levels.reader.collect" Button
+    t =    12.57s     Wait for com.chorai.nativeprototype.v8 to idle
+    t =    12.58s     Find the "journey.levels.reader.collect" Button
+    t =    12.61s     Check for interrupting elements affecting "journey.levels.reader.collect" Button
+    t =    12.64s     Synthesize event
+    t =    12.93s     Wait for com.chorai.nativeprototype.v8 to idle
+    t =    13.65s Find the "journey.levels.reader.collect" Button
+    t =    13.69s Waiting 3.0s for "journey.levels.reader.close" Button to exist
+    t =    14.71s     Checking `Expect predicate `existsNoRetry == 1` for object "journey.levels.reader.close" Button`
+    t =    14.72s         Checking existence of `"journey.levels.reader.close" Button`
+    t =    14.75s Checking existence of `"journey.levels.reader.close" Button`
+    t =    14.77s Find the "journey.levels.reader.close" Button
+    t =    14.79s Checking existence of `"journey.levels.reader.close" Button`
+    t =    14.81s Find the "journey.levels.reader.close" Button
+    t =    14.83s Tap "journey.levels.reader.close" Button
+    t =    14.83s     Wait for com.chorai.nativeprototype.v8 to idle
+    t =    14.84s     Find the "journey.levels.reader.close" Button
+    t =    14.85s     Check for interrupting elements affecting "journey.levels.reader.close" Button
+    t =    14.89s     Synthesize event
+    t =    15.18s     Wait for com.chorai.nativeprototype.v8 to idle
+    t =    15.95s Waiting 3.0s for "journey.levels.collect.basic" Button to exist
+    t =    16.98s     Checking `Expect predicate `existsNoRetry == 1` for object "journey.levels.collect.basic" Button`
+    t =    16.98s         Checking existence of `"journey.levels.collect.basic" Button`
+    t =    17.02s Checking existence of `"journey.levels.collect.basic" Button`
+    t =    17.04s Find the "journey.levels.collect.basic" Button
+    t =    17.07s Find the "journey.levels.collect.basic" Button
+    t =    17.10s Checking existence of `"journey.levels.grade.basic" Any`
+    t =    17.16s Waiting 3.0s for "journey.levels.close" Button to exist
+    t =    18.19s     Checking `Expect predicate `existsNoRetry == 1` for object "journey.levels.close" Button`
+    t =    18.19s         Checking existence of `"journey.levels.close" Button`
+    t =    18.21s Checking existence of `"journey.levels.close" Button`
+    t =    18.22s Find the "journey.levels.close" Button
+    t =    18.23s Checking existence of `"journey.levels.close" Button`
+    t =    18.24s Find the "journey.levels.close" Button
+    t =    18.26s Tap "journey.levels.close" Button
+    t =    18.26s     Wait for com.chorai.nativeprototype.v8 to idle
+    t =    18.26s     Find the "journey.levels.close" Button
+    t =    18.27s     Check for interrupting elements affecting "journey.levels.close" Button
+    t =    18.29s     Synthesize event
+    t =    18.58s     Wait for com.chorai.nativeprototype.v8 to idle
+    t =    19.42s Waiting 5.0s for "journey.lab.notes" Any to exist
+    t =    20.44s     Checking `Expect predicate `existsNoRetry == 1` for object "journey.lab.notes" Any`
+    t =    20.44s         Checking existence of `"journey.lab.notes" Any`
+    t =    20.48s Find the "journey.lab.notes" Any
+    t =    20.51s Find the "journey.lab.notes" StaticText
+    t =    20.54s Get all elements bound by index for: Descendants matching type StaticText
+    t =    20.58s Waiting 5.0s for "journey.lab.collected" Any to exist
+    t =    21.60s     Checking `Expect predicate `existsNoRetry == 1` for object "journey.lab.collected" Any`
+    t =    21.61s         Checking existence of `"journey.lab.collected" Any`
+    t =    21.65s Find the "journey.lab.collected" Any
+    t =    21.68s Find the "journey.lab.collected" StaticText
+    t =    21.71s Get all elements bound by index for: Descendants matching type StaticText
+    t =    21.74s Tear Down
+    t =    21.74s     Terminate com.chorai.nativeprototype.v8:56994
+Test Case '-[ChoraiPrototypeUITests.CardLevelJourneyTests testExplicitDetailCollectionUpdatesItsGridCardAndSharedCollection]' passed (23.092 seconds).
+Test Case '-[ChoraiPrototypeUITests.CardLevelJourneyTests testGrowthKeepsThreadStageSeparateFromItsSixDimensions]' started.
+    t =     0.00s Start Test at 2026-10-26 12:07:09.775
+    t =     0.02s Set Up
+    t =     0.02s Open com.chorai.nativeprototype.v8
+    t =     0.02s     Launch com.chorai.nativeprototype.v8
+    t =     0.17s         Setting up automation session
+    t =     0.64s         Wait for com.chorai.nativeprototype.v8 to idle
+    t =     2.11s Waiting 3.0s for "journey.levels.growth.stage" Any to exist
+    t =     3.15s     Checking `Expect predicate `existsNoRetry == 1` for object "journey.levels.growth.stage" Any`
+    t =     3.15s         Checking existence of `"journey.levels.growth.stage" Any`
+    t =     3.26s Checking existence of `"journey.levels.growth.stage" Any`
+    t =     3.32s Find the "journey.levels.growth.stage" Any
+    t =     3.37s Checking existence of `"journey.levels.growth.stage" Other`
+    t =     3.42s Find the "journey.levels.growth.stage" Other
+    t =     3.47s Find the "journey.levels.growth.stage" Other
+    t =     3.51s Get all elements bound by index for: Descendants matching type StaticText
+    t =     3.56s Find the StaticText (Element at index 0)
+    t =     3.61s Find the "journey.levels.growth.stage" Other
+    t =     3.66s Find the "journey.levels.growth.stage" Other
+    t =     3.71s Get all elements bound by index for: Descendants matching type StaticText
+    t =     3.76s Find the StaticText (Element at index 0)
+    t =     3.81s Waiting 3.0s for "journey.levels.growth.curiosity" Any to exist
+    t =     4.85s     Checking `Expect predicate `existsNoRetry == 1` for object "journey.levels.growth.curiosity" Any`
+    t =     4.85s         Checking existence of `"journey.levels.growth.curiosity" Any`
+    t =     4.92s Checking existence of `"journey.levels.growth.curiosity" Any`
+    t =     4.97s Find the "journey.levels.growth.curiosity" Any
+    t =     5.02s Checking existence of `"journey.levels.growth.curiosity" Other`
+    t =     5.07s Find the "journey.levels.growth.curiosity" Other
+    t =     5.11s Find the "journey.levels.growth.curiosity" Other
+    t =     5.16s Get all elements bound by index for: Descendants matching type StaticText
+    t =     5.21s Find the StaticText (Element at index 0)
+    t =     5.26s Find the StaticText (Element at index 1)
+    t =     5.31s Waiting 3.0s for "journey.levels.growth.insight" Any to exist
+    t =     6.35s     Checking `Expect predicate `existsNoRetry == 1` for object "journey.levels.growth.insight" Any`
+    t =     6.35s         Checking existence of `"journey.levels.growth.insight" Any`
+    t =     6.42s Checking existence of `"journey.levels.growth.insight" Any`
+    t =     6.47s Find the "journey.levels.growth.insight" Any
+    t =     6.52s Checking existence of `"journey.levels.growth.insight" Other`
+    t =     6.57s Find the "journey.levels.growth.insight" Other
+    t =     6.61s Find the "journey.levels.growth.insight" Other
+    t =     6.66s Get all elements bound by index for: Descendants matching type StaticText
+    t =     6.71s Find the StaticText (Element at index 0)
+    t =     6.76s Find the StaticText (Element at index 1)
+    t =     6.81s Waiting 3.0s for "journey.levels.growth.creativity" Any to exist
+    t =     7.84s     Checking `Expect predicate `existsNoRetry == 1` for object "journey.levels.growth.creativity" Any`
+    t =     7.84s         Checking existence of `"journey.levels.growth.creativity" Any`
+    t =     7.91s Checking existence of `"journey.levels.growth.creativity" Any`
+    t =     7.96s Find the "journey.levels.growth.creativity" Any
+    t =     8.01s Checking existence of `"journey.levels.growth.creativity" Other`
+    t =     8.06s Find the "journey.levels.growth.creativity" Other
+    t =     8.11s Find the "journey.levels.growth.creativity" Other
+    t =     8.16s Get all elements bound by index for: Descendants matching type StaticText
+    t =     8.21s Find the StaticText (Element at index 0)
+    t =     8.25s Find the StaticText (Element at index 1)
+    t =     8.30s Waiting 3.0s for "journey.levels.growth.empathy" Any to exist
+    t =     9.32s     Checking `Expect predicate `existsNoRetry == 1` for object "journey.levels.growth.empathy" Any`
+    t =     9.32s         Checking existence of `"journey.levels.growth.empathy" Any`
+    t =     9.38s Checking existence of `"journey.levels.growth.empathy" Any`
+    t =     9.43s Find the "journey.levels.growth.empathy" Any
+    t =     9.48s Checking existence of `"journey.levels.growth.empathy" Other`
+    t =     9.52s Find the "journey.levels.growth.empathy" Other
+    t =     9.57s Find the "journey.levels.growth.empathy" Other
+    t =     9.61s Get all elements bound by index for: Descendants matching type StaticText
+    t =     9.66s Find the StaticText (Element at index 0)
+    t =     9.71s Find the StaticText (Element at index 1)
+    t =     9.75s Waiting 3.0s for "journey.levels.growth.judgment" Any to exist
+    t =    10.78s     Checking `Expect predicate `existsNoRetry == 1` for object "journey.levels.growth.judgment" Any`
+    t =    10.78s         Checking existence of `"journey.levels.growth.judgment" Any`
+    t =    10.87s Checking existence of `"journey.levels.growth.judgment" Any`
+    t =    10.92s Find the "journey.levels.growth.judgment" Any
+    t =    10.97s Checking existence of `"journey.levels.growth.judgment" Other`
+    t =    11.02s Find the "journey.levels.growth.judgment" Other
+    t =    11.07s Find the "journey.levels.growth.judgment" Other
+    t =    11.12s Get all elements bound by index for: Descendants matching type StaticText
+    t =    11.17s Find the StaticText (Element at index 0)
+    t =    11.22s Find the StaticText (Element at index 1)
+    t =    11.26s Waiting 3.0s for "journey.levels.growth.resonance" Any to exist
+    t =    12.29s     Checking `Expect predicate `existsNoRetry == 1` for object "journey.levels.growth.resonance" Any`
+    t =    12.29s         Checking existence of `"journey.levels.growth.resonance" Any`
+    t =    12.35s Checking existence of `"journey.levels.growth.resonance" Any`
+    t =    12.40s Find the "journey.levels.growth.resonance" Any
+    t =    12.45s Checking existence of `"journey.levels.growth.resonance" Other`
+    t =    12.50s Find the "journey.levels.growth.resonance" Other
+    t =    12.54s Find the "journey.levels.growth.resonance" Other
+    t =    12.59s Get all elements bound by index for: Descendants matching type StaticText
+    t =    12.64s Find the StaticText (Element at index 0)
+    t =    12.70s Find the StaticText (Element at index 1)
+    t =    12.75s Checking existence of `"journey.levels.demo" Any`
+    t =    12.78s Waiting 3.0s for "journey.levels.close" Button to exist
+    t =    13.80s     Checking `Expect predicate `existsNoRetry == 1` for object "journey.levels.close" Button`
+    t =    13.80s         Checking existence of `"journey.levels.close" Button`
+    t =    13.81s Checking existence of `"journey.levels.close" Button`
+    t =    13.82s Find the "journey.levels.close" Button
+    t =    13.84s Checking existence of `"journey.levels.close" Button`
+    t =    13.85s Find the "journey.levels.close" Button
+    t =    13.87s Tap "journey.levels.close" Button
+    t =    13.87s     Wait for com.chorai.nativeprototype.v8 to idle
+    t =    13.88s     Find the "journey.levels.close" Button
+    t =    13.89s     Check for interrupting elements affecting "journey.levels.close" Button
+    t =    13.92s     Synthesize event
+    t =    14.20s     Wait for com.chorai.nativeprototype.v8 to idle
+    t =    15.04s Waiting 5.0s for "journey.lab.notes" Any to exist
+    t =    16.07s     Checking `Expect predicate `existsNoRetry == 1` for object "journey.lab.notes" Any`
+    t =    16.07s         Checking existence of `"journey.lab.notes" Any`
+    t =    16.13s Find the "journey.lab.notes" Any
+    t =    16.16s Find the "journey.lab.notes" StaticText
+    t =    16.19s Get all elements bound by index for: Descendants matching type StaticText
+    t =    16.23s Waiting 5.0s for "journey.lab.collected" Any to exist
+    t =    17.24s     Checking `Expect predicate `existsNoRetry == 1` for object "journey.lab.collected" Any`
+    t =    17.24s         Checking existence of `"journey.lab.collected" Any`
+    t =    17.30s Find the "journey.lab.collected" Any
+    t =    17.33s Find the "journey.lab.collected" StaticText
+    t =    17.36s Get all elements bound by index for: Descendants matching type StaticText
+    t =    17.40s Tear Down
+    t =    17.40s     Terminate com.chorai.nativeprototype.v8:57077
+Test Case '-[ChoraiPrototypeUITests.CardLevelJourneyTests testGrowthKeepsThreadStageSeparateFromItsSixDimensions]' passed (18.448 seconds).
+Test Case '-[ChoraiPrototypeUITests.CardLevelJourneyTests testLevelGridReaderReturnsToTheSameCardWithoutChangingCollection]' started.
+    t =     0.00s Start Test at 2026-10-26 12:07:28.224
+    t =     0.02s Set Up
+    t =     0.03s Open com.chorai.nativeprototype.v8
+    t =     0.03s     Launch com.chorai.nativeprototype.v8
+    t =     0.12s         Setting up automation session
+    t =     0.51s         Wait for com.chorai.nativeprototype.v8 to idle
+    t =     1.94s Waiting 3.0s for "journey.levels.open.basic" Button to exist
+    t =     2.98s     Checking `Expect predicate `existsNoRetry == 1` for object "journey.levels.open.basic" Button`
+    t =     2.98s         Checking existence of `"journey.levels.open.basic" Button`
+    t =     3.07s Checking existence of `"journey.levels.open.basic" Button`
+    t =     3.10s Find the "journey.levels.open.basic" Button
+    t =     3.13s Checking existence of `"journey.levels.open.basic" Button`
+    t =     3.16s Waiting 3.0s for "journey.levels.collect.basic" Button to exist
+    t =     4.16s     Checking `Expect predicate `existsNoRetry == 1` for object "journey.levels.collect.basic" Button`
+    t =     4.16s         Checking existence of `"journey.levels.collect.basic" Button`
+    t =     4.22s Checking existence of `"journey.levels.collect.basic" Button`
+    t =     4.25s Find the "journey.levels.collect.basic" Button
+    t =     4.28s Find the "journey.levels.collect.basic" Button
+    t =     4.31s Waiting 3.0s for "journey.levels.open.basic" Button to exist
+    t =     5.34s     Checking `Expect predicate `existsNoRetry == 1` for object "journey.levels.open.basic" Button`
+    t =     5.34s         Checking existence of `"journey.levels.open.basic" Button`
+    t =     5.38s Checking existence of `"journey.levels.open.basic" Button`
+    t =     5.40s Find the "journey.levels.open.basic" Button
+    t =     5.43s Find the "journey.levels.open.basic" Button
+    t =     5.46s Waiting 3.0s for "journey.levels.open.basic" Button to exist
+    t =     6.48s     Checking `Expect predicate `existsNoRetry == 1` for object "journey.levels.open.basic" Button`
+    t =     6.48s         Checking existence of `"journey.levels.open.basic" Button`
+    t =     6.53s Checking existence of `"journey.levels.open.basic" Button`
+    t =     6.56s Find the "journey.levels.open.basic" Button
+    t =     6.59s Checking existence of `"journey.levels.open.basic" Button`
+    t =     6.62s Find the "journey.levels.open.basic" Button
+    t =     6.65s Tap "journey.levels.open.basic" Button
+    t =     6.65s     Wait for com.chorai.nativeprototype.v8 to idle
+    t =     6.65s     Find the "journey.levels.open.basic" Button
+    t =     6.68s     Check for interrupting elements affecting "journey.levels.open.basic" Button
+    t =     6.71s     Synthesize event
+    t =     7.00s     Wait for com.chorai.nativeprototype.v8 to idle
+    t =     7.69s Waiting 4.0s for "journey.levels.reader" Any to exist
+    t =     8.72s     Checking `Expect predicate `existsNoRetry == 1` for object "journey.levels.reader" Any`
+    t =     8.72s         Checking existence of `"journey.levels.reader" Any`
+    t =     8.79s Waiting 4.0s for "journey.levels.reader.card.basic" Any to exist
+    t =     9.82s     Checking `Expect predicate `existsNoRetry == 1` for object "journey.levels.reader.card.basic" Any`
+    t =     9.82s         Checking existence of `"journey.levels.reader.card.basic" Any`
+    t =     9.89s Checking existence of `"journey.levels.grade.basic" Any`
+    t =     9.94s Find the "journey.levels.grade.basic" Any
+    t =    10.00s Find the "journey.levels.grade.basic" Other
+    t =    10.05s Get all elements bound by index for: Descendants matching type StaticText
+    t =    10.11s Find the StaticText (Element at index 0)
+    t =    10.17s Find the StaticText (Element at index 1)
+    t =    10.22s Checking existence of `"Mira Chen" StaticText`
+    t =    10.25s Waiting 3.0s for "journey.levels.reader.close" Button to exist
+    t =    11.28s     Checking `Expect predicate `existsNoRetry == 1` for object "journey.levels.reader.close" Button`
+    t =    11.28s         Checking existence of `"journey.levels.reader.close" Button`
+    t =    11.32s Checking existence of `"journey.levels.reader.close" Button`
+    t =    11.34s Find the "journey.levels.reader.close" Button
+    t =    11.37s Checking existence of `"journey.levels.reader.close" Button`
+    t =    11.39s Find the "journey.levels.reader.close" Button
+    t =    11.41s Tap "journey.levels.reader.close" Button
+    t =    11.41s     Wait for com.chorai.nativeprototype.v8 to idle
+    t =    11.41s     Find the "journey.levels.reader.close" Button
+    t =    11.43s     Check for interrupting elements affecting "journey.levels.reader.close" Button
+    t =    11.46s     Synthesize event
+    t =    11.75s     Wait for com.chorai.nativeprototype.v8 to idle
+    t =    12.52s Waiting 4.0s for "journey.levels.open.basic" Button to exist
+    t =    13.56s     Checking `Expect predicate `existsNoRetry == 1` for object "journey.levels.open.basic" Button`
+    t =    13.56s         Checking existence of `"journey.levels.open.basic" Button`
+    t =    13.62s Find the "journey.levels.open.basic" Button
+    t =    13.66s Find the "journey.levels.open.basic" Button
+    t =    13.68s Find the "journey.levels.collect.basic" Button
+    t =    13.71s Tear Down
+    t =    13.71s     Terminate com.chorai.nativeprototype.v8:57171
+Test Case '-[ChoraiPrototypeUITests.CardLevelJourneyTests testLevelGridReaderReturnsToTheSameCardWithoutChangingCollection]' passed (14.835 seconds).
+Test Case '-[ChoraiPrototypeUITests.CardLevelJourneyTests testNativeLevelGuideNamesAllSixLevelsAndChoosingPreviewDoesNotCreateContent]' started.
+    t =     0.00s Start Test at 2026-10-26 12:07:43.061
+    t =     0.02s Set Up
+    t =     0.02s Open com.chorai.nativeprototype.v8
+    t =     0.02s     Launch com.chorai.nativeprototype.v8
+    t =     0.11s         Setting up automation session
+    t =     0.52s         Wait for com.chorai.nativeprototype.v8 to idle
+    t =     1.91s Waiting 5.0s for "journey.levels.grade.basic" Any to exist
+    t =     2.94s     Checking `Expect predicate `existsNoRetry == 1` for object "journey.levels.grade.basic" Any`
+    t =     2.94s         Checking existence of `"journey.levels.grade.basic" Any`
+    t =     3.05s Waiting 3.0s for "journey.levels.about" Button to exist
+    t =     4.06s     Checking `Expect predicate `existsNoRetry == 1` for object "journey.levels.about" Button`
+    t =     4.06s         Checking existence of `"journey.levels.about" Button`
+    t =     4.11s Checking existence of `"journey.levels.about" Button`
+    t =     4.14s Find the "journey.levels.about" Button
+    t =     4.16s Checking existence of `"journey.levels.about" Button`
+    t =     4.18s Find the "journey.levels.about" Button
+    t =     4.21s Tap "journey.levels.about" Button
+    t =     4.21s     Wait for com.chorai.nativeprototype.v8 to idle
+    t =     4.21s     Find the "journey.levels.about" Button
+    t =     4.23s     Check for interrupting elements affecting "journey.levels.about" Button
+    t =     4.26s     Synthesize event
+    t =     4.55s     Wait for com.chorai.nativeprototype.v8 to idle
+    t =     5.00s Waiting 3.0s for "journey.levels.select.basic" Button to exist
+    t =     6.02s     Checking `Expect predicate `existsNoRetry == 1` for object "journey.levels.select.basic" Button`
+    t =     6.02s         Checking existence of `"journey.levels.select.basic" Button`
+    t =     6.08s Checking existence of `"journey.levels.select.basic" Button`
+    t =     6.12s Find the "journey.levels.select.basic" Button
+    t =     6.16s Checking existence of `"journey.levels.select.basic" Button`
+    t =     6.20s Find the "journey.levels.select.basic" Button
+    t =     6.24s Find the "journey.levels.select.basic" Button
+    t =     6.28s Get all elements bound by index for: Descendants matching type StaticText
+    t =     6.33s Find the StaticText (Element at index 0)
+    t =     6.37s Find the StaticText (Element at index 1)
+    t =     6.42s Find the StaticText (Element at index 2)
+    t =     6.47s Waiting 3.0s for "journey.levels.select.notable" Button to exist
+    t =     7.49s     Checking `Expect predicate `existsNoRetry == 1` for object "journey.levels.select.notable" Button`
+    t =     7.49s         Checking existence of `"journey.levels.select.notable" Button`
+    t =     7.56s Checking existence of `"journey.levels.select.notable" Button`
+    t =     7.60s Find the "journey.levels.select.notable" Button
+    t =     7.65s Checking existence of `"journey.levels.select.notable" Button`
+    t =     7.69s Find the "journey.levels.select.notable" Button
+    t =     7.74s Find the "journey.levels.select.notable" Button
+    t =     7.78s Get all elements bound by index for: Descendants matching type StaticText
+    t =     7.82s Find the StaticText (Element at index 0)
+    t =     7.87s Find the StaticText (Element at index 1)
+    t =     7.91s Find the StaticText (Element at index 2)
+    t =     7.96s Waiting 3.0s for "journey.levels.select.valuable" Button to exist
+    t =     8.98s     Checking `Expect predicate `existsNoRetry == 1` for object "journey.levels.select.valuable" Button`
+    t =     8.98s         Checking existence of `"journey.levels.select.valuable" Button`
+    t =     9.07s Checking existence of `"journey.levels.select.valuable" Button`
+    t =     9.13s Find the "journey.levels.select.valuable" Button
+    t =     9.18s Checking existence of `"journey.levels.select.valuable" Button`
+    t =     9.22s Find the "journey.levels.select.valuable" Button
+    t =     9.26s Find the "journey.levels.select.valuable" Button
+    t =     9.31s Get all elements bound by index for: Descendants matching type StaticText
+    t =     9.36s Find the StaticText (Element at index 0)
+    t =     9.40s Find the StaticText (Element at index 1)
+    t =     9.45s Find the StaticText (Element at index 2)
+    t =     9.49s Waiting 3.0s for "journey.levels.select.significant" Button to exist
+    t =    10.50s     Checking `Expect predicate `existsNoRetry == 1` for object "journey.levels.select.significant" Button`
+    t =    10.50s         Checking existence of `"journey.levels.select.significant" Button`
+    t =    10.57s Checking existence of `"journey.levels.select.significant" Button`
+    t =    10.61s Find the "journey.levels.select.significant" Button
+    t =    10.66s Checking existence of `"journey.levels.select.significant" Button`
+    t =    10.71s Find the "journey.levels.select.significant" Button
+    t =    10.75s Find the "journey.levels.select.significant" Button
+    t =    10.80s Get all elements bound by index for: Descendants matching type StaticText
+    t =    10.86s Find the StaticText (Element at index 0)
+    t =    10.91s Find the StaticText (Element at index 1)
+    t =    10.96s Find the StaticText (Element at index 2)
+    t =    11.01s Waiting 3.0s for "journey.levels.select.exceptional" Button to exist
+    t =    12.04s     Checking `Expect predicate `existsNoRetry == 1` for object "journey.levels.select.exceptional" Button`
+    t =    12.05s         Checking existence of `"journey.levels.select.exceptional" Button`
+    t =    12.12s Checking existence of `"journey.levels.select.exceptional" Button`
+    t =    12.16s Find the "journey.levels.select.exceptional" Button
+    t =    12.21s Checking existence of `"journey.levels.select.exceptional" Button`
+    t =    12.26s Find the "journey.levels.select.exceptional" Button
+    t =    12.30s Find the "journey.levels.select.exceptional" Button
+    t =    12.35s Get all elements bound by index for: Descendants matching type StaticText
+    t =    12.39s Find the StaticText (Element at index 0)
+    t =    12.44s Find the StaticText (Element at index 1)
+    t =    12.49s Find the StaticText (Element at index 2)
+    t =    12.54s Waiting 3.0s for "journey.levels.select.definitive" Button to exist
+    t =    13.56s     Checking `Expect predicate `existsNoRetry == 1` for object "journey.levels.select.definitive" Button`
+    t =    13.56s         Checking existence of `"journey.levels.select.definitive" Button`
+    t =    13.63s Checking existence of `"journey.levels.select.definitive" Button`
+    t =    13.67s Find the "journey.levels.select.definitive" Button
+    t =    13.73s Checking existence of `"journey.levels.select.definitive" Button`
+    t =    13.77s Find the "journey.levels.select.definitive" Button
+    t =    13.82s Find the "journey.levels.select.definitive" Button
+    t =    13.86s Get all elements bound by index for: Descendants matching type StaticText
+    t =    13.91s Find the StaticText (Element at index 0)
+    t =    13.96s Find the StaticText (Element at index 1)
+    t =    14.00s Find the StaticText (Element at index 2)
+    t =    14.05s Waiting 3.0s for "journey.levels.select.exceptional" Button to exist
+    t =    15.07s     Checking `Expect predicate `existsNoRetry == 1` for object "journey.levels.select.exceptional" Button`
+    t =    15.07s         Checking existence of `"journey.levels.select.exceptional" Button`
+    t =    15.12s Checking existence of `"journey.levels.select.exceptional" Button`
+    t =    15.16s Find the "journey.levels.select.exceptional" Button
+    t =    15.21s Checking existence of `"journey.levels.select.exceptional" Button`
+    t =    15.25s Find the "journey.levels.select.exceptional" Button
+    t =    15.30s Tap "journey.levels.select.exceptional" Button
+    t =    15.30s     Wait for com.chorai.nativeprototype.v8 to idle
+    t =    15.30s     Find the "journey.levels.select.exceptional" Button
+    t =    15.34s     Check for interrupting elements affecting "journey.levels.select.exceptional" Button
+    t =    15.38s     Synthesize event
+    t =    15.67s     Wait for com.chorai.nativeprototype.v8 to idle
+    t =    16.02s Waiting 5.0s for "journey.levels.grade.exceptional" Any to exist
+    t =    17.05s     Checking `Expect predicate `existsNoRetry == 1` for object "journey.levels.grade.exceptional" Any`
+    t =    17.05s         Checking existence of `"journey.levels.grade.exceptional" Any`
+    t =    17.13s Checking existence of `"journey.levels.guide.close" Button`
+    t =    17.16s Waiting 3.0s for "journey.levels.close" Button to exist
+    t =    18.19s     Checking `Expect predicate `existsNoRetry == 1` for object "journey.levels.close" Button`
+    t =    18.19s         Checking existence of `"journey.levels.close" Button`
+    t =    18.22s Checking existence of `"journey.levels.close" Button`
+    t =    18.24s Find the "journey.levels.close" Button
+    t =    18.26s Checking existence of `"journey.levels.close" Button`
+    t =    18.27s Find the "journey.levels.close" Button
+    t =    18.28s Tap "journey.levels.close" Button
+    t =    18.28s     Wait for com.chorai.nativeprototype.v8 to idle
+    t =    18.28s     Find the "journey.levels.close" Button
+    t =    18.29s     Check for interrupting elements affecting "journey.levels.close" Button
+    t =    18.31s     Synthesize event
+    t =    18.61s     Wait for com.chorai.nativeprototype.v8 to idle
+    t =    19.44s Waiting 5.0s for "journey.lab.notes" Any to exist
+    t =    20.45s     Checking `Expect predicate `existsNoRetry == 1` for object "journey.lab.notes" Any`
+    t =    20.45s         Checking existence of `"journey.lab.notes" Any`
+    t =    20.51s Find the "journey.lab.notes" Any
+    t =    20.55s Find the "journey.lab.notes" StaticText
+    t =    20.58s Get all elements bound by index for: Descendants matching type StaticText
+    t =    20.62s Waiting 5.0s for "journey.lab.collected" Any to exist
+    t =    21.63s     Checking `Expect predicate `existsNoRetry == 1` for object "journey.lab.collected" Any`
+    t =    21.63s         Checking existence of `"journey.lab.collected" Any`
+    t =    21.69s Find the "journey.lab.collected" Any
+    t =    21.73s Find the "journey.lab.collected" StaticText
+    t =    21.76s Get all elements bound by index for: Descendants matching type StaticText
+    t =    21.80s Waiting 3.0s for "journey.lab.workspace" Button to exist
+    t =    22.81s     Checking `Expect predicate `existsNoRetry == 1` for object "journey.lab.workspace" Button`
+    t =    22.82s         Checking existence of `"journey.lab.workspace" Button`
+    t =    22.84s Checking existence of `"journey.lab.workspace" Button`
+    t =    22.86s Find the "journey.lab.workspace" Button
+    t =    22.88s Checking existence of `"journey.lab.workspace" Button`
+    t =    22.90s Find the "journey.lab.workspace" Button
+    t =    22.92s Tap "journey.lab.workspace" Button
+    t =    22.92s     Wait for com.chorai.nativeprototype.v8 to idle
+    t =    22.92s     Find the "journey.lab.workspace" Button
+    t =    22.94s     Check for interrupting elements affecting "journey.lab.workspace" Button
+    t =    22.95s     Synthesize event
+    t =    23.24s     Wait for com.chorai.nativeprototype.v8 to idle
+    t =    23.51s Waiting 3.0s for "Home" Button to exist
+    t =    24.53s     Checking `Expect predicate `existsNoRetry == 1` for object "Home" Button`
+    t =    24.53s         Checking existence of `"Home" Button`
+    t =    24.62s Checking existence of `"Home" Button`
+    t =    24.66s Find the "Home" Button
+    t =    24.71s Checking existence of `"square.stack" Button`
+    t =    24.75s Find the "square.stack" Button
+    t =    24.79s Tap "square.stack" Button
+    t =    24.79s     Wait for com.chorai.nativeprototype.v8 to idle
+    t =    24.79s     Find the "square.stack" Button
+    t =    24.84s     Check for interrupting elements affecting "square.stack" Button
+    t =    24.87s     Synthesize event
+    t =    25.15s     Wait for com.chorai.nativeprototype.v8 to idle
+    t =    26.67s Waiting 3.0s for "Notes" Button to exist
+    t =    27.68s     Checking `Expect predicate `existsNoRetry == 1` for object "Notes" Button`
+    t =    27.68s         Checking existence of `"Notes" Button`
+    t =    27.76s Checking existence of `"Notes" Button`
+    t =    27.79s Find the "Notes" Button
+    t =    27.84s Checking existence of `"Notes" Button`
+    t =    27.87s Find the "Notes" Button
+    t =    27.92s Tap "Notes" Button
+    t =    27.92s     Wait for com.chorai.nativeprototype.v8 to idle
+    t =    27.92s     Find the "Notes" Button
+    t =    27.96s     Check for interrupting elements affecting "Notes" Button
+    t =    27.99s     Synthesize event
+    t =    28.27s     Wait for com.chorai.nativeprototype.v8 to idle
+    t =    29.10s Waiting 3.0s for "prototype.note.owned" Button to exist
+    t =    30.13s     Checking `Expect predicate `existsNoRetry == 1` for object "prototype.note.owned" Button`
+    t =    30.13s         Checking existence of `"prototype.note.owned" Button`
+    t =    30.17s Checking existence of `"prototype.note.owned" Button`
+    t =    30.21s Find the "prototype.note.owned" Button
+    t =    30.25s Checking existence of `"prototype.note.owned" Button`
+    t =    30.29s Find the "prototype.note.owned" Button
+    t =    30.33s Tap "prototype.note.owned" Button
+    t =    30.33s     Wait for com.chorai.nativeprototype.v8 to idle
+    t =    30.33s     Find the "prototype.note.owned" Button
+    t =    30.36s     Check for interrupting elements affecting "prototype.note.owned" Button
+    t =    30.40s     Synthesize event
+    t =    30.68s     Wait for com.chorai.nativeprototype.v8 to idle
+    t =    31.45s Waiting 4.0s for "prototype.editor.body" TextView to exist
+    t =    32.49s     Checking `Expect predicate `existsNoRetry == 1` for object "prototype.editor.body" TextView`
+    t =    32.49s         Checking existence of `"prototype.editor.body" TextView`
+    t =    32.55s Find the "prototype.editor.body" TextView
+    t =    32.58s Tear Down
+    t =    32.58s     Terminate com.chorai.nativeprototype.v8:57217
+Test Case '-[ChoraiPrototypeUITests.CardLevelJourneyTests testNativeLevelGuideNamesAllSixLevelsAndChoosingPreviewDoesNotCreateContent]' passed (33.724 seconds).
+Test Suite 'CardLevelJourneyTests' passed at 2026-10-26 12:08:16.784.
+	 Executed 4 tests, with 0 failures (0 unexpected) in 90.099 (90.102) seconds
+Test Suite 'ChoraiPrototypeUITests.xctest' passed at 2026-10-26 12:08:16.785.
+	 Executed 4 tests, with 0 failures (0 unexpected) in 90.099 (90.103) seconds
+Test Suite 'Selected tests' passed at 2026-10-26 12:08:16.786.
+	 Executed 4 tests, with 0 failures (0 unexpected) in 90.099 (90.104) seconds
+2026-10-26 12:08:16.850 xcodebuild[56758:4081562] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-10-26 12:08:16.854 xcodebuild[56758:4081562] [MT] IDESchemeActionSDKRecord: operatingSystemBuild = <DVTBuildVersion 24A94232>, error = invalidDigitCount(94232).
+2026-10-26 12:08:17.162 xcodebuild[56758:4081562] [MT] IDETestOperationsObserverDebug: 93.163 elapsed -- Testing started completed.
+2026-10-26 12:08:17.162 xcodebuild[56758:4081562] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-26 12:08:17.162 xcodebuild[56758:4081562] [MT] IDETestOperationsObserverDebug: 93.163 sec, +93.163 sec -- end
+
+Test session results, code coverage, and logs:
+	/tmp/chorai-v8-ui.xcresult
+
+** TEST SUCCEEDED **
+
+Testing started

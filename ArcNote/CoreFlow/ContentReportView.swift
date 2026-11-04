@@ -25,25 +25,37 @@ struct ContentReportView: View {
     }
 
     var body: some View {
-        ZStack {
-            Image("home_bg")
-                .resizable()
-                .scaledToFill()
-                .ignoresSafeArea()
-
-            VStack(spacing: 18) {
-                header
-                ScrollView {
-                    content
-                        .frame(maxWidth: .infinity, minHeight: 360)
+        NavigationStack {
+            Form {
+                Section {
+                    Label("Report this \(subject)", systemImage: "flag")
+                        .font(.body)
+                        .padding(.vertical, 5)
                 }
-                .scrollDismissesKeyboard(.interactively)
+                .listRowBackground(ChoraiTheme.surface)
+
+                content
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .adaptiveContentGutter()
-            .padding(.top, 72)
-            .padding(.bottom, 28)
+            .scrollContentBackground(.hidden)
+            .background(ChoraiTheme.background)
+            .foregroundStyle(ChoraiTheme.ink)
+            .tint(ChoraiTheme.ink)
+            .scrollDismissesKeyboard(.interactively)
+            .navigationTitle("Report")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button { dismiss() } label: {
+                        Image(systemName: "xmark")
+                            .frame(minWidth: 44, minHeight: 44)
+                    }
+                    .accessibilityLabel("Close")
+                    .accessibilityIdentifier("content-report.close")
+                }
+            }
         }
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
         .overlay(alignment: .topLeading) {
             Text("Report \(subject)")
                 .font(.system(size: 1))
@@ -51,33 +63,6 @@ struct ContentReportView: View {
                 .frame(width: 1, height: 1)
                 .accessibilityIdentifier("screen.content-report")
         }
-    }
-
-    private var header: some View {
-        HStack {
-            Button {
-                dismiss()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: 44, height: 44)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Close")
-            .accessibilityIdentifier("content-report.close")
-
-            Spacer()
-
-            Text("Report")
-                .font(.headline)
-                .foregroundStyle(.white)
-
-            Spacer()
-
-            Color.clear.frame(width: 44, height: 44)
-        }
-        .padding(.top, 8)
     }
 
     @ViewBuilder
@@ -91,130 +76,115 @@ struct ContentReportView: View {
     }
 
     private var reportForm: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Reason")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.white.opacity(0.62))
-
+        Group {
+            Section {
                 Picker("Reason", selection: reasonBinding) {
                     ForEach(ContentReportReason.allCases) { reason in
                         Text(reason.label).tag(reason)
                     }
                 }
                 .pickerStyle(.menu)
-                .tint(.white)
-                .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
-                .padding(.horizontal, 14)
-                .background(
-                    RoundedRectangle(cornerRadius: 14)
-                        .fill(Color.white.opacity(0.08))
-                )
                 .disabled(store.isSubmitting)
                 .accessibilityIdentifier("content-report.reason")
-            }
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Optional context")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.white.opacity(0.62))
 
                 TextEditor(text: detailBinding)
                     .scrollContentBackground(.hidden)
-                    .foregroundStyle(.white)
                     .frame(minHeight: 120, maxHeight: 180)
-                    .padding(10)
-                    .background(
-                        RoundedRectangle(cornerRadius: 14)
-                            .fill(Color.white.opacity(0.08))
-                    )
-                    .disabled(store.isSubmitting)
-                    .accessibilityIdentifier("content-report.detail")
-            }
-
-            if case .failed(let error) = store.phase {
-                VStack(alignment: .leading, spacing: 5) {
-                    Text("Report not submitted")
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(.white)
-                    Text("Your reason and context are unchanged. Try again.")
-                        .font(.caption)
-                        .foregroundStyle(.white.opacity(0.62))
-                    Text(error.code)
-                        .font(.system(size: 1))
-                        .foregroundStyle(.clear)
-                        .frame(width: 1, height: 1)
-                        .accessibilityIdentifier("content-report.error-code")
-                    Text("Report error")
-                        .font(.system(size: 1))
-                        .foregroundStyle(.clear)
-                        .frame(width: 1, height: 1)
-                        .accessibilityIdentifier("content-report.error")
-                }
-                .accessibilityElement(children: .contain)
-            }
-
-            Spacer(minLength: 0)
-
-            Button {
-                if case .failed = store.phase {
-                    store.retry()
-                } else {
-                    store.submit()
-                }
-            } label: {
-                Group {
-                    if store.isSubmitting {
-                        ProgressView().tint(.white)
-                    } else if case .failed = store.phase {
-                        Text("Try Again")
-                    } else {
-                        Text("Submit")
+                    .overlay(alignment: .topLeading) {
+                        if store.detail.isEmpty {
+                            Text("Optional context")
+                                .foregroundStyle(.tertiary)
+                                .padding(.top, 8)
+                                .padding(.leading, 5)
+                                .allowsHitTesting(false)
+                                .accessibilityHidden(true)
+                        }
                     }
-                }
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity, minHeight: 48)
-                .background(Capsule().fill(Color.white.opacity(0.12)))
+                    .disabled(store.isSubmitting)
+                    .accessibilityLabel("Optional context")
+                    .accessibilityIdentifier("content-report.detail")
+            } header: {
+                Text("Report details")
             }
-            .buttonStyle(.plain)
-            .disabled(store.isSubmitting)
-            .accessibilityIdentifier(
-                store.phase.isFailed
-                    ? "content-report.retry"
-                    : "content-report.submit"
-            )
+            .listRowBackground(ChoraiTheme.surface)
+
+            Section {
+                Button {
+                    if case .failed = store.phase {
+                        store.retry()
+                    } else {
+                        store.submit()
+                    }
+                } label: {
+                    HStack(spacing: 12) {
+                        if store.isSubmitting {
+                            ProgressView().tint(ChoraiTheme.ink)
+                        } else {
+                            Image(systemName: "flag")
+                        }
+                        Text(store.isSubmitting ? "Submitting…" : (store.phase.isFailed ? "Try Again" : "Submit"))
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                }
+                .disabled(store.isSubmitting)
+                .accessibilityIdentifier(
+                    store.phase.isFailed ? "content-report.retry" : "content-report.submit"
+                )
+
+                if case .failed(let error) = store.phase {
+                    VStack(alignment: .leading, spacing: 7) {
+                        Text("Report not submitted")
+                            .font(.subheadline.weight(.semibold))
+                        Text("Your reason and context are unchanged. Try again.")
+                            .font(.footnote)
+                            .foregroundStyle(ChoraiTheme.secondaryInk)
+                        Text(error.code)
+                            .font(.system(size: 1))
+                            .foregroundStyle(.clear)
+                            .frame(width: 1, height: 1)
+                            .accessibilityIdentifier("content-report.error-code")
+                        Text("Report error")
+                            .font(.system(size: 1))
+                            .foregroundStyle(.clear)
+                            .frame(width: 1, height: 1)
+                            .accessibilityIdentifier("content-report.error")
+                    }
+                    .padding(.vertical, 4)
+                    .accessibilityElement(children: .contain)
+                }
+            }
+            .listRowBackground(ChoraiTheme.surface)
         }
-        .padding(.top, 18)
     }
 
     private func submitted(_ receipt: ContentReportReceipt) -> some View {
-        VStack(spacing: 14) {
-            Spacer()
-            Text("Report submitted")
-                .font(.title3.weight(.semibold))
-                .foregroundStyle(.white)
-            Text("We’ll review this \(subject). No other action is needed.")
-                .font(.footnote)
-                .foregroundStyle(.white.opacity(0.62))
-                .multilineTextAlignment(.center)
-            Text("Case \(receipt.reportID)")
-                .font(.caption.monospaced())
-                .foregroundStyle(.white.opacity(0.48))
-            Text(receipt.reportID)
-                .font(.system(size: 1))
-                .foregroundStyle(.clear)
-                .frame(width: 1, height: 1)
-                .accessibilityIdentifier("content-report.report-id")
-            Text("Submitted")
-                .font(.system(size: 1))
-                .foregroundStyle(.clear)
-                .frame(width: 1, height: 1)
-                .accessibilityIdentifier("content-report.submitted")
-            Spacer()
+        Section {
+            VStack(alignment: .leading, spacing: 14) {
+                Text("Report submitted")
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(ChoraiTheme.ink)
+                Text("We’ll review this \(subject). No other action is needed.")
+                    .font(.footnote)
+                    .foregroundStyle(ChoraiTheme.secondaryInk)
+                    .multilineTextAlignment(.leading)
+                Text("Case \(receipt.reportID)")
+                    .font(.caption.monospaced())
+                    .foregroundStyle(ChoraiTheme.secondaryInk)
+                Text(receipt.reportID)
+                    .font(.system(size: 1))
+                    .foregroundStyle(.clear)
+                    .frame(width: 1, height: 1)
+                    .accessibilityIdentifier("content-report.report-id")
+                Text("Submitted")
+                    .font(.system(size: 1))
+                    .foregroundStyle(.clear)
+                    .frame(width: 1, height: 1)
+                    .accessibilityIdentifier("content-report.submitted")
+            }
+            .padding(.vertical, 12)
+            .accessibilityElement(children: .contain)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .accessibilityElement(children: .contain)
+        .listRowBackground(ChoraiTheme.surface)
     }
 
     private var reasonBinding: Binding<ContentReportReason> {

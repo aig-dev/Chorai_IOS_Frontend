@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Chorai · 欢迎与登录、Chat、侧栏</title>
+  <style>
+    :root { --paper:#faf9f6; --surface:#fffffc; --ink:#153b37; --muted:#586d64; --line:#d9dfd7; --gold:#846838; --soft:#efefe8; }
+    * { box-sizing:border-box; }
+    html { scroll-behavior:smooth; }
+    body { margin:0; background:var(--paper); color:var(--ink); font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; -webkit-font-smoothing:antialiased; }
+    a { color:inherit; text-underline-offset:4px; }
+    a:focus-visible { outline:3px solid var(--gold); outline-offset:5px; border-radius:6px; }
+    main { max-width:1680px; margin:auto; padding:42px clamp(20px,4vw,68px) 48px; }
+    .topline { display:flex; justify-content:space-between; align-items:center; gap:20px; flex-wrap:wrap; }
+    .eyebrow { color:var(--gold); font-size:11px; font-weight:650; letter-spacing:.12em; }
+    .previous { display:inline-flex; align-items:center; min-height:44px; font-size:13px; }
+    h1 { margin:20px 0 18px; font-size:clamp(30px,4.6vw,54px); line-height:1.2; letter-spacing:-.035em; font-weight:650; }
+    h2 { margin:0; font-size:clamp(23px,2.5vw,31px); line-height:1.35; letter-spacing:-.025em; font-weight:620; }
+    h3 { margin:0; font-size:18px; font-weight:600; }
+    p { margin:0; }
+    .lead { max-width:850px; color:var(--muted); font-size:17px; line-height:1.8; }
+    nav { display:flex; gap:10px; flex-wrap:wrap; margin-top:25px; }
+    nav a { min-height:44px; padding:9px 17px; border:1px solid var(--line); border-radius:24px; text-decoration:none; font-size:13px; background:var(--surface); }
+    nav a:hover { background:var(--soft); }
+    header { padding-bottom:34px; }
+    section { padding:38px 0 42px; border-top:1px solid var(--line); scroll-margin-top:20px; }
+    .section-head { display:flex; align-items:flex-start; justify-content:space-between; gap:18px; margin-bottom:16px; }
+    .section-number { margin-bottom:9px; }
+    .status { flex:none; display:inline-flex; align-items:center; padding:5px 11px; border:1px solid var(--line); border-radius:20px; font-size:12px; color:var(--muted); background:var(--surface); white-space:nowrap; }
+    .status.pending { border-color:#d9cdb5; color:var(--gold); background:#f5f0e6; }
+    .description { max-width:860px; color:var(--muted); font-size:15px; }
+    .chat-layout { display:grid; grid-template-columns:minmax(240px,480px) minmax(200px,430px); align-items:center; justify-content:center; gap:clamp(32px,6vw,90px); margin-top:28px; }
+    .chat-copy { padding:12px 0; }
+    .chat-copy h3 { margin-bottom:14px; font-size:23px; }
+    .chat-copy p { color:var(--muted); font-size:15px; margin-bottom:17px; }
+    .chat-copy .small { font-size:13px; }
+    .options { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:22px; margin-top:28px; }
+    figure { min-width:0; margin:0; }
+    .figure-head { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px; }
+    .figure-head span { color:var(--muted); font-size:12px; }
+    .image-link { display:block; overflow:hidden; border:1px solid var(--line); border-radius:16px; background:var(--surface); text-decoration:none; }
+    .image-link img { display:block; width:100%; height:auto; }
+    .image-link:hover { border-color:#8c9f93; box-shadow:0 8px 30px #153b3709; }
+    .image-link[aria-disabled="true"] { cursor:default; }
+    .image-link[aria-disabled="true"]:hover { border-color:var(--line); box-shadow:none; }
+    .placeholder { display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:260px; padding:36px 24px; text-align:center; color:var(--muted); background:linear-gradient(145deg,var(--surface),#f0f0e9); }
+    .placeholder strong { font-size:16px; font-weight:500; color:var(--ink); }
+    .placeholder span { font-size:13px; margin-top:8px; }
+    .portrait .placeholder { aspect-ratio:402/874; }
+    .image-link.has-image .placeholder { display:none; }
+    .image-link:not(.has-image) img { display:none; }
+    figcaption { padding-top:9px; color:var(--muted); font-size:12px; }
+    .open-image { display:inline-flex; align-items:center; min-height:44px; gap:8px; font-size:13px; }
+    .open-image[aria-disabled="true"] { pointer-events:none; text-decoration:none; opacity:.5; }
+    .contract { margin-top:23px; padding:18px 20px; border-left:2px solid #c2cdbf; background:#eff1ea; max-width:1050px; color:var(--muted); font-size:14px; }
+    .contract strong { color:var(--ink); font-weight:600; }
+    .comparison { display:grid; grid-template-columns:repeat(2,minmax(0,340px)); justify-content:center; gap:32px; margin-top:28px; }
+    .evidence-note { margin-top:22px; color:var(--muted); font-size:13px; max-width:900px; }
+    footer { display:flex; align-items:flex-start; justify-content:space-between; gap:20px; border-top:1px solid var(--line); padding-top:24px; color:var(--muted); font-size:13px; }
+    footer p { max-width:780px; }
+    footer a { flex:none; display:inline-flex; min-height:44px; align-items:center; }
+    @media(max-width:1100px) { .options { gap:15px; } main { padding-inline:24px; } }
+    @media(max-width:820px) { .options { grid-template-columns:1fr; max-width:670px; margin-inline:auto; gap:28px; } .chat-layout { grid-template-columns:minmax(0,450px); justify-content:center; gap:16px; } .chat-copy { order:-1; } .section-head { align-items:center; } .comparison { gap:18px; } }
+    @media(max-width:500px) { main { padding:24px 18px 30px; } header { padding-bottom:28px; } section { padding:28px 0 32px; } .topline { gap:5px; } .lead { font-size:15px; } .section-head { align-items:flex-start; flex-direction:column; gap:12px; } .comparison { grid-template-columns:minmax(0,340px); gap:30px; } footer { flex-direction:column; gap:4px; } .contract { padding:15px 16px; } }
+    @media(prefers-reduced-motion:reduce) { html { scroll-behavior:auto; } }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="topline"><div class="eyebrow">CHORAI · 2026.10.29 · DESIGN REVIEW 03</div><a class="previous" href="../2026-10-29-note-actions-v2/index.html">上一轮方案</a></div>
+    <h1>欢迎与登录，<br>以及 Chat 和侧栏。</h1>
+    <p class="lead">Chat 延续已选方案 3，调整 Chora 的呈现。欢迎页与登录页提供六组配套设计；侧栏修改单独用原生 App 截图对照。</p>
+    <nav aria-label="本轮审稿内容"><a href="#chat">Chat 调整</a><a href="#auth-lively">欢迎与登录 · 灵动修订</a><a href="#auth-combined">上一版融合稿</a><a href="#auth">之前六组方案</a><a href="#sidebar">侧栏前后对照</a></nav>
+  </header>
+
+  <section id="chat" aria-labelledby="chat-title">
+    <div class="section-head"><div><div class="eyebrow section-number">01 · CHAT</div><h2 id="chat-title">已选方案 3 · Chora 调整</h2></div><span class="status">视觉设计图</span></div>
+    <div class="chat-layout">
+      <figure>
+        <a class="image-link portrait" href="chat-chora.png" target="_blank" rel="noopener" aria-label="打开 Chat 调整设计原图" data-image-link>
+          <img src="chat-chora.png" alt="沿用已选方案 3、调整 Chora 呈现的 Chat 空态设计" decoding="async">
+          <div class="placeholder"><strong>Chat 调整图准备中</strong><span>图像就绪后，刷新此页查看。</span></div>
+        </a>
+        <figcaption>设计图，非原生 App 截图。<br><a class="open-image" href="chat-chora.png" target="_blank" rel="noopener" data-open-image>查看原图 ↗</a></figcaption>
+      </figure>
+      <div class="chat-copy">
+        <h3>保留已选方向，聚焦 Chora。</h3>
+        <p>这一张是上一轮方案 3 的继续调整，单独展示，不与欢迎和登录方案混合编号。</p>
+        <p>空态仍服务于现有路径：浏览笔记，认识作者，再开始交流。设计图用于确认构图、留白与 Chora 的视觉呈现。</p>
+        <p class="small">已加入原生 App；按钮进入 Explore 与最大辅助字号的两项自动交互测试已通过。加载、失败、成功空列表分别呈现。</p>
+        <a class="open-image" href="../2026-10-29-note-actions-v2/index.html#chat">对照上一轮 Chat 方案 ↗</a>
+      </div>
+    </div>
+    <div class="comparison">
+      <figure><div class="figure-head"><h3>原生实现</h3><span>自动交互测试实际截图</span></div><a class="image-link" href="qa/chat-native-light.png" target="_blank" data-image-link><img src="qa/chat-native-light.png" alt="双 Chora Chat 空态的原生截图"></a><figcaption>iPhone 17 Pro · iOS 26.5 · 本地离线样本。</figcaption></figure>
+      <figure><div class="figure-head"><h3>深色原生实现</h3><span>实际运行截图</span></div><a class="image-link" href="qa/chat-native-dark.png" target="_blank" data-image-link><img src="qa/chat-native-dark.png" alt="深色 Chat 双 Chora 的原生截图"></a><figcaption>深色专用素材提高气泡和轮廓可见性。<a href="qa/chat-native-accessibility.png" target="_blank">辅助大字号检查截图</a></figcaption></figure>
+    </div>
+  </section>
+
+  <section id="auth-lively" aria-labelledby="auth-lively-title">
+    <div class="section-head"><div><div class="eyebrow section-number">REFINEMENT · 2026.10.30</div><h2 id="auth-lively-title">1 + 2 · 灵动修订</h2></div><span class="status">视觉设计与动效分镜 · 待审</span></div>
+    <p class="description">针对上一版“没有灵动的设计感”：让小 Chora 从纸页后探出，文字、纸页与角色形成同一个构图。温白、墨绿与学院金继续保留。下面三帧表达短暂探头、停稳、进入登录页的过渡意图。</p>
+    <figure style="max-width:1060px;margin:28px auto 0"><a class="image-link" href="auth-combined-1-2-v2-curious-page.png" target="_blank" data-image-link><img src="auth-combined-1-2-v2-curious-page.png" alt="灵动修订的欢迎与登录设计，小 Chora 探出纸页，下方展示三步动效分镜"></a><figcaption>设计图与静态动效分镜；尚未替换原生认证页面，也不是运行中的动画。原六套与上一版融合图完整保留。</figcaption></figure>
+    <p class="evidence-note">拟议动效：首次进入约 450ms 探出后停稳；点击 Login 时约 320ms 缩小并移向登录页。减少动态效果时仅淡入；输入区域保持稳定。时长是设计建议，未在原生设备验证。</p>
+  </section>
+
+  <section id="auth-combined" aria-labelledby="auth-combined-title">
+    <div class="section-head"><div><div class="eyebrow section-number">REFINEMENT · 1 + 2</div><h2 id="auth-combined-title">方案 1 + 2 · 上一版融合稿</h2></div><span class="status">历史设计图</span></div>
+    <p class="description">延续方案 1 的温白纸感、衬线排版与细金线，加入方案 2 的小 Chora。欢迎页作为陪伴性的视觉中心，登录页缩小，保持表单清楚。原来六套完整保留。</p>
+    <figure style="max-width:1060px;margin:28px auto 0"><a class="image-link" href="auth-combined-1-2.png" target="_blank" data-image-link><img src="auth-combined-1-2.png" alt="方案 1 与方案 2 融合的欢迎页与登录页设计"></a><figcaption>这是融合后的设计图。现有登录、Beta 访问码与权限规则保持；尚未替换原生认证页面。</figcaption></figure>
+  </section>
+
+  <section id="auth" aria-labelledby="auth-title">
+    <div class="section-head"><div><div class="eyebrow section-number">02 · WELCOME + SIGN IN</div><h2 id="auth-title">欢迎页与登录页 · 六组配套设计</h2></div><span class="status">视觉设计图</span></div>
+    <p class="description">每组展示同一套风格下的欢迎页与 Sign In。这里的 landing 指现有 App 内欢迎页；六组按展示顺序编号。点击图像可打开原图放大查看。</p>
+    <nav aria-label="选择欢迎与登录方案"><a href="#auth-1">方案 1</a><a href="#auth-2">方案 2</a><a href="#auth-3">方案 3</a><a href="#auth-4">方案 4 · 新增</a><a href="#auth-5">方案 5 · 新增</a><a href="#auth-6">方案 6 · 新增</a></nav>
+    <div class="options">
+      <figure id="auth-1">
+        <div class="figure-head"><h3>方案 1</h3><span>欢迎页 + Sign In</span></div>
+        <a class="image-link" href="auth-1.png" target="_blank" rel="noopener" aria-label="打开方案 1 的欢迎页与登录页原图" data-image-link><img src="auth-1.png" alt="方案 1：同一风格的 App 欢迎页与 Sign In 设计" decoding="async"><div class="placeholder"><strong>方案 1 准备中</strong><span>图像就绪后，刷新此页查看。</span></div></a>
+        <figcaption>设计图，非原生 App 截图。<br><a class="open-image" href="auth-1.png" target="_blank" rel="noopener" data-open-image>查看原图 ↗</a></figcaption>
+      </figure>
+      <figure id="auth-2">
+        <div class="figure-head"><h3>方案 2</h3><span>欢迎页 + Sign In</span></div>
+        <a class="image-link" href="auth-2.png" target="_blank" rel="noopener" aria-label="打开方案 2 的欢迎页与登录页原图" data-image-link><img src="auth-2.png" alt="方案 2：同一风格的 App 欢迎页与 Sign In 设计" decoding="async"><div class="placeholder"><strong>方案 2 准备中</strong><span>图像就绪后，刷新此页查看。</span></div></a>
+        <figcaption>设计图，非原生 App 截图。<br><a class="open-image" href="auth-2.png" target="_blank" rel="noopener" data-open-image>查看原图 ↗</a></figcaption>
+      </figure>
+      <figure id="auth-3">
+        <div class="figure-head"><h3>方案 3</h3><span>欢迎页 + Sign In</span></div>
+        <a class="image-link" href="auth-3.png" target="_blank" rel="noopener" aria-label="打开方案 3 的欢迎页与登录页原图" data-image-link><img src="auth-3.png" alt="方案 3：同一风格的 App 欢迎页与 Sign In 设计" decoding="async"><div class="placeholder"><strong>方案 3 准备中</strong><span>图像就绪后，刷新此页查看。</span></div></a>
+        <figcaption>设计图，非原生 App 截图。<br><a class="open-image" href="auth-3.png" target="_blank" rel="noopener" data-open-image>查看原图 ↗</a></figcaption>
+      </figure>
+      <figure id="auth-4">
+        <div class="figure-head"><h3>方案 4</h3><span>新增 · 欢迎页 + Sign In</span></div>
+        <a class="image-link" href="auth-4.png" target="_blank" rel="noopener" aria-label="打开方案 4 的欢迎页与登录页原图" data-image-link><img src="auth-4.png" alt="方案 4：同一风格的 App 欢迎页与 Sign In 设计" decoding="async"><div class="placeholder"><strong>方案 4</strong><span>等待图像载入。</span></div></a>
+        <figcaption>设计图，非原生 App 截图。<br><a class="open-image" href="auth-4.png" target="_blank" rel="noopener" data-open-image>查看原图 ↗</a></figcaption>
+      </figure>
+      <figure id="auth-5">
+        <div class="figure-head"><h3>方案 5</h3><span>新增 · 欢迎页 + Sign In</span></div>
+        <a class="image-link" href="auth-5.png" target="_blank" rel="noopener" aria-label="打开方案 5 的欢迎页与登录页原图" data-image-link><img src="auth-5.png" alt="方案 5：同一风格的 App 欢迎页与 Sign In 设计" decoding="async"><div class="placeholder"><strong>方案 5</strong><span>等待图像载入。</span></div></a>
+        <figcaption>设计图，非原生 App 截图。<br><a class="open-image" href="auth-5.png" target="_blank" rel="noopener" data-open-image>查看原图 ↗</a></figcaption>
+      </figure>
+      <figure id="auth-6">
+        <div class="figure-head"><h3>方案 6</h3><span>新增 · 欢迎页 + Sign In</span></div>
+        <a class="image-link" href="auth-6.png" target="_blank" rel="noopener" aria-label="打开方案 6 的欢迎页与登录页原图" data-image-link><img src="auth-6.png" alt="方案 6：同一风格的 App 欢迎页与 Sign In 设计" decoding="async"><div class="placeholder"><strong>方案 6</strong><span>等待图像载入。</span></div></a>
+        <figcaption>设计图，非原生 App 截图。<br><a class="open-image" href="auth-6.png" target="_blank" rel="noopener" data-open-image>查看原图 ↗</a></figcaption>
+      </figure>
+    </div>
+    <p class="contract"><strong>六组保留同一条现有路径：</strong>欢迎页提供 Login 与 Join Private Beta；Sign In 保留 Email、Password、Google、Apple。Join Private Beta 先验证 Product Access Code，再进入注册。这里只比较视觉，不新增登录方式或改变访问权限。</p>
+  </section>
+
+  <section id="sidebar" aria-labelledby="sidebar-title">
+    <div class="section-head"><div><div class="eyebrow section-number">03 · SIDEBAR</div><h2 id="sidebar-title">侧栏 · 修改前后</h2></div><span id="sidebar-status" class="status pending">交互、开合与深色复核已完成</span></div>
+    <p class="description">这一组使用实际原生 App 截图。去掉大面积装饰头图，压紧资料区，侧栏展开时保持底层导航和页面高度。背景浏览模式不同，此处比较侧栏本身。</p>
+    <div class="comparison">
+      <figure>
+        <div class="figure-head"><h3>修改前</h3><span>原生 App 截图</span></div>
+        <a class="image-link portrait" href="qa/sidebar-before.png" target="_blank" rel="noopener" aria-label="打开侧栏修改前的原生截图" data-image-link><img src="qa/sidebar-before.png" alt="侧栏修改前的实际原生 App 截图" decoding="async"><div class="placeholder"><strong>修改前截图</strong><span>等待截图载入。</span></div></a>
+        <figcaption><a class="open-image" href="qa/sidebar-before.png" target="_blank" rel="noopener" data-open-image>查看原图 ↗</a></figcaption>
+      </figure>
+      <figure>
+        <div class="figure-head"><h3>修改后</h3><span>原生 App 截图</span></div>
+        <a class="image-link portrait" href="qa/sidebar-after.png" target="_blank" rel="noopener" aria-label="打开侧栏修改后的原生截图" data-image-link><img src="qa/sidebar-after.png" alt="侧栏修改后的实际原生 App 截图" decoding="async"><div class="placeholder"><strong>等待实际截图</strong><span>原生检查完成后补齐。</span></div></a>
+        <figcaption><a class="open-image" href="qa/sidebar-after.png" target="_blank" rel="noopener" data-open-image>查看原图 ↗</a></figcaption>
+      </figure>
+    </div>
+    <div class="comparison">
+      <figure><div class="figure-head"><h3>深色侧栏</h3><span>原生测试实际截图</span></div><a class="image-link" href="qa/sidebar-after-dark.png" target="_blank" data-image-link><img src="qa/sidebar-after-dark.png" alt="深色侧栏的原生截图"></a><figcaption>已确认文字、分隔线、面板边界和关闭入口。</figcaption></figure>
+      <figure><div class="figure-head"><h3>实际开合录像</h3><span>Device Hub · 浅色</span></div><video controls playsinline muted preload="metadata" src="qa/sidebar-manual-light.mov" style="display:block;width:100%;border-radius:16px;border:1px solid var(--line)"></video><figcaption>连续开合与遮罩关闭。录像用于观察布局和运动，不作为设备帧率测量。<a href="qa/motion-audit/open-contact.png" target="_blank">展开连续画面</a> · <a href="qa/motion-audit/close-contact.png" target="_blank">收起连续画面</a></figcaption></figure>
+    </div>
+    <p id="sidebar-verification-note" class="evidence-note">Local / Production 模拟器构建通过；CoreFlow 875/875，相关原生交互 7/7（4 + 3 两批）通过。已检查全屏覆盖、44pt 关闭按钮、三个主页的设置往返、关闭后的导航与标签栏位置。解锁后已检查浅色实际开合、遮罩关闭与快速重复点击；录像抽查的 16 张连续画面中，露出的底层卡片顶边位置保持一致。深色另跑 3/3 原生交互测试并检查实际截图。静态截图与本录屏不证明设备帧率。</p>
+  </section>
+
+  <footer><p>Chat 与欢迎／登录图像用于设计审稿；侧栏对照使用原生截图。此页是本地审稿资料，不提供真实登录或账号操作。前一轮原型保留。</p><a href="DESIGN.md">范围与依据</a></footer>
+</main>
+<script>
+  document.querySelectorAll('[data-image-link]').forEach(link => {
+    const img = link.querySelector('img');
+    const openLink = link.closest('figure').querySelector('[data-open-image]');
+    const setReady = ready => {
+      link.classList.toggle('has-image', ready);
+      for (const target of [link, openLink].filter(Boolean)) {
+        target.setAttribute('aria-disabled', String(!ready));
+        target.tabIndex = ready ? 0 : -1;
+      }
+    };
+    img.addEventListener('load', () => setReady(true));
+    img.addEventListener('error', () => setReady(false));
+    setReady(img.complete && img.naturalWidth > 0);
+    link.addEventListener('click', event => {
+      if (link.getAttribute('aria-disabled') === 'true') event.preventDefault();
+    });
+    openLink?.addEventListener('click', event => {
+      if (openLink.getAttribute('aria-disabled') === 'true') event.preventDefault();
+    });
+  });
+</script>
+</body>
+</html>

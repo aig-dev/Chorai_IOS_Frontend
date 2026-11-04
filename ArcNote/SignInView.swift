@@ -6,308 +6,213 @@
 //
 
 import SwiftUI
+import UIKit
 import Combine
 import CoreFlow
 import GoogleSignIn
 import AuthenticationServices
 
 struct SignInView: View {
-    @Environment(\.dismiss) private var dismiss
-    
+    @Environment(\.authEntryOverrides) private var authEntryOverrides
+    @FocusState private var focusedField: Field?
+    private enum Field { case email, password, visiblePassword }
+    @State private var revealsPassword = false
+    @State private var isVisible = false
+
     // 添加状态变量来管理输入内容
     @State private var usernameEmail = ""
     @State private var password = ""
-    
+
     // 登录相关状态
-    @State private var isSigningIn = false
-    @State private var showAlert = false
+    @State private var attemptID: UUID?
     @State private var alertMessage = ""
     @State private var showTabBar = false
     @State private var showChooseInterests = false
-    
+
     // 认证管理器
-    @StateObject private var authManager = AuthManager.shared
-    @State private var cancellables = Set<AnyCancellable>()
+    private var authManager: AuthManager { AuthManager.shared }
+    @State private var request: AnyCancellable?
     @State private var appleSignInDelegate: AppleSignInDelegate?
     @State private var accessKey = "ios-\(UUID().uuidString.lowercased())"
     @State private var accessKeyCode: String?
-    
-    
+
+
     var body: some View {
-        GeometryReader { geometry in
+        ScrollViewReader { proxy in
             ScrollView {
-                VStack(spacing: 0) {
-                // 顶部导航栏
-                HStack {
-                    Button(action: {
-                        dismiss()
-                    }) {
-                        Image(systemName: "arrow.left")
-                            .font(.title2)
-                            .foregroundColor(.white)
-                    }
-                    
-                    Spacer()
-                }
-                .adaptiveContentGutter()
-                .padding(.top, 20)
-                
-                // 标题
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Sign In")
-                        .font(.largeTitle)
-                        .fontWeight(.bold)
-                        .foregroundColor(.white)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .adaptiveContentGutter()
-                .padding(.top, 40)
-                
-                // 输入字段
-                VStack(spacing: 16) {
-                    // Username / Email
-                    InputField(icon: "person", placeholder: "Email", text: $usernameEmail, accessibilityIdentifier: "signin.email")
-                    
-                    // Password
-                    InputField(icon: "lock", placeholder: "Password", text: $password, accessibilityIdentifier: "signin.password")
-                }
-                .adaptiveContentGutter()
-                .padding(.top, 50)
-                
-                Spacer()
-                // 登录按钮
-                Button(action: {
-                    signIn()
-                }) {
-                    HStack {
-                        if isSigningIn {
-                            ProgressView()
-                                .scaleEffect(0.8)
-                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                VStack(spacing: 28) {
+                    AuthEntryHeading(title: "Welcome back", subtitle: "Enter your email and password")
+                    VStack(spacing: 14) {
+                        TextField("Email", text: $usernameEmail)
+                            .keyboardType(.emailAddress)
+                            .textContentType(.username)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .submitLabel(.next)
+                            .focused($focusedField, equals: .email)
+                            .onSubmit { focusedField = revealsPassword ? .visiblePassword : .password }
+                            .accessibilityIdentifier("signin.email")
+                            .modifier(SignInFieldSurface(isFocused: focusedField == .email))
+                        HStack(spacing: 8) {
+                            Group {
+                                if revealsPassword { TextField("Password", text: $password).focused($focusedField, equals: .visiblePassword) }
+                                else { SecureField("Password", text: $password).focused($focusedField, equals: .password) }
+                            }
+                            .textContentType(.password)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .submitLabel(.go)
+                            .onSubmit(signIn)
+                            .accessibilityIdentifier("signin.password")
+                            Button {
+                                revealsPassword.toggle()
+                                focusedField = revealsPassword ? .visiblePassword : .password
+                            } label: {
+                                Image(systemName: revealsPassword ? "eye" : "eye.slash")
+                                    .frame(width: 44, height: 44)
+                            }
+                            .buttonStyle(AuthPressButtonStyle())
+                            .accessibilityLabel(revealsPassword ? "Hide password" : "Show password")
                         }
-                        Text(isSigningIn ? "Logging..." : "SIGN IN")
-                            .font(.headline)
-                            .fontWeight(.bold)
-                            .foregroundColor(.white)
+                        .modifier(SignInFieldSurface(isFocused: focusedField == .password || focusedField == .visiblePassword))
                     }
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 62)
-                        .background(
-                            RoundedRectangle(cornerRadius: 32)
-                                .fill(.ultraThinMaterial)
-                                // 左上角高光
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 32)
-                                        .stroke(Color.white, lineWidth: 2)
-                                        .offset(x: 0, y: 0)
-                                        .mask(
-                                            RoundedRectangle(cornerRadius: 32)
-                                                .fill(
-                                                    RadialGradient(
-                                                        colors: [Color.white, Color.clear],
-                                                        center: .topLeading,
-                                                        startRadius: 10,
-                                                        endRadius: 35
-                                                    )
-                                                )
-                                        )
-                                )
-                                // 右下角高光
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 32)
-                                        .stroke(Color.white, lineWidth: 2)
-                                        .offset(x: 0, y: 0)
-                                        .mask(
-                                            RoundedRectangle(cornerRadius: 32)
-                                                .fill(
-                                                    RadialGradient(
-                                                        colors: [Color.white, Color.clear],
-                                                        center: .bottomTrailing,
-                                                        startRadius: 10,
-                                                        endRadius: 35
-                                                    )
-                                                )
-                                        )
-                                )
-                                // 上面边缘高光
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 32)
-                                        .stroke(Color.white, lineWidth: 1)
-                                        .offset(x: 0, y: -1)
-                                        .mask(
-                                            RoundedRectangle(cornerRadius: 32)
-                                                .fill(
-                                                    LinearGradient(
-                                                        colors: [Color.white, Color.clear],
-                                                        startPoint: .top,
-                                                        endPoint: UnitPoint(x: 0, y: 0.05)
-                                                    )
-                                                )
-                                        )
-                                )
-                                // 下面边缘高光
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 32)
-                                        .stroke(Color.white, lineWidth: 1)
-                                        .offset(x: -1, y: 1)
-                                        .mask(
-                                            RoundedRectangle(cornerRadius: 32)
-                                                .fill(
-                                                    LinearGradient(
-                                                        colors: [Color.white, Color.clear],
-                                                        startPoint: .bottom,
-                                                        endPoint: UnitPoint(x: 1, y: 0.05)
-                                                    )
-                                                )
-                                        )
-                                )
-                        )
-                }
-                .disabled(isSigningIn)
-                .accessibilityIdentifier("signin.submit")
-                .adaptiveContentGutter()
-                .padding(.top, 32)
-                
-                Spacer()
-                
-                // 分隔线
-                HStack {
-                    Rectangle()
-                        .frame(height: 1)
-                        .foregroundColor(.gray.opacity(0.3))
-                    
-                    Text("Or sign in with")
-                        .font(.caption)
-                        .foregroundColor(.gray)
-                        .padding(.horizontal, 16)
-                    
-                    Rectangle()
-                        .frame(height: 1)
-                        .foregroundColor(.gray.opacity(0.3))
-                }
-                .adaptiveContentGutter()
-                .padding(.top, 32)
-                
-                // 社交登录图标
-                SocialLoginRow(
-                    googleAction: {
-                        signInWithGoogle()
-                    },
-                    appleAction: {
-                        signInWithApple()
+                    .disabled(isSigningIn)
+                    if !alertMessage.isEmpty {
+                        Text(alertMessage).font(.footnote).foregroundStyle(Color.red)
+                            .multilineTextAlignment(.center)
+                            .accessibilityIdentifier("signin.error")
+                            .id("signin.error")
                     }
-                )
-                .padding(.top, 24)
-                .padding(.bottom, 50)
+                    AuthProviderButtons(google: signInWithGoogle, apple: signInWithApple, disabled: isSigningIn)
                 }
-                .frame(
-                    minHeight: geometry.size.height,
-                    alignment: .top
-                )
+                .padding(.horizontal, 22)
+                .padding(.top, 26)
+                .padding(.bottom, 24)
             }
-            .scrollDismissesKeyboard(.interactively)
+            .onChange(of: alertMessage) { message in
+                guard !message.isEmpty else { return }
+                proxy.scrollTo("signin.error", anchor: .center)
+                UIAccessibility.post(notification: .announcement, argument: message)
+            }
         }
-        .background(
-            Image("login_bg")
-                .resizable()
-                .aspectRatio(contentMode: .fill)
-                .ignoresSafeArea(.all)
-        )
-        .navigationBarHidden(true)
-        .navigationBarBackButtonHidden(true)
-        .toolbar(.hidden, for: .navigationBar)
-        .gesture(
-            DragGesture()
-                .onEnded { value in
-                    if value.translation.width > 100 && abs(value.translation.height) < 50 {
-                        dismiss()
+        .scrollDismissesKeyboard(.interactively)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            AuthPrimaryButton(title: "Sign in", isLoading: isSigningIn,
+                              enabled: canSubmit, loadingTitle: "Signing in…",
+                              identifier: "signin.submit", action: signIn)
+                .padding(.horizontal, 22).padding(.top, 10).padding(.bottom, 12)
+                .background(ChoraiTheme.background)
+        }
+        .authEntryPage()
+        .navigationTitle("chorai")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.visible, for: .navigationBar)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                NavigationLink("Sign Up") {
+                    if let overrides = authEntryOverrides {
+                        PrivateBetaEntryView(
+                            preflighter: overrides.preflighter,
+                            codeStore: overrides.codeStore,
+                            returnsToSignIn: true
+                        )
+                    } else {
+                        PrivateBetaEntryView(returnsToSignIn: true)
                     }
                 }
-        )
-        .navigationDestination(isPresented: $showTabBar) {
-            TabBarView()
+                .font(.subheadline)
+                .accessibilityIdentifier("signin.sign-up")
+            }
         }
-        .navigationDestination(isPresented: $showChooseInterests) {
-            ChooseInterestsView()
-        }
-        .alert("Notice", isPresented: $showAlert) {
-            Button("OK") { }
-        } message: {
-            Text(alertMessage)
-        }
+        .navigationDestination(isPresented: $showTabBar) { TabBarView() }
+        .navigationDestination(isPresented: $showChooseInterests) { ChooseInterestsView() }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("InterestsSelectionCompleted"))) { _ in
             showChooseInterests = false
             showTabBar = true
         }
-        #if DEBUG
-        .overlay(alignment: .topLeading) {
-            Text("Sign In loaded")
-                .font(.system(size: 1))
-                .foregroundColor(.white.opacity(0.01))
-                .frame(width: 1, height: 1)
-                .accessibilityIdentifier("screen.sign-in")
+        .onChange(of: usernameEmail) { _ in alertMessage = "" }
+        .onChange(of: password) { _ in alertMessage = "" }
+        .task {
+            isVisible = true
+            try? await Task.sleep(nanoseconds: 350_000_000)
+            guard !Task.isCancelled, isVisible, focusedField == nil, !isSigningIn else { return }
+            focusedField = .email
         }
-        #endif
+        .onDisappear {
+            isVisible = false
+            focusedField = nil
+            endAttempt()
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("screen.sign-in")
     }
-    
-    // MARK: - 登录功能
+
+    private var isSigningIn: Bool { attemptID != nil }
+    private var canSubmit: Bool { isValidEmail(usernameEmail) && !password.isEmpty }
+
     private func signIn() {
-        // 验证输入
-//        guard !usernameEmail.isEmpty else {
-//            showAlert(message: "请输入用户名或邮箱")
-//            return
-//        }
-        
-//        guard !password.isEmpty else {
-//            showAlert(message: "请输入密码")
-//            return
-//        }
-        
-//        guard password.count >= 6 else {
-//            showAlert(message: "密码长度至少6位")
-//            return
-//        }
-        
-        // 检测用户名格式是否为邮箱
-//        if !isValidEmail(usernameEmail) {
-//            showAlert(message: "请输入有效的邮箱地址")
-//            return
-//        }
-        
-        // 开始登录
-        isSigningIn = true
-        
-        // 调用登录API
-        authManager.login(email: usernameEmail, password: password)
-            .receive(on: DispatchQueue.main)
-            .sink(
-                receiveCompletion: { completion in
-                    isSigningIn = false
-                    if case .failure(let error) = completion {
+        guard canSubmit, let id = beginAttempt() else { return }
+        let publisher = authEntryOverrides?.login(usernameEmail, password)
+            ?? authManager.login(email: usernameEmail, password: password)
+        performLogin(publisher, attempt: id)
+    }
+
+    private func beginAttempt() -> UUID? {
+        guard isVisible, attemptID == nil else { return nil }
+        let id = UUID()
+        attemptID = id
+        focusedField = nil
+        alertMessage = ""
+        return id
+    }
+
+    private func isCurrentAttempt(_ id: UUID) -> Bool {
+        isVisible && attemptID == id
+    }
+
+    private func endAttempt() {
+        attemptID = nil
+        request?.cancel()
+        request = nil
+        appleSignInDelegate = nil
+    }
+
+    private func performLogin(
+        _ publisher: AnyPublisher<AuthResponse, NetworkError>,
+        attempt id: UUID,
+        provider: String? = nil
+    ) {
+        request = publisher.receive(on: DispatchQueue.main).sink(
+            receiveCompletion: { completion in
+                guard isCurrentAttempt(id) else { return }
+                endAttempt()
+                if case .failure(let error) = completion {
+                    if let provider {
+                        handleFederatedLoginError(error, provider: provider)
+                    } else {
                         handleLoginError(error)
                     }
-                },
-                receiveValue: { authResponse in
-                    isSigningIn = false
-                    routeAfterAuth(authResponse)
                 }
-            )
-            .store(in: &cancellables)
+            },
+            receiveValue: { response in
+                guard isCurrentAttempt(id) else { return }
+                endAttempt()
+                routeAfterAuth(response)
+            }
+        )
     }
-    
-    // MARK: 显示提示信息
+
     private func showAlert(message: String) {
         alertMessage = message
-        showAlert = true
     }
-    
+
     // MARK: 邮箱格式验证
     private func isValidEmail(_ email: String) -> Bool {
         let emailRegex = "^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$"
         let emailPredicate = NSPredicate(format: "SELF MATCHES %@", emailRegex)
         return emailPredicate.evaluate(with: email)
     }
-    
+
     // MARK: 处理登录错误
     private func handleLoginError(_ error: NetworkError) {
         switch error {
@@ -389,141 +294,105 @@ struct SignInView: View {
             showAlert(message: genericMessage)
         }
     }
-    
-    // MARK: - Google登录
+
     private func signInWithGoogle() {
+        if let overrides = authEntryOverrides {
+            overrides.onAuthenticated(.signIn)
+            return
+        }
+        guard let id = beginAttempt() else { return }
         guard let presentingViewController = UIApplication.shared.connectedScenes
             .compactMap({ $0 as? UIWindowScene })
             .flatMap({ $0.windows })
             .first(where: { $0.isKeyWindow })?.rootViewController else {
+            endAttempt()
+            showAlert(message: "Google sign-in could not start. Please try again.")
             return
         }
-        
+
         GIDSignIn.sharedInstance.signIn(withPresenting: presentingViewController) { result, error in
-            if let error = error {
-                print("Google登录失败: \(error.localizedDescription)")
-                return
-            }
-            
-            guard let user = result?.user else {
-                return
-            }
-            
-            print("Google登录成功")
-            
-            guard let idToken = user.idToken?.tokenString else {
-                print("无法获取ID Token")
-                return
-            }
-            
             DispatchQueue.main.async {
-                self.handleGoogleLoginResponse(idToken: idToken)
+                guard isCurrentAttempt(id) else { return }
+                guard error == nil, let idToken = result?.user.idToken?.tokenString else {
+                    endAttempt()
+                    if (error as? GIDSignInError)?.code != .canceled {
+                        showAlert(message: "Google sign-in could not be verified. Please try again.")
+                    }
+                    return
+                }
+                handleGoogleLoginResponse(idToken: idToken, attempt: id)
             }
         }
     }
-    
-    // MARK: - 处理Google登录响应
-    private func handleGoogleLoginResponse(idToken: String) {
+
+    private func handleGoogleLoginResponse(idToken: String, attempt id: UUID) {
+        guard isCurrentAttempt(id) else { return }
         let pair = pendingAccessPair()
-        authManager.googleLogin(
+        let publisher = authManager.googleLogin(
             idToken: idToken,
             accessCode: pair.code,
             idempotencyKey: pair.key
         )
-            .receive(on: DispatchQueue.main)
-            .sink(
-                receiveCompletion: { completion in
-                    if case .failure(let error) = completion {
-                        print("后端Google登录失败: \(error.localizedDescription)")
-                        handleFederatedLoginError(error, provider: "Google")
-                    }
-                },
-                receiveValue: { authResponse in
-                    print("后端Google登录成功")
-                    routeAfterAuth(authResponse)
-                }
-            )
-            .store(in: &cancellables)
+        performLogin(publisher, attempt: id, provider: "Google")
     }
-    
-    // MARK: Apple登录
+
     private func signInWithApple() {
+        if let overrides = authEntryOverrides {
+            overrides.onAuthenticated(.signIn)
+            return
+        }
+        guard let id = beginAttempt() else { return }
         let request = ASAuthorizationAppleIDProvider().createRequest()
         request.requestedScopes = [.fullName, .email]
-        
+
         appleSignInDelegate = AppleSignInDelegate { result in
             DispatchQueue.main.async {
+                guard isCurrentAttempt(id) else { return }
                 switch result {
                 case .success(let authorization):
-                    print("Apple授权成功")
-                    if let appleIDCredential = authorization.credential as? ASAuthorizationAppleIDCredential {
-                        print("Apple登录成功")
-                        
-                        guard let identityToken = appleIDCredential.identityToken,
-                              let identityTokenString = String(data: identityToken, encoding: .utf8) else {
-                            print("无法获取Identity Token")
-                            return
-                        }
-                        
-                        guard let authorizationCode = appleIDCredential.authorizationCode,
-                              let authorizationCodeString = String(data: authorizationCode, encoding: .utf8) else {
-                            print("无法获取Authorization Code")
-                            return
-                        }
-                        
-                        let appleUserInfo = AppleUserInfo(
-                            name: AppleName(
-                                firstName: appleIDCredential.fullName?.givenName ?? "",
-                                lastName: appleIDCredential.fullName?.familyName ?? ""
-                            )
-                        )
-                        
-                        let pair = pendingAccessPair()
-                        let appleLoginRequest = AppleLoginRequest(
-                            identityToken: identityTokenString,
-                            authorizationCode: authorizationCodeString,
-                            userInfo: appleUserInfo,
-                            accessCode: pair.code,
-                            idempotencyKey: pair.key
-                        )
-                        
-                        self.handleAppleLoginResponse(request: appleLoginRequest)
-                    } else {
-                        print("无法获取Apple ID凭证")
+                    guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential,
+                          let token = credential.identityToken,
+                          let identityToken = String(data: token, encoding: .utf8),
+                          let code = credential.authorizationCode,
+                          let authorizationCode = String(data: code, encoding: .utf8) else {
+                        endAttempt()
+                        showAlert(message: "Apple sign-in could not be verified. Please try again.")
+                        return
                     }
+                    let userInfo = AppleUserInfo(name: AppleName(
+                        firstName: credential.fullName?.givenName ?? "",
+                        lastName: credential.fullName?.familyName ?? ""
+                    ))
+                    let pair = pendingAccessPair()
+                    let loginRequest = AppleLoginRequest(
+                        identityToken: identityToken,
+                        authorizationCode: authorizationCode,
+                        userInfo: userInfo,
+                        accessCode: pair.code,
+                        idempotencyKey: pair.key
+                    )
+                    handleAppleLoginResponse(request: loginRequest, attempt: id)
                 case .failure(let error):
-                    print("Apple登录失败: \(error.localizedDescription)")
-                    showAlert(message: "Apple sign in failed, please try again")
+                    endAttempt()
+                    if (error as? ASAuthorizationError)?.code != .canceled {
+                        showAlert(message: "Apple sign-in failed. Please try again.")
+                    }
                 }
             }
         }
-        
-        let authorizationController = ASAuthorizationController(authorizationRequests: [request])
-        authorizationController.delegate = appleSignInDelegate
-        authorizationController.performRequests()
+
+        let controller = ASAuthorizationController(authorizationRequests: [request])
+        controller.delegate = appleSignInDelegate
+        controller.performRequests()
     }
-    
-    // MARK: 处理Apple登录响应
-    private func handleAppleLoginResponse(request: AppleLoginRequest) {
-        authManager.appleLogin(request: request)
-            .receive(on: DispatchQueue.main)
-            .sink(
-                receiveCompletion: { completion in
-                    if case .failure(let error) = completion {
-                        print("后端Apple登录失败: \(error.localizedDescription)")
-                        handleFederatedLoginError(error, provider: "Apple")
-                    }
-                },
-                receiveValue: { authResponse in
-                    print("后端Apple登录成功")
-                    routeAfterAuth(authResponse)
-                }
-            )
-            .store(in: &cancellables)
+
+    private func handleAppleLoginResponse(request: AppleLoginRequest, attempt id: UUID) {
+        guard isCurrentAttempt(id) else { return }
+        performLogin(authManager.appleLogin(request: request), attempt: id, provider: "Apple")
     }
 
     private func pendingAccessPair() -> (code: String?, key: String?) {
-        guard let code = KeychainStore.shared.load() else {
+        guard let code = (authEntryOverrides?.codeStore ?? KeychainStore.shared).load() else {
             return (nil, nil)
         }
         if accessKeyCode != code {
@@ -534,6 +403,7 @@ struct SignInView: View {
     }
 
     private func routeAfterAuth(_ response: AuthResponse) {
+        if let overrides = authEntryOverrides { overrides.onAuthenticated(.signIn); return }
         guard response.data.productAccess.status == "allowed" else { return }
         if response.data.isNewUser == true {
             showChooseInterests = true
@@ -547,4 +417,17 @@ struct SignInView_Previews: PreviewProvider {
     static var previews: some View {
         SignInView()
     }
-} 
+}
+
+private struct SignInFieldSurface: ViewModifier {
+    var isFocused = false
+
+    func body(content: Content) -> some View {
+        content.font(.body).foregroundStyle(ChoraiTheme.ink)
+            .padding(.horizontal, 16)
+            .frame(minHeight: 52)
+            .background(ChoraiTheme.surface, in: RoundedRectangle(cornerRadius: 15))
+            .overlay(RoundedRectangle(cornerRadius: 15)
+                .stroke(isFocused ? ChoraiTheme.accent : ChoraiTheme.separator, lineWidth: 1))
+    }
+}

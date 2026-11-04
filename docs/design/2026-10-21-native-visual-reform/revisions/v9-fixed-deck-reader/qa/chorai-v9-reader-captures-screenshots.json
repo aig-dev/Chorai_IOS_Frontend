@@ -1,0 +1,26 @@
+[
+  {
+    "file": "v9-reader-essay-dark.png",
+    "sourceResult": "/tmp/chorai-v9-reader-captures.xcresult",
+    "test": "ReviewV9Tests/testReaderDesignCapturesInBothThemes()",
+    "device": "iPhone 17 Pro"
+  },
+  {
+    "file": "v9-reader-photo-dark.png",
+    "sourceResult": "/tmp/chorai-v9-reader-captures.xcresult",
+    "test": "ReviewV9Tests/testReaderDesignCapturesInBothThemes()",
+    "device": "iPhone 17 Pro"
+  },
+  {
+    "file": "v9-reader-essay-light.png",
+    "sourceResult": "/tmp/chorai-v9-reader-captures.xcresult",
+    "test": "ReviewV9Tests/testReaderDesignCapturesInBothThemes()",
+    "device": "iPhone 17 Pro"
+  },
+  {
+    "file": "v9-reader-photo-light.png",
+    "sourceResult": "/tmp/chorai-v9-reader-captures.xcresult",
+    "test": "ReviewV9Tests/testReaderDesignCapturesInBothThemes()",
+    "device": "iPhone 17 Pro"
+  }
+]

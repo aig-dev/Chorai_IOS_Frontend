@@ -28,7 +28,7 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         XCTAssertTrue(actionBox.contains("geometry.safeAreaInsets.top"))
         XCTAssertTrue(actionBox.contains("geometry.safeAreaInsets.bottom"))
         XCTAssertTrue(actionBox.contains("RoundedRectangle(cornerRadius: 20)"))
-        XCTAssertTrue(actionBox.contains(".fill(.ultraThinMaterial.opacity(1))"))
+        XCTAssertTrue(actionBox.contains(".choraiGlassSurface(cornerRadius: 24)"))
         XCTAssertTrue(actionBox.contains(".spring(response: 0.3, dampingFraction: 0.8)"))
         XCTAssertTrue(actionBox.contains("let rowCount: Int"))
         XCTAssertTrue(
@@ -157,7 +157,7 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         XCTAssertFalse(
             presentation.contains(".font(.system(size: 12, weight: .medium))")
         )
-        XCTAssertTrue(presentation.contains(".foregroundStyle(.white)"))
+        XCTAssertTrue(presentation.contains(".foregroundStyle(ChoraiTheme.ink)"))
         XCTAssertTrue(presentation.contains(".padding(.horizontal, 12)"))
         XCTAssertTrue(presentation.contains(".padding(.vertical, 6)"))
         XCTAssertTrue(
@@ -171,7 +171,7 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         )
         XCTAssertTrue(
             presentation.contains(
-                "Color(red: 0.2, green: 0.1, blue: 0.3)"
+                "ChoraiTheme.raisedSurface"
             )
         )
         XCTAssertFalse(presentation.contains(#"#\(tag)"#))
@@ -185,7 +185,7 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         XCTAssertTrue(presentation.contains("font: .footnote"))
         XCTAssertTrue(
             presentation.contains(
-                "foregroundColor: .white.opacity(0.7)"
+                "foregroundColor: ChoraiTheme.secondaryInk"
             )
         )
 
@@ -199,7 +199,7 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         )
         XCTAssertTrue(
             htmlRenderer.contains(
-                "foregroundColor: Color = .white.opacity(0.9)"
+                "foregroundColor: Color = ChoraiTheme.ink"
             )
         )
         XCTAssertTrue(htmlRenderer.contains(".font(font)"))
@@ -355,28 +355,30 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         XCTAssertTrue(adapter.contains("cardEditorReadOnlyFallback"))
         XCTAssertTrue(adapter.contains("case let .bodyFocusChanged(isFocused)"))
         XCTAssertFalse(adapter.contains("keyboardWillShowNotification"))
-        XCTAssertTrue(adapter.contains("keyboardWillHideNotification"))
-        XCTAssertTrue(adapter.contains("func keyboardDidHide()"))
-        XCTAssertTrue(adapter.contains("guard isBodyFocused else"))
+        XCTAssertFalse(adapter.contains("keyboardWillHideNotification"),
+                       "Software keyboard visibility must not override the focused WebKit body, including hardware keyboard transitions")
+        XCTAssertFalse(adapter.contains("func keyboardDidHide()"))
+        XCTAssertTrue(adapter.contains("isBodyFocused = canMutate && isFocused"),
+                      "Observed focus belongs to the active editable bridge instance")
 
         let focusBody = try XCTUnwrap(adapter.range(of: "func focusBody()"))
-        let keyboardDidHide = try XCTUnwrap(
-            adapter.range(of: "func keyboardDidHide()")
-        )
         let dismissKeyboard = try XCTUnwrap(
             adapter.range(of: "func dismissKeyboard()")
         )
+        let canPerform = try XCTUnwrap(adapter.range(of: "func canPerform("))
         let focusImplementation = adapter[
-            focusBody.lowerBound..<keyboardDidHide.lowerBound
+            focusBody.lowerBound..<dismissKeyboard.lowerBound
         ]
-        let keyboardHideImplementation = adapter[
-            keyboardDidHide.lowerBound..<dismissKeyboard.lowerBound
+        let dismissImplementation = adapter[
+            dismissKeyboard.lowerBound..<canPerform.lowerBound
         ]
         XCTAssertFalse(
             focusImplementation.contains("isBodyFocused = true"),
             "A tap request alone must not claim keyboard focus"
         )
-        XCTAssertTrue(keyboardHideImplementation.contains("controller.blur()"))
+        XCTAssertTrue(dismissImplementation.contains("isBodyFocused = false"))
+        XCTAssertTrue(dismissImplementation.contains("controller.blur()"),
+                      "Explicit menu and drag dismissal must still end the real editor focus")
     }
 
     func testMetadataRowsShareStylingAndKeepUnlinkInlineAndDirectional() throws {
@@ -434,7 +436,7 @@ final class CardEditorShellSourceContractTests: XCTestCase {
             )
         )
         XCTAssertTrue(metadata.contains(".frame(width: 44, height: 44)"))
-        XCTAssertTrue(metadata.contains("Color.white.opacity(0.1)"))
+        XCTAssertTrue(metadata.contains("ChoraiTheme.ink.opacity(0.1)"))
         XCTAssertTrue(metadata.contains("if link.canRemove"))
         XCTAssertTrue(metadata.contains("onRemove(link)"))
         XCTAssertTrue(metadata.contains("cardEditorRemoveLink."))
@@ -619,14 +621,13 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         )
 
         XCTAssertTrue(glass.contains("if #available(iOS 26.0, *)"))
-        XCTAssertTrue(
-            writingPlaneMaterial.contains(
-                ".glassEffect(.clear.interactive(), in: shape)"
-            )
-        )
+        // The approved reading/writing surface is calm paper. Native glass
+        // remains on interactive chrome, not underneath editable body text.
+        XCTAssertTrue(writingPlaneMaterial.contains(".fill(ChoraiTheme.surface.opacity(0.94))"))
+        XCTAssertFalse(writingPlaneMaterial.contains(".glassEffect(.clear.interactive(), in: shape)"))
         XCTAssertEqual(
             writingPlaneMaterial.components(separatedBy: ".glassEffect(").count - 1,
-            1
+            0
         )
         XCTAssertFalse(
             writingPlaneMaterial.contains(
@@ -919,13 +920,15 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         )
         XCTAssertGreaterThanOrEqual(
             controls.components(separatedBy: ".clipShape(Circle())").count - 1,
-            3
+            1
         )
         XCTAssertGreaterThanOrEqual(
             controls.components(separatedBy: ".frame(width: 44, height: 44)").count - 1,
             3
         )
-        XCTAssertTrue(controls.contains("HStack(spacing: 8)"))
+        XCTAssertTrue(controls.contains("HStack(spacing: 4)"))
+        XCTAssertTrue(controls.contains(".choraiGlassSurface(cornerRadius: 24)"))
+        XCTAssertTrue(controls.contains("Text(\"Note\")"))
         XCTAssertTrue(
             controls.contains("Image(systemName: isPublic ? \"globe\" : \"lock\")")
         )
@@ -940,7 +943,8 @@ final class CardEditorShellSourceContractTests: XCTestCase {
             )
         )
         XCTAssertTrue(controls.contains("onOpenCardActions?()"))
-        XCTAssertFalse(controls.contains("Menu {"))
+        XCTAssertTrue(controls.contains("CardEditorNativeMenuButton("))
+        XCTAssertTrue(controls.contains("actions: menuActions"))
         for removedBackgroundSurface in [
             "hasBackground",
             "onChooseBackground",
@@ -953,6 +957,115 @@ final class CardEditorShellSourceContractTests: XCTestCase {
             )
         }
         XCTAssertFalse(controls.contains(".font(.body"))
+    }
+
+    func testNativeMoreMenuPreparesEditingStateOnPresentation() throws {
+        let shell = try source(at: "ArcNote/CardEditor/CardEditorShell.swift")
+        let start = try XCTUnwrap(shell.range(of: "if let menuActions {"))
+        let end = try XCTUnwrap(shell.range(of: "} else {", range: start.upperBound..<shell.endIndex))
+        let menu = String(shell[start.lowerBound..<end.lowerBound])
+        XCTAssertTrue(menu.contains("CardEditorNativeMenuButton("))
+        XCTAssertTrue(menu.contains("onPrepare: onInteraction"))
+        XCTAssertTrue(menu.contains("isEnabled: isMetadataEditable"))
+        XCTAssertTrue(menu.contains(".frame(width: 44, height: 44)"))
+        XCTAssertFalse(menu.contains(".simultaneousGesture("))
+        let actions = try source(at: "ArcNote/CardEditor/CardEditorActionBox.swift")
+        XCTAssertTrue(actions.contains("struct CardEditorNativeMenuButton: UIViewRepresentable"))
+        XCTAssertTrue(actions.contains("button.showsMenuAsPrimaryAction = true"))
+        XCTAssertTrue(actions.contains("for: .menuActionTriggered"))
+        XCTAssertTrue(actions.contains("button.window?.endEditing(true)"))
+        XCTAssertTrue(actions.contains("UIDeferredMenuElement.uncached"),
+                      "Every opening must read current Pin and formatting capability state")
+        XCTAssertTrue(actions.contains("action.accessibilityIdentifier = identifier"))
+        XCTAssertTrue(actions.contains("actions.prepare()\n            perform()"),
+                      "The selected action must still perform its original preparation and save guards")
+        let callback = try XCTUnwrap(actions.range(of: "func menuWillPresent(_ button: UIButton)"))
+        let prepare = try XCTUnwrap(actions.range(of: "prepare?()", range: callback.upperBound..<actions.endIndex))
+        let nativeResign = try XCTUnwrap(actions.range(of: "button.window?.endEditing(true)", range: callback.upperBound..<actions.endIndex))
+        XCTAssertLessThan(prepare.lowerBound, nativeResign.lowerBound)
+    }
+
+    func testWritingBodyKeepsStatusCloseAndLongDocumentsCanGrow() throws {
+        let shell = try source(at: "ArcNote/CardEditor/CardEditorShell.swift")
+        let editor = try source(at: "ArcNote/CardEditor/BlockNoteCardEditor.swift")
+        XCTAssertTrue(shell.contains("VStack(alignment: .leading, spacing: 6) {\n                            writingStatus"))
+        XCTAssertFalse(shell.contains("viewport.size.height - 150"),
+                       "Measure the actual footer instead of reserving a fixed blank spacer")
+        XCTAssertTrue(editor.contains("max(minimumHeight, model.renderedHeight)"),
+                      "Long documents must grow beyond the page minimum and keep their footer after the body")
+    }
+
+    func testEveryEditorAssignsRemainingPageHeightToTheRealWritingSurface() throws {
+        let shell = try source(at: "ArcNote/CardEditor/CardEditorShell.swift")
+        let editorView = try source(at: "ArcNote/CardEditor/BlockNoteCardEditor.swift")
+        XCTAssertFalse(shell.contains("usesFullPageWritingExtent"),
+                       "Existing short notes must receive the same full writing page as new drafts")
+        XCTAssertFalse(shell.contains(".hasMeaningfulContent"),
+                       "Document emptiness must not determine the editor's page size")
+        XCTAssertFalse(shell.contains("return 248 }"),
+                       "Do not restore a compact nonempty-document layout")
+        let editor = try XCTUnwrap(shell.range(of: "BlockNoteCardEditor("))
+        let minimumHeight = try XCTUnwrap(shell.range(
+            of: "minimumHeight: minimumWritingHeight(in: viewport.size.height)",
+            range: editor.upperBound..<shell.endIndex
+        ))
+        let accessibility = try XCTUnwrap(shell.range(of: ".accessibilityIdentifier(\"cardEditorContent\")"))
+        XCTAssertLessThan(minimumHeight.lowerBound, accessibility.lowerBound,
+                          "The blank lower area must belong to the real editor, not a decorative spacer")
+        XCTAssertTrue(shell.contains("CardEditorPageHeightKey.self"))
+        XCTAssertTrue(shell.contains("value: [.status: geometry.size.height]"))
+        XCTAssertTrue(shell.contains("value: [.footer: geometry.size.height]"))
+        XCTAssertTrue(shell.contains("- writingStatusHeight - footerHeight"),
+                      "Dynamic Type and visible metadata must be measured rather than clipped")
+        XCTAssertTrue(shell.contains("fillsWritingPage: true"))
+        XCTAssertTrue(editorView.contains("fillsWritingPage: Bool = false"),
+                      "Compact embedded editors must not opt into the full writing page")
+        XCTAssertTrue(editorView.contains("minimumWritingHeight: fillsWritingPage ? Double(minimumHeight) : 0"),
+                      "The DOM writing floor must use the independent page minimum, not its measured content height")
+        XCTAssertFalse(editorView.contains("TapGesture().onEnded(model.focusBody)"),
+                       "Natural DOM taps must own the caret position without a competing native focus command")
+    }
+
+    func testTrailingToolsMenuReachesExistingTagAndFormattingWorkflows() throws {
+        let shell = try source(at: "ArcNote/CardEditor/CardEditorShell.swift")
+        let metadata = try source(at: "ArcNote/CardEditor/CardEditorMetadataRows.swift")
+        let actions = try source(at: "ArcNote/CardEditor/CardEditorActionBox.swift")
+        let tagRow = try XCTUnwrap(shell.range(of: "CardEditorTagRow("))
+        let tools = try XCTUnwrap(shell.range(of: "CardEditorToolsMenuButton("))
+        XCTAssertLessThan(tagRow.lowerBound, tools.lowerBound)
+        let toolsSurface = try XCTUnwrap(shell.range(
+            of: ".choraiGlassSurface(cornerRadius: 22)",
+            range: tools.upperBound..<shell.endIndex
+        ))
+        let toolsControl = shell[tools.lowerBound..<toolsSurface.lowerBound]
+        XCTAssertTrue(toolsControl.contains(".disabled("),
+                      "SwiftUI must convey read-only state to the represented native control as well as its menu actions")
+        XCTAssertTrue(toolsControl.contains("(isMetadataEditable && tags.count < CardEditingTag.maximumCount)\n                        || bodyModel.canMutate"),
+                      "Tools stays available when either tag entry or formatting is independently allowed")
+        XCTAssertTrue(shell.contains("onPrepare: prepareToolsMenu"))
+        XCTAssertTrue(shell.contains("onFormat: focusFormattingTools"))
+        XCTAssertTrue(shell.contains("private func focusFormattingTools() {\n        completeTagEntry()\n        bodyModel.focusBody()"))
+        XCTAssertTrue(shell.contains("private func prepareToolsMenu() {\n        completeTagEntry()\n        bodyModel.dismissKeyboard()"))
+        XCTAssertTrue(metadata.contains("else if semantics != .cardEditor || tags.isEmpty"))
+        XCTAssertTrue(metadata.contains("Text(\"Add tags\")"))
+        let addTag = try XCTUnwrap(metadata.range(of: "private var addTagButton: some View"))
+        let tagInput = try XCTUnwrap(metadata.range(of: "private struct CardEditorTagInput"))
+        XCTAssertFalse(metadata[addTag.lowerBound..<tagInput.lowerBound].contains("Image(systemName: \"plus\")"),
+                       "The quiet writer footer must not restore the competing circular plus button")
+        XCTAssertTrue(actions.contains("struct CardEditorToolsMenuButton: UIViewRepresentable"))
+        XCTAssertTrue(actions.contains("UIImage(systemName: \"slider.horizontal.3\""))
+        for identifier in ["cardEditorTools", "cardEditorToolsAddTag", "cardEditorToolsFormat"] {
+            XCTAssertTrue(actions.contains("\"\(identifier)\""))
+        }
+        let toolsMenu = try XCTUnwrap(actions.range(of: "struct CardEditorToolsMenuButton: UIViewRepresentable"))
+        let legacyActions = try XCTUnwrap(actions.range(of: "struct CardEditorActionBox: View"))
+        let implementation = actions[toolsMenu.lowerBound..<legacyActions.lowerBound]
+        XCTAssertTrue(implementation.contains("for: .menuActionTriggered"))
+        XCTAssertTrue(implementation.contains("UIDeferredMenuElement.uncached"))
+        XCTAssertTrue(implementation.contains("isTagEntryEnabled ? [] : .disabled"))
+        XCTAssertTrue(implementation.contains("isFormattingEnabled ? [] : .disabled"))
+        XCTAssertTrue(implementation.contains("onBeginTag()"))
+        XCTAssertTrue(implementation.contains("onFormat()"))
     }
 
     func testBackgroundSupportsLocalAndRemoteImagesInsideBodySurface() throws {
@@ -1064,7 +1177,7 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         XCTAssertTrue(ambient.contains("if !reduceTransparency"))
     }
 
-    func testWritingPlaneUsesContinuousAmbientSceneAndVeilBelowGlass() throws {
+    func testPlainWritingPagePreservesImageVeilAndContentClipping() throws {
         let ambientPath = "ArcNote/CardEditor/CardEditorAmbientBackdrop.swift"
         let ambientURL = Self.repositoryRoot.appendingPathComponent(ambientPath)
         guard FileManager.default.fileExists(atPath: ambientURL.path) else {
@@ -1079,7 +1192,9 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         let shell = try source(at: "ArcNote/CardEditor/CardEditorShell.swift")
         let project = try source(at: "ArcNote.xcodeproj/project.pbxproj")
 
-        XCTAssertTrue(shell.contains("CardEditorAmbientBackdrop()"))
+        XCTAssertTrue(shell.contains("ChoraiBackground()"))
+        XCTAssertFalse(shell.contains("CardEditorAmbientBackdrop()"))
+        XCTAssertTrue(background.contains("if background == .none"))
         XCTAssertEqual(
             ambient.components(separatedBy: "RadialGradient(").count - 1,
             2
@@ -1108,9 +1223,8 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         let body = background[bodyStart.lowerBound..<layerStart.lowerBound]
         let contentClip = try XCTUnwrap(body.range(of: ".clipShape(paneShape)"))
         let backgroundModifier = try XCTUnwrap(body.range(of: ".background {"))
-        let shadow = try XCTUnwrap(body.range(of: ".shadow("))
         XCTAssertLessThan(contentClip.lowerBound, backgroundModifier.lowerBound)
-        XCTAssertLessThan(backgroundModifier.lowerBound, shadow.lowerBound)
+        XCTAssertFalse(body.contains(".shadow("))
 
         let layerEnd = try XCTUnwrap(
             background.range(
