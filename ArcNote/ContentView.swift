@@ -14,6 +14,8 @@ import AuthenticationServices
 struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var authManager = AuthManager.shared
+    @StateObject private var localNotes = LocalNotesController.shared
+    @State private var showReauthentication = false
     @State private var cancellables = Set<AnyCancellable>()
     @State private var appleSignInDelegate: AppleSignInDelegate?
     @State private var showUnauthorizedAlert = false
@@ -28,7 +30,7 @@ struct ContentView: View {
 
     var body: some View {
         Group {
-            if authManager.isAuthenticated {
+            if authManager.isAuthenticated || authManager.canOpenLocalNotes {
                 authenticatedView
             } else {
                 NavigationStack { loginView }
@@ -50,15 +52,22 @@ struct ContentView: View {
             _ = accessStore.capture(url)
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("UnauthorizedError"))) { _ in
+            authManager.markSessionNeedsLogin()
             showUnauthorizedAlert = true
         }
         .alert("Authentication Error", isPresented: $showUnauthorizedAlert) {
             Button("OK") {
-                // 用户点击OK后清除用户会话并返回登录页面
-                authManager.invalidateLocalSession()
+                showReauthentication = authManager.canOpenLocalNotes
             }
         } message: {
-            Text("401 Unauthorized - Please sign in again")
+            Text("Your local notes are kept. Sign in again to sync.")
+        }
+        .sheet(isPresented: $showReauthentication) { NavigationStack { SignInView() } }
+        .onChange(of: authManager.sessionPhase) { phase in
+            if phase == .verified { showReauthentication = false }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NoteSyncSignIn"))) { _ in
+            showReauthentication = true
         }
         .overlay(alignment: .topLeading) {
             #if DEBUG
@@ -73,13 +82,14 @@ struct ContentView: View {
 
     @ViewBuilder
     private var authenticatedView: some View {
-        if authManager.canEnterProduct {
-            if authManager.needsInterestSelection {
+        if authManager.canEnterProduct || authManager.canOpenLocalNotes {
+            if authManager.needsInterestSelection && authManager.canEnterProduct {
                 NavigationStack {
                     ChooseInterestsView(onComplete: authManager.completeInterestSelection)
                 }
             } else {
                 TabBarView()
+                    .id(authManager.currentNoteScope)
             }
         } else if authManager.accessState?.status == "required" {
             NavigationStack { accessGate(unavailable: false) }

@@ -153,6 +153,7 @@ struct BlockNoteNavigationGate {
 @MainActor
 public final class BlockNoteEditorCoordinator: NSObject {
     private let controller: BlockNoteEditorController
+    private let localImageHandler: BlockNoteLocalImageHandler?
     private var eventHandler: @MainActor (BlockNoteEditorEvent) -> Void
     private var session: BlockNoteEditorBridgeSession
     private weak var webView: WKWebView?
@@ -166,9 +167,11 @@ public final class BlockNoteEditorCoordinator: NSObject {
         document: BlockNoteInitialDocument,
         editable: Bool,
         controller: BlockNoteEditorController,
+        localImageSource: BlockNoteLocalImageSource? = nil,
         onEvent: @escaping @MainActor (BlockNoteEditorEvent) -> Void
     ) {
         self.controller = controller
+        localImageHandler = localImageSource.map { BlockNoteLocalImageHandler(source: $0) }
         eventHandler = onEvent
         session = BlockNoteEditorBridgeSession(document: document, editable: editable)
         super.init()
@@ -200,6 +203,9 @@ public final class BlockNoteEditorCoordinator: NSObject {
         let configuration = WKWebViewConfiguration()
         configuration.userContentController = userContentController
         configuration.websiteDataStore = .nonPersistent()
+        if let localImageHandler {
+            configuration.setURLSchemeHandler(localImageHandler, forURLScheme: localImageHandler.scheme)
+        }
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = self
@@ -263,6 +269,7 @@ public final class BlockNoteEditorCoordinator: NSObject {
     func teardown() {
         guard !isTornDown else { return }
         isTornDown = true
+        localImageHandler?.close()
 
         webView?.stopLoading()
         webView?.navigationDelegate = nil

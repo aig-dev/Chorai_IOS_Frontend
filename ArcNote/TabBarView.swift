@@ -519,7 +519,9 @@ struct TabBarView: View {
         ZStack {
             
             // 主要内容区域 - 全屏显示
-            TabView(selection: $coordinator.selectedTab) {
+            TabView(selection: Binding(get: { coordinator.selectedTab }, set: { tab in
+                if tab == .library || authManager.canEnterProduct { coordinator.selectedTab = tab }
+            })) {
                 // Explore 页面
                 tabNavigationRoot(.flow) {
                 ExploreView(
@@ -782,6 +784,9 @@ struct TabBarView: View {
             libraryCardRouteCoverageDepth = 0
             isLibrarySurfaceVisible = false
         }
+        .onChange(of: authManager.canEnterProduct) { allowed in
+            if !allowed { coordinator.selectedTab = .library }
+        }
         .onChange(of: onboardingStore.phase) { phase in
             syncContextualTipsWithOnboardingSession()
             if phase == .active {
@@ -828,6 +833,7 @@ struct TabBarView: View {
             isLibrarySurfaceVisible = false
         }
         .onAppear {
+            if !authManager.canEnterProduct { coordinator.selectedTab = .library }
             lastSelectedTab = coordinator.selectedTab
         }
         #if DEBUG

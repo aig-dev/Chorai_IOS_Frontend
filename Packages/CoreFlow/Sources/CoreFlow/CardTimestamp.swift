@@ -15,7 +15,7 @@ public enum CardTimestamp {
         return String(value[..<separator])
     }
 
-    private static func parse(_ value: String) -> Date? {
+    static func parse(_ value: String) -> Date? {
         fractional.date(from: value) ?? standard.date(from: value)
     }
 

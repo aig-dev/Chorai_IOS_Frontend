@@ -4,7 +4,7 @@ import XCTest
 final class CoreTabBarSourceContractTests: XCTestCase {
     func testProductRootUsesNativeTabsWithStableDestinations() throws {
         let source = try String(contentsOf: Self.repositoryRoot.appendingPathComponent("ArcNote/TabBarView.swift"), encoding: .utf8)
-        XCTAssertTrue(source.contains("TabView(selection: $coordinator.selectedTab)"))
+        XCTAssertTrue(source.contains("TabView(selection: Binding("))
         for (destination, name, symbol) in [("flow", "Explore", "safari"), ("library", "Home", "square.stack"), ("chat", "Chat", "bubble.left.and.bubble.right")] {
             XCTAssertTrue(source.contains(".tag(CoreTab.\(destination))"))
             XCTAssertTrue(source.contains("Label(\"\(name)\", systemImage: \"\(symbol)\")"))
@@ -38,9 +38,9 @@ final class CoreTabBarSourceContractTests: XCTestCase {
 
     func testAuthenticatedProductDoesNotInheritTheSignInNavigationStack() throws {
         let source = try String(contentsOf: Self.repositoryRoot.appendingPathComponent("ArcNote/ContentView.swift"), encoding: .utf8)
-        XCTAssertTrue(source.contains("Group {\n            if authManager.isAuthenticated {\n                authenticatedView"))
+        XCTAssertTrue(source.contains("Group {\n            if authManager.isAuthenticated || authManager.canOpenLocalNotes {\n                authenticatedView"))
         XCTAssertTrue(source.contains("NavigationStack { loginView }"), "Sign-in keeps its own navigation destinations")
-        XCTAssertTrue(source.contains("if authManager.needsInterestSelection {\n                NavigationStack {"))
+        XCTAssertTrue(source.contains("if authManager.needsInterestSelection && authManager.canEnterProduct {\n                NavigationStack {"))
         XCTAssertTrue(source.contains("ChooseInterestsView(onComplete: authManager.completeInterestSelection)"))
         XCTAssertFalse(source.contains("NavigationStack {\n            if authManager.isAuthenticated"))
     }

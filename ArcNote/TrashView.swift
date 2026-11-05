@@ -12,7 +12,7 @@ struct TrashView: View {
         List {
             Section {
                 Label {
-                    Text("The deleted notes will be automatically cleared after 30 days.")
+                    Text("Notes are kept here while offline. Cloud Trash retains synced deletions for 30 days.")
                         .fixedSize(horizontal: false, vertical: true)
                 } icon: {
                     Image(systemName: "info.circle")
@@ -252,7 +252,7 @@ struct TrashCardView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            Text("Automatically delete after \(card.daysRemaining) days.")
+            Text("Cloud Trash retains synced deletions for 30 days.")
                 .font(.caption)
                 .foregroundStyle(ChoraiTheme.gold)
 

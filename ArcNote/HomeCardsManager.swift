@@ -3,6 +3,7 @@ import Combine
 import CoreFlow
 import SwiftUI
 
+@MainActor
 class HomeCardsManager: ObservableObject {
     @Published var cards: [UserCard] = []
     @Published var isLoading: Bool = false
@@ -19,173 +20,67 @@ class HomeCardsManager: ObservableObject {
     private let pageSize: Int = 20
     private var currentSortBy: String? = "updated_at" // 默认排序字段
     private var currentSortOrder: String? = "desc" // 默认排序顺序
-    private var pendingCommittedCardID: String?
-    private var pendingCommittedCard: UserCard?
-    private var loadGeneration = 0
     
+    private var isOwnedLibrary = false
+
+    nonisolated init() {
+        Task { @MainActor [weak self] in
+        guard let self else { return }
+        LocalNotesController.shared.library.$notes
+            .sink { [weak self] notes in
+                guard let self, self.isOwnedLibrary else { return }
+                self.presentLocalNotes(notes)
+            }.store(in: &cancellables)
+        }
+    }
+
     func loadUserCards(refresh: Bool = false, sortBy: String? = nil, sortOrder: String? = nil) {
-        guard authManager.currentUser != nil else {
-            error = .unauthorized
-            return
+        isOwnedLibrary = true
+        if let sortBy { currentSortBy = sortBy }
+        if let sortOrder { currentSortOrder = sortOrder }
+        hasMoreData = false
+        presentLocalNotes(LocalNotesController.shared.library.notes)
+        LocalNotesController.shared.refreshAccess()
+        Task {
+            isLoading = true
+            defer { isLoading = false }
+            await LocalNotesController.shared.library.synchronize(forceRetry: refresh)
         }
-        
-        // 更新当前排序参数
-        if let sortBy = sortBy {
-            currentSortBy = sortBy
-        }
-        if let sortOrder = sortOrder {
-            currentSortOrder = sortOrder
-        }
-        
-        // 使用当前排序参数（如果新参数未提供）
-        let finalSortBy = sortBy ?? currentSortBy
-        let finalSortOrder = sortOrder ?? currentSortOrder
-        
-        
-        if refresh {
-            loadGeneration += 1
-            currentPage = 1
-            cards = []
-            hasMoreData = true
-        }
-        let requestGeneration = loadGeneration
-        
-        isLoading = true
-        error = nil
-        
-        networkManager.getCards(page: currentPage, perPage: pageSize, sortBy: finalSortBy, sortOrder: finalSortOrder)
-            .receive(on: DispatchQueue.main)
-            .sink(
-                receiveCompletion: { [weak self] completion in
-                    guard let self,
-                          self.loadGeneration == requestGeneration else {
-                        return
-                    }
-                    self.isLoading = false
-                    if case .failure(let error) = completion {
-                        self.error = error
-                        print("获取用户卡片失败: \(error)")
-                    }
-                    var atsStatus = ""
-                    if let atsConfig = Bundle.main.infoDictionary?["NSAppTransportSecurity"] as? [String: Any] {
-                        if let allowsArbitraryLoads = atsConfig["NSAllowsArbitraryLoads"] as? Bool, allowsArbitraryLoads {
-                            atsStatus = "ATS 已禁用 (NSAllowsArbitraryLoads = true)"
-                        } else if let allowsLocalNetworking = atsConfig["NSAllowsLocalNetworking"] as? Bool, allowsLocalNetworking {
-                            atsStatus = "ATS 已启用，本地网络例外已允许"
-                        } else {
-                            atsStatus = "ATS 已启用"
-                        }
-                    } else {
-                        atsStatus = "未找到 ATS 配置"
-                    }
-                    print(atsStatus)
-                },
-                receiveValue: { [weak self] response in
-                    guard let self,
-                          self.loadGeneration == requestGeneration else {
-                        return
-                    }
-                    
-                    for (index, card) in response.data.enumerated() {
-                        print("卡片 \(index): id=\(card.id), commentCount=\(card.commentCount ?? -1), likeCount=\(card.likeCount)")
-                    }
-                    
-                    let responseCards = self.cardsIncludingPendingCommit(
-                        response.data
-                    )
-                    if refresh {
-                        self.cards = responseCards
-                    } else {
-                        let existingIDs = Set(self.cards.map(\.id))
-                        self.cards.append(
-                            contentsOf: responseCards.filter {
-                                !existingIDs.contains($0.id)
-                            }
-                        )
-                    }
-
-                    self.hasMoreData = response.data.count == self.pageSize
-                    self.currentPage += 1
-
-                    if let pendingID = self.pendingCommittedCardID,
-                       response.data.contains(where: { $0.id == pendingID }) {
-                        self.pendingCommittedCardID = nil
-                        self.pendingCommittedCard = nil
-                    }
-              
-                }
-            )
-            .store(in: &cancellables)
     }
 
-    /// The commit response is authoritative before the paginated Library
-    /// projection is guaranteed to include the new Card. Fetch that exact Card
-    /// and keep it at the head of Notes while the normal list catches up.
+    private func presentLocalNotes(_ notes: [OfflineNote]) {
+        let formatter = ISO8601DateFormatter()
+        let sorted = notes.filter { $0.desiredLifecycle == .active }.sorted { lhs, rhs in
+            if (lhs.isPinned ?? false) != (rhs.isPinned ?? false) { return lhs.isPinned ?? false }
+            let a = currentSortBy == "created_at" ? lhs.createdAt : lhs.updatedAt
+            let b = currentSortBy == "created_at" ? rhs.createdAt : rhs.updatedAt
+            return currentSortOrder == "asc" ? a < b : a > b
+        }
+        cards = sorted.map { note in
+            UserCard(id: NoteLibraryStore.identifier(note), title: note.body.title, content: note.body.content,
+                contentJSON: note.body.contentJSON, backgroundMediaRef: note.backgroundMediaRef, contentHash: "",
+                isPublic: note.isPublic, tags: note.body.tags, createdAt: formatter.string(from: note.createdAt),
+                updatedAt: formatter.string(from: note.updatedAt), likeCount: 0, commentCount: nil, isLiked: false,
+                isPinned: note.isPinned ?? false, pinnedAt: nil, isFavorited: nil, favoriteCount: nil, rate: 0,
+                ownerActorId: authManager.currentUser?.id, isOwner: true)
+        }
+    }
+
     func promoteCommittedCard(id: String) {
-        let cardID = id.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !cardID.isEmpty else { return }
-
-        pendingCommittedCardID = cardID
-        networkManager.getCard(id: cardID)
-            .receive(on: DispatchQueue.main)
-            .sink(
-                receiveCompletion: { [weak self] completion in
-                    guard case let .failure(error) = completion,
-                          self?.pendingCommittedCardID == cardID else {
-                        return
-                    }
-                    self?.error = error
-                },
-                receiveValue: { [weak self] response in
-                    guard let self,
-                          response.success,
-                          response.data.id == cardID,
-                          self.pendingCommittedCardID == cardID else {
-                        return
-                    }
-                    let card = Self.userCard(from: response.data)
-                    self.pendingCommittedCard = card
-                    self.cards.removeAll { $0.id == cardID }
-                    self.cards.insert(card, at: 0)
-                }
-            )
-            .store(in: &cancellables)
-    }
-
-    private func cardsIncludingPendingCommit(
-        _ responseCards: [UserCard]
-    ) -> [UserCard] {
-        guard let pendingCommittedCard else { return responseCards }
-        return [pendingCommittedCard]
-            + responseCards.filter { $0.id != pendingCommittedCard.id }
-    }
-
-    private static func userCard(from card: CardResponseData) -> UserCard {
-        UserCard(
-            id: card.id,
-            title: card.title,
-            content: card.content,
-            contentJSON: card.contentJSON,
-            backgroundMediaRef: card.backgroundMediaRef,
-            contentHash: card.contentHash,
-            isPublic: card.isPublic,
-            tags: card.tags,
-            createdAt: card.createdAt,
-            updatedAt: card.updatedAt,
-            likeCount: card.likeCount,
-            commentCount: card.commentCount,
-            isLiked: card.isLiked,
-            isPinned: card.isPinned,
-            pinnedAt: card.pinnedAt,
-            isFavorited: card.isFavorited,
-            favoriteCount: card.favoriteCount,
-            rate: card.rate,
-            ownerActorId: card.ownerActorID ?? card.author?.id,
-            isOwner: card.isOwner
-        )
+        isOwnedLibrary = true
+        Task {
+            do {
+                _ = try await LocalNotesController.shared.library.open(identifier: id)
+                presentLocalNotes(LocalNotesController.shared.library.notes)
+            } catch {
+                // A failed cloud read never removes an already saved local note.
+                self.error = .networkError(error)
+            }
+        }
     }
 
     func loadPublicProfileCards(actorId: String, refresh: Bool = false) {
+        isOwnedLibrary = false
         guard authManager.currentUser != nil else {
             error = .unauthorized
             return
@@ -237,35 +132,14 @@ class HomeCardsManager: ObservableObject {
     
     // MARK: 删除卡片功能
     func deleteCard(cardId: String, completion: @escaping (Result<Bool, NetworkError>) -> Void) {
-        guard authManager.currentUser != nil else {
-            print("用户未登录")
-            completion(.failure(.unauthorized))
-            return
-        }
-        
-        networkManager.deleteCard(cardId: cardId) { [weak self] result in
-            DispatchQueue.main.async {
-                switch result {
-                case .success(let response):
-                    if response.success {
-                        // 从本地列表中移除卡片
-                        self?.cards.removeAll { $0.id == cardId }
-                        // 移除收藏状态
-                        self?.cardFavoriteStates.removeValue(forKey: cardId)
-                        print("卡片删除成功: cardId=\(cardId)")
-                        completion(.success(true))
-                    } else {
-                        print("卡片删除失败: \(response.message ?? "未知错误")")
-                        completion(.failure(.serverError(500, response.message)))
-                    }
-                case .failure(let error):
-                    print("卡片删除失败: \(error.localizedDescription)")
-                    completion(.failure(error))
-                }
-            }
+        Task {
+            do {
+                try await LocalNotesController.shared.setLifecycle(identifier: cardId, lifecycle: .trashed)
+                completion(.success(true))
+            } catch { completion(.failure(.networkError(error))) }
         }
     }
-    
+
     // MARK: - 收藏相关方法
     func getFavoriteState(for cardId: String) -> Bool {
         return cardFavoriteStates[cardId] ?? false
@@ -349,13 +223,18 @@ class HomeCardsManager: ObservableObject {
             return
         }
         
+        guard let scope = authManager.currentNoteScope, authManager.canEnterProduct,
+              let serverID = LocalNotesController.shared.library.serverID(for: cardId) else {
+            completion(.failure(.forbidden)); return
+        }
         let newIsPublic = !currentCard.isPublic
         
-        networkManager.toggleCardVisibility(cardId: cardId, isPublic: newIsPublic) { [weak self] result in
+        networkManager.toggleCardVisibility(cardId: serverID, isPublic: newIsPublic) { [weak self] result in
             DispatchQueue.main.async {
                 switch result {
                 case .success(let response):
                     if response.success {
+                        Task { try? await LocalNotesController.shared.library.recordMetadata(identifier: cardId, isPublic: response.data.isPublic, scope: scope) }
                         // 更新本地卡片数据
                         if let index = self?.cards.firstIndex(where: { $0.id == cardId }) {
                             self?.cards[index] = UserCard(
@@ -432,11 +311,16 @@ class HomeCardsManager: ObservableObject {
             apiCall = networkManager.toggleCardPin
         }
         
-        apiCall(cardId) { [weak self] result in
+        guard let scope = authManager.currentNoteScope, authManager.canEnterProduct,
+              let serverID = LocalNotesController.shared.library.serverID(for: cardId) else {
+            completion(.failure(.forbidden)); return
+        }
+        apiCall(serverID) { [weak self] result in
             DispatchQueue.main.async {
                 switch result {
                 case .success(let response):
                     if response.success, let updatedCard = response.data {
+                        Task { try? await LocalNotesController.shared.library.recordMetadata(identifier: cardId, isPinned: updatedCard.isPinned, scope: scope) }
                         // 更新本地卡片数据
                         if let index = self?.cards.firstIndex(where: { $0.id == cardId }) {
                             self?.cards[index] = UserCard(

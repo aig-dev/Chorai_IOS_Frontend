@@ -52,6 +52,7 @@ struct NewNoteView: View {
     @State private var cancellables = Set<AnyCancellable>()
 
     private let networkManager = NetworkManager.shared
+    @State private var localEditingService: LocalCoreCardEditingService
 
     init(
         cardId: String = "",
@@ -59,11 +60,16 @@ struct NewNoteView: View {
     ) {
         self.cardId = cardId
         self.onCreated = onCreated
+        let scope = AuthManager.shared.currentNoteScope ?? NoteStoreScope(actorID: "", environmentID: APIConfiguration.baseURL)
+        let creationID = UUID().uuidString
+        let service = LocalCoreCardEditingService(identifier: cardId.isEmpty ? nil : cardId, creationID: creationID, scope: scope)
+        _localEditingService = State(initialValue: service)
 
         let isNew = cardId.isEmpty
         _editingStore = StateObject(
             wrappedValue: CardEditingStore(
                 cardID: isNew ? nil : cardId,
+                createRequestID: creationID,
                 draft: CardEditingDraft(
                     title: nil,
                     content: "",
@@ -72,7 +78,8 @@ struct NewNoteView: View {
                 ),
                 backgroundMediaRef: nil,
                 links: [],
-                service: NetworkCoreCardEditingService()
+                service: service,
+                preservesLocalDrafts: true
             )
         )
         _editorSeed = State(initialValue: isNew ? .newNote() : nil)
@@ -84,6 +91,7 @@ struct NewNoteView: View {
                 CardEditorSessionView(
                     seed: seed,
                     editingStore: editingStore,
+                    localEditingService: localEditingService,
                     onCreated: onCreated
                 )
                 .id(seed.id)
@@ -114,55 +122,27 @@ struct NewNoteView: View {
         isLoading = true
         loadErrorMessage = nil
 
-        networkManager.getCardDetail(cardId: cardId) { result in
-            DispatchQueue.main.async {
-                isLoading = false
-                switch result {
-                case let .success(response) where response.success:
-                    hydrateExistingCard(response.data)
-                case let .success(response):
-                    loadErrorMessage = response.message ?? "Couldn't open this note."
-                case let .failure(error):
-                    loadErrorMessage = error.localizedDescription
-                }
+        Task {
+            defer { isLoading = false }
+            do {
+                let note = try await localEditingService.openExisting()
+                let displayURLs = try await localEditingService.imageDisplayURLs()
+                guard editorSeed == nil else { return }
+                editingStore.hydrate(draft: CardEditingDraft(title: note.body.title, content: note.body.content,
+                    contentJSON: note.body.contentJSON, editorAtmosphere: note.editorAtmosphere, tags: note.body.tags, isPublic: note.isPublic),
+                    bodyRevision: Int(note.bodyRevision), backgroundMediaRef: note.backgroundMediaRef, links: [])
+                editorSeed = CardEditorSeed(id: UUID(), document: BlockNoteInitialDocument.existingCard(contentJSON: note.body.contentJSON, fallbackMarkdown: note.body.content, displayURLsByMediaReference: displayURLs),
+                    revision: Int(note.bodyRevision), isNew: false, initialFocus: false, initialIsPublic: note.isPublic, isPinned: note.isPinned ?? false)
+            } catch {
+                loadErrorMessage = "Couldn't open this local note. Your saved data has been kept."
             }
         }
     }
 
-    private func hydrateExistingCard(_ card: CardDetail) {
-        guard editorSeed == nil else { return }
-
-        let draft = CardEditingDraft(
-            title: card.title,
-            content: card.content,
-            contentJSON: card.contentJSON,
-            editorAtmosphere: card.editorAtmosphere ?? "none",
-            tags: card.tags,
-            isPublic: card.isPublic
-        )
-        editingStore.hydrate(
-            draft: draft,
-            bodyRevision: 0,
-            backgroundMediaRef: card.backgroundMediaRef,
-            links: editingStore.links
-        )
-        editorSeed = CardEditorSeed(
-            id: UUID(),
-            document: BlockNoteInitialDocument.existingCard(
-                contentJSON: card.contentJSON,
-                fallbackMarkdown: card.content
-            ),
-            revision: 0,
-            isNew: false,
-            initialFocus: false,
-            initialIsPublic: card.isPublic,
-            isPinned: card.isPinned ?? false
-        )
-    }
-
     private func loadRelatedLinks() {
-        guard !cardId.isEmpty else { return }
-        networkManager.getCardLinks(cardId: cardId)
+        guard AuthManager.shared.canEnterProduct,
+              let serverID = LocalNotesController.shared.library.serverID(for: cardId) else { return }
+        networkManager.getCardLinks(cardId: serverID)
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { _ in },
@@ -172,8 +152,8 @@ struct NewNoteView: View {
                         + response.data.incomingLinks
                     let links = items.map { item in
                         CardEditingLink(
-                            sourceCardID: item.sourceAssetId,
-                            targetCardID: item.targetAssetId,
+                            sourceCardID: item.sourceAssetId == serverID ? cardId : item.sourceAssetId,
+                            targetCardID: item.targetAssetId == serverID ? cardId : item.targetAssetId,
                             title: item.title ?? "Related note",
                             previewHTML: item.content,
                             authorName: item.author?.userName,
@@ -214,6 +194,9 @@ private final class CardEditorNativeActionRouter: ObservableObject {
 @MainActor
 private struct CardEditorSessionView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
+    @ObservedObject private var localNotes = LocalNotesController.shared
+    @ObservedObject private var authManager = AuthManager.shared
     @Environment(\.navigateCard) private var navigateCard
 
     let seed: CardEditorSeed
@@ -251,10 +234,15 @@ private struct CardEditorSessionView: View {
     @State private var didNotifyCreation: Bool
     @State private var isPinned: Bool
     @State private var cancellables = Set<AnyCancellable>()
+    @State private var autosaveTask: Task<Void, Never>?
+    @State private var persistenceSessionID = UUID()
+    @State private var showCloudVersionConfirmation = false
+    @State private var isResolvingConflict = false
 
     init(
         seed: CardEditorSeed,
         editingStore: CardEditingStore,
+        localEditingService: LocalCoreCardEditingService,
         onCreated: @escaping (String, String) -> Void
     ) {
         self.seed = seed
@@ -270,6 +258,9 @@ private struct CardEditorSessionView: View {
                 document: seed.document,
                 initialRevision: seed.revision,
                 initiallyFocused: seed.initialFocus,
+                localImageSource: BlockNoteLocalImageSource(scheme: NoteAttachmentFiles.previewScheme) { url in
+                    try await localEditingService.imagePreview(url)
+                },
                 onDocumentChanged: { revision in
                     _ = editingStore.applyBodyRevision(
                         content: revision.fallbackMarkdown,
@@ -284,7 +275,7 @@ private struct CardEditorSessionView: View {
         )
     }
 
-    var body: some View {
+    private var editorShell: some View {
         CardEditorShell(
             bodyModel: bodyModel,
             tags: editingStore.draft.tags,
@@ -292,6 +283,7 @@ private struct CardEditorSessionView: View {
             unlinkingLinkID: unlinkingLinkID,
             isLinkRemovalEnabled: bodyModel.canMutate
                 && !isBusy
+                && cloudCardID != nil
                 && unlinkingLinkID == nil,
             background: editorBackground,
             isPublic: editingStore.draft.isPublic,
@@ -308,13 +300,19 @@ private struct CardEditorSessionView: View {
             onRemoveLink: removeOntologyLink,
             onTogglePrivacy: togglePrivacy,
             onOpenCardActions: cardActionsHandler,
-            menuActions: nativeMenuActions
+            menuActions: nativeMenuActions,
+            isPrivacyEditable: cloudCardID != nil,
+            saveStatus: localSaveStatus
         )
+    }
+
+    var body: some View {
+        editorShell
         .overlay {
             if showCardActions {
                 CardEditorActionBox(
                     isPresented: $showCardActions,
-                    isEnabled: bodyModel.canMutate && !isBusy,
+                    isEnabled: bodyModel.canMutate && !isBusy && cloudCardID != nil,
                     isPinned: isPinned,
                     onBackground: presentBackgroundActions,
                     onSpark: {
@@ -416,15 +414,113 @@ private struct CardEditorSessionView: View {
                 bodyModel.insertLink(url: url, text: text)
             }
         }
-        .onAppear(perform: configureNativeActions)
+        .onAppear {
+            configureNativeActions()
+            localNotes.registerEditor(persistenceSessionID) { await persistLocalDraft() }
+        }
+        .onChange(of: editingStore.draft) { _ in scheduleLocalSave() }
+        .confirmationDialog("Cloud version changed. Both copies are kept.", isPresented: $showCloudVersionConfirmation, titleVisibility: .visible) {
+            Button("Use cloud version", role: .destructive) { resolveConflict(useCloud: true) }
+            Button("Keep mine as a new note") { resolveConflict(useCloud: false) }
+        }
+        .disabled(isResolvingConflict)
+        .allowsHitTesting(!isResolvingConflict)
+        .onChange(of: scenePhase) { phase in
+            if phase != .active { flushLocalSave() }
+        }
         .onDisappear {
+            flushLocalSave()
+            Task {
+                await persistLocalDraft()
+                localNotes.unregisterEditor(persistenceSessionID)
+            }
             bodyModel.dismissKeyboard()
             LinkPopupManager.shared.onCardSelected = nil
         }
     }
 
+    private var currentLocalNote: OfflineNote? {
+        guard let id = editingStore.cardID else { return nil }
+        return localNotes.library.notes.first { NoteLibraryStore.identifier($0) == id || $0.serverAssetID == id }
+    }
+
+    private var cloudCardID: String? {
+        guard authManager.canEnterProduct, localNotes.library.cloudEnabled,
+              currentLocalNote?.isSynchronized == true,
+              let id = editingStore.cardID else { return nil }
+        return localNotes.library.serverID(for: id)
+    }
+
+    private func resolveConflict(useCloud: Bool) {
+        guard !isResolvingConflict, let id = editingStore.cardID else { return }
+        isResolvingConflict = true
+        bodyModel.dismissKeyboard()
+        Task {
+            defer { isResolvingConflict = false }
+            do {
+                if bodyModel.canSave { _ = try await applyCurrentSnapshot() }
+                await persistLocalDraft()
+                guard !editingStore.isDirty else { return }
+                if useCloud { try await localNotes.library.useCloudVersion(identifier: id) }
+                else {
+                    _ = try await localNotes.library.saveLocalAsNewNote(identifier: id)
+                }
+                dismiss()
+            } catch { saveMessage = "Couldn't resolve this version yet. Both copies have been kept." }
+        }
+    }
+
+    private var localSaveStatus: String? {
+        if editingStore.isDirty { return "Saving on this device…" }
+        guard let note = currentLocalNote else { return nil }
+        if note.remoteSnapshot != nil || note.syncIssue == "conflict" { return "Saved on this device · Cloud version changed" }
+        if note.syncIssue == "unsupported_document" { return "Saved on this device · This content can't sync yet" }
+        if authManager.sessionPhase == .needsLogin { return "Saved on this device · Sign in to sync" }
+        if note.syncIssue != nil { return "Saved on this device · Sync needs attention" }
+        return note.isSynchronized ? "Synced" : "Saved on this device · Waiting to sync"
+    }
+
+    private func scheduleLocalSave() {
+        guard autosaveTask == nil else { return }
+        autosaveTask = Task {
+            do { try await Task.sleep(nanoseconds: 300_000_000) } catch { autosaveTask = nil; return }
+            await persistLocalDraft()
+            autosaveTask = nil
+            if editingStore.isDirty, !hasSaveFailure { scheduleLocalSave() }
+        }
+    }
+
+    private func flushLocalSave() {
+        autosaveTask?.cancel()
+        autosaveTask = nil
+        // A short OS background allowance is for flushing local bytes only.
+        let taskID = UIApplication.shared.beginBackgroundTask(withName: "Save local note")
+        Task {
+            defer { if taskID != .invalid { UIApplication.shared.endBackgroundTask(taskID) } }
+            await persistLocalDraft()
+        }
+    }
+
+    private func persistLocalDraft() async {
+        guard editingStore.isDirty, !isUntouchedNewDraft else { return }
+        // A preceding local transaction may still be finishing as typing continues.
+        while editingStore.phase == .saving {
+            do { try await Task.sleep(nanoseconds: 20_000_000) } catch { return }
+        }
+        guard editingStore.isDirty else { return }
+        let saved = await editingStore.save()
+        notifyCreationIfNeeded()
+        if !saved, editingStoreHasFailure {
+            saveMessage = "Couldn't save on this device. Keep this note open and retry."
+            hasSaveFailure = true
+        } else {
+            saveMessage = nil
+            resolveSaveFailure()
+        }
+    }
+
     private var isBusy: Bool {
-        if isSaving || isLoadingBackgroundPhoto || isProcessingInlineImage
+        if isSaving || isResolvingConflict || isLoadingBackgroundPhoto || isProcessingInlineImage
             || isPreparingCardAction || isCardActionInFlight {
             return true
         }
@@ -521,7 +617,9 @@ private struct CardEditorSessionView: View {
             link: addOntologyLink,
             root: { performPersistedCardAction(.navigation { .root(cardID: $0, type: nil) }) },
             remove: { showRemoveCardConfirmation = true },
-            togglePin: { performPersistedCardAction(.togglePin) }
+            togglePin: { performPersistedCardAction(.togglePin) },
+            cloudActionsEnabled: cloudCardID != nil,
+            removeEnabled: bodyModel.canMutate && !isBusy
         )
     }
 
@@ -639,6 +737,10 @@ private struct CardEditorSessionView: View {
 
     private func handleLeadingControl() {
         guard !isBusy else { return }
+        if currentLocalNote?.remoteSnapshot != nil || currentLocalNote?.syncIssue == "remote_unavailable" {
+            showCloudVersionConfirmation = true
+            return
+        }
         switch leadingControlState {
         case .save, .retry:
             saveCurrentSnapshot()
@@ -893,12 +995,30 @@ private struct CardEditorSessionView: View {
     }
 
     private func togglePrivacy() {
+        guard let serverID = cloudCardID, let id = editingStore.cardID,
+              let scope = authManager.currentNoteScope else {
+            saveMessage = "Sync this note before changing who can see it."
+            return
+        }
         completeTagEntry()
-        updateMetadata(isPublic: !editingStore.draft.isPublic)
+        let value = !editingStore.draft.isPublic
+        NetworkManager.shared.updateCardVisibility(cardId: serverID, isPublic: value)
+            .receive(on: DispatchQueue.main)
+            .sink(receiveCompletion: { result in
+                if case .failure = result { saveMessage = "Couldn't update visibility." }
+            }, receiveValue: { response in
+                guard response.success, authManager.currentNoteScope == scope else { return }
+                Task {
+                    do {
+                        try await localNotes.library.recordMetadata(identifier: id, isPublic: response.data.isPublic, scope: scope)
+                        updateMetadata(isPublic: response.data.isPublic)
+                    } catch { saveMessage = "Visibility changed in the cloud. Refresh to check it." }
+                }
+            }).store(in: &cancellables)
     }
 
     private func presentBackgroundActions() {
-        guard !isBusy else { return }
+        guard !isBusy, cloudCardID != nil else { return }
         completeTagEntry()
         bodyModel.dismissKeyboard()
         saveMessage = nil
@@ -932,7 +1052,7 @@ private struct CardEditorSessionView: View {
     }
 
     private func addOntologyLink() {
-        guard !isBusy else { return }
+        guard !isBusy, let serverID = cloudCardID else { return }
         saveMessage = nil
         hideSaveFailure()
         Task {
@@ -952,7 +1072,7 @@ private struct CardEditorSessionView: View {
                 resolveSaveFailure()
                 pendingOntologyLinkSourceID = sourceID
                 LinkPopupManager.shared.show(
-                    cardId: sourceID,
+                    cardId: serverID,
                     navigateAfterLink: false,
                     mode: .selectionOnly
                 )
@@ -1178,7 +1298,7 @@ private struct CardEditorSessionView: View {
     private func performPersistedCardAction(
         _ action: CardEditorPersistedAction
     ) {
-        guard bodyModel.canSave, !isBusy else { return }
+        guard bodyModel.canSave, !isBusy, cloudCardID != nil else { return }
         isPreparingCardAction = true
         saveMessage = nil
         hideSaveFailure()
@@ -1209,7 +1329,7 @@ private struct CardEditorSessionView: View {
     ) {
         switch action {
         case .navigation(let route):
-            guard let cardID = editingStore.cardID else { return }
+            guard let cardID = cloudCardID else { return }
             navigateCard(route(cardID))
         case let .notification(name):
             postCardAction(name)
@@ -1230,7 +1350,7 @@ private struct CardEditorSessionView: View {
     }
 
     private func postCardAction(_ name: String) {
-        guard let cardID = editingStore.cardID else { return }
+        guard let cardID = cloudCardID else { return }
         NotificationCenter.default.post(
             name: NSNotification.Name(name),
             object: nil,
@@ -1239,7 +1359,7 @@ private struct CardEditorSessionView: View {
     }
 
     private func togglePinnedCard() {
-        guard let cardID = editingStore.cardID,
+        guard let cardID = cloudCardID,
               !isCardActionInFlight else { return }
         isCardActionInFlight = true
         saveMessage = nil
@@ -1271,33 +1391,25 @@ private struct CardEditorSessionView: View {
 
     private func removeCanonicalCard() {
         guard !isCardActionInFlight else { return }
-        guard let cardID = editingStore.cardID else {
-            resolveSaveFailure()
-            dismiss()
-            return
-        }
         isCardActionInFlight = true
         saveMessage = nil
         hideSaveFailure()
-        NetworkManager.shared.deleteCard(id: cardID)
-            .receive(on: DispatchQueue.main)
-            .sink(
-                receiveCompletion: { completion in
-                    isCardActionInFlight = false
-                    if case .failure = completion {
-                        saveMessage = "Couldn't move this note to Trash."
-                    }
-                },
-                receiveValue: { response in
-                    if response.success {
-                        resolveSaveFailure()
-                        dismiss()
-                    } else {
-                        saveMessage = "Couldn't move this note to Trash."
-                    }
-                }
-            )
-            .store(in: &cancellables)
+        Task {
+            defer { isCardActionInFlight = false }
+            // Save and change the local lifecycle without needing a cloud response.
+            if bodyModel.canSave {
+                do { _ = try await applyCurrentSnapshot() }
+                catch { saveMessage = "Couldn't save this note before moving it to Trash."; return }
+            }
+            await persistLocalDraft()
+            guard !editingStore.isDirty else { return }
+            guard let cardID = editingStore.cardID else { dismiss(); return }
+            do {
+                try await localNotes.setLifecycle(identifier: cardID, lifecycle: .trashed)
+                resolveSaveFailure()
+                dismiss()
+            } catch { saveMessage = "Couldn't move this note to Trash on this device. Your saved note is kept." }
+        }
     }
 }
 

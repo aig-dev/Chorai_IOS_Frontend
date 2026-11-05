@@ -24,6 +24,8 @@ struct CardEditorMenuActions {
     let root: () -> Void
     let remove: () -> Void
     let togglePin: () -> Void
+    var cloudActionsEnabled = true
+    var removeEnabled = true
 }
 
 /// UIKit supplies an explicit event before menu presentation. SwiftUI Menu's
@@ -105,9 +107,15 @@ struct CardEditorNativeMenuButton: UIViewRepresentable {
         attributes: UIMenuElement.Attributes = [],
         _ perform: @escaping () -> Void
     ) -> UIAction {
+        let cloudIDs = [CardEditorActionIdentity.background, CardEditorActionIdentity.spark, CardEditorActionIdentity.merge,
+                        CardEditorActionIdentity.share, CardEditorActionIdentity.link, CardEditorActionIdentity.root,
+                        CardEditorActionIdentity.pin]
+        var effectiveAttributes = attributes
+        if !actions.cloudActionsEnabled && cloudIDs.contains(identifier) { effectiveAttributes.insert(.disabled) }
+        if identifier == CardEditorActionIdentity.remove && !actions.removeEnabled { effectiveAttributes.insert(.disabled) }
         let action = UIAction(
             title: title, image: UIImage(systemName: icon),
-            identifier: UIAction.Identifier(identifier), attributes: attributes
+            identifier: UIAction.Identifier(identifier), attributes: effectiveAttributes
         ) { _ in
             actions.prepare()
             perform()

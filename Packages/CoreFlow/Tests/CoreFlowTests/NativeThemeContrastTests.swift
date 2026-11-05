@@ -26,9 +26,9 @@ final class NativeThemeContrastTests: XCTestCase {
             }
         }
         func luminance(_ hex: UInt32) -> Double {
-            let values = [16, 8, 0].map { Double((hex >> $0) & 255) / 255 }
-                .map { $0 <= 0.04045 ? $0 / 12.92 : pow(($0 + 0.055) / 1.055, 2.4) }
-            return zip(values, [0.2126, 0.7152, 0.0722]).reduce(0) { $0 + $1.0 * $1.1 }
+            let channels: [Double] = [16, 8, 0].map { Double((hex >> $0) & 255) / 255 }
+            let values: [Double] = channels.map { $0 <= 0.04045 ? $0 / 12.92 : pow(($0 + 0.055) / 1.055, 2.4) }
+            return zip(values, [0.2126, 0.7152, 0.0722]).reduce(0.0) { $0 + $1.0 * $1.1 }
         }
         for (foreground, background) in [("ink", "background"), ("secondaryInk", "surface"), ("tertiaryInk", "surface"), ("gold", "surface"), ("onAccent", "ink")] {
             let fg = try pair(foreground), bg = try pair(background)

@@ -7,6 +7,7 @@
 
 import Foundation
 import Combine
+import CoreFlow
 
 // MARK: 回收站卡片数据模型
 struct TrashCard: Codable, Identifiable {
@@ -22,6 +23,7 @@ struct TrashCard: Codable, Identifiable {
     let isLiked: Bool
     let deletedAt: String
     let daysRemaining: Int
+    var syncToken: String? = nil
 
     enum CodingKeys: String, CodingKey {
         case id, title, content, tags
@@ -33,6 +35,7 @@ struct TrashCard: Codable, Identifiable {
         case isLiked = "is_liked"
         case deletedAt = "deleted_at"
         case daysRemaining = "days_remaining"
+        case syncToken = "sync_token"
     }
 
     init(from decoder: Decoder) throws {
@@ -49,6 +52,7 @@ struct TrashCard: Codable, Identifiable {
         isLiked = try container.decode(Bool.self, forKey: .isLiked)
         deletedAt = try container.decode(String.self, forKey: .deletedAt)
         daysRemaining = try container.decode(Int.self, forKey: .daysRemaining)
+        syncToken = try container.decodeIfPresent(String.self, forKey: .syncToken)
     }
 }
 
@@ -76,122 +80,90 @@ struct TrashListResponse: Codable {
     }
 }
 
+extension TrashCard {
+    init(localNote note: OfflineNote) {
+        let formatter = ISO8601DateFormatter()
+        id = NoteLibraryStore.identifier(note)
+        title = note.body.title
+        content = note.body.content.replacingOccurrences(
+            of: #"!\[([^\]]*)\]\([^)]*\)"#, with: "$1", options: .regularExpression)
+        contentHash = ""
+        isPublic = note.isPublic
+        tags = note.body.tags
+        createdAt = formatter.string(from: note.createdAt)
+        updatedAt = formatter.string(from: note.updatedAt)
+        deletedAt = updatedAt
+        likeCount = 0
+        isLiked = false
+        daysRemaining = max(0, 30 - max(0, Int(Date().timeIntervalSince(note.updatedAt) / 86_400)))
+        syncToken = note.baseSyncToken
+    }
+}
+
 // MARK: 回收站管理器
+@MainActor
 class TrashManager: ObservableObject {
     static let shared = TrashManager()
-    
     @Published var trashCards: [TrashCard] = []
-    @Published var isLoading: Bool = false
-    @Published var hasMoreData: Bool = true
-    @Published var currentPage: Int = 1
+    @Published var isLoading = false
+    @Published var hasMoreData = false
+    @Published var currentPage = 1
     @Published var error: NetworkError?
-    
-    private let perPage: Int = 20
-    private let networkManager = NetworkManager.shared
-    private let authManager = AuthManager.shared
     private var cancellables = Set<AnyCancellable>()
-    
-    private init() {}
-    
+
+    private init() {
+        LocalNotesController.shared.library.$notes.sink { [weak self] notes in
+            self?.present(notes)
+        }.store(in: &cancellables)
+    }
+
+    private func present(_ notes: [OfflineNote]) {
+        trashCards = notes.filter { $0.desiredLifecycle == .trashed }
+            .sorted { $0.updatedAt > $1.updatedAt }.map(TrashCard.init(localNote:))
+    }
+
     func loadTrashCards(refresh: Bool = false) {
-        guard authManager.currentUser != nil else {
-            print("用户未登录")
-            self.error = .unauthorized
-            return
-        }
-        
-        if refresh {
-            currentPage = 1
-            trashCards = []
-            hasMoreData = true
-        }
-        
-        guard !isLoading && hasMoreData else { return }
-        
-        isLoading = true
         error = nil
-        
-        networkManager.getTrashCards(page: currentPage, perPage: perPage) { [weak self] result in
-            DispatchQueue.main.async {
-                self?.isLoading = false
-                switch result {
-                case .success(let response):
-                    if refresh {
-                        self?.trashCards = response.data
-                    } else {
-                        self?.trashCards.append(contentsOf: response.data)
-                    }
-                    self?.currentPage = response.page
-                    self?.hasMoreData = response.page < (response.total / response.perPage + (response.total % response.perPage > 0 ? 1 : 0))
-                case .failure(let error):
-                    self?.error = error
-                    print("回收站列表获取失败: \(error.localizedDescription)")
-                }
-            }
+        present(LocalNotesController.shared.library.notes)
+        LocalNotesController.shared.refreshAccess()
+        Task {
+            isLoading = true
+            defer { isLoading = false }
+            await LocalNotesController.shared.library.synchronize(forceRetry: refresh)
         }
     }
-    
-    func loadMoreTrashCards() {
-        guard hasMoreData && !isLoading else { return }
-        currentPage += 1
-        loadTrashCards()
-    }
-    
-    func refreshTrashCards() {
-        loadTrashCards(refresh: true)
-    }
-    
+
+    func loadMoreTrashCards() {}
+    func refreshTrashCards() { loadTrashCards(refresh: true) }
+
     func restoreCard(cardId: String, completion: @escaping (Result<Bool, NetworkError>) -> Void) {
-        guard authManager.currentUser != nil else {
-            print("用户未登录")
-            completion(.failure(.unauthorized))
-            return
-        }
-        
-        networkManager.restoreCard(cardId: cardId) { [weak self] result in
-            DispatchQueue.main.async {
-                switch result {
-                case .success(let response):
-                    if response.success {
-                        // 从本地列表中移除卡片
-                        self?.trashCards.removeAll { $0.id == cardId }
-                        print("卡片恢复成功: cardId=\(cardId)")
-                        completion(.success(true))
-                    } else {
-                        print("卡片恢复失败: \(response.message ?? "未知错误")")
-                        completion(.failure(.serverError(500, response.message)))
-                    }
-                case .failure(let error):
-                    print("卡片恢复失败: \(error.localizedDescription)")
-                    completion(.failure(error))
-                }
-            }
+        Task {
+            do {
+                try await LocalNotesController.shared.setLifecycle(identifier: cardId, lifecycle: .active)
+                completion(.success(true))
+            } catch { completion(.failure(.networkError(error))) }
         }
     }
-    
+
+    // The existing permanent-delete action stays online and is never queued.
     func permanentlyDeleteCard(cardId: String, completion: @escaping (Result<Bool, NetworkError>) -> Void) {
-        guard authManager.currentUser != nil else {
-            print("用户未登录")
-            completion(.failure(.unauthorized))
-            return
+        let library = LocalNotesController.shared.library
+        guard let scope = library.scope,
+              let note = library.notes.first(where: { NoteLibraryStore.identifier($0) == cardId }),
+              note.isSynchronized, note.confirmedLifecycle == .trashed,
+              let serverID = LocalNotesController.shared.cloudAssetID(for: cardId) else {
+            completion(.failure(.forbidden)); return
         }
-        
-        networkManager.permanentlyDeleteCard(cardId: cardId) { [weak self] result in
-            DispatchQueue.main.async {
+        NetworkManager.shared.permanentlyDeleteCard(cardId: serverID) { result in
+            Task { @MainActor in
                 switch result {
-                case .success(let response):
-                    if response.success {
-                        // 从本地列表中移除卡片
-                        self?.trashCards.removeAll { $0.id == cardId }
-                        print("卡片永久删除成功: cardId=\(cardId)")
+                case .success(let response) where response.success:
+                    do {
+                        try await library.discardConfirmedPurge(identifier: cardId, expectedGeneration: note.generation, scope: scope)
                         completion(.success(true))
-                    } else {
-                        print("卡片永久删除失败: \(response.message ?? "未知错误")")
-                        completion(.failure(.serverError(500, response.message)))
-                    }
-                case .failure(let error):
-                    print("卡片永久删除失败: \(error.localizedDescription)")
-                    completion(.failure(error))
+                    } catch { completion(.failure(.networkError(error))) }
+                case .success: completion(.failure(.serverError(500, "Couldn't permanently delete this note.")))
+                case .failure(let error): completion(.failure(error))
                 }
             }
         }

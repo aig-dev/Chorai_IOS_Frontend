@@ -37,6 +37,7 @@ class NetworkManager: ObservableObject {
     private let baseURL: String
     private let session: Session
     private var authToken: String?
+    private let reachabilityManager = NetworkReachabilityManager()
 
     // MARK: 发布者
     @Published var isConnected: Bool = true
@@ -462,7 +463,6 @@ class NetworkManager: ObservableObject {
 
     // MARK: 网络状态监控
     private func startNetworkMonitoring() {
-        let reachabilityManager = NetworkReachabilityManager()
         reachabilityManager?.startListening { [weak self] status in
             DispatchQueue.main.async {
                 switch status {
@@ -2172,10 +2172,12 @@ extension NetworkManager {
     }
 
     // MARK: 恢复卡片
-    func restoreCard(cardId: String, completion: @escaping (Result<NetworkResponse<CreateCardData>, NetworkError>) -> Void) {
+    func restoreCard(cardId: String, baseSyncToken: String? = nil, completion: @escaping (Result<NetworkResponse<CreateCardData>, NetworkError>) -> Void) {
         self.request(
             endpoint: "/api/cards/trash/\(cardId)/restore",
             method: .post,
+            parameters: baseSyncToken.map { ["base_sync_token": $0] },
+            headers: baseSyncToken.map { _ in HTTPHeaders(["Idempotency-Key": UUID().uuidString]) },
             responseType: NetworkResponse<CreateCardData>.self,
             presentsError: false
         )
@@ -3153,5 +3155,87 @@ struct DeleteLinkData: Codable {
         case targetAssetId = "target_asset_id"
         case activityId = "activity_id"
         case actionLogId = "action_log_id"
+    }
+}
+
+// MARK: - Scoped note synchronization
+extension NetworkManager {
+    @MainActor
+    func noteSyncRequest(scope: NoteStoreScope, path: String, method: NoteSyncHTTPMethod,
+                         body: Data? = nil, operationID: String? = nil) async throws -> Data {
+        let (token, generation) = try noteSyncCredentials(scope)
+        guard path.hasPrefix("/api/"), let url = URL(string: baseURL + path) else { throw NoteSyncFailure.invalidResponse }
+        var request = URLRequest(url: url)
+        request.httpMethod = method.rawValue
+        request.httpBody = body
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+        if let operationID { request.setValue(operationID, forHTTPHeaderField: "Idempotency-Key") }
+        let response = await session.request(request).redirect(using: Redirector(behavior: .doNotFollow))
+            .serializingData().response
+        try checkNoteSyncSession(scope, token: token, generation: generation)
+        return try noteSyncData(response)
+    }
+
+    @MainActor
+    func noteSyncUpload(scope: NoteStoreScope, attachment: NoteLocalAttachment, data: Data) async throws -> Data {
+        let (token, generation) = try noteSyncCredentials(scope)
+        guard !data.isEmpty, data.count == attachment.byteCount, data.count <= 25 * 1024 * 1024 else {
+            throw NoteSyncFailure.validation
+        }
+        let headers: HTTPHeaders = [.authorization(bearerToken: token), .accept("application/json"),
+            HTTPHeader(name: "Idempotency-Key", value: attachment.uploadID)]
+        let response = await session.upload(multipartFormData: { form in
+            form.append(data, withName: "file", fileName: attachment.originalFilename, mimeType: attachment.mimeType)
+            form.append(Data("inline".utf8), withName: "kind")
+        }, to: baseURL + "/api/v1/media/upload", method: .post, headers: headers)
+            .redirect(using: Redirector(behavior: .doNotFollow)).serializingData().response
+        try checkNoteSyncSession(scope, token: token, generation: generation)
+        return try noteSyncData(response)
+    }
+
+    @MainActor
+    func noteSyncDownload(scope: NoteStoreScope, url: URL) async throws -> Data {
+        let (token, generation) = try noteSyncCredentials(scope)
+        var request = URLRequest(url: url)
+        // Signed object URLs can have another origin. Never give that origin an API bearer token.
+        if let origin = URL(string: baseURL), url.scheme == origin.scheme,
+           url.host == origin.host, url.port == origin.port {
+            request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+        }
+        let response = await session.request(request).redirect(using: Redirector(behavior: .doNotFollow))
+            .serializingData().response
+        try checkNoteSyncSession(scope, token: token, generation: generation)
+        return try noteSyncData(response)
+    }
+
+    @MainActor
+    private func noteSyncCredentials(_ scope: NoteStoreScope) throws -> (String, UInt64) {
+        let auth = AuthManager.shared
+        guard scope.environmentID == baseURL, scope.actorID == auth.currentUser?.id,
+              auth.canEnterProduct, let token = authToken, !token.isEmpty else {
+            throw NoteSyncFailure.authenticationRequired
+        }
+        return (token, auth.sessionGeneration)
+    }
+
+    @MainActor
+    private func checkNoteSyncSession(_ scope: NoteStoreScope, token: String, generation: UInt64) throws {
+        try Task.checkCancellation()
+        let auth = AuthManager.shared
+        guard auth.sessionGeneration == generation, authToken == token,
+              scope.actorID == auth.currentUser?.id, scope.environmentID == baseURL,
+              auth.canEnterProduct else { throw CancellationError() }
+    }
+
+    private func noteSyncData(_ response: AFDataResponse<Data>) throws -> Data {
+        guard let http = response.response else { throw NoteSyncFailure.transient(retryAfter: nil) }
+        guard (200..<300).contains(http.statusCode) else {
+            throw NoteSyncHTTP.failure(status: http.statusCode, body: response.data ?? Data(),
+                retryAfter: http.value(forHTTPHeaderField: "Retry-After"))
+        }
+        guard response.error == nil, let data = response.value else { throw NoteSyncFailure.transient(retryAfter: nil) }
+        return data
     }
 }

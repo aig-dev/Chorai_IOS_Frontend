@@ -44,6 +44,7 @@ public final class CardEditingStore: ObservableObject {
     }
 
     private let service: any CoreCardEditingServing
+    private let preservesLocalDrafts: Bool
     private var stateGeneration = 0
     private var activeOperationID: UUID?
     private var failureContext: FailureContext?
@@ -55,7 +56,8 @@ public final class CardEditingStore: ObservableObject {
         bodyRevision: Int = 0,
         backgroundMediaRef: String?,
         links: [CardEditingLink],
-        service: any CoreCardEditingServing
+        service: any CoreCardEditingServing,
+        preservesLocalDrafts: Bool = false
     ) {
         self.cardID = cardID
         self.createRequestID = cardID == nil
@@ -66,6 +68,7 @@ public final class CardEditingStore: ObservableObject {
         self.backgroundMediaRef = backgroundMediaRef
         self.links = links
         self.service = service
+        self.preservesLocalDrafts = preservesLocalDrafts
         if cardID == nil {
             lastCommittedDraft = nil
             lastCommittedBodyRevision = nil
@@ -430,6 +433,7 @@ public final class CardEditingStore: ObservableObject {
     }
 
     private func validateDraft() -> Bool {
+        if preservesLocalDrafts { return true }
         guard let validationError = draft.validationError else { return true }
         fail(with: validationError)
         return false

@@ -145,6 +145,7 @@ public struct BlockNoteEditorView: UIViewRepresentable {
     private let fontScale: Double
     private let minimumWritingHeight: Double
     private let controller: BlockNoteEditorController
+    private let localImageSource: BlockNoteLocalImageSource?
     private let onEvent: @MainActor (BlockNoteEditorEvent) -> Void
 
     public init(
@@ -153,6 +154,7 @@ public struct BlockNoteEditorView: UIViewRepresentable {
         fontScale: Double = 23.0 / 17.0,
         minimumWritingHeight: Double = 0,
         controller: BlockNoteEditorController,
+        localImageSource: BlockNoteLocalImageSource? = nil,
         onEvent: @escaping @MainActor (BlockNoteEditorEvent) -> Void
     ) {
         self.document = document
@@ -160,6 +162,7 @@ public struct BlockNoteEditorView: UIViewRepresentable {
         self.fontScale = fontScale
         self.minimumWritingHeight = minimumWritingHeight
         self.controller = controller
+        self.localImageSource = localImageSource
         self.onEvent = onEvent
     }
 
@@ -168,6 +171,7 @@ public struct BlockNoteEditorView: UIViewRepresentable {
             document: document,
             editable: editable,
             controller: controller,
+            localImageSource: localImageSource,
             onEvent: onEvent
         )
     }

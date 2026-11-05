@@ -9,6 +9,7 @@ enum AuthSessionPhase: String, Equatable {
     case verifying
     case verified
     case degraded
+    case needsLogin = "needs-login"
 }
 
 // MARK: 用户认证管理器
@@ -23,6 +24,8 @@ class AuthManager: ObservableObject {
     @Published private(set) var sessionPhase: AuthSessionPhase = .signedOut
     @Published private(set) var accessState: AccessState?
     @Published private(set) var needsInterestSelection = false
+    @Published private(set) var offlineNoteAccess = NoteOfflineAccess()
+    private(set) var sessionGeneration: UInt64 = 0
     
     private let userDefaults = UserDefaults.standard
     private let networkManager = NetworkManager.shared
@@ -36,14 +39,19 @@ class AuthManager: ObservableObject {
     
     // MARK: 用户会话管理
     func loadUserSession() {
+        sessionGeneration &+= 1
+        sessionVerification?.cancel(); sessionVerification = nil
+        verifiedToken = nil; lastVerificationStartedAt = nil
+        if let saved = userDefaults.data(forKey: "offline_note_access_v1"),
+           let access = try? JSONDecoder().decode(NoteOfflineAccess.self, from: saved) {
+            offlineNoteAccess = access
+        }
         accessState = nil
         isLoggedIn = userDefaults.bool(forKey: "is_logged_in")
         authToken = SessionTokenStore.load()
         migrateLegacyAuthTokenIfNeeded()
         
         if isLoggedIn,
-           let token = authToken,
-           !token.isEmpty,
            let actorId = userDefaults.string(forKey: "actor_id") {
             guard
                 let username = userDefaults.string(forKey: "username"),
@@ -69,8 +77,17 @@ class AuthManager: ObservableObject {
             )
             
             // 设置网络管理器的认证令牌
-            networkManager.setAuthToken(token)
-            sessionPhase = .restored
+            if let token = authToken, !token.isEmpty {
+                networkManager.setAuthToken(token)
+                sessionPhase = .restored
+            } else if canOpenLocalNotes {
+                // A missing cloud credential cannot discard an already
+                // confirmed account's retained drafts. Cloud writes stay off.
+                networkManager.clearAuthToken()
+                sessionPhase = .needsLogin
+            } else {
+                clearUserSession()
+            }
         } else {
             clearUserSession()
         }
@@ -102,6 +119,9 @@ class AuthManager: ObservableObject {
     #endif
     
     func saveUserSession(_ authResponse: AuthResponse) {
+        sessionGeneration &+= 1
+        sessionVerification?.cancel(); sessionVerification = nil
+        lastVerificationStartedAt = nil
         // 保存认证信息
         let userData = authResponse.data
         let actorID = userData.user.id
@@ -116,11 +136,12 @@ class AuthManager: ObservableObject {
         authToken = userData.token
         verifiedToken = userData.token
         sessionPhase = .verified
-        applyAccess(userData.productAccess)
 
         print("用户\(userData.user.id),登录成功")
         let user = userData.user
         currentUser = user
+        isLoggedIn = true
+        applyAccess(userData.productAccess)
 
         // 保存到UserDefaults
         userDefaults.set(true, forKey: "is_logged_in")
@@ -128,7 +149,6 @@ class AuthManager: ObservableObject {
         userDefaults.removeObject(forKey: "auth_token")
         persistUserProjection(user)
 
-        isLoggedIn = true
     }
     
     func completeInterestSelection() {
@@ -138,6 +158,7 @@ class AuthManager: ObservableObject {
 
     private func clearUserSession(clearCode: Bool = false) {
         completeInterestSelection()
+        sessionGeneration &+= 1
         sessionVerification?.cancel()
         sessionVerification = nil
         verifiedToken = nil
@@ -149,6 +170,8 @@ class AuthManager: ObservableObject {
         isLoggedIn = false
         sessionPhase = .signedOut
         accessState = nil
+        offlineNoteAccess.clear()
+        userDefaults.removeObject(forKey: "offline_note_access_v1")
         if clearCode {
             KeychainStore.shared.clear()
         }
@@ -208,6 +231,7 @@ class AuthManager: ObservableObject {
     }
 
     func verifyRestoredSession(force: Bool = false) {
+        guard sessionPhase != .needsLogin else { return }
         guard isAuthenticated, let token = authToken, !token.isEmpty else {
             sessionPhase = .signedOut
             return
@@ -223,26 +247,33 @@ class AuthManager: ObservableObject {
         }
 
         lastVerificationStartedAt = Date()
+        let generation = sessionGeneration
+        let actorID = currentUser?.id
         sessionPhase = .verifying
         sessionVerification = networkManager.verifyToken(presentsError: false)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] completion in
-                guard let self else { return }
+                guard let self, self.sessionGeneration == generation,
+                      self.authToken == token, self.currentUser?.id == actorID else { return }
                 self.sessionVerification = nil
                 guard case .failure(let error) = completion else { return }
-                if case .unauthorized = error {
-                    self.invalidateLocalSession()
-                } else {
+                switch error {
+                case .unauthorized, .api(statusCode: 401, code: _, message: _):
+                    self.markSessionNeedsLogin()
+                case .forbidden, .api(statusCode: 403, code: _, message: _):
+                    self.markAccountRestricted()
+                default:
                     self.accessState = nil
                     self.sessionPhase = .degraded
                 }
             } receiveValue: { [weak self] response in
-                guard let self,
-                      response.success,
+                guard let self, self.sessionGeneration == generation,
+                      self.authToken == token, self.currentUser?.id == actorID else { return }
+                guard response.success,
                       let data = response.data,
                       data.valid,
                       data.user.id == self.currentUser?.id else {
-                    self?.invalidateLocalSession()
+                    self.invalidateLocalSession()
                     return
                 }
                 self.currentUser = data.user
@@ -261,29 +292,13 @@ class AuthManager: ObservableObject {
                 .eraseToAnyPublisher()
         }
 
-        return networkManager.logoutCurrentSession(presentsError: false)
-            .receive(on: DispatchQueue.main)
-            .flatMap { response -> AnyPublisher<Void, NetworkError> in
-                guard response.success else {
-                    return Fail(error: NetworkError.unknown)
-                        .eraseToAnyPublisher()
-                }
-                return Just(())
-                    .setFailureType(to: NetworkError.self)
-                    .eraseToAnyPublisher()
-            }
-            .catch { [weak self] error -> AnyPublisher<Void, NetworkError> in
-                if case .unauthorized = error {
-                    self?.invalidateLocalSession(clearCode: true)
-                    return Just(())
-                        .setFailureType(to: NetworkError.self)
-                        .eraseToAnyPublisher()
-                }
-                return Fail(error: error).eraseToAnyPublisher()
-            }
-            .handleEvents(receiveOutput: { [weak self] in
-                self?.invalidateLocalSession(clearCode: true)
-            })
+        // Capture the current credential before hiding the session. Local sign-out
+        // does not depend on connectivity, and a delayed response cannot clear a new login.
+        let remoteLogout = networkManager.logoutCurrentSession(presentsError: false)
+        invalidateLocalSession(clearCode: true)
+        return remoteLogout.map { _ in () }
+            .catch { _ in Just(()) }
+            .setFailureType(to: NetworkError.self)
             .eraseToAnyPublisher()
     }
     
@@ -325,8 +340,33 @@ class AuthManager: ObservableObject {
             return
         }
         accessState = state
+        if let scope = currentNoteScope {
+            offlineNoteAccess.recordConfirmed(state, scope: scope)
+            persistOfflineAccess()
+        }
         if state.status == "allowed" {
             KeychainStore.shared.clear()
+        }
+    }
+
+    func markSessionNeedsLogin() {
+        guard canOpenLocalNotes else { invalidateLocalSession(); return }
+        sessionGeneration &+= 1
+        sessionVerification?.cancel(); sessionVerification = nil
+        verifiedToken = nil; accessState = nil; sessionPhase = .needsLogin
+    }
+
+    func markAccountRestricted() {
+        sessionGeneration &+= 1
+        sessionVerification?.cancel(); sessionVerification = nil
+        verifiedToken = nil; offlineNoteAccess.clear(); persistOfflineAccess()
+        accessState = AccessState(mode: "private_beta", status: "required", scope: nil, reasonCode: "account_restricted")
+        sessionPhase = .degraded
+    }
+
+    private func persistOfflineAccess() {
+        if let data = try? JSONEncoder().encode(offlineNoteAccess) {
+            userDefaults.set(data, forKey: "offline_note_access_v1")
         }
     }
 
@@ -357,6 +397,13 @@ class AuthManager: ObservableObject {
 
 // MARK: - 用户状态扩展
 extension AuthManager {
+    var currentNoteScope: NoteStoreScope? {
+        guard isLoggedIn, let actorID = currentUser?.id else { return nil }
+        return NoteStoreScope(actorID: actorID, environmentID: APIConfiguration.baseURL)
+    }
+
+    var canOpenLocalNotes: Bool { offlineNoteAccess.allows(currentNoteScope) }
+
     var isAuthenticated: Bool {
         return isLoggedIn && authToken != nil && currentUser != nil
     }

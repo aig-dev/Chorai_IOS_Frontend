@@ -34,13 +34,13 @@ final class BlockNoteEditorResourceTests: XCTestCase {
         XCTAssertEqual(manifest.schemaVersion, BlockNoteEditorProtocol.schemaVersion)
     }
 
-    func testBundledContentSecurityPolicyAllowsOnlySecureAndLocalObjectStorageImages() throws {
+    func testBundledContentSecurityPolicyAllowsSecureLocalObjectStorageAndScopedNoteImages() throws {
         let indexURL = try BlockNoteEditorResources.indexURL()
         let indexHTML = try String(contentsOf: indexURL, encoding: .utf8)
 
         XCTAssertTrue(
             indexHTML.contains(
-                "img-src 'self' data: blob: https: http://127.0.0.1:9000 http://localhost:9000"
+                "img-src 'self' data: blob: chorai-note-media: https: http://127.0.0.1:9000 http://localhost:9000"
             )
         )
         XCTAssertFalse(indexHTML.contains("http://127.0.0.1:*"))

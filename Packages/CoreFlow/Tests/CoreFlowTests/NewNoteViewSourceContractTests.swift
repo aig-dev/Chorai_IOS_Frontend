@@ -46,7 +46,7 @@ final class NewNoteViewSourceContractTests: XCTestCase {
         XCTAssertTrue(newSeed.contains("initialFocus: true"))
 
         let hydration = try XCTUnwrap(
-            Self.functionBody(in: source, signature: "func hydrateExistingCard(")
+            Self.functionBody(in: source, signature: "func loadExistingCard()")
         )
         let storeHydration = try XCTUnwrap(
             hydration.range(of: "editingStore.hydrate(")
@@ -55,13 +55,13 @@ final class NewNoteViewSourceContractTests: XCTestCase {
             hydration.range(of: "editorSeed = CardEditorSeed(")
         )
         XCTAssertLessThan(storeHydration.lowerBound, seedCreation.lowerBound)
-        XCTAssertTrue(hydration.contains("title: card.title"))
+        XCTAssertTrue(hydration.contains("title: note.body.title"))
         XCTAssertTrue(
             hydration.contains("document: BlockNoteInitialDocument.existingCard("),
             "Existing cards must select the lossless runtime profile from their document shape"
         )
-        XCTAssertTrue(hydration.contains("contentJSON: card.contentJSON"))
-        XCTAssertTrue(hydration.contains("fallbackMarkdown: card.content"))
+        XCTAssertTrue(hydration.contains("contentJSON: note.body.contentJSON"))
+        XCTAssertTrue(hydration.contains("fallbackMarkdown: note.body.content"))
         XCTAssertTrue(hydration.contains("isNew: false"))
         XCTAssertTrue(hydration.contains("initialFocus: false"))
     }
@@ -270,7 +270,7 @@ final class NewNoteViewSourceContractTests: XCTestCase {
         )
         XCTAssertTrue(
             privacy.contains(
-                "updateMetadata(isPublic: !editingStore.draft.isPublic)"
+                "NetworkManager.shared.updateCardVisibility(cardId: serverID, isPublic: value)"
             )
         )
         XCTAssertFalse(privacy.contains("editingStore.save()"))
@@ -1302,7 +1302,7 @@ final class NewNoteViewSourceContractTests: XCTestCase {
         XCTAssertTrue(source.contains("NetworkManager.shared.pinCard(cardId: cardID)"))
         XCTAssertTrue(source.contains("NetworkManager.shared.unpinCard(cardId: cardID)"))
         XCTAssertTrue(source.contains("func removeCanonicalCard()"))
-        XCTAssertTrue(source.contains("NetworkManager.shared.deleteCard(id: cardID)"))
+        XCTAssertTrue(source.contains("localNotes.setLifecycle(identifier: cardID, lifecycle: .trashed)"))
         XCTAssertTrue(source.contains(#"userInfo: ["cardId": cardID]"#))
 
         let removal = try XCTUnwrap(
@@ -1312,7 +1312,7 @@ final class NewNoteViewSourceContractTests: XCTestCase {
             removal.range(of: "guard let cardID = editingStore.cardID else")
         )
         let delete = try XCTUnwrap(
-            removal.range(of: "NetworkManager.shared.deleteCard(id: cardID)")
+            removal.range(of: "localNotes.setLifecycle(identifier: cardID, lifecycle: .trashed)")
         )
         XCTAssertLessThan(localDismiss.lowerBound, delete.lowerBound)
         XCTAssertTrue(removal.contains("dismiss()"))

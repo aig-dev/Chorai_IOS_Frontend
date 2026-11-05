@@ -53,8 +53,8 @@ final class BlockNoteAppearanceTests: XCTestCase {
 
     private func contrast(_ a: UInt32, _ b: UInt32) -> Double {
         func luminance(_ color: UInt32) -> Double {
-            let channels = [16, 8, 0].map { Double((color >> $0) & 255) / 255 }
-                .map { $0 <= 0.04045 ? $0 / 12.92 : pow(($0 + 0.055) / 1.055, 2.4) }
+            let components: [Double] = [16, 8, 0].map { Double((color >> $0) & 255) / 255.0 }
+            let channels: [Double] = components.map { $0 <= 0.04045 ? $0 / 12.92 : pow(($0 + 0.055) / 1.055, 2.4) }
             return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722
         }
         let x = luminance(a), y = luminance(b)

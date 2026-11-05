@@ -29,6 +29,7 @@ final class BlockNoteCardEditorModel: ObservableObject {
 
     private(set) var controller: BlockNoteEditorController
     private(set) var initialDocument: BlockNoteInitialDocument
+    let localImageSource: BlockNoteLocalImageSource?
     private(set) var editorInstanceID: UUID
     let isInitiallyEditable: Bool
 
@@ -50,6 +51,7 @@ final class BlockNoteCardEditorModel: ObservableObject {
         initialSelection: BlockNoteSelectionState? = nil,
         initiallyFocused: Bool = false,
         initialCompatibilityBlock: String? = nil,
+        localImageSource: BlockNoteLocalImageSource? = nil,
         onDocumentChanged: @escaping (BlockNoteDocumentRevision) -> Void = { _ in },
         onCompatibilityBlocked: @escaping (String) -> Void = { _ in },
         onRequestCardLink: @escaping () -> Void = {},
@@ -58,6 +60,7 @@ final class BlockNoteCardEditorModel: ObservableObject {
     ) {
         controller = BlockNoteEditorController()
         initialDocument = document
+        self.localImageSource = localImageSource
         editorInstanceID = UUID()
         revision = max(0, initialRevision)
         sessionRevisionBase = max(0, initialRevision)
@@ -321,6 +324,7 @@ struct BlockNoteCardEditor: View {
             fontScale: fontScale,
             minimumWritingHeight: fillsWritingPage ? Double(minimumHeight) : 0,
             controller: model.controller,
+            localImageSource: model.localImageSource,
             onEvent: { [editorInstanceID = model.editorInstanceID] event in
                 model.receive(event, from: editorInstanceID)
             }

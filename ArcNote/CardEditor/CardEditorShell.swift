@@ -51,6 +51,8 @@ struct CardEditorShell: View {
     let onTogglePrivacy: () -> Void
     let onOpenCardActions: (() -> Void)?
     let menuActions: CardEditorMenuActions?
+    let isPrivacyEditable: Bool
+    let saveStatus: String?
 
     init(
         bodyModel: BlockNoteCardEditorModel,
@@ -73,7 +75,9 @@ struct CardEditorShell: View {
         onRemoveLink: @escaping (CardEditorLinkItem) -> Void,
         onTogglePrivacy: @escaping () -> Void,
         onOpenCardActions: (() -> Void)? = nil,
-        menuActions: CardEditorMenuActions? = nil
+        menuActions: CardEditorMenuActions? = nil,
+        isPrivacyEditable: Bool = true,
+        saveStatus: String? = nil
     ) {
         self.bodyModel = bodyModel
         self.tags = tags
@@ -96,6 +100,8 @@ struct CardEditorShell: View {
         self.onTogglePrivacy = onTogglePrivacy
         self.onOpenCardActions = onOpenCardActions
         self.menuActions = menuActions
+        self.isPrivacyEditable = isPrivacyEditable
+        self.saveStatus = saveStatus
     }
 
     var body: some View {
@@ -104,6 +110,7 @@ struct CardEditorShell: View {
                 bodyModel: bodyModel,
                 isPublic: isPublic,
                 isMetadataEditable: isMetadataEditable,
+                isPrivacyEditable: isPrivacyEditable,
                 leadingControlState: leadingControlState,
                 onInteraction: completeTagEntry,
                 onLeadingControl: onLeadingControl,
@@ -297,6 +304,7 @@ struct CardEditorShell: View {
     }
 
     private var writingStatusLabel: String {
+        if let saveStatus { return saveStatus }
         switch leadingControlState {
         case .save: return "Unsaved changes"
         case .saving: return "Saving…"
@@ -368,6 +376,7 @@ private struct CardEditorFloatingControls: View {
     @ObservedObject var bodyModel: BlockNoteCardEditorModel
     let isPublic: Bool
     let isMetadataEditable: Bool
+    let isPrivacyEditable: Bool
     let leadingControlState: CardEditorLeadingControlState
     let onInteraction: () -> Void
     let onLeadingControl: () -> Void
@@ -424,7 +433,7 @@ private struct CardEditorFloatingControls: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(ChoraiTheme.ink)
-                .disabled(!isMetadataEditable)
+                .disabled(!isMetadataEditable || !isPrivacyEditable)
                 .accessibilityLabel(isPublic ? "Make Private" : "Make Public")
                 .accessibilityValue(isPublic ? "Public" : "Private")
                 .accessibilityIdentifier("cardEditorPrivacyButton")

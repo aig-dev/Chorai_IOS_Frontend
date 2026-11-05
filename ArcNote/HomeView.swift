@@ -140,6 +140,20 @@ struct HomeView: View {
 
     private func refreshOwnedCardAfterEditing(_ cardID: String) {
         guard AuthManager.shared.currentUser != nil else { return }
+        if cardID.hasPrefix("local-note:") {
+            // Returning from a local editor must not send its identity to the cloud.
+            ownedCardRefreshRequestID = nil
+            ownedCardRefreshFailedID = nil
+            loadUserCards()
+            if let card = cardsManager.cards.first(where: { $0.id == cardID }) {
+                ownedCardActionRefresh = OwnedCardActionRefresh(snapshot: OwnedCardActionSnapshot(
+                    cardID: card.id, isOwned: card.isOwner == true,
+                    isPublic: card.isPublic, isPinned: card.isPinned, pinnedAt: card.pinnedAt
+                ))
+            }
+            if librarySearchSession.isActive { retryLibrarySearch() }
+            return
+        }
         let requestID = UUID()
         ownedCardRefreshRequestID = requestID
         NetworkManager.shared.getCardDetail(cardId: cardID) { result in
