@@ -1,1 +1,7 @@
 .worktrees/
+
+# Swift Package Manager build caches
+.build/
+
+# Local Xcode build output
+DerivedData/
