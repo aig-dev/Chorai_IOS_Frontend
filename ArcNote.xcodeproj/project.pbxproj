@@ -91,8 +91,6 @@
 		C0DEF1092F60000100000003 /* NetworkContentReportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1092F60000100000002 /* NetworkContentReportService.swift */; };
 		C0DEF1102F60000100000003 /* ContentReportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1102F60000100000002 /* ContentReportView.swift */; };
 		C0DEF1112F60000100000003 /* NetworkCoreCardEditingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1112F60000100000002 /* NetworkCoreCardEditingService.swift */; };
-				C0DEF1462F60000100000003 /* NetworkNoteSyncService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1462F60000100000002 /* NetworkNoteSyncService.swift */; };
-				C0DEF1472F60000100000003 /* LocalNotesController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1472F60000100000002 /* LocalNotesController.swift */; };
 		C0DEF1122F60000100000003 /* NetworkCoreInterestSelectionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1122F60000100000002 /* NetworkCoreInterestSelectionService.swift */; };
 		C0DEF1132F60000100000003 /* NetworkCoreCardLikeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1132F60000100000002 /* NetworkCoreCardLikeService.swift */; };
 		C0DEF1142F60000100000003 /* CardEngagementCenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1142F60000100000002 /* CardEngagementCenter.swift */; };
@@ -124,6 +122,8 @@
 		C0DEF1432F60000100000003 /* MergeArtifactEditorSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1432F60000100000002 /* MergeArtifactEditorSurface.swift */; };
 		C0DEF1442F60000100000003 /* MergeArtifactDraftController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1442F60000100000002 /* MergeArtifactDraftController.swift */; };
 		C0DEF1452F60000100000003 /* MergeTaskRailAnchor.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1452F60000100000002 /* MergeTaskRailAnchor.swift */; };
+		C0DEF1462F60000100000003 /* NetworkNoteSyncService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1462F60000100000002 /* NetworkNoteSyncService.swift */; };
+		C0DEF1472F60000100000003 /* LocalNotesController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF1472F60000100000002 /* LocalNotesController.swift */; };
 		C0DEF2002F70000100000001 /* BlockNoteEditor in Frameworks */ = {isa = PBXBuildFile; productRef = C0DEF2002F70000100000003 /* BlockNoteEditor */; };
 		C0DEF3002F80000100000011 /* BlockNoteCardEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF3002F80000100000021 /* BlockNoteCardEditor.swift */; };
 		C0DEF3002F80000100000012 /* CardEditorShell.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF3002F80000100000022 /* CardEditorShell.swift */; };
@@ -139,8 +139,6 @@
 		C0DEF3002F8000010000001C /* CardEditorBackgroundActions.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF3002F8000010000002C /* CardEditorBackgroundActions.swift */; };
 		C0DEF3002F8000010000001D /* AdaptiveLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF3002F8000010000002D /* AdaptiveLayout.swift */; };
 		C0DEF3002F8000010000001E /* CardLevelMaterial.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF3002F8000010000002E /* CardLevelMaterial.swift */; };
-		CC260B260000000000000001 /* ChoraiTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC260A260000000000000001 /* ChoraiTheme.swift */; };
-		CC260B260000000000000002 /* ChoraiCardLevel.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC260A260000000000000002 /* ChoraiCardLevel.swift */; };
 		C70100012F90000100000001 /* CommentPresentationUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C70100012F90000100000002 /* CommentPresentationUITests.swift */; };
 		C70200012F90000100000001 /* OwnedCardActionUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C70200012F90000100000002 /* OwnedCardActionUITests.swift */; };
 		C70300012F90000100000001 /* NativeRemediationVisualTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C70300012F90000100000002 /* NativeRemediationVisualTests.swift */; };
@@ -148,9 +146,11 @@
 		C70500012F90000100000001 /* SearchSummaryUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C70500012F90000100000002 /* SearchSummaryUITests.swift */; };
 		C72900012F90000100000001 /* ChatControlSizingUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C72900012F90000100000002 /* ChatControlSizingUITests.swift */; };
 		C72900022F90000100000001 /* RootHeaderAlignmentUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C72900022F90000100000002 /* RootHeaderAlignmentUITests.swift */; };
+		CC260B260000000000000001 /* ChoraiTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC260A260000000000000001 /* ChoraiTheme.swift */; };
+		CC260B260000000000000002 /* ChoraiCardLevel.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC260A260000000000000002 /* ChoraiCardLevel.swift */; };
 		D7B5078DE97E45839CE4A515 /* AuthEntryComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FC8A8D1AD4841DEA9BB285F /* AuthEntryComponents.swift */; };
-		F407155AB485430EA8E25838 /* AuthEntryFixture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 278679923D14405F9158C635 /* AuthEntryFixture.swift */; };
 		F0EDFA46EDB043FE8E8D0479 /* AuthEntryFlowUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5833D7B924E407AADD43A49 /* AuthEntryFlowUITests.swift */; };
+		F407155AB485430EA8E25838 /* AuthEntryFixture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 278679923D14405F9158C635 /* AuthEntryFixture.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -227,6 +227,8 @@
 		1BF373162E30D07900255F41 /* SignUpView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SignUpView.swift; sourceTree = "<group>"; };
 		1BF373182E30D5E100255F41 /* SignInView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SignInView.swift; sourceTree = "<group>"; };
 		1BF3731A2E30DA7A00255F41 /* ChooseInterestsView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ChooseInterestsView.swift; sourceTree = "<group>"; };
+		278679923D14405F9158C635 /* AuthEntryFixture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthEntryFixture.swift; sourceTree = "<group>"; };
+		4FC8A8D1AD4841DEA9BB285F /* AuthEntryComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthEntryComponents.swift; sourceTree = "<group>"; };
 		8D4846EA2F409AEB00A3D3C7 /* NoteCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteCard.swift; sourceTree = "<group>"; };
 		A00000012F50000100000002 /* ArcNoteUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArcNoteUITests.swift; sourceTree = "<group>"; };
 		A00000012F50000100000003 /* ArcNoteUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ArcNoteUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -248,8 +250,6 @@
 		C0DEF1092F60000100000002 /* NetworkContentReportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkContentReportService.swift; sourceTree = "<group>"; };
 		C0DEF1102F60000100000002 /* ContentReportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentReportView.swift; sourceTree = "<group>"; };
 		C0DEF1112F60000100000002 /* NetworkCoreCardEditingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkCoreCardEditingService.swift; sourceTree = "<group>"; };
-				C0DEF1462F60000100000002 /* NetworkNoteSyncService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkNoteSyncService.swift; sourceTree = "<group>"; };
-				C0DEF1472F60000100000002 /* LocalNotesController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalNotesController.swift; sourceTree = "<group>"; };
 		C0DEF1122F60000100000002 /* NetworkCoreInterestSelectionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkCoreInterestSelectionService.swift; sourceTree = "<group>"; };
 		C0DEF1132F60000100000002 /* NetworkCoreCardLikeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkCoreCardLikeService.swift; sourceTree = "<group>"; };
 		C0DEF1142F60000100000002 /* CardEngagementCenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardEngagementCenter.swift; sourceTree = "<group>"; };
@@ -281,6 +281,8 @@
 		C0DEF1432F60000100000002 /* MergeArtifactEditorSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MergeArtifactEditorSurface.swift; sourceTree = "<group>"; };
 		C0DEF1442F60000100000002 /* MergeArtifactDraftController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MergeArtifactDraftController.swift; sourceTree = "<group>"; };
 		C0DEF1452F60000100000002 /* MergeTaskRailAnchor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MergeTaskRailAnchor.swift; sourceTree = "<group>"; };
+		C0DEF1462F60000100000002 /* NetworkNoteSyncService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkNoteSyncService.swift; sourceTree = "<group>"; };
+		C0DEF1472F60000100000002 /* LocalNotesController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalNotesController.swift; sourceTree = "<group>"; };
 		C0DEF3002F80000100000021 /* BlockNoteCardEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlockNoteCardEditor.swift; sourceTree = "<group>"; };
 		C0DEF3002F80000100000022 /* CardEditorShell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardEditorShell.swift; sourceTree = "<group>"; };
 		C0DEF3002F80000100000023 /* CardEditorMetadataRows.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardEditorMetadataRows.swift; sourceTree = "<group>"; };
@@ -295,8 +297,6 @@
 		C0DEF3002F8000010000002C /* CardEditorBackgroundActions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardEditorBackgroundActions.swift; sourceTree = "<group>"; };
 		C0DEF3002F8000010000002D /* AdaptiveLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdaptiveLayout.swift; sourceTree = "<group>"; };
 		C0DEF3002F8000010000002E /* CardLevelMaterial.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardLevelMaterial.swift; sourceTree = "<group>"; };
-		CC260A260000000000000001 /* ChoraiTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChoraiTheme.swift; sourceTree = "<group>"; };
-		CC260A260000000000000002 /* ChoraiCardLevel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChoraiCardLevel.swift; sourceTree = "<group>"; };
 		C70100012F90000100000002 /* CommentPresentationUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommentPresentationUITests.swift; sourceTree = "<group>"; };
 		C70200012F90000100000002 /* OwnedCardActionUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OwnedCardActionUITests.swift; sourceTree = "<group>"; };
 		C70300012F90000100000002 /* NativeRemediationVisualTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeRemediationVisualTests.swift; sourceTree = "<group>"; };
@@ -304,8 +304,8 @@
 		C70500012F90000100000002 /* SearchSummaryUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchSummaryUITests.swift; sourceTree = "<group>"; };
 		C72900012F90000100000002 /* ChatControlSizingUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatControlSizingUITests.swift; sourceTree = "<group>"; };
 		C72900022F90000100000002 /* RootHeaderAlignmentUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootHeaderAlignmentUITests.swift; sourceTree = "<group>"; };
-		4FC8A8D1AD4841DEA9BB285F /* AuthEntryComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthEntryComponents.swift; sourceTree = "<group>"; };
-		278679923D14405F9158C635 /* AuthEntryFixture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthEntryFixture.swift; sourceTree = "<group>"; };
+		CC260A260000000000000001 /* ChoraiTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChoraiTheme.swift; sourceTree = "<group>"; };
+		CC260A260000000000000002 /* ChoraiCardLevel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChoraiCardLevel.swift; sourceTree = "<group>"; };
 		E5833D7B924E407AADD43A49 /* AuthEntryFlowUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthEntryFlowUITests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -602,7 +602,7 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 1500;
-				LastUpgradeCheck = 1500;
+				LastUpgradeCheck = 2720;
 				TargetAttributes = {
 					1B48AE302E30967F0090CF86 = {
 						CreatedOnToolsVersion = 15.0;
@@ -949,7 +949,7 @@
 				CODE_SIGN_ENTITLEMENTS = ArcNote/ArcNote.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 64;
+				CURRENT_PROJECT_VERSION = 66;
 				DEVELOPMENT_ASSET_PATHS = "\"ArcNote/Preview Content\"";
 				DEVELOPMENT_TEAM = 3YVRHRU9YA;
 				ENABLE_PREVIEWS = YES;
@@ -967,7 +967,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 2.0.0;
+				MARKETING_VERSION = 2.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.michen.arcnote;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -989,7 +989,7 @@
 				CODE_SIGN_ENTITLEMENTS = ArcNote/ArcNote.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 64;
+				CURRENT_PROJECT_VERSION = 66;
 				DEVELOPMENT_ASSET_PATHS = "\"ArcNote/Preview Content\"";
 				DEVELOPMENT_TEAM = 3YVRHRU9YA;
 				ENABLE_PREVIEWS = YES;
@@ -1007,7 +1007,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 2.0.0;
+				MARKETING_VERSION = 2.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.michen.arcnote;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -1128,7 +1128,7 @@
 				CODE_SIGN_ENTITLEMENTS = ArcNote/ArcNote.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 64;
+				CURRENT_PROJECT_VERSION = 66;
 				DEVELOPMENT_ASSET_PATHS = "\"ArcNote/Preview Content\"";
 				DEVELOPMENT_TEAM = 3YVRHRU9YA;
 				ENABLE_PREVIEWS = YES;
@@ -1146,7 +1146,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 2.0.0;
+				MARKETING_VERSION = 2.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.michen.arcnote;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -1228,7 +1228,7 @@
 			repositoryURL = "https://github.com/Alamofire/Alamofire.git";
 			requirement = {
 				kind = exactVersion;
-				version = 5.10.2;
+				version = 5.12.2;
 			};
 		};
 		1B6E6FBC2E6ABB6E006898F5 /* XCRemoteSwiftPackageReference "SwiftyJSON" */ = {

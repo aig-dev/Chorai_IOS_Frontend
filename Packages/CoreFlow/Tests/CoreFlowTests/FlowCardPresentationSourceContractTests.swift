@@ -145,7 +145,6 @@ final class FlowCardPresentationSourceContractTests: XCTestCase {
         XCTAssertTrue(source.contains("store.toggleFavorite(assetID: card.id"))
         XCTAssertTrue(source.contains(".choraiCardLevel(rate: card.rate, showsChora: false, cornerRadius: 28)"))
         XCTAssertTrue(source.contains(".choraiCardLevel(rate: card.rate, showsChora: false, cornerRadius: 17)"))
-        XCTAssertTrue(source.contains(".choraiCardLevel(rate: card.rate, showsChora: false, cornerRadius: 8)"))
         XCTAssertTrue(source.contains("FlowMasonryLayout(columns: typeSize.isAccessibilitySize ? 1 : 2, spacing: 12)"))
         XCTAssertTrue(source.contains(".onReceive(CardEngagementCenter.shared.favorites)"))
         XCTAssertTrue(source.contains(".accessibilityHidden(isGrid)"))
@@ -155,7 +154,7 @@ final class FlowCardPresentationSourceContractTests: XCTestCase {
     func testRatedGridKeepsBoundedSummaryAuthorAndActionsInsideV8LevelSurface() throws {
         let source = try flowViewSource()
         let start = try XCTUnwrap(source.range(of: "private func ratedTile(_ card: FlowCard)"))
-        let end = try XCTUnwrap(source.range(of: "private func unratedTile(_ card: FlowCard)", range: start.upperBound..<source.endIndex))
+        let end = try XCTUnwrap(source.range(of: "private func ratedSummary(_ card: FlowCard)", range: start.upperBound..<source.endIndex))
         let tile = String(source[start.lowerBound..<end.lowerBound])
         XCTAssertTrue(tile.contains(".font(.system(.subheadline, design: .serif))"))
         XCTAssertTrue(tile.contains(".lineSpacing(3).lineLimit(7)"))

@@ -902,9 +902,8 @@ private struct FlowGridView: View {
         .accessibilityIdentifier("explore.grid")
     }
 
-    @ViewBuilder private func tile(_ card: FlowCard) -> some View {
-        if card.rate != nil { ratedTile(card) }
-        else { unratedTile(card) }
+    private func tile(_ card: FlowCard) -> some View {
+        ratedTile(card)
     }
 
     /// The rated Grid uses the approved V8 level card as a complete surface.
@@ -963,61 +962,6 @@ private struct FlowGridView: View {
         return blocks.map(\.text).joined(separator: "\n\n")
     }
 
-    private func unratedTile(_ card: FlowCard) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Button { onOpenDetail(card) } label: {
-                VStack(alignment: .leading, spacing: 0) {
-                    FlowRichPreview(card: card, compact: true)
-                }
-                .frame(maxWidth: .infinity, minHeight: 44, alignment: .topLeading)
-                .choraiCardLevel(rate: card.rate, showsChora: false, cornerRadius: 8)
-                .contentShape(RoundedRectangle(cornerRadius: 8))
-            }.buttonStyle(.plain)
-                .accessibilityLabel("Read note, \(FlowTextPreview.make(card.content).prefix(100))")
-                .accessibilityHint("Opens the full note")
-                .accessibilityIdentifier("explore.grid.card.\(card.id)")
-                .contextMenu {
-                    Button("Read note", systemImage: "doc.text") { onOpenDetail(card) }
-                    if !card.isOwner {
-                        Button(card.isFavorited ? "Remove from collection" : "Collect", systemImage: card.isFavorited ? "bookmark.slash" : "bookmark") {
-                            store.toggleFavorite(assetID: card.id, onFavoriteSucceeded: onCardSaved)
-                        }
-                    }
-                }
-            HStack(spacing: 0) {
-                Button { onOpenAuthor(card) } label: {
-                    Text(card.author?.username ?? "Chorai")
-                        .font(.system(size: 11, weight: .medium)).foregroundStyle(ChoraiTheme.ink.opacity(0.76))
-                        .lineLimit(1).frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                        .contentShape(Rectangle())
-                }.buttonStyle(.plain).disabled(card.author == nil)
-                    .accessibilityLabel("Open author, \(card.author?.username ?? "Chorai")")
-                if !card.isOwner {
-                    Button { store.toggleFavorite(assetID: card.id, onFavoriteSucceeded: onCardSaved) } label: {
-                        Image(systemName: card.isFavorited ? "bookmark.fill" : "bookmark")
-                            .font(.system(size: 14, weight: .medium)).frame(width: 44, height: 44)
-                            .contentShape(Rectangle())
-                    }.buttonStyle(.plain)
-                        .accessibilityLabel(card.isFavorited ? "Remove from collection" : "Collect")
-                        .accessibilityValue(card.isFavorited ? "true" : "false")
-                        .accessibilityIdentifier("explore.grid.favorite.\(card.id)")
-                }
-                NativeCardActionsMenu(
-                    cardData: card.asUserCard,
-                    layout: .grid2x2,
-                    isOwnCard: card.isOwner,
-                    onSpark: { onSpark(card) }
-                ) {
-                    Image(systemName: "ellipsis").font(.system(size: 14, weight: .medium)).frame(width: 44, height: 44)
-                }.accessibilityLabel("Note actions")
-                    .accessibilityIdentifier("explore.grid.menu.\(card.id)")
-            }.padding(.leading, 3)
-        }
-        .foregroundStyle(ChoraiTheme.ink)
-        .multilineTextAlignment(.leading)
-        .accessibilityElement(children: .contain)
-        .disabled(store.isInteractionLocked)
-    }
 }
 
 /// The approved Grid places the next note in the shortest column without

@@ -15,7 +15,7 @@ Local Simulator development is the default.
 | Scheme | API | Use |
 | --- | --- | --- |
 | `ArcNote` | `http://127.0.0.1:8180` | normal local development |
-| `ArcNote Production` | `https://api.chorai.top` | explicit production-backed debugging |
+| `ArcNote Production` | `https://product.chorai.app` | explicit production-backed debugging through the product API proxy |
 | Archive / Release | production | distribution |
 
 Start and inspect the local backend from the outer Chorai workspace root:

@@ -20,7 +20,7 @@ enum APIEnvironment: String, CaseIterable {
         case .local:
             rawValue = "http://127.0.0.1:8180"
         case .production:
-            rawValue = "https://api.chorai.top"
+            rawValue = "https://product.chorai.app"
         }
         guard let url = URL(string: rawValue) else {
             preconditionFailure("Invalid canonical API endpoint for \(self.rawValue)")

@@ -36,6 +36,13 @@ struct ExploreView: View {
     @State private var currentSearchIndex = 0
     @State private var hasSubmittedSearch = false
 
+    private func bindCommentCreatedCallback() {
+        let manager = cardsManager
+        CommentPopupManager.shared.onCommentCreated = { [weak manager] cardID in
+            manager?.incrementCommentCount(for: cardID)
+        }
+    }
+
     private func targetIsVisible(for tip: ContextualGuideTipID) -> Bool {
         guard !isSearchMode, flowStore.currentCard != nil else {
             return false
@@ -152,7 +159,7 @@ struct ExploreView: View {
             .presentationDetents([.medium, .large])
         }
         .onAppear {
-            CommentPopupManager.shared.onCommentCreated = { [weak cardsManager] cardID in cardsManager?.incrementCommentCount(for: cardID) }
+            bindCommentCreatedCallback()
             #if DEBUG
             publishVisibleRecommendedCardForUITest()
             #endif

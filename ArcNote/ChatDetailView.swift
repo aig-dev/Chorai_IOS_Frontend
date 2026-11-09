@@ -651,8 +651,8 @@ struct SelectCardPopupView: View {
             }
             .onChange(of: searchText) { newValue in
                 searchWorkItem?.cancel()
-                let workItem = DispatchWorkItem { [weak manager] in
-                    manager?.fetchCards(searchText: newValue)
+                let workItem = DispatchWorkItem { [manager] in
+                    manager.fetchCards(searchText: newValue)
                 }
                 searchWorkItem = workItem
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.4, execute: workItem)

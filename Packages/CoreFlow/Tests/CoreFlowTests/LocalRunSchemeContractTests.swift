@@ -316,7 +316,7 @@ final class LocalRunSchemeContractTests: XCTestCase {
 
     func testRuntimeEndpointLiteralsExistOnlyInTheCatalog() throws {
         let localLiteral = ["http://", "127.0.0.1:8180"].joined()
-        let productionLiteral = ["https://", "api.chorai.top"].joined()
+        let productionLiteral = ["https://", "product.chorai.app"].joined()
         let legacyLocalLiteral = ["127.0.0.1:", "8080"].joined()
         let catalog = try read("ArcNote/APIEnvironment.swift")
         XCTAssertTrue(catalog.contains(localLiteral))

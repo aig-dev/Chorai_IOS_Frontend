@@ -2,7 +2,7 @@ import XCTest
 
 final class APIEnvironmentTests: XCTestCase {
     private let expectedLocal = ["http://", "127.0.0.1:8180"].joined()
-    private let expectedProduction = ["https://", "api.chorai.top"].joined()
+    private let expectedProduction = ["https://", "product.chorai.app"].joined()
 
     func testCatalogMapsStableEnvironmentNamesToCanonicalURLs() {
         XCTAssertEqual(APIEnvironment.local.rawValue, "local")
@@ -11,6 +11,14 @@ final class APIEnvironmentTests: XCTestCase {
         XCTAssertEqual(
             APIEnvironment.production.baseURL.absoluteString,
             expectedProduction
+        )
+    }
+
+    func testProductionPreflightUsesSingleAPIPath() {
+        XCTAssertEqual(
+            APIEnvironment.production.baseURL.absoluteString
+                + APIEnvironment.AccessRoute.preflight,
+            expectedProduction + "/api/auth/access-code/preflight"
         )
     }
 

@@ -14,7 +14,7 @@ public struct BlockNoteLocalImageSource {
 }
 
 @MainActor
-final class BlockNoteLocalImageHandler: NSObject, @preconcurrency WKURLSchemeHandler {
+final class BlockNoteLocalImageHandler: NSObject, WKURLSchemeHandler {
     private let source: BlockNoteLocalImageSource
     private var requests: [ObjectIdentifier: (token: UUID, task: Task<Void, Never>)] = [:]
     private var closed = false
