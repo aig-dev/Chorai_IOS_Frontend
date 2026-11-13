@@ -48,6 +48,37 @@ final class FlowCardPresentationSourceContractTests: XCTestCase {
         )
     }
 
+    func testDeckRendersTheActiveLikeProjection() throws {
+        let source = try flowViewSource()
+        XCTAssertTrue(source.contains("card.replacingLike(with: likeStore.state)"),
+                      "Flow's icon and count must read the local tap projection before the global receipt")
+    }
+
+    func testFlowSwipesAndVoiceOverUseOnlyTheBrowseAction() throws {
+        let card = try flowCardSource()
+        let swipe = try XCTUnwrap(card.components(separatedBy: "private func resolveSwipe(").last)
+        XCTAssertTrue(swipe.contains("onDismiss()"))
+        XCTAssertFalse(swipe.contains("onCollectAndAdvance"))
+        XCTAssertFalse(swipe.contains("onToggleLike"))
+        XCTAssertFalse(swipe.contains("onToggleFavorite"))
+        XCTAssertTrue(card.contains(#".accessibilityAction(named: Text("Next note"), onDismiss)"#))
+        XCTAssertFalse(card.contains("Collect and continue"))
+    }
+
+    func testDeckFavoriteWritesOnlyPresentTheirInlineErrorAndScopeGlobalReceipts() throws {
+        let flow = try String(contentsOf: Self.repositoryRoot.appendingPathComponent("ArcNote/CoreFlow/NetworkCoreFlowService.swift"), encoding: .utf8)
+        let like = try String(contentsOf: Self.repositoryRoot.appendingPathComponent("ArcNote/CoreFlow/NetworkCoreCardLikeService.swift"), encoding: .utf8)
+        XCTAssertTrue(flow.contains("favoriteCard(cardId: assetID, presentsError: false)"))
+        XCTAssertTrue(flow.contains("unfavoriteCard(cardId: assetID, presentsError: false)"))
+        for adapter in [flow, like] {
+            XCTAssertTrue(adapter.contains("private let scope: NoteStoreScope?"))
+            XCTAssertTrue(adapter.contains("AuthManager.shared.currentNoteScope == scope"))
+            XCTAssertTrue(adapter.contains("let session = AuthManager.shared.sessionGeneration"),
+                          "The write uses the current session after same-account reauthentication")
+            XCTAssertTrue(adapter.contains("AuthManager.shared.sessionGeneration == session"))
+        }
+    }
+
     func testOwnedFlowCardOmitsFavoriteControl() throws {
         let source = try flowCardSource()
 

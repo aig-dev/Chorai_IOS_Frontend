@@ -4,6 +4,7 @@ import Combine
 final class MockCoreFlowService: CoreFlowServing {
     var recommendedResults: [Result<FlowPage, CoreFlowError>] = []
     var favoriteResults: [Result<Void, CoreFlowError>] = []
+    var delayedFavorites: [String: PassthroughSubject<Void, CoreFlowError>] = [:]
     var unfavoriteResults: [Result<Void, CoreFlowError>] = []
 
     private(set) var requestedRefreshTokens: [String?] = []
@@ -20,6 +21,7 @@ final class MockCoreFlowService: CoreFlowServing {
 
     func favorite(assetID: String) -> AnyPublisher<Void, CoreFlowError> {
         favoritedAssetIDs.append(assetID)
+        if let subject = delayedFavorites[assetID] { return subject.eraseToAnyPublisher() }
         return pop(&favoriteResults).publisher.eraseToAnyPublisher()
     }
 

@@ -11,10 +11,17 @@ public final class CardLikeStore: ObservableObject {
         return false
     }
 
+    private struct PendingLike {
+        var baseline: CardLikeState
+        let target: Bool
+        let task: Task<Void, Never>
+
+        var displayState: CardLikeState { baseline.settingLiked(target) }
+    }
+
+    private var pending: [String: PendingLike] = [:]
     private let service: any CoreCardLikeServing
     private let onCommit: @MainActor (CardLikeState) -> Void
-    private var operationTask: Task<Void, Never>?
-    private var requestID = UUID()
 
     public init(
         state: CardLikeState,
@@ -27,58 +34,46 @@ public final class CardLikeStore: ObservableObject {
     }
 
     public func hydrate(_ state: CardLikeState) {
-        operationTask?.cancel()
-        requestID = UUID()
-        self.state = state
-        phase = .ready
+        if let write = pending[state.cardID] {
+            self.state = write.displayState
+            phase = .mutating(targetLiked: write.target)
+        } else {
+            self.state = state
+            phase = .ready
+        }
     }
 
     public func applyCommitted(_ state: CardLikeState) {
-        guard state.cardID == self.state.cardID, !isMutating else { return }
-        self.state = state
-        phase = .ready
+        pending[state.cardID]?.baseline = state
+        if self.state.cardID == state.cardID { hydrate(state) }
     }
 
     public func toggle() {
-        guard !isMutating, !state.cardID.isEmpty else { return }
-        let committed = state
-        let target = !committed.isLiked
-        let currentRequest = UUID()
-        requestID = currentRequest
-        phase = .mutating(targetLiked: target)
-        operationTask = Task { [weak self] in
-            guard let self else { return }
+        let cardID = state.cardID
+        guard !cardID.isEmpty, pending[cardID] == nil else { return }
+        let target = !state.isLiked
+        let task = Task { [weak self, service] in
             do {
-                try await service.setLiked(
-                    cardID: committed.cardID,
-                    liked: target
-                )
-                guard !Task.isCancelled,
-                      requestID == currentRequest,
-                      state.cardID == committed.cardID else {
-                    return
-                }
-                let count = max(
-                    0,
-                    committed.likeCount + (target ? 1 : -1)
-                )
-                let next = CardLikeState(
-                    cardID: committed.cardID,
-                    isLiked: target,
-                    likeCount: count
-                )
-                state = next
-                phase = .ready
-                onCommit(next)
+                try Task.checkCancellation()
+                try await service.setLiked(cardID: cardID, liked: target)
+                guard let self, !Task.isCancelled, let write = pending.removeValue(forKey: cardID) else { return }
+                let committed = write.displayState
+                if state.cardID == cardID { hydrate(committed) }
+                onCommit(committed)
             } catch {
-                guard !Task.isCancelled, requestID == currentRequest else {
-                    return
-                }
-                phase = .failed(
-                    (error as? CardLikeError)
-                        ?? .transport(code: "card_like_request_failed")
-                )
+                guard let self, !Task.isCancelled, let write = pending.removeValue(forKey: cardID),
+                      state.cardID == cardID else { return }
+                state = write.baseline
+                phase = .failed((error as? CardLikeError) ?? .transport(code: "card_like_request_failed"))
             }
         }
+        let write = PendingLike(baseline: state, target: target, task: task)
+        pending[cardID] = write
+        state = write.displayState
+        phase = .mutating(targetLiked: target)
+    }
+
+    deinit {
+        for write in pending.values { write.task.cancel() }
     }
 }

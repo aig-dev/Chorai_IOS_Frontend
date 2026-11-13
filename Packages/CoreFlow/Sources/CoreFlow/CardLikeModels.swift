@@ -10,6 +10,11 @@ public struct CardLikeState: Equatable, Sendable {
         self.isLiked = isLiked
         self.likeCount = max(0, likeCount)
     }
+
+    func settingLiked(_ liked: Bool) -> CardLikeState {
+        guard liked != isLiked else { return self }
+        return CardLikeState(cardID: cardID, isLiked: liked, likeCount: likeCount + (liked ? 1 : -1))
+    }
 }
 
 public enum CardLikeError: Error, Equatable, Sendable {

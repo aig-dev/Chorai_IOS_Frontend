@@ -595,6 +595,17 @@ enum NetworkError: Error, LocalizedError {
     case timeout
     case unknown
 
+    var invalidatesCardRead: Bool {
+        switch self {
+        case .unauthorized, .forbidden, .notFound:
+            return true
+        case .serverError(let status, _), .api(let status, _, _):
+            return [401, 403, 404, 410].contains(status)
+        default:
+            return false
+        }
+    }
+
     var errorDescription: String? {
         switch self {
         case .invalidURL:

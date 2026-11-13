@@ -5,12 +5,10 @@ import Foundation
 public final class FlowDeckStore: ObservableObject {
     @Published public private(set) var cards: [FlowCard] = []
     @Published public private(set) var phase: FlowDeckPhase = .idle
-    @Published public private(set) var isInteractionLocked = false
-    @Published public private(set) var notice: FlowNotice?
+    @Published public private(set) var failedFavoriteIDs: Set<String> = []
 
     @Published public private(set) var history: [FlowCard] = []
     @Published public private(set) var historyIndex: Int?
-    @Published public private(set) var undoCollectionCardID: String?
 
     public var browsingCards: [FlowCard] { history + cards }
     public var isRevisiting: Bool { historyIndex != nil }
@@ -26,7 +24,6 @@ public final class FlowDeckStore: ObservableObject {
     public var remainingCount: Int { cards.count + (historyIndex.map { history.count - $0 } ?? 0) }
     public var canLoadMore: Bool { nextRefreshToken != nil }
 
-
     private let service: CoreFlowServing
     private let pageSize: Int
     private let onFavoriteCommitted: (CardFavoriteState) -> Void
@@ -36,8 +33,16 @@ public final class FlowDeckStore: ObservableObject {
     private var emptyPageHopCount = 0
     private var isLoadingPage = false
     private var pageCancellable: AnyCancellable?
-    private var interactionCancellable: AnyCancellable?
-    private var pendingFavoriteBaseline: CardFavoriteState?
+    private struct PendingFavorite {
+        var baseline: CardFavoriteState
+        let target: Bool
+        var cancellable: AnyCancellable?
+    }
+    private var pendingFavorites: [String: PendingFavorite] = [:]
+
+    public func isFavoritePending(_ cardID: String) -> Bool {
+        pendingFavorites[cardID] != nil
+    }
 
     public init(service: CoreFlowServing, pageSize: Int = 20, onFavoriteCommitted: @escaping (CardFavoriteState) -> Void = { _ in }) {
         self.service = service
@@ -51,13 +56,12 @@ public final class FlowDeckStore: ObservableObject {
     }
 
     public func refresh() {
-        guard !isInteractionLocked else { return }
+        guard pendingFavorites.isEmpty else { return }
         requestPage(reset: true)
     }
 
     public func dismissCurrent() {
-        guard !isInteractionLocked, currentCard != nil else { return }
-        notice = nil
+        guard currentCard != nil else { return }
         if let index = historyIndex {
             historyIndex = index + 1 < history.count ? index + 1 : nil
         } else if !cards.isEmpty {
@@ -68,24 +72,20 @@ public final class FlowDeckStore: ObservableObject {
     }
 
     public func previous() {
-        guard !isInteractionLocked, canGoBack else { return }
-        notice = nil
+        guard canGoBack else { return }
         historyIndex = (historyIndex ?? history.count) - 1
         phase = .loaded
     }
 
     public func resumeExploring() {
-        guard !isInteractionLocked else { return }
         historyIndex = nil
-        notice = nil
         updatePhaseAfterAdvance()
         prefetchIfNeeded()
     }
 
     public func revisitHistory(at index: Int) {
-        guard !isInteractionLocked, history.indices.contains(index) else { return }
+        guard history.indices.contains(index) else { return }
         historyIndex = index
-        notice = nil
         phase = .loaded
     }
 
@@ -100,48 +100,31 @@ public final class FlowDeckStore: ObservableObject {
     }
 
     public func toggleFavorite(assetID: String, onFavoriteSucceeded: ((String) -> Void)? = nil) {
-        guard let card = browsingCards.first(where: { $0.id == assetID }) else { return }
-        mutateFavorite(card: card, isFavorited: !card.isFavorited) { [weak self] in
-            if self?.undoCollectionCardID == assetID { self?.undoCollectionCardID = nil }
-            if !card.isFavorited { onFavoriteSucceeded?(assetID) }
-        }
-    }
+        guard let card = browsingCards.first(where: { $0.id == assetID }),
+              !card.isOwner, !isFavoritePending(assetID) else { return }
 
-    /// A right swipe collects idempotently. Advancing waits for a real success.
-    public func collectAndAdvanceCurrent(
-        onFavoriteSucceeded: ((String) -> Void)? = nil,
-        onAdvanced: ((String) -> Void)? = nil
-    ) {
-        guard !isInteractionLocked, let card = currentCard else { return }
-        if card.isFavorited || card.isOwner {
-            undoCollectionCardID = nil
-            dismissCurrent()
-            onAdvanced?(card.id)
-            return
-        }
-        mutateFavorite(card: card, isFavorited: true) { [weak self] in
-            guard let self else { return }
-            self.undoCollectionCardID = card.id
-            onFavoriteSucceeded?(card.id)
-            guard self.currentCard?.id == card.id else { return }
-            self.dismissCurrent()
-            onAdvanced?(card.id)
-        }
-    }
+        failedFavoriteIDs.remove(assetID)
+        let target = !card.isFavorited
+        let baseline = card.favoriteState
+        pendingFavorites[assetID] = PendingFavorite(baseline: baseline, target: target)
+        displayFavorite(baseline.settingFavorite(target))
 
-    public func undoLastCollection() {
-        guard let id = undoCollectionCardID,
-              let card = browsingCards.first(where: { $0.id == id }),
-              card.isFavorited else { return }
-        mutateFavorite(card: card, isFavorited: false) { [weak self] in
-            self?.undoCollectionCardID = nil
-        }
-    }
-
-    /// Ends transient feedback without changing the confirmed collection or deck.
-    public func dismissCollectionUndo(for cardID: String) {
-        guard !isInteractionLocked, undoCollectionCardID == cardID else { return }
-        undoCollectionCardID = nil
+        var receivedSuccess = false
+        let mutation = target ? service.favorite(assetID: assetID) : service.unfavorite(assetID: assetID)
+        pendingFavorites[assetID]?.cancellable = mutation
+            .receive(on: DispatchQueue.main)
+            .sink(receiveCompletion: { [weak self] completion in
+                guard let self, let pending = pendingFavorites.removeValue(forKey: assetID) else { return }
+                if case .finished = completion, receivedSuccess {
+                    let committed = pending.baseline.settingFavorite(target)
+                    applyFavoriteState(committed)
+                    onFavoriteCommitted(committed)
+                    if target { onFavoriteSucceeded?(assetID) }
+                } else {
+                    displayFavorite(pending.baseline)
+                    if pending.baseline.isFavorited != target { failedFavoriteIDs.insert(assetID) }
+                }
+            }, receiveValue: { _ in receivedSuccess = true })
     }
 
     public func applyLikeState(_ state: CardLikeState) {
@@ -149,52 +132,22 @@ public final class FlowDeckStore: ObservableObject {
     }
 
     public func applyFavoriteState(_ state: CardFavoriteState) {
-        updateCard(state.cardID) { card in
-            let delta = card.isFavorited == state.isFavorited ? 0 : (state.isFavorited ? 1 : -1)
-            return card.replacingFavorite(
-                isFavorited: state.isFavorited,
-                favoriteCount: max(0, state.favoriteCount ?? (card.favoriteCount + delta))
-            )
+        guard let card = browsingCards.first(where: { $0.id == state.cardID }) else { return }
+        let baseline = pendingFavorites[card.id]?.baseline ?? card.favoriteState
+        let confirmed = baseline.settingFavorite(state.isFavorited, count: state.favoriteCount)
+        if let target = pendingFavorites[card.id]?.target {
+            pendingFavorites[card.id]?.baseline = confirmed
+            displayFavorite(confirmed.settingFavorite(target))
+        } else {
+            displayFavorite(confirmed)
         }
-        if pendingFavoriteBaseline?.cardID == state.cardID,
-           let card = browsingCards.first(where: { $0.id == state.cardID }) {
-            // A successful mutation elsewhere is now the rollback source of truth.
-            pendingFavoriteBaseline = .init(cardID: card.id, isFavorited: card.isFavorited, favoriteCount: card.favoriteCount)
-        }
-        if !state.isFavorited, undoCollectionCardID == state.cardID { undoCollectionCardID = nil }
+        failedFavoriteIDs.remove(card.id)
     }
 
-    private func mutateFavorite(card: FlowCard, isFavorited: Bool, onSuccess: @escaping () -> Void) {
-        guard !isInteractionLocked, !card.isOwner else { return }
-        notice = nil
-        pendingFavoriteBaseline = .init(cardID: card.id, isFavorited: card.isFavorited, favoriteCount: card.favoriteCount)
-        let count = max(0, card.favoriteCount + (isFavorited ? 1 : -1))
-        updateCard(card.id) { $0.replacingFavorite(isFavorited: isFavorited, favoriteCount: count) }
-        isInteractionLocked = true
-        var receivedSuccess = false
-        let mutation = isFavorited ? service.favorite(assetID: card.id) : service.unfavorite(assetID: card.id)
-        interactionCancellable = mutation
-            .receive(on: DispatchQueue.main)
-            .sink(receiveCompletion: { [weak self] completion in
-                guard let self else { return }
-                let baseline = self.pendingFavoriteBaseline
-                    ?? .init(cardID: card.id, isFavorited: card.isFavorited, favoriteCount: card.favoriteCount)
-                self.pendingFavoriteBaseline = nil
-                self.isInteractionLocked = false
-                if case .finished = completion, receivedSuccess {
-                    let delta = baseline.isFavorited == isFavorited ? 0 : (isFavorited ? 1 : -1)
-                    let committed = CardFavoriteState(cardID: card.id, isFavorited: isFavorited, favoriteCount: max(0, (baseline.favoriteCount ?? card.favoriteCount) + delta))
-                    self.applyFavoriteState(committed)
-                    self.onFavoriteCommitted(committed)
-                    onSuccess()
-                } else {
-                    // Keep successful updates from other surfaces and concurrent likes.
-                    self.updateCard(card.id) {
-                        $0.replacingFavorite(isFavorited: baseline.isFavorited, favoriteCount: baseline.favoriteCount ?? card.favoriteCount)
-                    }
-                    self.notice = .favoriteFailed
-                }
-            }, receiveValue: { _ in receivedSuccess = true })
+    private func displayFavorite(_ state: CardFavoriteState) {
+        updateCard(state.cardID) {
+            $0.replacingFavorite(isFavorited: state.isFavorited, favoriteCount: state.favoriteCount ?? $0.favoriteCount)
+        }
     }
 
     private func updateCard(_ id: String, transform: (FlowCard) -> FlowCard) {
@@ -208,8 +161,8 @@ public final class FlowDeckStore: ObservableObject {
         if reset {
             cards = []
             history = []
+            failedFavoriteIDs.removeAll()
             historyIndex = nil
-            undoCollectionCardID = nil
             seenAssetIDs = []
             nextRefreshToken = nil
             emptyPageHopCount = 0
@@ -271,5 +224,19 @@ public final class FlowDeckStore: ObservableObject {
         phase = currentCard == nil
             ? (nextRefreshToken == nil ? .empty : .loading)
             : .loaded
+    }
+}
+
+private extension FlowCard {
+    var favoriteState: CardFavoriteState {
+        CardFavoriteState(cardID: id, isFavorited: isFavorited, favoriteCount: favoriteCount)
+    }
+}
+
+private extension CardFavoriteState {
+    func settingFavorite(_ target: Bool, count: Int? = nil) -> CardFavoriteState {
+        let delta = isFavorited == target ? 0 : (target ? 1 : -1)
+        return CardFavoriteState(cardID: cardID, isFavorited: target,
+                                 favoriteCount: max(0, count ?? ((favoriteCount ?? 0) + delta)))
     }
 }

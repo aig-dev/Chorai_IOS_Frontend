@@ -4,12 +4,17 @@ import Foundation
 
 struct NetworkCoreCardLikeService: CoreCardLikeServing, @unchecked Sendable {
     private let network: NetworkManager
+    private let scope: NoteStoreScope?
 
     init(network: NetworkManager = .shared) {
         self.network = network
+        scope = AuthManager.shared.currentNoteScope
     }
 
+    @MainActor
     func setLiked(cardID: String, liked: Bool) async throws {
+        guard let scope, AuthManager.shared.currentNoteScope == scope else { throw CancellationError() }
+        let session = AuthManager.shared.sessionGeneration
         if liked {
             let response = try await firstValue(
                 from: network.likeCard(
@@ -31,6 +36,7 @@ struct NetworkCoreCardLikeService: CoreCardLikeServing, @unchecked Sendable {
                 throw CardLikeError.transport(code: "unlike_rejected")
             }
         }
+        guard AuthManager.shared.sessionGeneration == session else { throw CancellationError() }
     }
 
     private func firstValue<T>(

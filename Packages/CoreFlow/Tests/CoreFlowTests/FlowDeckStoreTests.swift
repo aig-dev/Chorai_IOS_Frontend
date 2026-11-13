@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import XCTest
 @testable import CoreFlow
@@ -149,7 +150,7 @@ final class FlowDeckStoreTests: XCTestCase {
         XCTAssertEqual(store.currentCard?.favoriteCount, 1)
         XCTAssertEqual(service.favoritedAssetIDs, ["a"])
         XCTAssertEqual(succeededAssetID, "a")
-        XCTAssertNil(store.notice)
+        XCTAssertTrue(store.failedFavoriteIDs.isEmpty)
     }
 
     @MainActor
@@ -177,7 +178,7 @@ final class FlowDeckStoreTests: XCTestCase {
         XCTAssertEqual(store.currentCard?.favoriteCount, 0)
         XCTAssertEqual(service.unfavoritedAssetIDs, ["a"])
         XCTAssertNil(succeededAssetID)
-        XCTAssertNil(store.notice)
+        XCTAssertTrue(store.failedFavoriteIDs.isEmpty)
     }
 
     @MainActor
@@ -198,7 +199,7 @@ final class FlowDeckStoreTests: XCTestCase {
         XCTAssertEqual(store.currentCard?.id, "a")
         XCTAssertEqual(store.currentCard?.isFavorited, false)
         XCTAssertEqual(store.currentCard?.favoriteCount, 0)
-        XCTAssertEqual(store.notice, .favoriteFailed)
+        XCTAssertEqual(store.failedFavoriteIDs, ["a"])
         XCTAssertNil(succeededAssetID)
     }
 
@@ -219,8 +220,8 @@ final class FlowDeckStoreTests: XCTestCase {
         XCTAssertEqual(store.currentCard, original)
         XCTAssertTrue(service.favoritedAssetIDs.isEmpty)
         XCTAssertTrue(service.unfavoritedAssetIDs.isEmpty)
-        XCTAssertFalse(store.isInteractionLocked)
-        XCTAssertNil(store.notice)
+        XCTAssertFalse(store.isFavoritePending("owned"))
+        XCTAssertTrue(store.failedFavoriteIDs.isEmpty)
     }
 
     @MainActor
@@ -294,133 +295,53 @@ final class FlowDeckStoreTests: XCTestCase {
     }
 
     @MainActor
-    func testCollectAndAdvanceOnlyMovesAfterSuccessAndCanUndoFromHistory() async {
+    func testBrowsingThroughSavedLikedAndOwnedCardsOnlyMovesTheDeck() async {
         let service = MockCoreFlowService()
-        service.recommendedResults = [.success(FlowPage(cards: [card("a"), card("b")], nextRefreshToken: nil))]
-        service.favoriteResults = [.success(())]
-        service.unfavoriteResults = [.success(())]
-        let store = FlowDeckStore(service: service)
+        let saved = card("saved", isFavorited: true).replacingLike(with: .init(cardID: "saved", isLiked: true, likeCount: 4))
+        let originals = [card("new"), saved, card("mine", isOwner: true)]
+        service.recommendedResults = [.success(FlowPage(cards: originals, nextRefreshToken: nil))]
+        var receipts: [CardFavoriteState] = []
+        let store = FlowDeckStore(service: service, onFavoriteCommitted: { receipts.append($0) })
         store.loadInitialIfNeeded()
         await settle()
-        store.collectAndAdvanceCurrent()
-        XCTAssertEqual(store.currentCard?.id, "a", "Do not advance while the service is pending")
-        await settle()
-        XCTAssertEqual(store.currentCard?.id, "b")
-        XCTAssertEqual(store.undoCollectionCardID, "a")
-        XCTAssertEqual(store.browsingCards.first?.isFavorited, true)
-        store.undoLastCollection()
-        await settle()
-        XCTAssertEqual(store.currentCard?.id, "b", "Undo restores collection, not browsing position")
-        XCTAssertEqual(store.browsingCards.first?.isFavorited, false)
-        XCTAssertNil(store.undoCollectionCardID)
-    }
 
-    @MainActor
-    func testFailedSwipeCollectionStaysOnCardAndCanRetry() async {
-        let service = MockCoreFlowService()
-        service.recommendedResults = [.success(FlowPage(cards: [card("a"), card("b")], nextRefreshToken: nil))]
-        service.favoriteResults = [.failure(.offline), .success(())]
-        let store = FlowDeckStore(service: service)
-        store.loadInitialIfNeeded()
-        await settle()
-        store.collectAndAdvanceCurrent()
-        await settle()
-        XCTAssertEqual(store.currentCard?.id, "a")
-        XCTAssertEqual(store.currentCard?.isFavorited, false)
-        XCTAssertEqual(store.notice, .favoriteFailed)
-        XCTAssertNil(store.undoCollectionCardID)
-        store.collectAndAdvanceCurrent()
-        await settle()
-        XCTAssertEqual(store.currentCard?.id, "b")
-    }
-
-    @MainActor
-    func testDismissingCollectionUndoKeepsConfirmedCollectionAndBrowsingPosition() async {
-        let service = MockCoreFlowService()
-        service.recommendedResults = [.success(FlowPage(cards: [card("a"), card("b")], nextRefreshToken: nil))]
-        service.favoriteResults = [.success(())]
-        let store = FlowDeckStore(service: service)
-        store.loadInitialIfNeeded()
-        await settle()
-        store.collectAndAdvanceCurrent()
-        await settle()
-
-        store.dismissCollectionUndo(for: "a")
-
-        XCTAssertNil(store.undoCollectionCardID)
-        XCTAssertEqual(store.currentCard?.id, "b")
-        XCTAssertEqual(store.history.map(\.id), ["a"])
-        XCTAssertEqual(store.history.first?.isFavorited, true)
-        XCTAssertEqual(service.favoritedAssetIDs, ["a"])
-        XCTAssertTrue(service.unfavoritedAssetIDs.isEmpty, "Dismissing feedback must not undo the confirmed collection")
-    }
-
-    @MainActor
-    func testExpiredCollectionFeedbackCannotDismissANewerCardsUndo() async {
-        let service = MockCoreFlowService()
-        service.recommendedResults = [.success(FlowPage(cards: [card("a"), card("b"), card("c")], nextRefreshToken: nil))]
-        service.favoriteResults = [.success(()), .success(())]
-        let store = FlowDeckStore(service: service)
-        store.loadInitialIfNeeded()
-        await settle()
-        store.collectAndAdvanceCurrent()
-        await settle()
-        store.collectAndAdvanceCurrent()
-        await settle()
-
-        store.dismissCollectionUndo(for: "a")
-        XCTAssertEqual(store.undoCollectionCardID, "b")
-        XCTAssertEqual(store.currentCard?.id, "c")
-
-        store.dismissCollectionUndo(for: "b")
-        XCTAssertNil(store.undoCollectionCardID)
-        XCTAssertEqual(store.history.map(\.id), ["a", "b"])
-        XCTAssertTrue(store.history.allSatisfy(\.isFavorited))
-        XCTAssertTrue(service.unfavoritedAssetIDs.isEmpty)
-    }
-
-    @MainActor
-    func testCollectionFeedbackExpiryDuringPendingUndoPreservesFailedUndoRetry() async {
-        let service = MockCoreFlowService()
-        service.recommendedResults = [.success(FlowPage(cards: [card("a"), card("b")], nextRefreshToken: nil))]
-        service.favoriteResults = [.success(())]
-        service.unfavoriteResults = [.failure(.offline), .success(())]
-        let store = FlowDeckStore(service: service)
-        store.loadInitialIfNeeded()
-        await settle()
-        store.collectAndAdvanceCurrent()
-        await settle()
-
-        store.undoLastCollection()
-        XCTAssertTrue(store.isInteractionLocked)
-        store.dismissCollectionUndo(for: "a")
-        await settle()
-        XCTAssertEqual(store.undoCollectionCardID, "a")
-        XCTAssertEqual(store.history.first?.isFavorited, true)
-        XCTAssertEqual(store.notice, .favoriteFailed)
-
-        store.undoLastCollection()
-        await settle()
-        XCTAssertNil(store.undoCollectionCardID)
-        XCTAssertEqual(store.history.first?.isFavorited, false)
-        XCTAssertEqual(store.currentCard?.id, "b")
-        XCTAssertEqual(service.unfavoritedAssetIDs, ["a", "a"])
-    }
-
-    @MainActor
-    func testRevisitingCollectedCardNeverUncollectsOnRightSwipe() async {
-        let service = MockCoreFlowService()
-        service.recommendedResults = [.success(FlowPage(cards: [card("a", isFavorited: true), card("b")], nextRefreshToken: nil))]
-        let store = FlowDeckStore(service: service)
-        store.loadInitialIfNeeded()
-        await settle()
-        store.dismissCurrent()
+        for expected in originals {
+            XCTAssertEqual(store.currentCard, expected)
+            store.dismissCurrent()
+        }
+        XCTAssertEqual(store.phase, .empty)
+        XCTAssertEqual(store.history, originals)
         store.previous()
-        store.collectAndAdvanceCurrent()
-        XCTAssertEqual(store.currentCard?.id, "b")
-        XCTAssertEqual(store.browsingCards.first?.isFavorited, true)
-        XCTAssertTrue(service.unfavoritedAssetIDs.isEmpty)
+        store.revisitHistory(at: 1)
+        store.dismissCurrent()
+        XCTAssertEqual(store.currentCard?.id, "mine")
+        XCTAssertEqual(store.history, originals)
         XCTAssertTrue(service.favoritedAssetIDs.isEmpty)
+        XCTAssertTrue(service.unfavoritedAssetIDs.isEmpty)
+        XCTAssertTrue(receipts.isEmpty)
+    }
+
+    @MainActor
+    func testBrowsingWhileBookmarkButtonIsPendingOnlySendsTheOriginalWrite() async {
+        let service = MockCoreFlowService()
+        let receipt = PassthroughSubject<Void, CoreFlowError>()
+        service.delayedFavorites["a"] = receipt
+        service.recommendedResults = [.success(FlowPage(cards: [card("a"), card("b"), card("c")], nextRefreshToken: nil))]
+        let store = FlowDeckStore(service: service)
+        store.loadInitialIfNeeded()
+        await settle()
+
+        store.toggleFavoriteCurrent()
+        store.dismissCurrent()
+        store.dismissCurrent()
+        XCTAssertEqual(store.currentCard?.id, "c")
+        receipt.send(completion: .failure(.offline))
+        await settle()
+        XCTAssertEqual(store.history.first?.isFavorited, false)
+        XCTAssertEqual(store.failedFavoriteIDs, ["a"])
+        XCTAssertEqual(store.currentCard?.id, "c")
+        XCTAssertEqual(service.favoritedAssetIDs, ["a"])
+        XCTAssertTrue(service.unfavoritedAssetIDs.isEmpty)
     }
 
     @MainActor
@@ -482,14 +403,14 @@ final class FlowDeckStoreTests: XCTestCase {
         await settle()
 
         store.toggleFavoriteCurrent()
-        XCTAssertTrue(store.isInteractionLocked)
+        XCTAssertTrue(store.isFavoritePending("a"))
         store.applyFavoriteState(.init(cardID: "a", isFavorited: true, favoriteCount: 7))
         await settle()
 
         XCTAssertEqual(store.currentCard?.isFavorited, true)
         XCTAssertEqual(store.currentCard?.favoriteCount, 7)
-        XCTAssertFalse(store.isInteractionLocked)
-        XCTAssertEqual(store.notice, .favoriteFailed)
+        XCTAssertFalse(store.isFavoritePending("a"))
+        XCTAssertTrue(store.failedFavoriteIDs.isEmpty, "The newer receipt already confirmed this bookmark")
     }
 
     @MainActor
@@ -527,25 +448,6 @@ final class FlowDeckStoreTests: XCTestCase {
 
         XCTAssertEqual(store.currentCard?.favoriteCount, 7)
         XCTAssertEqual(committed, .init(cardID: "a", isFavorited: true, favoriteCount: 7))
-    }
-
-    @MainActor
-    func testFailedUndoKeepsCollectionAndUndoAvailable() async {
-        let service = MockCoreFlowService()
-        service.recommendedResults = [.success(FlowPage(cards: [card("a"), card("b")], nextRefreshToken: nil))]
-        service.favoriteResults = [.success(())]
-        service.unfavoriteResults = [.failure(.offline)]
-        let store = FlowDeckStore(service: service)
-        store.loadInitialIfNeeded()
-        await settle()
-        store.collectAndAdvanceCurrent()
-        await settle()
-        store.undoLastCollection()
-        await settle()
-        XCTAssertEqual(store.browsingCards.first?.isFavorited, true)
-        XCTAssertEqual(store.undoCollectionCardID, "a")
-        XCTAssertEqual(store.currentCard?.id, "b")
-        XCTAssertEqual(store.notice, .favoriteFailed)
     }
 
     private func card(

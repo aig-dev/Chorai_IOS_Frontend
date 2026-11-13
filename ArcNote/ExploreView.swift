@@ -147,7 +147,6 @@ struct ExploreView: View {
                                 Text(card.author?.username ?? "Chorai").font(.caption).foregroundStyle(.secondary)
                             }.padding(.vertical, 6)
                         }
-                        .disabled(flowStore.isInteractionLocked)
                         .accessibilityIdentifier("flow.history.item.\(card.id)")
                         .listRowBackground(ChoraiTheme.surface)
                     }
@@ -269,14 +268,13 @@ struct ExploreView: View {
                         Image(systemName: "arrow.right.to.line").font(.system(size: 20, weight: .medium))
                     }
                         .frame(minWidth: 44, minHeight: 44)
-                        .disabled(flowStore.isInteractionLocked)
                         .accessibilityLabel("Continue exploring").accessibilityIdentifier("flow.resume")
                 }
                 Button { showsHistory = true } label: {
                     Image(systemName: "clock.arrow.circlepath").font(.system(size: 20, weight: .medium))
                 }
                     .frame(width: 44, height: 44)
-                    .disabled(flowStore.history.isEmpty || flowStore.isInteractionLocked)
+                    .disabled(flowStore.history.isEmpty)
                     .accessibilityLabel("Recently viewed").accessibilityIdentifier("flow.history")
             }
             }

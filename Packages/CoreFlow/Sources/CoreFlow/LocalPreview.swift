@@ -24,6 +24,11 @@ public enum LocalPreviewFixtures {
         let ownedCards = [card(id: "preview-note", owned: true, index: 0), card(id: "preview-note-2", owned: true, index: 1)]
         let cards = (0..<6).map { card(id: $0 == 0 ? "preview-field-note" : "preview-field-note-\($0)", owned: false, index: $0) }
         let allCards = ownedCards + cards
+        if path == "/api/cards/preview-field-note/comments" {
+            let comment = ["comment_id": "preview-reply", "card_id": "preview-field-note", "actor_id": "preview-reader",
+                           "username": "Mira Chen", "body": "I saved this passage too.", "created_at": "2026-10-26T09:00:00Z"]
+            return json(["success": true, "data": [comment], "meta": pageMetadata(total: 1)])
+        }
         if path.hasPrefix("/api/cards/"), !path.hasSuffix("/links"),
            let selected = allCards.first(where: { "/api/cards/" + ($0["id"] as? String ?? "") == path }) {
             return json(["success": true, "data": selected])
@@ -257,19 +262,44 @@ public enum LocalPreviewFixtures {
 #if DEBUG
 /// A terminal transport: every URL is answered locally; no fallback session exists.
 public final class LocalPreviewURLProtocol: URLProtocol {
+    public static let engagementWriteObserved = Notification.Name("localPreview.engagementWriteObserved")
+    private var pendingResponse: DispatchWorkItem?
     public override class func canInit(with request: URLRequest) -> Bool { true }
     public override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     public override func startLoading() {
-        guard let url = request.url,
-              let response = HTTPURLResponse(url: url, statusCode: LocalPreviewFixtures.response(method: request.httpMethod ?? "GET", path: url.path).statusCode, httpVersion: "HTTP/1.1", headerFields: ["Content-Type": "application/json"]) else {
+        guard let url = request.url else {
             client?.urlProtocol(self, didFailWithError: URLError(.badURL))
             return
         }
         let fixture = LocalPreviewFixtures.response(method: request.httpMethod ?? "GET", path: url.path)
-        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-        client?.urlProtocol(self, didLoad: fixture.data)
-        client?.urlProtocolDidFinishLoading(self)
+        guard let response = HTTPURLResponse(url: url, statusCode: fixture.statusCode, httpVersion: "HTTP/1.1", headerFields: ["Content-Type": "application/json"]) else {
+            client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
+            return
+        }
+        let deliver = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: fixture.data)
+            client?.urlProtocolDidFinishLoading(self)
+        }
+        let arguments = ProcessInfo.processInfo.arguments
+        let delayedRead = arguments.contains("--ui-test-card-reopen") &&
+            ["/api/cards/preview-field-note", "/api/cards/preview-field-note/comments"].contains(url.path)
+        let delayedWrite = arguments.contains("--ui-test-card-engagement") &&
+            ["POST", "DELETE"].contains(request.httpMethod ?? "") &&
+            ["/api/v1/actors/me/favorites", "/api/v1/actors/me/likes"].contains { url.path == $0 || url.path.hasPrefix($0 + "/") }
+        if delayedWrite {
+            NotificationCenter.default.post(name: Self.engagementWriteObserved, object: nil)
+        }
+        if delayedRead || delayedWrite {
+            pendingResponse = deliver
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3, execute: deliver)
+        } else {
+            deliver.perform()
+        }
     }
-    public override func stopLoading() {}
+    public override func stopLoading() {
+        pendingResponse?.cancel()
+    }
 }
 #endif

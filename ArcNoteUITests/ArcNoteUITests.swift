@@ -6704,6 +6704,61 @@ final class ArcNoteUITests: XCTestCase {
         waitFor("screen.detail.loaded", timeout: 30)
     }
 
+    func testReopeningDetailShowsThePreviousReadDuringRefresh() {
+        app.launchArguments += ["--dev-preview", "--ui-test-card-reopen"]
+        app.launch()
+        tap("fixture.detail.open")
+        waitFor("screen.detail.loaded")
+        app.navigationBars.buttons.firstMatch.tap()
+        tap("fixture.detail.open")
+        waitFor("screen.detail.refreshing")
+        XCTAssertTrue(exists("detail.reader.document", timeout: 1))
+        XCTAssertFalse(app.descendants(matching: .any)["screen.detail.loading"].exists)
+    }
+
+    func testReopeningCommentsShowsThePageBeforeTheDelayedReply() {
+        app.launchArguments += ["--dev-preview", "--ui-test-card-reopen"]
+        app.launch()
+        tap("fixture.detail.open")
+        waitFor("screen.detail.loaded")
+        let openComments = app.buttons["detail.comment.open"]
+        for _ in 0..<7 where !openComments.isHittable || openComments.frame.maxY > app.frame.maxY - 100 {
+            app.swipeUp()
+        }
+        openComments.tap()
+        waitFor("comment.content.preview-reply")
+        app.buttons["comment.close"].tap()
+        let closed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: app.buttons["comment.close"])
+        XCTAssertEqual(XCTWaiter.wait(for: [closed], timeout: 5), .completed)
+        openComments.tap()
+        XCTAssertTrue(exists("comment.content.preview-reply", timeout: 1), "The fixture delays the comment response for three seconds")
+    }
+
+    func testFlowSwipesBrowseWithoutWritesAndOnlyExplicitButtonsSendRequests() {
+        app.launchArguments += ["--dev-preview", "--ui-test-card-engagement"]
+        app.launch()
+        let first = "preview-field-note"
+        let second = "preview-field-note-1"
+        let third = "preview-field-note-2"
+        let writes = waitFor("fixture.flow.writeCount")
+        waitFor("flow.card.\(first)").swipeRight()
+        waitFor("flow.card.\(second)").swipeLeft()
+        waitFor("flow.card.\(third)")
+        XCTAssertEqual(writes.label, "0")
+        let like = waitForButton("flow.like.\(third)")
+        like.tap()
+        XCTAssertEqual(like.value as? String, "true")
+        waitFor("flow.like.error.\(third)")
+        XCTAssertEqual(like.value as? String, "false")
+        XCTAssertEqual(writes.label, "1")
+        let bookmark = waitForButton("flow.favorite.\(third)")
+        bookmark.tap()
+        XCTAssertEqual(bookmark.value as? String, "true")
+        waitFor("flow.favorite.error")
+        XCTAssertEqual(bookmark.value as? String, "false")
+        XCTAssertEqual(writes.label, "2")
+    }
+
     func testExploreVisibleRecommendedCardTapOpensGoDetailRoute() throws {
         launchAuthenticatedApp()
 
@@ -6724,34 +6779,22 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertEqual(detailCardId, visibleCardId)
     }
 
-    func testFlowLeftSwipeAdvancesWithoutFavoriteMutation() throws {
+    func testFlowSwipingEitherDirectionPreservesFavoriteAndLikeStatus() throws {
         let session = try requireSmokeSession()
         seedAppSession(session)
         launchAuthenticatedApp()
-
-        waitFor("tab.flow")
         waitFor("screen.flow.content", timeout: 20)
 
-        let firstCardId = waitFor("flow.visible-card.id", timeout: 30)
-            .label
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        XCTAssertFalse(firstCardId.isEmpty, "Visible Flow card id is empty")
-
-        let initialFavoriteState = try fetchAssetStatus(
-            kind: "favorites",
-            id: firstCardId,
-            token: session.token
-        )
-
-        waitFor("flow.card.\(firstCardId)").swipeLeft()
-
-        let nextCardId = waitForDifferentVisibleFlowCard(from: firstCardId)
-        XCTAssertNotEqual(nextCardId, firstCardId)
-        XCTAssertEqual(
-            try fetchAssetStatus(kind: "favorites", id: firstCardId, token: session.token),
-            initialFavoriteState,
-            "Left swipe must not mutate favorite state"
-        )
+        let swipes: [(XCUIElement) -> Void] = [{ $0.swipeLeft() }, { $0.swipeRight() }]
+        for swipe in swipes {
+            let cardID = flowVisibleCardID()
+            let saved = try fetchAssetStatus(kind: "favorites", id: cardID, token: session.token)
+            let liked = try fetchAssetStatus(kind: "likes", id: cardID, token: session.token)
+            swipe(waitFor("flow.card.\(cardID)"))
+            XCTAssertNotEqual(waitForDifferentVisibleFlowCard(from: cardID), cardID)
+            XCTAssertEqual(try fetchAssetStatus(kind: "favorites", id: cardID, token: session.token), saved)
+            XCTAssertEqual(try fetchAssetStatus(kind: "likes", id: cardID, token: session.token), liked)
+        }
     }
 
     func testFlowGlassDeckRendersReusableRelativeAvatarAndThreeCardStack() throws {
@@ -6858,31 +6901,6 @@ final class ArcNoteUITests: XCTestCase {
 
         waitFor("flow.card.\(cardID)").swipeLeft()
         XCTAssertNotEqual(waitForDifferentVisibleFlowCard(from: cardID), cardID)
-    }
-
-    func testFlowRightSwipeAdvancesWithoutFavoriteMutationOrUndo() throws {
-        let session = try requireSmokeSession()
-        seedAppSession(session)
-        launchAuthenticatedApp()
-
-        waitFor("tab.flow")
-        waitFor("screen.flow.content", timeout: 20)
-
-        let cardId = flowVisibleCardID()
-        let initialFavoriteState = try fetchAssetStatus(
-            kind: "favorites",
-            id: cardId,
-            token: session.token
-        )
-
-        waitFor("flow.card.\(cardId)").swipeRight()
-        XCTAssertNotEqual(waitForDifferentVisibleFlowCard(from: cardId), cardId)
-        XCTAssertEqual(
-            try fetchAssetStatus(kind: "favorites", id: cardId, token: session.token),
-            initialFavoriteState,
-            "Right swipe must not mutate favorite state"
-        )
-        XCTAssertFalse(app.buttons["flow.undo"].exists, "Flow must not expose Undo")
     }
 
     func testFlowLikeAndUnlikeStayOnCardAndPersistToGo() throws {
@@ -10349,7 +10367,8 @@ final class ArcNoteUITests: XCTestCase {
             let cardId = waitFor("flow.visible-card.id", timeout: 30, file: file, line: line)
                 .label
                 .trimmingCharacters(in: .whitespacesAndNewlines)
-            if try !fetchAssetStatus(kind: "favorites", id: cardId, token: token) {
+            if app.buttons["flow.favorite.\(cardId)"].exists,
+               try !fetchAssetStatus(kind: "favorites", id: cardId, token: token) {
                 return cardId
             }
 

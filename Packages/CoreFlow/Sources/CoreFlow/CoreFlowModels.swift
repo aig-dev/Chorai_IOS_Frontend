@@ -181,10 +181,6 @@ public enum FlowDeckPhase: Equatable, Sendable {
     case failed(String)
 }
 
-public enum FlowNotice: Equatable, Sendable {
-    case favoriteFailed
-}
-
 public enum CoreTab: Int, CaseIterable, Sendable {
     case flow
     case library

@@ -14,7 +14,7 @@ final class CommentUISourceContractTests: XCTestCase {
     func testCommentSheetRestoresPrivateToggleReplyAndSafeProfilePresentation() throws {
         let popup = try source(at: "ArcNote/CommentPopupView.swift")
         let network = try source(at: "ArcNote/NetworkManager.swift")
-        let models = try source(at: "ArcNote/Models/CommentModels.swift")
+        let reads = try source(at: "Packages/CoreFlow/Sources/CoreFlow/CommentReadStore.swift")
 
         XCTAssertTrue(popup.contains(#"Image(systemName: isPrivateMode ? "lock.fill" : "globe")"#))
         XCTAssertTrue(popup.contains(#".accessibilityIdentifier("comment.visibility.toggle")"#))
@@ -34,7 +34,7 @@ final class CommentUISourceContractTests: XCTestCase {
         XCTAssertFalse(popup.contains("comment.user.username ?? comment.user.id"))
         XCTAssertTrue(network.contains(#"parameters["parent_comment_id"]"#))
         XCTAssertTrue(network.contains(#""visibility": request.visibility.rawValue"#))
-        XCTAssertTrue(models.contains("CommentModel.assembleThreads"))
+        XCTAssertTrue(reads.contains("CommentModel.assembleThreads"))
         XCTAssertTrue(popup.contains(#".id("comment-load-more-\(manager.loadedCommentCount)")"#))
         XCTAssertTrue(popup.contains("manager.loadMoreComments()"))
     }

@@ -25,7 +25,9 @@ class AuthManager: ObservableObject {
     @Published private(set) var accessState: AccessState?
     @Published private(set) var needsInterestSelection = false
     @Published private(set) var offlineNoteAccess = NoteOfflineAccess()
-    private(set) var sessionGeneration: UInt64 = 0
+    private(set) var sessionGeneration: UInt64 = 0 {
+        didSet { NotificationCenter.default.post(name: .cardReadSessionDidChange, object: nil) }
+    }
     
     private let userDefaults = UserDefaults.standard
     private let networkManager = NetworkManager.shared
@@ -101,6 +103,7 @@ class AuthManager: ObservableObject {
         username: String,
         createdAt: String
     ) {
+        sessionGeneration &+= 1
         needsInterestSelection = false
         authToken = token
         isLoggedIn = true
@@ -337,9 +340,13 @@ class AuthManager: ObservableObject {
     func applyAccess(_ state: AccessState) {
         guard state.isValid else {
             accessState = nil
+            NotificationCenter.default.post(name: .cardReadSessionDidChange, object: nil)
             return
         }
         accessState = state
+        if state.status != "allowed" {
+            NotificationCenter.default.post(name: .cardReadSessionDidChange, object: nil)
+        }
         if let scope = currentNoteScope {
             offlineNoteAccess.recordConfirmed(state, scope: scope)
             persistOfflineAccess()
@@ -397,6 +404,17 @@ class AuthManager: ObservableObject {
 
 // MARK: - 用户状态扩展
 extension AuthManager {
+    var cardReadSession: UInt64? {
+        #if DEBUG
+        if LocalDevelopmentPreview.isEnabled, currentUser?.id == LocalPreviewFixtures.actorID {
+            return sessionGeneration
+        }
+        #endif
+        guard isAuthenticated, sessionPhase != .needsLogin,
+              accessState?.status != "required" else { return nil }
+        return sessionGeneration
+    }
+
     var currentNoteScope: NoteStoreScope? {
         guard isLoggedIn, let actorID = currentUser?.id else { return nil }
         return NoteStoreScope(actorID: actorID, environmentID: APIConfiguration.baseURL)

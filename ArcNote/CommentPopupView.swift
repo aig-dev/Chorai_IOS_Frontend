@@ -4,71 +4,59 @@ import SwiftUI
 import UIKit
 
 // MARK: 评论弹窗管理器
-class CommentPopupManager: ObservableObject {
-    @Published var isShowing = false
-    @Published var comments: [CommentModel] = []
-    @Published var isLoading = false
-    @Published var loadedCommentCount = 0
-    @Published var isSubmitting = false
+@MainActor
+final class CommentPopupManager: ObservableObject {
+    @Published var isShowing = false {
+        didSet { if !isShowing && oldValue { clearPresentation() } }
+    }
+    @Published private(set) var isSubmitting = false
     @Published var showErrorAlert = false
     @Published var errorMessage = ""
 
-    // Callback for when a comment is created
     var onCommentCreated: ((String) -> Void)?
-
     static let shared = CommentPopupManager()
-    private var commentManager = CommentManager()
-    private var currentCardId: String?
+    private let reads = CommentReadStore(session: { AuthManager.shared.cardReadSession }, fetch: CommentService.loadPage)
+    private var subscriptions = Set<AnyCancellable>()
+    private var submissionID: UUID?
+    private var pendingWrites: [UUID: String] = [:]
+
+    var cardID: String? { reads.cardID }
+    var comments: [CommentModel] { reads.comments }
+    var loadedCommentCount: Int { reads.loadedCommentCount }
+    var phase: CommentReadPhase { reads.phase }
+    var hasFirstPage: Bool { reads.hasFirstPage }
+    var canLoadMore: Bool { reads.canLoadMore }
 
     private init() {
-        // 监听评论管理器的数据变化
-        commentManager.$comments
-            .assign(to: \.comments, on: self)
-            .store(in: &cancellables)
-
-        commentManager.$isLoading
-            .assign(to: \.isLoading, on: self)
-            .store(in: &cancellables)
-
-        commentManager.$loadedCommentCount
-            .assign(to: \.loadedCommentCount, on: self)
-            .store(in: &cancellables)
-
-        // 设置评论数量变化回调
-        commentManager.onCommentCountChanged = { cardId, newCount in
-            print("评论数量变化回调: cardId=\(cardId), newCount=\(newCount)")
-            // 通知所有相关的卡片管理器更新评论数量
-            NotificationCenter.default.post(
-                name: NSNotification.Name("CommentCountChanged"),
-                object: nil,
-                userInfo: ["cardId": cardId, "newCount": newCount]
-            )
-        }
+        reads.objectWillChange.sink { [weak self] _ in
+            self?.objectWillChange.send()
+        }.store(in: &subscriptions)
+        reads.$cardID.sink { [weak self] id in
+            if id == nil, let self, isShowing { isShowing = false }
+        }.store(in: &subscriptions)
+        let center = NotificationCenter.default
+        center.publisher(for: .cardReadSessionDidChange).sink { [weak self] _ in
+            self?.pendingWrites.removeAll()
+        }.store(in: &subscriptions)
+        center.publisher(for: .cardReadInvalidated).sink { [weak self] event in
+            guard let self, let id = event.object as? String else { return }
+            pendingWrites = pendingWrites.filter { $0.value != id }
+        }.store(in: &subscriptions)
     }
 
-    private var cancellables = Set<AnyCancellable>()
-
-//    func show() {
-//        isShowing = true
-//    }
-
-    func hide() {
-        isShowing = false
+    private func clearPresentation() {
+        submissionID = nil
+        isSubmitting = false
+        showErrorAlert = false
+        errorMessage = ""
     }
+
+    func hide() { isShowing = false }
 
     func show(for cardId: String) {
-        currentCardId = cardId
-        #if DEBUG
-        if CommentPresentationFixture.isEnabled {
-            comments = CommentPresentationFixture.comments(for: cardId)
-            loadedCommentCount = comments.count
-            isLoading = false
-            isShowing = true
-            return
-        }
-        #endif
-        isShowing = true
-        commentManager.loadComments(for: cardId, refresh: true)
+        clearPresentation()
+        reads.open(cardId)
+        isShowing = reads.cardID != nil
     }
 
     func addComment(
@@ -77,39 +65,50 @@ class CommentPopupManager: ObservableObject {
         visibility: CommentVisibility = .publicComment,
         completion: ((Bool) -> Void)? = nil
     ) {
-        let trimmedContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let cardId = currentCardId, !trimmedContent.isEmpty, !isSubmitting else {
+        let text = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let id = cardID, let session = AuthManager.shared.cardReadSession,
+              isShowing, !text.isEmpty, !isSubmitting else {
             completion?(false)
             return
         }
+        let request = CreateCommentRequest(content: text, parentCommentId: parentCommentId, visibility: visibility)
+        let submission = UUID()
+        pendingWrites[submission] = id
+        submissionID = submission
         isSubmitting = true
-
-        commentManager.createComment(
-            for: cardId,
-            content: trimmedContent,
-            parentCommentId: parentCommentId,
-            visibility: visibility
-        ) { result in
+        NetworkManager.shared.createComment(cardId: id, request: request) { [weak self] result in
             DispatchQueue.main.async {
-                self.isSubmitting = false
-                switch result {
-                case .success(let comment):
-                    print("评论发布成功: id=\(comment.id)")
-                    completion?(true)
-                case .failure(let error):
-                    print("评论发布失败: \(error.localizedDescription)")
+                guard let self, self.pendingWrites.removeValue(forKey: submission) == id,
+                      AuthManager.shared.cardReadSession == session else { return }
+                let stillPresented = self.submissionID == submission && self.cardID == id && self.isShowing
+                if stillPresented {
+                    self.submissionID = nil
+                    self.isSubmitting = false
+                }
 
-                    // 检查是否是未授权错误
+                switch result {
+                case .success(let response):
+                    let comment = response.data
+                    guard response.success, comment.cardId == nil || comment.cardId == id else {
+                        if stillPresented {
+                            self.showSubmissionError()
+                            completion?(false)
+                        }
+                        return
+                    }
+                    if let count = self.reads.recordCreated(comment, for: id) {
+                        self.publishCount(count, for: id)
+                    }
+                    if stillPresented { completion?(true) }
+                case .failure(let error):
+                    guard stillPresented else { return }
+                    // A failed reply can refer to a missing/private parent. Recheck the card's read endpoint.
+                    if error.invalidatesCardRead { self.reads.refresh() }
                     if case .unauthorized = error {
                         self.hide()
-                        // 发送通知返回首页
-                        NotificationCenter.default.post(
-                            name: NSNotification.Name("UnauthorizedError"),
-                            object: nil
-                        )
+                        NotificationCenter.default.post(name: NSNotification.Name("UnauthorizedError"), object: nil)
                     } else {
-                        self.errorMessage = "Failed comment: \(error.localizedDescription)"
-                        self.showErrorAlert = true
+                        self.showSubmissionError()
                     }
                     completion?(false)
                 }
@@ -117,25 +116,25 @@ class CommentPopupManager: ObservableObject {
         }
     }
 
-    func loadMoreComments() {
-        #if DEBUG
-        guard !CommentPresentationFixture.isEnabled else { return }
-        #endif
-        guard currentCardId != nil else { return }
-        commentManager.loadMoreComments()
+    func loadMoreComments() { reads.loadMore() }
+    func refreshComments() { reads.refresh() }
+    func retry() { reads.retry() }
+    func comment(withID id: String) -> CommentModel? { reads.comment(withID: id) }
+
+    private func showSubmissionError() {
+        errorMessage = "Couldn't post your comment. Please try again."
+        showErrorAlert = true
     }
 
-    func refreshComments() {
-        #if DEBUG
-        guard !CommentPresentationFixture.isEnabled else { return }
-        #endif
-        guard currentCardId != nil else { return }
-        commentManager.refreshComments()
+    func removeComment(commentId: String, for cardId: String) {
+        if let count = reads.removeThread(commentId, for: cardId) { publishCount(count, for: cardId) }
     }
 
-    // MARK: - 移除评论（用于拉黑后移除）
-    func removeComment(commentId: String) {
-        commentManager.removeComment(commentId: commentId)
+    private func publishCount(_ count: Int, for id: String) {
+        NotificationCenter.default.post(
+            name: NSNotification.Name("CommentCountChanged"), object: nil,
+            userInfo: ["cardId": id, "newCount": count]
+        )
     }
 }
 
@@ -158,10 +157,14 @@ struct CommentPopupView: View {
 private struct CommentSheetContent: View {
     @ObservedObject private var manager = CommentPopupManager.shared
     @State private var commentText = ""
-    @State private var isPrivateMode = false
-    @State private var replyTarget: CommentModel?
+    @State private var privateSelected = false
+    @State private var replyTargetID: String?
     @FocusState private var isTextFieldFocused: Bool
     let onFocus: () -> Void
+
+    private var replyTarget: CommentModel? {
+        replyTargetID.flatMap { manager.comment(withID: $0) }
+    }
 
     var body: some View { commentSheet }
 
@@ -209,12 +212,16 @@ private struct CommentSheetContent: View {
                 onFocus()
             }
         }
+        .onChange(of: manager.cardID) { _ in
+            commentText = ""
+            exitReplyMode()
+        }
     }
 
     private var commentList: some View {
         ScrollView(.vertical, showsIndicators: true) {
             LazyVStack(spacing: 24) {
-                if manager.isLoading && manager.comments.isEmpty {
+                if manager.phase == .loading && manager.comments.isEmpty {
                     VStack(spacing: 12) {
                         ProgressView()
                         Text("Loading comments…")
@@ -233,7 +240,15 @@ private struct CommentSheetContent: View {
                         .accessibilityIdentifier("comment.row.\(comment.id)")
                     }
 
-                    if !manager.comments.isEmpty {
+                    if manager.hasFirstPage && manager.comments.isEmpty {
+                        Text("No comments yet")
+                            .font(.subheadline)
+                            .foregroundStyle(ChoraiTheme.secondaryInk)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 24)
+                    }
+
+                    if manager.canLoadMore {
                         Color.clear
                             .frame(height: 1)
                             .id("comment-load-more-\(manager.loadedCommentCount)")
@@ -243,7 +258,7 @@ private struct CommentSheetContent: View {
                             .accessibilityHidden(true)
                     }
 
-                    if manager.isLoading && !manager.comments.isEmpty {
+                    if manager.phase == .loadingMore {
                         HStack(spacing: 8) {
                             ProgressView()
                             Text("Loading more…")
@@ -253,6 +268,17 @@ private struct CommentSheetContent: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 16)
                     }
+                }
+
+                if case .failed(let page) = manager.phase {
+                    VStack(spacing: 4) {
+                        Text(page > 1 ? "Couldn't load more comments." : "Couldn't update comments.")
+                            .font(.subheadline)
+                            .foregroundStyle(ChoraiTheme.secondaryInk)
+                        Button("Try again") { manager.retry() }
+                            .frame(minHeight: 44)
+                    }
+                    .frame(maxWidth: .infinity)
                 }
             }
             .adaptiveContentGutter()
@@ -286,12 +312,18 @@ private struct CommentSheetContent: View {
                         .accessibilityLabel("Cancel reply")
                         .accessibilityIdentifier("comment.reply.cancel")
                     }
+                } else if replyTargetID != nil {
+                    Text("This comment is no longer available.")
+                        .font(.caption)
+                        .foregroundStyle(ChoraiTheme.secondaryInk)
+                    Button("Cancel reply", action: exitReplyMode)
+                        .frame(minHeight: 44)
                 }
 
                 HStack(alignment: .bottom, spacing: 10) {
                     Button(action: {
                         guard !isReplyPrivacyLocked else { return }
-                        isPrivateMode.toggle()
+                        privateSelected.toggle()
                     }) {
                         Image(systemName: isPrivateMode ? "lock.fill" : "globe")
                             .font(.body.weight(.medium))
@@ -330,7 +362,7 @@ private struct CommentSheetContent: View {
                     .choraiGlassButton(prominent: true)
                     .accessibilityLabel("Send comment")
                     .accessibilityIdentifier("comment.send")
-                    .disabled(trimmedCommentText.isEmpty || manager.isSubmitting)
+                    .disabled(!canSubmit)
                 }
             }
             .adaptiveContentGutter()
@@ -341,6 +373,10 @@ private struct CommentSheetContent: View {
 
     private var trimmedCommentText: String {
         commentText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var canSubmit: Bool {
+        !trimmedCommentText.isEmpty && !manager.isSubmitting && (replyTargetID == nil || replyTarget != nil)
     }
 
     private var composerPlaceholder: String {
@@ -354,25 +390,27 @@ private struct CommentSheetContent: View {
         replyTarget?.visibility == .privateComment
     }
 
+    private var isPrivateMode: Bool { privateSelected || isReplyPrivacyLocked }
+
     private func submitComment() {
-        guard !trimmedCommentText.isEmpty else { return }
+        guard canSubmit else { return }
         manager.addComment(
             trimmedCommentText,
-            parentCommentId: replyTarget?.id,
+            parentCommentId: replyTargetID,
             visibility: isPrivateMode ? .privateComment : .publicComment
         ) { didSucceed in
             guard didSucceed else { return }
             commentText = ""
-            replyTarget = nil
-            isPrivateMode = false
+            replyTargetID = nil
+            privateSelected = false
             isTextFieldFocused = false
         }
     }
 
     private func enterReplyMode(for comment: CommentModel) {
-        replyTarget = comment
+        replyTargetID = comment.id
         if comment.visibility == .privateComment {
-            isPrivateMode = true
+            privateSelected = true
         }
         DispatchQueue.main.async {
             isTextFieldFocused = true
@@ -380,8 +418,8 @@ private struct CommentSheetContent: View {
     }
 
     private func exitReplyMode() {
-        replyTarget = nil
-        isPrivateMode = false
+        replyTargetID = nil
+        privateSelected = false
         isTextFieldFocused = false
     }
 
@@ -545,10 +583,8 @@ struct CommentRowView: View {
 
     // MARK: - 拉黑用户
     private func blockUser() {
-        guard AuthManager.shared.currentUser != nil else {
-            return
-        }
-
+        guard let session = AuthManager.shared.cardReadSession,
+              let id = comment.cardId ?? CommentPopupManager.shared.cardID else { return }
 
         NetworkManager.shared.blockUser(blockedActorId: comment.user.id)
             .receive(on: DispatchQueue.main)
@@ -560,10 +596,9 @@ struct CommentRowView: View {
                         print("拉黑用户成功")
                     }
                 },
-                receiveValue: { _ in
-                    print("拉黑用户请求完成")
-                    // 拉黑后移除该评论
-                    CommentPopupManager.shared.removeComment(commentId: comment.id)
+                receiveValue: { response in
+                    guard response.success, AuthManager.shared.cardReadSession == session else { return }
+                    CommentPopupManager.shared.removeComment(commentId: comment.id, for: id)
                 }
             )
             .store(in: &cancellables)

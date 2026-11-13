@@ -806,12 +806,21 @@ extension NetworkManager {
         )
     }
 
-    func deleteCard(id: String) -> AnyPublisher<NetworkResponse<CardMessageData>, NetworkError> {
+    func deleteCard(id: String, presentsError: Bool = true) -> AnyPublisher<NetworkResponse<CardMessageData>, NetworkError> {
+        let session = AuthManager.shared.cardReadSession
         return request(
             endpoint: "/api/cards/\(id)",
             method: .delete,
-            responseType: NetworkResponse<CardMessageData>.self
+            encoding: URLEncoding.default,
+            responseType: NetworkResponse<CardMessageData>.self,
+            presentsError: presentsError
         )
+        .handleEvents(receiveOutput: { response in
+            if response.success, let session, AuthManager.shared.cardReadSession == session {
+                NotificationCenter.default.post(name: .cardReadInvalidated, object: id)
+            }
+        })
+        .eraseToAnyPublisher()
     }
 
     func searchCards(_ request: SearchRequest) -> AnyPublisher<SearchResponse, NetworkError> {
@@ -1945,7 +1954,9 @@ extension NetworkManager {
             method: .get,
             parameters: parameters,
             encoding: URLEncoding.default,
-            responseType: CommentListResponse.self
+            responseType: CommentListResponse.self,
+            presentsError: false,
+            suppressesPayloadLogging: true
         )
         .sink(
             receiveCompletion: { completionResult in
@@ -1973,7 +1984,8 @@ extension NetworkManager {
             endpoint: "/api/cards/\(cardId)/comments",
             method: .post,
             parameters: parameters,
-            responseType: CreateCommentResponse.self
+            responseType: CreateCommentResponse.self,
+            suppressesPayloadLogging: true
         )
         .sink(
             receiveCompletion: { completionResult in
@@ -2054,13 +2066,7 @@ extension NetworkManager {
     }
 
     func deleteCard(cardId: String, completion: @escaping (Result<NetworkResponse<CardMessageData>, NetworkError>) -> Void) {
-        self.request(
-            endpoint: "/api/cards/\(cardId)",
-            method: .delete,
-            encoding: URLEncoding.default,
-            responseType: NetworkResponse<CardMessageData>.self,
-            presentsError: false
-        )
+        deleteCard(id: cardId, presentsError: false)
         .sink(
             receiveCompletion: { completionResult in
                 if case .failure(let error) = completionResult {
@@ -2309,12 +2315,13 @@ extension NetworkManager {
             method: .get,
             encoding: URLEncoding.default,
             responseType: CardDetailResponse.self,
-            presentsError: presentsError
+            presentsError: presentsError,
+            suppressesPayloadLogging: true
         )
     }
 
-    func getCardDetail(cardId: String, completion: @escaping (Result<CardDetailResponse, NetworkError>) -> Void) {
-        getCardDetailPublisher(cardId: cardId)
+    func getCardDetail(cardId: String, presentsError: Bool = true, completion: @escaping (Result<CardDetailResponse, NetworkError>) -> Void) {
+        getCardDetailPublisher(cardId: cardId, presentsError: presentsError)
         .sink(
             receiveCompletion: { completionResult in
                 if case .failure(let error) = completionResult {

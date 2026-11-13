@@ -13,7 +13,7 @@ private struct LegacyMergeView: View {
     @State private var animationPhase = 0
     @State private var animationTimer: Timer?
     @StateObject private var searchManager = SearchManager.shared
-    @StateObject private var cardDetailManager = CardDetailManager.shared
+    @StateObject private var cardDetailManager = CardDetailManager()
     @StateObject private var mergeCardsManager = MergeCardsManager.shared
     @StateObject private var networkManager = NetworkManager.shared
     

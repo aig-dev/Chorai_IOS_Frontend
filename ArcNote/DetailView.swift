@@ -22,7 +22,7 @@ struct DetailView: View {
     @State private var navigateToUserProfile = false
     @State private var isRelatedNotesExpanded = false
     @State private var contentHeight: CGFloat = 200
-    @StateObject private var cardDetailManager = CardDetailManager.shared
+    @StateObject private var cardDetailManager: CardDetailManager
     
     // 状态管理
     @StateObject private var likeStore: CardLikeStore
@@ -46,6 +46,7 @@ struct DetailView: View {
     
     init(cardId: String = "") {
         self.cardId = cardId
+        _cardDetailManager = StateObject(wrappedValue: CardDetailManager(cardID: cardId))
         _likeStore = StateObject(
             wrappedValue: CardLikeStore(
                 state: CardLikeState(
@@ -59,12 +60,17 @@ struct DetailView: View {
         )
     }
     
+    private var displayedDetail: CardDetail? {
+        guard let detail = cardDetailManager.cardDetail, detail.id == cardId else { return nil }
+        return detail
+    }
+
     private var isCurrentCardOwned: Bool {
-        guard cardDetailManager.cardDetail?.id == cardId else { return false }
+        guard displayedDetail != nil else { return false }
         if let isOwner = cardDetailManager.cardDetail?.isOwner {
             return isOwner
         }
-        guard let authorId = cardDetailManager.cardDetail?.author?.actorId,
+        guard let authorId = displayedDetail?.author?.actorId,
               let currentUserId = AuthManager.shared.currentUser?.id else {
             return false
         }
@@ -72,9 +78,7 @@ struct DetailView: View {
     }
     
     private var currentDetailUserCard: UserCard? {
-        guard let detail = cardDetailManager.cardDetail, detail.id == cardId else {
-            return nil
-        }
+        guard let detail = displayedDetail else { return nil }
         return UserCard(
             id: detail.id,
             title: detail.title,
@@ -153,7 +157,7 @@ struct DetailView: View {
                         // 时间戳和标签
                         VStack(alignment: .leading, spacing: 12) {
                             HStack {
-                                Text(formatDate(cardDetailManager.cardDetail?.createdAt ?? ""))
+                                Text(formatDate(displayedDetail?.createdAt ?? ""))
                                     .font(.system(size: 14, weight: .regular))
                                     .foregroundColor(ChoraiTheme.secondaryInk)
                                 
@@ -169,7 +173,7 @@ struct DetailView: View {
                             
                             ScrollView(.horizontal, showsIndicators: false) {
                                 HStack(spacing: 8) {
-                                    ForEach(cardDetailManager.cardDetail?.tags ?? [], id: \.self) { tag in
+                                    ForEach(displayedDetail?.tags ?? [], id: \.self) { tag in
                                         CardMetadataTagCapsule(
                                             tag: tag,
                                             showsRemoveIndicator: false
@@ -181,7 +185,7 @@ struct DetailView: View {
                         }
                         .padding(.horizontal, 20)
 
-                        if !relatedNotes.isEmpty {
+                        if !relatedNotes.isEmpty, displayedDetail != nil {
                             HStack {
                                 Spacer()
                                 Button {
@@ -248,7 +252,9 @@ struct DetailView: View {
                                 )
                             }
                         }
-                        readerEngagement
+                        if displayedDetail != nil {
+                            readerEngagement
+                        }
                     }
                     .padding(.bottom, 24)
                 }
@@ -269,7 +275,7 @@ struct DetailView: View {
         .navigationBarBackButtonHidden(false)
         .toolbar {
             ToolbarItemGroup(placement: .navigationBarTrailing) {
-                if !isCurrentCardOwned {
+                if currentDetailUserCard != nil && !isCurrentCardOwned {
                     Button(action: toggleFavorite) {
                         Image(systemName: isFavorited ? "bookmark.fill" : "bookmark")
                     }
@@ -281,7 +287,7 @@ struct DetailView: View {
                         Image(systemName: "ellipsis").frame(minWidth: 44, minHeight: 44)
                     }
                     .accessibilityLabel("More actions").accessibilityIdentifier("detail.menu.open")
-                    .disabled(cardDetailManager.isLoading)
+                    .disabled(ownedCardRefreshRequestID != nil)
                 }
             }
         }
@@ -302,12 +308,12 @@ struct DetailView: View {
             Text("The last confirmed status is still shown. Try again to load your changes.")
         }
         .navigationDestination(isPresented: $navigateToUserProfile) {
-            UserProfileView(actorId: cardDetailManager.cardDetail?.author?.actorId ?? "")
+            UserProfileView(actorId: displayedDetail?.author?.actorId ?? "")
         }
         .navigationDestination(isPresented: $navigateToChat) {
             ChatDetailView(
                 conversationId: conversationId ?? "",
-                contactName: cardDetailManager.cardDetail?.author?.userName ?? "User",
+                contactName: displayedDetail?.author?.userName ?? "User",
                 contactStatus: "Online",
                 contactAvatar: "avatar"
             )
@@ -325,6 +331,11 @@ struct DetailView: View {
             }
         }
         .onChange(of: cardId) { newCardId in
+            cancellables.removeAll()
+            relatedNotes = []
+            isFollowing = false
+            isLoadingLinks = false
+            isRelatedNotesExpanded = false
             committedOwnedCardState = nil
             ownedCardActionRefresh = nil
             ownedCardRefreshFailed = false
@@ -336,17 +347,21 @@ struct DetailView: View {
         .overlay(alignment: .topLeading) {
             #if DEBUG
             Group {
-                if cardDetailManager.isLoading {
+                if cardDetailManager.isLoading && displayedDetail == nil {
                     Text("Detail loading")
                         .font(.system(size: 1))
                         .foregroundColor(ChoraiTheme.ink.opacity(0.01))
                         .frame(width: 1, height: 1)
                         .accessibilityIdentifier("screen.detail.loading")
-                } else if cardDetailManager.cardDetail != nil {
+                } else if displayedDetail != nil {
                     VStack(spacing: 0) {
                         Text("Detail loaded")
                             .accessibilityIdentifier("screen.detail.loaded")
-                        Text(cardDetailManager.cardDetail?.id ?? "")
+                        if cardDetailManager.isLoading {
+                            Text("Refreshing displayed note")
+                                .accessibilityIdentifier("screen.detail.refreshing")
+                        }
+                        Text(displayedDetail?.id ?? "")
                             .accessibilityIdentifier("screen.detail.loaded-card-id")
                     }
                     .font(.system(size: 1))
@@ -451,13 +466,19 @@ struct DetailView: View {
 
     private var readerCard: some View {
         VStack(alignment: .leading, spacing: 22) {
-            if let cardDetail = cardDetailManager.cardDetail {
+            if let cardDetail = displayedDetail {
                 VStack(alignment: .leading, spacing: 4) {
                     ChoraiReadingIdentity(rate: cardDetail.rate)
                     readerAuthorRow
                 }
                 AdaptiveHTMLWebView(htmlContent: cardDetail.content, height: $contentHeight)
                     .frame(height: contentHeight)
+            } else if cardDetailManager.error != nil {
+                VStack(spacing: 8) {
+                    Text("Couldn’t load this note.")
+                    Button("Retry") { loadCardDetail() }
+                }
+                .frame(maxWidth: .infinity, minHeight: 44)
             } else {
                 ProgressView().frame(maxWidth: .infinity, minHeight: 44)
                     .accessibilityLabel("Loading note")
@@ -493,7 +514,7 @@ struct DetailView: View {
 
     private var readerAuthorButton: some View {
         Button {
-                guard cardDetailManager.cardDetail?.author?.actorId != nil else { return }
+                guard displayedDetail?.author?.actorId != nil else { return }
                 navigateToUserProfile = true
             } label: {
                 HStack(spacing: 8) {
@@ -509,7 +530,7 @@ struct DetailView: View {
             .frame(minHeight: 44)
             .accessibilityLabel("Open author, \(readerAuthorName)")
             .accessibilityIdentifier("detail.author")
-            .disabled(cardDetailManager.cardDetail?.author?.actorId == nil)
+            .disabled(displayedDetail?.author?.actorId == nil)
     }
 
     private var readerMessageButton: some View {
@@ -523,7 +544,7 @@ struct DetailView: View {
             }
             .accessibilityLabel("Message author")
             .accessibilityIdentifier("detail.author.chat")
-            .disabled(isCreatingConversation || cardDetailManager.cardDetail?.author?.actorId == nil)
+            .disabled(isCreatingConversation || displayedDetail?.author?.actorId == nil)
     }
 
     private var readerFollowButton: some View {
@@ -538,12 +559,12 @@ struct DetailView: View {
             .accessibilityLabel(isFollowing ? "Unfollow author" : "Follow author")
             .accessibilityValue(isFollowing ? "Following" : "Not following")
             .accessibilityIdentifier("detail.author.follow")
-            .disabled(isFollowLoading || cardDetailManager.cardDetail?.author?.actorId == nil)
+            .disabled(isFollowLoading || displayedDetail?.author?.actorId == nil)
     }
 
     private var readerAuthorAvatar: some View {
         Group {
-            if let rawURL = cardDetailManager.cardDetail?.author?.avatarUrl,
+            if let rawURL = displayedDetail?.author?.avatarUrl,
                !rawURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                let url = URL(string: APIConfiguration.resourceURLString(rawURL)) {
                 AsyncImage(url: url) { phase in
@@ -566,7 +587,7 @@ struct DetailView: View {
     }
 
     private var readerAuthorName: String {
-        let name = cardDetailManager.cardDetail?.author?.userName.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let name = displayedDetail?.author?.userName.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return name.isEmpty ? "Unknown User" : name
     }
 
@@ -579,7 +600,6 @@ struct DetailView: View {
     private func loadCardDetail(refreshOwnedCardActions: Bool = false) {
         // An explicit return from Edit establishes a new metadata authority.
         // Keep the last confirmed state if that refresh fails.
-        if !refreshOwnedCardActions { cardDetailManager.cardDetail = nil }
         let refreshRequestID = UUID()
         if refreshOwnedCardActions { ownedCardRefreshRequestID = refreshRequestID }
 
@@ -602,29 +622,33 @@ struct DetailView: View {
                     ownedCardActionRefresh = OwnedCardActionRefresh(snapshot: snapshot)
                     ownedCardRefreshFailed = false
                 }
-                print("详情加载成功: \(cardDetail.title ?? "")")
-                
-                // 初始化状态
-                DispatchQueue.main.async {
-                    self.likeStore.hydrate(
-                        CardLikeState(
-                            cardID: cardDetail.id,
-                            isLiked: cardDetail.isLiked,
-                            likeCount: cardDetail.likeCount
-                        )
-                    )
-                    self.isFavorited = cardDetail.isFavorited ?? false
-                    self.favoriteCount = cardDetail.favoriteCount ?? 0
-                    self.commentCount = cardDetail.commentCount ?? 0
-                }
-                
+                showEngagement(cardDetail)
                 loadRelatedNotes()
                 checkFollowStatus()
             case .failure(let error):
-                if refreshOwnedCardActions { ownedCardRefreshFailed = true }
-                print("详情加载失败: \(error.localizedDescription)")
+                if error.invalidatesCardRead {
+                    relatedNotes = []
+                    committedOwnedCardState = nil
+                    ownedCardActionRefresh = nil
+                } else if refreshOwnedCardActions {
+                    ownedCardRefreshFailed = true
+                }
             }
         }
+        if let cached = cardDetailManager.cardDetail, cached.id == cardId {
+            showEngagement(cached)
+        }
+    }
+
+    private func showEngagement(_ detail: CardDetail) {
+        if !likeStore.isMutating || likeStore.state.cardID != detail.id {
+            likeStore.hydrate(CardLikeState(cardID: detail.id, isLiked: detail.isLiked, likeCount: detail.likeCount))
+        }
+        if !isFavoriteLoading {
+            isFavorited = detail.isFavorited ?? false
+            favoriteCount = detail.favoriteCount ?? 0
+        }
+        commentCount = detail.commentCount ?? 0
     }
     
     // MARK: - 加载关联笔记
@@ -721,7 +745,7 @@ struct DetailView: View {
     private func createConversation() {
         guard !isCreatingConversation else { return }
         
-        guard let authorId = cardDetailManager.cardDetail?.author?.actorId else {
+        guard let authorId = displayedDetail?.author?.actorId else {
             print("无法获取作者ID")
             return
         }
@@ -767,7 +791,7 @@ struct DetailView: View {
             return
         }
         
-        guard let authorId = cardDetailManager.cardDetail?.author?.actorId else {
+        guard let authorId = displayedDetail?.author?.actorId else {
             print("无法获取作者ID")
             return
         }
@@ -801,7 +825,7 @@ struct DetailView: View {
             return
         }
         
-        guard let authorId = cardDetailManager.cardDetail?.author?.actorId else {
+        guard let authorId = displayedDetail?.author?.actorId else {
             print("无法获取作者ID")
             return
         }

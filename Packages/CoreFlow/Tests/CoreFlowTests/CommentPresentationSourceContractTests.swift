@@ -40,7 +40,11 @@ final class CommentPresentationSourceContractTests: XCTestCase {
         XCTAssertTrue(app.contains("if CommentPresentationFixture.isEnabled {\n            CommentPresentationFixtureScreen()"))
         XCTAssertTrue(spark.contains(".disabled(!allowsNetworkNavigation && !CommentPresentationFixture.isEnabled)"))
         XCTAssertTrue(spark.contains("#else\n            .disabled(!allowsNetworkNavigation)\n            #endif"))
-        XCTAssertTrue(comments.contains("guard !CommentPresentationFixture.isEnabled else { return }"))
+        let service = try source("ArcNote/Models/CommentModels.swift")
+        let fixture = try XCTUnwrap(service.range(of: "if CommentPresentationFixture.isEnabled"))
+        let network = try XCTUnwrap(service.range(of: "NetworkManager.shared.getComments"))
+        XCTAssertLessThan(fixture.upperBound, network.lowerBound)
+        XCTAssertTrue(service[fixture.upperBound..<network.lowerBound].contains("return"))
     }
 
     private func source(_ path: String) throws -> String {

@@ -21,7 +21,7 @@ struct SparkView: View {
     @State private var showDetailView = false
     
     let cardId: String
-    @StateObject private var cardDetailManager = CardDetailManager.shared
+    @StateObject private var cardDetailManager = CardDetailManager()
     @StateObject private var relatedCardsManager = RelatedCardsManager.shared
     @State private var cancellables = Set<AnyCancellable>()
     

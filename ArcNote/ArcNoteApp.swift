@@ -118,6 +118,12 @@ struct ArcNoteApp: App {
             // API smoke work, even when unrelated UI-test environment is present.
         } else if LocalDevelopmentPreview.isEnabled {
             LocalDevelopmentPreview.installDisplayProfile()
+            if ProcessInfo.processInfo.arguments.contains("--ui-test-card-engagement") {
+                // Use a scoped test identity only with the terminal preview transport.
+                AuthManager.shared.installUITestSession(token: "preview", actorID: LocalPreviewFixtures.actorID,
+                                                       email: "preview@example.invalid", username: "Local Preview",
+                                                       createdAt: "2026-01-01T09:00:00Z")
+            }
         } else {
             APIMigrationUITestSeed.applyIfPresent()
             APIMigrationSmokeRunner.startIfRequested()
@@ -162,7 +168,14 @@ struct ArcNoteApp: App {
     @ViewBuilder
     private var rootContent: some View {
         #if DEBUG
-        if ProcessInfo.processInfo.arguments.contains("--ui-test-owned-card-actions") {
+        if LocalDevelopmentPreview.isEnabled, ProcessInfo.processInfo.arguments.contains("--ui-test-card-engagement") {
+            FlowEngagementTestScreen()
+        } else if LocalDevelopmentPreview.isEnabled, ProcessInfo.processInfo.arguments.contains("--ui-test-card-reopen") {
+            NavigationStack {
+                NavigationLink("Open note") { DetailView(cardId: "preview-field-note") }
+                    .accessibilityIdentifier("fixture.detail.open")
+            }
+        } else if ProcessInfo.processInfo.arguments.contains("--ui-test-owned-card-actions") {
             OwnedCardActionFixtureScreen()
         } else if LinkPresentationFixture.isEnabled {
             LinkPresentationFixtureScreen()
@@ -4777,6 +4790,26 @@ private final class APIMigrationSmokeRunner {
 #endif
 
 #if DEBUG
+private struct FlowEngagementTestScreen: View {
+    @StateObject private var store = FlowDeckStore(service: NetworkCoreFlowService())
+    @State private var writeCount = 0
+
+    var body: some View {
+        NavigationStack {
+            FlowDeckView(store: store, onOpenDetail: { _ in }, onOpenAuthor: { _ in },
+                         onOpenMenu: { _ in }, onSpark: { _ in }, onCardVisible: { _ in },
+                         onCardSaved: { _ in }, onCardDismissed: { _ in })
+        }
+        .overlay(alignment: .topLeading) {
+            Text(String(writeCount))
+                .font(.system(size: 1)).opacity(0.02)
+                .accessibilityIdentifier("fixture.flow.writeCount")
+        }
+        .onReceive(NotificationCenter.default.publisher(for: LocalPreviewURLProtocol.engagementWriteObserved)
+            .receive(on: DispatchQueue.main)) { _ in writeCount += 1 }
+    }
+}
+
 enum LocalDevelopmentPreview {
     static var isEnabled: Bool {
         #if targetEnvironment(simulator)

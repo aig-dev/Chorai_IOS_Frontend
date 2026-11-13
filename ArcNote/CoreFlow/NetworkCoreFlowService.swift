@@ -4,9 +4,11 @@ import Foundation
 
 struct NetworkCoreFlowService: CoreFlowServing {
     private let network: NetworkManager
+    private let scope: NoteStoreScope?
 
     init(network: NetworkManager = .shared) {
         self.network = network
+        scope = AuthManager.shared.currentNoteScope
     }
 
     func recommendedCards(
@@ -29,22 +31,25 @@ struct NetworkCoreFlowService: CoreFlowServing {
     }
 
     func favorite(assetID: String) -> AnyPublisher<Void, CoreFlowError> {
-        network.favoriteCard(cardId: assetID)
-            .tryMap { response in
-                guard response.success else {
-                    throw CoreFlowError.server
-                }
-            }
-            .mapError(Self.mapError)
-            .eraseToAnyPublisher()
+        favoriteReceipt(from: network.favoriteCard(cardId: assetID, presentsError: false))
     }
 
     func unfavorite(assetID: String) -> AnyPublisher<Void, CoreFlowError> {
-        network.unfavoriteCard(cardId: assetID)
+        favoriteReceipt(from: network.unfavoriteCard(cardId: assetID, presentsError: false))
+    }
+
+    private func favoriteReceipt<T: Codable>(
+        from mutation: @autoclosure () -> AnyPublisher<NetworkResponse<T>, NetworkError>
+    ) -> AnyPublisher<Void, CoreFlowError> {
+        guard let scope, AuthManager.shared.currentNoteScope == scope else {
+            return Fail(error: .unauthorized).eraseToAnyPublisher()
+        }
+        let session = AuthManager.shared.sessionGeneration
+        return mutation()
+            .receive(on: DispatchQueue.main)
             .tryMap { response in
-                guard response.success else {
-                    throw CoreFlowError.server
-                }
+                guard AuthManager.shared.sessionGeneration == session else { throw CoreFlowError.unauthorized }
+                guard response.success else { throw CoreFlowError.server }
             }
             .mapError(Self.mapError)
             .eraseToAnyPublisher()

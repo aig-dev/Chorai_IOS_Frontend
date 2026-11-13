@@ -59,6 +59,10 @@ final class LocalNotesController: ObservableObject {
         guard let scope = library.scope, AuthManager.shared.canOpenLocalNotes,
               AuthManager.shared.currentNoteScope == scope else { throw NoteLocalStoreError.invalidScope }
         try await library.setLifecycle(identifier: identifier, lifecycle: lifecycle, scope: scope)
+        if lifecycle == .trashed, library.scope == scope, AuthManager.shared.currentNoteScope == scope {
+            let serverID = library.notes.first { NoteLibraryStore.identifier($0) == identifier }?.serverAssetID
+            NotificationCenter.default.post(name: .cardReadInvalidated, object: serverID ?? identifier)
+        }
         Task { await library.synchronize() }
     }
 

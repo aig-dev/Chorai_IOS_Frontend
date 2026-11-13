@@ -18,11 +18,13 @@ final class CardEngagementCenter {
                 guard let payload = notification.userInfo,
                       let cardID = payload["cardID"] as? String,
                       let isFavorited = payload["isFavorited"] as? Bool else { return }
-                self?.favorites.send(CardFavoriteState(
+                let state = CardFavoriteState(
                     cardID: cardID,
                     isFavorited: isFavorited,
                     favoriteCount: payload["count"] as? Int
-                ))
+                )
+                CardDetailManager.didCommit(state)
+                self?.favorites.send(state)
             }
     }
 
@@ -33,6 +35,7 @@ final class CardEngagementCenter {
     }
 
     func publish(_ state: CardLikeState) {
+        CardDetailManager.didCommit(state)
         likes.send(state)
     }
 }
