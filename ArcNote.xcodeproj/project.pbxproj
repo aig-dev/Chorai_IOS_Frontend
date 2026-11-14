@@ -73,7 +73,6 @@
 		1BF3731B2E30DA7A00255F41 /* ChooseInterestsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1BF3731A2E30DA7A00255F41 /* ChooseInterestsView.swift */; };
 		8D4846EB2F409AEB00A3D3C7 /* NoteCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D4846EA2F409AEB00A3D3C7 /* NoteCard.swift */; };
 		A00000012F50000100000001 /* ArcNoteUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000012F50000100000002 /* ArcNoteUITests.swift */; };
-		C71400012F90000100000001 /* RecentNotesSyncUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C71400012F90000100000002 /* RecentNotesSyncUITests.swift */; };
 		A10000012F90000100000001 /* APIEnvironmentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000012F90000100000002 /* APIEnvironmentTests.swift */; };
 		A10000012F90000100000003 /* APIEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000012F90000100000004 /* APIEnvironment.swift */; };
 		A10000012F90000100000005 /* APIEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000012F90000100000004 /* APIEnvironment.swift */; };
@@ -145,6 +144,7 @@
 		C70300012F90000100000001 /* NativeRemediationVisualTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C70300012F90000100000002 /* NativeRemediationVisualTests.swift */; };
 		C70400012F90000100000001 /* LinkPresentationUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C70400012F90000100000002 /* LinkPresentationUITests.swift */; };
 		C70500012F90000100000001 /* SearchSummaryUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C70500012F90000100000002 /* SearchSummaryUITests.swift */; };
+		C71400012F90000100000001 /* RecentNotesSyncUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C71400012F90000100000002 /* RecentNotesSyncUITests.swift */; };
 		C72900012F90000100000001 /* ChatControlSizingUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C72900012F90000100000002 /* ChatControlSizingUITests.swift */; };
 		C72900022F90000100000001 /* RootHeaderAlignmentUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C72900022F90000100000002 /* RootHeaderAlignmentUITests.swift */; };
 		CC260B260000000000000001 /* ChoraiTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC260A260000000000000001 /* ChoraiTheme.swift */; };
@@ -232,7 +232,6 @@
 		4FC8A8D1AD4841DEA9BB285F /* AuthEntryComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthEntryComponents.swift; sourceTree = "<group>"; };
 		8D4846EA2F409AEB00A3D3C7 /* NoteCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteCard.swift; sourceTree = "<group>"; };
 		A00000012F50000100000002 /* ArcNoteUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArcNoteUITests.swift; sourceTree = "<group>"; };
-		C71400012F90000100000002 /* RecentNotesSyncUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentNotesSyncUITests.swift; sourceTree = "<group>"; };
 		A00000012F50000100000003 /* ArcNoteUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ArcNoteUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A10000012F90000100000002 /* APIEnvironmentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIEnvironmentTests.swift; sourceTree = "<group>"; };
 		A10000012F90000100000004 /* APIEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIEnvironment.swift; sourceTree = "<group>"; };
@@ -304,6 +303,7 @@
 		C70300012F90000100000002 /* NativeRemediationVisualTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeRemediationVisualTests.swift; sourceTree = "<group>"; };
 		C70400012F90000100000002 /* LinkPresentationUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinkPresentationUITests.swift; sourceTree = "<group>"; };
 		C70500012F90000100000002 /* SearchSummaryUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchSummaryUITests.swift; sourceTree = "<group>"; };
+		C71400012F90000100000002 /* RecentNotesSyncUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentNotesSyncUITests.swift; sourceTree = "<group>"; };
 		C72900012F90000100000002 /* ChatControlSizingUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatControlSizingUITests.swift; sourceTree = "<group>"; };
 		C72900022F90000100000002 /* RootHeaderAlignmentUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootHeaderAlignmentUITests.swift; sourceTree = "<group>"; };
 		CC260A260000000000000001 /* ChoraiTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChoraiTheme.swift; sourceTree = "<group>"; };
@@ -953,7 +953,7 @@
 				CODE_SIGN_ENTITLEMENTS = ArcNote/ArcNote.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 66;
+				CURRENT_PROJECT_VERSION = 67;
 				DEVELOPMENT_ASSET_PATHS = "\"ArcNote/Preview Content\"";
 				DEVELOPMENT_TEAM = 3YVRHRU9YA;
 				ENABLE_PREVIEWS = YES;
@@ -971,7 +971,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 2.1.0;
+				MARKETING_VERSION = 2.1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.michen.arcnote;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -993,7 +993,7 @@
 				CODE_SIGN_ENTITLEMENTS = ArcNote/ArcNote.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 66;
+				CURRENT_PROJECT_VERSION = 67;
 				DEVELOPMENT_ASSET_PATHS = "\"ArcNote/Preview Content\"";
 				DEVELOPMENT_TEAM = 3YVRHRU9YA;
 				ENABLE_PREVIEWS = YES;
@@ -1011,7 +1011,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 2.1.0;
+				MARKETING_VERSION = 2.1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.michen.arcnote;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -1132,7 +1132,7 @@
 				CODE_SIGN_ENTITLEMENTS = ArcNote/ArcNote.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 66;
+				CURRENT_PROJECT_VERSION = 67;
 				DEVELOPMENT_ASSET_PATHS = "\"ArcNote/Preview Content\"";
 				DEVELOPMENT_TEAM = 3YVRHRU9YA;
 				ENABLE_PREVIEWS = YES;
@@ -1150,7 +1150,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 2.1.0;
+				MARKETING_VERSION = 2.1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.michen.arcnote;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";

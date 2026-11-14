@@ -19,7 +19,7 @@ public actor NoteLocalStore {
         self.context.undoManager = nil
     }
 
-    public static func open(rootURL: URL, scope: NoteStoreScope) async throws -> NoteLocalStore {
+    static func directory(rootURL: URL, scope: NoteStoreScope) throws -> URL {
         guard !scope.actorID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               !scope.environmentID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw NoteLocalStoreError.invalidScope
@@ -27,7 +27,11 @@ public actor NoteLocalStore {
         // An array encoding is unambiguous even when IDs contain separators or path characters.
         let identity = try JSONEncoder().encode([scope.environmentID, scope.actorID])
         let key = SHA256.hash(data: identity).map { String(format: "%02x", $0) }.joined()
-        let directory = rootURL.appendingPathComponent(key, isDirectory: true)
+        return rootURL.appendingPathComponent(key, isDirectory: true)
+    }
+
+    public static func open(rootURL: URL, scope: NoteStoreScope) async throws -> NoteLocalStore {
+        let directory = try directory(rootURL: rootURL, scope: scope)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let container = NSPersistentContainer(name: "ChoraiOfflineNotes", managedObjectModel: model())
         let description = NSPersistentStoreDescription(url: directory.appendingPathComponent("notes.sqlite"))

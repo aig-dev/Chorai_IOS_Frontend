@@ -569,7 +569,11 @@ struct GlobalMergeTaskPortalModifier: ViewModifier {
             legacy: UserDefaultsMergeSessionStore(
                 keyPrefix: MergeSessionStorageConfiguration.keyPrefix
             )
-        )
+        ),
+        queueCommittedNote: { actorID, assetID in
+            let scope = NoteStoreScope(actorID: actorID, environmentID: APIConfiguration.baseURL)
+            try LocalNotesController.shared.library.queueCommittedNote(assetID: assetID, scope: scope)
+        }
     )
     @State private var isExpanded = false
 

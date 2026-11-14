@@ -27,10 +27,12 @@ public final class NoteLibraryStore: ObservableObject {
     private var fullRefreshInFlight = false
     private var locallyChangedDuringRefresh = Set<String>()
     private var configuration: Task<Void, Never>?
+    private let committedDownloads: CommittedNoteDownloads
     private var imageDownloads: [String: Task<(data: Data, mimeType: String), Error>] = [:]
 
     public init(rootURL: URL, service: @escaping @Sendable (NoteStoreScope) throws -> any NoteSyncServing) {
         self.rootURL = rootURL; self.serviceFactory = service
+        committedDownloads = CommittedNoteDownloads(rootURL: rootURL)
     }
 
     public nonisolated static func identifier(_ note: OfflineNote) -> String { "local-note:" + note.localID }
@@ -40,7 +42,13 @@ public final class NoteLibraryStore: ObservableObject {
             guard cloudEnabled != nextCloud else { return }
             let epoch = generation
             cloudEnabled = nextCloud
-            if nextCloud { await coordinator?.resume() } else { await coordinator?.suspend() }
+            if nextCloud {
+                committedDownloads.resume(in: self)
+                await coordinator?.resume()
+            } else {
+                committedDownloads.suspend()
+                await coordinator?.suspend()
+            }
             let state = await coordinator?.status ?? .paused
             if generation == epoch, cloudEnabled == nextCloud, status != state { status = state }
             return
@@ -51,6 +59,7 @@ public final class NoteLibraryStore: ObservableObject {
             return
         }
         generation &+= 1
+        committedDownloads.suspend(scopeChanged: true)
         imageDownloads.values.forEach { $0.cancel() }; imageDownloads.removeAll()
         let epoch = generation
         let previous = configuration
@@ -79,7 +88,10 @@ public final class NoteLibraryStore: ObservableObject {
                     await self?.publishInsertedPage(inserted, generation: epoch)
                 })
                 self.store = local; self.service = transport; self.coordinator = sync
-                if self.cloudEnabled { await sync.resume() }
+                if self.cloudEnabled {
+                    self.committedDownloads.resume(in: self)
+                    await sync.resume()
+                }
                 await self.refresh(generation: epoch)
             } catch {
                 try? await opened?.close()
@@ -92,6 +104,11 @@ public final class NoteLibraryStore: ObservableObject {
         configuration = task
         await task.value
         if generation == epoch { configuration = nil }
+    }
+
+    /// Persist the known cloud ID before the Merge receipt can be acknowledged.
+    public func queueCommittedNote(assetID: String, scope: NoteStoreScope) throws {
+        try committedDownloads.enqueue(assetID: assetID, scope: scope, in: self)
     }
 
     public func synchronize(forceRetry: Bool = false) async {

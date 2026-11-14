@@ -76,6 +76,7 @@ public final class MergeTaskCoordinator: ObservableObject {
     private let pollingGate: MergePollingGate
     private let idempotencyKey: () -> String
     private let operationID: () -> String
+    private let queueCommittedNote: @MainActor (String, String) throws -> Void
     private let now: () -> Date
 
     private var actorID: String?
@@ -101,7 +102,8 @@ public final class MergeTaskCoordinator: ObservableObject {
             "ios-merge-\(UUID().uuidString)"
         },
         operationID: @escaping () -> String = { UUID().uuidString },
-        now: @escaping () -> Date = Date.init
+        now: @escaping () -> Date = Date.init,
+        queueCommittedNote: @escaping @MainActor (String, String) throws -> Void = { _, _ in }
     ) {
         self.service = service
         self.persistence = persistence
@@ -110,6 +112,7 @@ public final class MergeTaskCoordinator: ObservableObject {
         self.idempotencyKey = idempotencyKey
         self.operationID = operationID
         self.now = now
+        self.queueCommittedNote = queueCommittedNote
     }
 
     @discardableResult
@@ -517,6 +520,7 @@ public final class MergeTaskCoordinator: ObservableObject {
             sleeper: sleeper,
             pollingGate: pollingGate,
             resumePersistedSession: resumePersistedSession,
+            queueCommittedNote: queueCommittedNote,
             idempotencyKey: idempotencyKey
         )
     }

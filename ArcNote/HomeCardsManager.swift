@@ -99,16 +99,12 @@ class HomeCardsManager: ObservableObject {
     }
 
     func promoteCommittedCard(id: String) {
-        if !isOwnedLibrary { presentLocalNotes(LocalNotesController.shared.library.notes) }
+        let library = LocalNotesController.shared.library
+        if !isOwnedLibrary { presentLocalNotes(library.notes) }
         isOwnedLibrary = true
-        Task {
-            do {
-                let note = try await LocalNotesController.shared.library.open(identifier: id)
-                if isOwnedLibrary { updateLocalCards([note], removed: []) }
-            } catch {
-                // A failed cloud read never removes an already saved local note.
-                self.error = .networkError(error)
-            }
+        // The commit already queued the download. Later inserts arrive via library.changes.
+        if let note = library.notes.first(where: { $0.serverAssetID == id }) {
+            updateLocalCards([note], removed: [])
         }
     }
 

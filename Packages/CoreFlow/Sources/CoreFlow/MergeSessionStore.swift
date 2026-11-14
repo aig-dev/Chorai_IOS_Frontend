@@ -84,6 +84,7 @@ public final class MergeSessionStore: ObservableObject {
     private let persistence: any MergeSessionPersisting
     private let sleeper: any MergeSleeping
     private let pollingGate: MergePollingGate?
+    private let queueCommittedNote: @MainActor (String, String) throws -> Void
     private let resumePersistedSession: Bool
     private let idempotencyKey: () -> String
     private let pollDelaysNanoseconds: [UInt64]
@@ -112,6 +113,7 @@ public final class MergeSessionStore: ObservableObject {
         sleeper: any MergeSleeping = SystemMergeSleeper(),
         pollingGate: MergePollingGate? = nil,
         resumePersistedSession: Bool = true,
+        queueCommittedNote: @escaping @MainActor (String, String) throws -> Void = { _, _ in },
         idempotencyKey: @escaping () -> String = {
             "ios-merge-\(UUID().uuidString)"
         },
@@ -141,6 +143,7 @@ public final class MergeSessionStore: ObservableObject {
         self.persistence = persistence
         self.sleeper = sleeper
         self.pollingGate = pollingGate
+        self.queueCommittedNote = queueCommittedNote
         self.resumePersistedSession = resumePersistedSession
         self.idempotencyKey = idempotencyKey
         self.pollDelaysNanoseconds = pollDelaysNanoseconds
@@ -156,7 +159,7 @@ public final class MergeSessionStore: ObservableObject {
            let restored = persistence.snapshot(actorID: actorID) {
             restore(restored)
             if let committedAssetID = restored.committedAssetID {
-                phase = .completed(assetID: committedAssetID)
+                completeCommittedNote(committedAssetID)
                 return
             }
             if restored.lastStatus == .failed {
@@ -256,6 +259,10 @@ public final class MergeSessionStore: ObservableObject {
             return
         }
 
+        if let assetID = snapshot.committedAssetID {
+            completeCommittedNote(assetID)
+            return
+        }
         if snapshot.lastStatus == .failed {
             retryGeneration()
             return
@@ -1454,7 +1461,7 @@ public final class MergeSessionStore: ObservableObject {
                 return
             case .committedCard:
                 if let committedAssetID = snapshot?.committedAssetID {
-                    phase = .completed(assetID: committedAssetID)
+                    completeCommittedNote(committedAssetID)
                 } else if let commitRequest = snapshot?.commitRequest {
                     await submitRecoveredCommit(
                         jobID: current.jobID,
@@ -1608,7 +1615,17 @@ public final class MergeSessionStore: ObservableObject {
         value.lastStatus = .committedCard
         snapshot = value
         persistence.save(value)
-        phase = .completed(assetID: assetID)
+        completeCommittedNote(assetID)
+    }
+
+    private func completeCommittedNote(_ assetID: String) {
+        do {
+            try queueCommittedNote(actorID, assetID)
+            phase = .completed(assetID: assetID)
+        } catch {
+            // Keep the receipt. Retry or relaunch only repeats the local handoff.
+            phase = .paused(.unavailable(code: "local_note_unavailable"))
+        }
     }
 
     private func record(_ current: MergeJob) {

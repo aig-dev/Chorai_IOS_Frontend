@@ -75,7 +75,7 @@ final class MergeBackgroundNavigationSourceContractTests: XCTestCase {
         XCTAssertFalse(load.contains("selectedFilter ="), "A Merge refresh preserves the user's chosen Library sort")
         XCTAssertTrue(home.contains("selectedSegment = 0"))
         XCTAssertTrue(cardsManager.contains("func promoteCommittedCard(id:"))
-        XCTAssertTrue(cardsManager.contains("LocalNotesController.shared.library.open(identifier: id)"))
+        XCTAssertTrue(cardsManager.contains("library.changes.sink"))
         XCTAssertTrue(cardsManager.contains("presentLocalNotes"))
         XCTAssertTrue(cardsManager.contains("library.synchronize"))
     }
