@@ -73,6 +73,7 @@
 		1BF3731B2E30DA7A00255F41 /* ChooseInterestsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1BF3731A2E30DA7A00255F41 /* ChooseInterestsView.swift */; };
 		8D4846EB2F409AEB00A3D3C7 /* NoteCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D4846EA2F409AEB00A3D3C7 /* NoteCard.swift */; };
 		A00000012F50000100000001 /* ArcNoteUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000012F50000100000002 /* ArcNoteUITests.swift */; };
+		C71400012F90000100000001 /* RecentNotesSyncUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C71400012F90000100000002 /* RecentNotesSyncUITests.swift */; };
 		A10000012F90000100000001 /* APIEnvironmentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000012F90000100000002 /* APIEnvironmentTests.swift */; };
 		A10000012F90000100000003 /* APIEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000012F90000100000004 /* APIEnvironment.swift */; };
 		A10000012F90000100000005 /* APIEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000012F90000100000004 /* APIEnvironment.swift */; };
@@ -231,6 +232,7 @@
 		4FC8A8D1AD4841DEA9BB285F /* AuthEntryComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthEntryComponents.swift; sourceTree = "<group>"; };
 		8D4846EA2F409AEB00A3D3C7 /* NoteCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteCard.swift; sourceTree = "<group>"; };
 		A00000012F50000100000002 /* ArcNoteUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArcNoteUITests.swift; sourceTree = "<group>"; };
+		C71400012F90000100000002 /* RecentNotesSyncUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentNotesSyncUITests.swift; sourceTree = "<group>"; };
 		A00000012F50000100000003 /* ArcNoteUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ArcNoteUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A10000012F90000100000002 /* APIEnvironmentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIEnvironmentTests.swift; sourceTree = "<group>"; };
 		A10000012F90000100000004 /* APIEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIEnvironment.swift; sourceTree = "<group>"; };
@@ -466,6 +468,7 @@
 			isa = PBXGroup;
 			children = (
 				A00000012F50000100000002 /* ArcNoteUITests.swift */,
+				C71400012F90000100000002 /* RecentNotesSyncUITests.swift */,
 				E5833D7B924E407AADD43A49 /* AuthEntryFlowUITests.swift */,
 				C70400012F90000100000002 /* LinkPresentationUITests.swift */,
 				C70500012F90000100000002 /* SearchSummaryUITests.swift */,
@@ -796,6 +799,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A00000012F50000100000001 /* ArcNoteUITests.swift in Sources */,
+				C71400012F90000100000001 /* RecentNotesSyncUITests.swift in Sources */,
 				F0EDFA46EDB043FE8E8D0479 /* AuthEntryFlowUITests.swift in Sources */,
 				C70400012F90000100000001 /* LinkPresentationUITests.swift in Sources */,
 				C70500012F90000100000001 /* SearchSummaryUITests.swift in Sources */,

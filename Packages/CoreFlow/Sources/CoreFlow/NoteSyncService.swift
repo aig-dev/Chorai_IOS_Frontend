@@ -46,11 +46,17 @@ public struct NoteSyncDownloadedAttachment: Sendable {
 /// this immutable scope. It must reject credentials belonging to another actor.
 public protocol NoteSyncServing: Sendable {
     var scope: NoteStoreScope { get }
+    /// Nil IDs request the most recent active notes. A nil response means this server only supports individual details.
+    func readPage(assetIDs: [String]?) async throws -> [NoteRemoteSnapshot]?
     func manifest() async throws -> NoteSyncManifest
     func detail(assetID: String) async throws -> NoteRemoteSnapshot
     func send(_ operation: NotePendingOperation) async throws -> NoteSyncReceipt
     func upload(_ attachment: NoteLocalAttachment, data: Data) async throws -> NoteSyncUploadReceipt
     func downloadAttachment(assetID: String, mediaRef: String) async throws -> NoteSyncDownloadedAttachment
+}
+
+public extension NoteSyncServing {
+    func readPage(assetIDs: [String]?) async throws -> [NoteRemoteSnapshot]? { nil }
 }
 
 public enum NoteSyncFailure: Error, Equatable, Sendable {

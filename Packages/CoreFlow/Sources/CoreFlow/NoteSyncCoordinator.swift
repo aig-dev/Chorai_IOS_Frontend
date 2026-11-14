@@ -10,6 +10,8 @@ public actor NoteSyncCoordinator {
     private let now: @Sendable () -> Date
     private let jitter: @Sendable () -> Double
     private let didChange: @Sendable () async -> Void
+    private let didInsertPage: (@Sendable ([OfflineNote]) async -> Void)?
+    private static let pageSize = 20
     private var enabled = false
     private var epoch: UInt64 = 0
     private var work: Task<Void, Never>?
@@ -22,10 +24,11 @@ public actor NoteSyncCoordinator {
     public init(store: NoteLocalStore, service: any NoteSyncServing,
                 now: @escaping @Sendable () -> Date = { Date() },
                 jitter: @escaping @Sendable () -> Double = { Double.random(in: 0...0.25) },
-                didChange: @escaping @Sendable () async -> Void = {}) throws {
+                didChange: @escaping @Sendable () async -> Void = {},
+                didInsertPage: (@Sendable ([OfflineNote]) async -> Void)? = nil) throws {
         guard store.scope == service.scope else { throw NoteLocalStoreError.invalidScope }
         self.store = store; self.service = service; self.scope = store.scope
-        self.now = now; self.jitter = jitter; self.didChange = didChange
+        self.now = now; self.jitter = jitter; self.didChange = didChange; self.didInsertPage = didInsertPage
     }
 
     /// The app calls this only after confirming this account's cloud eligibility.
@@ -65,7 +68,18 @@ public actor NoteSyncCoordinator {
         do {
             // Capture generations before starting the manifest request. Missing
             // entries and delayed details cannot act on later local decisions.
-            let initial = try await store.notes()
+            var initial = try await store.notes()
+            var supportsPages = true
+            guard valid(session) else { return }
+            if !initial.contains(where: { $0.serverAssetID != nil }) {
+                if let recent = try await service.readPage(assetIDs: nil) {
+                    guard valid(session) else { return }
+                    try await insertPage(recent, requestedIDs: nil, session: session)
+                    initial = try await store.notes()
+                } else {
+                    supportsPages = false
+                }
+            }
             guard valid(session) else { return }
             let manifest = try await service.manifest()
             guard valid(session) else { return }
@@ -74,6 +88,7 @@ public actor NoteSyncCoordinator {
             let entries = Dictionary(uniqueKeysWithValues: manifest.notes.map { ($0.assetID, $0) })
             for note in initial {
                 guard valid(session) else { return }
+                if note.isSynchronized { continue }
                 if ["needs_login", "sync_not_ready", "precondition_required"].contains(note.syncIssue ?? "") ||
                     (note.syncIssue == "unsupported_operation" && !textOnly) ||
                     (note.syncIssue == "unsupported_document" && protocolVersion == 3 &&
@@ -94,6 +109,7 @@ public actor NoteSyncCoordinator {
                     }
                     continue
                 }
+                if note.isSynchronized && note.baseSyncToken == entry.syncToken { continue }
                 let latest = try await store.note(localID: note.localID)
                 guard let latest, latest.pendingOperation == nil else { continue }
                 // A definite conflict needs its remote copy even though recording
@@ -105,10 +121,8 @@ public actor NoteSyncCoordinator {
                 }
             }
             let known = Set(initial.compactMap(\.serverAssetID))
-            for entry in manifest.notes where !known.contains(entry.assetID) {
-                guard valid(session) else { return }
-                await pull(assetID: entry.assetID, localID: nil, generation: nil, session: session)
-            }
+            let missing = manifest.notes.filter { !known.contains($0.assetID) }.map(\.assetID)
+            try await pullMissing(missing, supportsPages: supportsPages, session: session)
             guard valid(session) else { return }
             let retained = try await store.notes()
             retryDeadline = retained.filter { $0.syncIssue == nil }.flatMap { note in
@@ -121,6 +135,60 @@ public actor NoteSyncCoordinator {
         } catch {
             guard valid(session) else { return }
             classifySessionFailure(error)
+            await didChange()
+        }
+    }
+
+    private func pullMissing(_ missing: [String], supportsPages: Bool, session: UInt64) async throws {
+        var usePages = supportsPages
+        var failedPages = 0
+        for start in stride(from: 0, to: missing.count, by: Self.pageSize) {
+            guard valid(session) else { return }
+            let ids = Array(missing[start..<min(start + Self.pageSize, missing.count)])
+            if usePages {
+                do {
+                    if let page = try await service.readPage(assetIDs: ids) {
+                        try await insertPage(page, requestedIDs: ids, session: session)
+                        failedPages = 0
+                        continue
+                    }
+                } catch NoteSyncFailure.transient(let retryAfter) {
+                    guard valid(session) else { return }
+                    // A single unavailable page need not hide the rest. Stop promptly on loss of connectivity or a server backoff.
+                    failedPages += 1
+                    if failedPages > 1 || retryAfter != nil { throw NoteSyncFailure.transient(retryAfter: retryAfter) }
+                    status = .waitingForNetwork
+                    continue
+                }
+                // A previous server can still fill this library through its owner-only detail route.
+                usePages = false
+            }
+            for id in ids {
+                guard valid(session) else { return }
+                await pull(assetID: id, localID: nil, generation: nil, session: session)
+            }
+            if valid(session) { await didChange() }
+        }
+    }
+
+    private func insertPage(_ snapshots: [NoteRemoteSnapshot], requestedIDs: [String]?, session: UInt64) async throws {
+        guard valid(session) else { return }
+        let ids = Set(snapshots.map(\.assetID))
+        guard snapshots.count <= Self.pageSize, ids.count == snapshots.count,
+              snapshots.allSatisfy({ !$0.assetID.isEmpty && !$0.syncToken.isEmpty }) else {
+            throw NoteSyncFailure.invalidResponse
+        }
+        if let requestedIDs {
+            guard ids.isSubset(of: requestedIDs) else { throw NoteSyncFailure.invalidResponse }
+        } else {
+            guard snapshots.allSatisfy({ $0.lifecycle == .active }) else { throw NoteSyncFailure.invalidResponse }
+        }
+        guard !snapshots.isEmpty else { return }
+        let inserted = try await store.insertMissingPage(snapshots)
+        guard valid(session), !inserted.isEmpty else { return }
+        if let didInsertPage {
+            await didInsertPage(inserted)
+        } else {
             await didChange()
         }
     }

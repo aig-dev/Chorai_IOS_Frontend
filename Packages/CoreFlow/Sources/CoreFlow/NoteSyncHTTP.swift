@@ -32,7 +32,14 @@ public enum NoteSyncHTTP {
     }
 
     public static func snapshot(from bytes: Data, actorID: String) throws -> NoteRemoteSnapshot {
-        let card = try payload(Card.self, from: bytes)
+        try snapshot(payload(Card.self, from: bytes), actorID: actorID)
+    }
+
+    public static func snapshots(from bytes: Data, actorID: String) throws -> [NoteRemoteSnapshot] {
+        try payload([Card].self, from: bytes).map { try snapshot($0, actorID: actorID) }
+    }
+
+    private static func snapshot(_ card: Card, actorID: String) throws -> NoteRemoteSnapshot {
         guard card.ownerActorID == actorID, !card.id.isEmpty, !card.syncToken.isEmpty else { throw NoteSyncFailure.invalidResponse }
         return NoteRemoteSnapshot(assetID: card.id, syncToken: card.syncToken,
             body: OfflineNoteBody(title: card.title, content: card.content, contentJSON: card.contentJSON, tags: card.tags),

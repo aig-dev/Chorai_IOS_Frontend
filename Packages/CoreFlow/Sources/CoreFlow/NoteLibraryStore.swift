@@ -17,6 +17,7 @@ public final class NoteLibraryStore: ObservableObject {
     private var service: (any NoteSyncServing)?
     private var generation: UInt64 = 0
     private var refreshSerial: UInt64 = 0
+    private var fullRefreshInFlight = false
     private var configuration: Task<Void, Never>?
     private var imageDownloads: [String: Task<(data: Data, mimeType: String), Error>] = [:]
 
@@ -60,6 +61,8 @@ public final class NoteLibraryStore: ObservableObject {
                 let transport = try self.serviceFactory(nextScope)
                 let sync = try NoteSyncCoordinator(store: local, service: transport, didChange: { [weak self] in
                     await self?.refresh(generation: epoch)
+                }, didInsertPage: { [weak self] inserted in
+                    await self?.publishInsertedPage(inserted, generation: epoch)
                 })
                 self.store = local; self.service = transport; self.coordinator = sync
                 if self.cloudEnabled { await sync.resume() }
@@ -267,13 +270,29 @@ public final class NoteLibraryStore: ObservableObject {
 
     private func find(_ identifier: String, store: NoteLocalStore) async throws -> OfflineNote? {
         if identifier.hasPrefix("local-note:") { return try await store.note(localID: String(identifier.dropFirst(11))) }
-        return try await store.notes().first { $0.serverAssetID == identifier }
+        return try await store.note(serverAssetID: identifier)
+    }
+
+    private func publishInsertedPage(_ inserted: [OfflineNote], generation epoch: UInt64) async {
+        guard generation == epoch else { return }
+        // If a full refresh is already reading disk it may contain both this page and a newer local edit.
+        // Restart that read to publish both changes in transaction order.
+        if fullRefreshInFlight {
+            await refresh(generation: epoch)
+            return
+        }
+        let added = Set(inserted.map(\.localID))
+        let alreadyVisible = Set(notes.lazy.filter { added.contains($0.localID) }.map(\.localID))
+        notes.append(contentsOf: inserted.filter { !alreadyVisible.contains($0.localID) })
+        status = .synchronizing
     }
 
     private func refresh(generation epoch: UInt64) async {
         guard generation == epoch, let store else { return }
         refreshSerial &+= 1
         let serial = refreshSerial
+        fullRefreshInFlight = true
+        defer { if refreshSerial == serial { fullRefreshInFlight = false } }
         do {
             let saved = try await store.notes()
             let state = await coordinator?.status ?? .paused

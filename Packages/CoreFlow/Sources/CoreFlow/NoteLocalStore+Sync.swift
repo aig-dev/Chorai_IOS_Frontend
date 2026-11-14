@@ -63,48 +63,63 @@ extension NoteLocalStore {
 
     /// Nil means a response lost its generation fence; callers must fetch again, not force it in.
     public func applyRemote(_ snapshot: NoteRemoteSnapshot, localID: String?, expectedGeneration: Int64?) async throws -> OfflineNote? {
-        guard !snapshot.assetID.isEmpty, !snapshot.syncToken.isEmpty else { throw NoteLocalStoreError.invalidIdentity }
         let scope = scope
         return try await transaction { context in
-            var note: OfflineNote
-            if let localID {
-                guard let row = try Self.row(localID: localID, in: context) else { throw NoteLocalStoreError.noteNotFound }
-                note = try Self.decode(row, scope: scope)
-                guard note.serverAssetID == snapshot.assetID else { throw NoteLocalStoreError.invalidIdentity }
-                guard note.generation == expectedGeneration, note.pendingOperation == nil else { return nil }
-                // Transport/access warnings do not make an otherwise clean
-                // working copy dirty. An authorized read may clear them.
-                if note.hasUnacknowledgedBody || note.desiredLifecycle != note.confirmedLifecycle || note.remoteSnapshot != nil {
-                    guard note.baseSyncToken != snapshot.syncToken else { return note }
-                    note.remoteSnapshot = snapshot
-                    note.syncIssue = "conflict"
-                    note.generation += 1
-                    try Self.write(note, scope: scope, in: context)
-                    return note
-                }
-                note.bodyRevision += 1
-                note.generation += 1
-            } else {
-                guard expectedGeneration == nil else { throw NoteLocalStoreError.staleGeneration }
-                // A second manifest/detail request cannot insert another copy of the same remote note.
-                guard try Self.row(key: "serverAssetID", value: snapshot.assetID, in: context) == nil else { return nil }
-                note = OfflineNote(localID: UUID().uuidString, body: snapshot.body, now: snapshot.createdAt ?? Date())
-            }
-            note.serverAssetID = snapshot.assetID
-            note.body = snapshot.body
-            note.acknowledgedBodyRevision = note.bodyRevision
-            note.baseSyncToken = snapshot.syncToken
-            note.desiredLifecycle = snapshot.lifecycle
-            note.confirmedLifecycle = snapshot.lifecycle
-            note.isPublic = snapshot.isPublic
-            note.editorAtmosphere = snapshot.editorAtmosphere
-            note.backgroundMediaRef = snapshot.backgroundMediaRef
-            note.isPinned = snapshot.isPinned
-            note.updatedAt = snapshot.updatedAt ?? note.updatedAt
-            note.remoteSnapshot = nil
-            note.syncIssue = nil
-            try Self.write(note, scope: scope, in: context)
-            return note
+            try Self.applyRemote(snapshot, localID: localID, expectedGeneration: expectedGeneration, scope: scope, in: context)
         }
+    }
+
+    /// Backfill may race a manual open or an edit. Only insert bodies still missing in this transaction.
+    func insertMissingPage(_ snapshots: [NoteRemoteSnapshot]) async throws -> [OfflineNote] {
+        let scope = scope
+        return try await transaction { context in
+            try snapshots.compactMap {
+                try Self.applyRemote($0, localID: nil, expectedGeneration: nil, scope: scope, in: context)
+            }
+        }
+    }
+
+    private static func applyRemote(_ snapshot: NoteRemoteSnapshot, localID: String?, expectedGeneration: Int64?,
+                                    scope: NoteStoreScope, in context: NSManagedObjectContext) throws -> OfflineNote? {
+        guard !snapshot.assetID.isEmpty, !snapshot.syncToken.isEmpty else { throw NoteLocalStoreError.invalidIdentity }
+        var note: OfflineNote
+        if let localID {
+            guard let row = try Self.row(localID: localID, in: context) else { throw NoteLocalStoreError.noteNotFound }
+            note = try Self.decode(row, scope: scope)
+            guard note.serverAssetID == snapshot.assetID else { throw NoteLocalStoreError.invalidIdentity }
+            guard note.generation == expectedGeneration, note.pendingOperation == nil else { return nil }
+            // Transport/access warnings do not make an otherwise clean
+            // working copy dirty. An authorized read may clear them.
+            if note.hasUnacknowledgedBody || note.desiredLifecycle != note.confirmedLifecycle || note.remoteSnapshot != nil {
+                guard note.baseSyncToken != snapshot.syncToken else { return note }
+                note.remoteSnapshot = snapshot
+                note.syncIssue = "conflict"
+                note.generation += 1
+                try Self.write(note, scope: scope, in: context)
+                return note
+            }
+            note.bodyRevision += 1
+            note.generation += 1
+        } else {
+            guard expectedGeneration == nil else { throw NoteLocalStoreError.staleGeneration }
+            // A second manifest/detail request cannot insert another copy of the same remote note.
+            guard try Self.row(key: "serverAssetID", value: snapshot.assetID, in: context) == nil else { return nil }
+            note = OfflineNote(localID: UUID().uuidString, body: snapshot.body, now: snapshot.createdAt ?? Date())
+        }
+        note.serverAssetID = snapshot.assetID
+        note.body = snapshot.body
+        note.acknowledgedBodyRevision = note.bodyRevision
+        note.baseSyncToken = snapshot.syncToken
+        note.desiredLifecycle = snapshot.lifecycle
+        note.confirmedLifecycle = snapshot.lifecycle
+        note.isPublic = snapshot.isPublic
+        note.editorAtmosphere = snapshot.editorAtmosphere
+        note.backgroundMediaRef = snapshot.backgroundMediaRef
+        note.isPinned = snapshot.isPinned
+        note.updatedAt = snapshot.updatedAt ?? note.updatedAt
+        note.remoteSnapshot = nil
+        note.syncIssue = nil
+        try Self.write(note, scope: scope, in: context)
+        return note
     }
 }

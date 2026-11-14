@@ -3,6 +3,23 @@ import XCTest
 @testable import CoreFlow
 
 final class NoteSyncHTTPTests: XCTestCase {
+    func testPageUsesTheSingleCardOwnerAndBodyChecksForEveryItem() throws {
+        let mine: [String: Any] = ["id": "mine", "owner_actor_id": "owner", "sync_token": "v7", "lifecycle": "active",
+                                   "content": "owned body", "content_json": #"{"blocks":[]}"#, "tags": ["test"], "is_public": false]
+        var other = mine
+        other["owner_actor_id"] = "elsewhere"
+        func data(_ cards: [[String: Any]]) throws -> Data {
+            try JSONSerialization.data(withJSONObject: ["success": true, "data": cards])
+        }
+        let page = try NoteSyncHTTP.snapshots(from: data([mine]), actorID: "owner")
+        let single = try JSONSerialization.data(withJSONObject: ["success": true, "data": mine])
+        XCTAssertEqual(page, [try NoteSyncHTTP.snapshot(from: single, actorID: "owner")])
+        XCTAssertThrowsError(try NoteSyncHTTP.snapshots(from: data([mine, other]), actorID: "owner"))
+        var missingToken = mine
+        missingToken.removeValue(forKey: "sync_token")
+        XCTAssertThrowsError(try NoteSyncHTTP.snapshots(from: data([mine, missingToken]), actorID: "owner"))
+    }
+
     func testCloudTimestampsPreserveOriginalOrderingAcrossDownload() throws {
         let data = Data(#"{"success":true,"data":{"id":"note","owner_actor_id":"actor","sync_token":"body-v1","lifecycle":"active","content":"body","tags":[],"is_public":false,"created_at":"2026-01-01T08:00:00+08:00","updated_at":"2026-01-02T00:00:00.123456Z"}}"#.utf8)
         let card = try NoteSyncHTTP.snapshot(from: data, actorID: "actor")

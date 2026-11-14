@@ -5,6 +5,20 @@ import Foundation
 struct NetworkNoteSyncService: NoteSyncServing, Sendable {
     let scope: NoteStoreScope
 
+    func readPage(assetIDs: [String]?) async throws -> [NoteRemoteSnapshot]? {
+        var path = "/api/cards/sync-page"
+        if let assetIDs {
+            try assetIDs.forEach(validateServerID)
+            path += "?ids=" + assetIDs.joined(separator: ",")
+        }
+        do {
+            let bytes = try await NetworkManager.shared.noteSyncRequest(scope: scope, path: path, method: .get)
+            return try NoteSyncHTTP.snapshots(from: bytes, actorID: scope.actorID)
+        } catch NoteSyncFailure.notFound {
+            return nil
+        }
+    }
+
     func manifest() async throws -> NoteSyncManifest {
         let bytes = try await NetworkManager.shared.noteSyncRequest(scope: scope, path: "/api/cards/sync-manifest", method: .get)
         let manifest = try NoteSyncHTTP.payload(NoteSyncManifest.self, from: bytes)

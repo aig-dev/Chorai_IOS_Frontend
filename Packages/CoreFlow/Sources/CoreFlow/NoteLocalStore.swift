@@ -109,6 +109,13 @@ public actor NoteLocalStore {
         }
     }
 
+    func note(serverAssetID: String) async throws -> OfflineNote? {
+        let scope = scope
+        return try await transaction { context in
+            try Self.row(key: "serverAssetID", value: serverAssetID, in: context).map { try Self.decode($0, scope: scope) }
+        }
+    }
+
     public func notes() async throws -> [OfflineNote] {
         let scope = scope
         return try await transaction { context in
