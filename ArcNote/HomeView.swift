@@ -1689,7 +1689,9 @@ struct NotesCard: View {
                 Image(systemName: card.isPublic ? "globe" : "lock").font(.caption2)
             }.foregroundStyle(.secondary)
             LibraryCardContentPreview(content: card.content, contentJSON: card.contentJSON,
-                                      cardID: card.id, onTap: openCard)
+                                      cardID: card.id,
+                                      localNoteScope: localNoteScope,
+                                      onTap: openCard)
                 .accessibilityIdentifier("home.card.body.\(card.id)")
             HStack(spacing: 7) {
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -1737,6 +1739,12 @@ struct NotesCard: View {
     }
 
     // MARK: Background Views
+
+    private var localNoteScope: NoteStoreScope? {
+        guard let scope = LocalNotesController.shared.library.scope,
+              card.ownerActorId == scope.actorID else { return nil }
+        return scope
+    }
 
     private var hasCustomBackground: Bool {
         guard let backgroundMediaRef = card.backgroundMediaRef else {
@@ -2216,6 +2224,7 @@ struct LibraryCardContentPreview: View {
     private let preview: LibraryCardPreviewContent
     private let cardID: String
     private let textFont: Font?
+    private let localNoteScope: NoteStoreScope?
     @ScaledMetric(relativeTo: .body) private var readingSize = 21.0
     private let onTap: (() -> Void)?
 
@@ -2224,14 +2233,17 @@ struct LibraryCardContentPreview: View {
         contentJSON: String?,
         cardID: String,
         textFont: Font? = nil,
+        localNoteScope: NoteStoreScope? = nil,
         onTap: (() -> Void)? = nil
     ) {
         preview = LibraryCardPreviewParser.parse(
             content: content,
-            contentJSON: contentJSON
+            contentJSON: contentJSON,
+            allowsLocalImages: localNoteScope != nil
         )
         self.cardID = cardID
         self.textFont = textFont
+        self.localNoteScope = localNoteScope
         self.onTap = onTap
     }
 
@@ -2247,8 +2259,24 @@ struct LibraryCardContentPreview: View {
 
     private var previewContent: some View {
         VStack(alignment: .leading, spacing: 10) {
-            if let imageURL {
-                libraryImage(url: imageURL)
+            if let mediaRef = preview.imageMediaRef, let scope = localNoteScope {
+                libraryImage {
+                    LocalNoteThumbnail(scope: scope, cardID: cardID, source: .reference(mediaRef), content: imageContent)
+                        .id(scope)
+                }
+            } else if let url = imageURL {
+                libraryImage {
+                    if let scope = localNoteScope, url.scheme == NoteAttachmentFiles.previewScheme {
+                        LocalNoteThumbnail(scope: scope, cardID: cardID, source: .previewURL(url), content: imageContent)
+                            .id(scope)
+                    } else {
+                        AsyncImage(
+                            url: url,
+                            transaction: Transaction(animation: reduceMotion ? nil : .easeInOut(duration: 0.2)),
+                            content: imageContent
+                        )
+                    }
+                }
             }
 
             if !preview.text.isEmpty {
@@ -2265,6 +2293,9 @@ struct LibraryCardContentPreview: View {
 
     private var imageURL: URL? {
         guard let source = preview.imageSource else { return nil }
+        if localNoteScope != nil, let url = URL(string: source), url.scheme == NoteAttachmentFiles.previewScheme {
+            return url
+        }
         let normalizedSource = source.hasPrefix("chorai-assets/")
             ? "/\(source)"
             : source
@@ -2274,27 +2305,9 @@ struct LibraryCardContentPreview: View {
         )
     }
 
-    private func libraryImage(url: URL) -> some View {
-        AsyncImage(
-            url: url,
-            transaction: Transaction(
-                animation: reduceMotion ? nil : .easeInOut(duration: 0.2)
-            )
-        ) { phase in
-            switch phase {
-            case .success(let image):
-                image.resizable()
-                    .interpolation(.high)
-                    .scaledToFit()
-                    .frame(maxWidth: .infinity, maxHeight: 480)
-            case .failure:
-                imageUnavailable
-            case .empty:
-                imageLoading
-            @unknown default:
-                imageUnavailable
-            }
-        }
+    private func libraryImage(@ViewBuilder _ image: () -> some View) -> some View {
+        image()
+        .id(cardID)
         .frame(maxWidth: .infinity)
         .background(ChoraiTheme.raisedSurface)
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -2307,6 +2320,23 @@ struct LibraryCardContentPreview: View {
             preview.imageAlternativeText ?? "Note image"
         )
         .accessibilityIdentifier("library.card.image.\(cardID)")
+    }
+
+    @ViewBuilder
+    private func imageContent(_ phase: AsyncImagePhase) -> some View {
+        switch phase {
+        case .success(let image):
+            image.resizable()
+                .interpolation(.high)
+                .scaledToFit()
+                .frame(maxWidth: .infinity, maxHeight: 480)
+        case .empty:
+            imageLoading
+        case .failure:
+            imageUnavailable
+        @unknown default:
+            imageUnavailable
+        }
     }
 
     private var imageLoading: some View {
@@ -2327,6 +2357,47 @@ struct LibraryCardContentPreview: View {
         }
         .foregroundColor(ChoraiTheme.ink.opacity(0.55))
         .frame(maxWidth: .infinity, minHeight: 140)
+    }
+}
+
+private struct LocalNoteThumbnail<Content: View>: View {
+    enum Source: Hashable {
+        case reference(String)
+        case previewURL(URL)
+    }
+
+    let scope: NoteStoreScope
+    let cardID: String
+    let source: Source
+    let content: (AsyncImagePhase) -> Content
+    @State private var phase = AsyncImagePhase.empty
+
+    var body: some View {
+        content(phase).task(id: source) {
+            phase = .empty
+            do {
+                let library = LocalNotesController.shared.library
+                let previewURL: URL
+                switch source {
+                case let .reference(mediaRef):
+                    let urls = try await library.imageDisplayURLs(identifier: cardID, scope: scope)
+                    guard let mapped = urls[mediaRef].flatMap(URL.init(string:)) else { throw NoteLocalStoreError.invalidAttachment }
+                    previewURL = mapped
+                case let .previewURL(url):
+                    previewURL = url
+                }
+                let resource = try await library.imagePreview(previewURL, identifier: cardID, scope: scope)
+                guard !Task.isCancelled else { return }
+                guard let original = UIImage(data: resource.data),
+                      let thumbnail = await original.byPreparingThumbnail(ofSize: CGSize(width: 1024, height: 1024))
+                else { throw NoteLocalStoreError.invalidAttachment }
+                guard !Task.isCancelled else { return }
+                phase = .success(Image(uiImage: thumbnail))
+            } catch {
+                guard !Task.isCancelled else { return }
+                phase = .failure(error)
+            }
+        }
     }
 }
 

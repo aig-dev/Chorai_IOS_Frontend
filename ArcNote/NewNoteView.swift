@@ -302,7 +302,12 @@ private struct CardEditorSessionView: View {
             onOpenCardActions: cardActionsHandler,
             menuActions: nativeMenuActions,
             isPrivacyEditable: cloudCardID != nil,
-            saveStatus: localSaveStatus
+            saveStatus: localSaveStatus,
+            onReviewVersions: canReviewVersions ? {
+                completeTagEntry()
+                bodyModel.dismissKeyboard()
+                showCloudVersionConfirmation = true
+            } : nil
         )
     }
 
@@ -419,9 +424,25 @@ private struct CardEditorSessionView: View {
             localNotes.registerEditor(persistenceSessionID) { await persistLocalDraft() }
         }
         .onChange(of: editingStore.draft) { _ in scheduleLocalSave() }
-        .confirmationDialog("Cloud version changed. Both copies are kept.", isPresented: $showCloudVersionConfirmation, titleVisibility: .visible) {
-            Button("Use cloud version", role: .destructive) { resolveConflict(useCloud: true) }
+        .confirmationDialog(
+            currentLocalNote?.remoteSnapshot == nil ? "Cloud version unavailable" : "Cloud version changed",
+            isPresented: $showCloudVersionConfirmation,
+            titleVisibility: .visible
+        ) {
+            if currentLocalNote?.remoteSnapshot != nil {
+                Button("Use cloud version", role: .destructive) { resolveConflict(useCloud: true) }
+            }
             Button("Keep mine as a new note") { resolveConflict(useCloud: false) }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            if let note = currentLocalNote {
+                let message = note.remoteSnapshot == nil
+                    ? "Your edits are saved on this device."
+                    : "Using the cloud version replaces your local edits."
+                Text(NoteSyncPayload.hasUndownloadedImages(note)
+                    ? message + " Connect to download the images for a new note."
+                    : message)
+            }
         }
         .disabled(isResolvingConflict)
         .allowsHitTesting(!isResolvingConflict)
@@ -451,8 +472,14 @@ private struct CardEditorSessionView: View {
         return localNotes.library.serverID(for: id)
     }
 
+    private var canReviewVersions: Bool {
+        guard let note = currentLocalNote, note.pendingOperation == nil else { return false }
+        return note.remoteSnapshot != nil || note.syncIssue == "remote_unavailable"
+    }
+
     private func resolveConflict(useCloud: Bool) {
-        guard !isResolvingConflict, let id = editingStore.cardID else { return }
+        guard !isResolvingConflict, canReviewVersions, let id = editingStore.cardID,
+              !useCloud || currentLocalNote?.remoteSnapshot != nil else { return }
         isResolvingConflict = true
         bodyModel.dismissKeyboard()
         Task {
@@ -466,7 +493,9 @@ private struct CardEditorSessionView: View {
                     _ = try await localNotes.library.saveLocalAsNewNote(identifier: id)
                 }
                 dismiss()
-            } catch { saveMessage = "Couldn't resolve this version yet. Both copies have been kept." }
+            } catch {
+                saveMessage = "Couldn't apply that choice. Your edits are still on this device."
+            }
         }
     }
 
@@ -474,6 +503,7 @@ private struct CardEditorSessionView: View {
         if editingStore.isDirty { return "Saving on this device…" }
         guard let note = currentLocalNote else { return nil }
         if note.remoteSnapshot != nil || note.syncIssue == "conflict" { return "Saved on this device · Cloud version changed" }
+        if note.syncIssue == "remote_unavailable" { return "Saved on this device · Cloud version unavailable" }
         if note.syncIssue == "unsupported_document" { return "Saved on this device · This content can't sync yet" }
         if authManager.sessionPhase == .needsLogin { return "Saved on this device · Sign in to sync" }
         if note.syncIssue != nil { return "Saved on this device · Sync needs attention" }
@@ -737,10 +767,6 @@ private struct CardEditorSessionView: View {
 
     private func handleLeadingControl() {
         guard !isBusy else { return }
-        if currentLocalNote?.remoteSnapshot != nil || currentLocalNote?.syncIssue == "remote_unavailable" {
-            showCloudVersionConfirmation = true
-            return
-        }
         switch leadingControlState {
         case .save, .retry:
             saveCurrentSnapshot()
@@ -859,13 +885,11 @@ private struct CardEditorSessionView: View {
             defer { isSaving = false }
             do {
                 let snapshot = try await applyCurrentSnapshot()
-                if isUntouchedNewSnapshot(snapshot)
-                    || snapshotMatchesCommittedBaseline(snapshot) {
+                // Back can receive a newer WebKit revision than the last autosave.
+                await persistLocalDraft()
+                if isUntouchedNewSnapshot(snapshot) || snapshotMatchesCommittedBaseline(snapshot) {
                     resolveSaveFailure()
                     dismiss()
-                } else {
-                    hideSaveFailure()
-                    saveMessage = nil
                 }
             } catch CardEditorSessionError.staleSnapshot {
                 saveMessage = nil

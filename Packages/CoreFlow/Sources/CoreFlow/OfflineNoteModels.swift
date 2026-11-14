@@ -129,6 +129,10 @@ public struct NoteRemoteSnapshot: Codable, Equatable, Sendable {
 }
 
 public struct OfflineNote: Codable, Equatable, Identifiable, Sendable {
+    static func mostRecentFirst(_ lhs: Self, _ rhs: Self) -> Bool {
+        lhs.updatedAt == rhs.updatedAt ? lhs.localID < rhs.localID : lhs.updatedAt > rhs.updatedAt
+    }
+
     public var id: String { localID }
     public let localID: String
     public internal(set) var serverAssetID: String?

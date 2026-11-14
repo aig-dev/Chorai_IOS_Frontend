@@ -94,14 +94,14 @@ final class LocalCoreCardEditingService: CoreCardEditingServing {
         let note = try await library.save(identifier: nil, createID: createRequestID, body: OfflineNoteBody(draft: draft), scope: scope, observedBodyRevision: observedBodyRevision)
         observedBodyRevision = note.bodyRevision
         identifier = NoteLibraryStore.identifier(note)
-        return snapshot(note)
+        return editorSnapshot(note, savedDraft: draft)
     }
 
     func update(cardID: String, draft: CardEditingDraft) async throws -> CardEditingSnapshot {
         let note = try await library.save(identifier: cardID, createID: creationID, body: OfflineNoteBody(draft: draft), scope: scope, observedBodyRevision: observedBodyRevision)
         observedBodyRevision = note.bodyRevision
         identifier = NoteLibraryStore.identifier(note)
-        return snapshot(note)
+        return editorSnapshot(note, savedDraft: draft)
     }
 
     func openExisting() async throws -> OfflineNote {
@@ -158,9 +158,11 @@ final class LocalCoreCardEditingService: CoreCardEditingServing {
             title: link.title, previewHTML: link.previewHTML, authorName: link.authorName, authorAvatarURL: link.authorAvatarURL)
     }
 
-    private func snapshot(_ note: OfflineNote) -> CardEditingSnapshot {
+    private func editorSnapshot(_ note: OfflineNote, savedDraft: CardEditingDraft) -> CardEditingSnapshot {
+        // The stored JSON binds preview URLs to retained attachments. Acknowledge the
+        // editor JSON that produced it so the next WebKit snapshot can match this save.
         CardEditingSnapshot(id: NoteLibraryStore.identifier(note), title: note.body.title, content: note.body.content,
-            contentJSON: note.body.contentJSON, editorAtmosphere: note.editorAtmosphere, tags: note.body.tags,
+            contentJSON: savedDraft.contentJSON, editorAtmosphere: note.editorAtmosphere, tags: note.body.tags,
             isPublic: note.isPublic, backgroundMediaRef: note.backgroundMediaRef)
     }
 }

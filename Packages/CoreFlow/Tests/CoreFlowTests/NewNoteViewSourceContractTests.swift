@@ -66,7 +66,7 @@ final class NewNoteViewSourceContractTests: XCTestCase {
         XCTAssertTrue(hydration.contains("initialFocus: false"))
     }
 
-    func testLeadingSaveCommitsWithoutDismissAndBackOnlyVerifiesCleanSnapshot() throws {
+    func testLeadingSaveStaysOpenAndBackChecksTheLatestLocalCommit() throws {
         let source = try Self.newNoteSource()
         let leading = try XCTUnwrap(
             Self.functionBody(in: source, signature: "func handleLeadingControl()")
@@ -75,6 +75,7 @@ final class NewNoteViewSourceContractTests: XCTestCase {
         XCTAssertTrue(leading.contains("saveCurrentSnapshot()"))
         XCTAssertTrue(leading.contains("case .back:"))
         XCTAssertTrue(leading.contains("verifyCurrentSnapshotAndDismiss()"))
+        XCTAssertFalse(leading.contains("showCloudVersionConfirmation"))
 
         let save = try XCTUnwrap(
             Self.functionBody(in: source, signature: "func saveCurrentSnapshot()")
@@ -95,9 +96,11 @@ final class NewNoteViewSourceContractTests: XCTestCase {
         XCTAssertTrue(close.contains("completeTagEntry()"))
         XCTAssertTrue(close.contains("applyCurrentSnapshot()"))
         XCTAssertTrue(close.contains("isUntouchedNewSnapshot(snapshot)"))
-        XCTAssertTrue(close.contains("snapshotMatchesCommittedBaseline(snapshot)"))
-        XCTAssertTrue(close.contains("dismiss()"))
-        XCTAssertFalse(close.contains("editingStore.save()"))
+        XCTAssertTrue(Self.containsInOrder([
+            "await persistLocalDraft()",
+            "snapshotMatchesCommittedBaseline(snapshot)",
+            "dismiss()",
+        ], in: String(close)))
     }
 
     func testLeadingStateUsesMeaningfulDraftAndPendingInlineTag() throws {

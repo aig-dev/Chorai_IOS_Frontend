@@ -64,6 +64,12 @@ final class NoteSyncHTTPTests: XCTestCase {
         XCTAssertEqual(NoteSyncHTTP.failure(status: 500, body: Data(), retryAfter: "NaN", now: now), .transient(retryAfter: nil))
     }
 
+    func testServiceNotReadyPreservesItsAdvertisedRetryDelay() {
+        let body = Data(#"{"error":{"reason":"sync_not_ready"}}"#.utf8)
+        XCTAssertEqual(NoteSyncHTTP.failure(status: 503, body: body, retryAfter: "60"), .transient(retryAfter: 60))
+        XCTAssertEqual(NoteSyncHTTP.failure(status: 503, body: body, retryAfter: "invalid"), .notReady)
+    }
+
     func testMissingTokenAndServerErrorCannotBecomeValidSnapshots() {
         for json in [#"{"success":true,"data":{"id":"note","owner_actor_id":"actor","content":"body","tags":[],"is_public":false}}"#, #"{"success":false,"data":null}"#] {
             XCTAssertThrowsError(try NoteSyncHTTP.snapshot(from: Data(json.utf8), actorID: "actor"))

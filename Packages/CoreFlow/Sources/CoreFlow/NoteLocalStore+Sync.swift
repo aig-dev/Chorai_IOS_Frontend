@@ -91,7 +91,15 @@ extension NoteLocalStore {
             // Transport/access warnings do not make an otherwise clean
             // working copy dirty. An authorized read may clear them.
             if note.hasUnacknowledgedBody || note.desiredLifecycle != note.confirmedLifecycle || note.remoteSnapshot != nil {
-                guard note.baseSyncToken != snapshot.syncToken else { return note }
+                if note.baseSyncToken == snapshot.syncToken {
+                    if note.remoteSnapshot == nil && note.syncIssue == "remote_unavailable" {
+                        // The owner-only read confirmed that this local edit still has the same base.
+                        note.syncIssue = nil
+                        note.generation += 1
+                        try Self.write(note, scope: scope, in: context)
+                    }
+                    return note
+                }
                 note.remoteSnapshot = snapshot
                 note.syncIssue = "conflict"
                 note.generation += 1

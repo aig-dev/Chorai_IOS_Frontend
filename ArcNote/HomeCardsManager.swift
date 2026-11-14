@@ -22,24 +22,32 @@ class HomeCardsManager: ObservableObject {
     private var currentSortOrder: String? = "desc" // 默认排序顺序
     
     private var isOwnedLibrary = false
+    private var localSortDates: [String: Date] = [:]
+    private let localDateFormatter = ISO8601DateFormatter()
 
     nonisolated init() {
         Task { @MainActor [weak self] in
-        guard let self else { return }
-        LocalNotesController.shared.library.$notes
-            .sink { [weak self] notes in
-                guard let self, self.isOwnedLibrary else { return }
-                self.presentLocalNotes(notes)
+            guard let self else { return }
+            let library = LocalNotesController.shared.library
+            library.changes.sink { [weak self, weak library] change in
+                guard let self, self.isOwnedLibrary, let library else { return }
+                switch change {
+                case .reset: self.presentLocalNotes(library.notes)
+                case let .updated(notes, removed): self.updateLocalCards(notes, removed: removed)
+                }
             }.store(in: &cancellables)
+            if self.isOwnedLibrary { self.presentLocalNotes(library.notes) }
         }
     }
 
     func loadUserCards(refresh: Bool = false, sortBy: String? = nil, sortOrder: String? = nil) {
+        let rebuild = !isOwnedLibrary || (sortBy != nil && sortBy != currentSortBy)
+            || (sortOrder != nil && sortOrder != currentSortOrder)
         isOwnedLibrary = true
         if let sortBy { currentSortBy = sortBy }
         if let sortOrder { currentSortOrder = sortOrder }
         hasMoreData = false
-        presentLocalNotes(LocalNotesController.shared.library.notes)
+        if rebuild { presentLocalNotes(LocalNotesController.shared.library.notes) }
         LocalNotesController.shared.refreshAccess()
         Task {
             isLoading = true
@@ -49,29 +57,54 @@ class HomeCardsManager: ObservableObject {
     }
 
     private func presentLocalNotes(_ notes: [OfflineNote]) {
-        let formatter = ISO8601DateFormatter()
-        let sorted = notes.filter { $0.desiredLifecycle == .active }.sorted { lhs, rhs in
-            if (lhs.isPinned ?? false) != (rhs.isPinned ?? false) { return lhs.isPinned ?? false }
-            let a = currentSortBy == "created_at" ? lhs.createdAt : lhs.updatedAt
-            let b = currentSortBy == "created_at" ? rhs.createdAt : rhs.updatedAt
-            return currentSortOrder == "asc" ? a < b : a > b
+        localSortDates.removeAll(keepingCapacity: true)
+        cards = notes.filter { $0.desiredLifecycle == .active }.map(localCard).sorted(by: precedes)
+    }
+
+    private func updateLocalCards(_ changed: [OfflineNote], removed: Set<String>) {
+        var result = cards
+        if !removed.isEmpty {
+            let ids = Set(removed.map { "local-note:" + $0 })
+            result.removeAll { ids.contains($0.id) }
+            for id in ids { localSortDates[id] = nil }
         }
-        cards = sorted.map { note in
-            UserCard(id: NoteLibraryStore.identifier(note), title: note.body.title, content: note.body.content,
-                contentJSON: note.body.contentJSON, backgroundMediaRef: note.backgroundMediaRef, contentHash: "",
-                isPublic: note.isPublic, tags: note.body.tags, createdAt: formatter.string(from: note.createdAt),
-                updatedAt: formatter.string(from: note.updatedAt), likeCount: 0, commentCount: nil, isLiked: false,
-                isPinned: note.isPinned ?? false, pinnedAt: nil, isFavorited: nil, favoriteCount: nil, rate: 0,
-                ownerActorId: authManager.currentUser?.id, isOwner: true)
+        for note in changed {
+            let id = NoteLibraryStore.identifier(note)
+            if let old = result.firstIndex(where: { $0.id == id }) { result.remove(at: old) }
+            guard note.desiredLifecycle == .active else { localSortDates[id] = nil; continue }
+            let card = localCard(note)
+            let index = result.firstIndex { precedes(card, $0) } ?? result.endIndex
+            result.insert(card, at: index)
         }
+        cards = result
+    }
+
+    private func localCard(_ note: OfflineNote) -> UserCard {
+        let id = NoteLibraryStore.identifier(note)
+        localSortDates[id] = currentSortBy == "created_at" ? note.createdAt : note.updatedAt
+        return UserCard(id: id, title: note.body.title, content: note.body.content,
+            contentJSON: note.body.contentJSON, backgroundMediaRef: note.backgroundMediaRef, contentHash: "",
+            isPublic: note.isPublic, tags: note.body.tags, createdAt: localDateFormatter.string(from: note.createdAt),
+            updatedAt: localDateFormatter.string(from: note.updatedAt), likeCount: 0, commentCount: nil, isLiked: false,
+            isPinned: note.isPinned ?? false, pinnedAt: nil, isFavorited: nil, favoriteCount: nil, rate: 0,
+            ownerActorId: authManager.currentUser?.id, isOwner: true)
+    }
+
+    private func precedes(_ lhs: UserCard, _ rhs: UserCard) -> Bool {
+        if lhs.isPinned != rhs.isPinned { return lhs.isPinned }
+        let a = localSortDates[lhs.id] ?? .distantPast
+        let b = localSortDates[rhs.id] ?? .distantPast
+        if a == b { return lhs.id < rhs.id }
+        return currentSortOrder == "asc" ? a < b : a > b
     }
 
     func promoteCommittedCard(id: String) {
+        if !isOwnedLibrary { presentLocalNotes(LocalNotesController.shared.library.notes) }
         isOwnedLibrary = true
         Task {
             do {
-                _ = try await LocalNotesController.shared.library.open(identifier: id)
-                presentLocalNotes(LocalNotesController.shared.library.notes)
+                let note = try await LocalNotesController.shared.library.open(identifier: id)
+                if isOwnedLibrary { updateLocalCards([note], removed: []) }
             } catch {
                 // A failed cloud read never removes an already saved local note.
                 self.error = .networkError(error)
@@ -81,6 +114,7 @@ class HomeCardsManager: ObservableObject {
 
     func loadPublicProfileCards(actorId: String, refresh: Bool = false) {
         isOwnedLibrary = false
+        localSortDates.removeAll()
         guard authManager.currentUser != nil else {
             error = .unauthorized
             return
@@ -99,14 +133,15 @@ class HomeCardsManager: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { [weak self] completion in
-                    self?.isLoading = false
+                    guard let self, !self.isOwnedLibrary else { return }
+                    self.isLoading = false
                     if case .failure(let error) = completion {
-                        self?.error = error
+                        self.error = error
                         print("获取公开用户卡片失败: \(error)")
                     }
                 },
                 receiveValue: { [weak self] response in
-                    guard let self = self else { return }
+                    guard let self, !self.isOwnedLibrary else { return }
 
                     if refresh {
                         self.cards = response.data

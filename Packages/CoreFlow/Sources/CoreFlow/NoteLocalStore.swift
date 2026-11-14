@@ -62,6 +62,17 @@ public actor NoteLocalStore {
         }
     }
 
+    /// Both the first body save and the first photo may arrive before the editor has a persisted ID.
+    func saveEditorBody(localID: String, body: OfflineNoteBody, creatingIfMissing: Bool,
+                        observedBodyRevision: Int64?) async throws -> OfflineNote {
+        try await mutate(localID: localID, creatingWith: creatingIfMissing ? body : nil) { note in
+            let retained = try NoteSyncPayload.retainingPreviewIdentities(
+                body: body, attachments: note.attachments, assetID: note.serverAssetID
+            )
+            try Self.replaceBody(&note, with: retained, attachments: nil, observedBodyRevision: observedBodyRevision)
+        }
+    }
+
     public func saveBody(localID: String, body: OfflineNoteBody, attachments: [NoteLocalAttachment]? = nil, observedBodyRevision: Int64? = nil) async throws -> OfflineNote {
         if let attachments {
             guard Set(attachments.map(\.uploadID)).count == attachments.count else { throw NoteLocalStoreError.invalidAttachment }
@@ -69,27 +80,31 @@ public actor NoteLocalStore {
             for attachment in attachments { _ = try files.read(attachment) }
         }
         return try await mutate(localID: localID) { note in
-            guard note.body != body || (attachments != nil && attachments != note.attachments) else { return }
-            if let observedBodyRevision, observedBodyRevision != note.bodyRevision {
-                // The editor can buffer input briefly while a pull commits.
-                // Preserve both versions; never attach that older editor's
-                // content to the newly fetched token as an ordinary update.
-                guard !note.hasUnacknowledgedBody, note.pendingOperation == nil,
-                      let assetID = note.serverAssetID, let token = note.baseSyncToken,
-                      let lifecycle = note.confirmedLifecycle else { throw NoteLocalStoreError.staleGeneration }
-                note.remoteSnapshot = NoteRemoteSnapshot(assetID: assetID, syncToken: token, body: note.body,
-                    lifecycle: lifecycle, isPublic: note.isPublic, editorAtmosphere: note.editorAtmosphere,
-                    backgroundMediaRef: note.backgroundMediaRef, isPinned: note.isPinned,
-                    createdAt: note.createdAt, updatedAt: note.updatedAt)
-                note.syncIssue = "conflict"
-            }
-            note.body = body
-            if let attachments { note.attachments = attachments }
-            note.bodyRevision += 1
-            note.generation += 1
-            note.updatedAt = Date()
-            // A content edit can repair an unsupported payload, but cannot resolve a remote conflict.
-            if note.remoteSnapshot == nil { note.syncIssue = nil }
+            try Self.replaceBody(&note, with: body, attachments: attachments, observedBodyRevision: observedBodyRevision)
+        }
+    }
+
+    private static func replaceBody(_ note: inout OfflineNote, with body: OfflineNoteBody,
+                                    attachments: [NoteLocalAttachment]?, observedBodyRevision: Int64?) throws {
+        guard note.body != body || (attachments != nil && attachments != note.attachments) else { return }
+        if let observedBodyRevision, observedBodyRevision != note.bodyRevision {
+            // A pull may have committed while the editor was buffering input.
+            guard !note.hasUnacknowledgedBody, note.pendingOperation == nil,
+                  let assetID = note.serverAssetID, let token = note.baseSyncToken,
+                  let lifecycle = note.confirmedLifecycle else { throw NoteLocalStoreError.staleGeneration }
+            note.remoteSnapshot = NoteRemoteSnapshot(assetID: assetID, syncToken: token, body: note.body,
+                lifecycle: lifecycle, isPublic: note.isPublic, editorAtmosphere: note.editorAtmosphere,
+                backgroundMediaRef: note.backgroundMediaRef, isPinned: note.isPinned,
+                createdAt: note.createdAt, updatedAt: note.updatedAt)
+            note.syncIssue = "conflict"
+        }
+        note.body = body
+        if let attachments { note.attachments = attachments }
+        note.bodyRevision += 1
+        note.generation += 1
+        note.updatedAt = Date()
+        if note.remoteSnapshot == nil && note.syncIssue != "remote_unavailable" && note.syncIssue != "conflict" {
+            note.syncIssue = nil
         }
     }
 
@@ -121,7 +136,7 @@ public actor NoteLocalStore {
         return try await transaction { context in
             let request = NSFetchRequest<NSManagedObject>(entityName: "LocalNote")
             return try context.fetch(request).map { try Self.decode($0, scope: scope) }
-                .sorted { $0.updatedAt == $1.updatedAt ? $0.localID < $1.localID : $0.updatedAt > $1.updatedAt }
+                .sorted(by: OfflineNote.mostRecentFirst)
         }
     }
 
@@ -154,13 +169,25 @@ public actor NoteLocalStore {
         }
     }
 
-    func mutate(localID: String, _ change: @escaping (inout OfflineNote) throws -> Void) async throws -> OfflineNote {
+    func mutate(localID: String, creatingWith initialBody: OfflineNoteBody? = nil,
+                _ change: @escaping (inout OfflineNote) throws -> Void) async throws -> OfflineNote {
         let scope = scope
         return try await transaction { context in
-            guard let row = try Self.row(localID: localID, in: context) else { throw NoteLocalStoreError.noteNotFound }
-            var note = try Self.decode(row, scope: scope)
+            let row = try Self.row(localID: localID, in: context)
+            var note: OfflineNote
+            if let row {
+                note = try Self.decode(row, scope: scope)
+            } else if let initialBody {
+                guard !localID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw NoteLocalStoreError.invalidIdentity }
+                note = OfflineNote(localID: localID, body: initialBody)
+            } else {
+                throw NoteLocalStoreError.noteNotFound
+            }
+            let original = note
             try change(&note)
-            try Self.write(note, scope: scope, in: context)
+            if row == nil || original != note {
+                try Self.write(note, scope: scope, in: context)
+            }
             return note
         }
     }

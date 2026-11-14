@@ -72,7 +72,10 @@ public enum NoteSyncHTTP {
         }
         if status == 404 || status == 410 { return .notFound }
         if status == 428 { return .preconditionRequired }
-        if status == 503 && reason == "sync_not_ready" { return .notReady }
+        if status == 503 && reason == "sync_not_ready" {
+            if let delay = retryDelay(retryAfter, now: now) { return .transient(retryAfter: delay) }
+            return .notReady
+        }
         if status == 400 || status == 409 || status == 422 {
             switch reason {
             case "stale_version", "note_authority_changed": return .staleVersion

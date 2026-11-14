@@ -4,15 +4,18 @@ public struct LibraryCardPreviewContent: Equatable, Sendable {
     public let text: String
     public let imageSource: String?
     public let imageAlternativeText: String?
+    public let imageMediaRef: String?
 
     public init(
         text: String,
         imageSource: String?,
-        imageAlternativeText: String?
+        imageAlternativeText: String?,
+        imageMediaRef: String? = nil
     ) {
         self.text = text
         self.imageSource = imageSource
         self.imageAlternativeText = imageAlternativeText
+        self.imageMediaRef = imageMediaRef
     }
 }
 
@@ -47,11 +50,12 @@ public enum LibraryCardPreviewParser {
 
     public static func parse(
         content: String,
-        contentJSON: String? = nil
+        contentJSON: String? = nil,
+        allowsLocalImages: Bool = false
     ) -> LibraryCardPreviewContent {
         if let blocks = structuredBlocks(from: contentJSON), !blocks.isEmpty {
             let flattened = flatten(blocks)
-            let image = firstStructuredImage(in: flattened)
+            let image = firstStructuredImage(in: flattened, allowsLocalImages: allowsLocalImages)
             let text = normalizedPlainText(
                 flattened.compactMap(structuredText).joined(separator: "\n")
             )
@@ -60,7 +64,8 @@ public enum LibraryCardPreviewParser {
                 return LibraryCardPreviewContent(
                     text: text,
                     imageSource: image?.source,
-                    imageAlternativeText: image?.alternativeText
+                    imageAlternativeText: image?.alternativeText,
+                    imageMediaRef: image?.mediaRef
                 )
             }
         }
@@ -70,8 +75,9 @@ public enum LibraryCardPreviewParser {
 
     private struct ImageCandidate {
         let location: Int
-        let source: String
+        let source: String?
         let alternativeText: String?
+        var mediaRef: String? = nil
     }
 
     private static func structuredBlocks(from value: String?) -> [[String: Any]]? {
@@ -124,7 +130,8 @@ public enum LibraryCardPreviewParser {
     }
 
     private static func firstStructuredImage(
-        in blocks: [[String: Any]]
+        in blocks: [[String: Any]],
+        allowsLocalImages: Bool
     ) -> ImageCandidate? {
         for (index, block) in blocks.enumerated() {
             guard (block["type"] as? String)?.lowercased() == "image",
@@ -134,7 +141,16 @@ public enum LibraryCardPreviewParser {
 
             let sources = [props["url"], props["src"]]
                 .compactMap { $0 as? String }
-            guard let source = sources.first(where: isAllowedImageSource) else {
+            let source = sources.first { value in
+                if isAllowedImageSource(value) { return true }
+                guard allowsLocalImages, let url = URL(string: value),
+                      url.scheme == NoteAttachmentFiles.previewScheme else { return false }
+                return (try? NoteAttachmentFiles.previewUploadID(url)) != nil
+            }
+            let mediaRef = allowsLocalImages
+                ? (props["mediaRef"] as? String ?? props["media_ref"] as? String)?.trimmedNonEmpty
+                : nil
+            guard source != nil || mediaRef != nil else {
                 continue
             }
 
@@ -146,8 +162,9 @@ public enum LibraryCardPreviewParser {
 
             return ImageCandidate(
                 location: index,
-                source: source.trimmingCharacters(in: .whitespacesAndNewlines),
-                alternativeText: alternativeText
+                source: source?.trimmingCharacters(in: .whitespacesAndNewlines),
+                alternativeText: alternativeText,
+                mediaRef: mediaRef
             )
         }
         return nil

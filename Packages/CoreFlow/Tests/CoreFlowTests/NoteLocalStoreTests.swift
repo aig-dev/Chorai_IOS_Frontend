@@ -167,6 +167,22 @@ final class NoteLocalStoreTests: XCTestCase {
         try await store.close()
     }
 
+    func testAuthorizedRemoteReadUnblocksEditedUnavailableNoteWithUnchangedBaseline() async throws {
+        let store = try await open()
+        let original = try await syncedNote(in: store)
+        try await store.recordSyncIssue(localID: original.localID, issue: "remote_unavailable")
+        let edited = try await store.saveBody(localID: original.localID, body: body("offline draft"))
+        let cleared = try unwrap(try await store.applyRemote(
+            remote("server body", token: "token-1"), localID: original.localID, expectedGeneration: edited.generation
+        ))
+        XCTAssertNil(cleared.syncIssue)
+        XCTAssertNil(cleared.remoteSnapshot)
+        XCTAssertEqual(cleared.body, edited.body)
+        XCTAssertEqual(cleared.baseSyncToken, original.baseSyncToken)
+        XCTAssertTrue(cleared.hasUnacknowledgedBody)
+        try await store.close()
+    }
+
     // Break caught: accepting a receipt for another request or leaving a failed mutation in the context.
     func testWrongReceiptAndSecondFreezeDoNotMutatePendingOperation() async throws {
         let store = try await open()

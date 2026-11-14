@@ -3,6 +3,26 @@ import Foundation
 /// One coordinator belongs to one immutable actor/environment store. Durable
 /// operations are the queue; Tasks and timers only provide execution chances.
 public actor NoteSyncCoordinator {
+    private struct Edit {
+        let first: Date
+        let last: Date
+        var deadline: Date { min(last.addingTimeInterval(2), first.addingTimeInterval(30)) }
+    }
+
+    private struct SessionRetry {
+        let attempt: Int
+        let deadline: Date
+        let status: NoteSyncStatus
+        let failure: NoteSyncFailure?
+
+        func allowsEarlyRetry(forceRetry: Bool) -> Bool {
+            // A malformed page can be repaired and checked again on request.
+            if failure == .invalidResponse { return true }
+            if case .transient(.some) = failure { return false }
+            return forceRetry
+        }
+    }
+
     public nonisolated let scope: NoteStoreScope
     public private(set) var status: NoteSyncStatus = .paused
     private let store: NoteLocalStore
@@ -16,8 +36,9 @@ public actor NoteSyncCoordinator {
     private var epoch: UInt64 = 0
     private var work: Task<Void, Never>?
     private var wakeup: Task<Void, Never>?
-    private var edits: [String: (first: Date, last: Date)] = [:]
-    private var retryDeadline: Date?
+    private var edits: [String: Edit] = [:]
+    private var deliveryRetryAt: Date?
+    private var sessionRetry: SessionRetry?
     private var protocolVersion = 0
     private var textOnly: Bool { protocolVersion == 2 }
 
@@ -34,7 +55,9 @@ public actor NoteSyncCoordinator {
     /// The app calls this only after confirming this account's cloud eligibility.
     public func resume() {
         epoch &+= 1; work?.cancel(); work = nil; wakeup?.cancel(); wakeup = nil
-        enabled = true; status = .idle
+        enabled = true
+        status = sessionRetry?.status ?? .idle
+        scheduleWakeup()
     }
 
     public func suspend() {
@@ -44,14 +67,18 @@ public actor NoteSyncCoordinator {
 
     public func localDidChange(localID: String) {
         let instant = now()
-        edits[localID] = (edits[localID]?.first ?? instant, instant)
+        edits[localID] = Edit(first: edits[localID]?.first ?? instant, last: instant)
         scheduleWakeup()
     }
 
     public func synchronize(forceRetry: Bool = false) async {
         guard enabled else { return }
         if let work { await work.value; return }
+        if let retry = sessionRetry, now() < retry.deadline, !retry.allowsEarlyRetry(forceRetry: forceRetry) {
+            return
+        }
         let session = epoch
+        wakeup?.cancel(); wakeup = nil
         let task = Task { await self.run(session: session, forceRetry: forceRetry) }
         work = task
         await task.value
@@ -64,6 +91,13 @@ public actor NoteSyncCoordinator {
 
     private func run(session: UInt64, forceRetry: Bool) async {
         guard valid(session) else { return }
+        let previousAttempt = sessionRetry?.attempt ?? 0
+        sessionRetry = nil
+        deliveryRetryAt = nil
+        // Consume elapsed wakeups before the store snapshot. Edits committed
+        // during the network requests can schedule another pass.
+        let instant = now()
+        edits = edits.filter { $0.value.deadline > instant }
         status = .synchronizing
         do {
             // Capture generations before starting the manifest request. Missing
@@ -83,7 +117,7 @@ public actor NoteSyncCoordinator {
             guard valid(session) else { return }
             let manifest = try await service.manifest()
             guard valid(session) else { return }
-            guard manifest.isReady else { status = .notReady; await didChange(); return }
+            guard manifest.isReady else { throw NoteSyncFailure.notReady }
             protocolVersion = manifest.protocolVersion
             let entries = Dictionary(uniqueKeysWithValues: manifest.notes.map { ($0.assetID, $0) })
             for note in initial {
@@ -96,7 +130,7 @@ public actor NoteSyncCoordinator {
                     (note.syncIssue == "permission_denied" && note.serverAssetID.flatMap { entries[$0] } != nil) {
                     try await store.recordSyncIssue(localID: note.localID, issue: nil)
                 }
-                await deliver(localID: note.localID, session: session, forceRetry: forceRetry)
+                try await deliver(localID: note.localID, session: session, forceRetry: forceRetry)
             }
             guard valid(session) else { return }
             for note in initial {
@@ -117,24 +151,18 @@ public actor NoteSyncCoordinator {
                 let rejected = latest.syncIssue == "conflict"
                 guard rejected || latest.generation == note.generation else { continue }
                 if (latest.baseSyncToken != entry.syncToken && latest.remoteSnapshot?.syncToken != entry.syncToken) || latest.syncIssue == "remote_unavailable" || (rejected && latest.remoteSnapshot == nil) {
-                    await pull(assetID: assetID, localID: note.localID, generation: latest.generation, session: session)
+                    try await pull(assetID: assetID, localID: note.localID, generation: latest.generation, session: session)
                 }
             }
             let known = Set(initial.compactMap(\.serverAssetID))
             let missing = manifest.notes.filter { !known.contains($0.assetID) }.map(\.assetID)
             try await pullMissing(missing, supportsPages: supportsPages, session: session)
             guard valid(session) else { return }
-            let retained = try await store.notes()
-            retryDeadline = retained.filter { $0.syncIssue == nil }.flatMap { note in
-                let used = (try? NoteSyncPayload.referencedAttachments(body: note.body, attachments: note.attachments)) ?? []
-                return [note.pendingOperation?.nextAttemptAt].compactMap { $0 } + used.filter { $0.mediaRef == nil }.compactMap(\.nextUploadAttemptAt)
-            }.min()
-            guard valid(session) else { return }
             if status == .synchronizing { status = .idle }
             await didChange()
         } catch {
             guard valid(session) else { return }
-            classifySessionFailure(error)
+            classifySessionFailure(error, attempt: previousAttempt + 1)
             await didChange()
         }
     }
@@ -142,6 +170,7 @@ public actor NoteSyncCoordinator {
     private func pullMissing(_ missing: [String], supportsPages: Bool, session: UInt64) async throws {
         var usePages = supportsPages
         var failedPages = 0
+        var missedPage = false
         for start in stride(from: 0, to: missing.count, by: Self.pageSize) {
             guard valid(session) else { return }
             let ids = Array(missing[start..<min(start + Self.pageSize, missing.count)])
@@ -157,7 +186,7 @@ public actor NoteSyncCoordinator {
                     // A single unavailable page need not hide the rest. Stop promptly on loss of connectivity or a server backoff.
                     failedPages += 1
                     if failedPages > 1 || retryAfter != nil { throw NoteSyncFailure.transient(retryAfter: retryAfter) }
-                    status = .waitingForNetwork
+                    missedPage = true
                     continue
                 }
                 // A previous server can still fill this library through its owner-only detail route.
@@ -165,10 +194,11 @@ public actor NoteSyncCoordinator {
             }
             for id in ids {
                 guard valid(session) else { return }
-                await pull(assetID: id, localID: nil, generation: nil, session: session)
+                try await pull(assetID: id, localID: nil, generation: nil, session: session)
             }
             if valid(session) { await didChange() }
         }
+        if missedPage { throw NoteSyncFailure.transient(retryAfter: nil) }
     }
 
     private func insertPage(_ snapshots: [NoteRemoteSnapshot], requestedIDs: [String]?, session: UInt64) async throws {
@@ -193,7 +223,7 @@ public actor NoteSyncCoordinator {
         }
     }
 
-    private func deliver(localID: String, session: UInt64, forceRetry: Bool) async {
+    private func deliver(localID: String, session: UInt64, forceRetry: Bool) async throws {
         // Bounded work even when typing continues throughout every HTTP request.
         for _ in 0..<3 {
             guard valid(session) else { return }
@@ -219,7 +249,10 @@ public actor NoteSyncCoordinator {
                             return
                         }
                     }
-                    if !forceRetry, let next = existing.nextAttemptAt, next > now() { return }
+                    if !forceRetry, let next = existing.nextAttemptAt, next > now() {
+                        scheduleDeliveryRetry(at: next)
+                        return
+                    }
                     pending = existing
                 } else {
                     if textOnly {
@@ -229,8 +262,8 @@ public actor NoteSyncCoordinator {
                         try NoteSyncPayload.requireSupportedDocument(note.body, includeImages: true)
                     }
                     guard note.desiredLifecycle == .active || note.serverAssetID != nil else { edits[localID] = nil; return }
-                    if !forceRetry, note.desiredLifecycle == .active, note.confirmedLifecycle != .trashed, let edit = edits[localID],
-                       min(edit.last.addingTimeInterval(2), edit.first.addingTimeInterval(30)) > now() { return }
+                    if !forceRetry, note.desiredLifecycle == .active, note.confirmedLifecycle != .trashed,
+                       let edit = edits[localID], edit.deadline > now() { return }
                     if note.desiredLifecycle == .active && note.confirmedLifecycle != .trashed {
                         guard try await uploadMissingAttachments(note, session: session, forceRetry: forceRetry) else { edits[localID] = nil; return }
                         guard valid(session), let refreshed = try await store.note(localID: localID) else { return }
@@ -261,7 +294,7 @@ public actor NoteSyncCoordinator {
                 continue // Input changed while preparing, before any HTTP write.
             } catch {
                 guard valid(session) else { return }
-                await recordFailure(error, localID: localID, pending: pending, session: session, bodyRevision: pending?.bodyRevision ?? attemptedBodyRevision)
+                try await recordFailure(error, localID: localID, pending: pending, session: session, bodyRevision: pending?.bodyRevision ?? attemptedBodyRevision)
                 return
             }
         }
@@ -276,7 +309,10 @@ public actor NoteSyncCoordinator {
                   current.bodyRevision == note.bodyRevision, current.desiredLifecycle == note.desiredLifecycle else {
                 throw NoteLocalStoreError.staleGeneration
             }
-            if !forceRetry, let next = attachment.nextUploadAttemptAt, next > now() { return false }
+            if !forceRetry, let next = attachment.nextUploadAttemptAt, next > now() {
+                scheduleDeliveryRetry(at: next)
+                return false
+            }
             let data: Data
             do { data = try files.read(attachment) } catch { throw NoteLocalStoreError.invalidAttachment }
             let receipt: NoteSyncUploadReceipt
@@ -285,8 +321,9 @@ public actor NoteSyncCoordinator {
                 guard valid(session) else { throw CancellationError() }
                 let failure = error as? NoteSyncFailure ?? .transient(retryAfter: nil)
                 if case .transient(let retryAfter) = failure {
-                    try await store.recordUploadRetry(localID: note.localID, uploadID: attachment.uploadID,
-                        nextAttemptAt: retryDate(attempt: (attachment.uploadAttemptCount ?? 0) + 1, retryAfter: retryAfter))
+                    let next = retryDate(attempt: (attachment.uploadAttemptCount ?? 0) + 1, retryAfter: retryAfter)
+                    try await store.recordUploadRetry(localID: note.localID, uploadID: attachment.uploadID, nextAttemptAt: next)
+                    scheduleDeliveryRetry(at: next)
                 }
                 throw failure
             }
@@ -308,7 +345,8 @@ public actor NoteSyncCoordinator {
         }
     }
 
-    private func recordFailure(_ error: Error, localID: String, pending: NotePendingOperation?, session: UInt64, bodyRevision: Int64? = nil) async {
+    private func recordFailure(_ error: Error, localID: String, pending: NotePendingOperation?, session: UInt64, bodyRevision: Int64? = nil) async throws {
+        var rejectedVersion: (assetID: String, generation: Int64)?
         do {
             if error is NoteLocalStoreError {
                 status = .localFailure
@@ -316,11 +354,10 @@ public actor NoteSyncCoordinator {
                 return
             }
             let failure = error as? NoteSyncFailure ?? .transient(retryAfter: nil)
-            if case .transient = failure { } else { edits[localID] = nil }
+            edits[localID] = nil
             switch failure {
             case .transient(let retryAfter):
                 if let pending { try await deferOperation(localID: localID, pending: pending, retryAfter: retryAfter) }
-                else { edits[localID] = nil }
                 status = .waitingForNetwork
             case .authenticationRequired:
                 try await store.recordSyncIssue(localID: localID, issue: "needs_login")
@@ -337,7 +374,7 @@ public actor NoteSyncCoordinator {
             case .staleVersion:
                 try await store.recordSyncIssue(localID: localID, issue: "conflict", rejectedOperationID: pending?.operationID)
                 if let asset = pending?.serverAssetID, let note = try await store.note(localID: localID), valid(session) {
-                    await pull(assetID: asset, localID: localID, generation: note.generation, session: session)
+                    rejectedVersion = (asset, note.generation)
                 }
             case .unsupportedDocument, .validation:
                 try await store.recordSyncIssue(localID: localID, issue: failure == .unsupportedDocument ? "unsupported_document" : "validation", rejectedOperationID: pending?.operationID, issueBodyRevision: bodyRevision)
@@ -349,24 +386,35 @@ public actor NoteSyncCoordinator {
                 catch {
                     guard valid(session) else { return }
                     let failure = error as? NoteSyncFailure
-                    await recordFailure(failure == .mediaExpired ? NoteSyncFailure.validation : error, localID: localID, pending: pending, session: session)
-                    return
+                    return try await recordFailure(failure == .mediaExpired ? NoteSyncFailure.validation : error, localID: localID, pending: pending, session: session)
                 }
                 guard valid(session) else { return }
                 try await deferOperation(localID: localID, pending: pending, retryAfter: nil)
             }
-            await didChange()
         } catch {
             guard valid(session) else { return }
             if let pending {
                 do { try await deferOperation(localID: localID, pending: pending, retryAfter: nil) }
                 catch { status = .localFailure }
             } else { status = .localFailure }
+            return
         }
+        // The rejected write is closed. A failure to fetch its remote version is
+        // now a read failure for this session.
+        if let rejectedVersion, valid(session) {
+            try await pull(assetID: rejectedVersion.assetID, localID: localID, generation: rejectedVersion.generation, session: session)
+        }
+        await didChange()
     }
 
     private func deferOperation(localID: String, pending: NotePendingOperation, retryAfter: TimeInterval?) async throws {
-        try await store.recordRetry(localID: localID, operationID: pending.operationID, nextAttemptAt: retryDate(attempt: pending.attemptCount + 1, retryAfter: retryAfter))
+        let next = retryDate(attempt: pending.attemptCount + 1, retryAfter: retryAfter)
+        try await store.recordRetry(localID: localID, operationID: pending.operationID, nextAttemptAt: next)
+        scheduleDeliveryRetry(at: next)
+    }
+
+    private func scheduleDeliveryRetry(at deadline: Date) {
+        deliveryRetryAt = min(deliveryRetryAt ?? deadline, deadline)
     }
 
     private func retryDate(attempt: Int, retryAfter: TimeInterval?) -> Date {
@@ -376,7 +424,7 @@ public actor NoteSyncCoordinator {
         return now().addingTimeInterval(delay)
     }
 
-    private func pull(assetID: String, localID: String?, generation: Int64?, session: UInt64) async {
+    private func pull(assetID: String, localID: String?, generation: Int64?, session: UInt64) async throws {
         do {
             let snapshot = try await service.detail(assetID: assetID)
             guard valid(session) else { return }
@@ -390,32 +438,43 @@ public actor NoteSyncCoordinator {
                     catch NoteLocalStoreError.staleGeneration { }
                     catch { status = .localFailure }
                 }
-            } else { classifySessionFailure(error) }
+            } else { throw error }
         }
     }
 
-    private func classifySessionFailure(_ error: Error) {
-        switch error as? NoteSyncFailure {
-        case .authenticationRequired: enabled = false; status = .needsLogin
-        case .accountRestricted, .permissionDenied: enabled = false; status = .accessRevoked
+    private func classifySessionFailure(_ error: Error, attempt: Int) {
+        var retryAfter: TimeInterval?
+        let failure = error as? NoteSyncFailure
+        switch failure {
+        case .authenticationRequired: enabled = false; status = .needsLogin; return
+        case .accountRestricted, .permissionDenied: enabled = false; status = .accessRevoked; return
         case .notReady, .preconditionRequired, .notFound, .invalidResponse: status = .notReady
+        case .transient(let advertisedDelay): retryAfter = advertisedDelay; status = .waitingForNetwork
         default: status = error is NoteLocalStoreError ? .localFailure : .waitingForNetwork
         }
+        sessionRetry = SessionRetry(attempt: attempt, deadline: retryDate(attempt: attempt, retryAfter: retryAfter),
+                                    status: status, failure: failure)
     }
 
     private func scheduleWakeup() {
         wakeup?.cancel(); wakeup = nil
-        guard enabled else { return }
+        guard enabled, work == nil else { return }
         let session = epoch
-        // Always finite. Foreground execution owns these chances; suspension
-        // cancels the timer and the next resume rechecks server readiness.
         let instant = now()
-        let editDeadline = edits.values.map { min($0.last.addingTimeInterval(2), $0.first.addingTimeInterval(30)) }.min()
-        let deadline = [editDeadline, retryDeadline].compactMap { $0 }.min()
-        let delay = max(0.05, min(30, deadline?.timeIntervalSince(instant) ?? 30))
+        let editDeadline = edits.values.map(\.deadline).min()
+        let nextWork = [editDeadline, deliveryRetryAt].compactMap { $0 }.min()
+        let poll = instant.addingTimeInterval(30)
+        let deadline = sessionRetry?.deadline ?? min(poll, nextWork ?? poll)
+        // Very large but valid Retry-After values exceed Task.sleep's nanosecond range.
+        // Recheck the deadline after a day without starting network work early.
+        let delay = max(0.05, min(86_400, deadline.timeIntervalSince(instant)))
         wakeup = Task {
             do { try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000)) } catch { return }
             guard self.valid(session) else { return }
+            if let retry = self.sessionRetry, self.now() < retry.deadline {
+                self.scheduleWakeup()
+                return
+            }
             await self.synchronize()
         }
     }

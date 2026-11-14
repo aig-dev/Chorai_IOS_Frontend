@@ -42,6 +42,111 @@ final class NoteLibraryStoreTests: XCTestCase {
         await library.configure(scope: nil, cloudEnabled: false)
     }
 
+    func testFirstAutosaveAndPhotoShareOneDurableOfflineDraft() async throws {
+        let library = library()
+        await library.configure(scope: a, cloudEnabled: false)
+        let image = CardEditingImage(data: Data([1, 3, 5]), filename: "first.png", mimeType: "image/png")
+        var savedPhotos: [(String, URL)] = []
+        for index in 0..<12 {
+            let id = "first-\(index)"
+            let body = OfflineNoteBody(content: "offline text \(index)")
+            async let typing = library.save(identifier: nil, createID: id, body: body, scope: a)
+            async let takingPhoto = library.retainImage(image, identifier: nil, createID: id, scope: a)
+            let (saved, photo) = try await (typing, takingPhoto)
+            let stored = try await library.open(identifier: NoteLibraryStore.identifier(saved))
+            XCTAssertEqual(stored.body, body)
+            XCTAssertEqual(stored.attachments.count, 1)
+            XCTAssertEqual(library.notes.first { $0.localID == id }, stored)
+            let raw = #"[{"id":"image","type":"image","props":{"url":"\#(photo.url.absoluteString)"}}]"#
+            _ = try await library.save(identifier: nil, createID: id, body: OfflineNoteBody(content: body.content, contentJSON: raw), scope: a)
+            savedPhotos.append((NoteLibraryStore.identifier(saved), photo.url))
+        }
+        await library.configure(scope: nil, cloudEnabled: false)
+        await library.configure(scope: a, cloudEnabled: false)
+        XCTAssertEqual(library.notes.count, savedPhotos.count)
+        for (identifier, url) in savedPhotos {
+            let stored = try await library.open(identifier: identifier)
+            let ref = NoteSyncPayload.localMediaRef(uploadID: try NoteAttachmentFiles.previewUploadID(url))
+            XCTAssertTrue(stored.body.contentJSON?.contains(ref) == true)
+            let preview = try await library.imagePreview(url, identifier: identifier, scope: a)
+            XCTAssertEqual(preview.data, image.data)
+        }
+        await library.configure(scope: nil, cloudEnabled: false)
+    }
+
+    func testEditingUnavailableRemoteNotePreservesDeferredConflictAfterRelaunch() async throws {
+        let disk = try await NoteLocalStore.open(rootURL: root, scope: a)
+        let snapshot = NoteRemoteSnapshot(assetID: "gone", syncToken: "v1", body: OfflineNoteBody(content: "first"),
+                                          lifecycle: .active, isPublic: false)
+        let remote = try await disk.applyRemote(snapshot, localID: nil, expectedGeneration: nil)
+        let note = try XCTUnwrap(remote)
+        try await disk.recordSyncIssue(localID: note.localID, issue: "remote_unavailable")
+        try await disk.close()
+        let library = library()
+        let id = NoteLibraryStore.identifier(note)
+        await library.configure(scope: a, cloudEnabled: false)
+        _ = try await library.save(identifier: id, createID: "unused", body: OfflineNoteBody(content: "still mine"), scope: a)
+        await library.configure(scope: nil, cloudEnabled: false)
+        await library.configure(scope: a, cloudEnabled: false)
+        let saved = try await library.open(identifier: id)
+        XCTAssertEqual(saved.body.content, "still mine")
+        XCTAssertEqual(saved.syncIssue, "remote_unavailable")
+        await library.configure(scope: nil, cloudEnabled: false)
+    }
+
+    func testLibraryPublishesOnlyCommittedRowsUntilTheAccountIsReplaced() async throws {
+        let library = library()
+        await library.configure(scope: a, cloudEnabled: false)
+        var changes: [[String]] = []
+        let subscription = library.changes.sink { change in
+            switch change {
+            case .reset: changes.append(["reset"])
+            case let .updated(notes, removed):
+                changes.append(notes.map(\.localID).sorted() + removed.sorted())
+            }
+        }
+        defer { subscription.cancel() }
+        let one = try await library.save(identifier: nil, createID: "one", body: OfflineNoteBody(content: "one"))
+        _ = try await library.save(identifier: nil, createID: "two", body: OfflineNoteBody(content: "two"))
+        let id = NoteLibraryStore.identifier(one)
+        let edited = try await library.save(identifier: id, createID: "", body: OfflineNoteBody(content: "changed"))
+        _ = try await library.save(identifier: id, createID: "", body: edited.body)
+        try await library.setLifecycle(identifier: id, lifecycle: .trashed)
+        XCTAssertEqual(changes, [["one"], ["two"], ["one"], ["one"]])
+        XCTAssertEqual(library.notes.map(\.localID), ["one", "two"])
+        XCTAssertEqual(library.notes.first?.desiredLifecycle, .trashed)
+        let countBeforeSwitch = changes.count
+        await library.configure(scope: b, cloudEnabled: false)
+        XCTAssertEqual(changes.last, ["reset"])
+        XCTAssertEqual(changes.count, countBeforeSwitch + 1)
+        XCTAssertTrue(library.notes.isEmpty)
+        await library.configure(scope: nil, cloudEnabled: false)
+    }
+
+    func testConfirmedPurgePublishesOnlyTheRemovedID() async throws {
+        let disk = try await NoteLocalStore.open(rootURL: root, scope: a)
+        let snapshot = NoteRemoteSnapshot(assetID: "trash", syncToken: "v1", body: OfflineNoteBody(content: "trashed"),
+                                          lifecycle: .trashed, isPublic: false)
+        let seeded = try await disk.applyRemote(snapshot, localID: nil, expectedGeneration: nil)
+        let note = try XCTUnwrap(seeded)
+        try await disk.close()
+        let library = library()
+        await library.configure(scope: a, cloudEnabled: false)
+        let keep = try await library.save(identifier: nil, createID: "keep", body: OfflineNoteBody(content: "keep"))
+        var removedIDs = Set<String>()
+        let subscription = library.changes.sink { change in
+            if case let .updated(updated, removed) = change {
+                XCTAssertTrue(updated.isEmpty)
+                removedIDs.formUnion(removed)
+            }
+        }
+        defer { subscription.cancel() }
+        try await library.discardConfirmedPurge(identifier: "trash", expectedGeneration: note.generation, scope: a)
+        XCTAssertEqual(removedIDs, [note.localID])
+        XCTAssertEqual(library.notes, [keep])
+        await library.configure(scope: nil, cloudEnabled: false)
+    }
+
     func testRevalidationSuspendsCloudWithoutUnmountingLibraryAndRefreshKeepsDraft() async throws {
         let service = LibraryUnavailableTransport(scope: a)
         let library = NoteLibraryStore(rootURL: root, service: { _ in service })

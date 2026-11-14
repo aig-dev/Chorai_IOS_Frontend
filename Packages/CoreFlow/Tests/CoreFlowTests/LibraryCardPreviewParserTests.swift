@@ -2,6 +2,29 @@ import CoreFlow
 import XCTest
 
 final class LibraryCardPreviewParserTests: XCTestCase {
+    func testPersonalPreviewUsesTheFirstOwnedImageReferenceIncludingRefOnlyBlocks() {
+        let doc = #"[{"type":"paragraph","children":[{"type":"image","props":{"media_ref":"med_0123456789abcdef","caption":"Field sketch"}}]},{"type":"image","props":{"url":"https://cdn.example/second.png","caption":"Next photo"}}]"#
+        let personal = LibraryCardPreviewParser.parse(content: "", contentJSON: doc, allowsLocalImages: true)
+        XCTAssertEqual(personal.imageMediaRef, "med_0123456789abcdef")
+        XCTAssertEqual(personal.imageAlternativeText, "Field sketch")
+        let publicPreview = LibraryCardPreviewParser.parse(content: "", contentJSON: doc)
+        XCTAssertNil(publicPreview.imageMediaRef)
+        XCTAssertEqual(publicPreview.imageSource, "https://cdn.example/second.png")
+        XCTAssertEqual(publicPreview.imageAlternativeText, "Next photo")
+    }
+
+    func testOwnedImagePreviewAcceptsOnlyCanonicalNoteAttachmentURLs() throws {
+        let url = try NoteAttachmentFiles.previewURL(uploadID: "photo-1")
+        func parse(_ source: String, owned: Bool) -> LibraryCardPreviewContent {
+            let document = #"[{"type":"image","props":{"url":"\#(source)","name":"Camera"}}]"#
+            return LibraryCardPreviewParser.parse(content: "", contentJSON: document, allowsLocalImages: owned)
+        }
+        XCTAssertEqual(parse(url.absoluteString, owned: true).imageSource, url.absoluteString)
+        XCTAssertNil(parse(url.absoluteString, owned: false).imageSource)
+        XCTAssertNil(parse(url.absoluteString + "?other=1", owned: true).imageSource)
+        XCTAssertNil(parse("file:///tmp/photo.jpg", owned: true).imageSource)
+    }
+
     func testStructuredDocumentProvidesFirstSafeImageAndPlainText() {
         let document = #"[{"type":"paragraph","content":[{"type":"text","text":"Before","styles":{}}],"children":[]},{"type":"image","props":{"url":"/chorai-assets/staged/note_media/act_1/image.png","name":"Diagram"},"children":[]},{"type":"paragraph","content":[{"type":"text","text":"After","styles":{}}],"children":[]}]"#
 

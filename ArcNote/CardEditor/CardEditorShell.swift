@@ -53,6 +53,7 @@ struct CardEditorShell: View {
     let menuActions: CardEditorMenuActions?
     let isPrivacyEditable: Bool
     let saveStatus: String?
+    let onReviewVersions: (() -> Void)?
 
     init(
         bodyModel: BlockNoteCardEditorModel,
@@ -77,7 +78,8 @@ struct CardEditorShell: View {
         onOpenCardActions: (() -> Void)? = nil,
         menuActions: CardEditorMenuActions? = nil,
         isPrivacyEditable: Bool = true,
-        saveStatus: String? = nil
+        saveStatus: String? = nil,
+        onReviewVersions: (() -> Void)? = nil
     ) {
         self.bodyModel = bodyModel
         self.tags = tags
@@ -102,6 +104,7 @@ struct CardEditorShell: View {
         self.menuActions = menuActions
         self.isPrivacyEditable = isPrivacyEditable
         self.saveStatus = saveStatus
+        self.onReviewVersions = onReviewVersions
     }
 
     var body: some View {
@@ -293,7 +296,21 @@ struct CardEditorShell: View {
         HStack(spacing: 8) {
             Circle().fill(ChoraiTheme.ink.opacity(0.55))
                 .frame(width: 5, height: 5)
-            Text(writingStatusLabel)
+            if let onReviewVersions {
+                Button(action: onReviewVersions) {
+                    HStack(spacing: 4) {
+                        Text(writingStatusLabel)
+                        Image(systemName: "chevron.right").accessibilityHidden(true)
+                    }
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint("Review version options")
+                .accessibilityIdentifier("cardEditorVersionOptions")
+            } else {
+                Text(writingStatusLabel)
+            }
             Spacer()
             Text("\(bodyModel.fallbackMarkdown.split { $0.isWhitespace || $0.isNewline }.count) words")
                 .monospacedDigit()
