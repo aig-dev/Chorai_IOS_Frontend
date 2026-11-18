@@ -81,8 +81,7 @@ final class LibraryCardPreviewSourceContractTests: XCTestCase {
 
     func testEveryRateSurfaceConsumesCanonicalLevelStyle() throws {
         let home = try source(at: "ArcNote/HomeView.swift")
-        let merge = try source(at: "ArcNote/MergeView.swift")
-        let newInsight = try source(at: "ArcNote/NewInsightView.swift")
+        let merge = try source(at: "ArcNote/MergeSelectionCards.swift")
         let mergeArtifactController = try source(
             at: "ArcNote/CoreFlow/MergeArtifactDraftController.swift"
         )
@@ -97,15 +96,12 @@ final class LibraryCardPreviewSourceContractTests: XCTestCase {
             ).count - 1,
             2
         )
-        for rateSurface in [home, newInsight] {
-            XCTAssertTrue(rateSurface.contains("CardLevelStyle(rate:"))
-            XCTAssertFalse(rateSurface.contains("LibraryCardRateStyle"))
-            XCTAssertFalse(rateSurface.contains("Critical"))
-        }
+        XCTAssertTrue(home.contains("CardLevelStyle(rate:"))
+        XCTAssertFalse(home.contains("LibraryCardRateStyle"))
+        XCTAssertFalse(home.contains("Critical"))
         XCTAssertTrue(mergeArtifactController.contains("CardLevelStyle("))
         XCTAssertFalse(mergeArtifactController.contains("LibraryCardRateStyle"))
         XCTAssertFalse(mergeArtifactController.contains("Critical"))
-        XCTAssertTrue(newInsight.contains("Text(levelStyle.label)"))
         XCTAssertTrue(mergeArtifactController.contains("store.artifactDraft?.rate"))
         XCTAssertTrue(mergeArtifactController.contains("store.artifact?.presentation.rate"))
         XCTAssertTrue(
@@ -142,7 +138,6 @@ final class LibraryCardPreviewSourceContractTests: XCTestCase {
             for source in [
                 home,
                 merge,
-                newInsight,
                 mergeArtifactController,
                 mergeArtifactSurface,
                 discoveryPath,
@@ -163,37 +158,6 @@ final class LibraryCardPreviewSourceContractTests: XCTestCase {
         )
         XCTAssertFalse(mergeArtifactSurface.contains(#"\(rate)"#))
         XCTAssertFalse(mergeArtifactSurface.contains("String(rate)"))
-    }
-
-    func testNewInsightBadgeUsesSharedTierAccentMaterial() throws {
-        let newInsight = try source(at: "ArcNote/NewInsightView.swift")
-        let badgeStart = try XCTUnwrap(
-            newInsight.range(of: "Text(levelStyle.label)")
-        )
-        let badgeEnd = try XCTUnwrap(
-            newInsight.range(
-                of: ".accessibilityLabel(levelStyle.label)",
-                range: badgeStart.upperBound..<newInsight.endIndex
-            )
-        )
-        let badge = String(
-            newInsight[badgeStart.lowerBound..<badgeEnd.upperBound]
-        )
-        let compactBadge = badge.components(
-            separatedBy: .whitespacesAndNewlines
-        ).joined()
-
-        XCTAssertTrue(
-            compactBadge.contains(
-                ".foregroundStyle(levelStyle.materialAccentColor??ChoraiTheme.ink)"
-            )
-        )
-        XCTAssertTrue(compactBadge.contains("CardLevelMaterial("))
-        XCTAssertTrue(compactBadge.contains("style:levelStyle"))
-        XCTAssertFalse(
-            badge.contains("Color(red: 0.3, green: 0.2, blue: 0.1)")
-        )
-        XCTAssertFalse(badge.contains(".foregroundColor(.white)"))
     }
 
     func testImageBearingLibraryListsAreLazyAndPreserveCanonicalContent() throws {

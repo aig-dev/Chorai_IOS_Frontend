@@ -44,15 +44,15 @@ final class DiscoveryNativeMenuIntegrationTests: XCTestCase {
     func testExploreSearchSuppliesActualCardWithoutOpeningTheLegacyOverlay() throws {
         let explore = try source("ArcNote/ExploreView.swift")
         let search = try section("private var searchContent", until: "private func performSearch", in: explore)
-        XCTAssertTrue(search.contains("menuCardData: convertCardToUserCard(convertSearchCardToCard(card))"))
-        let preparation = try section("onShowMenu: { value in", until: "onSwipe:", in: search)
-        XCTAssertTrue(preparation.contains("currentExploreCardData = convertCardToUserCard(value)"))
-        XCTAssertFalse(preparation.contains("showExplorePopupMenu = true"))
+        XCTAssertTrue(search.contains("menuCardData: convertCardToUserCard(displayCard)"))
+        XCTAssertTrue(search.contains("displayCard.isOwner ?? isOwnedByCurrentUser(ownerId: displayCard.ownerActorId)"))
+        let result = try section("private struct ExploreSearchResultCard", until: "private struct TagView", in: explore)
+        XCTAssertTrue(result.contains("NativeCardActionsMenu(cardData: menuCardData, layout: .grid2x2, isOwnCard: isOwner)"))
+        XCTAssertFalse(result.contains(".popupMenu("))
         let tabs = try source("ArcNote/TabBarView.swift")
-        let post = String(tabs[try XCTUnwrap(tabs.range(of: "struct PostCard: View")).lowerBound...])
-        XCTAssertTrue(post.contains("if let menuCardData"))
-        XCTAssertTrue(post.contains("cardData: menuCardData, layout: .grid2x2"), "Search retains its original four-action permission policy")
-        XCTAssertTrue(post.contains("onPrepare: { onShowMenu(card) }"))
+        let host = try section("private func tabNavigationRoot", until: "var body: some View", in: tabs)
+        XCTAssertTrue(host.contains(".popupMenu("))
+        XCTAssertTrue(tabs.contains("tabNavigationRoot(.flow)"))
     }
 
     private func section(_ start: String, until end: String, in source: String) throws -> String {

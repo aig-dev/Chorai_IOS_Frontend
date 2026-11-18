@@ -5,7 +5,7 @@ final class LinkPresentationSourceContractTests: XCTestCase {
     func testLinkHasOneRootPresenterAndNoCompetingSourceSheets() throws {
         let app = try source("ArcNote/ArcNoteApp.swift")
         XCTAssertEqual(app.components(separatedBy: ".overlay { LinkPopupPresenter() }").count - 1, 1)
-        for file in ["TabBarView", "MyProfileView", "UserProfileView", "NewNoteView", "SparkView"] {
+        for file in ["TabBarView", "MyProfileView", "UserProfileView", "NewNoteView", "ExploreView", "CoreFlow/SparkContinuationViews"] {
             XCTAssertFalse(try source("ArcNote/\(file).swift").contains(".linkPopup()"), "Competing presenter in \(file)")
         }
         let link = try source("ArcNote/LinkPopupView.swift")

@@ -77,6 +77,75 @@ public enum LibrarySortOption: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
+public struct LibrarySearchSortKey: Sendable {
+    public let id: String
+    public let rate: Int
+    public let createdAt: Date?
+    public let updatedAt: Date?
+
+    public init(
+        id: String,
+        rate: Int,
+        createdAt: String,
+        updatedAt: String,
+        parseDate: (String) -> Date?
+    ) {
+        self.id = id
+        self.rate = rate
+        self.createdAt = parseDate(createdAt)
+        self.updatedAt = parseDate(updatedAt)
+    }
+
+    /// Create one parser on the queue preparing a batch of results.
+    public static func makeDateParser() -> (String) -> Date? {
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let whole = ISO8601DateFormatter()
+        return { fractional.date(from: $0) ?? whole.date(from: $0) }
+    }
+
+    public func precedes(_ other: Self, by descriptor: LibrarySortDescriptor) -> Bool {
+        let comparison: ComparisonResult
+        switch descriptor.field {
+        case .updatedAt:
+            comparison = (updatedAt ?? .distantPast).compare(other.updatedAt ?? .distantPast)
+        case .createdAt:
+            comparison = (createdAt ?? .distantPast).compare(other.createdAt ?? .distantPast)
+        case .rate:
+            if rate == other.rate { return id < other.id }
+            comparison = rate < other.rate ? .orderedAscending : .orderedDescending
+        }
+        if comparison == .orderedSame { return id < other.id }
+        return comparison == (descriptor.order == .ascending ? .orderedAscending : .orderedDescending)
+    }
+}
+
+/// The selected sort may change while the current request is preparing its results.
+public struct LibrarySearchRequest: Sendable {
+    private var active: (id: UUID, sort: LibrarySortOption)?
+
+    public init() {}
+
+    public mutating func begin(sort: LibrarySortOption) -> UUID {
+        let id = UUID()
+        active = (id, sort)
+        return id
+    }
+
+    public mutating func selectSort(_ sort: LibrarySortOption) {
+        active?.sort = sort
+    }
+
+    public func sort(for id: UUID) -> LibrarySortOption? {
+        guard let active, active.id == id else { return nil }
+        return active.sort
+    }
+
+    public mutating func clear() {
+        active = nil
+    }
+}
+
 public struct LibrarySearchSession: Equatable, Sendable {
     public private(set) var isActive = false
     public private(set) var scope: LibrarySearchScope?

@@ -1278,31 +1278,48 @@ extension NetworkManager {
         sparkActivityId: String? = nil,
         presentsError: Bool = true
     ) -> AnyPublisher<NetworkResponse<FavoriteResponseData>, NetworkError> {
+        let generation = AuthManager.shared.sessionGeneration
         var parameters: Parameters = ["asset_id": cardId]
         if let sparkActivityId, !sparkActivityId.isEmpty {
             parameters["spark_activity_id"] = sparkActivityId
         }
 
-        return request(
+        let receipt = request(
             endpoint: "/api/v1/actors/me/favorites",
             method: .post,
             parameters: parameters,
             responseType: NetworkResponse<FavoriteResponseData>.self,
             presentsError: presentsError
         )
+        return currentFavoriteReceipt(receipt, generation: generation)
     }
 
     func unfavoriteCard(
         cardId: String,
         presentsError: Bool = true
     ) -> AnyPublisher<NetworkResponse<EmptyResponseData>, NetworkError> {
-        return request(
+        let generation = AuthManager.shared.sessionGeneration
+        let receipt = request(
             endpoint: "/api/v1/actors/me/favorites/\(cardId)",
             method: .delete,
             encoding: URLEncoding.default,
             responseType: NetworkResponse<EmptyResponseData>.self,
             presentsError: presentsError
         )
+        return currentFavoriteReceipt(receipt, generation: generation)
+    }
+
+    private func currentFavoriteReceipt<T>(
+        _ receipt: AnyPublisher<T, NetworkError>, generation: UInt64
+    ) -> AnyPublisher<T, NetworkError> {
+        receipt
+            .receive(on: DispatchQueue.main)
+            .tryMap { value in
+                guard AuthManager.shared.sessionGeneration == generation else { throw NetworkError.unauthorized }
+                return value
+            }
+            .mapError { ($0 as? NetworkError) ?? .unknown }
+            .eraseToAnyPublisher()
     }
 
     func getDiscoveryPath(
@@ -1312,8 +1329,11 @@ extension NetworkManager {
         request(
             endpoint: "/api/v1/actors/me/favorites/\(cardId)/discovery-path",
             method: .get,
+            parameters: ["include": "cards"],
+            encoding: URLEncoding.default,
             responseType: NetworkResponse<DiscoveryPathData>.self,
-            presentsError: presentsError
+            presentsError: presentsError,
+            suppressesPayloadLogging: true
         )
     }
 
@@ -2335,29 +2355,6 @@ extension NetworkManager {
         .store(in: &cancellables)
     }
 
-    // MARK: 合并卡片预览
-    func mergeCards(request: MergeCardsRequest, completion: @escaping (Result<MergePreviewResponse, NetworkError>) -> Void) {
-        createMergeJob(request)
-            .flatMap { [weak self] job -> AnyPublisher<MergeArtifactResponse, NetworkError> in
-                guard let self = self else {
-                    return Fail(error: .unknown).eraseToAnyPublisher()
-                }
-                return self.waitForMergeArtifact(jobId: job.jobId)
-            }
-            .map { $0.toPreviewResponse() }
-            .sink(
-                receiveCompletion: { result in
-                    if case .failure(let error) = result {
-                        completion(.failure(error))
-                    }
-                },
-                receiveValue: { response in
-                    completion(.success(response))
-                }
-            )
-            .store(in: &cancellables)
-    }
-
     func createMergeJob(_ request: MergeCardsRequest) -> AnyPublisher<MergeJobResponse, NetworkError> {
         do {
             return self.request(
@@ -2497,33 +2494,6 @@ extension NetworkManager {
         }
     }
 
-    private func waitForMergeArtifact(jobId: String, attempt: Int = 0) -> AnyPublisher<MergeArtifactResponse, NetworkError> {
-        return getMergeJob(jobId: jobId)
-            .flatMap { [weak self] job -> AnyPublisher<MergeArtifactResponse, NetworkError> in
-                guard let self = self else {
-                    return Fail(error: .unknown).eraseToAnyPublisher()
-                }
-
-                switch job.status {
-                case "ARTIFACT_READY", "COMMITTING", "COMMITTED":
-                    return self.getMergeArtifact(jobId: jobId)
-                case "FAILED", "CANCELLED":
-                    return Fail(error: .serverError(409, job.status))
-                        .eraseToAnyPublisher()
-                default:
-                    guard attempt < 30 else {
-                        return Fail(error: .timeout).eraseToAnyPublisher()
-                    }
-                    return Just(())
-                        .delay(for: .seconds(1), scheduler: DispatchQueue.global(qos: .userInitiated))
-                        .setFailureType(to: NetworkError.self)
-                        .flatMap { self.waitForMergeArtifact(jobId: jobId, attempt: attempt + 1) }
-                        .eraseToAnyPublisher()
-                }
-            }
-            .eraseToAnyPublisher()
-    }
-
     // MARK: 关注相关API
 
     /// 关注用户
@@ -2579,12 +2549,20 @@ extension NetworkManager {
         blockedActorId: String,
         presentsError: Bool = true
     ) -> AnyPublisher<BlockUserResponse, NetworkError> {
+        let readSession = AuthManager.shared.cardReadSession
         return self.request(
             endpoint: "/api/user-blocks/\(blockedActorId)",
             method: .post,
             responseType: BlockUserResponse.self,
             presentsError: presentsError
         )
+        .receive(on: DispatchQueue.main)
+        .handleEvents(receiveOutput: { response in
+            guard response.success, let readSession, AuthManager.shared.cardReadSession == readSession else { return }
+            // Explore cards do not carry a reliable owner ID for selective eviction.
+            NotificationCenter.default.post(name: .cardReadSessionDidChange, object: nil)
+        })
+        .eraseToAnyPublisher()
     }
 
     /// 取消拉黑用户
@@ -2681,31 +2659,6 @@ extension NetworkManager {
         } catch {
             return Fail(error: NetworkError.encodingError).eraseToAnyPublisher()
         }
-    }
-
-    func commitMergeJob(
-        jobId: String,
-        titleOverride: String?
-    ) -> AnyPublisher<MergeCommitResponse, NetworkError> {
-        // The current commit contract seals the latest artifact revision.
-        // titleOverride is retained only for source compatibility with the
-        // legacy preview screen; the server no longer accepts it here.
-        getMergeArtifact(jobId: jobId)
-            .flatMap { [weak self] artifact
-                -> AnyPublisher<MergeCommitResponse, NetworkError> in
-                guard let self else {
-                    return Fail(error: .unknown).eraseToAnyPublisher()
-                }
-                return self.commitMergeJob(
-                    jobId: jobId,
-                    request: CommitMergeJobRequest(
-                        revision: artifact.latestRevision,
-                        artifactHash: artifact.latestHash,
-                        idemKey: "ios-legacy-merge-commit-\(jobId)"
-                    )
-                )
-            }
-            .eraseToAnyPublisher()
     }
 
     func getOnboardingStatus(

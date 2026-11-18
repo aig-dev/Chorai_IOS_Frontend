@@ -13,7 +13,6 @@ final class CommentPopupManager: ObservableObject {
     @Published var showErrorAlert = false
     @Published var errorMessage = ""
 
-    var onCommentCreated: ((String) -> Void)?
     static let shared = CommentPopupManager()
     private let reads = CommentReadStore(session: { AuthManager.shared.cardReadSession }, fetch: CommentService.loadPage)
     private var subscriptions = Set<AnyCancellable>()
@@ -615,27 +614,15 @@ struct CommentRowView: View {
 // MARK: 评论按钮组件
 struct CommentButton: View {
     @ObservedObject private var manager = CommentPopupManager.shared
-    @ObservedObject private var relatedCardsManager = RelatedCardsManager.shared
     let cardId: String
-    let cardsManager: RecommendedCardsManager?
-    let useRelatedCardsManager: Bool
+    let searchEngagement: ExploreSearchEngagement?
     let iconSize: CGFloat
     let countFont: Font
     @State private var staticCommentCount: Int = 0
 
-    init(cardId: String, cardsManager: RecommendedCardsManager) {
+    init(cardId: String, searchEngagement: ExploreSearchEngagement) {
         self.cardId = cardId
-        self.cardsManager = cardsManager
-        self.useRelatedCardsManager = false
-        self.iconSize = 20
-        self.countFont = .subheadline.weight(.medium)
-        self.staticCommentCount = 0
-    }
-
-    init(cardId: String, relatedCardsManager: RelatedCardsManager) {
-        self.cardId = cardId
-        self.cardsManager = nil
-        self.useRelatedCardsManager = true
+        self.searchEngagement = searchEngagement
         self.iconSize = 20
         self.countFont = .subheadline.weight(.medium)
         self.staticCommentCount = 0
@@ -643,8 +630,7 @@ struct CommentButton: View {
 
     init(cardId: String, commentCount: Int = 0, iconSize: CGFloat = 20, countFont: Font = .subheadline.weight(.medium)) {
         self.cardId = cardId
-        self.cardsManager = nil
-        self.useRelatedCardsManager = false
+        self.searchEngagement = nil
         self.iconSize = iconSize
         self.countFont = countFont
         self.staticCommentCount = commentCount
@@ -668,7 +654,7 @@ struct CommentButton: View {
             if let userInfo = notification.userInfo,
                let updatedCardId = userInfo["cardId"] as? String,
                let newCount = userInfo["newCount"] as? Int,
-               updatedCardId == cardId && cardsManager == nil && !useRelatedCardsManager {
+               updatedCardId == cardId && searchEngagement == nil {
                 print("数量变化通知: cardId=\(cardId), newCount=\(newCount)")
                 staticCommentCount = newCount
             }
@@ -676,13 +662,7 @@ struct CommentButton: View {
     }
 
     private var displayCommentCount: Int {
-        if let cardsManager = cardsManager {
-            return cardsManager.getCommentCount(for: cardId)
-        } else if useRelatedCardsManager {
-            return relatedCardsManager.getCommentCount(for: cardId)
-        } else {
-            return staticCommentCount
-        }
+        searchEngagement?.getCommentCount(for: cardId) ?? staticCommentCount
     }
 }
 

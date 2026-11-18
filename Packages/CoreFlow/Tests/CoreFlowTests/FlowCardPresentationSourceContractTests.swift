@@ -13,8 +13,11 @@ final class FlowCardPresentationSourceContractTests: XCTestCase {
     func testExploreFlowCardUsesBodyWithoutRenderingLegacyTitle() throws {
         let source = try flowCardSource()
 
-        XCTAssertTrue(source.contains("FlowRichPreview(card: card, compact: false)"))
-        XCTAssertTrue(try flowViewSource().contains("LibraryCardPreviewParser.parse(content: card.content, contentJSON: card.contentJSON)"))
+        XCTAssertTrue(source.contains("FlowRichPreview("))
+        let views = try flowViewSource()
+        XCTAssertTrue(views.contains("RenderedFlowRichPreview(presentation: presentation, compact: compact)"))
+        XCTAssertFalse(views.contains("JSONSerialization"))
+        XCTAssertFalse(views.contains("LibraryCardPreviewParser.parse"))
         XCTAssertFalse(
             source.contains("card.title"),
             "Explore cards are titleless even when the API returns a legacy title"
@@ -172,11 +175,12 @@ final class FlowCardPresentationSourceContractTests: XCTestCase {
 
     func testGridAndDeckShareLiveStoreAndHideDecorativeChora() throws {
         let source = try flowViewSource()
-        XCTAssertTrue(source.contains("ForEach(Array(store.browsingCards.enumerated())"))
+        XCTAssertTrue(source.contains("let cards = store.browsingCards"))
+        XCTAssertTrue(source.contains(".accessibilitySortPriority(Double(cards.count - index))"))
         XCTAssertTrue(source.contains("store.toggleFavorite(assetID: card.id"))
         XCTAssertTrue(source.contains(".choraiCardLevel(rate: card.rate, showsChora: false, cornerRadius: 28)"))
         XCTAssertTrue(source.contains(".choraiCardLevel(rate: card.rate, showsChora: false, cornerRadius: 17)"))
-        XCTAssertTrue(source.contains("FlowMasonryLayout(columns: typeSize.isAccessibilitySize ? 1 : 2, spacing: 12)"))
+        XCTAssertTrue(source.contains("FlowMasonryLayout(columns: typeSize.isAccessibilitySize ? 1 : 2, spacing: 12, typeSize: typeSize)"))
         XCTAssertTrue(source.contains(".onReceive(CardEngagementCenter.shared.favorites)"))
         XCTAssertTrue(source.contains(".accessibilityHidden(isGrid)"))
         XCTAssertTrue(source.contains(".accessibilityHidden(!isGrid)"))
@@ -184,8 +188,8 @@ final class FlowCardPresentationSourceContractTests: XCTestCase {
 
     func testRatedGridKeepsBoundedSummaryAuthorAndActionsInsideV8LevelSurface() throws {
         let source = try flowViewSource()
-        let start = try XCTUnwrap(source.range(of: "private func ratedTile(_ card: FlowCard)"))
-        let end = try XCTUnwrap(source.range(of: "private func ratedSummary(_ card: FlowCard)", range: start.upperBound..<source.endIndex))
+        let start = try XCTUnwrap(source.range(of: "private func ratedTile(_ card: FlowCard, excerpt: FlowGridExcerpt?)"))
+        let end = try XCTUnwrap(source.range(of: "private struct FlowGridExcerpt", range: start.upperBound..<source.endIndex))
         let tile = String(source[start.lowerBound..<end.lowerBound])
         XCTAssertTrue(tile.contains(".font(.system(.subheadline, design: .serif))"))
         XCTAssertTrue(tile.contains(".lineSpacing(3).lineLimit(7)"))

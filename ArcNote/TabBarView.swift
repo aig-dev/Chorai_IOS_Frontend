@@ -2,7 +2,6 @@ import SwiftUI
 import Combine
 import CoreFlow
 import UIKit
-import WebKit
 
 struct TabBarView: View {
     @Environment(\.scenePhase) private var scenePhase
@@ -13,8 +12,6 @@ struct TabBarView: View {
     @StateObject private var coordinator = CoreFlowCoordinator()
     @StateObject private var keyboardLayout = KeyboardLayoutObserver()
     @State private var showPopupMenu = false
-    @State private var selectedFilter = "All"
-    @State private var showFilterTags = false
     @State private var showSideMenu = false
     @State private var currentMenuCardData: UserCard? = nil
     @State private var navigationPaths: [CoreTab: NavigationPath] = [:]
@@ -226,7 +223,7 @@ struct TabBarView: View {
         exploreSearchSmokeCompleted = false
         exploreSearchSmokeInFlight = true
 
-        SearchManager.shared.searchCards(query: "go api ui smoke unlikely result") { _ in
+        ExploreSearchManager.shared.searchCards(query: "go api ui smoke unlikely result") { _ in
             DispatchQueue.main.async {
                 print("Explore search smoke completed")
                 exploreSearchSmokeInFlight = false
@@ -302,9 +299,6 @@ struct TabBarView: View {
     private func closeAllPopups() {
         // 关闭 popup 菜单
         showPopupMenu = false
-        
-        // 关闭筛选标签
-        showFilterTags = false
         
         // 关闭侧边菜单
         showSideMenu = false
@@ -515,19 +509,23 @@ struct TabBarView: View {
         }
     }
 
+    private var allowsCommunityTabs: Bool {
+        #if DEBUG
+        if LocalDevelopmentPreview.isEnabled { return true }
+        #endif
+        return authManager.canEnterProduct
+    }
+
     var body: some View {
         ZStack {
             
             // 主要内容区域 - 全屏显示
             TabView(selection: Binding(get: { coordinator.selectedTab }, set: { tab in
-                if tab == .library || authManager.canEnterProduct { coordinator.selectedTab = tab }
+                if tab == .library || allowsCommunityTabs { coordinator.selectedTab = tab }
             })) {
                 // Explore 页面
                 tabNavigationRoot(.flow) {
                 ExploreView(
-                    showPopupMenu: $showPopupMenu,
-                    selectedFilter: $selectedFilter,
-                    showFilterTags: $showFilterTags,
                     showSideMenu: $showSideMenu,
                     onSpark: { cardId in
                         handleSparkRequested(proposedCardID: cardId)
@@ -784,7 +782,7 @@ struct TabBarView: View {
             libraryCardRouteCoverageDepth = 0
             isLibrarySurfaceVisible = false
         }
-        .onChange(of: authManager.canEnterProduct) { allowed in
+        .onChange(of: allowsCommunityTabs) { allowed in
             if !allowed { coordinator.selectedTab = .library }
         }
         .onChange(of: onboardingStore.phase) { phase in
@@ -833,7 +831,7 @@ struct TabBarView: View {
             isLibrarySurfaceVisible = false
         }
         .onAppear {
-            if !authManager.canEnterProduct { coordinator.selectedTab = .library }
+            if !allowsCommunityTabs { coordinator.selectedTab = .library }
             lastSelectedTab = coordinator.selectedTab
         }
         #if DEBUG
@@ -866,387 +864,6 @@ struct TabBarView: View {
 
 
 // 帖子卡片组件
-struct PostCard: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    let card: Card
-    @ObservedObject var cardsManager: RecommendedCardsManager
-    @State private var offset: CGFloat = 0
-    @State private var rotation: Double = 0
-    @State private var scale: CGFloat = 1.0
-    @State private var isLoadingAuthor = false
-    @State private var isMenuButtonPressed = false
-    var onShowMenu: (Card) -> Void
-    var onSwipe: (CGFloat, Bool) -> Void
-    var onAvatarTap: ((String) -> Void)? = nil
-    var onCardTap: ((String) -> Void)? = nil
-    var menuCardData: UserCard? = nil
-
-    private var isMenuCardOwned: Bool {
-        if let isOwner = card.isOwner { return isOwner }
-        guard let authorID = card.author?.id,
-              let actorID = AuthManager.shared.currentUser?.id else { return false }
-        return authorID == actorID
-    }
-
-    @ViewBuilder
-    private var moreMenu: some View {
-        if let menuCardData {
-            NativeCardActionsMenu(
-                cardData: menuCardData, layout: .grid2x2,
-                isOwnCard: isMenuCardOwned,
-                onPrepare: { onShowMenu(card) }
-            ) {
-                moreMenuLabel
-            }
-        } else {
-            Button {
-                isMenuButtonPressed = true
-                onShowMenu(card)
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    isMenuButtonPressed = false
-                }
-            } label: {
-                moreMenuLabel
-            }
-        }
-    }
-
-    private var moreMenuLabel: some View {
-        Image(systemName: "ellipsis")
-            .font(.title3)
-            .foregroundStyle(ChoraiTheme.ink)
-            .frame(width: 44, height: 44)
-            .contentShape(Rectangle())
-    }
-    
-    private var cardBackground: some View {
-        RoundedRectangle(cornerRadius: 16)
-            .background(ChoraiTheme.surface)
-            .cornerRadius(16)
-
-
-
-
-    }
-    
-    private var topLeftHighlight: some View {
-        RoundedRectangle(cornerRadius: 16)
-            .stroke(Color.white, lineWidth: 1)
-            .offset(x: 0, y: -1)
-            .mask(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(
-                        RadialGradient(
-                            colors: [Color.white, Color.clear],
-                            center: .topLeading,
-                            startRadius: 10,
-                            endRadius: 35
-                        )
-                    )
-            )
-    }
-    
-    private var bottomRightHighlight: some View {
-        RoundedRectangle(cornerRadius: 16)
-            .stroke(Color.white, lineWidth: 1)
-            .offset(x: 0, y: 0)
-            .mask(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(
-                        RadialGradient(
-                            colors: [Color.white, Color.clear],
-                            center: .bottomTrailing,
-                            startRadius: 10,
-                            endRadius: 35
-                        )
-                    )
-            )
-    }
-    
-    private var topEdgeHighlight: some View {
-        RoundedRectangle(cornerRadius: 16)
-            .stroke(Color.white, lineWidth: 1)
-            .offset(x: 0, y: -1)
-            .mask(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.white, Color.clear],
-                            startPoint: .top,
-                            endPoint: UnitPoint(x: 0, y: 0.05)
-                        )
-                    )
-            )
-    }
-    
-    private var bottomEdgeHighlight: some View {
-        RoundedRectangle(cornerRadius: 16)
-            .stroke(Color.white, lineWidth: 1)
-            .offset(x: 0, y: 1)
-            .mask(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.white, Color.clear],
-                            startPoint: .bottom,
-                            endPoint: UnitPoint(x: 1, y: 0.05)
-                        )
-                    )
-            )
-    }
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            // 用户信息
-            HStack {
-                // 头像
-                Button(action: {
-                    print("card.author: \(String(describing: card.author))")
-                    if let author = card.author {
-                        print(" author.id: \(author.id)")
-                        onAvatarTap?(author.id)
-                    } else {
-                        loadAuthorFromCardDetail()
-                    }
-                }) {
-                    Group {
-                        if let avatarUrl = card.author?.avatar, !avatarUrl.isEmpty {
-                            let fullAvatarUrl = APIConfiguration.resourceURLString(avatarUrl)
-                            
-                            AsyncImage(url: URL(string: fullAvatarUrl)) { image in
-                                image
-                                    .resizable()
-                                    .aspectRatio(contentMode: .fill)
-                            } placeholder: {
-                                Image("avatar")
-                                    .resizable()
-                                    .aspectRatio(contentMode: .fill)
-                            }
-                        } else {
-                            Image("avatar")
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                        }
-                    }
-                        .frame(width: 38, height: 38)
-                    .clipShape(Circle())
-                }
-                .buttonStyle(PlainButtonStyle())
-                .frame(minWidth: 44, minHeight: 44)
-                .accessibilityLabel("Open author")
-                .accessibilityIdentifier("explore.search.author.\(card.id)")
-                
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(card.author?.username ?? "AI")
-                        .font(.subheadline.weight(.semibold))
-                        .lineLimit(1)
-                        .foregroundColor(ChoraiTheme.ink)
-                    
-                    Text(formatDate(card.createdAt))
-                        .font(.caption)
-                        .lineLimit(1)
-                        .foregroundColor(ChoraiTheme.ink.opacity(0.7))
-                }
-                
-                Spacer()
-                
-                moreMenu
-                .buttonStyle(PlainButtonStyle())
-                .accessibilityLabel("Note actions")
-                .accessibilityIdentifier("explore.search.menu.\(card.id)")
-            }
-
-            ChoraiLevelBadge(rate: card.rate, compact: true)
-
-            FlowRichPreview(card: card.asFlowCard, compact: false)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .clipped()
-            .contentShape(Rectangle())
-            .onTapGesture {
-                onCardTap?(card.id)
-            }
-            .highPriorityGesture(summaryDragGesture)
-            .accessibilityElement(children: .combine)
-            .accessibilityAddTraits(.isButton)
-            .accessibilityHint("Read full note")
-            .accessibilityIdentifier("explore.search.summary.\(card.id)")
-            .accessibilityAction { onCardTap?(card.id) }
-            
-            // 底部内容 - 固定在底部
-            VStack(spacing: 16) {
-                // 标签
-                if !card.tags.isEmpty {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
-                            ForEach(card.tags, id: \.self) { tag in
-                                TagView(text: tag)
-                            }
-                            Spacer()
-                        }
-                    }
-                    .accessibilityIdentifier("explore.search.tags.\(card.id)")
-                }
-                
-                // 交互统计
-                HStack {
-                    // 左边一个 - 收藏按钮
-                    if card.isOwner != true {
-                        Button(action: {
-                            cardsManager.toggleFavorite(for: card.id)
-                        }) {
-                            HStack(spacing: 4) {
-                                Image(systemName: cardsManager.getFavoriteState(for: card.id) ? "bookmark.fill" : "bookmark")
-                                    .resizable()
-                                    .aspectRatio(contentMode: .fit)
-                                    .frame(width: 26, height: 26)
-                                Text("\(cardsManager.getFavoriteCount(for: card.id))")
-                                    .font(.system(size: 14, weight: .medium))
-                                    .foregroundColor(ChoraiTheme.ink.opacity(0.8))
-                            }
-                            .frame(minWidth: 44, minHeight: 44)
-                            .contentShape(Rectangle())
-                        }
-                        .accessibilityElement(children: .combine)
-                        .accessibilityLabel("Favorite")
-                        .accessibilityValue(cardsManager.getFavoriteState(for: card.id) ? "true" : "false")
-                        .accessibilityIdentifier("card.favorite.\(card.id)")
-                    }
-                    
-                    Spacer()
-                    
-                    // 右边两个
-                    HStack(spacing: 20) {
-                        Button(action: {
-                            cardsManager.toggleLike(for: card.id)
-                        }) {
-                            HStack(spacing: 4) {
-                                Image(systemName: cardsManager.getLikeState(for: card.id) ? "heart.fill" : "heart")
-                                    .resizable()
-                                    .aspectRatio(contentMode: .fit)
-                                    .frame(width: 20, height: 20)
-                                Text("\(cardsManager.getLikeCount(for: card.id))")
-                                    .font(.system(size: 14, weight: .medium))
-                                    .foregroundColor(ChoraiTheme.ink.opacity(0.8))
-                            }
-                            .frame(minWidth: 44, minHeight: 44)
-                            .contentShape(Rectangle())
-                        }
-                        .disabled(cardsManager.isLikeMutationInFlight(for: card.id))
-                        .accessibilityElement(children: .combine)
-                        .accessibilityLabel(cardsManager.getLikeState(for: card.id) ? "Unlike" : "Like")
-                        .accessibilityValue(cardsManager.getLikeState(for: card.id) ? "true" : "false")
-                        .accessibilityIdentifier("card.like.\(card.id)")
-                        
-                        CommentButton(cardId: card.id, cardsManager: cardsManager)
-                            .frame(minWidth: 44, minHeight: 44)
-                    }
-                }
-
-                if let error = cardsManager.likeError(for: card.id) {
-                    Text(error)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(ChoraiTheme.ink.opacity(0.72))
-                        .accessibilityIdentifier("card.like.error.\(card.id)")
-                }
-            }
-        }
-        .padding(.vertical, 24)
-        .adaptiveContentGutter()
-        .frame(maxHeight: .infinity)
-        .choraiCardLevel(rate: card.rate, showsChora: false, cornerRadius: 28)
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("explore.search.surface.\(card.id)")
-        .offset(x: offset)
-        .rotationEffect(.degrees(rotation))
-        .scaleEffect(scale)
-        .onAppear {
-            // 点赞状态现在由 RecommendedCardsManager 管理
-            #if DEBUG
-            NotificationCenter.default.post(
-                name: NSNotification.Name("ExploreVisibleRecommendedCardChanged"),
-                object: nil,
-                userInfo: ["cardId": card.id]
-            )
-            #endif
-        }
-    }
-
-    private var summaryDragGesture: some Gesture {
-        DragGesture(minimumDistance: 18)
-            .onChanged { value in
-                guard abs(value.translation.width) > abs(value.translation.height) else { return }
-                offset = value.translation.width
-                rotation = reduceMotion ? 0 : Double(value.translation.width / 34)
-                onSwipe(value.translation.width, false)
-            }
-            .onEnded { value in
-                let decision = ExploreSearchSwipe.resolve(
-                    horizontal: Double(value.translation.width),
-                    vertical: Double(value.translation.height)
-                )
-                if decision != .cancel { onSwipe(value.translation.width, true) }
-                withAnimation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.86)) {
-                    offset = 0
-                    rotation = 0
-                    scale = 1
-                }
-            }
-    }
-    
-    // MARK: - 获取作者信息
-    private func loadAuthorFromCardDetail() {
-        guard !isLoadingAuthor else { return }
-        
-        isLoadingAuthor = true
-        print("获取卡片详情: cardId=\(card.id)")
-        
-        guard AuthManager.shared.currentUser != nil else {
-            print("用户未登录")
-            isLoadingAuthor = false
-            return
-        }
-        
-        NetworkManager.shared.getCardDetail(cardId: card.id) { result in
-            DispatchQueue.main.async {
-                self.isLoadingAuthor = false
-                switch result {
-                case .success(let response):
-                    if let author = response.data.author {
-                        print("成功: actorId=\(author.actorId)")
-                        self.onAvatarTap?(author.actorId)
-                    } else {
-                    }
-                case .failure(let error):
-                    print("获取卡片详情失败: \(error.localizedDescription)")
-                }
-            }
-        }
-    }
-    
-    // MARK: - 辅助函数
-    private func formatDate(_ dateString: String) -> String {
-        CardTimestamp.dateOnly(from: dateString)
-    }
-    
-}
-
-// 标签组件
-struct TagView: View {
-    let text: String
-    
-    var body: some View {
-        Text(text)
-            .font(.system(size: 12, weight: .medium))
-            .foregroundColor(ChoraiTheme.ink)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(
-                RoundedRectangle(cornerRadius: 15)
-                    .fill(Color.white.opacity(0.1))
-            )
-    }
-}
-
 @MainActor
 private struct TabBarMergePortalPreview: View {
     @StateObject private var anchorStore = MergeTaskRailAnchorStore()
@@ -1260,102 +877,3 @@ private struct TabBarMergePortalPreview: View {
 #Preview {
     TabBarMergePortalPreview()
 }
-
-
-
-// MARK: - HTMLWebView 组件
-struct HTMLWebView1: UIViewRepresentable {
-    let html: String
-    
-    func makeUIView(context: Context) -> WKWebView {
-        let webView = WKWebView()
-        webView.isOpaque = false
-        webView.backgroundColor = UIColor.clear
-        webView.scrollView.isScrollEnabled = false
-        webView.scrollView.bounces = false
-        webView.scrollView.showsVerticalScrollIndicator = false
-        webView.scrollView.showsHorizontalScrollIndicator = false
-        return webView
-    }
-    
-    func updateUIView(_ webView: WKWebView, context: Context) {
-        let htmlString = """
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <style>
-                body {
-                    margin: 0;
-                    padding: 0;
-                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-                    font-size: 14px;
-                    line-height: 1.4;
-                    color: rgba(255, 255, 255, 0.9);
-                    background: transparent;
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                }
-                p {
-                    margin: 0 0 8px 0;
-                }
-                p:last-child {
-                    margin-bottom: 0;
-                }
-                h1, h2, h3, h4, h5, h6 {
-                    margin: 0 0 8px 0;
-                    font-weight: 600;
-                }
-                ul, ol {
-                    margin: 0 0 8px 0;
-                    padding-left: 20px;
-                }
-                li {
-                    margin: 0 0 4px 0;
-                }
-                blockquote {
-                    margin: 0 0 8px 0;
-                    padding-left: 16px;
-                    border-left: 3px solid rgba(255, 255, 255, 0.3);
-                }
-                code {
-                    background: rgba(255, 255, 255, 0.1);
-                    padding: 2px 4px;
-                    border-radius: 3px;
-                    font-family: 'SF Mono', Monaco, monospace;
-                    font-size: 12px;
-                }
-                pre {
-                    background: rgba(255, 255, 255, 0.1);
-                    padding: 8px;
-                    border-radius: 6px;
-                    overflow-x: auto;
-                    margin: 0 0 8px 0;
-                }
-                pre code {
-                    background: none;
-                    padding: 0;
-                }
-                a {
-                    color: rgba(255, 255, 255, 0.8);
-                    text-decoration: underline;
-                }
-                img {
-                    max-width: 100%;
-                    height: auto;
-                    border-radius: 4px;
-                }
-            </style>
-        </head>
-        <body>
-            \(html)
-        </body>
-        </html>
-        """
-        
-        webView.loadHTMLString(htmlString, baseURL: nil)
-    }
-}
-
-// PopupMenuView 和 MenuButton 已移至 PopupMenuView.swift 文件中 

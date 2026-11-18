@@ -125,4 +125,38 @@ final class LibraryCardPreviewParserTests: XCTestCase {
         XCTAssertEqual(preview.text, "")
         XCTAssertNil(preview.imageSource)
     }
+
+    func testPresentationDerivesRichBlocksGridTextAndImageFromTheSameDocument() throws {
+        let doc = #"{"blocks":[{"type":"heading","content":[{"text":"Chapter"}]},{"type":"paragraph","content":[{"type":"link","content":[{"type":"text","text":"Read  this"}]}],"children":[{"type":"checkListItem","props":{"checked":true},"content":"A &amp; B"},{"type":"image","props":{"url":"/chorai-assets/diagram.png","mediaRef":"med_diagram","alt":"A diagram"}}]}]}"#
+        let doubleEncoded = String(decoding: try JSONEncoder().encode(doc), as: UTF8.self)
+
+        let value = LibraryCardPreviewParser.presentation(content: "Stale fallback", contentJSON: doubleEncoded)
+
+        XCTAssertEqual(value.blocks.map(\.kind), ["heading", "paragraph", "checklistitem"])
+        XCTAssertEqual(value.blocks.map(\.text), ["Chapter", "Read this", "A & B"])
+        XCTAssertEqual(value.blocks.map(\.checked), [false, false, true])
+        XCTAssertEqual(value.preview.text, "Chapter\nRead this\nA & B")
+        XCTAssertEqual(value.gridSummary, "Chapter\n\nRead this\n\nA & B")
+        XCTAssertEqual(value.accessibilityExcerpt, "Chapter Read this A & B")
+        XCTAssertEqual(value.preview.imageSource, "/chorai-assets/diagram.png")
+        XCTAssertEqual(value.preview.imageAlternativeText, "A diagram")
+        XCTAssertNil(value.preview.imageMediaRef, "Public preview retains the existing local media boundary")
+    }
+
+    func testPresentationKeepsLegacyHTMLAndEmptyBodies() {
+        let legacy = LibraryCardPreviewParser.presentation(
+            content: #"<div>First</div><p>Second<br />Third</p><img src="/chorai-assets/a.png" alt="Sketch">"#
+        )
+
+        XCTAssertEqual(legacy.blocks.map(\.kind), ["paragraph"])
+        XCTAssertEqual(legacy.blocks.map(\.text), ["First\nSecond\nThird"])
+        XCTAssertEqual(legacy.gridSummary, "First\nSecond\nThird")
+        XCTAssertEqual(legacy.preview.imageAlternativeText, "Sketch")
+        XCTAssertEqual(legacy.accessibilityExcerpt, "First Second Third")
+
+        let empty = LibraryCardPreviewParser.presentation(content: "doc://note/hash/11")
+        XCTAssertTrue(empty.blocks.isEmpty)
+        XCTAssertEqual(empty.gridSummary, "")
+        XCTAssertNil(empty.preview.imageSource)
+    }
 }

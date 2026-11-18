@@ -8,7 +8,7 @@ final class MergeTaskRailSourceContractTests: XCTestCase {
         let popup = try source(at: "ArcNote/PopupMenuView.swift")
         let home = try source(at: "ArcNote/HomeView.swift")
         let explore = try source(at: "ArcNote/ExploreView.swift")
-        let spark = try source(at: "ArcNote/SparkView.swift")
+        let spark = try source(at: "ArcNote/CoreFlow/SparkContinuationViews.swift")
         let rail = try source(at: "ArcNote/CoreFlow/MergeTaskRail.swift")
         let ownerToken = "MergeTaskRailShellOverlay("
 

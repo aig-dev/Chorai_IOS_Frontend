@@ -5,6 +5,10 @@ public extension Notification.Name {
     static let cardReadInvalidated = Notification.Name("chorai.cardReadInvalidated")
 }
 
+public enum CardReadInvalidation {
+    public static let statusKey = "http_status"
+}
+
 /// Main-thread snapshots of results the current session has already read.
 public final class RecentCardReads<Value> {
     private let capacity: Int

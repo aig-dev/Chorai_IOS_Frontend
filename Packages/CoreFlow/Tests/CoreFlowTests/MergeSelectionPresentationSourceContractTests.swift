@@ -4,7 +4,7 @@ import XCTest
 final class MergeSelectionPresentationSourceContractTests: XCTestCase {
     func testMergeSelectionUsesOneSafeAreaPrimaryAction() throws {
         let lifecycle = try source(at: "ArcNote/CoreFlow/MergeLifecycleViews.swift")
-        let cards = try source(at: "ArcNote/MergeView.swift")
+        let cards = try source(at: "ArcNote/MergeSelectionCards.swift")
 
         XCTAssertTrue(lifecycle.contains("MergeSelectionPrimaryAction("))
         XCTAssertTrue(lifecycle.contains(".safeAreaInset(edge: .bottom, spacing: 0)"))

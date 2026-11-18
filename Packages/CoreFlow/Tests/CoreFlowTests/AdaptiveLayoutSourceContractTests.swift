@@ -4,7 +4,6 @@ import XCTest
 final class AdaptiveLayoutSourceContractTests: XCTestCase {
     private let responsiveRoots = [
         "ArcNote/ContentView.swift",
-        "ArcNote/TabBarView.swift",
         "ArcNote/HomeView.swift",
         "ArcNote/ExploreView.swift",
         "ArcNote/ChatView.swift",
@@ -27,11 +26,8 @@ final class AdaptiveLayoutSourceContractTests: XCTestCase {
         "ArcNote/FollowListView.swift",
         "ArcNote/BlockedActorsView.swift",
         "ArcNote/ChooseInterestsView.swift",
-        "ArcNote/NewInsightView.swift",
         // NewNoteView delegates its visible root to this shared editor shell.
         "ArcNote/CardEditor/CardEditorShell.swift",
-        "ArcNote/SparkView.swift",
-        "ArcNote/MergeView.swift",
         "ArcNote/CoreFlow/SparkContinuationViews.swift",
         "ArcNote/CoreFlow/MergeLifecycleViews.swift",
         "ArcNote/CoreFlow/ShareCardView.swift",

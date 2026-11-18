@@ -47,6 +47,59 @@ final class FlowDeckStoreTests: XCTestCase {
     }
 
     @MainActor
+    func testRevokedCardIsRemovedFromHistoryAndAnOlderPageCannotRestoreIt() async {
+        let service = MockCoreFlowService()
+        service.recommendedResults = [
+            .success(.init(cards: [card("gone"), card("keep")], nextRefreshToken: "next")),
+            .success(.init(cards: [card("gone"), card("next")], nextRefreshToken: nil))
+        ]
+        let store = FlowDeckStore(service: service)
+        store.loadInitialIfNeeded()
+        await settle()
+        store.dismissCurrent()
+        NotificationCenter.default.post(name: .cardReadInvalidated, object: "gone")
+        await settle()
+
+        XCTAssertEqual(store.browsingCards.map(\.id), ["keep", "next"])
+        XCTAssertEqual(store.currentCard?.id, "keep")
+        XCTAssertTrue(store.history.isEmpty)
+    }
+
+    @MainActor
+    func testReadSessionChangeDiscardsQueuedPageBeforeReload() async {
+        let service = MockCoreFlowService()
+        service.recommendedResults = [
+            .success(.init(cards: [card("old")], nextRefreshToken: nil)),
+            .success(.init(cards: [card("new")], nextRefreshToken: nil))
+        ]
+        let store = FlowDeckStore(service: service)
+        store.loadInitialIfNeeded()
+        NotificationCenter.default.post(name: .cardReadSessionDidChange, object: nil)
+        await settle()
+        XCTAssertTrue(store.browsingCards.isEmpty)
+        XCTAssertEqual(store.phase, .idle)
+        store.loadInitialIfNeeded()
+        await settle()
+        XCTAssertEqual(store.cards.map(\.id), ["new"])
+    }
+
+    @MainActor
+    func testRevokingLastCardLoadsNextPage() async {
+        let service = MockCoreFlowService()
+        service.recommendedResults = [
+            .success(.init(cards: [card("gone")], nextRefreshToken: "next")),
+            .success(.init(cards: [card("next-card")], nextRefreshToken: nil))
+        ]
+        let store = FlowDeckStore(service: service)
+        store.loadInitialIfNeeded()
+        await settle()
+        NotificationCenter.default.post(name: .cardReadInvalidated, object: "gone")
+        await settle()
+        XCTAssertEqual(store.currentCard?.id, "next-card")
+        XCTAssertEqual(service.requestedRefreshTokens, [nil, "next"])
+    }
+
+    @MainActor
     func testEmptyPageWithNextTokenContinuesUntilFirstCard() async {
         let service = MockCoreFlowService()
         service.recommendedResults = [

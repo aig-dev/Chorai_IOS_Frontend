@@ -2,14 +2,6 @@ import SwiftUI
 import Combine
 import CoreFlow
 
-// MARK: 关联笔记数据模型
-struct DetailRelatedNote: Identifiable {
-    let id = UUID()
-    let avatar: String
-    let title: String
-    let description: String
-}
-
 struct DetailView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -66,15 +58,15 @@ struct DetailView: View {
     }
 
     private var isCurrentCardOwned: Bool {
-        guard displayedDetail != nil else { return false }
-        if let isOwner = cardDetailManager.cardDetail?.isOwner {
+        guard let detail = displayedDetail else { return false }
+        if let isOwner = detail.isOwner {
             return isOwner
         }
-        guard let authorId = displayedDetail?.author?.actorId,
+        guard let ownerId = detail.ownerActorId,
               let currentUserId = AuthManager.shared.currentUser?.id else {
             return false
         }
-        return authorId == currentUserId
+        return ownerId == currentUserId
     }
     
     private var currentDetailUserCard: UserCard? {
@@ -131,7 +123,7 @@ struct DetailView: View {
 
     private func handleOwnedCardRouteDismissal(_ dismissal: CardNavigationDismissal) {
         guard case .editor(let editedID) = dismissal.route, editedID == cardId else { return }
-        loadCardDetail(refreshOwnedCardActions: true)
+        loadCardDetail(refreshOwnedCardActions: true, requiringNewRead: true)
     }
 
     // 关联笔记数据
@@ -326,9 +318,19 @@ struct DetailView: View {
             }
         }
         .onAppear {
-            if !cardId.isEmpty {
+            if !cardId.isEmpty && ownedCardRefreshRequestID == nil {
                 loadCardDetail()
             }
+        }
+        .onDisappear {
+            cardDetailManager.cancelRead()
+            ownedCardRefreshRequestID = nil
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .cardReadInvalidated)) { event in
+            if event.object as? String == cardId { clearReadAttachments() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .cardReadSessionDidChange)) { _ in
+            clearReadAttachments()
         }
         .onChange(of: cardId) { newCardId in
             cancellables.removeAll()
@@ -597,13 +599,28 @@ struct DetailView: View {
     }
 
     // MARK: 加载卡片详情
-    private func loadCardDetail(refreshOwnedCardActions: Bool = false) {
+    private func clearReadAttachments() {
+        cancellables.removeAll()
+        relatedNotes = []
+        isLoadingLinks = false
+        isFollowing = false
+        isFollowLoading = false
+        isFavoriteLoading = false
+        isFavorited = false
+        favoriteCount = 0
+        favoriteError = nil
+        committedOwnedCardState = nil
+        ownedCardActionRefresh = nil
+        ownedCardRefreshRequestID = nil
+    }
+
+    private func loadCardDetail(refreshOwnedCardActions: Bool = false, requiringNewRead: Bool = false) {
         // An explicit return from Edit establishes a new metadata authority.
         // Keep the last confirmed state if that refresh fails.
         let refreshRequestID = UUID()
         if refreshOwnedCardActions { ownedCardRefreshRequestID = refreshRequestID }
 
-        cardDetailManager.fetchCardDetail(cardId: cardId) { result in
+        cardDetailManager.fetchCardDetail(cardId: cardId, requiringNewRead: requiringNewRead) { result in
             if refreshOwnedCardActions {
                 guard ownedCardRefreshRequestID == refreshRequestID else { return }
                 ownedCardRefreshRequestID = nil
@@ -614,7 +631,7 @@ struct DetailView: View {
                 if refreshOwnedCardActions {
                     let snapshot = OwnedCardActionSnapshot(
                         cardID: cardDetail.id,
-                        isOwned: cardDetail.isOwner ?? (AuthManager.shared.currentUser.map { cardDetail.author?.actorId == $0.id } ?? false),
+                        isOwned: cardDetail.isOwner ?? (AuthManager.shared.currentUser.map { cardDetail.ownerActorId == $0.id } ?? false),
                         isPublic: cardDetail.isPublic, isPinned: cardDetail.isPinned ?? false,
                         pinnedAt: cardDetail.pinnedAt
                     )

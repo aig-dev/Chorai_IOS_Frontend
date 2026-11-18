@@ -13,7 +13,6 @@ final class CardEngagementCenter {
 
     private init() {
         favoriteObserver = NotificationCenter.default.publisher(for: .choraiFavoriteChanged)
-            .receive(on: DispatchQueue.main)
             .sink { [weak self] notification in
                 guard let payload = notification.userInfo,
                       let cardID = payload["cardID"] as? String,
@@ -23,7 +22,7 @@ final class CardEngagementCenter {
                     isFavorited: isFavorited,
                     favoriteCount: payload["count"] as? Int
                 )
-                CardDetailManager.didCommit(state)
+                CardDetailReader.shared.didCommit(state)
                 self?.favorites.send(state)
             }
     }
@@ -35,7 +34,7 @@ final class CardEngagementCenter {
     }
 
     func publish(_ state: CardLikeState) {
-        CardDetailManager.didCommit(state)
+        CardDetailReader.shared.didCommit(state)
         likes.send(state)
     }
 }

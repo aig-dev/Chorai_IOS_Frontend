@@ -1,41 +1,6 @@
 import SwiftUI
 import WebKit
 
-/// Compact previews keep their existing three-line clipping. Full readers below
-/// use the same typography without clipping or replacing the HTML document.
-struct HTMLWebView: UIViewRepresentable {
-    @Environment(\.colorScheme) private var colorScheme
-    let htmlContent: String
-    let height: CGFloat
-
-    init(htmlContent: String, height: CGFloat = 200) {
-        self.htmlContent = htmlContent
-        self.height = height
-    }
-
-    func makeUIView(context: Context) -> WKWebView {
-        let webView = ChoraiHTMLAppearance.makeWebView()
-        webView.overrideUserInterfaceStyle = colorScheme == .dark ? .dark : .light
-        return webView
-    }
-
-    func updateUIView(_ webView: WKWebView, context: Context) {
-        webView.overrideUserInterfaceStyle = colorScheme == .dark ? .dark : .light
-        guard context.coordinator.loadedContent != htmlContent else { return }
-        context.coordinator.loadedContent = htmlContent
-        webView.loadHTMLString(
-            ChoraiHTMLAppearance.document(content: htmlContent, isPreview: true),
-            baseURL: nil
-        )
-    }
-
-    func makeCoordinator() -> Coordinator { Coordinator() }
-
-    final class Coordinator {
-        var loadedContent: String?
-    }
-}
-
 struct AdaptiveHTMLWebView: UIViewRepresentable {
     @Environment(\.colorScheme) private var colorScheme
     let htmlContent: String
@@ -54,7 +19,7 @@ struct AdaptiveHTMLWebView: UIViewRepresentable {
         guard context.coordinator.loadedContent != htmlContent else { return }
         context.coordinator.loadedContent = htmlContent
         webView.loadHTMLString(
-            ChoraiHTMLAppearance.document(content: htmlContent, isPreview: false),
+            ChoraiHTMLAppearance.document(content: htmlContent),
             baseURL: nil
         )
     }
@@ -102,7 +67,7 @@ private enum ChoraiHTMLAppearance {
         return webView
     }
 
-    static func document(content: String, isPreview: Bool) -> String {
+    static func document(content: String) -> String {
         """
         <!DOCTYPE html>
         <html><head>
@@ -117,8 +82,8 @@ private enum ChoraiHTMLAppearance {
         /* Contain heading/paragraph margins so the measured body includes the
            last line. Collapsed margins can otherwise fall outside scrollHeight. */
         body { display:flow-root; }
-        body { font:-apple-system-body; line-height:1.65; color:\(isPreview ? "var(--ink)" : "CanvasText"); overflow-wrap:anywhere; -webkit-text-size-adjust:100%; }
-        \(isPreview ? "body { max-height:4.95em; overflow:hidden; }" : "html { font:-apple-system-body; } body { font-family:ui-serif,'New York','Songti SC',Georgia,serif; font-size:1.235294rem; line-height:1.6; } p { margin-bottom:24px; }")
+        body { font:-apple-system-body; line-height:1.65; color:CanvasText; overflow-wrap:anywhere; -webkit-text-size-adjust:100%; }
+        html { font:-apple-system-body; } body { font-family:ui-serif,'New York','Songti SC',Georgia,serif; font-size:1.235294rem; line-height:1.6; } p { margin-bottom:24px; }
         p { margin:0 0 16px; padding:0; }
         ul, ol { margin:12px 0; padding-left:24px; }
         li { margin:5px 0; }
@@ -134,7 +99,7 @@ private enum ChoraiHTMLAppearance {
         th, td { border:1px solid var(--edge); padding:8px; text-align:left; }
         th { background:var(--surface); }
         hr { border:0; border-top:1px solid var(--edge); margin:20px 0; }
-        \(isPreview ? "" : "p { margin-bottom:24px; } body > :first-child { margin-top:0; }")
+        p { margin-bottom:24px; } body > :first-child { margin-top:0; }
         </style></head><body>\(content)</body></html>
         """
     }

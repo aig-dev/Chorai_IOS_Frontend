@@ -105,6 +105,51 @@ final class DiscoveryPathStoreTests: XCTestCase {
         XCTAssertEqual(store.phase, .empty)
         XCTAssertEqual(store.snapshot, recovered)
     }
+
+    func testReadInvalidationRemovesAncestorAndThenTarget() async {
+        let value = DiscoveryPathSnapshot(
+            collected: .fixture("target"),
+            nodes: [.fixture("first", depth: 1), .fixture("second", depth: 0)],
+            pathLength: 3
+        )
+        let store = DiscoveryPathStore(service: DiscoveryPathServiceStub(scripts: [
+            .init(result: .success(value))
+        ]))
+        await store.load(cardID: "target")
+
+        NotificationCenter.default.post(name: .cardReadInvalidated, object: "first")
+        XCTAssertEqual(store.snapshot?.ancestors.map(\.id), ["second"])
+
+        NotificationCenter.default.post(name: .cardReadInvalidated, object: "target")
+        XCTAssertNil(store.snapshot)
+        XCTAssertEqual(store.phase, .failed(.forbidden))
+    }
+
+    func testSessionChangeRejectsInFlightPath() async {
+        let value = DiscoveryPathSnapshot(collected: .fixture("old"), nodes: [], pathLength: 0)
+        let service = DiscoveryPathServiceStub(scripts: [
+            .init(delay: 80_000_000, result: .success(value))
+        ])
+        let store = DiscoveryPathStore(service: service)
+        let load = Task { await store.load(cardID: "old") }
+        while await service.requestCount() == 0 { await Task.yield() }
+
+        NotificationCenter.default.post(name: .cardReadSessionDidChange, object: nil)
+        await load.value
+        XCTAssertNil(store.snapshot)
+        XCTAssertEqual(store.phase, .failed(.requestFailed(message: nil)))
+    }
+
+    func testInvalidationKeepsTheTargetReadStatus() async {
+        for (status, expected) in [(401, DiscoveryPathError.unauthorized), (404, .invalidCard), (410, .invalidCard), (403, .forbidden)] {
+            let value = DiscoveryPathSnapshot(collected: .fixture("target"), nodes: [], pathLength: 0)
+            let store = DiscoveryPathStore(service: DiscoveryPathServiceStub(scripts: [.init(result: .success(value))]))
+            await store.load(cardID: "target")
+            NotificationCenter.default.post(name: .cardReadInvalidated, object: "target", userInfo: [CardReadInvalidation.statusKey: status])
+            XCTAssertNil(store.snapshot)
+            XCTAssertEqual(store.phase, .failed(expected))
+        }
+    }
 }
 
 private extension DiscoveryPathCard {

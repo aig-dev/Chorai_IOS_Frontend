@@ -3,9 +3,6 @@ import SwiftUI
 
 struct ExploreView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @Binding var showPopupMenu: Bool
-    @Binding var selectedFilter: String
-    @Binding var showFilterTags: Bool
     @Binding var showSideMenu: Bool
     let onSpark: (String) -> Void
     var onFlowCardVisible: (String) -> Void = { _ in }
@@ -17,15 +14,10 @@ struct ExploreView: View {
     @State private var isSearchMode = false
     @State private var searchText = ""
     @FocusState private var isSearchFocused: Bool
-    @StateObject private var cardsManager = RecommendedCardsManager(autoLoad: false)
+    @StateObject private var searchEngagement = ExploreSearchEngagement()
     @StateObject private var flowStore = FlowDeckStore(service: NetworkCoreFlowService(), onFavoriteCommitted: CardEngagementCenter.shared.publishFavorite)
-    @StateObject private var searchManager = SearchManager.shared
+    @StateObject private var searchManager = ExploreSearchManager.shared
 
-    // ExploreView自己的弹窗状态
-    @State private var showExplorePopupMenu = false
-    @State private var currentExploreCardData: UserCard? = nil
-    @State private var isCurrentExploreCardOwned = false
-    
     // 导航状态
     @State private var navigateToUserProfile = false
     @State private var selectedActorId: String? = nil
@@ -35,13 +27,6 @@ struct ExploreView: View {
     // 搜索状态
     @State private var currentSearchIndex = 0
     @State private var hasSubmittedSearch = false
-
-    private func bindCommentCreatedCallback() {
-        let manager = cardsManager
-        CommentPopupManager.shared.onCommentCreated = { [weak manager] cardID in
-            manager?.incrementCommentCount(for: cardID)
-        }
-    }
 
     private func targetIsVisible(for tip: ContextualGuideTipID) -> Bool {
         guard !isSearchMode, flowStore.currentCard != nil else {
@@ -90,28 +75,15 @@ struct ExploreView: View {
                 if let onboardingStore, onboardingStore.guideScene != nil, !isSearchMode {
                     OnboardingGuideLine(store: onboardingStore)
                 }
-                if showFilterTags && !isSearchMode {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
-                            ForEach(["All", "Follow", "Popular", "Trending"], id: \.self) { filter in
-                                FilterTag(title: filter, isSelected: selectedFilter == filter) { selectedFilter = filter }
-                            }
-                        }
-                    }
-                }
                 ZStack {
                     FlowDeckView(
                         store: flowStore,
                         isGrid: gridMode,
+                        loadsPreviews: !isSearchMode,
                         onOpenDetail: { card in selectedCardId = card.id; navigateToDetail = true },
                         onOpenAuthor: { card in
                             guard let actorID = card.author?.id else { return }
                             selectedActorId = actorID; navigateToUserProfile = true
-                        },
-                        onOpenMenu: { card in
-                            currentExploreCardData = card.asUserCard
-                            isCurrentExploreCardOwned = card.isOwner || isOwnedByCurrentUser(authorId: card.author?.id)
-                            showExplorePopupMenu = true
                         },
                         onSpark: { onSpark($0.id) },
                         onCardVisible: { onFlowCardVisible($0.id) },
@@ -157,20 +129,24 @@ struct ExploreView: View {
             }
             .presentationDetents([.medium, .large])
         }
-        .onAppear {
-            bindCommentCreatedCallback()
-            #if DEBUG
-            publishVisibleRecommendedCardForUITest()
-            #endif
-        }
         #if DEBUG
+        .onAppear { publishVisibleRecommendedCardForUITest() }
         .onReceive(flowStore.$cards) { _ in publishVisibleRecommendedCardForUITest() }
         #endif
-        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("CloseAllPopups"))) { _ in
-            showExplorePopupMenu = false; showFilterTags = false
+        .onReceive(NotificationCenter.default.publisher(for: .cardReadSessionDidChange)) { _ in
+            showsHistory = false
+            searchManager.clearSearchResults()
+            hasSubmittedSearch = false
+            currentSearchIndex = 0
+            Task { @MainActor in
+                if AuthManager.shared.cardReadSession != nil { flowStore.loadInitialIfNeeded() }
+            }
         }
-        .onChange(of: showFilterTags) { if $0 { dismissVisibleFlowTip() } }
-        .popupMenu(isPresented: $showExplorePopupMenu, layout: .grid2x2, cardData: currentExploreCardData, isOwnCard: isCurrentExploreCardOwned)
+        .onReceive(NotificationCenter.default.publisher(for: .cardReadInvalidated)) { event in
+            guard let cardID = event.object as? String else { return }
+            searchManager.invalidateRead(cardID: cardID)
+            currentSearchIndex = min(currentSearchIndex, max(0, searchManager.searchResults.count - 1))
+        }
         .navigationDestination(isPresented: $navigateToUserProfile) {
             if let actorID = selectedActorId { UserProfileView(actorId: actorID) }
         }
@@ -314,18 +290,18 @@ struct ExploreView: View {
             }.frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if currentSearchIndex < searchManager.searchResults.count {
             let card = searchManager.searchResults[currentSearchIndex]
+            let displayCard = convertSearchCardToCard(card)
+            let isOwner = displayCard.isOwner ?? isOwnedByCurrentUser(ownerId: displayCard.ownerActorId)
             GeometryReader { viewport in
             VStack(spacing: 8) {
-                PostCard(
-                    card: convertSearchCardToCard(card), cardsManager: cardsManager,
-                    onShowMenu: { value in
-                        currentExploreCardData = convertCardToUserCard(value)
-                        isCurrentExploreCardOwned = value.isOwner ?? isOwnedByCurrentUser(authorId: value.author?.id)
-                    },
-                    onSwipe: { translation, ended in handleSearchSwipe(translation: CGSize(width: translation, height: 0), isEnded: ended) },
+                ExploreSearchResultCard(
+                    card: displayCard,
+                    engagement: searchEngagement,
+                    menuCardData: convertCardToUserCard(displayCard),
+                    isOwner: isOwner,
+                    onSwipe: applySearchSwipe,
                     onAvatarTap: { selectedActorId = $0; navigateToUserProfile = true },
-                    onCardTap: { selectedCardId = $0; navigateToDetail = true },
-                    menuCardData: convertCardToUserCard(convertSearchCardToCard(card))
+                    onCardTap: { selectedCardId = $0; navigateToDetail = true }
                 )
                 .frame(height: max(0, viewport.size.height - 52), alignment: .top)
                 .id(card.id)
@@ -433,28 +409,17 @@ struct ExploreView: View {
         )
     }
     
-    // MARK: - 处理搜索滑动
-    private func handleSearchSwipe(translation: CGSize, isEnded: Bool) {
-        if isEnded {
-            let threshold: CGFloat = 100
-            if abs(translation.width) > threshold {
-                if translation.width > 0 {
-                    // 向右滑上一张搜索结果
-                    if currentSearchIndex > 0 {
-                        currentSearchIndex -= 1
-                        print("搜索向右滑动，显示第 \(currentSearchIndex + 1) 张")
-                    }
-                } else {
-                    // 向左滑下一张搜索结果
-                    if currentSearchIndex < searchManager.searchResults.count - 1 {
-                        currentSearchIndex += 1
-                        print("搜索向左滑动，显示第 \(currentSearchIndex + 1) 张")
-                    }
-                }
-            }
+    private func applySearchSwipe(_ decision: ExploreSearchSwipe) {
+        switch decision {
+        case .previous:
+            if currentSearchIndex > 0 { currentSearchIndex -= 1 }
+        case .next:
+            if currentSearchIndex + 1 < searchManager.searchResults.count { currentSearchIndex += 1 }
+        case .cancel:
+            break
         }
     }
-    
+
     // MARK: - 转换Card为UserCard
     private func convertCardToUserCard(_ card: Card) -> UserCard {
         return UserCard(
@@ -481,38 +446,254 @@ struct ExploreView: View {
         )
     }
     
-    private func isOwnedByCurrentUser(authorId: String?) -> Bool {
-        guard let authorId = authorId,
+    private func isOwnedByCurrentUser(ownerId: String?) -> Bool {
+        guard let ownerId,
               let currentUserId = AuthManager.shared.currentUser?.id else {
             return false
         }
-        return authorId == currentUserId
+        return ownerId == currentUserId
+    }
+}
+
+private struct ExploreSearchResultCard: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let card: Card
+    @ObservedObject var engagement: ExploreSearchEngagement
+    let menuCardData: UserCard
+    let isOwner: Bool
+    let onSwipe: (ExploreSearchSwipe) -> Void
+    let onAvatarTap: (String) -> Void
+    let onCardTap: (String) -> Void
+    @State private var offset: CGFloat = 0
+    @State private var rotation: Double = 0
+
+    private var moreMenuLabel: some View {
+        Image(systemName: "ellipsis")
+            .font(.title3)
+            .foregroundStyle(ChoraiTheme.ink)
+            .frame(width: 44, height: 44)
+            .contentShape(Rectangle())
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            // 用户信息
+            HStack {
+                // 头像
+                Button {
+                    if let author = card.author { onAvatarTap(author.id) }
+                } label: {
+                    Group {
+                        if let avatarUrl = card.author?.avatar, !avatarUrl.isEmpty {
+                            let fullAvatarUrl = APIConfiguration.resourceURLString(avatarUrl)
+
+                            AsyncImage(url: URL(string: fullAvatarUrl)) { image in
+                                image
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fill)
+                            } placeholder: {
+                                Image("avatar")
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fill)
+                            }
+                        } else {
+                            Image("avatar")
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                        }
+                    }
+                        .frame(width: 38, height: 38)
+                    .clipShape(Circle())
+                }
+                .buttonStyle(PlainButtonStyle())
+                .frame(minWidth: 44, minHeight: 44)
+                .accessibilityLabel("Open author")
+                .accessibilityIdentifier("explore.search.author.\(card.id)")
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(card.author?.username ?? "AI")
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(1)
+                        .foregroundColor(ChoraiTheme.ink)
+
+                    Text(formatDate(card.createdAt))
+                        .font(.caption)
+                        .lineLimit(1)
+                        .foregroundColor(ChoraiTheme.ink.opacity(0.7))
+                }
+
+                Spacer()
+
+                NativeCardActionsMenu(cardData: menuCardData, layout: .grid2x2, isOwnCard: isOwner) {
+                    moreMenuLabel
+                }
+                .buttonStyle(PlainButtonStyle())
+                .accessibilityLabel("Note actions")
+                .accessibilityIdentifier("explore.search.menu.\(card.id)")
+            }
+
+            ChoraiLevelBadge(rate: card.rate, compact: true)
+
+            FlowRichPreview(card: card.asFlowCard, compact: false)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .clipped()
+            .contentShape(Rectangle())
+            .onTapGesture {
+                onCardTap(card.id)
+            }
+            .highPriorityGesture(summaryDragGesture)
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isButton)
+            .accessibilityHint("Read full note")
+            .accessibilityIdentifier("explore.search.summary.\(card.id)")
+            .accessibilityAction { onCardTap(card.id) }
+
+            // 底部内容 - 固定在底部
+            VStack(spacing: 16) {
+                // 标签
+                if !card.tags.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(card.tags, id: \.self) { tag in
+                                TagView(text: tag)
+                            }
+                            Spacer()
+                        }
+                    }
+                    .accessibilityIdentifier("explore.search.tags.\(card.id)")
+                }
+
+                // 交互统计
+                HStack {
+                    // 左边一个 - 收藏按钮
+                    if !isOwner {
+                        Button(action: {
+                            engagement.toggleFavorite(for: card.id)
+                        }) {
+                            HStack(spacing: 4) {
+                                Image(systemName: engagement.getFavoriteState(for: card.id) ? "bookmark.fill" : "bookmark")
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fit)
+                                    .frame(width: 26, height: 26)
+                                Text("\(engagement.getFavoriteCount(for: card.id))")
+                                    .font(.system(size: 14, weight: .medium))
+                                    .foregroundColor(ChoraiTheme.ink.opacity(0.8))
+                            }
+                            .frame(minWidth: 44, minHeight: 44)
+                            .contentShape(Rectangle())
+                        }
+                        .accessibilityElement(children: .combine)
+                        .accessibilityLabel("Favorite")
+                        .accessibilityValue(engagement.getFavoriteState(for: card.id) ? "true" : "false")
+                        .accessibilityIdentifier("card.favorite.\(card.id)")
+                    }
+
+                    Spacer()
+
+                    // 右边两个
+                    HStack(spacing: 20) {
+                        Button(action: {
+                            engagement.toggleLike(for: card.id)
+                        }) {
+                            HStack(spacing: 4) {
+                                Image(systemName: engagement.getLikeState(for: card.id) ? "heart.fill" : "heart")
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fit)
+                                    .frame(width: 20, height: 20)
+                                Text("\(engagement.getLikeCount(for: card.id))")
+                                    .font(.system(size: 14, weight: .medium))
+                                    .foregroundColor(ChoraiTheme.ink.opacity(0.8))
+                            }
+                            .frame(minWidth: 44, minHeight: 44)
+                            .contentShape(Rectangle())
+                        }
+                        .disabled(engagement.isLikeMutationInFlight(for: card.id))
+                        .accessibilityElement(children: .combine)
+                        .accessibilityLabel(engagement.getLikeState(for: card.id) ? "Unlike" : "Like")
+                        .accessibilityValue(engagement.getLikeState(for: card.id) ? "true" : "false")
+                        .accessibilityIdentifier("card.like.\(card.id)")
+
+                        CommentButton(cardId: card.id, searchEngagement: engagement)
+                            .frame(minWidth: 44, minHeight: 44)
+                    }
+                }
+
+                if let error = engagement.likeError(for: card.id) {
+                    Text(error)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(ChoraiTheme.ink.opacity(0.72))
+                        .accessibilityIdentifier("card.like.error.\(card.id)")
+                }
+            }
+        }
+        .padding(.vertical, 24)
+        .adaptiveContentGutter()
+        .frame(maxHeight: .infinity)
+        .choraiCardLevel(rate: card.rate, showsChora: false, cornerRadius: 28)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("explore.search.surface.\(card.id)")
+        .offset(x: offset)
+        .rotationEffect(.degrees(rotation))
+        #if DEBUG
+        .onAppear {
+            NotificationCenter.default.post(
+                name: NSNotification.Name("ExploreVisibleRecommendedCardChanged"),
+                object: nil,
+                userInfo: ["cardId": card.id]
+            )
+        }
+        #endif
+    }
+
+    private var summaryDragGesture: some Gesture {
+        DragGesture(minimumDistance: 18)
+            .onChanged { value in
+                guard abs(value.translation.width) > abs(value.translation.height) else { return }
+                offset = value.translation.width
+                rotation = reduceMotion ? 0 : Double(value.translation.width / 34)
+            }
+            .onEnded { value in
+                let decision = ExploreSearchSwipe.resolve(
+                    horizontal: Double(value.translation.width),
+                    vertical: Double(value.translation.height)
+                )
+                onSwipe(decision)
+                withAnimation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.86)) {
+                    offset = 0
+                    rotation = 0
+                }
+            }
+    }
+
+    // MARK: - 辅助函数
+    private func formatDate(_ dateString: String) -> String {
+        CardTimestamp.dateOnly(from: dateString)
+    }
+
+}
+
+// 标签组件
+private struct TagView: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: 12, weight: .medium))
+            .foregroundColor(ChoraiTheme.ink)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(
+                RoundedRectangle(cornerRadius: 15)
+                    .fill(Color.white.opacity(0.1))
+            )
     }
 }
 
 #Preview {
     ExploreView(
-        showPopupMenu: .constant(false),
-        selectedFilter: .constant("All"),
-        showFilterTags: .constant(false),
         showSideMenu: .constant(false),
         onSpark: { _ in }
     )
-}
-
-// Shared by existing filter call sites; theme changes do not alter selection.
-struct FilterTag: View {
-    let title: String
-    let isSelected: Bool
-    let action: () -> Void
-    var body: some View {
-        Button(action: action) {
-            Text(title).font(.subheadline.weight(isSelected ? .semibold : .regular))
-                .padding(.horizontal, 16).frame(minHeight: 44)
-                .foregroundStyle(isSelected ? ChoraiTheme.onAccent : ChoraiTheme.ink)
-                .background(isSelected ? ChoraiTheme.accent : ChoraiTheme.raisedSurface, in: Capsule())
-        }.buttonStyle(.plain).accessibilityAddTraits(isSelected ? .isSelected : [])
-    }
 }
 
 struct RotatingLoaderView: View {

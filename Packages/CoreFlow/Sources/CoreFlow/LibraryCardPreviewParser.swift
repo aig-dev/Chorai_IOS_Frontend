@@ -19,6 +19,27 @@ public struct LibraryCardPreviewContent: Equatable, Sendable {
     }
 }
 
+public struct LibraryCardPreviewBlock: Equatable, Sendable {
+    public let kind: String
+    public let text: String
+    public let checked: Bool
+}
+
+public struct LibraryCardPresentation: Equatable, Sendable {
+    public let preview: LibraryCardPreviewContent
+    public let blocks: [LibraryCardPreviewBlock]
+    public let gridSummary: String
+    public let accessibilityExcerpt: String
+
+    var estimatedBytes: Int {
+        let textBytes = preview.text.utf8.count + gridSummary.utf8.count + accessibilityExcerpt.utf8.count
+        let imageBytes = [preview.imageSource, preview.imageAlternativeText, preview.imageMediaRef]
+            .compactMap { $0 }.reduce(0) { $0 + $1.utf8.count }
+        let blockBytes = blocks.reduce(0) { $0 + $1.kind.utf8.count + $1.text.utf8.count }
+        return textBytes + imageBytes + blockBytes
+    }
+}
+
 public enum LibraryCardPreviewParser {
     private static let markdownImageExpression = try! NSRegularExpression(
         pattern: #"!\[([^\]]*)\]\(\s*(?:<([^>\r\n]+)>|([^\s\)]+))(?:\s+(?:\"[^\"]*\"|'[^']*'|\([^\)]*\)))?\s*\)"#
@@ -53,24 +74,75 @@ public enum LibraryCardPreviewParser {
         contentJSON: String? = nil,
         allowsLocalImages: Bool = false
     ) -> LibraryCardPreviewContent {
+        read(content: content, contentJSON: contentJSON, allowsLocalImages: allowsLocalImages, includeBlocks: false).preview
+    }
+
+    public static func presentation(
+        content: String,
+        contentJSON: String? = nil,
+        allowsLocalImages: Bool = false
+    ) -> LibraryCardPresentation {
+        let (preview, blocks) = read(
+            content: content, contentJSON: contentJSON, allowsLocalImages: allowsLocalImages, includeBlocks: true
+        )
+        let excerpt = preview.text.split(maxSplits: 100, whereSeparator: \.isWhitespace)
+            .prefix(100).joined(separator: " ").prefix(100)
+        return LibraryCardPresentation(
+            preview: preview,
+            blocks: blocks,
+            gridSummary: blocks.map(\.text).joined(separator: "\n\n"),
+            accessibilityExcerpt: String(excerpt)
+        )
+    }
+
+    private static func read(
+        content: String,
+        contentJSON: String?,
+        allowsLocalImages: Bool,
+        includeBlocks: Bool
+    ) -> (preview: LibraryCardPreviewContent, blocks: [LibraryCardPreviewBlock]) {
         if let blocks = structuredBlocks(from: contentJSON), !blocks.isEmpty {
             let flattened = flatten(blocks)
             let image = firstStructuredImage(in: flattened, allowsLocalImages: allowsLocalImages)
-            let text = normalizedPlainText(
-                flattened.compactMap(structuredText).joined(separator: "\n")
-            )
+            var textByBlock: [String] = []
+            var displayBlocks: [LibraryCardPreviewBlock] = []
+            for block in flattened {
+                let kind = (block["type"] as? String ?? "paragraph").lowercased()
+                guard let rawText = structuredText(from: block, kind: kind) else { continue }
+                textByBlock.append(rawText)
+
+                if includeBlocks {
+                    let text = normalizedPlainText(rawText)
+                    if !text.isEmpty {
+                        let checked = (block["props"] as? [String: Any])?["checked"] as? Bool ?? false
+                        displayBlocks.append(LibraryCardPreviewBlock(kind: kind, text: text, checked: checked))
+                    }
+                }
+            }
+            let text = normalizedPlainText(textByBlock.joined(separator: "\n"))
 
             if image != nil || !text.isEmpty {
-                return LibraryCardPreviewContent(
+                let preview = LibraryCardPreviewContent(
                     text: text,
                     imageSource: image?.source,
                     imageAlternativeText: image?.alternativeText,
                     imageMediaRef: image?.mediaRef
                 )
+                return (preview, resolvedBlocks(displayBlocks, fallback: text, includeBlocks: includeBlocks))
             }
         }
 
-        return fallbackPreview(from: content)
+        let preview = fallbackPreview(from: content)
+        return (preview, resolvedBlocks([], fallback: preview.text, includeBlocks: includeBlocks))
+    }
+
+    private static func resolvedBlocks(
+        _ blocks: [LibraryCardPreviewBlock],
+        fallback text: String,
+        includeBlocks: Bool
+    ) -> [LibraryCardPreviewBlock] {
+        guard includeBlocks, blocks.isEmpty, !text.isEmpty else { return blocks }
+        return [LibraryCardPreviewBlock(kind: "paragraph", text: text, checked: false)]
     }
 
     private struct ImageCandidate {
@@ -171,13 +243,12 @@ public enum LibraryCardPreviewParser {
     }
 
     private static func structuredText(
-        from block: [String: Any]
+        from block: [String: Any],
+        kind: String
     ) -> String? {
-        if (block["type"] as? String)?.lowercased() == "image" {
-            return nil
-        }
+        guard kind != "image" else { return nil }
 
-        if (block["type"] as? String)?.lowercased() == "mindmap",
+        if kind == "mindmap",
            let props = block["props"] as? [String: Any],
            let fallback = (props["fallbackText"] as? String)?.trimmedNonEmpty {
             return fallback

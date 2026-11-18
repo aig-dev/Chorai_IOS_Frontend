@@ -1,3 +1,4 @@
+import Combine
 import CoreFlow
 import SwiftUI
 import UIKit
@@ -104,16 +105,13 @@ private struct FlowDeckBackplate: View {
     }
 }
 
+@MainActor
 enum FlowTextPreview {
-    private static let cache: NSCache<NSString, NSString> = {
-        let cache = NSCache<NSString, NSString>()
-        cache.countLimit = 200
-        return cache
-    }()
-
     static func make(_ source: String) -> String {
+        let cache = FlowPreviewReader.shared.textCache
+        let canCache = AuthManager.shared.cardReadSession != nil
         let key = source as NSString
-        if let cached = cache.object(forKey: key) {
+        if canCache, let cached = cache.object(forKey: key) {
             return cached as String
         }
 
@@ -146,7 +144,12 @@ enum FlowTextPreview {
         let preview = decoded
             .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        cache.setObject(preview as NSString, forKey: key)
+        if canCache {
+            let bytes = source.utf8.count + preview.utf8.count
+            if bytes <= cache.totalCostLimit {
+                cache.setObject(preview as NSString, forKey: key, cost: bytes)
+            }
+        }
         return preview
     }
 }
@@ -169,7 +172,6 @@ struct FlowCardView: View {
     let likeErrorMessage: String?
     let onOpenDetail: () -> Void
     let onOpenAuthor: () -> Void
-    let onOpenMenu: () -> Void
     let onToggleFavorite: () -> Void
     let onSpark: () -> Void
     let onDismiss: () -> Void
@@ -178,6 +180,8 @@ struct FlowCardView: View {
     var contextualTipStore: ContextualGuideTipStore?
     var sparkResumeTargetIsVisible: Bool
     var cardHeight: CGFloat = 440
+    var previewSnapshotID: UUID?
+    var loadsPreview = true
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -348,7 +352,10 @@ struct FlowCardView: View {
                 .dynamicTypeSize(...DynamicTypeSize.accessibility1)
                 .fixedSize(horizontal: false, vertical: true)
 
-            FlowRichPreview(card: card, compact: false)
+            FlowRichPreview(
+                card: card, compact: false,
+                snapshotID: previewSnapshotID, loadsPreview: loadsPreview
+            )
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
                 .onTapGesture {
@@ -607,6 +614,7 @@ struct FlowCardView: View {
 struct FlowDeckView: View {
     @ObservedObject var store: FlowDeckStore
     var isGrid = false
+    var loadsPreviews = true
     @StateObject private var likeStore = CardLikeStore(
         state: CardLikeState(cardID: "", isLiked: false, likeCount: 0),
         service: NetworkCoreCardLikeService(),
@@ -614,7 +622,6 @@ struct FlowDeckView: View {
     )
     let onOpenDetail: (FlowCard) -> Void
     let onOpenAuthor: (FlowCard) -> Void
-    let onOpenMenu: (FlowCard) -> Void
     let onSpark: (FlowCard) -> Void
     let onCardVisible: (FlowCard) -> Void
     let onCardSaved: (String) -> Void
@@ -697,7 +704,6 @@ struct FlowDeckView: View {
                             likeErrorMessage: likeErrorMessage(for: card.id),
                             onOpenDetail: { onOpenDetail(card) },
                             onOpenAuthor: { onOpenAuthor(card) },
-                            onOpenMenu: { onOpenMenu(card) },
                             onToggleFavorite: { store.toggleFavoriteCurrent(onFavoriteSucceeded: recordSaved) },
                             onSpark: { onSpark(card) },
                             onDismiss: {
@@ -716,7 +722,9 @@ struct FlowDeckView: View {
                                 onboardingState: onboardingStore?.contextualTipState,
                                 resumeRootSourceAssetID: sparkResumeRootSourceAssetID
                             ),
-                            cardHeight: max(0, viewport.size.height - 12)
+                            cardHeight: max(0, viewport.size.height - 12),
+                            previewSnapshotID: store.previewSnapshotID,
+                            loadsPreview: loadsPreviews && !isGrid
                         )
                         .id(card.id)
                 }
@@ -742,7 +750,10 @@ struct FlowDeckView: View {
     private var gridContent: some View {
         if store.browsingCards.isEmpty { deckContent }
         else {
-            FlowGridView(store: store, onOpenDetail: onOpenDetail, onOpenAuthor: onOpenAuthor, onOpenMenu: onOpenMenu, onSpark: onSpark, onCardSaved: recordSaved)
+            FlowGridView(
+                store: store, loadsPreviews: loadsPreviews && isGrid,
+                onOpenDetail: onOpenDetail, onOpenAuthor: onOpenAuthor, onSpark: onSpark, onCardSaved: recordSaved
+            )
         }
     }
 
@@ -820,24 +831,24 @@ private struct FlowStateView: View {
 /// Both presentations read the same store; each keeps its own scroll position.
 private struct FlowGridView: View {
     @ObservedObject var store: FlowDeckStore
+    let loadsPreviews: Bool
     let onOpenDetail: (FlowCard) -> Void
     let onOpenAuthor: (FlowCard) -> Void
-    let onOpenMenu: (FlowCard) -> Void
     let onSpark: (FlowCard) -> Void
     let onCardSaved: (String) -> Void
     @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
+        let cards = store.browsingCards
         ScrollView {
             LazyVStack(spacing: 16) {
-                FlowMasonryLayout(columns: typeSize.isAccessibilitySize ? 1 : 2, spacing: 12) {
-                    ForEach(Array(store.browsingCards.enumerated()), id: \.element.id) { index, card in
-                        tile(card)
-                            .accessibilitySortPriority(Double(store.browsingCards.count - index))
-
+                FlowMasonryLayout(columns: typeSize.isAccessibilitySize ? 1 : 2, spacing: 12, typeSize: typeSize) {
+                    ForEach(Array(cards.enumerated()), id: \.element.id) { index, card in
+                        tile(card, priority: index < 2 ? .userInitiated : .utility)
+                            .accessibilitySortPriority(Double(cards.count - index))
                     }
                 }
-                if store.canLoadMore, let last = store.browsingCards.last {
+                if store.canLoadMore, let last = cards.last {
                     Color.clear.frame(height: 1)
                         .onAppear { store.loadMoreIfNeeded(visibleCardID: last.id) }
                         .id(last.id)
@@ -853,30 +864,41 @@ private struct FlowGridView: View {
         .accessibilityIdentifier("explore.grid")
     }
 
-    private func tile(_ card: FlowCard) -> some View {
-        ratedTile(card)
+    private func tile(_ card: FlowCard, priority: TaskPriority) -> some View {
+        FlowPreviewValue(
+            card: card,
+            snapshotID: store.previewSnapshotID,
+            loadsPreview: loadsPreviews,
+            priority: priority,
+            project: FlowGridExcerpt.init
+        ) { excerpt in
+            ratedTile(card, excerpt: excerpt)
+        }
     }
 
     /// The rated Grid uses the approved V8 level card as a complete surface.
-    private func ratedTile(_ card: FlowCard) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+    private func ratedTile(_ card: FlowCard, excerpt: FlowGridExcerpt?) -> some View {
+        let hasFavoriteError = store.failedFavoriteIDs.contains(card.id)
+        let authorName = card.author?.username ?? "Chorai"
+        let summary = excerpt?.summary ?? ""
+        return VStack(alignment: .leading, spacing: 12) {
             ChoraiLevelBadge(rate: card.rate, compact: true)
             Button { onOpenDetail(card) } label: {
-                Text(ratedSummary(card)).font(.system(.subheadline, design: .serif))
+                Text(summary).font(.system(.subheadline, design: .serif))
                     .lineSpacing(3).lineLimit(7)
                     .frame(maxWidth: .infinity, minHeight: 126, alignment: .topLeading)
                     .contentShape(Rectangle())
             }.buttonStyle(.plain)
-                .accessibilityLabel("Read note, \(FlowTextPreview.make(card.content).prefix(100))")
+                .accessibilityLabel(excerpt?.readLabel ?? "Read note")
                 .accessibilityHint("Opens the full note")
                 .accessibilityIdentifier("explore.grid.card.\(card.id)")
             Button { onOpenAuthor(card) } label: {
-                Text(card.author?.username ?? "Chorai")
+                Text(authorName)
                     .font(.caption.weight(.medium)).foregroundStyle(Color.secondary)
                     .lineLimit(1).frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                     .contentShape(Rectangle())
             }.buttonStyle(.plain).disabled(card.author == nil)
-                .accessibilityLabel("Open author, \(card.author?.username ?? "Chorai")")
+                .accessibilityLabel("Open author, \(authorName)")
             HStack(spacing: 0) {
                 if !card.isOwner {
                     Button { store.toggleFavorite(assetID: card.id, onFavoriteSucceeded: onCardSaved) } label: {
@@ -899,7 +921,7 @@ private struct FlowGridView: View {
                 }.accessibilityLabel("Note actions")
                     .accessibilityIdentifier("explore.grid.menu.\(card.id)")
             }.buttonStyle(.plain)
-            if store.failedFavoriteIDs.contains(card.id) {
+            if hasFavoriteError {
                 FlowFavoriteErrorView()
             }
         }
@@ -908,14 +930,38 @@ private struct FlowGridView: View {
         .foregroundStyle(ChoraiTheme.ink)
         .multilineTextAlignment(.leading)
         .accessibilityElement(children: .contain)
+        .layoutValue(
+            key: FlowGridTileMeasurementKey.self,
+            value: FlowGridTileMeasurement(
+                id: card.id, summary: summary, rate: card.rate, author: authorName,
+                isOwner: card.isOwner, hasFavoriteError: hasFavoriteError
+            )
+        )
     }
+}
 
-    private func ratedSummary(_ card: FlowCard) -> String {
-        let preview = LibraryCardPreviewParser.parse(content: card.content, contentJSON: card.contentJSON)
-        let blocks = FlowPreviewBlock.read(card, fallback: preview.text)
-        return blocks.map(\.text).joined(separator: "\n\n")
+private struct FlowGridExcerpt {
+    let summary: String
+    let readLabel: String
+
+    init(_ presentation: LibraryCardPresentation) {
+        summary = presentation.gridSummary
+        let excerpt = presentation.accessibilityExcerpt
+        readLabel = excerpt.isEmpty ? "Read note" : "Read note, \(excerpt)"
     }
+}
 
+private struct FlowGridTileMeasurement: Equatable {
+    let id: String
+    let summary: String
+    let rate: Int
+    let author: String
+    let isOwner: Bool
+    let hasFavoriteError: Bool
+}
+
+private struct FlowGridTileMeasurementKey: LayoutValueKey {
+    static let defaultValue: FlowGridTileMeasurement? = nil
 }
 
 /// The approved Grid places the next note in the shortest column without
@@ -923,78 +969,194 @@ private struct FlowGridView: View {
 private struct FlowMasonryLayout: Layout {
     var columns: Int
     var spacing: CGFloat
+    var typeSize: DynamicTypeSize
 
-    private func placements(width: CGFloat, subviews: Subviews) -> (points: [CGPoint], heights: [CGFloat], columnWidth: CGFloat) {
+    struct Cache {
+        fileprivate var measurement: Measurement?
+    }
+
+    fileprivate struct Inputs: Equatable {
+        let width: CGFloat
+        let columns: Int
+        let spacing: CGFloat
+        let typeSize: DynamicTypeSize
+        let tiles: [FlowGridTileMeasurement?]
+    }
+
+    fileprivate struct Measurement {
+        let inputs: Inputs
+        let points: [CGPoint]
+        let height: CGFloat
+        let columnWidth: CGFloat
+    }
+
+    func makeCache(subviews: Subviews) -> Cache {
+        Cache()
+    }
+
+    private func measurement(width: CGFloat, subviews: Subviews, cache: inout Cache) -> Measurement {
         let count = max(1, columns)
+        let inputs = Inputs(
+            width: width, columns: count, spacing: spacing, typeSize: typeSize,
+            tiles: subviews.map { $0[FlowGridTileMeasurementKey.self] }
+        )
+        if let saved = cache.measurement, saved.inputs == inputs { return saved }
+
         let columnWidth = max(1, (width - CGFloat(count - 1) * spacing) / CGFloat(count))
         var heights = Array(repeating: CGFloat.zero, count: count)
         var points: [CGPoint] = []
+        points.reserveCapacity(subviews.count)
         for subview in subviews {
             let column = heights.indices.min { heights[$0] < heights[$1] } ?? 0
             let size = subview.sizeThatFits(ProposedViewSize(width: columnWidth, height: nil))
             points.append(CGPoint(x: CGFloat(column) * (columnWidth + spacing), y: heights[column]))
             heights[column] += size.height + spacing
         }
-        return (points, heights, columnWidth)
+        let result = Measurement(
+            inputs: inputs, points: points, height: max(0, (heights.max() ?? 0) - spacing), columnWidth: columnWidth
+        )
+        cache.measurement = result
+        return result
     }
 
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout Cache) -> CGSize {
         let width = proposal.width ?? 360
-        let result = placements(width: width, subviews: subviews)
-        return CGSize(width: width, height: max(0, (result.heights.max() ?? 0) - spacing))
+        let result = measurement(width: width, subviews: subviews, cache: &cache)
+        return CGSize(width: width, height: result.height)
     }
 
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        let result = placements(width: bounds.width, subviews: subviews)
-        for (index, subview) in subviews.enumerated() {
-            let point = result.points[index]
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout Cache) {
+        let result = measurement(width: bounds.width, subviews: subviews, cache: &cache)
+        for (subview, point) in zip(subviews, result.points) {
             subview.place(at: CGPoint(x: bounds.minX + point.x, y: bounds.minY + point.y), anchor: .topLeading,
                           proposal: ProposedViewSize(width: result.columnWidth, height: nil))
         }
     }
 }
 
-/// Preview only the note's real blocks. In particular a paragraph never becomes
-/// an invented title, and the legacy title field is not displayed.
-private struct FlowPreviewBlock {
-    let kind: String
-    let text: String
-    let checked: Bool
+@MainActor
+private final class FlowPreviewReader: ObservableObject {
+    struct Scope: Equatable {
+        let session: UInt64
+        let token: LibraryCardPreviewCache.ReadToken
+    }
 
-    static func read(_ card: FlowCard, fallback: String) -> [Self] {
-        var decoded: Any? = card.contentJSON
-        for _ in 0..<2 {
-            guard let value = decoded as? String, let data = value.data(using: .utf8) else { break }
-            decoded = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
-        }
-        let raw = (decoded as? [[String: Any]]) ?? ((decoded as? [String: Any])?["blocks"] as? [[String: Any]])
-        if let raw {
-            func flatten(_ blocks: [[String: Any]]) -> [[String: Any]] {
-                blocks.flatMap { [$0] + flatten($0["children"] as? [[String: Any]] ?? []) }
+    static let shared = FlowPreviewReader()
+    nonisolated(unsafe) let objectWillChange = ObservableObjectPublisher()
+    let textCache: NSCache<NSString, NSString> = {
+        let cache = NSCache<NSString, NSString>()
+        cache.countLimit = 40
+        cache.totalCostLimit = 4 * 1024 * 1024
+        return cache
+    }()
+    private let cache = LibraryCardPreviewCache()
+    private var subscriptions = Set<AnyCancellable>()
+
+    private init() {
+        let center = NotificationCenter.default
+        center.publisher(for: .cardReadSessionDidChange).sink { [weak self] _ in
+            guard let self else { return }
+            objectWillChange.send()
+            cache.invalidateAll()
+            textCache.removeAllObjects()
+        }.store(in: &subscriptions)
+        center.publisher(for: .cardReadInvalidated).sink { [weak self] event in
+            guard let self, let cardID = event.object as? String else { return }
+            objectWillChange.send()
+            cache.invalidate(cardID: cardID)
+            textCache.removeAllObjects()
+        }.store(in: &subscriptions)
+        center.publisher(for: UIApplication.didReceiveMemoryWarningNotification).sink { [weak self] _ in
+            guard let self else { return }
+            cache.removeCachedPreviews()
+            textCache.removeAllObjects()
+        }.store(in: &subscriptions)
+    }
+
+    func scope(for cardID: String) -> Scope? {
+        guard let session = AuthManager.shared.cardReadSession else { return nil }
+        return Scope(session: session, token: cache.token(for: cardID))
+    }
+
+    func read(_ input: LibraryCardPreviewInput, scope: Scope) async -> LibraryCardPresentation? {
+        guard self.scope(for: input.cardID) == scope else { return nil }
+        let presentation = await cache.read(input, token: scope.token)
+        guard self.scope(for: input.cardID) == scope else { return nil }
+        return presentation
+    }
+}
+
+private struct FlowPreviewValue<Value, Content: View>: View {
+    let card: FlowCard
+    let snapshotID: UUID
+    let loadsPreview: Bool
+    let priority: TaskPriority
+    let project: (LibraryCardPresentation) -> Value
+    @ViewBuilder let content: (Value?) -> Content
+    @ObservedObject private var reader = FlowPreviewReader.shared
+    @State private var loaded: Loaded?
+
+    private struct Request: Equatable {
+        let input: LibraryCardPreviewInput
+        let snapshotID: UUID
+    }
+
+    private struct Loaded {
+        let input: LibraryCardPreviewInput
+        let scope: FlowPreviewReader.Scope
+        let value: Value
+    }
+
+    var body: some View {
+        let input = LibraryCardPreviewInput(
+            cardID: card.id, contentHash: card.contentHash, snapshotID: snapshotID,
+            content: card.content, contentJSON: card.contentJSON
+        )
+        let scope = reader.scope(for: card.id)
+        let value = currentValue(for: input, scope: scope)
+        let request = loadsPreview ? Request(input: input, snapshotID: snapshotID) : nil
+        content(value)
+            .task(id: request, priority: priority) {
+                guard loadsPreview, let scope, currentValue(for: input, scope: scope) == nil,
+                      let presentation = await reader.read(input, scope: scope),
+                      !Task.isCancelled, reader.scope(for: input.cardID) == scope else { return }
+                loaded = Loaded(input: input, scope: scope, value: project(presentation))
             }
-            let result = flatten(raw).compactMap { block -> Self? in
-                let kind = (block["type"] as? String ?? "paragraph").lowercased()
-                guard kind != "image", let data = try? JSONSerialization.data(withJSONObject: [block]),
-                      let json = String(data: data, encoding: .utf8) else { return nil }
-                // Children are separate previews, not repeated in their parent.
-                var ownBlock = block
-                ownBlock["children"] = []
-                let ownJSON = (try? JSONSerialization.data(withJSONObject: [ownBlock])).flatMap { String(data: $0, encoding: .utf8) } ?? json
-                let text = LibraryCardPreviewParser.parse(content: "", contentJSON: ownJSON).text
-                guard !text.isEmpty else { return nil }
-                let checked = (block["props"] as? [String: Any])?["checked"] as? Bool ?? false
-                return Self(kind: kind, text: text, checked: checked)
+            .onChange(of: scope) { updated in
+                if loaded?.scope != updated { loaded = nil }
             }
-            if !result.isEmpty { return result }
-        }
-        // Existing HTML remains a plain, paragraph-preserving preview. No title
-        // is inferred from the first sentence when structured blocks are absent.
-        return fallback.isEmpty ? [] : [Self(kind: "paragraph", text: fallback, checked: false)]
+            .onChange(of: input) { updated in
+                if loaded?.input != updated { loaded = nil }
+            }
+            .onDisappear { loaded = nil }
+    }
+
+    private func currentValue(for input: LibraryCardPreviewInput, scope: FlowPreviewReader.Scope?) -> Value? {
+        guard let loaded, loaded.input == input, loaded.scope == scope else { return nil }
+        return loaded.value
     }
 }
 
 struct FlowRichPreview: View {
     let card: FlowCard
+    let compact: Bool
+    var snapshotID: UUID?
+    var loadsPreview = true
+    @State private var viewSnapshotID = UUID()
+
+    var body: some View {
+        FlowPreviewValue(
+            card: card, snapshotID: snapshotID ?? viewSnapshotID,
+            loadsPreview: loadsPreview, priority: .userInitiated, project: { $0 }
+        ) { presentation in
+            RenderedFlowRichPreview(presentation: presentation, compact: compact)
+        }
+    }
+}
+
+/// Uses the note's authored blocks and the shared fallback for older documents.
+private struct RenderedFlowRichPreview: View {
+    let presentation: LibraryCardPresentation?
     let compact: Bool
     @Environment(\.dynamicTypeSize) private var typeSize
     @ScaledMetric(relativeTo: .body) private var readingSize = 20.0
@@ -1006,12 +1168,9 @@ struct FlowRichPreview: View {
     @ScaledMetric(relativeTo: .footnote) private var codeSize = 13.0
     @ScaledMetric(relativeTo: .footnote) private var compactCodeSize = 11.0
 
-    private var preview: LibraryCardPreviewContent {
-        LibraryCardPreviewParser.parse(content: card.content, contentJSON: card.contentJSON)
-    }
-    private var blocks: [FlowPreviewBlock] { FlowPreviewBlock.read(card, fallback: preview.text) }
+    private var blocks: [LibraryCardPreviewBlock] { presentation?.blocks ?? [] }
     private var imageURL: URL? {
-        guard let source = preview.imageSource else { return nil }
+        guard let source = presentation?.preview.imageSource else { return nil }
         return CardEditingMediaURLResolver.resolve(
             source.hasPrefix("chorai-assets/") ? "/\(source)" : source,
             canonicalizeRelativePath: APIConfiguration.resourceURLString
@@ -1019,17 +1178,19 @@ struct FlowRichPreview: View {
     }
 
     var body: some View {
+        let imageURL = imageURL
+        let text = presentation?.preview.text ?? ""
         Group {
             if compact {
-                previewContent(blockLimit: 5, lineLimit: nil, showsImage: true)
+                previewContent(blockLimit: 5, lineLimit: nil, imageURL: imageURL)
             } else {
                 GeometryReader { available in
                     ViewThatFits(in: .vertical) {
-                        previewContent(blockLimit: 3, lineLimit: 4, showsImage: true).fixedSize(horizontal: false, vertical: true)
-                        previewContent(blockLimit: 2, lineLimit: 3, showsImage: true).fixedSize(horizontal: false, vertical: true)
-                        previewContent(blockLimit: 1, lineLimit: 2, showsImage: true).fixedSize(horizontal: false, vertical: true)
-                        previewContent(blockLimit: 1, lineLimit: 3, showsImage: false).fixedSize(horizontal: false, vertical: true)
-                        Text(preview.text.isEmpty ? "Open note" : preview.text)
+                        previewContent(blockLimit: 3, lineLimit: 4, imageURL: imageURL).fixedSize(horizontal: false, vertical: true)
+                        previewContent(blockLimit: 2, lineLimit: 3, imageURL: imageURL).fixedSize(horizontal: false, vertical: true)
+                        previewContent(blockLimit: 1, lineLimit: 2, imageURL: imageURL).fixedSize(horizontal: false, vertical: true)
+                        previewContent(blockLimit: 1, lineLimit: 3, imageURL: nil).fixedSize(horizontal: false, vertical: true)
+                        Text(text.isEmpty ? "Open note" : text)
                             .font(.body).lineLimit(1).truncationMode(.tail)
                     }
                     .frame(width: available.size.width, height: available.size.height, alignment: .topLeading)
@@ -1041,22 +1202,22 @@ struct FlowRichPreview: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func previewContent(blockLimit: Int, lineLimit: Int?, showsImage: Bool) -> some View {
+    private func previewContent(blockLimit: Int, lineLimit: Int?, imageURL: URL?) -> some View {
         VStack(alignment: .leading, spacing: compact ? 0 : 14) {
-            if showsImage, let imageURL { imageContent(imageURL) }
+            if let imageURL { imageContent(imageURL) }
             if !blocks.isEmpty {
                 VStack(alignment: .leading, spacing: compact ? 12 : 14) {
                     ForEach(Array(blocks.prefix(blockLimit).enumerated()), id: \.offset) { _, block in
                         blockContent(block, summaryLines: lineLimit)
                     }
                 }.padding(compact ? 15 : 0)
-            } else if imageURL == nil || !showsImage {
+            } else if imageURL == nil {
                 Text("Open note").font(.body).foregroundStyle(.secondary).padding(compact ? 15 : 0)
             }
         }
     }
 
-    @ViewBuilder private func blockContent(_ block: FlowPreviewBlock, summaryLines: Int? = nil) -> some View {
+    @ViewBuilder private func blockContent(_ block: LibraryCardPreviewBlock, summaryLines: Int? = nil) -> some View {
         switch block.kind {
         case "heading":
             Text(block.text).font(.system(size: compact ? compactHeadingSize : headingSize, design: .serif))
@@ -1108,6 +1269,6 @@ struct FlowRichPreview: View {
                 }
             }
             .clipShape(RoundedRectangle(cornerRadius: compact ? 8 : 16))
-            .accessibilityLabel(preview.imageAlternativeText ?? "Note image")
+            .accessibilityLabel(presentation?.preview.imageAlternativeText ?? "Note image")
     }
 }

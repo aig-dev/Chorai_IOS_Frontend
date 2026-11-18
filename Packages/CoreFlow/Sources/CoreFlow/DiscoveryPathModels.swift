@@ -10,6 +10,7 @@ public struct DiscoveryPathCard: Identifiable, Equatable, Sendable {
     public let authorName: String
     public let avatarURL: String?
     public let rate: Int
+    public let ownerActorID: String?
 
     public init(
         id: String,
@@ -20,7 +21,8 @@ public struct DiscoveryPathCard: Identifiable, Equatable, Sendable {
         authorActorID: String?,
         authorName: String,
         avatarURL: String?,
-        rate: Int
+        rate: Int,
+        ownerActorID: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -31,6 +33,7 @@ public struct DiscoveryPathCard: Identifiable, Equatable, Sendable {
         self.authorName = authorName
         self.avatarURL = avatarURL
         self.rate = rate
+        self.ownerActorID = ownerActorID
     }
 }
 

@@ -113,24 +113,23 @@ struct CardDetailResponse: Codable {
 // MARK: 卡片详细信息管理器
 @MainActor
 final class CardDetailManager: ObservableObject {
-    private static let recent = RecentCardReads<CardDetail>()
-
     @Published private(set) var cardDetail: CardDetail?
     @Published private(set) var isLoading = false
     @Published private(set) var error: NetworkError?
 
+    private let reader: CardDetailReader
     private var currentCardID: String?
     private var readSession: UInt64?
     private var requestID = UUID()
-    private var likeDuringRefresh: CardLikeState?
-    private var favoriteDuringRefresh: CardFavoriteState?
+    private var readTask: Task<Void, Never>?
     private var subscriptions = Set<AnyCancellable>()
 
-    init(cardID: String? = nil) {
+    init(cardID: String? = nil, reader: CardDetailReader? = nil) {
+        self.reader = reader ?? .shared
         currentCardID = cardID
         readSession = AuthManager.shared.cardReadSession
         if readSession != nil, let cardID {
-            cardDetail = Self.recent.value(for: cardID)
+            cardDetail = self.reader.cached(cardID: cardID)
         }
         let center = NotificationCenter.default
         center.publisher(for: .cardReadSessionDidChange).sink { [weak self] _ in
@@ -139,33 +138,29 @@ final class CardDetailManager: ObservableObject {
         center.publisher(for: .cardReadInvalidated).sink { [weak self] event in
             guard let self, let id = event.object as? String, currentCardID == id else { return }
             clearCardDetail()
-            error = .notFound
+            switch event.userInfo?[CardReadInvalidation.statusKey] as? Int {
+            case 401: error = .unauthorized
+            case 403: error = .forbidden
+            default: error = .notFound
+            }
         }.store(in: &subscriptions)
         CardEngagementCenter.shared.likes.sink { [weak self] state in
             guard let self, currentCardID == state.cardID else { return }
-            if isLoading { likeDuringRefresh = state }
             cardDetail?.applyLike(state)
         }.store(in: &subscriptions)
         CardEngagementCenter.shared.favorites.sink { [weak self] state in
             guard let self, currentCardID == state.cardID else { return }
-            if isLoading { favoriteDuringRefresh = state }
             cardDetail?.applyFavorite(state)
         }.store(in: &subscriptions)
     }
 
-    static func didCommit(_ state: CardLikeState) {
-        guard var detail = recent.value(for: state.cardID) else { return }
-        detail.applyLike(state)
-        recent.insert(detail, for: state.cardID)
-    }
+    deinit { readTask?.cancel() }
 
-    static func didCommit(_ state: CardFavoriteState) {
-        guard var detail = recent.value(for: state.cardID) else { return }
-        detail.applyFavorite(state)
-        recent.insert(detail, for: state.cardID)
-    }
-
-    func fetchCardDetail(cardId: String, completion: @escaping (Result<CardDetail, NetworkError>) -> Void) {
+    func fetchCardDetail(
+        cardId: String,
+        requiringNewRead: Bool = false,
+        completion: @escaping (Result<CardDetail, NetworkError>) -> Void
+    ) {
         guard let session = AuthManager.shared.cardReadSession else {
             clearCardDetail()
             error = .unauthorized
@@ -173,54 +168,61 @@ final class CardDetailManager: ObservableObject {
             return
         }
         if currentCardID != cardId || readSession != session || cardDetail == nil {
-            cardDetail = Self.recent.value(for: cardId)
+            cardDetail = reader.cached(cardID: cardId)
         }
         currentCardID = cardId
         readSession = session
+        cancelRead()
         error = nil
         isLoading = true
-        likeDuringRefresh = nil
-        favoriteDuringRefresh = nil
         let request = UUID()
         requestID = request
-        NetworkManager.shared.getCardDetail(cardId: cardId, presentsError: false) { [weak self] result in
-            guard let self, self.requestID == request, AuthManager.shared.cardReadSession == session else { return }
+        readTask = Task { [weak self, reader] in
+            let result: Result<CardDetail, NetworkError>
+            do {
+                let detail = try await reader.confirmed(cardID: cardId, requiringNewRead: requiringNewRead)
+                result = .success(detail)
+            } catch is CancellationError {
+                if let self, self.requestID == request {
+                    self.readTask = nil
+                    self.isLoading = false
+                    if !Task.isCancelled { completion(.failure(.unknown)) }
+                }
+                return
+            } catch {
+                result = .failure((error as? NetworkError) ?? .unknown)
+            }
+            guard !Task.isCancelled, let self, self.requestID == request,
+                  AuthManager.shared.cardReadSession == session else { return }
+            self.readTask = nil
             self.isLoading = false
             switch result {
-            case .success(let response) where response.success && response.data.id == cardId:
-                var detail = response.data
-                // A receipt delivered after this GET started is newer than its snapshot.
-                if let like = self.likeDuringRefresh { detail.applyLike(like) }
-                if let favorite = self.favoriteDuringRefresh { detail.applyFavorite(favorite) }
-                Self.recent.insert(detail, for: cardId)
+            case .success(let detail):
                 self.cardDetail = detail
-                completion(.success(detail))
-            case .success:
-                self.error = .decodingError
-                completion(.failure(.decodingError))
             case .failure(let error):
-                if error.invalidatesCardRead {
-                    NotificationCenter.default.post(name: .cardReadInvalidated, object: cardId)
-                }
                 self.error = error
-                completion(.failure(error))
             }
+            completion(result)
         }
     }
 
-    func clearCardDetail() {
+    func cancelRead() {
+        readTask?.cancel()
+        readTask = nil
         requestID = UUID()
+        isLoading = false
+    }
+
+    func clearCardDetail() {
+        cancelRead()
         currentCardID = nil
         readSession = nil
-        likeDuringRefresh = nil
-        favoriteDuringRefresh = nil
         cardDetail = nil
-        isLoading = false
         error = nil
     }
 }
 
-private extension CardDetail {
+extension CardDetail {
     mutating func applyLike(_ state: CardLikeState) {
         isLiked = state.isLiked
         likeCount = state.likeCount

@@ -65,7 +65,7 @@ final class LibraryInlineSearchSourceContractTests: XCTestCase {
         XCTAssertTrue(search.contains("getUserAllCards("))
         XCTAssertTrue(search.contains("searchType: scope.apiSearchType"))
         XCTAssertTrue(search.contains("limit: 200"))
-        XCTAssertTrue(search.contains("requestID == self.activeRequestID"))
+        XCTAssertTrue(search.contains("let sort = self.request.sort(for: requestID)"))
     }
 
     func testReturningAndRefreshingLibraryPreserveTheSelectedSort() throws {

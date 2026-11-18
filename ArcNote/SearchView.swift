@@ -5,10 +5,16 @@ import SwiftUI
 struct LibrarySearchCard: Identifiable {
     let source: UserAllCard
     let card: UserCard
+    let sortKey: LibrarySearchSortKey
 
-    init(source: UserAllCard) {
+    init(source: UserAllCard, parseDate: (String) -> Date?) {
         self.source = source
         card = source.libraryUserCard
+        sortKey = LibrarySearchSortKey(
+            id: source.id, rate: source.rate,
+            createdAt: source.createdAt, updatedAt: source.updatedAt,
+            parseDate: parseDate
+        )
     }
 
     var id: String { card.id }
@@ -27,8 +33,9 @@ final class LibrarySearchManager: ObservableObject {
 
     private var rawResults: [LibrarySearchCard] = []
     private var requestCancellable: AnyCancellable?
-    private var activeRequestID: UUID?
+    private var request = LibrarySearchRequest()
     private let searchRequest: SearchRequest
+    private static let preparationQueue = DispatchQueue(label: "chorai.library-search.prepare", qos: .userInitiated)
 
     init(searchRequest: SearchRequest? = nil) {
         self.searchRequest = searchRequest ?? { query, scope in
@@ -56,19 +63,23 @@ final class LibrarySearchManager: ObservableObject {
     ) {
         requestCancellable?.cancel()
 
-        let requestID = UUID()
-        activeRequestID = requestID
+        let requestID = request.begin(sort: sort)
         rawResults = []
         results = []
         error = nil
         isLoading = true
 
         requestCancellable = searchRequest(query, scope)
+        .receive(on: Self.preparationQueue)
+        .map { cards in
+            let parseDate = LibrarySearchSortKey.makeDateParser()
+            return cards.map { LibrarySearchCard(source: $0, parseDate: parseDate) }
+        }
         .receive(on: DispatchQueue.main)
         .sink(
             receiveCompletion: { [weak self] completion in
                 guard let self,
-                      requestID == self.activeRequestID else {
+                      self.request.sort(for: requestID) != nil else {
                     return
                 }
                 self.isLoading = false
@@ -78,26 +89,28 @@ final class LibrarySearchManager: ObservableObject {
             },
             receiveValue: { [weak self] cards in
                 guard let self,
-                      requestID == self.activeRequestID else {
+                      let sort = self.request.sort(for: requestID) else {
                     return
                 }
 
-                self.rawResults = cards.map(LibrarySearchCard.init(source:))
+                self.rawResults = cards
                 self.applySort(sort)
             }
         )
     }
 
     func applySort(_ sort: LibrarySortOption) {
+        request.selectSort(sort)
+        let descriptor = sort.descriptor
         results = rawResults.sorted { lhs, rhs in
-            Self.precedes(lhs, rhs, descriptor: sort.descriptor)
+            lhs.sortKey.precedes(rhs.sortKey, by: descriptor)
         }
     }
 
     func clear() {
         requestCancellable?.cancel()
         requestCancellable = nil
-        activeRequestID = nil
+        request.clear()
         rawResults = []
         results = []
         error = nil
@@ -107,60 +120,6 @@ final class LibrarySearchManager: ObservableObject {
     func remove(cardID: String) {
         rawResults.removeAll { $0.id == cardID }
         results.removeAll { $0.id == cardID }
-    }
-
-    private static func precedes(
-        _ lhs: LibrarySearchCard,
-        _ rhs: LibrarySearchCard,
-        descriptor: LibrarySortDescriptor
-    ) -> Bool {
-        let comparison: ComparisonResult
-
-        switch descriptor.field {
-        case .updatedAt:
-            comparison = compareDates(lhs.card.updatedAt, rhs.card.updatedAt)
-        case .createdAt:
-            comparison = compareDates(lhs.card.createdAt, rhs.card.createdAt)
-        case .rate:
-            comparison = compareInts(lhs.card.rate, rhs.card.rate)
-        }
-
-        if comparison == .orderedSame {
-            return lhs.id < rhs.id
-        }
-        switch descriptor.order {
-        case .ascending:
-            return comparison == .orderedAscending
-        case .descending:
-            return comparison == .orderedDescending
-        }
-    }
-
-    private static func compareInts(_ lhs: Int, _ rhs: Int) -> ComparisonResult {
-        if lhs < rhs { return .orderedAscending }
-        if lhs > rhs { return .orderedDescending }
-        return .orderedSame
-    }
-
-    private static func compareDates(
-        _ lhs: String,
-        _ rhs: String
-    ) -> ComparisonResult {
-        let lhsDate = parseDate(lhs) ?? .distantPast
-        let rhsDate = parseDate(rhs) ?? .distantPast
-        return lhsDate.compare(rhsDate)
-    }
-
-    private static func parseDate(_ value: String) -> Date? {
-        let fractional = ISO8601DateFormatter()
-        fractional.formatOptions = [
-            .withInternetDateTime,
-            .withFractionalSeconds,
-        ]
-        if let date = fractional.date(from: value) {
-            return date
-        }
-        return ISO8601DateFormatter().date(from: value)
     }
 }
 
@@ -295,7 +254,7 @@ struct LibrarySearchResultsView: View {
             HomePostCard(
                 profileImage: result.author?.avatar ?? "",
                 name: result.author?.username ?? "Unknown author",
-                time: relativeTime(result.card.updatedAt),
+                time: relativeTime(result.sortKey.updatedAt),
                 content: result.card.content,
                 contentJSON: result.card.contentJSON,
                 backgroundMediaRef: result.card.backgroundMediaRef,
@@ -314,24 +273,12 @@ struct LibrarySearchResultsView: View {
         }
     }
 
-    private func relativeTime(_ value: String) -> String {
-        guard let date = Self.parseDate(value) else {
+    private func relativeTime(_ date: Date?) -> String {
+        guard let date else {
             return "Recently updated"
         }
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .abbreviated
         return formatter.localizedString(for: date, relativeTo: Date())
-    }
-
-    private static func parseDate(_ value: String) -> Date? {
-        let fractional = ISO8601DateFormatter()
-        fractional.formatOptions = [
-            .withInternetDateTime,
-            .withFractionalSeconds,
-        ]
-        if let date = fractional.date(from: value) {
-            return date
-        }
-        return ISO8601DateFormatter().date(from: value)
     }
 }

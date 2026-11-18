@@ -70,6 +70,11 @@ final class ArcNoteUITests: XCTestCase {
         let card = app.buttons["explore.grid.card.preview-field-note"]
         XCTAssertTrue(card.waitForExistence(timeout: 8))
         XCTAssertTrue(card.isHittable)
+        let previewReady = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label CONTAINS %@", "Attention is a kind of generosity."),
+            object: card
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [previewReady], timeout: 5), .completed)
         let gridShot = XCTAttachment(screenshot: app.screenshot())
         gridShot.name = "Native reform Grid"
         gridShot.lifetime = .keepAlways
@@ -137,6 +142,22 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertTrue(first.waitForExistence(timeout: 5))
         waitForButton("flow.resume").tap()
         XCTAssertTrue(second.waitForExistence(timeout: 5))
+    }
+
+    func testNativeExploreSearchMenuOpensTheSelectedResult() {
+        app.launchArguments.append("--dev-preview")
+        app.launch()
+        waitForButton("explore.search.open").tap()
+        let input = app.textFields["explore.search.input"]
+        XCTAssertTrue(input.waitForExistence(timeout: 10))
+        input.tap()
+        input.typeText("field note\n")
+
+        waitForButton("explore.search.next").tap()
+        let cardID = "preview-field-note-1"
+        waitForButton("explore.search.menu.\(cardID)").tap()
+        waitForButton("View").tap()
+        XCTAssertEqual(waitFor("screen.detail.loaded-card-id").label, cardID)
     }
 
     func testNativeReviewSortUsesSystemMenuWithoutExpandingThePage() {
@@ -4446,18 +4467,19 @@ final class ArcNoteUITests: XCTestCase {
         app.launch()
 
         waitFor("library.fixture.session")
-        let normalFilter = waitFor("home.filter")
-        let searchButton = waitFor("home.search")
-        let normalHeaderTop = min(normalFilter.frame.minY, searchButton.frame.minY)
+        let normalFilter = waitForButton("home.filter")
+        let searchButton = waitForButton("home.search")
+        let normalHeaderTop = waitForButton("home.segment.notes").frame.minY
         XCTAssertTrue(normalFilter.isHittable)
         XCTAssertTrue(searchButton.isHittable)
         XCTAssertFalse(app.textFields["home.search.input"].exists)
 
         searchButton.tap()
 
-        let input = waitFor("home.search.input")
-        let close = waitFor("home.search.close")
-        let inlineFilter = waitFor("home.search.filter")
+        let input = app.textFields["home.search.input"]
+        XCTAssertTrue(input.waitForExistence(timeout: 8))
+        let close = waitForButton("home.search.close")
+        let inlineFilter = waitForButton("home.search.filter")
         let keyboard = app.keyboards.firstMatch
         XCTAssertTrue(keyboard.waitForExistence(timeout: 10))
         let keyboardLayoutDescription = [
@@ -4493,7 +4515,7 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["Time"].exists)
 
         input.typeText("design")
-        waitFor("home.search.clear")
+        waitForButton("home.search.clear")
         XCTAssertFalse(
             app.descendants(matching: .any)["home.search.results"].exists,
             "Typing must keep the current Library list until keyboard Search"
@@ -4509,21 +4531,22 @@ final class ArcNoteUITests: XCTestCase {
         )
         captureVisual("library-inline-search-submitted")
 
-        tap("home.search.clear")
+        waitForButton("home.search.clear").tap()
         XCTAssertFalse(
             app.descendants(matching: .any)["home.search.results"]
                 .waitForExistence(timeout: 1)
         )
-        XCTAssertTrue(waitFor("home.search.input").isHittable)
+        XCTAssertTrue(input.isHittable)
 
-        tap("home.search.close")
-        XCTAssertTrue(waitFor("home.filter").isHittable)
-        XCTAssertTrue(waitFor("home.search").isHittable)
+        waitForButton("home.search.close").tap()
+        XCTAssertTrue(waitForButton("home.filter").isHittable)
+        XCTAssertTrue(waitForButton("home.search").isHittable)
         XCTAssertFalse(app.textFields["home.search.input"].exists)
 
-        tap("home.segment.collect")
-        tap("home.search")
-        let collectInput = waitFor("home.search.input")
+        waitForButton("home.segment.collect").tap()
+        waitForButton("home.search").tap()
+        let collectInput = app.textFields["home.search.input"]
+        XCTAssertTrue(collectInput.waitForExistence(timeout: 8))
         collectInput.typeText("design\n")
         waitFor("home.search.results")
         waitFor("card.home.library-search-collect-design")
@@ -6716,6 +6739,16 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertFalse(app.descendants(matching: .any)["screen.detail.loading"].exists)
     }
 
+    func testSharedCardReadAndDiscoveryTransportContract() {
+        app.launchArguments += ["--dev-preview", "--ui-test-community-card-reads"]
+        app.launch()
+        let result = app.staticTexts["fixture.community-card-reads.result"]
+        XCTAssertTrue(result.waitForExistence(timeout: 10))
+        let finished = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label != %@", "Running"), object: result)
+        XCTAssertEqual(XCTWaiter.wait(for: [finished], timeout: 15), .completed)
+        XCTAssertEqual(result.label, "Passed")
+    }
+
     func testReopeningCommentsShowsThePageBeforeTheDelayedReply() {
         app.launchArguments += ["--dev-preview", "--ui-test-card-reopen"]
         app.launch()
@@ -7271,18 +7304,26 @@ final class ArcNoteUITests: XCTestCase {
 
     func testDiscoveryPathRendersLiveGoSparkProvenance() throws {
         let session = try requireSmokeSession()
-        openSparkFromDetail(cardID: sparkSeedCardID, session: session)
-
-        let resultID = try waitForUnfavoritedSparkResult(token: session.token)
-        defer { deleteFavorite(id: resultID, token: session.token) }
-
-        waitForButton("spark.favorite.\(resultID)").tap()
-        waitForAssetStatus(
-            kind: "favorites",
-            id: resultID,
-            token: session.token,
-            expected: true
-        )
+        let resultID: String
+        var createdFavoriteID: String?
+        defer {
+            if let createdFavoriteID { deleteFavorite(id: createdFavoriteID, token: session.token) }
+        }
+        if let seeded = ProcessInfo.processInfo.environment["CHORAI_UI_TEST_DISCOVERY_PATH_CARD_ID"], !seeded.isEmpty {
+            resultID = seeded
+        } else {
+            openSparkFromDetail(cardID: sparkSeedCardID, session: session)
+            resultID = try waitForUnfavoritedSparkResult(token: session.token)
+            createdFavoriteID = resultID
+            waitForButton("spark.favorite.\(resultID)").tap()
+            waitForAssetStatus(
+                kind: "favorites",
+                id: resultID,
+                token: session.token,
+                expected: true
+            )
+            app.terminate()
+        }
         let discovery = try waitForDiscoveryPath(
             assetID: resultID,
             token: session.token
@@ -7295,7 +7336,6 @@ final class ArcNoteUITests: XCTestCase {
             .filter { seen.insert($0).inserted }
         XCTAssertFalse(expectedAncestors.isEmpty)
 
-        app.terminate()
         seedAppSession(session)
         app.launchEnvironment["CHORAI_UI_TEST"] = "1"
         app.launchEnvironment["CHORAI_UI_TEST_DISCOVERY_PATH_CARD_ID"] = resultID

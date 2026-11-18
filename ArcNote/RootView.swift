@@ -77,6 +77,12 @@ struct RootView: View {
         .task(id: cardId) {
             await store.load(cardID: cardId)
         }
+        .onReceive(NotificationCenter.default.publisher(for: .cardReadInvalidated)) { event in
+            if event.object as? String == menuCard?.id { clearMenu() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .cardReadSessionDidChange)) { _ in
+            clearMenu()
+        }
     }
 
     @ViewBuilder
@@ -141,8 +147,7 @@ struct RootView: View {
     private func openCard(_ card: DiscoveryPathCard) {
         selectedCardID = card.id
         let currentActorID = AuthManager.shared.currentUser?.id
-        if let authorActorID = card.authorActorID,
-           authorActorID == currentActorID {
+        if let ownerActorID = card.ownerActorID, ownerActorID == currentActorID {
             navigateToEdit = true
         } else {
             navigateToDetail = true
@@ -151,6 +156,11 @@ struct RootView: View {
 
     private func openMenu(_ card: DiscoveryPathCard) {
         menuCard = card.asMenuCard
+    }
+
+    private func clearMenu() {
+        menuCard = nil
+        showPopupMenu = false
     }
 
     private func message(for error: DiscoveryPathError) -> String {
@@ -232,8 +242,8 @@ private extension DiscoveryPathCard {
             tags: tags, createdAt: createdAt, updatedAt: createdAt,
             likeCount: 0, commentCount: nil, isLiked: false, isPinned: false,
             pinnedAt: nil, isFavorited: nil, favoriteCount: nil, rate: rate,
-            ownerActorId: authorActorID,
-            isOwner: actorID != nil && authorActorID == actorID
+            ownerActorId: ownerActorID,
+            isOwner: actorID != nil && ownerActorID == actorID
         )
     }
 }

@@ -175,6 +175,8 @@ struct ArcNoteApp: App {
                 NavigationLink("Open note") { DetailView(cardId: "preview-field-note") }
                     .accessibilityIdentifier("fixture.detail.open")
             }
+        } else if LocalDevelopmentPreview.isEnabled, ProcessInfo.processInfo.arguments.contains("--ui-test-community-card-reads") {
+            CardReadAcceptanceFixture()
         } else if ProcessInfo.processInfo.arguments.contains("--ui-test-owned-card-actions") {
             OwnedCardActionFixtureScreen()
         } else if LinkPresentationFixture.isEnabled {
@@ -4797,7 +4799,7 @@ private struct FlowEngagementTestScreen: View {
     var body: some View {
         NavigationStack {
             FlowDeckView(store: store, onOpenDetail: { _ in }, onOpenAuthor: { _ in },
-                         onOpenMenu: { _ in }, onSpark: { _ in }, onCardVisible: { _ in },
+                         onSpark: { _ in }, onCardVisible: { _ in },
                          onCardSaved: { _ in }, onCardDismissed: { _ in })
         }
         .overlay(alignment: .topLeading) {

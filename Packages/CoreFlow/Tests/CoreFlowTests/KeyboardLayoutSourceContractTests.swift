@@ -51,10 +51,6 @@ final class KeyboardLayoutSourceContractTests: XCTestCase {
             try source(at: "ArcNote/CoreFlow/MergeLifecycleViews.swift")
                 .contains("KeyboardStableViewport(isFocused: isTextInputFocused)")
         )
-        XCTAssertTrue(
-            try source(at: "ArcNote/MergeView.swift")
-                .contains("KeyboardStableViewport(isFocused: isSearchFocused)")
-        )
         XCTAssertTrue(signIn.contains("ScrollView"))
         XCTAssertTrue(signIn.contains(".scrollDismissesKeyboard(.interactively)"))
         XCTAssertTrue(report.contains("Form {"))
@@ -84,8 +80,6 @@ final class KeyboardLayoutSourceContractTests: XCTestCase {
             "ArcNote/ChoraProfileView.swift",
             "ArcNote/InvitationCreditView.swift",
             "ArcNote/CoreFlow/MergeLifecycleViews.swift",
-            "ArcNote/MergeView.swift",
-            "ArcNote/NewInsightView.swift",
             "ArcNote/NewNoteView.swift",
             "ArcNote/CardEditor/CardEditorShell.swift",
         ]

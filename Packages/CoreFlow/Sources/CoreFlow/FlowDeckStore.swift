@@ -6,6 +6,7 @@ public final class FlowDeckStore: ObservableObject {
     @Published public private(set) var cards: [FlowCard] = []
     @Published public private(set) var phase: FlowDeckPhase = .idle
     @Published public private(set) var failedFavoriteIDs: Set<String> = []
+    public private(set) var previewSnapshotID = UUID()
 
     @Published public private(set) var history: [FlowCard] = []
     @Published public private(set) var historyIndex: Int?
@@ -33,7 +34,11 @@ public final class FlowDeckStore: ObservableObject {
     private var emptyPageHopCount = 0
     private var isLoadingPage = false
     private var pageCancellable: AnyCancellable?
+    private var pageRequestID: UUID?
+    private var invalidatedDuringPage = Set<String>()
+    private var readSubscriptions = Set<AnyCancellable>()
     private struct PendingFavorite {
+        let id = UUID()
         var baseline: CardFavoriteState
         let target: Bool
         var cancellable: AnyCancellable?
@@ -48,6 +53,13 @@ public final class FlowDeckStore: ObservableObject {
         self.service = service
         self.pageSize = pageSize
         self.onFavoriteCommitted = onFavoriteCommitted
+        let center = NotificationCenter.default
+        center.publisher(for: .cardReadSessionDidChange).sink { [weak self] _ in
+            self?.resetReadSession()
+        }.store(in: &readSubscriptions)
+        center.publisher(for: .cardReadInvalidated).sink { [weak self] event in
+            if let cardID = event.object as? String { self?.invalidate(cardID: cardID) }
+        }.store(in: &readSubscriptions)
     }
 
     public func loadInitialIfNeeded() {
@@ -106,7 +118,8 @@ public final class FlowDeckStore: ObservableObject {
         failedFavoriteIDs.remove(assetID)
         let target = !card.isFavorited
         let baseline = card.favoriteState
-        pendingFavorites[assetID] = PendingFavorite(baseline: baseline, target: target)
+        let pending = PendingFavorite(baseline: baseline, target: target)
+        pendingFavorites[assetID] = pending
         displayFavorite(baseline.settingFavorite(target))
 
         var receivedSuccess = false
@@ -114,7 +127,8 @@ public final class FlowDeckStore: ObservableObject {
         pendingFavorites[assetID]?.cancellable = mutation
             .receive(on: DispatchQueue.main)
             .sink(receiveCompletion: { [weak self] completion in
-                guard let self, let pending = pendingFavorites.removeValue(forKey: assetID) else { return }
+                guard let self, pendingFavorites[assetID]?.id == pending.id,
+                      let pending = pendingFavorites.removeValue(forKey: assetID) else { return }
                 if case .finished = completion, receivedSuccess {
                     let committed = pending.baseline.settingFavorite(target)
                     applyFavoriteState(committed)
@@ -159,19 +173,16 @@ public final class FlowDeckStore: ObservableObject {
         guard !isLoadingPage else { return }
 
         if reset {
-            cards = []
-            history = []
-            failedFavoriteIDs.removeAll()
-            historyIndex = nil
-            seenAssetIDs = []
-            nextRefreshToken = nil
-            emptyPageHopCount = 0
+            clearPages()
         } else if nextRefreshToken == nil {
             updatePhaseAfterAdvance()
             return
         }
 
         isLoadingPage = true
+        invalidatedDuringPage.removeAll()
+        let requestID = UUID()
+        pageRequestID = requestID
         if currentCard == nil {
             phase = .loading
         }
@@ -181,9 +192,10 @@ public final class FlowDeckStore: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { [weak self] completion in
-                    guard let self else { return }
+                    guard let self, pageRequestID == requestID else { return }
 
                     self.isLoadingPage = false
+                    self.pageRequestID = nil
                     if case .failure = completion {
                         self.phase = self.currentCard == nil
                             ? .failed("Couldn't load your flow.")
@@ -201,10 +213,10 @@ public final class FlowDeckStore: ObservableObject {
                     }
                 },
                 receiveValue: { [weak self] page in
-                    guard let self else { return }
+                    guard let self, pageRequestID == requestID else { return }
 
                     for card in page.cards
-                    where self.seenAssetIDs.insert(card.id).inserted {
+                    where !self.invalidatedDuringPage.contains(card.id) && self.seenAssetIDs.insert(card.id).inserted {
                         self.cards.append(card)
                     }
                     self.nextRefreshToken = page.nextRefreshToken
@@ -213,6 +225,48 @@ public final class FlowDeckStore: ObservableObject {
                     }
                 }
             )
+    }
+
+    private func invalidate(cardID: String) {
+        if isLoadingPage { invalidatedDuringPage.insert(cardID) }
+        pendingFavorites.removeValue(forKey: cardID)?.cancellable?.cancel()
+        failedFavoriteIDs.remove(cardID)
+        seenAssetIDs.remove(cardID)
+        guard cards.contains(where: { $0.id == cardID }) || history.contains(where: { $0.id == cardID }) else {
+            return
+        }
+        let historicalSelection = historyIndex.map { history[$0].id }
+        cards.removeAll { $0.id == cardID }
+        history.removeAll { $0.id == cardID }
+        historyIndex = historicalSelection.flatMap { id in history.firstIndex { $0.id == id } }
+        if !isLoadingPage {
+            updatePhaseAfterAdvance()
+            if currentCard == nil { prefetchIfNeeded() }
+        }
+    }
+
+    private func resetReadSession() {
+        pageRequestID = nil
+        pageCancellable?.cancel()
+        pageCancellable = nil
+        isLoadingPage = false
+        invalidatedDuringPage.removeAll()
+        let previousFavorites = pendingFavorites.values
+        pendingFavorites.removeAll()
+        previousFavorites.forEach { $0.cancellable?.cancel() }
+        clearPages()
+        phase = .idle
+    }
+
+    private func clearPages() {
+        previewSnapshotID = UUID()
+        cards = []
+        history = []
+        failedFavoriteIDs.removeAll()
+        historyIndex = nil
+        seenAssetIDs.removeAll()
+        nextRefreshToken = nil
+        emptyPageHopCount = 0
     }
 
     private func prefetchIfNeeded() {

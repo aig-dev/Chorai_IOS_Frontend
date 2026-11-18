@@ -191,24 +191,23 @@ struct SearchResponse: Codable {
 }
 
 // MARK: 搜索管理器
-class SearchManager: ObservableObject {
-    static let shared = SearchManager()
+final class ExploreSearchManager: ObservableObject {
+    static let shared = ExploreSearchManager()
 
     @Published var searchResults: [SearchCard] = []
     @Published var isLoading: Bool = false
-    @Published var hasMoreData: Bool = true
-    @Published var currentPage: Int = 1
     @Published var error: NetworkError?
 
     private let perPage: Int = 20
     private let networkManager = NetworkManager.shared
     private let authManager = AuthManager.shared
-    private var cancellables = Set<AnyCancellable>()
+    private var requestID = UUID()
+    private var invalidatedDuringRequest = Set<String>()
 
     private init() {}
 
     // 搜索卡片
-    func searchCards(query: String, page: Int = 1, completion: @escaping (Result<[SearchCard], NetworkError>) -> Void) {
+    func searchCards(query: String, completion: @escaping (Result<[SearchCard], NetworkError>) -> Void) {
         guard authManager.currentUser != nil else {
             print("用户未登录")
             completion(.failure(.unauthorized))
@@ -222,33 +221,32 @@ class SearchManager: ObservableObject {
 
         isLoading = true
         error = nil
+        let id = UUID()
+        requestID = id
+        invalidatedDuringRequest.removeAll()
 
         networkManager.searchCards(
             query: query,
-            page: page,
+            page: 1,
             perPage: perPage
         ) { [weak self] result in
             DispatchQueue.main.async {
-                self?.isLoading = false
+                guard let self, self.requestID == id else { return }
+                self.isLoading = false
                 switch result {
                 case .success(let response):
                     if response.success {
-                        if page == 1 {
-                            self?.searchResults = response.data
-                        } else {
-                            self?.searchResults.append(contentsOf: response.data)
-                        }
-                        self?.currentPage = page
-                        self?.hasMoreData = response.data.count == self?.perPage
-                        completion(.success(response.data))
+                        let cards = response.data.filter { !self.invalidatedDuringRequest.contains($0.id) }
+                        self.searchResults = cards
+                        completion(.success(cards))
                     } else {
                         print("搜索失败: \(response.message ?? "未知错误")")
-                        self?.error = .serverError(500, response.message)
+                        self.error = .serverError(500, response.message)
                         completion(.failure(.serverError(500, response.message)))
                     }
                 case .failure(let error):
                     print("搜索失败: \(error.localizedDescription)")
-                    self?.error = error
+                    self.error = error
                     completion(.failure(error))
                 }
             }
@@ -257,16 +255,15 @@ class SearchManager: ObservableObject {
 
     // 清空搜索结果
     func clearSearchResults() {
+        requestID = UUID()
+        invalidatedDuringRequest.removeAll()
         searchResults = []
-        currentPage = 1
-        hasMoreData = true
+        isLoading = false
         error = nil
     }
 
-    // 加载更多搜索结果
-    func loadMoreSearchResults(query: String) {
-        guard hasMoreData && !isLoading else { return }
-        currentPage += 1
-        searchCards(query: query, page: currentPage) { _ in }
+    func invalidateRead(cardID: String) {
+        if isLoading { invalidatedDuringRequest.insert(cardID) }
+        searchResults.removeAll { $0.id == cardID }
     }
 }

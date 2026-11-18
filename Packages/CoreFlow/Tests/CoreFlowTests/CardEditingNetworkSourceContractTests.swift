@@ -30,10 +30,11 @@ final class CardEditingNetworkSourceContractTests: XCTestCase {
         )
         XCTAssertTrue(
             detailSource.contains(
-                "if let isOwner = cardDetailManager.cardDetail?.isOwner"
+                "if let isOwner = detail.isOwner"
             ),
             "Detail ownership must prefer the backend is_owner value"
         )
+        XCTAssertTrue(detailSource.contains("guard let ownerId = detail.ownerActorId,"))
         XCTAssertTrue(detailSource.contains("guard !isCurrentCardOwned, !isFavoriteLoading else { return }"))
     }
 

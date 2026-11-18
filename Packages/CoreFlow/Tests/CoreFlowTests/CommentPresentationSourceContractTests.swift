@@ -5,7 +5,7 @@ final class CommentPresentationSourceContractTests: XCTestCase {
     func testCommentsHaveOneSceneScopedPresenterAboveAnExistingSheet() throws {
         let app = try source("ArcNote/ArcNoteApp.swift")
         XCTAssertEqual(app.components(separatedBy: ".overlay { CommentPopupView() }").count - 1, 1)
-        for path in ["ArcNote/TabBarView.swift", "ArcNote/DetailView.swift", "ArcNote/SparkView.swift", "ArcNote/MyProfileView.swift", "ArcNote/UserProfileView.swift", "ArcNote/CoreFlow/SparkContinuationViews.swift"] {
+        for path in ["ArcNote/TabBarView.swift", "ArcNote/DetailView.swift", "ArcNote/ExploreView.swift", "ArcNote/MyProfileView.swift", "ArcNote/UserProfileView.swift", "ArcNote/CoreFlow/SparkContinuationViews.swift"] {
             XCTAssertFalse(try source(path).contains("CommentPopupView()"), "Duplicate presenter in \(path)")
         }
         let presenter = try source("ArcNote/ChoraiTheme.swift")

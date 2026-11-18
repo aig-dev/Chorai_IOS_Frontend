@@ -148,12 +148,44 @@ struct DiscoveryPathData: Codable {
     let rootActivityID: String?
     let path: [DiscoveryPathNodeData]
     let pathLength: Int
+    let ancestorCards: [DiscoveryPathCardData]?
 
     enum CodingKeys: String, CodingKey {
         case targetAssetID = "target_asset_id"
         case rootActivityID = "root_activity_id"
         case path
         case pathLength = "path_length"
+        case ancestorCards = "ancestor_cards"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        targetAssetID = try container.decode(String.self, forKey: .targetAssetID)
+        rootActivityID = try container.decodeIfPresent(String.self, forKey: .rootActivityID)
+        path = try container.decode([DiscoveryPathNodeData].self, forKey: .path)
+        pathLength = try container.decode(Int.self, forKey: .pathLength)
+        // Only an absent key identifies a server that uses the original contract.
+        ancestorCards = container.contains(.ancestorCards)
+            ? try container.decode([DiscoveryPathCardData].self, forKey: .ancestorCards)
+            : nil
+    }
+}
+
+struct DiscoveryPathCardData: Codable {
+    let assetID: String
+    let title: String
+    let content: String
+    let tags: [String]
+    let createdAt: String
+    let author: CardDetailAuthor
+    let ownerActorID: String
+    let rate: Int
+
+    enum CodingKeys: String, CodingKey {
+        case assetID = "asset_id"
+        case title, content, tags, author, rate
+        case createdAt = "created_at"
+        case ownerActorID = "owner_actor_id"
     }
 }
 
@@ -596,13 +628,19 @@ enum NetworkError: Error, LocalizedError {
     case unknown
 
     var invalidatesCardRead: Bool {
+        guard let status = cardReadStatus else { return false }
+        return [401, 403, 404, 410].contains(status)
+    }
+
+    var cardReadStatus: Int? {
         switch self {
-        case .unauthorized, .forbidden, .notFound:
-            return true
+        case .unauthorized: return 401
+        case .forbidden: return 403
+        case .notFound: return 404
         case .serverError(let status, _), .api(let status, _, _):
-            return [401, 403, 404, 410].contains(status)
+            return status
         default:
-            return false
+            return nil
         }
     }
 
