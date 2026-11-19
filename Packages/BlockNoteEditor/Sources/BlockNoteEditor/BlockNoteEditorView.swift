@@ -1,9 +1,43 @@
 import Combine
 import Foundation
 
+/// A fixed attachment's acceptance boundary and applied-event watermark.
+/// Retaining this handle never redirects a pending drain to a replacement view.
+@MainActor
+public final class BlockNoteEditorAttachment {
+    public let id = UUID()
+    public private(set) var isClosing = false
+    private let drain: @MainActor () async -> Void
+    private let pendingEvents: @MainActor () -> Bool
+    private let close: @MainActor (BlockNoteEditorAttachment) -> Void
+
+    init(drain: @escaping @MainActor () async -> Void,
+         pendingEvents: @escaping @MainActor () -> Bool,
+         close: @escaping @MainActor (BlockNoteEditorAttachment) -> Void) {
+        self.drain = drain
+        self.pendingEvents = pendingEvents
+        self.close = close
+    }
+
+    public func drainAcceptedEvents() async { await drain() }
+
+    /// Check synchronously after draining before replacing a live editor. A
+    /// fixed watermark may finish while more events entered its mailbox.
+    public var hasPendingAcceptedEvents: Bool { pendingEvents() }
+
+    public func beginClosing() {
+        guard !isClosing else { return }
+        isClosing = true
+        close(self)
+    }
+}
+
 @MainActor
 public final class BlockNoteEditorController: ObservableObject {
     private typealias SnapshotContinuation = CheckedContinuation<BlockNoteSnapshot, Error>
+
+    public private(set) var attachment: BlockNoteEditorAttachment?
+    public var onAttachmentWillClose: (@MainActor (BlockNoteEditorAttachment) -> Void)?
 
     private var commandHandler: ((BlockNoteEditorCommand) -> Void)?
     private var pendingSnapshots: [String: SnapshotContinuation] = [:]
@@ -81,16 +115,41 @@ public final class BlockNoteEditorController: ObservableObject {
         }
     }
 
-    func attach(commandHandler: @escaping (BlockNoteEditorCommand) -> Void) {
-        if self.commandHandler != nil {
-            failAllSnapshots(with: .tornDown)
+    func attach(
+        drainAcceptedEvents: @escaping @MainActor () async -> Void = {},
+        hasPendingAcceptedEvents: @escaping @MainActor () -> Bool = { false },
+        beginClosing: @escaping @MainActor () -> Void = {},
+        commandHandler: @escaping (BlockNoteEditorCommand) -> Void
+    ) {
+        attachment?.beginClosing()
+        failAllSnapshots(with: .tornDown)
+        attachment = BlockNoteEditorAttachment(drain: drainAcceptedEvents,
+            pendingEvents: hasPendingAcceptedEvents) { [weak self] binding in
+            if self?.attachment?.id == binding.id {
+                self?.commandHandler = nil
+                self?.failAllSnapshots(with: .tornDown)
+            }
+            beginClosing()
+            self?.onAttachmentWillClose?(binding)
         }
         self.commandHandler = commandHandler
+    }
+
+    public func beginClosing() {
+        attachment?.beginClosing()
+    }
+
+    public func drainAcceptedEvents() async {
+        let binding = attachment
+        await binding?.drainAcceptedEvents()
     }
 
     func detach(with failure: BlockNoteEditorFailure = .tornDown) {
         commandHandler = nil
         failAllSnapshots(with: failure)
+        attachment?.beginClosing()
+        // Keep the fixed handle until a new attachment replaces it. Accepted
+        // events still belong to this lifetime after WK has been dismantled.
     }
 
     @discardableResult

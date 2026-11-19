@@ -227,6 +227,7 @@ struct ChatDetailView: View {
                                     NoteAuthorAvatarView(note: note, size: 22)
 
                                     HTMLTextRenderer(
+                                        cardID: note.id,
                                         htmlContent: note.description,
                                         maxLines: dynamicTypeSize.isAccessibilitySize ? 3 : 1,
                                         font: .caption,
@@ -681,6 +682,7 @@ struct NoteCardView: View {
                     .lineLimit(1)
 
                 HTMLTextRenderer(
+                    cardID: card.id,
                     htmlContent: card.description,
                     maxLines: dynamicTypeSize.isAccessibilitySize ? 3 : 2,
                     font: .caption,
@@ -814,6 +816,7 @@ struct AttachedNotesView: View {
                                 .lineLimit(1)
 
                             HTMLTextRenderer(
+                                cardID: note.id,
                                 htmlContent: note.description,
                                 maxLines: dynamicTypeSize.isAccessibilitySize ? 3 : 2,
                                 font: .caption2,
@@ -859,6 +862,7 @@ struct AttachedNotesBubbleView: View {
                             NoteAuthorAvatarView(note: note, size: 20)
 
                             HTMLTextRenderer(
+                                cardID: note.id,
                                 htmlContent: note.description,
                                 maxLines: dynamicTypeSize.isAccessibilitySize ? 3 : 1,
                                 font: .caption,

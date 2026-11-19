@@ -108,6 +108,34 @@ final class CardDetailReader {
         }
     }
 
+    /// Each subscription owns only its waiter. The reader still owns the shared GET.
+    func confirmedPublisher(cardID: String) -> AnyPublisher<CardDetail, NetworkError> {
+        Deferred { [weak self] in
+            let result = PassthroughSubject<CardDetail, NetworkError>()
+            let task = Task { @MainActor [weak self] in
+                do {
+                    guard let self else { throw NetworkError.unauthorized }
+                    let detail = try await self.confirmed(cardID: cardID)
+                    try Task.checkCancellation()
+                    result.send(detail)
+                    result.send(completion: .finished)
+                } catch {
+                    guard !Task.isCancelled else { return }
+                    result.send(completion: .failure(error as? NetworkError ?? .networkError(error)))
+                }
+            }
+            return result.handleEvents(receiveCancel: { task.cancel() }).eraseToAnyPublisher()
+        }.eraseToAnyPublisher()
+    }
+
+    func referencedNote(cardID: String) -> AnyPublisher<NoteCard, NetworkError> {
+        confirmedPublisher(cardID: cardID).map { card in
+            NoteCard(id: card.id, title: (card.title?.isEmpty ?? true) ? "Untitled" : (card.title ?? ""),
+                     description: card.content, isPublic: card.isPublic,
+                     username: card.author?.userName ?? "Unknown", avatarUrl: card.author?.avatarUrl)
+        }.eraseToAnyPublisher()
+    }
+
     func didCommit(_ state: CardFavoriteState) {
         if let read = reads[state.cardID], isCurrent(read.scope, cardID: state.cardID) { read.favorite = state }
         if var detail = cached(cardID: state.cardID) {

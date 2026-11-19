@@ -3,6 +3,7 @@ import WebKit
 import XCTest
 @testable import BlockNoteEditor
 
+@MainActor
 final class BlockNoteNavigationPolicyTests: XCTestCase {
     func testBootstrapQueueIsInstalledAtDocumentStartForTheMainFrame() {
         let userContentController = WKUserContentController()

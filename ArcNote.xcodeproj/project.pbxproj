@@ -152,6 +152,28 @@
 		D7B5078DE97E45839CE4A515 /* AuthEntryComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FC8A8D1AD4841DEA9BB285F /* AuthEntryComponents.swift */; };
 		F0EDFA46EDB043FE8E8D0479 /* AuthEntryFlowUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5833D7B924E407AADD43A49 /* AuthEntryFlowUITests.swift */; };
 		F407155AB485430EA8E25838 /* AuthEntryFixture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 278679923D14405F9158C635 /* AuthEntryFixture.swift */; };
+		3FAFD34EAC1CD093CEB3276C /* ExecutionBoundaryBaselineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4405F0504AC8A94BFB039854 /* ExecutionBoundaryBaselineTests.swift */; };
+		2B121A9F8CEA97D6317C3E19 /* CardPreviewReaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48849BFA164B2466D17666B9 /* CardPreviewReaderTests.swift */; };
+		4B375FB730127873770A343F /* CardPreviewReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 935D592F2F7A1370DC45518C /* CardPreviewReader.swift */; };
+		D5295C7C5BA1E0237CFAF2AB /* ExecutionFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2EFB8C521110239D4BE5C6F7 /* ExecutionFixtures.swift */; };
+		21992CC082DB482281D3F0FE /* StubURLProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67C776D3EF12CAECFBCAFFF8 /* StubURLProtocol.swift */; };
+		D25E56F61A293DB592B455C7 /* NetworkResponseExecutionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E41C4CEBE69067D293BA7ECC /* NetworkResponseExecutionTests.swift */; };
+		C11D1AA997C7E2E5D12BA7CA /* CardDetailReaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C19E959B8363D8E79720B724 /* CardDetailReaderTests.swift */; };
+		CAA378EBD05FBE2C0CA7A9D7 /* CardImagePreparationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 725D1C8BC22A06A30C4A6279 /* CardImagePreparationTests.swift */; };
+		82C443884ECE5389CA1B1A75 /* CardImagePreparation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70328C0F1F28C0DD3CFAC752 /* CardImagePreparation.swift */; };
+		A29F677BDCCDD4ADD4B884C4 /* LocalNoteEditorPersistenceSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9B5CAE97CCFFC3595F96129 /* LocalNoteEditorPersistenceSessionTests.swift */; };
+		6DCB88AAEFE470EA7AA746A3 /* LocalNoteEditorPersistenceSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 969BC9EE7A541EE34C76BDC1 /* LocalNoteEditorPersistenceSession.swift */; };
+		0B6BC22F0BE17B1F86041C51 /* MergeEditorRetirementTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3ADDC28A8156BE6C33154F7 /* MergeEditorRetirementTests.swift */; };
+		47240F88F54B3581BA01AB4F /* MergeArtifactDraftExecutionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58B971DA8E6B55058CC8C05C /* MergeArtifactDraftExecutionTests.swift */; };
+		AEC19E6E3C8FFA353C217FDB /* HomeCardProjectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11F8BEB538E19FD9D10F3026 /* HomeCardProjectionTests.swift */; };
+		B9F3DE75CAFA5F73451F734E /* HomeCardProjectionWorker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97C2A244AC2C9C90B7F5803A /* HomeCardProjectionWorker.swift */; };
+		EA17F9240516AFF4B92072BC /* HomeCardsLoadingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 999695199ECD7F79FD9858F6 /* HomeCardsLoadingTests.swift */; };
+		A8393E1FDF04660FA7F7C4D2 /* CardRenderingDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34B30F493F4BC0C8CDCAE3B1 /* CardRenderingDiagnostics.swift */; };
+		247139F1EBB290291A2B4A8C /* HomeCardRenderingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1E3A966527A35C05A070BB2 /* HomeCardRenderingTests.swift */; };
+		554230038285A505D3A0F115 /* LocalNoteThumbnailReaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA3042831931F962B60EA636 /* LocalNoteThumbnailReaderTests.swift */; };
+		3429A95ACEF908AA700EC6D1 /* LocalNoteThumbnailReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1E0FB957B117F6596BB718C /* LocalNoteThumbnailReader.swift */; };
+		4921AB68CC59BEE867FAA6C4 /* HTMLTextReaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16845431EF7D9B2AE676D3C9 /* HTMLTextReaderTests.swift */; };
+		96173B537BE66B36D958C303 /* HTMLTextReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = D62B0B96B71343CC59CD3B90 /* HTMLTextReader.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -162,6 +184,7 @@
 			remoteGlobalIDString = 1B48AE302E30967F0090CF86;
 			remoteInfo = ArcNote;
 		};
+		AFCC97E1D7489ECE0D37DBC5 /* PBXContainerItemProxy */ = {isa = PBXContainerItemProxy; containerPortal = 1B48AE292E30967F0090CF86 /* Project object */; proxyType = 1; remoteGlobalIDString = 1B48AE302E30967F0090CF86; remoteInfo = ArcNote; };
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
@@ -309,6 +332,29 @@
 		CC260A260000000000000001 /* ChoraiTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChoraiTheme.swift; sourceTree = "<group>"; };
 		CC260A260000000000000002 /* ChoraiCardLevel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChoraiCardLevel.swift; sourceTree = "<group>"; };
 		E5833D7B924E407AADD43A49 /* AuthEntryFlowUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthEntryFlowUITests.swift; sourceTree = "<group>"; };
+		94797D021B8B96AE3105383D /* ArcNoteTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ArcNoteTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		4405F0504AC8A94BFB039854 /* ExecutionBoundaryBaselineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ArcNoteTests/ExecutionBoundaryBaselineTests.swift"; sourceTree = SOURCE_ROOT; };
+		48849BFA164B2466D17666B9 /* CardPreviewReaderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ArcNoteTests/CardPreviewReaderTests.swift"; sourceTree = SOURCE_ROOT; };
+		935D592F2F7A1370DC45518C /* CardPreviewReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ArcNote/CoreFlow/CardPreviewReader.swift"; sourceTree = SOURCE_ROOT; };
+		2EFB8C521110239D4BE5C6F7 /* ExecutionFixtures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ArcNoteTests/ExecutionFixtures.swift"; sourceTree = SOURCE_ROOT; };
+		67C776D3EF12CAECFBCAFFF8 /* StubURLProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ArcNoteTests/StubURLProtocol.swift"; sourceTree = SOURCE_ROOT; };
+		E41C4CEBE69067D293BA7ECC /* NetworkResponseExecutionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ArcNoteTests/NetworkResponseExecutionTests.swift"; sourceTree = SOURCE_ROOT; };
+		C19E959B8363D8E79720B724 /* CardDetailReaderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ArcNoteTests/CardDetailReaderTests.swift"; sourceTree = SOURCE_ROOT; };
+		725D1C8BC22A06A30C4A6279 /* CardImagePreparationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ArcNoteTests/CardImagePreparationTests.swift"; sourceTree = SOURCE_ROOT; };
+		70328C0F1F28C0DD3CFAC752 /* CardImagePreparation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ArcNote/CardImagePreparation.swift"; sourceTree = SOURCE_ROOT; };
+		A9B5CAE97CCFFC3595F96129 /* LocalNoteEditorPersistenceSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ArcNoteTests/LocalNoteEditorPersistenceSessionTests.swift"; sourceTree = SOURCE_ROOT; };
+		969BC9EE7A541EE34C76BDC1 /* LocalNoteEditorPersistenceSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ArcNote/CoreFlow/LocalNoteEditorPersistenceSession.swift"; sourceTree = SOURCE_ROOT; };
+		D3ADDC28A8156BE6C33154F7 /* MergeEditorRetirementTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ArcNoteTests/MergeEditorRetirementTests.swift"; sourceTree = SOURCE_ROOT; };
+		58B971DA8E6B55058CC8C05C /* MergeArtifactDraftExecutionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ArcNoteTests/MergeArtifactDraftExecutionTests.swift"; sourceTree = SOURCE_ROOT; };
+		11F8BEB538E19FD9D10F3026 /* HomeCardProjectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ArcNoteTests/HomeCardProjectionTests.swift"; sourceTree = SOURCE_ROOT; };
+		97C2A244AC2C9C90B7F5803A /* HomeCardProjectionWorker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ArcNote/CoreFlow/HomeCardProjectionWorker.swift"; sourceTree = SOURCE_ROOT; };
+		999695199ECD7F79FD9858F6 /* HomeCardsLoadingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ArcNoteTests/HomeCardsLoadingTests.swift"; sourceTree = SOURCE_ROOT; };
+		34B30F493F4BC0C8CDCAE3B1 /* CardRenderingDiagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ArcNote/CoreFlow/CardRenderingDiagnostics.swift"; sourceTree = SOURCE_ROOT; };
+		A1E3A966527A35C05A070BB2 /* HomeCardRenderingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ArcNoteTests/HomeCardRenderingTests.swift"; sourceTree = SOURCE_ROOT; };
+		AA3042831931F962B60EA636 /* LocalNoteThumbnailReaderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ArcNoteTests/LocalNoteThumbnailReaderTests.swift"; sourceTree = SOURCE_ROOT; };
+		B1E0FB957B117F6596BB718C /* LocalNoteThumbnailReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ArcNote/CoreFlow/LocalNoteThumbnailReader.swift"; sourceTree = SOURCE_ROOT; };
+		16845431EF7D9B2AE676D3C9 /* HTMLTextReaderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ArcNoteTests/HTMLTextReaderTests.swift"; sourceTree = SOURCE_ROOT; };
+		D62B0B96B71343CC59CD3B90 /* HTMLTextReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ArcNote/CoreFlow/HTMLTextReader.swift"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -332,6 +378,10 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		88CFF8759ECF2267C2AC2BCC /* PBXFrameworksBuildPhase */ = {
+			isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (
+			); runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -348,6 +398,7 @@
 		1B48AE322E30967F0090CF86 /* Products */ = {
 			isa = PBXGroup;
 			children = (
+				94797D021B8B96AE3105383D /* ArcNoteTests.xctest */,
 				1B48AE312E30967F0090CF86 /* ArcNote.app */,
 				A00000012F50000100000003 /* ArcNoteUITests.xctest */,
 			);
@@ -549,6 +600,23 @@
 			path = CardEditor;
 			sourceTree = "<group>";
 		};
+		94B3F7F5060CC463EB0E7E97 /* ArcNoteTests */ = {isa = PBXGroup; children = (
+				16845431EF7D9B2AE676D3C9 /* HTMLTextReaderTests.swift */,
+				AA3042831931F962B60EA636 /* LocalNoteThumbnailReaderTests.swift */,
+				A1E3A966527A35C05A070BB2 /* HomeCardRenderingTests.swift */,
+				999695199ECD7F79FD9858F6 /* HomeCardsLoadingTests.swift */,
+				11F8BEB538E19FD9D10F3026 /* HomeCardProjectionTests.swift */,
+				58B971DA8E6B55058CC8C05C /* MergeArtifactDraftExecutionTests.swift */,
+				D3ADDC28A8156BE6C33154F7 /* MergeEditorRetirementTests.swift */,
+				A9B5CAE97CCFFC3595F96129 /* LocalNoteEditorPersistenceSessionTests.swift */,
+				725D1C8BC22A06A30C4A6279 /* CardImagePreparationTests.swift */,
+				C19E959B8363D8E79720B724 /* CardDetailReaderTests.swift */,
+				E41C4CEBE69067D293BA7ECC /* NetworkResponseExecutionTests.swift */,
+				67C776D3EF12CAECFBCAFFF8 /* StubURLProtocol.swift */,
+				2EFB8C521110239D4BE5C6F7 /* ExecutionFixtures.swift */,
+				48849BFA164B2466D17666B9 /* CardPreviewReaderTests.swift */,
+				4405F0504AC8A94BFB039854 /* ExecutionBoundaryBaselineTests.swift */,
+			); path = ArcNoteTests; sourceTree = "<group>"; };
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -597,6 +665,7 @@
 			productReference = A00000012F50000100000003 /* ArcNoteUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		CEF0A8A6F2E96EF0BE00FA1C /* ArcNoteTests */ = {isa = PBXNativeTarget; buildConfigurationList = 86D936EFB3E04A42D87F14DB /* Test configurations */; buildPhases = (4391C694BDD7A447A202F623 /* PBXSourcesBuildPhase */, 88CFF8759ECF2267C2AC2BCC /* PBXFrameworksBuildPhase */, 5FB688396DA40076544D1E89 /* PBXResourcesBuildPhase */,); buildRules = (); dependencies = (CF08291ED8AA06A792DE39E6 /* PBXTargetDependency */,); name = ArcNoteTests; productName = ArcNoteTests; productReference = 94797D021B8B96AE3105383D /* ArcNoteTests.xctest */; productType = "com.apple.product-type.bundle.unit-test"; };
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -636,6 +705,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
+				CEF0A8A6F2E96EF0BE00FA1C /* ArcNoteTests */,
 				1B48AE302E30967F0090CF86 /* ArcNote */,
 				A00000012F50000100000008 /* ArcNoteUITests */,
 			);
@@ -660,6 +730,10 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		5FB688396DA40076544D1E89 /* PBXResourcesBuildPhase */ = {
+			isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (
+			); runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -667,6 +741,13 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				96173B537BE66B36D958C303 /* HTMLTextReader.swift in Sources */,
+				3429A95ACEF908AA700EC6D1 /* LocalNoteThumbnailReader.swift in Sources */,
+				A8393E1FDF04660FA7F7C4D2 /* CardRenderingDiagnostics.swift in Sources */,
+				B9F3DE75CAFA5F73451F734E /* HomeCardProjectionWorker.swift in Sources */,
+				6DCB88AAEFE470EA7AA746A3 /* LocalNoteEditorPersistenceSession.swift in Sources */,
+				82C443884ECE5389CA1B1A75 /* CardImagePreparation.swift in Sources */,
+				4B375FB730127873770A343F /* CardPreviewReader.swift in Sources */,
 				A10000012F90000100000005 /* APIEnvironment.swift in Sources */,
 				C0DEF1402F60000100000003 /* AccessGateView.swift in Sources */,
 				C0DEF1412F60000100000003 /* KeychainStore.swift in Sources */,
@@ -813,6 +894,25 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		4391C694BDD7A447A202F623 /* PBXSourcesBuildPhase */ = {
+			isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (
+				4921AB68CC59BEE867FAA6C4 /* HTMLTextReaderTests.swift in Sources */,
+				554230038285A505D3A0F115 /* LocalNoteThumbnailReaderTests.swift in Sources */,
+				247139F1EBB290291A2B4A8C /* HomeCardRenderingTests.swift in Sources */,
+				EA17F9240516AFF4B92072BC /* HomeCardsLoadingTests.swift in Sources */,
+				AEC19E6E3C8FFA353C217FDB /* HomeCardProjectionTests.swift in Sources */,
+				47240F88F54B3581BA01AB4F /* MergeArtifactDraftExecutionTests.swift in Sources */,
+				0B6BC22F0BE17B1F86041C51 /* MergeEditorRetirementTests.swift in Sources */,
+				A29F677BDCCDD4ADD4B884C4 /* LocalNoteEditorPersistenceSessionTests.swift in Sources */,
+				CAA378EBD05FBE2C0CA7A9D7 /* CardImagePreparationTests.swift in Sources */,
+				C11D1AA997C7E2E5D12BA7CA /* CardDetailReaderTests.swift in Sources */,
+				D25E56F61A293DB592B455C7 /* NetworkResponseExecutionTests.swift in Sources */,
+				21992CC082DB482281D3F0FE /* StubURLProtocol.swift in Sources */,
+				D5295C7C5BA1E0237CFAF2AB /* ExecutionFixtures.swift in Sources */,
+				2B121A9F8CEA97D6317C3E19 /* CardPreviewReaderTests.swift in Sources */,
+				3FAFD34EAC1CD093CEB3276C /* ExecutionBoundaryBaselineTests.swift in Sources */,
+			); runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -821,6 +921,7 @@
 			target = 1B48AE302E30967F0090CF86 /* ArcNote */;
 			targetProxy = A00000012F5000010000000C /* PBXContainerItemProxy */;
 		};
+		CF08291ED8AA06A792DE39E6 /* PBXTargetDependency */ = {isa = PBXTargetDependency; target = 1B48AE302E30967F0090CF86 /* ArcNote */; targetProxy = AFCC97E1D7489ECE0D37DBC5 /* PBXContainerItemProxy */; };
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
@@ -1180,6 +1281,39 @@
 			};
 			name = "Debug-Production";
 		};
+		B8681F06B00EF70769E4BC51 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = {
+                BUNDLE_LOADER = "$(TEST_HOST)";
+                TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ArcNote.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/ArcNote";
+                GENERATE_INFOPLIST_FILE = YES;
+                IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+                PRODUCT_BUNDLE_IDENTIFIER = com.michen.arcnote.tests;
+                PRODUCT_NAME = "$(TARGET_NAME)";
+                SWIFT_VERSION = 5.0;
+                TARGETED_DEVICE_FAMILY = 1;
+                SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) DEBUG";
+            }; name = "Debug"; };
+		20E254161FF83B29C4AC52D3 /* Release */ = {isa = XCBuildConfiguration; buildSettings = {
+                BUNDLE_LOADER = "$(TEST_HOST)";
+                TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ArcNote.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/ArcNote";
+                GENERATE_INFOPLIST_FILE = YES;
+                IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+                PRODUCT_BUNDLE_IDENTIFIER = com.michen.arcnote.tests;
+                PRODUCT_NAME = "$(TARGET_NAME)";
+                SWIFT_VERSION = 5.0;
+                TARGETED_DEVICE_FAMILY = 1;
+                SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) DEBUG";
+            }; name = "Release"; };
+		6C83B881047D101C2A43D513 /* Debug-Production */ = {isa = XCBuildConfiguration; buildSettings = {
+                BUNDLE_LOADER = "$(TEST_HOST)";
+                TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ArcNote.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/ArcNote";
+                GENERATE_INFOPLIST_FILE = YES;
+                IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+                PRODUCT_BUNDLE_IDENTIFIER = com.michen.arcnote.tests;
+                PRODUCT_NAME = "$(TARGET_NAME)";
+                SWIFT_VERSION = 5.0;
+                TARGETED_DEVICE_FAMILY = 1;
+                SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) DEBUG";
+            }; name = "Debug-Production"; };
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -1213,6 +1347,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		86D936EFB3E04A42D87F14DB /* Test configurations */ = {isa = XCConfigurationList; buildConfigurations = (B8681F06B00EF70769E4BC51 /* Debug */, 20E254161FF83B29C4AC52D3 /* Release */, 6C83B881047D101C2A43D513 /* Debug-Production */,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */

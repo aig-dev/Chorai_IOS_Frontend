@@ -145,10 +145,11 @@ struct HomeView: View {
             ownedCardRefreshRequestID = nil
             ownedCardRefreshFailedID = nil
             loadUserCards()
-            if let card = cardsManager.cards.first(where: { $0.id == cardID }) {
+            if let note = LocalNotesController.shared.library.notes.first(where: { NoteLibraryStore.identifier($0) == cardID }) {
+                // Action state reads the committed note; display projection may still be running.
                 ownedCardActionRefresh = OwnedCardActionRefresh(snapshot: OwnedCardActionSnapshot(
-                    cardID: card.id, isOwned: card.isOwner == true,
-                    isPublic: card.isPublic, isPinned: card.isPinned, pinnedAt: card.pinnedAt
+                    cardID: cardID, isOwned: true,
+                    isPublic: note.isPublic, isPinned: note.isPinned ?? false, pinnedAt: nil
                 ))
             }
             if librarySearchSession.isActive { retryLibrarySearch() }
@@ -156,24 +157,24 @@ struct HomeView: View {
         }
         let requestID = UUID()
         ownedCardRefreshRequestID = requestID
-        NetworkManager.shared.getCardDetail(cardId: cardID) { result in
-            DispatchQueue.main.async {
+        Task { @MainActor in
+            do {
+                let detail = try await CardDetailReader.shared.confirmed(cardID: cardID, requiringNewRead: true)
                 guard ownedCardRefreshRequestID == requestID else { return }
                 ownedCardRefreshRequestID = nil
-                switch result {
-                case .success(let response) where response.success && response.data.id == cardID:
-                    let detail = response.data
-                    let snapshot = OwnedCardActionSnapshot(
-                        cardID: detail.id,
-                        isOwned: detail.isOwner ?? (AuthManager.shared.currentUser.map { detail.author?.actorId == $0.id } ?? false),
-                        isPublic: detail.isPublic, isPinned: detail.isPinned ?? false, pinnedAt: detail.pinnedAt
-                    )
-                    ownedCardActionRefresh = OwnedCardActionRefresh(snapshot: snapshot)
-                    ownedCardRefreshFailedID = nil
-                    loadUserCards()
-                    if librarySearchSession.isActive { retryLibrarySearch() }
-                default: ownedCardRefreshFailedID = cardID
-                }
+                let snapshot = OwnedCardActionSnapshot(
+                    cardID: detail.id,
+                    isOwned: detail.isOwner ?? (AuthManager.shared.currentUser.map { detail.author?.actorId == $0.id } ?? false),
+                    isPublic: detail.isPublic, isPinned: detail.isPinned ?? false, pinnedAt: detail.pinnedAt
+                )
+                ownedCardActionRefresh = OwnedCardActionRefresh(snapshot: snapshot)
+                ownedCardRefreshFailedID = nil
+                loadUserCards()
+                if librarySearchSession.isActive { retryLibrarySearch() }
+            } catch {
+                guard ownedCardRefreshRequestID == requestID else { return }
+                ownedCardRefreshRequestID = nil
+                ownedCardRefreshFailedID = cardID
             }
         }
     }
@@ -1191,7 +1192,6 @@ struct NotesListView: View {
                                     print("设置当前卡片ID: \(cardData.id)")
                                     onShowMenu(cardData)
                                 },
-                                cardsManager: cardsManager,
                                 showMergeGuide: index == 0,
                                 onboardingState: onboardingStore?.contextualTipState,
                                 contextualTipStore: contextualTipStore,
@@ -1616,12 +1616,26 @@ struct LibraryCardBackgroundSurface<Fallback: View>: View {
 }
 
 // MARK: - Notes 卡片组件
+private struct NotesCardGuideDecoration<Content: View>: View {
+    @ObservedObject var store: ContextualGuideTipStore
+    let onboardingState: String?
+    let enabled: Bool
+    @ViewBuilder let content: (Bool) -> Content
+
+    var body: some View {
+        content(enabled && store.isVisible(.libraryMergeEntry, onboardingState: onboardingState, targetIsVisible: true))
+    }
+}
+
 struct NotesCard: View {
+    #if DEBUG
+    @Environment(\.notesCardRenderObserver) private var renderObserver
+    @Environment(\.notesCardGuideVisibilityObserver) private var guideObserver
+    #endif
     @Environment(\.colorSchemeContrast) private var contrast
     let card: UserCard
     let onShowMenu: (UserCard) -> Void
     let onCardTap: ((String) -> Void)?
-    @ObservedObject var cardsManager: HomeCardsManager
     let showMergeGuide: Bool
     let onboardingState: String?
     let contextualTipStore: ContextualGuideTipStore?
@@ -1629,7 +1643,6 @@ struct NotesCard: View {
     init(
         card: UserCard,
         onShowMenu: @escaping (UserCard) -> Void,
-        cardsManager: HomeCardsManager,
         showMergeGuide: Bool = false,
         onboardingState: String? = nil,
         contextualTipStore: ContextualGuideTipStore? = nil,
@@ -1637,20 +1650,10 @@ struct NotesCard: View {
     ) {
         self.card = card
         self.onShowMenu = onShowMenu
-        self.cardsManager = cardsManager
         self.showMergeGuide = showMergeGuide
         self.onboardingState = onboardingState
         self.contextualTipStore = contextualTipStore
         self.onCardTap = onCardTap
-    }
-
-    private var isMergeEntryTipVisible: Bool {
-        showMergeGuide
-            && (contextualTipStore?.isVisible(
-                .libraryMergeEntry,
-                onboardingState: onboardingState,
-                targetIsVisible: true
-            ) ?? false)
     }
 
     private func openMenu() {
@@ -1680,6 +1683,9 @@ struct NotesCard: View {
     }
     
     var body: some View {
+        #if DEBUG
+        let _ = renderObserver?(card.id)
+        #endif
         VStack(alignment: .leading, spacing: 13) {
             HStack(spacing: 7) {
                 Text(formatDate(card.updatedAt).uppercased())
@@ -1690,7 +1696,8 @@ struct NotesCard: View {
             }.foregroundStyle(.secondary)
             LibraryCardContentPreview(content: card.content, contentJSON: card.contentJSON,
                                       cardID: card.id,
-                                      localNoteScope: localNoteScope,
+                                      contentHash: card.contentHash,
+                                      localPreviewIdentity: card.localPreviewIdentity,
                                       onTap: openCard)
                 .accessibilityIdentifier("home.card.body.\(card.id)")
             HStack(spacing: 7) {
@@ -1713,14 +1720,28 @@ struct NotesCard: View {
                 .buttonStyle(.plain).foregroundStyle(.secondary)
                 .accessibilityLabel("Card menu")
                 .accessibilityIdentifier("home.card.menu.\(card.id)")
-                .overlay { ContextualGuideTargetHalo(isVisible: isMergeEntryTipVisible) }
+                .overlay {
+                    if let contextualTipStore {
+                        NotesCardGuideDecoration(store: contextualTipStore, onboardingState: onboardingState, enabled: showMergeGuide) { visible in
+                            ContextualGuideTargetHalo(isVisible: visible)
+                                #if DEBUG
+                                .onAppear { guideObserver?(visible) }
+                                .onChange(of: visible) { guideObserver?($0) }
+                                #endif
+                        }
+                    }
+                }
             }
             .padding(.bottom, 20)
-            if isMergeEntryTipVisible, let contextualTipStore {
-                HStack {
-                    Spacer(minLength: 0)
-                    ContextualGuideCallout(store: contextualTipStore, tip: .libraryMergeEntry,
-                        onboardingState: onboardingState, targetIsVisible: true)
+            if showMergeGuide, let contextualTipStore {
+                NotesCardGuideDecoration(store: contextualTipStore, onboardingState: onboardingState, enabled: true) { visible in
+                    if visible {
+                        HStack {
+                            Spacer(minLength: 0)
+                            ContextualGuideCallout(store: contextualTipStore, tip: .libraryMergeEntry,
+                                onboardingState: onboardingState, targetIsVisible: true)
+                        }
+                    }
                 }
             }
             Divider()
@@ -1741,9 +1762,11 @@ struct NotesCard: View {
     // MARK: Background Views
 
     private var localNoteScope: NoteStoreScope? {
-        guard let scope = LocalNotesController.shared.library.scope,
-              card.ownerActorId == scope.actorID else { return nil }
-        return scope
+        guard let identity = card.localPreviewIdentity,
+              identity.scope == LocalNotesController.shared.library.scope,
+              identity.scope == AuthManager.shared.currentNoteScope,
+              card.ownerActorId == identity.scope.actorID else { return nil }
+        return identity.scope
     }
 
     private var hasCustomBackground: Bool {
@@ -2220,32 +2243,49 @@ struct HomePostCard: View {
 
 // MARK: - Library 富内容预览
 struct LibraryCardContentPreview: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    private let preview: LibraryCardPreviewContent
-    private let cardID: String
-    private let textFont: Font?
-    private let localNoteScope: NoteStoreScope?
-    @ScaledMetric(relativeTo: .body) private var readingSize = 21.0
-    private let onTap: (() -> Void)?
+    let content: String
+    let contentJSON: String?
+    let cardID: String
+    var textFont: Font? = nil
+    var contentHash: String? = nil
+    var localPreviewIdentity: LocalNotePreviewIdentity? = nil
+    var onTap: (() -> Void)? = nil
+    @State private var snapshotID = UUID()
 
-    init(
-        content: String,
-        contentJSON: String?,
-        cardID: String,
-        textFont: Font? = nil,
-        localNoteScope: NoteStoreScope? = nil,
-        onTap: (() -> Void)? = nil
-    ) {
-        preview = LibraryCardPreviewParser.parse(
-            content: content,
-            contentJSON: contentJSON,
-            allowsLocalImages: localNoteScope != nil
+    private var input: LibraryCardPreviewInput? {
+        if let local = localPreviewIdentity {
+            return LibraryCardPreviewInput(
+                localNoteID: cardID, scope: local.scope, bodyRevision: local.bodyRevision,
+                content: content, contentJSON: contentJSON
+            )
+        }
+        guard !cardID.hasPrefix("local-note:") else { return nil }
+        return LibraryCardPreviewInput(
+            cardID: cardID, contentHash: contentHash, snapshotID: snapshotID,
+            content: content, contentJSON: contentJSON
         )
-        self.cardID = cardID
-        self.textFont = textFont
-        self.localNoteScope = localNoteScope
-        self.onTap = onTap
     }
+
+    var body: some View {
+        CardPreviewValue(input: input) { presentation in
+            LibraryCardPreviewBody(
+                preview: presentation?.preview ?? LibraryCardPreviewContent(
+                    text: "", imageSource: nil, imageAlternativeText: nil
+                ),
+                cardID: cardID, textFont: textFont, localPreviewIdentity: localPreviewIdentity, onTap: onTap
+            )
+        }
+    }
+}
+
+private struct LibraryCardPreviewBody: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let preview: LibraryCardPreviewContent
+    let cardID: String
+    let textFont: Font?
+    let localPreviewIdentity: LocalNotePreviewIdentity?
+    let onTap: (() -> Void)?
+    @ScaledMetric(relativeTo: .body) private var readingSize = 21.0
 
     var body: some View {
         if let onTap {
@@ -2259,16 +2299,18 @@ struct LibraryCardContentPreview: View {
 
     private var previewContent: some View {
         VStack(alignment: .leading, spacing: 10) {
-            if let mediaRef = preview.imageMediaRef, let scope = localNoteScope {
+            if let mediaRef = preview.imageMediaRef, let local = localPreviewIdentity {
                 libraryImage {
-                    LocalNoteThumbnail(scope: scope, cardID: cardID, source: .reference(mediaRef), content: imageContent)
-                        .id(scope)
+                    LocalNoteThumbnail(scope: local.scope, cardID: cardID, bodyRevision: local.bodyRevision,
+                                       source: .reference(mediaRef), content: imageContent)
+                        .id(local.scope)
                 }
             } else if let url = imageURL {
                 libraryImage {
-                    if let scope = localNoteScope, url.scheme == NoteAttachmentFiles.previewScheme {
-                        LocalNoteThumbnail(scope: scope, cardID: cardID, source: .previewURL(url), content: imageContent)
-                            .id(scope)
+                    if let local = localPreviewIdentity, url.scheme == NoteAttachmentFiles.previewScheme {
+                        LocalNoteThumbnail(scope: local.scope, cardID: cardID, bodyRevision: local.bodyRevision,
+                                           source: .previewURL(url), content: imageContent)
+                            .id(local.scope)
                     } else {
                         AsyncImage(
                             url: url,
@@ -2293,7 +2335,7 @@ struct LibraryCardContentPreview: View {
 
     private var imageURL: URL? {
         guard let source = preview.imageSource else { return nil }
-        if localNoteScope != nil, let url = URL(string: source), url.scheme == NoteAttachmentFiles.previewScheme {
+        if localPreviewIdentity != nil, let url = URL(string: source), url.scheme == NoteAttachmentFiles.previewScheme {
             return url
         }
         let normalizedSource = source.hasPrefix("chorai-assets/")
@@ -2361,59 +2403,61 @@ struct LibraryCardContentPreview: View {
 }
 
 private struct LocalNoteThumbnail<Content: View>: View {
-    enum Source: Hashable {
-        case reference(String)
-        case previewURL(URL)
-    }
-
     let scope: NoteStoreScope
     let cardID: String
-    let source: Source
+    let bodyRevision: Int64
+    let source: NoteThumbnailSource
     let content: (AsyncImagePhase) -> Content
+    @ObservedObject private var reader = LocalNoteThumbnailReader.shared
     @State private var phase = AsyncImagePhase.empty
+    @State private var loadedRequest: Request?
+
+    private struct Request: Hashable {
+        let scope: NoteStoreScope
+        let cardID: String
+        let bodyRevision: Int64
+        let source: NoteThumbnailSource
+        let generation: UInt64
+    }
 
     var body: some View {
-        content(phase).task(id: source) {
+        let request = Request(scope: scope, cardID: cardID, bodyRevision: bodyRevision,
+                              source: source, generation: reader.invalidationGeneration)
+        content(loadedRequest == request && reader.allows(scope) ? phase : .empty).task(id: request) {
             phase = .empty
+            loadedRequest = nil
             do {
-                let library = LocalNotesController.shared.library
-                let previewURL: URL
-                switch source {
-                case let .reference(mediaRef):
-                    let urls = try await library.imageDisplayURLs(identifier: cardID, scope: scope)
-                    guard let mapped = urls[mediaRef].flatMap(URL.init(string:)) else { throw NoteLocalStoreError.invalidAttachment }
-                    previewURL = mapped
-                case let .previewURL(url):
-                    previewURL = url
-                }
-                let resource = try await library.imagePreview(previewURL, identifier: cardID, scope: scope)
-                guard !Task.isCancelled else { return }
-                guard let original = UIImage(data: resource.data),
-                      let thumbnail = await original.byPreparingThumbnail(ofSize: CGSize(width: 1024, height: 1024))
-                else { throw NoteLocalStoreError.invalidAttachment }
-                guard !Task.isCancelled else { return }
+                let thumbnail = try await reader.image(source: source, cardID: cardID, scope: scope,
+                                                       bodyRevision: bodyRevision, pixelSize: 1024)
+                guard !Task.isCancelled, reader.invalidationGeneration == request.generation else { return }
+                loadedRequest = request
                 phase = .success(Image(uiImage: thumbnail))
             } catch {
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled, reader.invalidationGeneration == request.generation else { return }
+                loadedRequest = request
                 phase = .failure(error)
             }
         }
+        .onDisappear { loadedRequest = nil; phase = .empty }
     }
 }
 
 // MARK: - HTML 文本渲染组件
 struct HTMLTextRenderer: View {
+    let cardID: String
     let htmlContent: String
     let maxLines: Int
     let font: Font
     let foregroundColor: Color
     
     init(
+        cardID: String,
         htmlContent: String,
         maxLines: Int = 3,
         font: Font = .system(size: 17, weight: .regular),
         foregroundColor: Color = ChoraiTheme.ink
     ) {
+        self.cardID = cardID
         self.htmlContent = htmlContent
         self.maxLines = maxLines
         self.font = font
@@ -2421,48 +2465,12 @@ struct HTMLTextRenderer: View {
     }
     
     var body: some View {
-        Text(plainText)
-            .font(font)
-            .foregroundColor(foregroundColor)
-            .lineLimit(maxLines)
-            .multilineTextAlignment(.leading)
-    }
-    
-    private var plainText: String {
-        // 移除 HTML 标签，保留纯文本
-        var text = htmlContent
-        
-        // 处理常见的 HTML 标签
-        text = text.replacingOccurrences(of: "<br>", with: "\n")
-        text = text.replacingOccurrences(of: "<br/>", with: "\n")
-        text = text.replacingOccurrences(of: "<br />", with: "\n")
-        text = text.replacingOccurrences(of: "</p>", with: "\n")
-        text = text.replacingOccurrences(of: "</div>", with: "\n")
-        text = text.replacingOccurrences(of: "</li>", with: "\n")
-        
-        // 移除所有 HTML 标签
-        text = text.replacingOccurrences(
-            of: "<[^>]+>",
-            with: "",
-            options: .regularExpression
-        )
-        
-        // 解码 HTML 实体
-        text = text.replacingOccurrences(of: "&nbsp;", with: " ")
-        text = text.replacingOccurrences(of: "&amp;", with: "&")
-        text = text.replacingOccurrences(of: "&lt;", with: "<")
-        text = text.replacingOccurrences(of: "&gt;", with: ">")
-        text = text.replacingOccurrences(of: "&quot;", with: "\"")
-        text = text.replacingOccurrences(of: "&#39;", with: "'")
-        text = text.replacingOccurrences(of: "&apos;", with: "'")
-        
-        // 清理多余的空白字符和换行
-        text = text.replacingOccurrences(
-            of: "\\s+",
-            with: " ",
-            options: .regularExpression
-        )
-        
-        return text.trimmingCharacters(in: .whitespacesAndNewlines)
+        HTMLTextValue(cardID: cardID, html: htmlContent, reader: .shared) { text in
+            Text(text)
+                .font(font)
+                .foregroundColor(foregroundColor)
+                .lineLimit(maxLines)
+                .multilineTextAlignment(.leading)
+        }
     }
 }

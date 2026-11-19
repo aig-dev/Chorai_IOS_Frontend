@@ -88,8 +88,8 @@ private struct NewMergeSessionHost: View {
                 )
             } else {
                 MergeEntryLoadingView(onBack: abandonDraftAndDismiss)
-                    .task {
-                        guard draft == nil else { return }
+                    .task(id: mergeCoordinator.canStartDraft) {
+                        guard draft == nil, mergeCoordinator.canStartDraft else { return }
                         draft = mergeCoordinator.makeDraft(
                             anchor: anchor.coreMergeSource
                         )
@@ -1106,6 +1106,7 @@ private struct MergeSelectionActionDockSurface: View {
 
 @MainActor
 private struct MergeArtifactEditorHost: View {
+    @Environment(\.cardNavigationMergeCoordinator) private var mergeCoordinator
     @StateObject private var controller: MergeArtifactDraftController
     let onBack: () -> Void
 
@@ -1127,6 +1128,8 @@ private struct MergeArtifactEditorHost: View {
             controller: controller,
             onBack: onBack
         )
+        .onAppear { controller.setHostVisible(true, coordinator: mergeCoordinator) }
+        .onDisappear { controller.setHostVisible(false, coordinator: mergeCoordinator) }
     }
 }
 

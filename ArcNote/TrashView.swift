@@ -243,7 +243,7 @@ struct TrashCardView: View {
                 .font(.caption)
                 .foregroundStyle(ChoraiTheme.secondaryInk)
 
-            HTMLTextRenderer(htmlContent: card.content, maxLines: 3)
+            HTMLTextRenderer(cardID: card.id, htmlContent: card.content, maxLines: 3)
 
             if !card.tags.isEmpty {
                 Text(card.tags.joined(separator: " · "))

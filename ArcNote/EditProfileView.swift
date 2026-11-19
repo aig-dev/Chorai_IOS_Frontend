@@ -19,6 +19,8 @@ struct EditProfileView: View {
     @State private var selectedBackgroundImage: UIImage?
     @State private var imagePickerTarget: ProfileImageTarget?
     @State private var isSaving = false
+    @State private var preparationTask: Task<Void, Never>?
+    @State private var saveGeneration = UUID()
     @State private var saveErrorMessage: String?
     @State private var cancellables = Set<AnyCancellable>()
 
@@ -77,6 +79,10 @@ struct EditProfileView: View {
         .onChange(of: userProfileManager.userProfile) { profile in
             guard !isSaving, let profile else { return }
             applyProfile(profile)
+        }
+        .onDisappear { cancelImagePreparation() }
+        .onReceive(NotificationCenter.default.publisher(for: .cardReadSessionDidChange)) { _ in
+            cancelImagePreparation()
         }
         .onChange(of: bio) { updatedBio in
             if updatedBio.count > 100 {
@@ -144,6 +150,7 @@ struct EditProfileView: View {
         .accessibilityLabel(hasBackgroundImage ? "Change background photo" : "Add background photo")
         .accessibilityHint("Opens your photo library")
         .accessibilityIdentifier("edit-profile.background")
+        .disabled(isSaving)
         .overlay(alignment: .bottom) {
             avatarButton
                 .offset(y: 36)
@@ -242,6 +249,7 @@ struct EditProfileView: View {
         .accessibilityLabel("Change profile photo")
         .accessibilityHint("Opens your photo library")
         .accessibilityIdentifier("edit-profile.avatar")
+        .disabled(isSaving)
     }
 
     @ViewBuilder
@@ -403,12 +411,22 @@ struct EditProfileView: View {
         return URL(string: APIConfiguration.resourceURLString(trimmedValue))
     }
 
+    /// Picker completion can arrive after its launcher was disabled.
+    @MainActor
+    static func imageSelectionBinding(_ selection: Binding<UIImage?>,
+                                      isSaving: @escaping () -> Bool) -> Binding<UIImage?> {
+        Binding(get: { selection.wrappedValue }, set: { image in
+            guard !isSaving() else { return }
+            selection.wrappedValue = image
+        })
+    }
+
     private func imageBinding(for target: ProfileImageTarget) -> Binding<UIImage?> {
         switch target {
         case .avatar:
-            return $selectedAvatarImage
+            return Self.imageSelectionBinding($selectedAvatarImage, isSaving: { isSaving })
         case .background:
-            return $selectedBackgroundImage
+            return Self.imageSelectionBinding($selectedBackgroundImage, isSaving: { isSaving })
         }
     }
 
@@ -457,28 +475,6 @@ struct EditProfileView: View {
             return
         }
 
-        let avatarData: Data?
-        if let selectedAvatarImage {
-            guard let data = selectedAvatarImage.jpegData(compressionQuality: 0.82) else {
-                saveErrorMessage = "The profile photo couldn’t be prepared. Choose another image."
-                return
-            }
-            avatarData = data
-        } else {
-            avatarData = nil
-        }
-
-        let backgroundData: Data?
-        if let selectedBackgroundImage {
-            guard let data = selectedBackgroundImage.jpegData(compressionQuality: 0.82) else {
-                saveErrorMessage = "The background photo couldn’t be prepared. Choose another image."
-                return
-            }
-            backgroundData = data
-        } else {
-            backgroundData = nil
-        }
-
         isSaving = true
         saveErrorMessage = nil
         #if DEBUG
@@ -487,6 +483,53 @@ struct EditProfileView: View {
         backgroundUploadError = ""
         #endif
 
+        preparationTask?.cancel()
+        let generation = UUID()
+        saveGeneration = generation
+        let authSession = AuthManager.shared.sessionGeneration
+        let avatar = selectedAvatarImage
+        let background = selectedBackgroundImage
+        preparationTask = Task {
+            var failureMessage = "The profile photo couldn’t be prepared. Choose another image."
+            do {
+                let avatarData: Data?
+                if let avatar {
+                    avatarData = try await CardImagePreparation.shared.jpeg(avatar, quality: 0.82, filename: "avatar.jpg").data
+                } else { avatarData = nil }
+                try Task.checkCancellation()
+                failureMessage = "The background photo couldn’t be prepared. Choose another image."
+                let backgroundData: Data?
+                if let background {
+                    backgroundData = try await CardImagePreparation.shared.jpeg(background, quality: 0.82, filename: "background.jpg").data
+                } else { backgroundData = nil }
+                guard !Task.isCancelled, saveGeneration == generation,
+                      AuthManager.shared.sessionGeneration == authSession else { return }
+                savePreparedProfile(currentProfile: currentProfile, avatarData: avatarData,
+                    backgroundData: backgroundData, trimmedName: trimmedName, savedBio: savedBio,
+                    savedLocation: savedLocation, savedBirthday: savedBirthday,
+                    generation: generation, authSession: authSession)
+                preparationTask = nil
+            } catch {
+                guard saveGeneration == generation else { return }
+                isSaving = false
+                preparationTask = nil
+                if !(error is CancellationError) { saveErrorMessage = failureMessage }
+            }
+        }
+    }
+
+    private func cancelImagePreparation() {
+        saveGeneration = UUID()
+        preparationTask?.cancel()
+        preparationTask = nil
+        isSaving = false
+    }
+
+    private func savePreparedProfile(
+        currentProfile: UserProfile, avatarData: Data?, backgroundData: Data?,
+        trimmedName: String, savedBio: String, savedLocation: String, savedBirthday: String,
+        generation: UUID, authSession: UInt64
+    ) {
         var publisher = Just(currentProfile)
             .setFailureType(to: NetworkError.self)
             .eraseToAnyPublisher()
@@ -496,11 +539,16 @@ struct EditProfileView: View {
             avatarUploadStatus = "uploading"
             #endif
             publisher = publisher
-                .flatMap { _ in
-                    NetworkManager.shared.uploadAvatar(imageData: avatarData)
+                .flatMap { _ -> AnyPublisher<AvatarUploadResponse, NetworkError> in
+                    guard saveGeneration == generation,
+                          AuthManager.shared.sessionGeneration == authSession else {
+                        return Fail(error: NetworkError.unauthorized).eraseToAnyPublisher()
+                    }
+                    return NetworkManager.shared.uploadAvatar(imageData: avatarData)
                 }
                 .receive(on: DispatchQueue.main)
                 .handleEvents(receiveOutput: { response in
+                    guard saveGeneration == generation, AuthManager.shared.sessionGeneration == authSession else { return }
                     userProfileManager.userProfile = response.data
                     selectedAvatarImage = nil
                     #if DEBUG
@@ -516,11 +564,16 @@ struct EditProfileView: View {
             backgroundUploadStatus = "uploading"
             #endif
             publisher = publisher
-                .flatMap { _ in
-                    NetworkManager.shared.uploadProfileBackground(imageData: backgroundData)
+                .flatMap { _ -> AnyPublisher<AvatarUploadResponse, NetworkError> in
+                    guard saveGeneration == generation,
+                          AuthManager.shared.sessionGeneration == authSession else {
+                        return Fail(error: NetworkError.unauthorized).eraseToAnyPublisher()
+                    }
+                    return NetworkManager.shared.uploadProfileBackground(imageData: backgroundData)
                 }
                 .receive(on: DispatchQueue.main)
                 .handleEvents(receiveOutput: { response in
+                    guard saveGeneration == generation, AuthManager.shared.sessionGeneration == authSession else { return }
                     userProfileManager.userProfile = response.data
                     selectedBackgroundImage = nil
                     #if DEBUG
@@ -532,8 +585,12 @@ struct EditProfileView: View {
         }
 
         publisher
-            .flatMap { _ in
-                NetworkManager.shared.updateUserProfilePublisher(
+            .flatMap { _ -> AnyPublisher<UserProfileResponse, NetworkError> in
+                    guard saveGeneration == generation,
+                          AuthManager.shared.sessionGeneration == authSession else {
+                        return Fail(error: NetworkError.unauthorized).eraseToAnyPublisher()
+                    }
+                return NetworkManager.shared.updateUserProfilePublisher(
                     username: trimmedName,
                     bio: savedBio,
                     location: savedLocation,
@@ -543,6 +600,7 @@ struct EditProfileView: View {
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { completion in
+                    guard saveGeneration == generation, AuthManager.shared.sessionGeneration == authSession else { return }
                     if case .failure(let error) = completion {
                         isSaving = false
                         saveErrorMessage = error.localizedDescription
@@ -560,6 +618,7 @@ struct EditProfileView: View {
                     }
                 },
                 receiveValue: { response in
+                    guard saveGeneration == generation, AuthManager.shared.sessionGeneration == authSession else { return }
                     userProfileManager.userProfile = response.data
                     isSaving = false
                     #if DEBUG

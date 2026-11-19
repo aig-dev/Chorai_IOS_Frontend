@@ -205,6 +205,7 @@ private struct CardEditorSessionView: View {
     @ObservedObject private var editingStore: CardEditingStore
     @ObservedObject private var linkPopupManager = LinkPopupManager.shared
     @StateObject private var bodyModel: BlockNoteCardEditorModel
+    @StateObject private var persistenceSession: LocalNoteEditorPersistenceSession
     @StateObject private var nativeActionRouter: CardEditorNativeActionRouter
 
     @State private var isAddingTag = false
@@ -229,13 +230,14 @@ private struct CardEditorSessionView: View {
     @State private var isSaving = false
     @State private var isLoadingBackgroundPhoto = false
     @State private var isProcessingInlineImage = false
+    @State private var inlineImageTask: Task<Void, Never>?
+    @State private var inlineImageGeneration = UUID()
     @State private var isPreparingCardAction = false
     @State private var isCardActionInFlight = false
     @State private var didNotifyCreation: Bool
     @State private var isPinned: Bool
     @State private var cancellables = Set<AnyCancellable>()
     @State private var autosaveTask: Task<Void, Never>?
-    @State private var persistenceSessionID = UUID()
     @State private var showCloudVersionConfirmation = false
     @State private var isResolvingConflict = false
 
@@ -253,8 +255,7 @@ private struct CardEditorSessionView: View {
 
         let router = CardEditorNativeActionRouter()
         _nativeActionRouter = StateObject(wrappedValue: router)
-        _bodyModel = StateObject(
-            wrappedValue: BlockNoteCardEditorModel(
+        let model = BlockNoteCardEditorModel(
                 document: seed.document,
                 initialRevision: seed.revision,
                 initiallyFocused: seed.initialFocus,
@@ -271,8 +272,12 @@ private struct CardEditorSessionView: View {
                 onRequestCardLink: router.requestCardLink,
                 onRequestInlineLink: router.requestInlineLink,
                 onRequestInlineImage: router.requestInlineImage
-            )
         )
+        _bodyModel = StateObject(wrappedValue: model)
+        _persistenceSession = StateObject(wrappedValue: LocalNoteEditorPersistenceSession(
+            scope: localEditingService.scope, editingStore: editingStore,
+            bodyModel: model, isNew: seed.isNew, initialIsPublic: seed.initialIsPublic
+        ))
     }
 
     private var editorShell: some View {
@@ -421,9 +426,16 @@ private struct CardEditorSessionView: View {
         }
         .onAppear {
             configureNativeActions()
-            localNotes.registerEditor(persistenceSessionID) { await persistLocalDraft() }
+            persistenceSession.setVisible(true)
+            localNotes.registerEditor(persistenceSession)
         }
         .onChange(of: editingStore.draft) { _ in scheduleLocalSave() }
+        .onChange(of: persistenceSession.hasSaveFailure) { failed in
+            if failed {
+                saveMessage = "Couldn't save on this device. Keep this note open and retry."
+                hasSaveFailure = true
+            }
+        }
         .confirmationDialog(
             currentLocalNote?.remoteSnapshot == nil ? "Cloud version unavailable" : "Cloud version changed",
             isPresented: $showCloudVersionConfirmation,
@@ -449,12 +461,13 @@ private struct CardEditorSessionView: View {
         .onChange(of: scenePhase) { phase in
             if phase != .active { flushLocalSave() }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .cardReadSessionDidChange)) { _ in
+            cancelInlineImagePreparation()
+        }
         .onDisappear {
+            cancelInlineImagePreparation()
             flushLocalSave()
-            Task {
-                await persistLocalDraft()
-                localNotes.unregisterEditor(persistenceSessionID)
-            }
+            persistenceSession.setVisible(false)
             bodyModel.dismissKeyboard()
             LinkPopupManager.shared.onCardSelected = nil
         }
@@ -532,18 +545,12 @@ private struct CardEditorSessionView: View {
     }
 
     private func persistLocalDraft() async {
-        guard editingStore.isDirty, !isUntouchedNewDraft else { return }
-        // A preceding local transaction may still be finishing as typing continues.
-        while editingStore.phase == .saving {
-            do { try await Task.sleep(nanoseconds: 20_000_000) } catch { return }
-        }
-        guard editingStore.isDirty else { return }
-        let saved = await editingStore.save()
+        let saved = await persistenceSession.flushAcceptedEdits()
         notifyCreationIfNeeded()
-        if !saved, editingStoreHasFailure {
+        if !saved, persistenceSession.hasSaveFailure {
             saveMessage = "Couldn't save on this device. Keep this note open and retry."
             hasSaveFailure = true
-        } else {
+        } else if saved {
             saveMessage = nil
             resolveSaveFailure()
         }
@@ -1235,8 +1242,15 @@ private struct CardEditorSessionView: View {
     private func handleCapturedInlineImage(_ image: UIImage) {
         showInlineImageCamera = false
         beginInlineImageProcessing {
-            try capturedCardEditingImage(image)
+            try await capturedCardEditingImage(image)
         }
+    }
+
+    private func cancelInlineImagePreparation() {
+        inlineImageGeneration = UUID()
+        inlineImageTask?.cancel()
+        inlineImageTask = nil
+        isProcessingInlineImage = false
     }
 
     private func beginInlineImageProcessing(
@@ -1246,36 +1260,43 @@ private struct CardEditorSessionView: View {
         isProcessingInlineImage = true
         saveMessage = nil
         hideSaveFailure()
+        let generation = UUID()
+        inlineImageGeneration = generation
+        let authSession = authManager.sessionGeneration
+        let scope = localNotes.library.scope
 
-        Task {
-            defer { isProcessingInlineImage = false }
+        inlineImageTask = Task {
+            defer {
+                if inlineImageGeneration == generation {
+                    isProcessingInlineImage = false
+                    inlineImageTask = nil
+                }
+            }
             do {
                 let image = try await makeImage()
+                guard !Task.isCancelled, inlineImageGeneration == generation,
+                      authManager.sessionGeneration == authSession,
+                      localNotes.library.scope == scope else { return }
                 let uploaded = try await editingStore.uploadInlineImage(image)
-                bodyModel.insertImage(
-                    url: uploaded.url.absoluteString,
-                    alt: "Inline image"
-                )
+                guard !Task.isCancelled, inlineImageGeneration == generation,
+                      authManager.sessionGeneration == authSession,
+                      localNotes.library.scope == scope else { return }
+                bodyModel.insertImage(url: uploaded.url.absoluteString, alt: "Inline image")
                 saveMessage = nil
                 hideSaveFailure()
+            } catch is CancellationError {
+                // A replaced selection or closed editor has no result to publish.
             } catch {
+                guard inlineImageGeneration == generation,
+                      authManager.sessionGeneration == authSession else { return }
                 saveMessage = "Couldn't insert that image. Your draft is unchanged."
                 hideSaveFailure()
             }
         }
     }
 
-    private func capturedCardEditingImage(
-        _ image: UIImage
-    ) throws -> CardEditingImage {
-        guard let data = image.jpegData(compressionQuality: 0.9) else {
-            throw CardEditorSessionError.imageUnavailable
-        }
-        return CardEditingImage(
-            data: data,
-            filename: "inline-camera.jpg",
-            mimeType: "image/jpeg"
-        )
+    private func capturedCardEditingImage(_ image: UIImage) async throws -> CardEditingImage {
+        try await CardImagePreparation.shared.jpeg(image, quality: 0.9, filename: "inline-camera.jpg")
     }
 
     private func cardEditingImage(

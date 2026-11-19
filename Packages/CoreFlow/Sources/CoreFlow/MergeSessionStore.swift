@@ -54,7 +54,7 @@ public final class MergeSessionStore: ObservableObject {
     private(set) var cancelledStatusResponseDiscardCount = 0
 
     public var canCreate: Bool {
-        !isLifetimeInvalidated
+        canRunRemoteWork
             && phase == .selection
             && isMergeAvailable
             && selectedSources.count >= 2
@@ -82,6 +82,8 @@ public final class MergeSessionStore: ObservableObject {
     private let actorID: String
     private let service: any CoreMergeServing
     private let persistence: any MergeSessionPersisting
+    /// One job owns canonical preparation and its editor's reusable pure decode.
+    public let editorWorker: MergeArtifactEditorWorker
     private let sleeper: any MergeSleeping
     private let pollingGate: MergePollingGate?
     private let queueCommittedNote: @MainActor (String, String) throws -> Void
@@ -102,6 +104,11 @@ public final class MergeSessionStore: ObservableObject {
     private var isNetworkAvailable = true
     private var hasStarted = false
     private var isLifetimeInvalidated = false
+    private var isLocalEditorDraining = false
+
+    private var canRunRemoteWork: Bool {
+        !isLifetimeInvalidated && !isLocalEditorDraining
+    }
 
     private static let artifactDraftDebounceNanoseconds: UInt64 = 600_000_000
 
@@ -134,13 +141,15 @@ public final class MergeSessionStore: ObservableObject {
         },
         // About 356 seconds with the default backoff: enough for the frozen
         // three-provider Merge routes when every provider uses its 90s bound.
-        maxPollAttempts: Int = 180
+        maxPollAttempts: Int = 180,
+        editorWorker: MergeArtifactEditorWorker = MergeArtifactEditorWorker()
     ) {
         self.actorID = actorID
         self.anchor = anchor
         self.selectedSources = [anchor]
         self.service = service
         self.persistence = persistence
+        self.editorWorker = editorWorker
         self.sleeper = sleeper
         self.pollingGate = pollingGate
         self.queueCommittedNote = queueCommittedNote
@@ -152,7 +161,7 @@ public final class MergeSessionStore: ObservableObject {
     }
 
     public func start() {
-        guard !isLifetimeInvalidated, !hasStarted else { return }
+        guard canRunRemoteWork, !hasStarted else { return }
         hasStarted = true
 
         if resumePersistedSession,
@@ -190,7 +199,7 @@ public final class MergeSessionStore: ObservableObject {
 
     public func toggleSelection(_ source: MergeSource) {
         guard
-            !isLifetimeInvalidated,
+            canRunRemoteWork,
             phase == .selection,
             source.assetID != anchor.assetID
         else {
@@ -248,7 +257,7 @@ public final class MergeSessionStore: ObservableObject {
     }
 
     public func retry() {
-        guard !isLifetimeInvalidated, !isOperationInFlight else { return }
+        guard canRunRemoteWork, !isOperationInFlight else { return }
         notFoundResource = nil
 
         guard let snapshot else {
@@ -299,7 +308,7 @@ public final class MergeSessionStore: ObservableObject {
 
     public func cancel() {
         guard
-            !isLifetimeInvalidated,
+            canRunRemoteWork,
             let jobID = canonicalJobIDForCancellation
         else {
             return
@@ -314,7 +323,7 @@ public final class MergeSessionStore: ObservableObject {
 
     public func discardArtifact() {
         guard
-            !isLifetimeInvalidated,
+            canRunRemoteWork,
             !isOperationInFlight,
             phase == .ready,
             artifact != nil,
@@ -387,7 +396,7 @@ public final class MergeSessionStore: ObservableObject {
         _ resolution: MergeArtifactConflictResolution
     ) async {
         guard
-            !isLifetimeInvalidated,
+            canRunRemoteWork,
             case .conflict = artifactDraftSyncState,
             let serverArtifact = conflictServerArtifact,
             let current = artifactDraft
@@ -397,7 +406,14 @@ public final class MergeSessionStore: ObservableObject {
 
         switch resolution {
         case .reloadServer:
-            adoptServerArtifact(serverArtifact)
+            let generation = draftLifetimeGeneration
+            guard let clean = try? await editorWorker.cleanDraft(from: serverArtifact),
+                  shouldAcceptAsyncResult, generation == draftLifetimeGeneration,
+                  artifactDraft == current, case .conflict = artifactDraftSyncState,
+                  conflictServerArtifact?.artifactID == serverArtifact.artifactID,
+                  conflictServerArtifact?.latestRevision == serverArtifact.latestRevision,
+                  conflictServerArtifact?.latestHash == serverArtifact.latestHash else { return }
+            adoptServerArtifact(serverArtifact, clean: clean)
         case .keepMine:
             let pending = MergePendingArtifactSave(
                 idempotencyKey: idempotencyKey(),
@@ -432,7 +448,7 @@ public final class MergeSessionStore: ObservableObject {
     }
 
     public func setNetworkAvailable(_ isAvailable: Bool) {
-        guard !isLifetimeInvalidated else { return }
+        guard canRunRemoteWork else { return }
         isNetworkAvailable = isAvailable
 
         guard let draft = artifactDraft,
@@ -457,7 +473,7 @@ public final class MergeSessionStore: ObservableObject {
 
     public func commit() {
         guard
-            !isLifetimeInvalidated,
+            canRunRemoteWork,
             !isOperationInFlight,
             phase == .ready,
             let job,
@@ -482,7 +498,7 @@ public final class MergeSessionStore: ObservableObject {
             canReplaceMissingJob = false
         }
         guard
-            !isLifetimeInvalidated,
+            canRunRemoteWork,
             !isOperationInFlight,
             let current = snapshot,
             current.lastStatus == .failed || canReplaceMissingJob
@@ -527,6 +543,7 @@ public final class MergeSessionStore: ObservableObject {
     }
 
     public func suspend(reason: CoreMergeError? = nil) {
+        guard canRunRemoteWork else { return }
         operationTask?.cancel()
         operationTask = nil
         isOperationInFlight = false
@@ -537,7 +554,7 @@ public final class MergeSessionStore: ObservableObject {
 
     public func resume() {
         guard
-            !isLifetimeInvalidated,
+            canRunRemoteWork,
             snapshot != nil,
             !isOperationInFlight
         else {
@@ -553,7 +570,7 @@ public final class MergeSessionStore: ObservableObject {
 
     public func acknowledgeCompletion() {
         guard
-            !isLifetimeInvalidated,
+            canRunRemoteWork,
             case .completed = phase,
             snapshot != nil
         else {
@@ -564,6 +581,26 @@ public final class MergeSessionStore: ObservableObject {
         artifactDraft = nil
         artifactDraftSyncState = .clean
         cancelDraftWork()
+    }
+
+    /// Freeze remote work without discarding the original store or its attempted
+    /// idempotent request. Accepted editor events may still update this draft.
+    func beginLocalEditorDrain() {
+        guard !isLifetimeInvalidated, !isLocalEditorDraining else { return }
+        isLocalEditorDraining = true
+        isNetworkAvailable = false
+        draftLifetimeGeneration += 1
+        draftDebounceTask?.cancel()
+        draftDebounceTask = nil
+        activeDraftSaveTask?.cancel()
+        activeDraftSaveTask = nil
+        activeDraftSaveToken = nil
+        // Do not call cancelDraftWork: an attempted key must keep its exact body.
+        operationTask?.cancel()
+        operationTask = nil
+        isOperationInFlight = false
+        if artifact != nil, !isTerminalPresentation { phase = .ready }
+        if artifactDraft?.pendingSave != nil { artifactDraftSyncState = .unsynced(.offline) }
     }
 
     func invalidateLifetime() {
@@ -609,7 +646,7 @@ public final class MergeSessionStore: ObservableObject {
     }
 
     private var shouldAcceptAsyncResult: Bool {
-        !isLifetimeInvalidated && !Task.isCancelled
+        canRunRemoteWork && !Task.isCancelled
     }
 
     private func restore(_ restored: MergeSessionSnapshot) {
@@ -851,7 +888,7 @@ public final class MergeSessionStore: ObservableObject {
 
     private func scheduleDraftSynchronization(afterDebounce: Bool) {
         guard
-            !isLifetimeInvalidated,
+            canRunRemoteWork,
             isNetworkAvailable,
             let draft = artifactDraft,
             draft.pendingSave != nil,
@@ -881,7 +918,7 @@ public final class MergeSessionStore: ObservableObject {
 
     private func synchronizeArtifactDraft() async throws -> MergeArtifact {
         while true {
-            guard !isLifetimeInvalidated,
+            guard canRunRemoteWork,
                   let jobID = snapshot?.jobID,
                   !jobID.isEmpty,
                   let currentArtifact = artifact,
@@ -1097,25 +1134,14 @@ public final class MergeSessionStore: ObservableObject {
                   ) else {
                 throw CoreMergeError.interrupted
             }
-            let hadLocalChanges: Bool
-            if let draft = artifactDraft, let acknowledged = artifact {
-                hadLocalChanges = draft.documentJSON != acknowledged.documentJSON
-                    || draft.tags
-                        != CardEditingTag.normalize(acknowledged.presentation.tags)
-            } else {
-                hadLocalChanges = true
-            }
-            if hadLocalChanges {
-                conflictServerArtifact = latest
-                artifactDraftSyncState = .conflict(
-                    MergeArtifactConflict(
-                        serverRevision: latest.latestRevision,
-                        serverDocumentHash: latest.latestHash
-                    )
-                )
-                throw CoreMergeError.conflict(code: "artifact_draft_conflict")
-            }
-            adoptServerArtifact(latest)
+            try requireUnchangedDraftForAdoption(latest)
+            let clean = try await editorWorker.cleanDraft(from: latest)
+            guard shouldAcceptDraftResult(jobID: jobID, pending: pending,
+                saveToken: saveToken, generation: generation) else { throw CoreMergeError.interrupted }
+            // The store stays editable during preparation. Recheck after the
+            // worker returns; a body/tag accepted in that interval wins.
+            try requireUnchangedDraftForAdoption(latest)
+            adoptServerArtifact(latest, clean: clean)
             return latest
         } catch {
             let mapped = coreError(from: error)
@@ -1135,30 +1161,22 @@ public final class MergeSessionStore: ObservableObject {
         }
     }
 
-    private func adoptServerArtifact(_ serverArtifact: MergeArtifact) {
+    private func requireUnchangedDraftForAdoption(_ latest: MergeArtifact) throws {
+        if let draft = artifactDraft, let acknowledged = artifact,
+           draft.documentJSON == acknowledged.documentJSON,
+           draft.tags == CardEditingTag.normalize(acknowledged.presentation.tags) { return }
+        conflictServerArtifact = latest
+        artifactDraftSyncState = .conflict(.init(serverRevision: latest.latestRevision,
+            serverDocumentHash: latest.latestHash))
+        throw CoreMergeError.conflict(code: "artifact_draft_conflict")
+    }
+
+    private func adoptServerArtifact(_ serverArtifact: MergeArtifact, clean: MergeArtifactDraftSnapshot) {
         artifact = serverArtifact
-        let clean = makeCleanDraft(from: serverArtifact)
         conflictServerArtifact = nil
         pendingSaveWasAttempted = false
         artifactDraftSyncState = .clean
         persistArtifactDraft(clean, invalidatingCommitRequest: true)
-    }
-
-    private func makeCleanDraft(
-        from artifact: MergeArtifact
-    ) -> MergeArtifactDraftSnapshot {
-        let preservationManifest = (try? MergeArtifactEditorCodec.decode(
-            cardDocumentJSON: artifact.documentJSON
-        ).preservationManifest) ?? Data()
-        return MergeArtifactDraftSnapshot(
-            baseRevision: artifact.latestRevision,
-            baseDocumentHash: artifact.latestHash,
-            documentJSON: artifact.documentJSON,
-            tags: CardEditingTag.normalize(artifact.presentation.tags),
-            rate: artifact.presentation.rate,
-            preservationManifest: preservationManifest,
-            pendingSave: nil
-        )
     }
 
     private func shouldAcceptDraftResult(
@@ -1167,7 +1185,7 @@ public final class MergeSessionStore: ObservableObject {
         saveToken: UUID,
         generation: Int
     ) -> Bool {
-        !isLifetimeInvalidated
+        canRunRemoteWork
             && !Task.isCancelled
             && generation == draftLifetimeGeneration
             && activeDraftSaveToken == saveToken
@@ -1518,6 +1536,7 @@ public final class MergeSessionStore: ObservableObject {
 
     private func loadArtifact(jobID: String) async {
         phase = .loadingArtifact
+        let generation = draftLifetimeGeneration
         do {
             let loaded = try await service.artifact(jobID: jobID)
             guard shouldAcceptAsyncResult else { return }
@@ -1526,6 +1545,13 @@ public final class MergeSessionStore: ObservableObject {
                 phase = .failed(.decoding)
                 return
             }
+            let restoredDraft = snapshot?.artifactDraft
+            let canRestore = restoredDraft.map {
+                $0.pendingSave != nil || ($0.baseRevision == loaded.latestRevision && $0.baseDocumentHash == loaded.latestHash)
+            } ?? false
+            let clean = canRestore ? nil : try await editorWorker.cleanDraft(from: loaded)
+            guard shouldAcceptAsyncResult, generation == draftLifetimeGeneration,
+                  snapshot?.jobID == jobID else { return }
             artifact = loaded
             artifactActionError = nil
             // Merge vNext documents are titleless and the wire commit seals only
@@ -1566,7 +1592,7 @@ public final class MergeSessionStore: ObservableObject {
                     pendingSaveWasAttempted = false
                     artifactDraftSyncState = .clean
                 } else {
-                    artifactDraft = makeCleanDraft(from: loaded)
+                    artifactDraft = clean
                     pendingSaveWasAttempted = false
                     artifactDraftSyncState = .clean
                 }
@@ -1675,11 +1701,11 @@ public final class MergeSessionStore: ObservableObject {
     private func launch(
         _ operation: @escaping @MainActor (MergeSessionStore) async -> Void
     ) {
-        guard !isLifetimeInvalidated else { return }
+        guard canRunRemoteWork else { return }
         operationTask?.cancel()
         isOperationInFlight = true
         operationTask = Task { [weak self] in
-            guard let self, !self.isLifetimeInvalidated else { return }
+            guard let self, self.canRunRemoteWork else { return }
             await operation(self)
             if self.shouldAcceptAsyncResult {
                 self.isOperationInFlight = false

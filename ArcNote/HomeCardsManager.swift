@@ -22,145 +22,206 @@ class HomeCardsManager: ObservableObject {
     private var currentSortOrder: String? = "desc" // 默认排序顺序
     
     private var isOwnedLibrary = false
-    private var localSortDates: [String: Date] = [:]
-    private let localDateFormatter = ISO8601DateFormatter()
+    private let injectedReadSession: (@MainActor @Sendable () -> UInt64?)?
+    private let injectedPublicFetch: (@MainActor @Sendable (String, Int, Int) -> AnyPublisher<UserCardsListResponse, NetworkError>)?
+    private var readSession: UInt64? {
+        if let injectedReadSession { return injectedReadSession() }
+        return authManager.cardReadSession
+    }
+    private var profileActorID: String?
+    private var profileSession: UInt64?
+    private var profileReadID: UUID?
+    private var profileReadPage: Int?
+    private var profileRead: AnyCancellable?
+    private var sessionObservation: AnyCancellable?
+    private var loadingGeneration: UInt64 = 0
+    private let projectionWorker: HomeCardProjectionWorker
+    private let injectedLibrary: NoteLibraryStore?
+    private var library: NoteLibraryStore { injectedLibrary ?? LocalNotesController.shared.library }
+    private var libraryObservation: AnyCancellable?
+    private var projectionTask: Task<Void, Never>?
+    private var projectionGeneration: UInt64 = 0
+    private var projectionScope: NoteStoreScope?
+    private struct ProjectionReset {
+        let notes: [OfflineNote]
+        let scope: NoteStoreScope?
+        let sortBy: String?
+        let sortOrder: String?
+    }
+    private var pendingReset: ProjectionReset?
+    private var pendingChanges: [String: OfflineNote] = [:]
+    private var pendingRemovals = Set<String>()
 
-    nonisolated init() {
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            let library = LocalNotesController.shared.library
-            library.changes.sink { [weak self, weak library] change in
-                guard let self, self.isOwnedLibrary, let library else { return }
-                switch change {
-                case .reset: self.presentLocalNotes(library.notes)
-                case let .updated(notes, removed): self.updateLocalCards(notes, removed: removed)
-                }
-            }.store(in: &cancellables)
-            if self.isOwnedLibrary { self.presentLocalNotes(library.notes) }
+    nonisolated init(projectionWorker: HomeCardProjectionWorker = HomeCardProjectionWorker(), library: NoteLibraryStore? = nil,
+                     readSession: (@MainActor @Sendable () -> UInt64?)? = nil,
+                     fetchPublicCards: (@MainActor @Sendable (String, Int, Int) -> AnyPublisher<UserCardsListResponse, NetworkError>)? = nil) {
+        self.projectionWorker = projectionWorker
+        self.injectedLibrary = library
+        self.injectedReadSession = readSession
+        self.injectedPublicFetch = fetchPublicCards
+        Task { @MainActor [weak self] in self?.observeLibraryIfNeeded() }
+    }
+
+    private func observeLibraryIfNeeded() {
+        guard libraryObservation == nil else { return }
+        sessionObservation = NotificationCenter.default.publisher(for: .cardReadSessionDidChange).sink { [weak self] _ in
+            guard let self, !self.isOwnedLibrary, self.profileSession != self.readSession else { return }
+            self.retirePublicRead()
+            self.profileActorID = nil; self.profileSession = nil
+            self.cards = []; self.isLoading = false; self.hasMoreData = false
+        }
+        let library = library
+        libraryObservation = library.changes.sink { [weak self, weak library] change in
+            guard let self, self.isOwnedLibrary, let library else { return }
+            switch change {
+            case .reset: self.presentLocalNotes(library.notes, scope: library.scope)
+            case let .updated(notes, removed): self.updateLocalCards(notes, removed: removed, scope: library.scope)
+            }
         }
     }
 
     func loadUserCards(refresh: Bool = false, sortBy: String? = nil, sortOrder: String? = nil) {
+        observeLibraryIfNeeded()
         let rebuild = !isOwnedLibrary || (sortBy != nil && sortBy != currentSortBy)
             || (sortOrder != nil && sortOrder != currentSortOrder)
+        if !isOwnedLibrary { cards = []; retirePublicRead(); profileActorID = nil; profileSession = nil }
         isOwnedLibrary = true
         if let sortBy { currentSortBy = sortBy }
         if let sortOrder { currentSortOrder = sortOrder }
         hasMoreData = false
-        if rebuild { presentLocalNotes(LocalNotesController.shared.library.notes) }
-        LocalNotesController.shared.refreshAccess()
+        if rebuild { presentLocalNotes(library.notes, scope: library.scope) }
+        if injectedLibrary == nil { LocalNotesController.shared.refreshAccess() }
+        loadingGeneration &+= 1
+        let generation = loadingGeneration
+        isLoading = true
         Task {
-            isLoading = true
-            defer { isLoading = false }
-            await LocalNotesController.shared.library.synchronize(forceRetry: refresh)
+            await library.synchronize(forceRetry: refresh)
+            // Offline synchronization can finish before the first display projection.
+            await waitForLocalProjection()
+            if isOwnedLibrary, generation == loadingGeneration { isLoading = false }
         }
     }
 
-    private func presentLocalNotes(_ notes: [OfflineNote]) {
-        localSortDates.removeAll(keepingCapacity: true)
-        cards = notes.filter { $0.desiredLifecycle == .active }.map(localCard).sorted(by: precedes)
+    private func presentLocalNotes(_ notes: [OfflineNote], scope: NoteStoreScope?) {
+        projectionGeneration &+= 1
+        if scope != projectionScope || scope == nil { cards = [] }
+        projectionScope = scope
+        pendingReset = ProjectionReset(notes: notes, scope: scope, sortBy: currentSortBy, sortOrder: currentSortOrder)
+        pendingChanges.removeAll(); pendingRemovals.removeAll()
+        startProjectionIfNeeded()
     }
 
-    private func updateLocalCards(_ changed: [OfflineNote], removed: Set<String>) {
-        var result = cards
-        if !removed.isEmpty {
-            let ids = Set(removed.map { "local-note:" + $0 })
-            result.removeAll { ids.contains($0.id) }
-            for id in ids { localSortDates[id] = nil }
+    private func updateLocalCards(_ changed: [OfflineNote], removed: Set<String>, scope: NoteStoreScope?) {
+        guard scope == projectionScope else { presentLocalNotes(library.notes, scope: scope); return }
+        for note in changed { pendingChanges[note.localID] = note; pendingRemovals.remove(note.localID) }
+        for id in removed { pendingChanges[id] = nil; pendingRemovals.insert(id) }
+        startProjectionIfNeeded()
+    }
+
+    private func startProjectionIfNeeded() {
+        guard projectionTask == nil else { return }
+        projectionTask = Task { [weak self] in
+            guard let self else { return }
+            while self.pendingReset != nil || !self.pendingChanges.isEmpty || !self.pendingRemovals.isEmpty {
+                let generation = self.projectionGeneration
+                let reset = self.pendingReset
+                let changed = Array(self.pendingChanges.values)
+                let removed = self.pendingRemovals
+                self.pendingReset = nil; self.pendingChanges.removeAll(); self.pendingRemovals.removeAll()
+                var result: [UserCard] = []
+                if let reset {
+                    result = await self.projectionWorker.reset(notes: reset.notes, scope: reset.scope,
+                                                               sortBy: reset.sortBy, sortOrder: reset.sortOrder)
+                }
+                if !changed.isEmpty || !removed.isEmpty {
+                    result = await self.projectionWorker.update(changed: changed, removed: removed)
+                }
+                guard self.isOwnedLibrary, generation == self.projectionGeneration,
+                      self.pendingReset == nil, self.pendingChanges.isEmpty, self.pendingRemovals.isEmpty else { continue }
+                self.cards = result
+            }
+            self.projectionTask = nil
         }
-        for note in changed {
-            let id = NoteLibraryStore.identifier(note)
-            if let old = result.firstIndex(where: { $0.id == id }) { result.remove(at: old) }
-            guard note.desiredLifecycle == .active else { localSortDates[id] = nil; continue }
-            let card = localCard(note)
-            let index = result.firstIndex { precedes(card, $0) } ?? result.endIndex
-            result.insert(card, at: index)
-        }
-        cards = result
     }
 
-    private func localCard(_ note: OfflineNote) -> UserCard {
-        let id = NoteLibraryStore.identifier(note)
-        localSortDates[id] = currentSortBy == "created_at" ? note.createdAt : note.updatedAt
-        return UserCard(id: id, title: note.body.title, content: note.body.content,
-            contentJSON: note.body.contentJSON, backgroundMediaRef: note.backgroundMediaRef, contentHash: "",
-            isPublic: note.isPublic, tags: note.body.tags, createdAt: localDateFormatter.string(from: note.createdAt),
-            updatedAt: localDateFormatter.string(from: note.updatedAt), likeCount: 0, commentCount: nil, isLiked: false,
-            isPinned: note.isPinned ?? false, pinnedAt: nil, isFavorited: nil, favoriteCount: nil, rate: 0,
-            ownerActorId: authManager.currentUser?.id, isOwner: true)
-    }
-
-    private func precedes(_ lhs: UserCard, _ rhs: UserCard) -> Bool {
-        if lhs.isPinned != rhs.isPinned { return lhs.isPinned }
-        let a = localSortDates[lhs.id] ?? .distantPast
-        let b = localSortDates[rhs.id] ?? .distantPast
-        if a == b { return lhs.id < rhs.id }
-        return currentSortOrder == "asc" ? a < b : a > b
-    }
+    func waitForLocalProjection() async { await projectionTask?.value }
 
     func promoteCommittedCard(id: String) {
-        let library = LocalNotesController.shared.library
-        if !isOwnedLibrary { presentLocalNotes(library.notes) }
+        let library = library
+        observeLibraryIfNeeded()
+        if !isOwnedLibrary {
+            cards = []; retirePublicRead(); profileActorID = nil; profileSession = nil
+            presentLocalNotes(library.notes, scope: library.scope)
+        }
         isOwnedLibrary = true
         // The commit already queued the download. Later inserts arrive via library.changes.
         if let note = library.notes.first(where: { $0.serverAssetID == id }) {
-            updateLocalCards([note], removed: [])
+            updateLocalCards([note], removed: [], scope: library.scope)
         }
     }
 
     func loadPublicProfileCards(actorId: String, refresh: Bool = false) {
-        isOwnedLibrary = false
-        localSortDates.removeAll()
-        guard authManager.currentUser != nil else {
-            error = .unauthorized
+        observeLibraryIfNeeded()
+        guard let session = readSession else {
+            isOwnedLibrary = false
+            projectionGeneration &+= 1; loadingGeneration &+= 1
+            pendingReset = nil; pendingChanges.removeAll(); pendingRemovals.removeAll()
+            retirePublicRead(); cards = []; isLoading = false; error = .unauthorized
+            profileActorID = nil; profileSession = nil; hasMoreData = false
             return
         }
-
-        if refresh {
-            currentPage = 1
-            cards = []
-            hasMoreData = true
-        }
-
-        isLoading = true
-        error = nil
-
-        networkManager.getPublicProfileCards(actorId: actorId, page: currentPage, perPage: pageSize)
-            .receive(on: DispatchQueue.main)
-            .sink(
-                receiveCompletion: { [weak self] completion in
-                    guard let self, !self.isOwnedLibrary else { return }
-                    self.isLoading = false
-                    if case .failure(let error) = completion {
-                        self.error = error
-                        print("获取公开用户卡片失败: \(error)")
-                    }
-                },
-                receiveValue: { [weak self] response in
-                    guard let self, !self.isOwnedLibrary else { return }
-
-                    if refresh {
-                        self.cards = response.data
-                    } else {
-                        self.cards.append(contentsOf: response.data)
-                    }
-
-                    self.hasMoreData = response.data.count == self.pageSize
-                    self.currentPage += 1
-                }
-            )
-            .store(in: &cancellables)
+        let sameProfile = !isOwnedLibrary && profileActorID == actorId && profileSession == session
+        if sameProfile, profileReadID != nil, !refresh || profileReadPage == 1 { return }
+        if sameProfile, !refresh, !hasMoreData { return }
+        projectionGeneration &+= 1
+        pendingReset = nil; pendingChanges.removeAll(); pendingRemovals.removeAll()
+        loadingGeneration &+= 1
+        isOwnedLibrary = false
+        retirePublicRead()
+        if !sameProfile || refresh { currentPage = 1; cards = []; hasMoreData = true }
+        profileActorID = actorId; profileSession = session
+        let page = currentPage
+        let requestID = UUID()
+        profileReadID = requestID; profileReadPage = page
+        isLoading = true; error = nil
+        let publisher = injectedPublicFetch?(actorId, page, pageSize)
+            ?? networkManager.getPublicProfileCards(actorId: actorId, page: page, perPage: pageSize)
+        profileRead = publisher.receive(on: DispatchQueue.main).sink(
+            receiveCompletion: { [weak self] completion in
+                guard let self, self.acceptsPublicRead(requestID, session: session) else { return }
+                self.isLoading = false
+                self.profileReadID = nil; self.profileReadPage = nil; self.profileRead = nil
+                if case .failure(let error) = completion { self.error = error }
+            }, receiveValue: { [weak self] response in
+                guard let self, self.acceptsPublicRead(requestID, session: session), self.currentPage == page else { return }
+                guard response.success else { self.error = .decodingError; return }
+                if page == 1 { self.cards = response.data }
+                else { self.cards.append(contentsOf: response.data) }
+                self.hasMoreData = response.data.count == self.pageSize
+                self.currentPage = page + 1
+            })
     }
-    
+
+    private func acceptsPublicRead(_ requestID: UUID, session: UInt64) -> Bool {
+        !isOwnedLibrary && profileReadID == requestID && readSession == session && profileSession == session
+    }
+
+    private func retirePublicRead() {
+        profileReadID = nil; profileReadPage = nil
+        profileRead?.cancel(); profileRead = nil
+    }
+
     func loadMoreCards() {
         guard hasMoreData && !isLoading else { return }
-        loadUserCards(refresh: false)
+        if !isOwnedLibrary, let profileActorID { loadPublicProfileCards(actorId: profileActorID) }
+        else { loadUserCards(refresh: false) }
     }
-    
+
     func refreshCards() {
-        loadUserCards(refresh: true)
+        if !isOwnedLibrary, let profileActorID { loadPublicProfileCards(actorId: profileActorID, refresh: true) }
+        else { loadUserCards(refresh: true) }
     }
-    
+
     // MARK: 删除卡片功能
     func deleteCard(cardId: String, completion: @escaping (Result<Bool, NetworkError>) -> Void) {
         Task {
@@ -288,7 +349,8 @@ class HomeCardsManager: ObservableObject {
                                 favoriteCount: self?.cards[index].favoriteCount,
                                 rate: self?.cards[index].rate ?? 0,
                                 ownerActorId: self?.cards[index].ownerActorId,
-                                isOwner: self?.cards[index].isOwner
+                                isOwner: self?.cards[index].isOwner,
+                                localPreviewIdentity: self?.cards[index].localPreviewIdentity
                             )
                         }
                         // The visibility response is the committed source state. The card
@@ -374,7 +436,8 @@ class HomeCardsManager: ObservableObject {
                                 favoriteCount: self?.cards[index].favoriteCount,
                                 rate: self?.cards[index].rate ?? 0,
                                 ownerActorId: self?.cards[index].ownerActorId,
-                                isOwner: self?.cards[index].isOwner
+                                isOwner: self?.cards[index].isOwner,
+                                localPreviewIdentity: self?.cards[index].localPreviewIdentity
                             )
                         }
                         print("置顶状态切换成功: cardId=\(cardId), isPinned=\(updatedCard.isPinned ?? false)")

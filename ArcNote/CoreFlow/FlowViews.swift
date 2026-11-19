@@ -105,55 +105,6 @@ private struct FlowDeckBackplate: View {
     }
 }
 
-@MainActor
-enum FlowTextPreview {
-    static func make(_ source: String) -> String {
-        let cache = FlowPreviewReader.shared.textCache
-        let canCache = AuthManager.shared.cardReadSession != nil
-        let key = source as NSString
-        if canCache, let cached = cache.object(forKey: key) {
-            return cached as String
-        }
-
-        // NSAttributedString's HTML importer enters WebKit's run loop. Calling
-        // it from a SwiftUI body can recursively re-enter layout while a card
-        // is being replaced, so previews deliberately use a pure transform.
-        let decoded = source
-            .replacingOccurrences(
-                of: "(?is)<(script|style)[^>]*>.*?</\\1>",
-                with: " ",
-                options: .regularExpression
-            )
-            .replacingOccurrences(
-                of: "(?i)<br\\s*/?>|</p\\s*>|</div\\s*>|</li\\s*>",
-                with: " ",
-                options: .regularExpression
-            )
-            .replacingOccurrences(
-                of: "<[^>]+>",
-                with: " ",
-                options: .regularExpression
-            )
-            .replacingOccurrences(of: "&nbsp;", with: " ")
-            .replacingOccurrences(of: "&quot;", with: "\"")
-            .replacingOccurrences(of: "&#39;", with: "'")
-            .replacingOccurrences(of: "&lt;", with: "<")
-            .replacingOccurrences(of: "&gt;", with: ">")
-            .replacingOccurrences(of: "&amp;", with: "&")
-
-        let preview = decoded
-            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        if canCache {
-            let bytes = source.utf8.count + preview.utf8.count
-            if bytes <= cache.totalCostLimit {
-                cache.setObject(preview as NSString, forKey: key, cost: bytes)
-            }
-        }
-        return preview
-    }
-}
-
 private struct FlowSparkButtonStyle: ViewModifier {
     @ViewBuilder func body(content: Content) -> some View {
         if #available(iOS 26.0, *) {
@@ -1034,58 +985,6 @@ private struct FlowMasonryLayout: Layout {
     }
 }
 
-@MainActor
-private final class FlowPreviewReader: ObservableObject {
-    struct Scope: Equatable {
-        let session: UInt64
-        let token: LibraryCardPreviewCache.ReadToken
-    }
-
-    static let shared = FlowPreviewReader()
-    nonisolated(unsafe) let objectWillChange = ObservableObjectPublisher()
-    let textCache: NSCache<NSString, NSString> = {
-        let cache = NSCache<NSString, NSString>()
-        cache.countLimit = 40
-        cache.totalCostLimit = 4 * 1024 * 1024
-        return cache
-    }()
-    private let cache = LibraryCardPreviewCache()
-    private var subscriptions = Set<AnyCancellable>()
-
-    private init() {
-        let center = NotificationCenter.default
-        center.publisher(for: .cardReadSessionDidChange).sink { [weak self] _ in
-            guard let self else { return }
-            objectWillChange.send()
-            cache.invalidateAll()
-            textCache.removeAllObjects()
-        }.store(in: &subscriptions)
-        center.publisher(for: .cardReadInvalidated).sink { [weak self] event in
-            guard let self, let cardID = event.object as? String else { return }
-            objectWillChange.send()
-            cache.invalidate(cardID: cardID)
-            textCache.removeAllObjects()
-        }.store(in: &subscriptions)
-        center.publisher(for: UIApplication.didReceiveMemoryWarningNotification).sink { [weak self] _ in
-            guard let self else { return }
-            cache.removeCachedPreviews()
-            textCache.removeAllObjects()
-        }.store(in: &subscriptions)
-    }
-
-    func scope(for cardID: String) -> Scope? {
-        guard let session = AuthManager.shared.cardReadSession else { return nil }
-        return Scope(session: session, token: cache.token(for: cardID))
-    }
-
-    func read(_ input: LibraryCardPreviewInput, scope: Scope) async -> LibraryCardPresentation? {
-        guard self.scope(for: input.cardID) == scope else { return nil }
-        let presentation = await cache.read(input, token: scope.token)
-        guard self.scope(for: input.cardID) == scope else { return nil }
-        return presentation
-    }
-}
-
 private struct FlowPreviewValue<Value, Content: View>: View {
     let card: FlowCard
     let snapshotID: UUID
@@ -1093,47 +992,15 @@ private struct FlowPreviewValue<Value, Content: View>: View {
     let priority: TaskPriority
     let project: (LibraryCardPresentation) -> Value
     @ViewBuilder let content: (Value?) -> Content
-    @ObservedObject private var reader = FlowPreviewReader.shared
-    @State private var loaded: Loaded?
-
-    private struct Request: Equatable {
-        let input: LibraryCardPreviewInput
-        let snapshotID: UUID
-    }
-
-    private struct Loaded {
-        let input: LibraryCardPreviewInput
-        let scope: FlowPreviewReader.Scope
-        let value: Value
-    }
 
     var body: some View {
         let input = LibraryCardPreviewInput(
             cardID: card.id, contentHash: card.contentHash, snapshotID: snapshotID,
             content: card.content, contentJSON: card.contentJSON
         )
-        let scope = reader.scope(for: card.id)
-        let value = currentValue(for: input, scope: scope)
-        let request = loadsPreview ? Request(input: input, snapshotID: snapshotID) : nil
-        content(value)
-            .task(id: request, priority: priority) {
-                guard loadsPreview, let scope, currentValue(for: input, scope: scope) == nil,
-                      let presentation = await reader.read(input, scope: scope),
-                      !Task.isCancelled, reader.scope(for: input.cardID) == scope else { return }
-                loaded = Loaded(input: input, scope: scope, value: project(presentation))
-            }
-            .onChange(of: scope) { updated in
-                if loaded?.scope != updated { loaded = nil }
-            }
-            .onChange(of: input) { updated in
-                if loaded?.input != updated { loaded = nil }
-            }
-            .onDisappear { loaded = nil }
-    }
-
-    private func currentValue(for input: LibraryCardPreviewInput, scope: FlowPreviewReader.Scope?) -> Value? {
-        guard let loaded, loaded.input == input, loaded.scope == scope else { return nil }
-        return loaded.value
+        CardPreviewValue(input: loadsPreview ? input : nil, priority: priority) { presentation in
+            content(presentation.map(project))
+        }
     }
 }
 

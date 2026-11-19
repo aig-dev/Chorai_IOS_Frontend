@@ -2,7 +2,7 @@ import Foundation
 import WebKit
 
 enum BlockNoteBridgeBootstrap {
-    static let contentWorld = WKContentWorld.page
+    @MainActor static let contentWorld = WKContentWorld.page
 
     static var source: String {
         """
@@ -28,7 +28,7 @@ enum BlockNoteBridgeBootstrap {
         """
     }
 
-    static func install(in userContentController: WKUserContentController) {
+    @MainActor static func install(in userContentController: WKUserContentController) {
         userContentController.addUserScript(WKUserScript(
             source: source,
             injectionTime: .atDocumentStart,
@@ -150,31 +150,73 @@ struct BlockNoteNavigationGate {
     }
 }
 
+/// Retained by an attachment's mailbox until its accepted events are applied.
+/// WebKit callbacks stay weak; body delivery survives coordinator dismantling.
+@MainActor
+private final class BlockNoteBridgeDelivery {
+    private weak var controller: BlockNoteEditorController?
+    var eventHandler: @MainActor (BlockNoteEditorEvent) -> Void
+    var submitCommand: (BlockNotePreparedCommand) -> Void = { _ in }
+    var updateSummary: (BlockNotePreparedOutput) -> Void = { _ in }
+    var isCurrentFocusProbe: (Int) -> Bool = { _ in false }
+
+    init(controller: BlockNoteEditorController, eventHandler: @escaping @MainActor (BlockNoteEditorEvent) -> Void) {
+        self.controller = controller
+        self.eventHandler = eventHandler
+    }
+
+    func dispatch(_ prepared: BlockNotePreparedOutput) {
+        if let revision = prepared.focusProbeRevision, !isCurrentFocusProbe(revision) { return }
+        updateSummary(prepared)
+        for command in prepared.commands { submitCommand(command) }
+        let output = prepared.output
+        if let snapshot = output.snapshot { _ = controller?.complete(snapshot: snapshot) }
+        if let failure = output.snapshotRequestFailure { controller?.failSnapshot(requestID: failure.requestID, with: failure.failure) }
+        if let failure = output.snapshotFailure { controller?.failAllSnapshots(with: failure) }
+        for event in output.events { eventHandler(event) }
+    }
+}
+
 @MainActor
 public final class BlockNoteEditorCoordinator: NSObject {
     private let controller: BlockNoteEditorController
     private let localImageHandler: BlockNoteLocalImageHandler?
-    private var eventHandler: @MainActor (BlockNoteEditorEvent) -> Void
-    private var session: BlockNoteEditorBridgeSession
+    private let delivery: BlockNoteBridgeDelivery
+    private var mailbox: BlockNoteBridgeMailbox?
+    private var mutationAllowed = false
     private weak var webView: WKWebView?
     private var navigationGate: BlockNoteNavigationGate?
     private var isTornDown = false
     private var focusObservationRevision = 0
     private var minimumWritingHeight: Double = 0
     private var hasFinishedNavigation = false
+    private let resourceValidator: BlockNoteResourceValidator
+    private var resourceValidationTask: Task<Void, Never>?
+    private var resourceAttachmentID = UUID()
 
     init(
         document: BlockNoteInitialDocument,
         editable: Bool,
         controller: BlockNoteEditorController,
         localImageSource: BlockNoteLocalImageSource? = nil,
+        resourceValidator: BlockNoteResourceValidator = .shared,
         onEvent: @escaping @MainActor (BlockNoteEditorEvent) -> Void
     ) {
         self.controller = controller
+        self.resourceValidator = resourceValidator
         localImageHandler = localImageSource.map { BlockNoteLocalImageHandler(source: $0) }
-        eventHandler = onEvent
-        session = BlockNoteEditorBridgeSession(document: document, editable: editable)
+        delivery = BlockNoteBridgeDelivery(controller: controller, eventHandler: onEvent)
         super.init()
+        delivery.submitCommand = { [weak self] in self?.evaluate($0) }
+        delivery.updateSummary = { [weak self] in self?.mutationAllowed = $0.mutationAllowed }
+        delivery.isCurrentFocusProbe = { [weak self] revision in
+            guard let self else { return false }
+            return !self.isTornDown && revision == self.focusObservationRevision
+        }
+        let delivery = self.delivery
+        mailbox = BlockNoteBridgeMailbox(worker: BlockNoteBridgeWorker(document: document, editable: editable)) {
+            delivery.dispatch($0)
+        }
     }
 
     func makeWebView(
@@ -219,26 +261,36 @@ public final class BlockNoteEditorCoordinator: NSObject {
         webView.scrollView.alwaysBounceVertical = false
         #endif
 
-        controller.attach { [weak self] command in
-            guard let self else { return }
-            self.apply(self.session.request(command))
+        let mailbox = self.mailbox
+        controller.attach(
+            drainAcceptedEvents: { await mailbox?.drainAcceptedEvents() },
+            hasPendingAcceptedEvents: { (mailbox?.pendingCount ?? 0) > 0 },
+            beginClosing: { [weak self] in self?.teardown() }
+        ) { [weak self] command in
+            self?.submit(.command(command))
         }
 
-        do {
-            _ = try BlockNoteEditorResources.validateBundledResources()
-            let directory = try BlockNoteEditorResources.resourceDirectory()
-            let indexURL = try BlockNoteEditorResources.indexURL()
-            navigationGate = BlockNoteNavigationGate(
-                resourceDirectory: directory,
-                indexURL: indexURL
-            )
-            let navigation = webView.loadFileURL(
-                indexURL,
-                allowingReadAccessTo: directory
-            )
-            navigationGate?.bindBootstrapNavigation(navigation)
-        } catch {
-            apply(session.bridgeFailure(code: "resource_validation_failed"))
+        let attachment = UUID()
+        resourceAttachmentID = attachment
+        resourceValidationTask?.cancel()
+        let validator = resourceValidator
+        resourceValidationTask = Task { [weak self, weak webView] in
+            do {
+                _ = try await validator.validateBundledResources()
+                guard !Task.isCancelled, let self, let webView,
+                      !self.isTornDown, self.resourceAttachmentID == attachment,
+                      self.webView === webView else { return }
+                let directory = try BlockNoteEditorResources.resourceDirectory()
+                let indexURL = try BlockNoteEditorResources.indexURL()
+                self.navigationGate = BlockNoteNavigationGate(resourceDirectory: directory, indexURL: indexURL)
+                let navigation = webView.loadFileURL(indexURL, allowingReadAccessTo: directory)
+                self.navigationGate?.bindBootstrapNavigation(navigation)
+            } catch is CancellationError {
+            } catch {
+                guard let self, !self.isTornDown,
+                      self.resourceAttachmentID == attachment else { return }
+                self.submit(.bridgeFailure("resource_validation_failed"))
+            }
         }
 
         return webView
@@ -247,7 +299,7 @@ public final class BlockNoteEditorCoordinator: NSObject {
     func updateEventHandler(
         _ handler: @escaping @MainActor (BlockNoteEditorEvent) -> Void
     ) {
-        eventHandler = handler
+        delivery.eventHandler = handler
     }
 
     func updateMinimumWritingHeight(_ height: Double) {
@@ -269,6 +321,9 @@ public final class BlockNoteEditorCoordinator: NSObject {
     func teardown() {
         guard !isTornDown else { return }
         isTornDown = true
+        resourceAttachmentID = UUID()
+        resourceValidationTask?.cancel()
+        resourceValidationTask = nil
         localImageHandler?.close()
 
         webView?.stopLoading()
@@ -276,75 +331,47 @@ public final class BlockNoteEditorCoordinator: NSObject {
         webView?.configuration.userContentController.removeScriptMessageHandler(
             forName: BlockNoteEditorProtocol.webKitHandlerName
         )
-        apply(session.teardown())
+        mailbox?.close()
         controller.detach(with: .tornDown)
         webView = nil
     }
 
-    private func apply(_ output: BlockNoteBridgeSessionOutput) {
-        BlockNoteBridgeOutputDispatcher(
-            submitCommand: { [weak self] command in
-                self?.evaluate(command)
-            },
-            emitEvent: { [weak self] event in
-                self?.eventHandler(event)
-            },
-            completeSnapshot: { [weak controller] snapshot in
-                _ = controller?.complete(snapshot: snapshot)
-            },
-            failSnapshot: { [weak controller] failure in
-                controller?.failSnapshot(
-                    requestID: failure.requestID,
-                    with: failure.failure
-                )
-            },
-            failSnapshots: { [weak controller] failure in
-                controller?.failAllSnapshots(with: failure)
-            }
-        ).dispatch(output)
+    private func submit(_ input: BlockNoteBridgeInput) {
+        mailbox?.enqueue(input)
     }
 
-    private func evaluate(_ command: BlockNoteEditorCommand) {
+    private func evaluate(_ prepared: BlockNotePreparedCommand) {
+        let command = prepared.command
         guard !isTornDown, let webView else {
             if let requestID = command.snapshotRequestID {
                 controller.failSnapshot(requestID: requestID, with: .tornDown)
             }
             return
         }
-
-        do {
-            let data = try JSONEncoder().encode(command)
-            let json = String(decoding: data, as: UTF8.self)
-            let script = "window.\(BlockNoteEditorProtocol.javaScriptBridgeName).receiveCommand(\(json));"
-            let focusRevision: Int?
-            switch command {
-            case .focus, .blur:
-                focusObservationRevision += 1
-                focusRevision = focusObservationRevision
-            default:
-                focusRevision = nil
-            }
-            webView.evaluateJavaScript(script) { [weak self] _, error in
-                Task { @MainActor in
-                    guard let self, !self.isTornDown else { return }
-                    guard error == nil else {
-                        self.apply(self.session.bridgeFailure(code: "javascript_evaluation_failed"))
-                        return
-                    }
-                    if let focusRevision {
-                        self.reconcileBodyFocus(ifCurrent: focusRevision)
-                    }
+        let focusRevision: Int?
+        switch command {
+        case .focus, .blur:
+            focusObservationRevision += 1
+            focusRevision = focusObservationRevision
+            submit(.focusObservation(focusObservationRevision))
+        default: focusRevision = nil
+        }
+        webView.evaluateJavaScript(prepared.script) { [weak self] _, error in
+            Task { @MainActor in
+                guard let self, !self.isTornDown else { return }
+                guard error == nil else {
+                    self.submit(.bridgeFailure("javascript_evaluation_failed"))
+                    return
                 }
+                if let focusRevision { self.reconcileBodyFocus(ifCurrent: focusRevision) }
             }
-        } catch {
-            apply(session.bridgeFailure(code: "command_encoding_failed"))
         }
     }
 
     private func reconcileBodyFocus(ifCurrent revision: Int) {
         guard !isTornDown,
               revision == focusObservationRevision,
-              session.state.mutationAllowed,
+              mutationAllowed,
               let webView else { return }
         // Hydration can focus the DOM before the React bridge observes focus.
         // Repeating focus() then produces no event. Read the real DOM state after
@@ -360,26 +387,15 @@ public final class BlockNoteEditorCoordinator: NSObject {
             Task { @MainActor in
                 guard let self, !self.isTornDown,
                       revision == self.focusObservationRevision,
-                      self.session.state.mutationAllowed,
+                      self.mutationAllowed,
                       error == nil,
                       let isFocused = result as? Bool else { return }
-                self.apply(self.session.receive(.bodyFocusChanged(isFocused: isFocused)))
+                self.submit(.focusProbe(isFocused: isFocused, revision: revision))
             }
         }
     }
 
-    private func decodeMessageBody(_ body: Any) throws -> BlockNoteEditorMessage {
-        let data: Data
-        if let string = body as? String {
-            data = Data(string.utf8)
-        } else {
-            guard JSONSerialization.isValidJSONObject(body) else {
-                throw BlockNoteMessageBodyError.invalidJSONObject
-            }
-            data = try JSONSerialization.data(withJSONObject: body)
-        }
-        return try JSONDecoder().decode(BlockNoteEditorMessage.self, from: data)
-    }
+
 }
 
 extension BlockNoteEditorCoordinator: WKScriptMessageHandler {
@@ -393,19 +409,15 @@ extension BlockNoteEditorCoordinator: WKScriptMessageHandler {
             return
         }
 
-        do {
-            let decoded = try decodeMessageBody(message.body)
-            if case .bodyFocusChanged = decoded {
-                // DOM focus can change while the document is still hydrating.
-                guard session.state.isBridgeReady else { return }
-                // A genuine newer event takes precedence over an outstanding
-                // command acknowledgement, even if that query finishes later.
-                focusObservationRevision += 1
-            }
-            apply(session.receive(decoded))
-        } catch {
-            apply(session.malformedMessage())
+        let envelope = BlockNoteBridgeEnvelope.capture(message.body)
+        var revision: Int?
+        if envelope.mayContainNaturalFocus {
+            // Do not consult a stale main-thread readiness snapshot. The worker
+            // observes ready and focus in the same FIFO as all other inputs.
+            focusObservationRevision += 1
+            revision = focusObservationRevision
         }
+        submit(.message(envelope, focusRevision: revision))
     }
 }
 
@@ -420,7 +432,7 @@ extension BlockNoteEditorCoordinator: WKNavigationDelegate {
         }
         hasFinishedNavigation = true
         applyMinimumWritingHeight()
-        apply(session.navigationFinished())
+        submit(.navigationFinished)
     }
 
     public func webView(
@@ -429,7 +441,7 @@ extension BlockNoteEditorCoordinator: WKNavigationDelegate {
         withError error: Error
     ) {
         guard !isTornDown else { return }
-        apply(session.bridgeFailure(code: "navigation_failed"))
+        submit(.bridgeFailure("navigation_failed"))
     }
 
     public func webView(
@@ -438,13 +450,13 @@ extension BlockNoteEditorCoordinator: WKNavigationDelegate {
         withError error: Error
     ) {
         guard !isTornDown else { return }
-        apply(session.bridgeFailure(code: "navigation_failed"))
+        submit(.bridgeFailure("navigation_failed"))
     }
 
     public func webView(
         _ webView: WKWebView,
         decidePolicyFor navigationAction: WKNavigationAction,
-        decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
+        decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void
     ) {
         guard !isTornDown,
               let decision = navigationGate?.decision(
@@ -456,8 +468,4 @@ extension BlockNoteEditorCoordinator: WKNavigationDelegate {
         }
         decisionHandler(decision == .allow ? .allow : .cancel)
     }
-}
-
-private enum BlockNoteMessageBodyError: Error {
-    case invalidJSONObject
 }

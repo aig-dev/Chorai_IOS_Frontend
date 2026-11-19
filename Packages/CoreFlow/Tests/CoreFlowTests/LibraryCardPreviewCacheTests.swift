@@ -2,6 +2,130 @@ import CoreFlow
 import XCTest
 
 final class LibraryCardPreviewCacheTests: XCTestCase {
+
+    @MainActor
+    func testConcurrentHashlessSnapshotsBothReceiveTheirOwnPresentation() async {
+        let first = input("shared", version: nil, content: "Same body")
+        let second = input("shared", version: nil, content: "Same body")
+        let entered = expectation(description: "first parse")
+        let finish = DispatchSemaphore(value: 0)
+        let cache = LibraryCardPreviewCache(parse: { value in
+            if value == first { entered.fulfill(); _ = finish.wait(timeout: .now() + 3) }
+            return LibraryCardPreviewParser.presentation(content: value.content)
+        })
+        let one = Task { await read(first, cache: cache) }
+        await fulfillment(of: [entered], timeout: 2)
+        let two = await read(second, cache: cache)
+        finish.signal()
+        let oneValue = await one.value
+        XCTAssertEqual(oneValue?.plainText, "Same body")
+        XCTAssertEqual(two?.plainText, "Same body")
+    }
+
+    @MainActor
+    func testCancellationOfOneVersionKeepsOtherVersionWaitersAlive() async {
+        let first = input("shared", version: "one", content: "One")
+        let second = input("shared", version: "two", content: "Two")
+        let entered = expectation(description: "both parsers")
+        entered.expectedFulfillmentCount = 2
+        let finish = DispatchSemaphore(value: 0)
+        let cache = LibraryCardPreviewCache(parse: { value in
+            entered.fulfill(); _ = finish.wait(timeout: .now() + 3)
+            return LibraryCardPreviewParser.presentation(content: value.content)
+        })
+        let one = Task { await read(first, cache: cache) }
+        let two = Task { await read(second, cache: cache) }
+        await fulfillment(of: [entered], timeout: 2)
+        one.cancel()
+        finish.signal(); finish.signal()
+        let firstValue = await one.value
+        let secondValue = await two.value
+        XCTAssertNil(firstValue)
+        XCTAssertEqual(secondValue?.plainText, "Two")
+    }
+    @MainActor
+    func testLocalScopesAndRemoteInputNeverShare() async {
+        let probe = ParseProbe()
+        let cache = LibraryCardPreviewCache(parse: { probe.parse($0) })
+        let a = NoteStoreScope(actorID: "alice", environmentID: "local")
+        let b = NoteStoreScope(actorID: "bob", environmentID: "local")
+        let one = LibraryCardPreviewInput(localNoteID: "same", scope: a, bodyRevision: 1, content: "Draft", contentJSON: nil)
+        let two = LibraryCardPreviewInput(localNoteID: "same", scope: b, bodyRevision: 1, content: "Draft", contentJSON: nil)
+        let revised = LibraryCardPreviewInput(localNoteID: "same", scope: a, bodyRevision: 2, content: "Draft", contentJSON: nil)
+        for value in [one, two, input("same", content: "Draft"), revised] {
+            let result = await cache.read(value, token: cache.token(for: value.cardID, localScope: value.localScope))
+            XCTAssertEqual(result?.preview.text, "Draft")
+        }
+        XCTAssertEqual(probe.count, 4)
+        let wrongScope = await cache.read(one, token: cache.token(for: one.cardID, localScope: b))
+        XCTAssertNil(wrongScope)
+    }
+
+    @MainActor
+    func testLocalInputAllowsMediaReferenceWhileRemoteDoesNot() async {
+        let cache = LibraryCardPreviewCache()
+        let json = #"[{"type":"image","props":{"mediaRef":"local-media","url":"chorai-note://image/local-media"}}]"#
+        let local = LibraryCardPreviewInput(localNoteID: "same", scope: .init(actorID: "a", environmentID: "local"), bodyRevision: 1, content: "", contentJSON: json)
+        let localResult = await cache.read(local, token: cache.token(for: local.cardID, localScope: local.localScope))
+        let remote = await read(input("same", content: "", json: json), cache: cache)
+        XCTAssertEqual(localResult?.preview.imageMediaRef, "local-media")
+        XCTAssertNil(remote?.preview.imageMediaRef)
+    }
+
+    @MainActor
+    func testRunningCancelledParsesRetainTheirCapacity() async {
+        let started = expectation(description: "two parsers occupied")
+        started.expectedFulfillmentCount = 2
+        let unexpected = expectation(description: "third parser must remain queued")
+        unexpected.isInverted = true
+        let gate = DispatchSemaphore(value: 0)
+        let cache = LibraryCardPreviewCache(parse: { input in
+            if input.cardID == "third" { unexpected.fulfill() }
+            else { started.fulfill() }
+            _ = gate.wait(timeout: .now() + 3)
+            XCTAssertFalse(Thread.isMainThread)
+            return LibraryCardPreviewParser.presentation(content: input.content)
+        })
+        let first = Task { await read(input("first", content: "1"), cache: cache) }
+        let second = Task { await read(input("second", content: "2"), cache: cache) }
+        await fulfillment(of: [started], timeout: 2)
+        cache.invalidate(cardID: "first")
+        let third = Task { await read(input("third", content: "3"), cache: cache) }
+        await fulfillment(of: [unexpected], timeout: 0.15)
+        gate.signal(); gate.signal(); gate.signal()
+        let stale = await first.value
+        let next = await second.value
+        let last = await third.value
+        XCTAssertNil(stale)
+        XCTAssertEqual(next?.preview.text, "2")
+        XCTAssertEqual(last?.preview.text, "3")
+    }
+
+    @MainActor
+    func testOlderVersionCompletesItsOwnReaderWithoutReplacingLatestCacheEntry() async {
+        let started = expectation(description: "old computation started")
+        let finish = DispatchSemaphore(value: 0)
+        let probe = ParseProbe()
+        let cache = LibraryCardPreviewCache(parse: { input in
+            if input.content == "Old" {
+                started.fulfill()
+                _ = finish.wait(timeout: .now() + 3)
+            }
+            return probe.parse(input)
+        })
+        let old = input("a", version: "old", content: "Old")
+        let oldTask = Task { await read(old, cache: cache) }
+        await fulfillment(of: [started], timeout: 2)
+        let fresh = await read(input("a", version: "new", content: "New"), cache: cache)
+        finish.signal()
+        let stale = await oldTask.value
+        XCTAssertEqual(fresh?.preview.text, "New")
+        XCTAssertEqual(stale?.preview.text, "Old")
+        let cached = await read(input("a", version: "new", content: "New"), cache: cache)
+        XCTAssertEqual(cached?.preview.text, "New")
+        XCTAssertEqual(probe.count, 2, "Late old completion must not evict the newer cached input")
+    }
+
     @MainActor
     func testHotReadsShareOneParseAndANewVersionParsesOnce() async {
         let probe = ParseProbe()
@@ -157,7 +281,7 @@ final class LibraryCardPreviewCacheTests: XCTestCase {
     @MainActor
     func testCacheAccountsForCombinedBytesAndOversizedPreviewsOnlyServeTheirRead() async {
         let probe = ParseProbe()
-        let cache = LibraryCardPreviewCache(byteLimit: 128, parse: { probe.parse($0) })
+        let cache = LibraryCardPreviewCache(byteLimit: 160, parse: { probe.parse($0) })
         let a = input("a", content: String(repeating: "A", count: 20))
         let b = input("b", content: String(repeating: "B", count: 20))
         let large = input("large", content: String(repeating: "L", count: 200))

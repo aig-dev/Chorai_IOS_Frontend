@@ -30,7 +30,9 @@ struct ContentView: View {
 
     var body: some View {
         Group {
-            if authManager.isAuthenticated || authManager.canOpenLocalNotes {
+            if !localNotes.canDisplayNotes(for: authManager.canOpenLocalNotes ? authManager.currentNoteScope : nil) {
+                noteScopeTransitionView
+            } else if authManager.isAuthenticated || authManager.canOpenLocalNotes {
                 authenticatedView
             } else {
                 NavigationStack { loginView }
@@ -78,6 +80,22 @@ struct ContentView: View {
                 .accessibilityIdentifier("auth.session.phase")
             #endif
         }
+    }
+
+    private var noteScopeTransitionView: some View {
+        VStack(spacing: 16) {
+            if localNotes.scopeTransition == .failed {
+                Text("Couldn't save your last note. Retry to continue.")
+                    .multilineTextAlignment(.center)
+                Button("Retry") { localNotes.retryScopeTransition() }
+            } else {
+                ProgressView("Saving your notes…")
+            }
+        }
+        .padding()
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(ChoraiTheme.surface)
+        .accessibilityIdentifier("notes.scope-transition")
     }
 
     @ViewBuilder

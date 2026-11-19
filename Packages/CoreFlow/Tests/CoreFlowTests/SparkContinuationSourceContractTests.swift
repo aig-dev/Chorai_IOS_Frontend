@@ -137,7 +137,7 @@ final class SparkContinuationSourceContractTests: XCTestCase {
             )
         )
 
-        guard let contentStart = card.range(of: "private var tappableContent"),
+        guard let contentStart = card.range(of: "private func tappableContent("),
               let footerStart = card.range(of: "private var engagementFooter") else {
             XCTFail("Unable to isolate the Spark content and footer regions")
             return

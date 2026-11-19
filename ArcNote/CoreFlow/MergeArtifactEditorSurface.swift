@@ -256,6 +256,7 @@ struct MergeArtifactEditorSurface: View {
             .accessibilityLabel("Back")
             .accessibilityHint("Minimizes this Merge without discarding edits")
             .accessibilityIdentifier("merge.artifact.back")
+            .disabled(!controller.canBack)
             .choraiGlassSurface(cornerRadius: 22)
 
             Spacer()
@@ -285,11 +286,16 @@ struct MergeArtifactEditorSurface: View {
     private func editor(height: CGFloat) -> some View {
         ScrollView(.vertical, showsIndicators: true) {
             VStack(alignment: .leading, spacing: 12) {
+                if controller.isPreparingProjection {
+                    ProgressView("Loading…")
+                        .frame(maxWidth: .infinity, minHeight: 180)
+                } else {
                 BlockNoteCardEditor(
                     model: controller.bodyModel,
                     minimumHeight: 180,
                     fontScale: 1
                 )
+                }
 
                 if !controller.unresolvedMediaReferences.isEmpty {
                     Label(

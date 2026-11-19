@@ -1007,6 +1007,35 @@ final class ArcNoteUITests: XCTestCase {
         )
     }
 
+    func testMergeArtifactImmediateBackReopensWithBodyAndPendingTag() {
+        app.launchArguments.append("--ui-test-merge-artifact")
+        app.launchEnvironment["CHORAI_UI_TEST_MERGE_SESSION_SCOPE"] = "\(name).\(UUID().uuidString)"
+        app.launch()
+
+        let heading = app.staticTexts["A durable merged insight"]
+        XCTAssertTrue(heading.waitForExistence(timeout: 10))
+        heading.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+        app.typeText(" immediate-drain-body")
+        waitForButton("merge.artifact.back").tap()
+        waitForMissing("screen.merge.artifact")
+        waitForExactlyOneMergeTaskRail().tap()
+        XCTAssertTrue(app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS %@", "immediate-drain-body")
+        ).firstMatch.waitForExistence(timeout: 10))
+
+        waitForButton("merge.artifact.add-tag").tap()
+        waitFor("merge.artifact.tag-input").typeText("immediate-drain-tag")
+        waitForButton("merge.artifact.back").tap()
+        waitForMissing("screen.merge.artifact")
+        waitForExactlyOneMergeTaskRail().tap()
+        XCTAssertTrue(waitForButton("merge.artifact.tag.immediate-drain-tag").exists)
+
+        XCTAssertTrue(app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS %@", "immediate-drain-body")
+        ).firstMatch.waitForExistence(timeout: 10))
+    }
+
     func testMergeArtifactEditsInPlaceAndRestoresDraft() {
         app.launchArguments.append("--ui-test-merge-artifact")
         app.launchEnvironment["CHORAI_UI_TEST_MERGE_SESSION_SCOPE"] =
@@ -1994,7 +2023,7 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertEqual(cancelCount.label, "1")
     }
 
-    func testMergeArtifactBackRetainsLossyDraftAndPendingTag() {
+    func testMergeArtifactBackRetainsLossyDraftAndCompletedTag() {
         app.launchArguments.append("--ui-test-merge-artifact")
         app.launchEnvironment[
             "CHORAI_UI_TEST_MERGE_LOSSY_PASSTHROUGH"
@@ -2056,10 +2085,9 @@ final class ArcNoteUITests: XCTestCase {
             "A rejected snapshot must not minimize the artifact"
         )
         XCTAssertTrue(waitFor("screen.merge.artifact").exists)
-        XCTAssertEqual(
-            waitFor("merge.artifact.tag-input").value as? String,
-            "pending-back-tag",
-            "A failed Back must leave the pending tag in its editable state"
+        XCTAssertTrue(
+            waitFor("merge.artifact.tag.pending-back-tag").exists,
+            "Back completes the pending tag before snapshot capture and retains it on failure"
         )
         XCTAssertTrue(
             waitFor("merge.artifact.sync-state").label.contains(

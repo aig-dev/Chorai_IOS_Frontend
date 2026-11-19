@@ -7,6 +7,10 @@ struct ChoraIdentitySection: View {
     let humanActorID: String
     @State private var selectedImage: UIImage?
     @State private var showsImagePicker = false
+    @State private var preparationTask: Task<Void, Never>?
+    @State private var preparationGeneration = UUID()
+    @State private var isPreparingImage = false
+    @State private var preparationError: String?
 
     var body: some View {
         ChoraSectionSurface(title: "Identity", identifier: "chora.identity.section", openLayout: true) {
@@ -22,12 +26,55 @@ struct ChoraIdentitySection: View {
         }
         .sheet(isPresented: $showsImagePicker) { ImagePicker(selectedImage: $selectedImage) }
         .onChange(of: selectedImage) { image in
-            guard let data = image?.jpegData(compressionQuality: 0.88) else { return }
-            store.setAvatarDraft(.init(data: data, filename: "chora-avatar.jpg", mimeType: "image/jpeg"))
+            prepareAvatar(image)
+        }
+        .onDisappear { cancelPreparation() }
+        .onChange(of: humanActorID) { _ in cancelPreparation(); selectedImage = nil }
+        .onReceive(NotificationCenter.default.publisher(for: .cardReadSessionDidChange)) { _ in
+            cancelPreparation()
+            selectedImage = nil
         }
         .onChange(of: store.avatarDraft) { draft in
-            if draft == nil {
+            if draft == nil, !isPreparingImage {
                 selectedImage = nil
+            }
+        }
+    }
+
+    private func cancelPreparation() {
+        preparationGeneration = UUID()
+        preparationTask?.cancel()
+        preparationTask = nil
+        isPreparingImage = false
+    }
+
+    private func prepareAvatar(_ image: UIImage?) {
+        cancelPreparation()
+        guard let image else { return }
+        let generation = preparationGeneration
+        let authSession = AuthManager.shared.sessionGeneration
+        let owner = humanActorID
+        let identity = store.identity
+        isPreparingImage = true
+        store.setAvatarDraft(nil)
+        preparationError = nil
+        preparationTask = Task {
+            defer {
+                if preparationGeneration == generation {
+                    isPreparingImage = false
+                    preparationTask = nil
+                }
+            }
+            do {
+                let value = try await CardImagePreparation.shared.jpeg(image, quality: 0.88, filename: "chora-avatar.jpg")
+                guard !Task.isCancelled, generation == preparationGeneration,
+                      authSession == AuthManager.shared.sessionGeneration,
+                      store.identity == identity, store.identity?.humanActorID == owner else { return }
+                store.setAvatarDraft(.init(data: value.data, filename: value.filename, mimeType: value.mimeType))
+            } catch is CancellationError {
+            } catch {
+                guard generation == preparationGeneration else { return }
+                preparationError = "The photo couldn’t be prepared. Choose another image."
             }
         }
     }
@@ -63,10 +110,13 @@ struct ChoraIdentitySection: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("chora.identity.error.\(field)")
             }
-            ChoraActionButton(title: store.isSaving ? "Saving…" : "Save") {
+            if let preparationError {
+                Text(preparationError).font(.footnote).foregroundColor(.red)
+            }
+            ChoraActionButton(title: isPreparingImage ? "Preparing…" : (store.isSaving ? "Saving…" : "Save")) {
                 store.save()
             }
-            .disabled(store.isSaving || store.changedFields.isEmpty)
+            .disabled(isPreparingImage || store.isSaving || store.changedFields.isEmpty)
             .accessibilityIdentifier("chora.identity.save")
         }
     }

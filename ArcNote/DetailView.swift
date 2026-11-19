@@ -217,6 +217,7 @@ struct DetailView: View {
                                             }
                                         } label: {
                                             CardMetadataRelatedRow(
+                                                cardID: note.linkedCardId,
                                                 avatarURL: note.author?.avatar,
                                                 title: note.author?.userName
                                                     ?? note.title

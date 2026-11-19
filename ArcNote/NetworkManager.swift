@@ -29,6 +29,47 @@ private struct MergeRawJSONBodyEncoding: ParameterEncoding {
     }
 }
 
+private final class DetailRequestLifetime {
+    private let lock = NSLock()
+    private var request: DataRequest?
+    private var ended = false
+    private var cancelled = false
+
+    var isCancelled: Bool {
+        lock.lock(); defer { lock.unlock() }
+        return cancelled
+    }
+
+    func install(_ request: DataRequest) {
+        lock.lock()
+        let shouldCancel = cancelled
+        if !ended { self.request = request }
+        lock.unlock()
+        if shouldCancel { request.cancel() }
+    }
+
+    @discardableResult
+    func cancel() -> Bool {
+        lock.lock()
+        guard !ended else { lock.unlock(); return false }
+        ended = true
+        cancelled = true
+        let request = self.request
+        self.request = nil
+        lock.unlock()
+        request?.cancel()
+        return true
+    }
+
+    func finish() -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        guard !ended else { return false }
+        ended = true
+        request = nil
+        return true
+    }
+}
+
 // MARK: 网络管理器
 class NetworkManager: ObservableObject {
     static let shared = NetworkManager()
@@ -36,6 +77,8 @@ class NetworkManager: ObservableObject {
     // MARK: 配置
     private let baseURL: String
     private let session: Session
+    private let responseDecodeQueue = DispatchQueue(label: "app.chorai.response-decode", qos: .userInitiated)
+    private let errorPresenter: ((String) -> Void)?
     private var authToken: String?
     private let reachabilityManager = NetworkReachabilityManager()
 
@@ -47,8 +90,7 @@ class NetworkManager: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
 
     // MARK: 初始化
-    private init() {
-        self.baseURL = APIConfiguration.baseURL
+    private convenience init() {
 
         // 配置Alamofire Session
         let configuration = URLSessionConfiguration.default
@@ -67,10 +109,14 @@ class NetworkManager: ObservableObject {
             "Accept": "application/json"
         ]
         let serverTrustPolicy = ServerTrustManager(allHostsMustBeEvaluated: false, evaluators: [:])
-        self.session = Session(configuration: configuration, serverTrustManager: serverTrustPolicy)
+        self.init(baseURL: APIConfiguration.baseURL, session: Session(configuration: configuration, serverTrustManager: serverTrustPolicy), startsMonitoring: true)
+    }
 
-        // 监听网络状态
-        startNetworkMonitoring()
+    init(baseURL: String, session: Session, startsMonitoring: Bool = false, errorPresenter: ((String) -> Void)? = nil) {
+        self.baseURL = baseURL
+        self.session = session
+        self.errorPresenter = errorPresenter
+        if startsMonitoring { startNetworkMonitoring() }
     }
 
     // MARK: 认证相关
@@ -97,7 +143,7 @@ class NetworkManager: ObservableObject {
             for header in customHeaders {
                 requestHeaders.update(header)
             }
-            print("自定义请求头: \(customHeaders)")
+            // Header values may contain credentials; never log them.
         }
 
         return requestHeaders
@@ -111,8 +157,13 @@ class NetworkManager: ObservableObject {
         return object
     }
 
+    private static func onMain(_ body: @escaping () -> Void) {
+        if Thread.isMainThread { body() }
+        else { DispatchQueue.main.async(execute: body) }
+    }
+
     // MARK: 通用请求方法
-    private func request<T: Codable>(
+    func request<T: Codable>(
         endpoint: String,
         method: HTTPMethod = .get,
         parameters: Parameters? = nil,
@@ -123,152 +174,89 @@ class NetworkManager: ObservableObject {
         suppressesPayloadLogging: Bool = false,
         isCredentialExchange: Bool = false
     ) -> AnyPublisher<T, NetworkError> {
-
-        return Future<T, NetworkError> { [weak self] promise in
-            guard let self = self else {
-                promise(.failure(.unknown))
-                return
+        // Preserve the existing eager, shared Future semantics for mutations.
+        Future<T, NetworkError> { [weak self] promise in
+            Self.onMain {
+                guard let self else { promise(.failure(.unknown)); return }
+                self.startRequest(
+                    endpoint: endpoint, method: method, parameters: parameters,
+                    encoding: encoding, headers: headers, responseType: responseType,
+                    presentsError: presentsError, isCredentialExchange: isCredentialExchange,
+                    completion: promise
+                )
             }
+        }.eraseToAnyPublisher()
+    }
 
-            let url = "\(self.baseURL)\(endpoint)"
-
-            print("请求URL: \(url)")
-            print("请求方法: \(method.rawValue)")
-            if let description = Self.payloadLogDescription(
-                parameters: parameters,
-                suppressesPayloadLogging: suppressesPayloadLogging
-            ) {
-                print("请求参数: \(description)")
-            }
-
-            let requestHeaders = self.authorizedHeaders(extra: headers)
-
-            // 显示加载状态
+    /// Request creation and delivery own all mutable UI/authentication access.
+    @discardableResult
+    private func startRequest<T: Codable>(
+        endpoint: String, method: HTTPMethod, parameters: Parameters? = nil,
+        encoding: ParameterEncoding, headers: HTTPHeaders? = nil,
+        responseType: T.Type, presentsError: Bool,
+        isCredentialExchange: Bool = false,
+        acceptResult: @escaping () -> Bool = { true },
+        completion: @escaping (Result<T, NetworkError>) -> Void
+    ) -> DataRequest {
+        dispatchPrecondition(condition: .onQueue(.main))
+        isLoading = true
+        return session.request(
+            "\(baseURL)\(endpoint)", method: method, parameters: parameters,
+            encoding: encoding, headers: authorizedHeaders(extra: headers)
+        ).validate().responseData(queue: responseDecodeQueue) { response in
+            let prepared = self.prepareResponse(response, as: responseType, isCredentialExchange: isCredentialExchange)
             DispatchQueue.main.async {
-                self.isLoading = true
-            }
-
-            // 发送请求
-            self.session.request(
-                url,
-                method: method,
-                parameters: parameters,
-                encoding: encoding,
-                headers: requestHeaders
-            )
-            .validate()
-            .responseData { response in
-                DispatchQueue.main.async {
-                    self.isLoading = false
+                guard acceptResult() else { return }
+                self.isLoading = false
+                let staleUnauthorized = response.response?.statusCode == 401 && self.authToken == nil
+                if presentsError, !staleUnauthorized, let message = prepared.alert, !message.isEmpty {
+                    self.presentErrorAlert(message: message)
                 }
-
-                if let httpResponse = response.response {
-                    print("响应状态码: \(httpResponse.statusCode)")
-                    print("响应头: \(httpResponse.allHeaderFields)")
-                }
-
-                switch response.result {
-                case .success(let data):
-                    if Self.shouldLogPayload(
-                        suppressesPayloadLogging: suppressesPayloadLogging
-                    ) {
-                        self.logResponseData(data, label: "响应数据")
-                    } else {
-                        print("响应数据: <redacted>")
-                    }
-
-                    let statusCode = response.response?.statusCode
-                    if isCredentialExchange,
-                       let apiError = APIErrorPayload.decode(
-                        from: data,
-                        statusCode: statusCode
-                    ) {
-                        promise(
-                            .failure(
-                                .api(
-                                    statusCode: statusCode ?? 200,
-                                    code: apiError.code,
-                                    message: apiError.message
-                                )
-                            )
-                        )
-                        return
-                    }
-
-                    do {
-                        let decodedResponse = try JSONDecoder().decode(T.self, from: data)
-                        print("解码成功: \(type(of: decodedResponse))")
-                        promise(.success(decodedResponse))
-                    } catch {
-                        print("解码错误: \(error)")
-                        promise(.failure(.decodingError))
-                    }
-
-                case .failure(let error):
-                    var responseMessage: String?
-                    var apiError: APIErrorPayload?
-                    let statusCode = response.response?.statusCode
-                    if let data = response.data {
-                        if Self.shouldLogPayload(
-                            suppressesPayloadLogging: suppressesPayloadLogging
-                        ) {
-                            self.logResponseData(data, label: "请求失败响应数据")
-                        } else {
-                            print("请求失败响应数据: <redacted>")
-                        }
-                        apiError = APIErrorPayload.decode(
-                            from: data,
-                            statusCode: statusCode
-                        )
-                        responseMessage = apiError?.message ?? self.extractMessage(from: data)
-                    }
-                    if let httpResponse = response.response {
-                        print("请求失败状态码: \(httpResponse.statusCode)")
-                    }
-                    print("请求失败错误: \(error)")
-
-                    let isStaleUnauthorizedRequest = statusCode == 401
-                        && self.authToken == nil
-                    if presentsError,
-                       !isStaleUnauthorizedRequest,
-                       let message = responseMessage,
-                       !message.isEmpty {
-                        self.presentErrorAlert(message: message)
-                    }
-
-                    let networkError: NetworkError
-                    if statusCode == 401 && !isCredentialExchange {
-                        networkError = .unauthorized
-                    } else if let statusCode,
-                              (400...599).contains(statusCode),
-                              isCredentialExchange || apiError != nil {
-                        networkError = .api(
-                            statusCode: statusCode,
-                            code: apiError?.code,
-                            message: apiError?.message ?? responseMessage
-                        )
-                    } else {
-                        networkError = self.handleError(error, response: response.response)
-                    }
-                    promise(.failure(networkError))
-                }
+                completion(prepared.result)
             }
         }
-        .eraseToAnyPublisher()
+    }
+
+    /// Pure response interpretation; no authentication reads or UI effects.
+    private func prepareResponse<T: Codable>(
+        _ response: AFDataResponse<Data>, as type: T.Type,
+        isCredentialExchange: Bool
+    ) -> (result: Result<T, NetworkError>, alert: String?) {
+        let status = response.response?.statusCode
+        switch response.result {
+        case .success(let data):
+            if isCredentialExchange, let api = APIErrorPayload.decode(from: data, statusCode: status) {
+                return (.failure(.api(statusCode: status ?? 200, code: api.code, message: api.message)), nil)
+            }
+            do { return (.success(try JSONDecoder().decode(type, from: data)), nil) }
+            catch { return (.failure(.decodingError), nil) }
+        case .failure(let error):
+            let api = response.data.flatMap { APIErrorPayload.decode(from: $0, statusCode: status) }
+            let message = api?.message ?? response.data.flatMap { self.extractMessage(from: $0) }
+            let mapped: NetworkError
+            if status == 401 && !isCredentialExchange {
+                mapped = .unauthorized
+            } else if let status, (400...599).contains(status), isCredentialExchange || api != nil {
+                mapped = .api(statusCode: status, code: api?.code, message: api?.message ?? message)
+            } else {
+                mapped = self.handleError(error, response: response.response)
+            }
+            return (.failure(mapped), message)
+        }
     }
 
     static func payloadLogDescription(
         parameters: [String: Any]?,
         suppressesPayloadLogging: Bool
     ) -> String? {
-        guard let parameters else { return nil }
-        return suppressesPayloadLogging ? "<redacted>" : String(describing: parameters)
+        guard parameters != nil else { return nil }
+        return "<redacted>"
     }
 
     static func shouldLogPayload(
         suppressesPayloadLogging: Bool
     ) -> Bool {
-        !suppressesPayloadLogging
+        false
     }
 
     private static func appendAccessPair(
@@ -293,68 +281,75 @@ class NetworkManager: ObservableObject {
         presentsError: Bool = true
     ) -> AnyPublisher<Data, NetworkError> {
         Future<Data, NetworkError> { [weak self] promise in
-            guard let self else {
-                promise(.failure(.unknown))
-                return
-            }
-
-            var requestHeaders = self.authorizedHeaders()
-            requestHeaders.update(
-                HTTPHeader(name: "Accept", value: accept)
-            )
-            self.session.request(
-                "\(self.baseURL)\(endpoint)",
-                method: method,
-                parameters: parameters,
-                encoding: encoding,
-                headers: requestHeaders
-            )
-            .validate()
-            .responseData { response in
-                switch response.result {
-                case .success(let data):
-                    promise(.success(data))
-                case .failure(let error):
-                    let statusCode = response.response?.statusCode
-                    var apiError: APIErrorPayload?
-                    if let data = response.data {
-                        apiError = APIErrorPayload.decode(
-                            from: data,
-                            statusCode: statusCode
-                        )
+            Self.onMain {
+                guard let self else {
+                    promise(.failure(.unknown))
+                    return
+                }
+                let finish: (Result<Data, NetworkError>) -> Void = { result in
+                    DispatchQueue.main.async {
+                        promise(result)
                     }
+                }
 
-                    if presentsError, let message = apiError?.message {
-                        self.presentErrorAlert(message: message)
-                    }
+                var requestHeaders = self.authorizedHeaders()
+                requestHeaders.update(
+                    HTTPHeader(name: "Accept", value: accept)
+                )
+                self.session.request(
+                    "\(self.baseURL)\(endpoint)",
+                    method: method,
+                    parameters: parameters,
+                    encoding: encoding,
+                    headers: requestHeaders
+                )
+                .validate()
+                .responseData(queue: self.responseDecodeQueue) { response in
+                    switch response.result {
+                    case .success(let data):
+                        finish(.success(data))
+                    case .failure(let error):
+                        let statusCode = response.response?.statusCode
+                        var apiError: APIErrorPayload?
+                        if let data = response.data {
+                            apiError = APIErrorPayload.decode(
+                                from: data,
+                                statusCode: statusCode
+                            )
+                        }
 
-                    if statusCode == 401 {
-                        promise(.failure(.unauthorized))
-                    } else if statusCode == 403 {
-                        promise(.failure(.forbidden))
-                    } else if statusCode == 404 {
-                        promise(.failure(.notFound))
-                    } else if let statusCode,
-                              let apiError,
-                              (400...599).contains(statusCode) {
-                        promise(
-                            .failure(
-                                .api(
-                                    statusCode: statusCode,
-                                    code: apiError.code,
-                                    message: apiError.message
+                        if presentsError, let message = apiError?.message {
+                            DispatchQueue.main.async { self.presentErrorAlert(message: message) }
+                        }
+
+                        if statusCode == 401 {
+                            finish(.failure(.unauthorized))
+                        } else if statusCode == 403 {
+                            finish(.failure(.forbidden))
+                        } else if statusCode == 404 {
+                            finish(.failure(.notFound))
+                        } else if let statusCode,
+                                  let apiError,
+                                  (400...599).contains(statusCode) {
+                            finish(
+                                .failure(
+                                    .api(
+                                        statusCode: statusCode,
+                                        code: apiError.code,
+                                        message: apiError.message
+                                    )
                                 )
                             )
-                        )
-                    } else {
-                        promise(
-                            .failure(
-                                self.handleError(
-                                    error,
-                                    response: response.response
+                        } else {
+                            finish(
+                                .failure(
+                                    self.handleError(
+                                        error,
+                                        response: response.response
+                                    )
                                 )
                             )
-                        )
+                        }
                     }
                 }
             }
@@ -383,25 +378,12 @@ class NetworkManager: ObservableObject {
 
     private func logResponseData(_ data: Data, label: String) {
 #if DEBUG
-        guard let responseString = String(data: data, encoding: .utf8) else {
-            print("\(label): <non-utf8 \(data.count) bytes>")
-            return
-        }
-
-        let isSmokeRun = ProcessInfo.processInfo.environment["CHORAI_API_SMOKE"] == "1"
-        let limit = isSmokeRun ? 1200 : 12000
-        if responseString.count > limit {
-            print("\(label): \(String(responseString.prefix(limit)))... <truncated \(data.count) bytes>")
-        } else {
-            print("\(label): \(responseString)")
-        }
-#else
-        _ = data
-        _ = label
+        print("\(label): \(data.count) bytes")
 #endif
     }
 
     private func presentErrorAlert(message: String) {
+        if let errorPresenter { errorPresenter(message); return }
         DispatchQueue.main.async {
             guard
                 let windowScene = UIApplication.shared.connectedScenes
@@ -1482,48 +1464,50 @@ extension NetworkManager {
         fileName: String
     ) -> AnyPublisher<AvatarUploadResponse, NetworkError> {
         return Future<AvatarUploadResponse, NetworkError> { [weak self] promise in
-            guard let self = self else {
-                promise(.failure(.unknown))
-                return
-            }
-
-            let url = "\(self.baseURL)\(endpoint)"
-            let headers = self.authorizedHeaders()
-
-            DispatchQueue.main.async {
-                self.isLoading = true
-            }
-
-            self.session.upload(
-                multipartFormData: { multipartFormData in
-                    multipartFormData.append(
-                        imageData,
-                        withName: fieldName,
-                        fileName: fileName,
-                        mimeType: "image/jpeg"
-                    )
-                },
-                to: url,
-                method: .put,
-                headers: headers
-            )
-            .validate()
-            .responseData { response in
-                DispatchQueue.main.async {
-                    self.isLoading = false
+            Self.onMain {
+                guard let self = self else {
+                    promise(.failure(.unknown))
+                    return
+                }
+                let finish: (Result<AvatarUploadResponse, NetworkError>) -> Void = { result in
+                    DispatchQueue.main.async {
+                        self.isLoading = false
+                        promise(result)
+                    }
                 }
 
-                switch response.result {
-                case .success(let data):
-                    do {
-                        let uploadResponse = try JSONDecoder().decode(AvatarUploadResponse.self, from: data)
-                        promise(.success(uploadResponse))
-                    } catch {
-                        promise(.failure(.decodingError))
+                let url = "\(self.baseURL)\(endpoint)"
+                let headers = self.authorizedHeaders()
+
+                self.isLoading = true
+
+                self.session.upload(
+                    multipartFormData: { multipartFormData in
+                        multipartFormData.append(
+                            imageData,
+                            withName: fieldName,
+                            fileName: fileName,
+                            mimeType: "image/jpeg"
+                        )
+                    },
+                    to: url,
+                    method: .put,
+                    headers: headers
+                )
+                .validate()
+                .responseData(queue: self.responseDecodeQueue) { response in
+                    switch response.result {
+                    case .success(let data):
+                        do {
+                            let uploadResponse = try JSONDecoder().decode(AvatarUploadResponse.self, from: data)
+                            finish(.success(uploadResponse))
+                        } catch {
+                            finish(.failure(.decodingError))
+                        }
+                    case .failure(let error):
+                        let networkError = self.handleError(error, response: response.response)
+                        finish(.failure(networkError))
                     }
-                case .failure(let error):
-                    let networkError = self.handleError(error, response: response.response)
-                    promise(.failure(networkError))
                 }
             }
         }
@@ -1681,58 +1665,60 @@ extension NetworkManager {
         mimeType: String
     ) -> AnyPublisher<UploadResponse, NetworkError> {
         Future<UploadResponse, NetworkError> { [weak self] promise in
-            guard let self else {
-                promise(.failure(.unknown))
-                return
-            }
-
-            var headers = HTTPHeaders()
-            if let token = self.authToken {
-                headers.add(.authorization(bearerToken: token))
-            }
-
-            DispatchQueue.main.async {
-                self.isLoading = true
-            }
-
-            self.session.upload(
-                multipartFormData: { form in
-                    form.append(
-                        data,
-                        withName: "file",
-                        fileName: filename,
-                        mimeType: mimeType
-                    )
-                    form.append(Data("inline".utf8), withName: "kind")
-                },
-                to: "\(self.baseURL)/api/v1/media/upload",
-                headers: headers
-            )
-            .validate()
-            .responseData { response in
-                DispatchQueue.main.async {
-                    self.isLoading = false
+            Self.onMain {
+                guard let self else {
+                    promise(.failure(.unknown))
+                    return
+                }
+                let finish: (Result<UploadResponse, NetworkError>) -> Void = { result in
+                    DispatchQueue.main.async {
+                        self.isLoading = false
+                        promise(result)
+                    }
                 }
 
-                switch response.result {
-                case .success(let responseData):
-                    do {
-                        let upload = try JSONDecoder().decode(
-                            UploadResponse.self,
-                            from: responseData
+                var headers = HTTPHeaders()
+                if let token = self.authToken {
+                    headers.add(.authorization(bearerToken: token))
+                }
+
+                self.isLoading = true
+
+                self.session.upload(
+                    multipartFormData: { form in
+                        form.append(
+                            data,
+                            withName: "file",
+                            fileName: filename,
+                            mimeType: mimeType
                         )
-                        guard upload.success else {
-                            promise(.failure(.serverError(0, upload.message)))
-                            return
+                        form.append(Data("inline".utf8), withName: "kind")
+                    },
+                    to: "\(self.baseURL)/api/v1/media/upload",
+                    headers: headers
+                )
+                .validate()
+                .responseData(queue: self.responseDecodeQueue) { response in
+                    switch response.result {
+                    case .success(let responseData):
+                        do {
+                            let upload = try JSONDecoder().decode(
+                                UploadResponse.self,
+                                from: responseData
+                            )
+                            guard upload.success else {
+                                finish(.failure(.serverError(0, upload.message)))
+                                return
+                            }
+                            finish(.success(upload))
+                        } catch {
+                            finish(.failure(.decodingError))
                         }
-                        promise(.success(upload))
-                    } catch {
-                        promise(.failure(.decodingError))
+                    case .failure(let error):
+                        finish(.failure(
+                            self.handleError(error, response: response.response)
+                        ))
                     }
-                case .failure(let error):
-                    promise(.failure(
-                        self.handleError(error, response: response.response)
-                    ))
                 }
             }
         }
@@ -1741,70 +1727,66 @@ extension NetworkManager {
 
     func uploadFile(data: Data, filename: String, mimeType: String, assetId: String, kind: String = "background") -> AnyPublisher<UploadResponse, NetworkError> {
         return Future<UploadResponse, NetworkError> { [weak self] promise in
-            guard let self = self else {
-                promise(.failure(.unknown))
-                return
-            }
+            Self.onMain {
+                guard let self = self else {
+                    promise(.failure(.unknown))
+                    return
+                }
+                let finish: (Result<UploadResponse, NetworkError>) -> Void = { result in
+                    DispatchQueue.main.async {
+                        self.isLoading = false
+                        promise(result)
+                    }
+                }
 
-            let url = "\(self.baseURL)/api/v1/media/upload"
+                let url = "\(self.baseURL)/api/v1/media/upload"
 
-            print("文件上传URL: \(url)")
-            print("文件名: \(filename)")
-            print("文件大小: \(data.count) bytes")
-            print("MIME类型: \(mimeType)")
-            print("关联资产ID: \(assetId)")
-            print("上传类型: \(kind)")
+                print("文件大小: \(data.count) bytes")
+                print("MIME类型: \(mimeType)")
+                print("上传类型: \(kind)")
 
-            var headers = HTTPHeaders()
-            if let token = self.authToken {
-                headers.add(.authorization(bearerToken: token))
-                print("认证Token: <redacted>")
-            }
+                var headers = HTTPHeaders()
+                if let token = self.authToken {
+                    headers.add(.authorization(bearerToken: token))
+                    print("认证Token: <redacted>")
+                }
 
-            DispatchQueue.main.async {
                 self.isLoading = true
-            }
 
-            self.session.upload(
-                multipartFormData: { multipartFormData in
-                    multipartFormData.append(data, withName: "file", fileName: filename, mimeType: mimeType)
-                    multipartFormData.append(Data(assetId.utf8), withName: "asset_id")
-                    multipartFormData.append(Data(kind.utf8), withName: "kind")
-                },
-                to: url,
-                headers: headers
-            )
-            .validate()
-            .responseData { response in
-                DispatchQueue.main.async {
-                    self.isLoading = false
-                }
-
-                if let httpResponse = response.response {
-                    print("文件上传响应状态码: \(httpResponse.statusCode)")
-                }
-
-                switch response.result {
-                case .success(let data):
-                    if let responseString = String(data: data, encoding: .utf8) {
-                        print("文件上传响应数据: \(responseString)")
+                self.session.upload(
+                    multipartFormData: { multipartFormData in
+                        multipartFormData.append(data, withName: "file", fileName: filename, mimeType: mimeType)
+                        multipartFormData.append(Data(assetId.utf8), withName: "asset_id")
+                        multipartFormData.append(Data(kind.utf8), withName: "kind")
+                    },
+                    to: url,
+                    headers: headers
+                )
+                .validate()
+                .responseData(queue: self.responseDecodeQueue) { response in
+                    if let httpResponse = response.response {
+                        print("文件上传响应状态码: \(httpResponse.statusCode)")
                     }
 
-                    do {
-                        let uploadResponse = try JSONDecoder().decode(UploadResponse.self, from: data)
-                        if uploadResponse.success {
-                            promise(.success(uploadResponse))
-                        } else {
-                            print("文件上传失败: \(uploadResponse.message ?? "未知错误")")
-                            promise(.failure(.serverError(0, uploadResponse.message)))
+                    switch response.result {
+                    case .success(let data):
+                        self.logResponseData(data, label: "upload response")
+
+                        do {
+                            let uploadResponse = try JSONDecoder().decode(UploadResponse.self, from: data)
+                            if uploadResponse.success {
+                                finish(.success(uploadResponse))
+                            } else {
+                                finish(.failure(.serverError(0, uploadResponse.message)))
+                            }
+                        } catch {
+                            finish(.failure(.decodingError))
                         }
-                    } catch {
-                        promise(.failure(.decodingError))
-                    }
 
-                case .failure(let error):
-                    let networkError = self.handleError(error, response: response.response)
-                    promise(.failure(networkError))
+                    case .failure(let error):
+                        let networkError = self.handleError(error, response: response.response)
+                        finish(.failure(networkError))
+                    }
                 }
             }
         }
@@ -2330,14 +2312,28 @@ extension NetworkManager {
         cardId: String,
         presentsError: Bool = true
     ) -> AnyPublisher<CardDetailResponse, NetworkError> {
-        request(
-            endpoint: "/api/cards/\(cardId)",
-            method: .get,
-            encoding: URLEncoding.default,
-            responseType: CardDetailResponse.self,
-            presentsError: presentsError,
-            suppressesPayloadLogging: true
-        )
+        Deferred { [weak self] () -> AnyPublisher<CardDetailResponse, NetworkError> in
+            let lifetime = DetailRequestLifetime()
+            return Future<CardDetailResponse, NetworkError> { promise in
+                Self.onMain {
+                    guard let self else { promise(.failure(.unknown)); return }
+                    guard !lifetime.isCancelled else { return }
+                    let request = self.startRequest(
+                        endpoint: "/api/cards/\(cardId)", method: .get,
+                        encoding: URLEncoding.default,
+                        responseType: CardDetailResponse.self, presentsError: presentsError,
+                        acceptResult: { lifetime.finish() }, completion: promise
+                    )
+                    lifetime.install(request)
+                }
+            }
+            .handleEvents(receiveCancel: { [weak self] in
+                if lifetime.cancel() {
+                    DispatchQueue.main.async { self?.isLoading = false }
+                }
+            })
+            .eraseToAnyPublisher()
+        }.eraseToAnyPublisher()
     }
 
     func getCardDetail(cardId: String, presentsError: Bool = true, completion: @escaping (Result<CardDetailResponse, NetworkError>) -> Void) {

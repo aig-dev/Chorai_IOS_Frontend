@@ -440,7 +440,7 @@ struct LinkItemView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HTMLTextRenderer(htmlContent: item.description, maxLines: 3)
+            HTMLTextRenderer(cardID: item.id, htmlContent: item.description, maxLines: 3)
                 .font(.body)
                 .foregroundColor(ChoraiTheme.ink)
             Text(item.username)

@@ -79,7 +79,7 @@ final class CommittedNoteDownloads {
         let note = try await library.open(identifier: id, scope: scope)
         guard note.desiredLifecycle == .active else { return }
         let retained = Set(note.attachments.compactMap(\.mediaRef))
-        let refs = try NoteSyncPayload.imageReferences(note.body).subtracting(retained)
+        let refs = try await library.imageReferences(identifier: id, scope: scope).subtracting(retained)
         var failure: Error?
         for ref in refs.sorted() where !ref.hasPrefix("local-note-attachment:") {
             try Task.checkCancellation()
@@ -94,8 +94,12 @@ final class CommittedNoteDownloads {
         if let failure { throw failure }
         // The user can edit while media is in flight. Only finish against the current working copy.
         guard let latest = library.notes.first(where: { $0.localID == note.localID }) else { return }
-        if latest.desiredLifecycle == .active, latest.bodyRevision != note.bodyRevision,
-           NoteSyncPayload.hasUndownloadedImages(latest) { throw NoteLocalStoreError.staleGeneration }
+        if latest.desiredLifecycle == .active, latest.bodyRevision != note.bodyRevision {
+            let latestRefs = try await library.imageReferences(identifier: id, scope: scope)
+            if latestRefs.contains(where: { ref in
+                !latest.attachments.contains { NoteSyncPayload.localMediaRef(uploadID: $0.uploadID) == ref || $0.mediaRef == ref }
+            }) { throw NoteLocalStoreError.staleGeneration }
+        }
     }
 
     private func scheduleRetry(in library: NoteLibraryStore, at deadline: Date) {

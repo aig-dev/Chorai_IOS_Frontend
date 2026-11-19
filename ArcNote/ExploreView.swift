@@ -115,7 +115,7 @@ struct ExploreView: View {
                             showsHistory = false
                         } label: {
                             VStack(alignment: .leading, spacing: 6) {
-                                Text(FlowTextPreview.make(card.content)).font(.body).lineLimit(3)
+                                CardPlainTextPreview(card: card).font(.body).lineLimit(3)
                                 Text(card.author?.username ?? "Chorai").font(.caption).foregroundStyle(.secondary)
                             }.padding(.vertical, 6)
                         }

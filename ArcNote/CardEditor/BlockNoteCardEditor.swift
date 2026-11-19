@@ -27,7 +27,7 @@ final class BlockNoteCardEditorModel: ObservableObject {
     @Published private(set) var bridgeFailureNotice: String?
     @Published private(set) var isBodyFocused: Bool
 
-    private(set) var controller: BlockNoteEditorController
+    @Published private(set) var controller: BlockNoteEditorController
     private(set) var initialDocument: BlockNoteInitialDocument
     let localImageSource: BlockNoteLocalImageSource?
     private(set) var editorInstanceID: UUID
@@ -180,6 +180,7 @@ final class BlockNoteCardEditorModel: ObservableObject {
               compatibilityNotice == nil,
               isInitiallyEditable else { return }
 
+        controller.beginClosing()
         availability = .loading
         selectionState = nil
         isBodyFocused = false
@@ -188,7 +189,9 @@ final class BlockNoteCardEditorModel: ObservableObject {
         latestSessionRevision = 0
         initialDocument = BlockNoteInitialDocument(
             contentJSON: contentJSON,
-            fallbackMarkdown: fallbackMarkdown
+            fallbackMarkdown: fallbackMarkdown,
+            profile: initialDocument.profile,
+            displayURLsByMediaReference: initialDocument.displayURLsByMediaReference
         )
         controller = BlockNoteEditorController()
         editorInstanceID = UUID()
@@ -267,10 +270,16 @@ final class BlockNoteCardEditorModel: ObservableObject {
             }
             throw CardEditorBodyError.unavailable
         }
-        let snapshot = try await controller.requestSnapshot()
+        let originalController = controller
+        let originalInstance = editorInstanceID
+        let originalRevisionBase = sessionRevisionBase
+        let snapshot = try await originalController.requestSnapshot()
+        guard editorInstanceID == originalInstance, controller === originalController else {
+            throw CardEditorBodyError.unavailable
+        }
         return BlockNoteSnapshot(
             requestID: snapshot.requestID,
-            revision: sessionRevisionBase + snapshot.revision,
+            revision: originalRevisionBase + snapshot.revision,
             contentJSON: snapshot.contentJSON,
             fallbackMarkdown: snapshot.fallbackMarkdown
         )

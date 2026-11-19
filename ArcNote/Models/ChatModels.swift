@@ -38,21 +38,7 @@ extension NetworkManager: ChatConversationFetching, ChatDetailFetching {
     func getReferencedNote(
         cardId: String
     ) -> AnyPublisher<NoteCard, NetworkError> {
-        getCardDetailPublisher(cardId: cardId, presentsError: false)
-            .map { response in
-                let card = response.data
-                return NoteCard(
-                    id: card.id,
-                    title: (card.title?.isEmpty ?? true)
-                        ? "Untitled"
-                        : (card.title ?? ""),
-                    description: card.content,
-                    isPublic: card.isPublic,
-                    username: card.author?.userName ?? "Unknown",
-                    avatarUrl: card.author?.avatarUrl
-                )
-            }
-            .eraseToAnyPublisher()
+        CardDetailReader.shared.referencedNote(cardID: cardId)
     }
 }
 

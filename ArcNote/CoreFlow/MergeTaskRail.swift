@@ -605,7 +605,7 @@ struct GlobalMergeTaskPortalModifier: ViewModifier {
 
     private var presentation: Binding<Bool> {
         Binding(
-            get: { coordinator.presentation != nil },
+            get: { coordinator.isReady(for: verifiedActorID) && coordinator.presentation != nil },
             set: { isPresented in
                 if !isPresented {
                     coordinator.minimize()
@@ -641,7 +641,7 @@ struct GlobalMergeTaskPortalModifier: ViewModifier {
             .environment(\.cardNavigationMergeCoordinator, coordinator)
             .mergeTaskRailPortal(
                 anchorStore: anchorStore,
-                summaries: coordinator.summaries,
+                summaries: coordinator.isReady(for: verifiedActorID) ? coordinator.summaries : [],
                 isExpanded: $isExpanded,
                 isHidden: coordinator.presentation != nil,
                 onSelect: select,
@@ -659,11 +659,24 @@ struct GlobalMergeTaskPortalModifier: ViewModifier {
                 )
             }
             .fullScreenCover(isPresented: presentation) {
-                if let jobID = presentedJobID {
+                if coordinator.isReady(for: verifiedActorID), let jobID = presentedJobID {
                     ExistingMergeTaskHost(jobID: jobID)
                         .environmentObject(coordinator)
+                        .environment(\.cardNavigationMergeCoordinator, coordinator)
                 } else {
                     EmptyView()
+                }
+            }
+            .overlay(alignment: .top) {
+                if coordinator.transitionState == .failed {
+                    HStack {
+                        Text("Your last Merge edits could not be saved.")
+                        Button("Retry") { coordinator.retryEditorDrain() }
+                    }
+                    .font(.footnote)
+                    .padding()
+                    .background(.regularMaterial)
+                    .accessibilityIdentifier("merge.editor-drain.retry")
                 }
             }
             .onAppear(perform: synchronizeLifecycle)

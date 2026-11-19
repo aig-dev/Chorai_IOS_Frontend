@@ -65,6 +65,7 @@ struct CardMetadataTagCapsule: View {
 }
 
 struct CardMetadataRelatedRow: View {
+    let cardID: String
     let avatarURL: String?
     let title: String
     let previewHTML: String?
@@ -94,6 +95,7 @@ struct CardMetadataRelatedRow: View {
                     .lineLimit(1)
 
                 HTMLTextRenderer(
+                    cardID: cardID,
                     htmlContent: previewHTML ?? "",
                     maxLines: 2,
                     font: .footnote,

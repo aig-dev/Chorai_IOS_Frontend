@@ -28,11 +28,12 @@ public struct LibraryCardPreviewBlock: Equatable, Sendable {
 public struct LibraryCardPresentation: Equatable, Sendable {
     public let preview: LibraryCardPreviewContent
     public let blocks: [LibraryCardPreviewBlock]
+    public let plainText: String
     public let gridSummary: String
     public let accessibilityExcerpt: String
 
     var estimatedBytes: Int {
-        let textBytes = preview.text.utf8.count + gridSummary.utf8.count + accessibilityExcerpt.utf8.count
+        let textBytes = preview.text.utf8.count + plainText.utf8.count + gridSummary.utf8.count + accessibilityExcerpt.utf8.count
         let imageBytes = [preview.imageSource, preview.imageAlternativeText, preview.imageMediaRef]
             .compactMap { $0 }.reduce(0) { $0 + $1.utf8.count }
         let blockBytes = blocks.reduce(0) { $0 + $1.kind.utf8.count + $1.text.utf8.count }
@@ -90,9 +91,40 @@ public enum LibraryCardPreviewParser {
         return LibraryCardPresentation(
             preview: preview,
             blocks: blocks,
+            plainText: makePlainText(content),
             gridSummary: blocks.map(\.text).joined(separator: "\n\n"),
             accessibilityExcerpt: String(excerpt)
         )
+    }
+
+    private static func makePlainText(_ source: String) -> String {
+        let decoded = source
+            .replacingOccurrences(
+                of: "(?is)<(script|style)[^>]*>.*?</\\1>",
+                with: " ",
+                options: .regularExpression
+            )
+            .replacingOccurrences(
+                of: "(?i)<br\\s*/?>|</p\\s*>|</div\\s*>|</li\\s*>",
+                with: " ",
+                options: .regularExpression
+            )
+            .replacingOccurrences(
+                of: "<[^>]+>",
+                with: " ",
+                options: .regularExpression
+            )
+            .replacingOccurrences(of: "&nbsp;", with: " ")
+            .replacingOccurrences(of: "&quot;", with: "\"")
+            .replacingOccurrences(of: "&#39;", with: "'")
+            .replacingOccurrences(of: "&lt;", with: "<")
+            .replacingOccurrences(of: "&gt;", with: ">")
+            .replacingOccurrences(of: "&amp;", with: "&")
+
+        let preview = decoded
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return preview
     }
 
     private static func read(

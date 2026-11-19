@@ -288,6 +288,7 @@ private struct DiscoveryPathCardView: View {
 
             Button(action: action) {
                 HTMLTextRenderer(
+                    cardID: card.id,
                     htmlContent: card.content,
                     maxLines: 4,
                     font: .system(size: previewFontSize, weight: .regular, design: .serif),

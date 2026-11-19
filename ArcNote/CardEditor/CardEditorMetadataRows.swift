@@ -284,6 +284,7 @@ struct CardEditorLinkRow: View {
                             index, link in
                             HStack(spacing: 4) {
                                 CardMetadataRelatedRow(
+                                    cardID: link.id,
                                     avatarURL: link.avatarURL,
                                     title: link.title,
                                     previewHTML: link.previewHTML

@@ -10,6 +10,72 @@ final class NoteLibraryStoreTests: XCTestCase {
     override func setUpWithError() throws { root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString) }
     override func tearDownWithError() throws { try? FileManager.default.removeItem(at: root) }
 
+    func testConcurrentSynchronizationKeepsExistingSingleFlight() async throws {
+        let service = LibraryManifestGate(scope: a)
+        let library = NoteLibraryStore(rootURL: root, service: { _ in service })
+        await library.configure(scope: a, cloudEnabled: true)
+        let first = Task { await library.synchronize(forceRetry: true) }
+        let second = Task { await library.synchronize(forceRetry: true) }
+        await service.waitUntilEntered()
+        // Both callers have a chance to reach the coordinator while the manifest is held.
+        let joined = expectation(description: "second waiter joined")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { joined.fulfill() }
+        await fulfillment(of: [joined], timeout: 1)
+        await service.finish()
+        await first.value; await second.value
+        let calls = await service.count
+        XCTAssertEqual(calls, 1)
+        await library.configure(scope: nil, cloudEnabled: false)
+    }
+
+    func testConcurrentMissingNoteOpensShareDownloadAndOneCancellationDoesNotCancelOthers() async throws {
+        let started = expectation(description: "detail started")
+        let duplicate = expectation(description: "no duplicate detail"); duplicate.isInverted = true
+        let service = LibraryOpenTransport(scope: a, onDetail: { count in
+            if count == 1 { started.fulfill() } else { duplicate.fulfill() }
+        })
+        let library = NoteLibraryStore(rootURL: root, service: { _ in service })
+        await library.configure(scope: a, cloudEnabled: true)
+        var updates = 0
+        let subscription = library.changes.sink { if case .updated = $0 { updates += 1 } }
+        defer { subscription.cancel() }
+        let first = Task { try await library.open(identifier: "asset", scope: a) }
+        let second = Task { try await library.open(identifier: "asset", scope: a) }
+        await fulfillment(of: [started, duplicate], timeout: 0.1)
+        first.cancel()
+        await service.finish()
+        let note = try await second.value
+        XCTAssertEqual(note.serverAssetID, "asset")
+        do { _ = try await first.value; XCTFail("Cancelled consumer received a note") }
+        catch is CancellationError {} catch { XCTFail("Unexpected: \(error)") }
+        XCTAssertEqual(updates, 1)
+        let count = await service.count
+        XCTAssertEqual(count, 1)
+        _ = try await library.open(identifier: "asset", scope: a)
+        let cachedCount = await service.count
+        XCTAssertEqual(cachedCount, 1)
+        await library.configure(scope: nil, cloudEnabled: false)
+    }
+
+    func testMissingNoteFailureCanRetryAndRetiredScopeCannotPublishLateDownload() async throws {
+        let service = LibraryOpenTransport(scope: a)
+        let library = NoteLibraryStore(rootURL: root, service: { _ in service })
+        await library.configure(scope: a, cloudEnabled: true)
+        let first = Task { try await library.open(identifier: "asset", scope: a) }
+        await service.waitForCount(1)
+        await service.finish(error: .notFound)
+        do { _ = try await first.value; XCTFail("Expected failed read") }
+        catch { XCTAssertEqual(error as? NoteSyncFailure, .notFound) }
+        let retry = Task { try await library.open(identifier: "asset", scope: a) }
+        await service.waitForCount(2)
+        await library.configure(scope: b, cloudEnabled: false)
+        await service.finish()
+        do { _ = try await retry.value; XCTFail("Retired scope published a note") } catch {}
+        XCTAssertTrue(library.notes.isEmpty)
+        XCTAssertEqual(library.scope, b)
+        await library.configure(scope: nil, cloudEnabled: false)
+    }
+
     func testLocalCreateEditReopenNeverRequiresCloudAndUsesStableIdentity() async throws {
         let library = library()
         await library.configure(scope: a, cloudEnabled: false)
@@ -327,4 +393,48 @@ private struct LibraryUnavailableTransport: NoteSyncServing {
     func send(_ operation: NotePendingOperation) async throws -> NoteSyncReceipt { throw NoteSyncFailure.transient(retryAfter: nil) }
     func upload(_ attachment: NoteLocalAttachment, data: Data) async throws -> NoteSyncUploadReceipt { throw NoteSyncFailure.transient(retryAfter: nil) }
     func downloadAttachment(assetID: String, mediaRef: String) async throws -> NoteSyncDownloadedAttachment { throw NoteSyncFailure.transient(retryAfter: nil) }
+}
+
+private actor LibraryOpenTransport: NoteSyncServing {
+    nonisolated let scope: NoteStoreScope
+    private(set) var count = 0
+    private let onDetail: @Sendable (Int) -> Void
+    private var continuations: [CheckedContinuation<Void, Error>] = []
+    init(scope: NoteStoreScope, onDetail: @escaping @Sendable (Int) -> Void = { _ in }) {
+        self.scope = scope; self.onDetail = onDetail
+    }
+    func manifest() async throws -> NoteSyncManifest { throw NoteSyncFailure.notReady }
+    func detail(assetID: String) async throws -> NoteRemoteSnapshot {
+        count += 1; onDetail(count)
+        try await withCheckedThrowingContinuation { continuations.append($0) }
+        return .init(assetID: assetID, syncToken: "v1", body: .init(content: "downloaded"), lifecycle: .active, isPublic: false)
+    }
+    func waitForCount(_ target: Int) async { while count < target { await Task.yield() } }
+    func finish(error: NoteSyncFailure? = nil) {
+        let pending = continuations; continuations = []
+        for continuation in pending {
+            if let error { continuation.resume(throwing: error) } else { continuation.resume() }
+        }
+    }
+    func send(_ operation: NotePendingOperation) async throws -> NoteSyncReceipt { throw NoteSyncFailure.notReady }
+    func upload(_ attachment: NoteLocalAttachment, data: Data) async throws -> NoteSyncUploadReceipt { throw NoteSyncFailure.notReady }
+    func downloadAttachment(assetID: String, mediaRef: String) async throws -> NoteSyncDownloadedAttachment { throw NoteSyncFailure.notReady }
+}
+
+private actor LibraryManifestGate: NoteSyncServing {
+    nonisolated let scope: NoteStoreScope
+    private(set) var count = 0
+    private var pending: [CheckedContinuation<Void, Never>] = []
+    init(scope: NoteStoreScope) { self.scope = scope }
+    func manifest() async throws -> NoteSyncManifest {
+        count += 1
+        await withCheckedContinuation { pending.append($0) }
+        return .init(protocolVersion: 1, complete: true, notes: [])
+    }
+    func waitUntilEntered() async { while count == 0 { await Task.yield() } }
+    func finish() { let waits = pending; pending = []; waits.forEach { $0.resume() } }
+    func detail(assetID: String) async throws -> NoteRemoteSnapshot { throw NoteSyncFailure.notReady }
+    func send(_ operation: NotePendingOperation) async throws -> NoteSyncReceipt { throw NoteSyncFailure.notReady }
+    func upload(_ attachment: NoteLocalAttachment, data: Data) async throws -> NoteSyncUploadReceipt { throw NoteSyncFailure.notReady }
+    func downloadAttachment(assetID: String, mediaRef: String) async throws -> NoteSyncDownloadedAttachment { throw NoteSyncFailure.notReady }
 }

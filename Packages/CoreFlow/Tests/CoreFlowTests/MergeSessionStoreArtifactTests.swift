@@ -4,6 +4,126 @@ import XCTest
 
 @MainActor
 final class MergeSessionStoreArtifactTests: XCTestCase {
+
+    func testInitialCanonicalPreparationWaitsAndRetirementRejectsItsLateResult() async {
+        let gate = CanonicalDraftExecutionGate()
+        gate.blocked = true
+        let worker = MergeArtifactEditorWorker(beforeWork: { await gate.wait($0) })
+        let persistence = InMemoryMergeSessionPersistence()
+        persistence.seed(makeMergeSnapshot(jobID: "job_1", status: .artifactReady))
+        let store = makeStore(service: ControlledDraftMergeService(initialArtifact: makeMergeArtifact()),
+            persistence: persistence, editorWorker: worker)
+        store.start()
+        await waitForMergeStore { gate.entered }
+        XCTAssertEqual(store.phase, .loadingArtifact)
+        XCTAssertNil(store.artifact)
+        XCTAssertNil(store.artifactDraft)
+        store.beginLocalEditorDrain()
+        gate.open()
+        await waitForMergeStore { gate.exited }
+        for _ in 0..<5 { await Task.yield() }
+        XCTAssertNil(store.artifact)
+        XCTAssertNil(persistence.snapshot(actorID: "actor_1")?.artifactDraft)
+    }
+
+    func testCleanConflictDoesNotReplaceEditsAcceptedDuringCanonicalDecode() async {
+        let original = makeMergeArtifact()
+        let gate = CanonicalDraftExecutionGate()
+        gate.blocked = true
+        let worker = MergeArtifactEditorWorker(beforeWork: { await gate.wait($0) })
+        let persistence = InMemoryMergeSessionPersistence()
+        var snapshot = makeMergeSnapshot(jobID: "job_1", status: .artifactReady)
+        let pending = MergePendingArtifactSave(idempotencyKey: "attempted", baseRevision: 0,
+            baseDocumentHash: "stale", documentJSON: original.documentJSON, tags: original.presentation.tags)
+        snapshot.artifactDraft = MergeArtifactDraftSnapshot(baseRevision: 0, baseDocumentHash: "stale",
+            documentJSON: original.documentJSON, tags: original.presentation.tags, rate: 1,
+            preservationManifest: Data(), pendingSave: pending)
+        persistence.seed(snapshot)
+        let service = MockCoreMergeService()
+        await service.enqueueJob(.success(makeMergeJob(status: .artifactReady, artifactID: "artifact_1")))
+        await service.enqueueArtifact(.success(original))
+        await service.enqueueSave(.failure(.conflict(code: "stale_base")))
+        let latest = draftArtifact(revision: 2, documentJSON: document(id: "blk_server", text: "Server"))
+        await service.enqueueArtifact(.success(latest))
+        let store = makeStore(service: service, persistence: persistence, editorWorker: worker)
+        store.start()
+        await waitForMergeStore { gate.entered }
+        let local = document(id: "blk_local", text: "During decode")
+        store.updateArtifactDraft(documentJSON: local, preservationManifest: Data("local".utf8))
+        store.updateArtifactTags(["Local tag"])
+        gate.open()
+        await waitForMergeStore {
+            if case .conflict = store.artifactDraftSyncState { return true }
+            return store.artifact?.latestRevision == 2
+        }
+        XCTAssertEqual(store.artifactDraft?.documentJSON, local)
+        XCTAssertEqual(store.artifactDraft?.tags, ["Local tag"])
+        XCTAssertEqual(store.artifactDraft?.pendingSave, pending)
+        XCTAssertEqual(store.artifact?.latestRevision, original.latestRevision)
+        XCTAssertEqual(store.artifactDraftSyncState,
+            .conflict(.init(serverRevision: 2, serverDocumentHash: latest.latestHash)))
+    }
+
+    func testReloadServerCannotOverwriteLaterTagMutationWhilePreparing() async {
+        let gate = CanonicalDraftExecutionGate()
+        let worker = MergeArtifactEditorWorker(beforeWork: { await gate.wait($0) })
+        let service = MockCoreMergeService()
+        let persistence = InMemoryMergeSessionPersistence()
+        persistence.seed(makeMergeSnapshot(jobID: "job_1", status: .artifactReady))
+        await service.enqueueJob(.success(makeMergeJob(status: .artifactReady, artifactID: "artifact_1")))
+        await service.enqueueArtifact(.success(makeMergeArtifact()))
+        let store = makeStore(service: service, persistence: persistence,
+            keys: MergeKeySequence(["local"]), editorWorker: worker)
+        store.start()
+        await waitForMergeStore { store.phase == .ready }
+        await service.enqueueSave(.failure(.conflict(code: "stale_base")))
+        let latest = draftArtifact(revision: 2, documentJSON: document(id: "blk_server", text: "Server"))
+        await service.enqueueArtifact(.success(latest))
+        let local = document(id: "blk_local", text: "Local")
+        store.updateArtifactDraft(documentJSON: local, preservationManifest: Data("local".utf8))
+        await waitForMergeStore { if case .conflict = store.artifactDraftSyncState { return true }; return false }
+        gate.blocked = true
+        gate.entered = false
+        let reload = Task { await store.resolveArtifactConflict(.reloadServer) }
+        await waitForMergeStore { gate.entered }
+        store.updateArtifactTags(["New tag"])
+        gate.open()
+        await reload.value
+        XCTAssertEqual(store.artifactDraft?.documentJSON, local)
+        XCTAssertEqual(store.artifactDraft?.tags, ["New tag"])
+        XCTAssertEqual(store.artifact?.latestRevision, 1)
+    }
+
+
+    func testLocalEditorDrainPreservesAttemptedSaveAndRejectsLateAcknowledgement() async {
+        let service = ControlledDraftMergeService(initialArtifact: draftArtifact(revision: 1))
+        let response = ControlledDraftSaveResponse(result: .success(saveResult(revision: 2)))
+        await service.enqueueSave(response)
+        let persistence = InMemoryMergeSessionPersistence()
+        persistence.seed(makeMergeSnapshot(jobID: "job_1", status: .artifactReady))
+        let store = makeStore(service: service, persistence: persistence,
+            keys: MergeKeySequence(["attempted-key"]))
+        store.start()
+        await waitForMergeStore { store.phase == .ready }
+        store.updateArtifactDraft(documentJSON: document(id: "first", text: "First"),
+            preservationManifest: Data("first".utf8))
+        await waitForControlledDraftSave(response)
+        let attempted = store.artifactDraft?.pendingSave
+        store.beginLocalEditorDrain()
+        let latest = document(id: "last", text: "Accepted before close")
+        store.updateArtifactDraft(documentJSON: latest, preservationManifest: Data("last".utf8))
+        store.setNetworkAvailable(true)
+        store.resume()
+        XCTAssertEqual(store.artifactDraft?.pendingSave, attempted)
+        XCTAssertEqual(persistence.snapshot(actorID: "actor_1")?.artifactDraft?.documentJSON, latest)
+        await response.resume()
+        for _ in 0..<30 { await Task.yield() }
+        XCTAssertEqual(store.artifactDraft?.documentJSON, latest)
+        XCTAssertEqual(store.artifactDraft?.pendingSave, attempted)
+        XCTAssertEqual(store.artifact?.latestRevision, 1)
+        let calls = await service.saveCalls
+        XCTAssertEqual(calls.count, 1)
+    }
     func testThreeRapidDraftMutationsDebounceIntoOneLatestNormalizedSave() async {
         let service = MockCoreMergeService()
         let persistence = InMemoryMergeSessionPersistence()
@@ -943,7 +1063,8 @@ final class MergeSessionStoreArtifactTests: XCTestCase {
         service: any CoreMergeServing,
         persistence: InMemoryMergeSessionPersistence,
         sleeper: any MergeSleeping = ImmediateMergeSleeper(),
-        keys: MergeKeySequence = MergeKeySequence(["unused"])
+        keys: MergeKeySequence = MergeKeySequence(["unused"]),
+        editorWorker: MergeArtifactEditorWorker = MergeArtifactEditorWorker()
     ) -> MergeSessionStore {
         MergeSessionStore(
             actorID: "actor_1",
@@ -953,7 +1074,8 @@ final class MergeSessionStoreArtifactTests: XCTestCase {
             sleeper: sleeper,
             idempotencyKey: { keys.next() },
             pollDelaysNanoseconds: [0],
-            maxPollAttempts: 3
+            maxPollAttempts: 3,
+            editorWorker: editorWorker
         )
     }
 
@@ -1170,5 +1292,25 @@ private func waitForPendingDraftSleep(
         line: line
     ) {
         await sleeper.pendingCount > 0
+    }
+}
+
+@MainActor
+private final class CanonicalDraftExecutionGate {
+    var blocked = false
+    var entered = false
+    var exited = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+    func wait(_ work: MergeArtifactEditorWorker.Work) async {
+        guard work == .cleanDraft, blocked else { return }
+        entered = true
+        await withCheckedContinuation { waiters.append($0) }
+        exited = true
+    }
+    func open() {
+        blocked = false
+        let pending = waiters
+        waiters.removeAll()
+        pending.forEach { $0.resume() }
     }
 }

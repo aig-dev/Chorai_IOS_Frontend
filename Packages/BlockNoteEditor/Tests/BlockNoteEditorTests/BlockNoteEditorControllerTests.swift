@@ -3,6 +3,64 @@ import XCTest
 
 @MainActor
 final class BlockNoteEditorControllerTests: XCTestCase {
+    func testClosingSealsCommandsButRetainsAcceptedEventDrain() async throws {
+        let controller = BlockNoteEditorController()
+        let entered = expectation(description: "drain entered")
+        var resume: CheckedContinuation<Void, Never>?
+        var applied = false
+        var closeCount = 0
+        var sent = 0
+        controller.attach(drainAcceptedEvents: {
+            entered.fulfill()
+            await withCheckedContinuation { resume = $0 }
+            applied = true
+        }, beginClosing: { closeCount += 1 }, commandHandler: { _ in sent += 1 })
+        let binding = try XCTUnwrap(controller.attachment)
+        var closing: UUID?
+        controller.onAttachmentWillClose = { closing = $0.id }
+        controller.beginClosing()
+        controller.beginClosing()
+        XCTAssertEqual(closing, binding.id)
+        XCTAssertEqual(closeCount, 1)
+        controller.focus()
+        XCTAssertEqual(sent, 0)
+        let drain = Task { await controller.drainAcceptedEvents() }
+        await fulfillment(of: [entered], timeout: 3)
+        XCTAssertFalse(applied)
+        controller.detach()
+        resume?.resume()
+        await drain.value
+        XCTAssertTrue(applied)
+    }
+
+    func testOldDrainDoesNotFollowReplacementAndInactiveDoesNotSeal() async throws {
+        let controller = BlockNoteEditorController()
+        let entered = expectation(description: "old drain entered")
+        var resume: CheckedContinuation<Void, Never>?
+        var oldApplied = false
+        var newDrain = false
+        var sent = false
+        controller.attach(drainAcceptedEvents: {
+            entered.fulfill()
+            await withCheckedContinuation { resume = $0 }
+            oldApplied = true
+        }, commandHandler: { _ in })
+        let old = try XCTUnwrap(controller.attachment)
+        let pending = Task { await controller.drainAcceptedEvents() }
+        await fulfillment(of: [entered], timeout: 3)
+        controller.attach(drainAcceptedEvents: { newDrain = true }, commandHandler: { _ in sent = true })
+        resume?.resume()
+        await pending.value
+        XCTAssertTrue(oldApplied)
+        XCTAssertFalse(newDrain)
+        XCTAssertNotEqual(old.id, controller.attachment?.id)
+        await controller.drainAcceptedEvents()
+        controller.focus()
+        XCTAssertTrue(newDrain)
+        XCTAssertTrue(sent)
+        XCTAssertEqual(controller.attachment?.isClosing, false)
+    }
+
     func testSnapshotCompletesOnlyForItsCorrelatedRequestID() async throws {
         let controller = BlockNoteEditorController()
         var sentCommand: BlockNoteEditorCommand?

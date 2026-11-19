@@ -413,7 +413,7 @@ struct UserPostCard: View {
                     .font(.caption).foregroundStyle(ChoraiTheme.secondaryInk)
             }
             Button { onCardTap?(card.id) } label: {
-                HTMLTextRenderer(htmlContent: card.content, maxLines: 7)
+                HTMLTextRenderer(cardID: card.id, htmlContent: card.content, maxLines: 7)
                     .font(.system(.title3, design: .serif))
                     .foregroundStyle(ChoraiTheme.ink)
                     .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)

@@ -478,8 +478,13 @@ struct UserCardsListResponse: Codable {
     }
 }
 
+struct LocalNotePreviewIdentity: Equatable, Sendable {
+    let scope: NoteStoreScope
+    let bodyRevision: Int64
+}
+
 // MARK: 用户卡片数据模型
-struct UserCard: Codable, Identifiable {
+struct UserCard: Codable, Identifiable, Sendable {
     let id: String
     let title: String?
     let content: String
@@ -500,6 +505,7 @@ struct UserCard: Codable, Identifiable {
     let rate: Int
     let ownerActorId: String?
     let isOwner: Bool?
+    var localPreviewIdentity: LocalNotePreviewIdentity? = nil
 
     init(
         id: String,
@@ -521,7 +527,8 @@ struct UserCard: Codable, Identifiable {
         favoriteCount: Int?,
         rate: Int,
         ownerActorId: String? = nil,
-        isOwner: Bool? = nil
+        isOwner: Bool? = nil,
+        localPreviewIdentity: LocalNotePreviewIdentity? = nil
     ) {
         self.id = id
         self.title = title
@@ -543,6 +550,18 @@ struct UserCard: Codable, Identifiable {
         self.rate = rate
         self.ownerActorId = ownerActorId
         self.isOwner = isOwner
+        self.localPreviewIdentity = localPreviewIdentity
+    }
+
+    func previewInput(snapshotID: UUID) -> LibraryCardPreviewInput? {
+        if let local = localPreviewIdentity {
+            guard ownerActorId == local.scope.actorID else { return nil }
+            return LibraryCardPreviewInput(localNoteID: id, scope: local.scope, bodyRevision: local.bodyRevision,
+                                           content: content, contentJSON: contentJSON)
+        }
+        guard !id.hasPrefix("local-note:") else { return nil }
+        return LibraryCardPreviewInput(cardID: id, contentHash: contentHash, snapshotID: snapshotID,
+                                       content: content, contentJSON: contentJSON)
     }
 
     enum CodingKeys: String, CodingKey {

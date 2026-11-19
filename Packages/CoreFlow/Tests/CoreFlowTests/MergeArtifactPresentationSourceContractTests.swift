@@ -53,16 +53,16 @@ final class MergeArtifactPresentationSourceContractTests: XCTestCase {
         )
 
         XCTAssertTrue(controller.contains("requestSnapshot()"))
-        XCTAssertTrue(controller.contains("MergeArtifactEditorCodec"))
-        XCTAssertTrue(controller.contains("codec.encode("))
+        XCTAssertTrue(controller.contains("MergeArtifactEditorWorker"))
+        XCTAssertTrue(controller.contains("worker.prepareDraft("))
         XCTAssertTrue(controller.contains("store.updateArtifactDraft("))
         XCTAssertTrue(controller.contains("store.updateArtifactTags("))
         XCTAssertTrue(controller.contains("try await store.flushArtifactDraft()"))
         XCTAssertTrue(controller.contains("store.commit()"))
         XCTAssertTrue(controller.contains("store.resolveArtifactConflict("))
         XCTAssertFalse(
-            controller.contains("jobID"),
-            "The draft controller must not own Merge job identity"
+            controller.contains("let jobID: String"),
+            "Job identity stays on the store; the controller only registers its drain"
         )
     }
 
@@ -122,7 +122,7 @@ final class MergeArtifactPresentationSourceContractTests: XCTestCase {
         XCTAssertTrue(surface.contains(#"Button("Discard", role: .destructive)"#))
         XCTAssertTrue(surface.contains("controller.discard()"))
         let changeStart = try XCTUnwrap(
-            controller.range(of: "fileprivate func documentDidChange(")
+            controller.range(of: "private func documentDidChange(")
         )
         let changeEnd = try XCTUnwrap(
             controller.range(
@@ -133,7 +133,9 @@ final class MergeArtifactPresentationSourceContractTests: XCTestCase {
         let documentChange = controller[
             changeStart.lowerBound..<changeEnd.lowerBound
         ]
-        XCTAssertTrue(documentChange.contains("guard canEdit else { return }"))
+        XCTAssertTrue(documentChange.contains("generation == projectionGeneration"))
+        XCTAssertTrue(documentChange.contains("store.phase == .ready"))
+        XCTAssertFalse(documentChange.contains("guard canEdit"), "Accepted events must survive UI action/closing locks")
     }
 
     func testBackMinimizesOnlyAfterLosslessSnapshotAndPendingTag() throws {
@@ -152,12 +154,12 @@ final class MergeArtifactPresentationSourceContractTests: XCTestCase {
         )
         let back = controller[backStart.lowerBound..<backEnd.lowerBound]
         let snapshot = try XCTUnwrap(
-            back.range(of: "guard await persistCurrentSnapshot() else")
+            back.range(of: "await persistCurrentSnapshot()")
         )
         let completeTag = try XCTUnwrap(back.range(of: "completeTag()"))
         let minimize = try XCTUnwrap(back.range(of: "onMinimize()"))
 
-        XCTAssertLessThan(snapshot.lowerBound, completeTag.lowerBound)
+        XCTAssertLessThan(completeTag.lowerBound, snapshot.lowerBound)
         XCTAssertLessThan(completeTag.lowerBound, minimize.lowerBound)
 
         let actionStart = try XCTUnwrap(

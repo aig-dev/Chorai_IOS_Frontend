@@ -3,6 +3,8 @@ import CoreFlow
 import Foundation
 import UIKit
 
+enum NoteScopeTransitionState: Equatable { case ready, flushing, failed }
+
 @MainActor
 final class LocalNotesController: ObservableObject {
     static let shared = LocalNotesController()
@@ -10,13 +12,19 @@ final class LocalNotesController: ObservableObject {
     private var subscriptions = Set<AnyCancellable>()
     private var foreground = true
     private var accessTask: Task<Void, Never>?
-    private var editorFlushes: [UUID: () async -> Void] = [:]
+    @Published private(set) var scopeTransition: NoteScopeTransitionState = .ready
+    private(set) var editors: [UUID: LocalNoteEditorPersistenceSession] = [:]
+    private let access: () -> (scope: NoteStoreScope?, cloudEnabled: Bool)
 
-    private init() {
+    private convenience init() {
         let directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("OfflineNotes", isDirectory: true)
-        library = NoteLibraryStore(rootURL: directory, service: { NetworkNoteSyncService(scope: $0) })
-        library.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }.store(in: &subscriptions)
+        let library = NoteLibraryStore(rootURL: directory, service: { NetworkNoteSyncService(scope: $0) })
+        self.init(library: library, access: {
+            let auth = AuthManager.shared
+            return (auth.canOpenLocalNotes ? auth.currentNoteScope : nil,
+                    auth.canEnterProduct && NetworkManager.shared.isConnected)
+        })
         AuthManager.shared.objectWillChange.receive(on: DispatchQueue.main)
             .sink { [weak self] in self?.refreshAccess() }.store(in: &subscriptions)
         NetworkManager.shared.$isConnected.removeDuplicates().receive(on: DispatchQueue.main)
@@ -35,23 +43,66 @@ final class LocalNotesController: ObservableObject {
         refreshAccess()
     }
 
-    func refreshAccess() {
-        let previous = accessTask
-        accessTask = Task {
-            await previous?.value
-            let auth = AuthManager.shared
-            if library.scope != (auth.canOpenLocalNotes ? auth.currentNoteScope : nil) {
-                for flush in Array(editorFlushes.values) { await flush() }
-            }
-            let scope = auth.canOpenLocalNotes ? auth.currentNoteScope : nil
-            let cloud = auth.canEnterProduct && NetworkManager.shared.isConnected && foreground
-            await library.configure(scope: scope, cloudEnabled: cloud)
-            if cloud { Task { await library.synchronize() } }
-        }
+    init(library: NoteLibraryStore, access: @escaping () -> (scope: NoteStoreScope?, cloudEnabled: Bool)) {
+        self.library = library
+        self.access = access
+        library.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }.store(in: &subscriptions)
     }
 
-    func registerEditor(_ id: UUID, flush: @escaping () async -> Void) { editorFlushes[id] = flush }
-    func unregisterEditor(_ id: UUID) { editorFlushes[id] = nil }
+    func canDisplayNotes(for scope: NoteStoreScope?) -> Bool {
+        scopeTransition == .ready && library.scope == scope
+    }
+
+    @discardableResult
+    func refreshAccess() -> Task<Void, Never> {
+        if library.scope != access().scope, scopeTransition != .failed { scopeTransition = .flushing }
+        let previous = accessTask
+        let task = Task {
+            await previous?.value
+            guard self.scopeTransition != .failed else { return }
+            while true {
+                let target = self.access()
+                if self.library.scope != target.scope || self.scopeTransition == .flushing {
+                    self.scopeTransition = .flushing
+                    // Suspend the original scope's cloud owner before sealing.
+                    await self.library.configure(scope: self.library.scope, cloudEnabled: false)
+                    let sessions = Array(self.editors.values)
+                    sessions.forEach { $0.beginClosingForScopeChange() }
+                    for session in sessions {
+                        guard await session.closeForScopeChange() else {
+                            self.scopeTransition = .failed
+                            return
+                        }
+                    }
+                }
+                // Authentication may have changed while drain or disk I/O waited.
+                let latest = self.access()
+                let cloud = latest.cloudEnabled && self.foreground
+                await self.library.configure(scope: latest.scope, cloudEnabled: cloud)
+                guard self.library.scope == self.access().scope else { continue }
+                self.scopeTransition = .ready
+                if cloud { Task { await self.library.synchronize() } }
+                return
+            }
+        }
+        accessTask = task
+        return task
+    }
+
+    @discardableResult
+    func retryScopeTransition() -> Task<Void, Never> {
+        scopeTransition = .flushing
+        return refreshAccess()
+    }
+
+    func registerEditor(_ session: LocalNoteEditorPersistenceSession) {
+        editors[session.id] = session
+        session.onRelease = { [weak self, weak session] in
+            guard let self, let session, self.editors[session.id] === session else { return }
+            self.editors.removeValue(forKey: session.id)
+        }
+        session.onFinalFlushFailure = { [weak self] in self?.scopeTransition = .failed }
+    }
 
     /// Persist the local decision first. The existing coordinator freezes and
     /// confirms its cloud operation separately from any body revision.
@@ -78,7 +129,7 @@ final class LocalNotesController: ObservableObject {
 
 @MainActor
 final class LocalCoreCardEditingService: CoreCardEditingServing {
-    private let scope: NoteStoreScope
+    let scope: NoteStoreScope
     private let library: NoteLibraryStore
     private let cloud = NetworkCoreCardEditingService()
     private let creationID: String

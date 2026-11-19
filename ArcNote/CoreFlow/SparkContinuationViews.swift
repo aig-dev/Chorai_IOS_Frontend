@@ -362,7 +362,7 @@ struct SparkContinuationView: View {
                             .font(.caption2.weight(.semibold))
                             .tracking(1)
                             .foregroundStyle(ChoraiTheme.secondaryInk)
-                        Text(FlowTextPreview.make(card.content))
+                        CardPlainTextPreview(card: card)
                             .font(.subheadline)
                             .lineLimit(2)
                             .multilineTextAlignment(.leading)
@@ -867,7 +867,18 @@ private struct SparkResultCard: View {
         )
     }
 
+    @State private var previewSnapshotID = UUID()
+
     var body: some View {
+        CardPreviewValue(input: LibraryCardPreviewInput(
+            cardID: result.card.id, contentHash: result.card.contentHash, snapshotID: previewSnapshotID,
+            content: result.card.content, contentJSON: result.card.contentJSON
+        )) { presentation in
+            cardBody(presentation: presentation)
+        }
+    }
+
+    private func cardBody(presentation: LibraryCardPresentation?) -> some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack(spacing: 12) {
                 Button(action: onOpenAuthor) {
@@ -902,7 +913,7 @@ private struct SparkResultCard: View {
 
             ChoraiLevelBadge(rate: result.card.rate, compact: true)
 
-            tappableContent
+            tappableContent(presentation: presentation)
             Button(action: onOpenCard) {
                 Label("Read full note", systemImage: "arrow.up.right")
                     .font(.subheadline.weight(.medium))
@@ -936,12 +947,9 @@ private struct SparkResultCard: View {
         .disabled(isInteractionLocked || isResolvingGesture)
     }
 
-    private var tappableContent: some View {
+    private func tappableContent(presentation: LibraryCardPresentation?) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(LibraryCardPreviewParser.parse(
-                content: result.card.content,
-                contentJSON: result.card.contentJSON
-            ).text)
+            Text(presentation?.preview.text ?? "")
                 .font(.system(.title3, design: .serif))
                 .lineSpacing(5)
                 .lineLimit(dynamicTypeSize.isAccessibilitySize ? 7 : 9)
@@ -970,7 +978,7 @@ private struct SparkResultCard: View {
         .onTapGesture(perform: onOpenCard)
         .gesture(cardGesture)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(accessibilityCardLabel)
+        .accessibilityLabel(accessibilityCardLabel(presentation: presentation))
         .accessibilityAddTraits(.isButton)
         .accessibilityAction(named: Text("Next result"), onNext)
         .accessibilityAction(named: Text("Open card"), onOpenCard)
@@ -1171,8 +1179,8 @@ private struct SparkResultCard: View {
         isResolvingGesture = false
     }
 
-    private var accessibilityCardLabel: String {
-        let content = FlowTextPreview.make(result.card.content)
+    private func accessibilityCardLabel(presentation: LibraryCardPresentation?) -> String {
+        let content = presentation?.plainText ?? ""
         guard let bucketLabel else { return content }
         return "\(bucketLabel). \(content)"
     }

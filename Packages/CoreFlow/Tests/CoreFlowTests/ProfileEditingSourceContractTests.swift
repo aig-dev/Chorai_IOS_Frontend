@@ -2,6 +2,18 @@ import Foundation
 import XCTest
 
 final class ProfileEditingSourceContractTests: XCTestCase {
+
+    func testBothProfilePickerLaunchersAndCallbacksRespectSaveLock() throws {
+        let source = try source("ArcNote/EditProfileView.swift")
+        for (start, end) in [("private var profileMediaEditor", "private var backgroundContent"),
+                             ("private var avatarButton", "private var avatarContent")] {
+            let lower = try XCTUnwrap(source.range(of: start)).lowerBound
+            let upper = try XCTUnwrap(source.range(of: end, range: lower..<source.endIndex)).lowerBound
+            XCTAssertTrue(source[lower..<upper].contains(".disabled(isSaving)"))
+        }
+        XCTAssertTrue(source.contains("imageSelectionBinding($selectedAvatarImage, isSaving: { isSaving })"))
+        XCTAssertTrue(source.contains("imageSelectionBinding($selectedBackgroundImage, isSaving: { isSaving })"))
+    }
     func testProfileModelMapsCanonicalBackgroundURL() throws {
         let source = try source("ArcNote/Models/UserProfileModels.swift")
 

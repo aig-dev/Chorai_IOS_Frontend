@@ -188,6 +188,7 @@ struct ArcNoteApp: App {
             // portal that can resume a signed-in actor's persisted network tasks.
             NavigationStack {
                 MergeSelectionFidelityFixtureScreen()
+                .environment(\.cardPreviewReader, CardPreviewReader.fixture)
             }
             .tint(ChoraiTheme.accent)
         } else {
@@ -204,6 +205,7 @@ struct ArcNoteApp: App {
         if isSparkFidelityUITestRoute {
             NavigationStack {
                 SparkContinuationView.fidelityFixture()
+                .environment(\.cardPreviewReader, CardPreviewReader.fixture)
             }
         } else if LocalDevelopmentPreview.isEnabled {
             TabBarView()
@@ -213,6 +215,7 @@ struct ArcNoteApp: App {
             AdaptiveLayoutFixtureScreen()
         } else if isMergeSelectionUITestRoute {
             MergeSelectionVisualFixtureScreen()
+                .environment(\.cardPreviewReader, CardPreviewReader.fixture)
         } else if isMergeArtifactUITestRoute || isMergeLongArtifactUITestRoute {
             MergeArtifactVisualFixtureScreen(
                 usesLongDocument: isMergeLongArtifactUITestRoute
@@ -257,9 +260,11 @@ struct ArcNoteApp: App {
             }
         } else if isLibraryPreviewUITestRoute {
             LibraryCardPreviewFixtureScreen()
+                .environment(\.cardPreviewReader, CardPreviewReader.fixture)
         } else if isLibraryUITestRoute {
             NavigationStack {
                 LibraryFixtureScreen()
+                .environment(\.cardPreviewReader, CardPreviewReader.fixture)
             }
         } else if isChatVisibilityUITestRoute {
             ChatVisibilityFixtureScreen()
@@ -1201,7 +1206,6 @@ private struct LibraryCardPreviewFixtureScreen: View {
                         NotesCard(
                             card: card,
                             onShowMenu: { _ in },
-                            cardsManager: cardsManager,
                             onCardTap: { _ in }
                         )
                     }

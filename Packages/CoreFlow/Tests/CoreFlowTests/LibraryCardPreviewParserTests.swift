@@ -2,6 +2,12 @@ import CoreFlow
 import XCTest
 
 final class LibraryCardPreviewParserTests: XCTestCase {
+    func testPlainTextPreservesScriptStyleEntityWhitespaceBehavior() {
+        let source = "<style>hidden</style><script>bad()</script><p>A &amp; B</p>  <br> &quot;C&quot; &#39;D&#39; &lt;E&gt;"
+        let value = LibraryCardPreviewParser.presentation(content: source)
+        XCTAssertEqual(value.plainText, "A & B \"C\" 'D' <E>")
+    }
+
     func testPersonalPreviewUsesTheFirstOwnedImageReferenceIncludingRefOnlyBlocks() {
         let doc = #"[{"type":"paragraph","children":[{"type":"image","props":{"media_ref":"med_0123456789abcdef","caption":"Field sketch"}}]},{"type":"image","props":{"url":"https://cdn.example/second.png","caption":"Next photo"}}]"#
         let personal = LibraryCardPreviewParser.parse(content: "", contentJSON: doc, allowsLocalImages: true)

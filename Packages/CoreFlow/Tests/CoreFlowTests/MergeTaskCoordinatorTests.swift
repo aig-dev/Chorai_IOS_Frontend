@@ -3,6 +3,84 @@ import XCTest
 
 @MainActor
 final class MergeTaskCoordinatorTests: XCTestCase {
+
+    func testEditorRetirementHidesOldUIAndPersistsBeforeLatestActorActivation() async {
+        let fixture = makeCoordinatorFixture(keys: ["create", "save"])
+        fixture.coordinator.activate(actorID: "actor_1")
+        let draft = await acceptDraft(coordinator: fixture.coordinator, service: fixture.service,
+            anchorID: "a", companionID: "b", jobID: "job_1", status: .artifactReady)
+        await waitForMergeCoordinator { draft.store.phase == .ready }
+        fixture.coordinator.present(jobID: "job_1")
+        var gate: CheckedContinuation<Void, Never>?
+        var closeCount = 0
+        var drainCount = 0
+        let finalDocument = Data(#"{"schemaVersion":"card_doc.v1","meta":{},"blocks":[]}"#.utf8)
+        fixture.coordinator.registerEditorDrain(id: UUID(), jobID: "job_1", beginClosing: {
+            closeCount += 1
+        }, drain: {
+            drainCount += 1
+            await withCheckedContinuation { gate = $0 }
+            draft.store.updateArtifactDraft(documentJSON: finalDocument, preservationManifest: Data())
+            return true
+        })
+        fixture.coordinator.deactivate()
+        XCTAssertEqual(closeCount, 1)
+        XCTAssertEqual(fixture.coordinator.transitionState, .draining)
+        XCTAssertTrue(fixture.coordinator.summaries.isEmpty)
+        XCTAssertNil(fixture.coordinator.presentation)
+        fixture.coordinator.activate(actorID: "actor_2")
+        fixture.coordinator.activate(actorID: "actor_3")
+        XCTAssertFalse(fixture.coordinator.isReady(for: "actor_3"))
+        await waitForMergeCoordinator { gate != nil }
+        gate?.resume()
+        await waitForMergeCoordinator { fixture.coordinator.isReady(for: "actor_3") }
+        XCTAssertEqual(drainCount, 1)
+        XCTAssertEqual(fixture.persistence.collection(actorID: "actor_1").tasks["job_1"]?
+            .snapshot.artifactDraft?.documentJSON, finalDocument)
+        XCTAssertTrue(fixture.persistence.collection(actorID: "actor_2").tasks.isEmpty)
+        // The old store is invalidated only after its accepted body has been persisted.
+        draft.store.updateArtifactTags(["too late"])
+        XCTAssertNotEqual(draft.store.artifactDraft?.tags, ["too late"])
+    }
+
+    func testFailedEditorDrainRetainsOwnerAndRetriesLatestTarget() async {
+        let fixture = makeCoordinatorFixture(keys: [])
+        fixture.coordinator.activate(actorID: "actor_1")
+        var attempts = 0
+        var closes = 0
+        fixture.coordinator.registerEditorDrain(id: UUID(), jobID: "fixture", beginClosing: {
+            closes += 1
+        }, drain: {
+            attempts += 1
+            return attempts > 1
+        })
+        fixture.coordinator.activate(actorID: "actor_2")
+        await waitForMergeCoordinator { fixture.coordinator.transitionState == .failed }
+        fixture.coordinator.activate(actorID: "actor_3")
+        XCTAssertEqual(attempts, 1)
+        XCTAssertFalse(fixture.coordinator.isReady(for: "actor_3"))
+        fixture.coordinator.retryEditorDrain()
+        await waitForMergeCoordinator { fixture.coordinator.isReady(for: "actor_3") }
+        XCTAssertEqual(attempts, 2)
+        XCTAssertEqual(closes, 1)
+    }
+
+    func testInactiveFlushDoesNotSealEditorAndCanFlushAgain() async {
+        let fixture = makeCoordinatorFixture(keys: [])
+        fixture.coordinator.activate(actorID: "actor_1")
+        var flushes = 0
+        var closes = 0
+        fixture.coordinator.registerEditorDrain(id: UUID(), jobID: "fixture", beginClosing: {
+            closes += 1
+        }, drain: { flushes += 1; return true })
+        fixture.coordinator.setApplicationActive(false)
+        await waitForMergeCoordinator { flushes == 1 }
+        fixture.coordinator.setApplicationActive(true)
+        fixture.coordinator.setApplicationActive(false)
+        await waitForMergeCoordinator { flushes == 2 }
+        XCTAssertEqual(closes, 0)
+        XCTAssertTrue(fixture.coordinator.isReady(for: "actor_1"))
+    }
     func testRootLifecycleDirectActivationRestoresWithoutTabBarAndDeactivatesOnLogout() async {
         let fixture = makeCoordinatorFixture(
             keys: [],

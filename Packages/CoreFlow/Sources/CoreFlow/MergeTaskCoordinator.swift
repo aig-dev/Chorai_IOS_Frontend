@@ -50,12 +50,76 @@ public struct MergeDraftSession {
     let generation: Int
 }
 
+public enum MergeEditorTransitionState: Equatable, Sendable {
+    case ready, draining, failed
+}
+
 @MainActor
 public final class MergeTaskCoordinator: ObservableObject {
     @Published public private(set) var summaries: [MergeTaskSummary] = []
     @Published public private(set) var presentation: MergeTaskPresentation?
     @Published public private(set) var committedCardIntent: MergeCommittedCardIntent?
     @Published public private(set) var completionEventJobID: String?
+
+    @Published public private(set) var transitionState: MergeEditorTransitionState = .ready
+
+    private struct EditorDrain {
+        let jobID: String
+        let beginClosing: @MainActor () -> Void
+        let drain: @MainActor () async -> Bool
+    }
+    private var editorDrains: [UUID: EditorDrain] = [:]
+    @Published private var closingEditorIDs: Set<UUID> = []
+    private var sealedEditorIDs: Set<UUID> = []
+    private var requestedActorID: String?
+    private var retirementTask: Task<Void, Never>?
+
+    public var canStartDraft: Bool { transitionState == .ready && actorID != nil }
+
+    public func isReady(for actorID: String?) -> Bool {
+        transitionState == .ready && actorID != nil && self.actorID == actorID
+    }
+
+    public func registerEditorDrain(
+        id: UUID, jobID: String,
+        beginClosing: @escaping @MainActor () -> Void,
+        drain: @escaping @MainActor () async -> Bool
+    ) {
+        editorDrains[id] = EditorDrain(jobID: jobID, beginClosing: beginClosing, drain: drain)
+        closingEditorIDs.remove(id)
+        if transitionState != .ready { sealEditor(id) }
+    }
+
+    public func unregisterEditorDrain(id: UUID) {
+        // Retirement owns the registration until its drain has succeeded.
+        guard transitionState == .ready else { return }
+        editorDrains[id] = nil
+        closingEditorIDs.remove(id)
+        sealedEditorIDs.remove(id)
+    }
+
+    public func editorWillDisappear(id: UUID) {
+        guard editorDrains[id] != nil else { return }
+        closingEditorIDs.insert(id)
+    }
+
+    public func editorDrainFailed(id: UUID) {
+        guard transitionState == .ready, editorDrains[id] != nil else { return }
+        // Retain the original failed owner and use the existing explicit retry
+        // transition. A fresh editor must never overwrite its unsaved body.
+        beginRetirement()
+        transitionState = .failed
+    }
+
+    private func isEditorClosing(jobID: String) -> Bool {
+        closingEditorIDs.contains { editorDrains[$0]?.jobID == jobID }
+    }
+
+    public func retryEditorDrain() {
+        guard transitionState == .failed else { return }
+        transitionState = .draining
+        startRetirement()
+    }
 
     private struct Runtime {
         let operationID: String
@@ -121,22 +185,74 @@ public final class MergeTaskCoordinator: ObservableObject {
         isApplicationActive: Bool,
         isNetworkAvailable: Bool
     ) -> Bool {
-        setApplicationActive(isApplicationActive)
-        setNetworkAvailable(isNetworkAvailable)
-
-        guard actorID != verifiedActorID else { return false }
-        if let verifiedActorID {
-            activate(actorID: verifiedActorID)
+        let didChange = requestedActorID != verifiedActorID
+        if didChange || transitionState != .ready {
+            self.isApplicationActive = isApplicationActive
+            self.isNetworkAvailable = isNetworkAvailable
+            requestActivation(verifiedActorID)
         } else {
-            deactivate()
+            setApplicationActive(isApplicationActive)
+            setNetworkAvailable(isNetworkAvailable)
         }
-        return true
+        return didChange
     }
 
-    public func activate(actorID: String) {
+    public func activate(actorID: String) { requestActivation(actorID, force: true) }
+
+    public func deactivate() { requestActivation(nil) }
+
+    private func requestActivation(_ target: String?, force: Bool = false) {
+        requestedActorID = target
+        guard transitionState == .ready else { return }
+        guard force || actorID != target else { return }
+        guard !editorDrains.isEmpty else {
+            finishActivation(target)
+            return
+        }
+        beginRetirement()
+        startRetirement()
+    }
+
+    private func beginRetirement() {
+        transitionState = .draining
+        presentation = nil
+        summaries = []
+        committedCardIntent = nil
+        completionEventJobID = nil
+        for runtime in runtimesByOperationID.values { runtime.store.beginLocalEditorDrain() }
+        for draft in draftsByOperationID.values { draft.store.beginLocalEditorDrain() }
+        for id in Array(editorDrains.keys) { sealEditor(id) }
+    }
+
+    private func sealEditor(_ id: UUID) {
+        guard sealedEditorIDs.insert(id).inserted else { return }
+        editorDrains[id]?.beginClosing()
+    }
+
+    private func startRetirement() {
+        guard retirementTask == nil else { return }
+        retirementTask = Task { @MainActor in
+            while let (id, editor) = self.editorDrains.first {
+                guard await editor.drain() else {
+                    self.retirementTask = nil
+                    self.transitionState = .failed
+                    return
+                }
+                self.editorDrains[id] = nil
+                self.closingEditorIDs.remove(id)
+                self.sealedEditorIDs.remove(id)
+            }
+            self.retirementTask = nil
+            self.finishActivation(self.requestedActorID)
+        }
+    }
+
+    private func finishActivation(_ target: String?) {
         clearRuntimeState()
         generation += 1
-        self.actorID = actorID
+        actorID = target
+        transitionState = .ready
+        guard let actorID = target else { return }
 
         let collection = persistence.collection(actorID: actorID)
         completionObservedJobIDs = Set(
@@ -187,14 +303,8 @@ public final class MergeTaskCoordinator: ObservableObject {
         refreshState()
     }
 
-    public func deactivate() {
-        clearRuntimeState()
-        generation += 1
-        actorID = nil
-    }
-
     public func makeDraft(anchor: MergeSource) -> MergeDraftSession {
-        guard let actorID else {
+        guard transitionState == .ready, let actorID else {
             preconditionFailure("MergeTaskCoordinator must be activated before making a draft")
         }
         let operationID = operationID()
@@ -233,6 +343,7 @@ public final class MergeTaskCoordinator: ObservableObject {
 
     @discardableResult
     public func adopt(_ draft: MergeDraftSession) -> String? {
+        guard transitionState == .ready else { return nil }
         guard
             let actorID,
             draft.generation == generation,
@@ -275,6 +386,7 @@ public final class MergeTaskCoordinator: ObservableObject {
     }
 
     public func abandon(_ draft: MergeDraftSession) {
+        guard transitionState == .ready else { return }
         guard
             let actorID,
             draft.generation == generation,
@@ -312,7 +424,8 @@ public final class MergeTaskCoordinator: ObservableObject {
     }
 
     public func session(jobID: String) -> MergeSessionStore? {
-        guard let operationID = jobToOperationID[jobID] else { return nil }
+        guard transitionState == .ready, !isEditorClosing(jobID: jobID),
+              let operationID = jobToOperationID[jobID] else { return nil }
         return runtimesByOperationID[operationID]?.store
     }
 
@@ -321,6 +434,7 @@ public final class MergeTaskCoordinator: ObservableObject {
     }
 
     public func present(jobID: String) {
+        guard transitionState == .ready, !isEditorClosing(jobID: jobID) else { return }
         refreshState()
         guard let summary = summary(jobID: jobID) else { return }
         presentation = presentation(for: summary)
@@ -333,6 +447,7 @@ public final class MergeTaskCoordinator: ObservableObject {
     public func setNetworkAvailable(_ isAvailable: Bool) {
         guard isNetworkAvailable != isAvailable else { return }
         isNetworkAvailable = isAvailable
+        guard transitionState == .ready else { return }
         for runtime in runtimesByOperationID.values {
             runtime.store.setNetworkAvailable(isAvailable)
             if runtime.store.phase == .ready {
@@ -354,6 +469,12 @@ public final class MergeTaskCoordinator: ObservableObject {
     public func setApplicationActive(_ isActive: Bool) {
         guard isApplicationActive != isActive else { return }
         isApplicationActive = isActive
+        guard transitionState == .ready else { return }
+        if !isActive {
+            for editor in editorDrains.values {
+                Task { @MainActor in _ = await editor.drain() }
+            }
+        }
         for runtime in runtimesByOperationID.values {
             if runtime.store.phase == .ready {
                 continue
@@ -372,6 +493,7 @@ public final class MergeTaskCoordinator: ObservableObject {
     }
 
     public func removeFailed(jobID: String) {
+        guard transitionState == .ready else { return }
         guard
             failureActions(jobID: jobID).contains(.remove),
             let operationID = jobToOperationID[jobID],
@@ -411,6 +533,7 @@ public final class MergeTaskCoordinator: ObservableObject {
     }
 
     public func retryFailed(jobID: String) {
+        guard transitionState == .ready else { return }
         guard
             failureActions(jobID: jobID).contains(.retry),
             let store = session(jobID: jobID)
@@ -434,6 +557,7 @@ public final class MergeTaskCoordinator: ObservableObject {
     }
 
     public func cancelFailed(jobID: String) {
+        guard transitionState == .ready else { return }
         guard
             failureActions(jobID: jobID).contains(.cancel),
             let store = session(jobID: jobID)
@@ -481,6 +605,7 @@ public final class MergeTaskCoordinator: ObservableObject {
     }
 
     public func acknowledgeCommittedCardIntent(jobID: String) {
+        guard transitionState == .ready else { return }
         guard
             committedIntentQueue.first?.jobID == jobID,
             let operationID = jobToOperationID[jobID],
@@ -578,7 +703,7 @@ public final class MergeTaskCoordinator: ObservableObject {
         prioritizedOperationID: String? = nil,
         shouldObserveEvents: Bool = false
     ) {
-        guard let actorID else {
+        guard transitionState == .ready, let actorID else {
             summaries = []
             return
         }

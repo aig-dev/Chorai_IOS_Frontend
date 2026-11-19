@@ -28,6 +28,12 @@ public final class NoteLibraryStore: ObservableObject {
     private var locallyChangedDuringRefresh = Set<String>()
     private var configuration: Task<Void, Never>?
     private let committedDownloads: CommittedNoteDownloads
+    private struct NoteDownload {
+        let id: UUID
+        let task: Task<OfflineNote, Error>
+    }
+    private var noteDownloads: [String: NoteDownload] = [:]
+    private var mediaWorker = NoteMediaReferenceWorker()
     private var imageDownloads: [String: Task<(data: Data, mimeType: String), Error>] = [:]
 
     public init(rootURL: URL, service: @escaping @Sendable (NoteStoreScope) throws -> any NoteSyncServing) {
@@ -47,6 +53,7 @@ public final class NoteLibraryStore: ObservableObject {
                 await coordinator?.resume()
             } else {
                 committedDownloads.suspend()
+                noteDownloads.values.forEach { $0.task.cancel() }; noteDownloads.removeAll()
                 await coordinator?.suspend()
             }
             let state = await coordinator?.status ?? .paused
@@ -59,7 +66,9 @@ public final class NoteLibraryStore: ObservableObject {
             return
         }
         generation &+= 1
+        mediaWorker = NoteMediaReferenceWorker()
         committedDownloads.suspend(scopeChanged: true)
+        noteDownloads.values.forEach { $0.task.cancel() }; noteDownloads.removeAll()
         imageDownloads.values.forEach { $0.cancel() }; imageDownloads.removeAll()
         let epoch = generation
         let previous = configuration
@@ -121,20 +130,48 @@ public final class NoteLibraryStore: ObservableObject {
     }
 
     public func open(identifier: String, scope expectedScope: NoteStoreScope? = nil) async throws -> OfflineNote {
+        try Task.checkCancellation()
         let (store, epoch) = try await context(expectedScope)
-        if let note = try await find(identifier, store: store) { try check(epoch); return note }
-        guard !identifier.hasPrefix("local-note:"), cloudEnabled, let service else { throw NoteLocalStoreError.noteNotFound }
-        let snapshot = try await service.detail(assetID: identifier)
+        let local = try await find(identifier, store: store)
         try check(epoch)
-        guard snapshot.assetID == identifier else { throw NoteSyncFailure.invalidResponse }
-        if let note = try await store.applyRemote(snapshot, localID: nil, expectedGeneration: nil) {
-            try check(epoch); publish([note])
-            return note
+        try Task.checkCancellation()
+        if let local { return local }
+        guard !identifier.hasPrefix("local-note:"), cloudEnabled, let service else { throw NoteLocalStoreError.noteNotFound }
+        let download: NoteDownload
+        if let pending = noteDownloads[identifier] { download = pending }
+        else {
+            let task = Task { [weak self] () throws -> OfflineNote in
+                if let existing = try await store.note(serverAssetID: identifier) {
+                    try Task.checkCancellation()
+                    guard let self else { throw CancellationError() }
+                    try self.check(epoch)
+                    return existing
+                }
+                try Task.checkCancellation()
+                guard self?.generation == epoch else { throw NoteLocalStoreError.invalidScope }
+                let snapshot = try await service.detail(assetID: identifier)
+                try Task.checkCancellation()
+                guard let self else { throw CancellationError() }
+                try self.check(epoch)
+                guard snapshot.assetID == identifier else { throw NoteSyncFailure.invalidResponse }
+                let inserted = try await store.applyRemote(snapshot, localID: nil, expectedGeneration: nil)
+                // A sync page may have inserted the same identity while detail was in flight.
+                let note: OfflineNote
+                if let inserted { note = inserted }
+                else if let existing = try await store.note(serverAssetID: identifier) { note = existing }
+                else { throw NoteLocalStoreError.noteNotFound }
+                try self.check(epoch)
+                self.publish([note])
+                return note
+            }
+            download = NoteDownload(id: UUID(), task: task)
+            noteDownloads[identifier] = download
         }
-        // Another reader or the first sync page can insert this identity during the request.
-        guard let note = try await store.note(serverAssetID: identifier) else { throw NoteLocalStoreError.noteNotFound }
-        try check(epoch); publish([note])
-        return note
+        let result = await download.task.result
+        if noteDownloads[identifier]?.id == download.id { noteDownloads[identifier] = nil }
+        try Task.checkCancellation()
+        try check(epoch)
+        return try result.get()
     }
 
     public func save(identifier: String?, createID: String, body: OfflineNoteBody,
@@ -177,8 +214,11 @@ public final class NoteLibraryStore: ObservableObject {
             try check(epoch)
             return (data, attachment.mimeType)
         }
-        guard let assetID = note.serverAssetID,
-              let ref = try NoteSyncPayload.imageReferences(note.body).first(where: { NoteAttachmentFiles.downloadID(assetID: assetID, mediaRef: $0) == id }) else { throw NoteLocalStoreError.invalidAttachment }
+        let ref = try await mediaWorker.remoteReference(previewUploadID: id, in: note, scope: expectedScope)
+        try check(epoch)
+        guard let current = try await store.note(localID: note.localID), current.bodyRevision == note.bodyRevision else { throw NoteLocalStoreError.staleGeneration }
+        try check(epoch)
+        guard let assetID = note.serverAssetID, let ref else { throw NoteLocalStoreError.invalidAttachment }
         guard cloudEnabled, let service else { throw NoteSyncFailure.notFound }
         if let pending = imageDownloads[id] {
             let value = try await pending.value
@@ -210,18 +250,53 @@ public final class NoteLibraryStore: ObservableObject {
         let epoch = generation
         let note = try await open(identifier: identifier, scope: expectedScope)
         try check(epoch)
-        var result: [String: String] = [:]
-        for attachment in note.attachments {
-            let url = try NoteAttachmentFiles.previewURL(uploadID: attachment.uploadID).absoluteString
-            result[NoteSyncPayload.localMediaRef(uploadID: attachment.uploadID)] = url
-            if let ref = attachment.mediaRef { result[ref] = url }
-        }
-        if let assetID = note.serverAssetID {
-            for ref in (try? NoteSyncPayload.imageReferences(note.body)) ?? [] where result[ref] == nil && !ref.hasPrefix("local-note-attachment:") {
-                result[ref] = try NoteAttachmentFiles.previewURL(uploadID: NoteAttachmentFiles.downloadID(assetID: assetID, mediaRef: ref)).absoluteString
-            }
-        }
+        let result = try await mediaWorker.displayURLs(in: note, scope: expectedScope)
+        try check(epoch)
+        guard notes.first(where: { $0.localID == note.localID })?.bodyRevision == note.bodyRevision else { throw NoteLocalStoreError.staleGeneration }
         return result
+    }
+
+    public func imageReferences(identifier: String, scope expectedScope: NoteStoreScope) async throws -> Set<String> {
+        let (store, epoch) = try await context(expectedScope)
+        guard let note = try await find(identifier, store: store) else { throw NoteLocalStoreError.noteNotFound }
+        let refs = try await mediaWorker.references(in: note, scope: expectedScope)
+        try check(epoch)
+        guard notes.first(where: { $0.localID == note.localID })?.bodyRevision == note.bodyRevision else { throw NoteLocalStoreError.staleGeneration }
+        return refs
+    }
+
+    public func thumbnailIdentity(source: NoteThumbnailSource, identifier: String, scope expectedScope: NoteStoreScope,
+                                  bodyRevision: Int64) async throws -> NoteThumbnailIdentity {
+        let (_, epoch) = try await context(expectedScope)
+        // Published values are already decoded and immutable. Do not rehydrate a
+        // whole database record per consumer before it can join the image flight.
+        let localID = identifier.hasPrefix("local-note:") ? String(identifier.dropFirst(11)) : nil
+        guard let note = notes.first(where: { note in
+            if let localID { return note.localID == localID }
+            return note.serverAssetID == identifier
+        }) else { throw NoteLocalStoreError.noteNotFound }
+        try check(epoch)
+        guard note.bodyRevision == bodyRevision, note.desiredLifecycle == .active else { throw NoteLocalStoreError.staleGeneration }
+        let url = try await mediaWorker.previewURL(source: source, in: note, scope: expectedScope)
+        try check(epoch)
+        try Task.checkCancellation()
+        let identity = NoteThumbnailIdentity(scope: expectedScope, localID: note.localID, bodyRevision: bodyRevision, previewURL: url)
+        guard isCurrentThumbnail(identity) else { throw NoteLocalStoreError.staleGeneration }
+        return identity
+    }
+
+    public func isCurrentThumbnail(_ identity: NoteThumbnailIdentity) -> Bool {
+        scope == identity.scope && notes.contains {
+            $0.localID == identity.localID && $0.bodyRevision == identity.bodyRevision && $0.desiredLifecycle == .active
+        }
+    }
+
+    public func thumbnailData(for identity: NoteThumbnailIdentity) async throws -> Data {
+        guard scope == identity.scope else { throw NoteLocalStoreError.invalidScope }
+        guard isCurrentThumbnail(identity) else { throw NoteLocalStoreError.staleGeneration }
+        let resource = try await imagePreview(identity.previewURL, identifier: "local-note:" + identity.localID, scope: identity.scope)
+        guard isCurrentThumbnail(identity) else { throw NoteLocalStoreError.staleGeneration }
+        return resource.data
     }
 
     public func setLifecycle(identifier: String, lifecycle: NoteLifecycle, scope expectedScope: NoteStoreScope? = nil) async throws {
@@ -310,18 +385,30 @@ public final class NoteLibraryStore: ObservableObject {
 
     /// Publish committed rows. A delayed transaction result cannot replace a newer revision.
     private func publish(_ committed: [OfflineNote], removed: Set<String> = []) {
-        var changed: [OfflineNote] = []
-        var result = notes
-        for note in committed {
-            if let index = result.firstIndex(where: { $0.localID == note.localID }) {
-                guard result[index].generation < note.generation else { continue }
-                result.remove(at: index)
-            }
-            let index = result.firstIndex { OfflineNote.mostRecentFirst(note, $0) } ?? result.endIndex
-            result.insert(note, at: index)
-            changed.append(note)
+        var latest = Dictionary(committed.map { ($0.localID, $0) }, uniquingKeysWith: {
+            $0.generation >= $1.generation ? $0 : $1
+        })
+        var unchanged: [OfflineNote] = []
+        unchanged.reserveCapacity(notes.count)
+        for note in notes {
+            if let replacement = latest[note.localID] {
+                if replacement.generation <= note.generation {
+                    latest[note.localID] = nil
+                    if !removed.contains(note.localID) { unchanged.append(note) }
+                }
+            } else if !removed.contains(note.localID) { unchanged.append(note) }
         }
-        if !removed.isEmpty { result.removeAll { removed.contains($0.localID) } }
+        let changed = latest.values.sorted(by: OfflineNote.mostRecentFirst)
+        let visible = changed.filter { !removed.contains($0.localID) }
+        var result: [OfflineNote] = []
+        result.reserveCapacity(unchanged.count + visible.count)
+        var old = 0, new = 0
+        while old < unchanged.count && new < visible.count {
+            if OfflineNote.mostRecentFirst(visible[new], unchanged[old]) { result.append(visible[new]); new += 1 }
+            else { result.append(unchanged[old]); old += 1 }
+        }
+        result.append(contentsOf: unchanged[old...])
+        result.append(contentsOf: visible[new...])
         if fullRefreshInFlight {
             locallyChangedDuringRefresh.formUnion(changed.map(\.localID))
             locallyChangedDuringRefresh.formUnion(removed)

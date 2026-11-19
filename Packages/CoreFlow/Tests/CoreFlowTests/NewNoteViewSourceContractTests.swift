@@ -324,7 +324,7 @@ final class NewNoteViewSourceContractTests: XCTestCase {
         )
         XCTAssertTrue(inlineImage.contains("isProcessingInlineImage = true"))
         XCTAssertTrue(
-            inlineImage.contains("defer { isProcessingInlineImage = false }")
+            inlineImage.contains("if inlineImageGeneration == generation") && inlineImage.contains("isProcessingInlineImage = false")
         )
         let upload = try XCTUnwrap(
             inlineImage.range(of: "editingStore.uploadInlineImage(")
@@ -346,9 +346,9 @@ final class NewNoteViewSourceContractTests: XCTestCase {
                 signature: "func capturedCardEditingImage("
             )
         )
-        XCTAssertTrue(cameraImage.contains("jpegData(compressionQuality: 0.9)"))
+        XCTAssertTrue(cameraImage.contains("CardImagePreparation.shared.jpeg(image, quality: 0.9"))
         XCTAssertTrue(cameraImage.contains("filename: \"inline-camera.jpg\""))
-        XCTAssertTrue(cameraImage.contains("mimeType: \"image/jpeg\""))
+        XCTAssertFalse(cameraImage.contains("jpegData("))
     }
 
     func testNativeInlineLinkAndSeparateImageSourceRoutesStayOutsideBridge() throws {

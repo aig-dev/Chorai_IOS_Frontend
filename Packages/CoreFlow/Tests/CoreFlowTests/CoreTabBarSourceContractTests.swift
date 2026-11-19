@@ -38,7 +38,8 @@ final class CoreTabBarSourceContractTests: XCTestCase {
 
     func testAuthenticatedProductDoesNotInheritTheSignInNavigationStack() throws {
         let source = try String(contentsOf: Self.repositoryRoot.appendingPathComponent("ArcNote/ContentView.swift"), encoding: .utf8)
-        XCTAssertTrue(source.contains("Group {\n            if authManager.isAuthenticated || authManager.canOpenLocalNotes {\n                authenticatedView"))
+        XCTAssertTrue(source.contains("else if authManager.isAuthenticated || authManager.canOpenLocalNotes {\n                authenticatedView"))
+        XCTAssertTrue(source.contains("if !localNotes.canDisplayNotes(for:"))
         XCTAssertTrue(source.contains("NavigationStack { loginView }"), "Sign-in keeps its own navigation destinations")
         XCTAssertTrue(source.contains("if authManager.needsInterestSelection && authManager.canEnterProduct {\n                NavigationStack {"))
         XCTAssertTrue(source.contains("ChooseInterestsView(onComplete: authManager.completeInterestSelection)"))

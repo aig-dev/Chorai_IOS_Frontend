@@ -246,7 +246,6 @@ struct LibrarySearchResultsView: View {
             NotesCard(
                 card: result.card,
                 onShowMenu: { _ in onShowMenu(result) },
-                cardsManager: cardsManager,
                 onCardTap: onCardTap
             )
 
