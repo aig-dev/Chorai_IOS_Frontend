@@ -178,6 +178,16 @@ by the nonisolated service before entering NetworkManager. NoteImport retains it
 specialized cancellation/termination drain: security-scoped files stay accessible
 until the upload actually terminates.
 
+Import recovery binds the actor's persisted `client_request_id` to the canonical
+batch returned by Go. Replays retain the original request identity and conflict
+if file bytes or metadata change. With no pending request, the store prefers an
+active batch and otherwise displays the latest terminal result; selecting new
+files clears that historical identity. The current import contract has only job
+and file lifecycle states. The retired Soul-extraction fields and terminal
+condition have been removed from transport, CoreFlow and fixtures, rather than
+manufacturing a state the service does not return. See the
+[import recovery evidence](../qa/2026-11-21-import-recovery.md).
+
 Only card detail GET uses a subscription-owned cancelable request. CardDetailReader still owns the single shared transport; invalidating a card/session cancels the real Alamofire request. Canceling one async reader does not cancel another reader. Mutation publishers remain eager shared Futures. Payload and credential values are not logged.
 
 ## Native image preparation — implemented

@@ -392,17 +392,51 @@ final class NoteImportStoreTests: XCTestCase {
         XCTAssertEqual(persistence.events, ["save:act_1:req_latest"])
     }
 
-    func testUnknownJobAndSoulStatusesStayLosslessAndKeepPolling() async {
+    func testRelaunchWithoutPendingRequestKeepsLatestTerminalResultWithoutReusingIdentity() async {
+        let persistence = NoteImportPersistenceSpy()
+        let latest = NoteImportJobSummary.fixture(
+            jobID: "job_latest", clientRequestID: "req_latest", status: .done,
+            createdAt: Date(timeIntervalSince1970: 20)
+        )
+        let service = NoteImportServiceSpy(
+            jobLists: [[
+                .fixture(jobID: "job_old", clientRequestID: "req_old", status: .cancelled,
+                         createdAt: Date(timeIntervalSince1970: 10)), latest
+            ], [latest]],
+            details: [
+                .fixture(jobID: "job_latest", clientRequestID: "req_latest", status: .done),
+                .fixture(jobID: "job_latest", clientRequestID: "req_latest", status: .done),
+                .fixture(jobID: "job_1", clientRequestID: "req_new", status: .done)
+            ]
+        )
+        let store = makeStore(service: service, persistence: persistence, requestID: { "req_new" })
+        for _ in 0..<2 {
+            await store.load(actorID: "act_1")
+            XCTAssertEqual(store.phase, .terminal)
+            XCTAssertEqual(store.detail?.jobID, "job_latest")
+            XCTAssertNil(persistence.value(actorID: "act_1"))
+            XCTAssertFalse(store.canCancelCurrentJob)
+        }
+        XCTAssertTrue(persistence.events.isEmpty, "Displaying settled history must not persist a pending request")
+        store.select([file("new.md", format: .markdown)])
+        XCTAssertNil(store.clientRequestID)
+        store.start()
+        await waitUntil { store.phase == .terminal }
+        XCTAssertEqual(store.detail?.jobID, "job_1")
+        let ids = await service.enqueueRequestIDs()
+        XCTAssertEqual(ids, ["req_new"])
+    }
+
+    func testUnknownJobStatusesStayLosslessAndKeepPolling() async {
         let persistence = NoteImportPersistenceSpy()
         let sleeper = NoteImportSleeperSpy()
         let unknownJob = NoteImportJobStatus(rawValue: "future_job")
-        let unknownSoul = NoteImportSoulStatus(rawValue: "future_soul")
         let service = NoteImportServiceSpy(
             enqueueResults: [.success(.receipt())],
             details: [
-                .fixture(status: unknownJob, soulStatus: .done),
-                .fixture(status: .done, soulStatus: unknownSoul),
-                .fixture(status: .done, soulStatus: .done)
+                .fixture(status: unknownJob),
+                .fixture(status: .init(rawValue: "future_job_next")),
+                .fixture(status: .done)
             ]
         )
         let store = makeStore(
@@ -422,8 +456,7 @@ final class NoteImportStoreTests: XCTestCase {
 
         await sleeper.resumeNext()
         await waitUntil { await sleeper.callCount() == 2 }
-        XCTAssertEqual(store.detail?.soulStatus.rawValue, "future_soul")
-        XCTAssertEqual(store.detail?.status, .done)
+        XCTAssertEqual(store.detail?.status.rawValue, "future_job_next")
         XCTAssertEqual(store.phase, .polling)
         XCTAssertEqual(persistence.value(actorID: "act_1"), "req_generated")
         XCTAssertTrue(persistence.clearedActors.isEmpty)
@@ -438,9 +471,9 @@ final class NoteImportStoreTests: XCTestCase {
         let service = NoteImportServiceSpy(
             enqueueResults: [.success(.receipt())],
             details: [
-                .fixture(status: .running, soulStatus: .notRequested),
-                .fixture(status: .done, soulStatus: .running),
-                .fixture(status: .done, soulStatus: .done)
+                .fixture(status: .running),
+                .fixture(status: .running),
+                .fixture(status: .done)
             ]
         )
         let store = makeStore(service: service, sleeper: sleeper)
@@ -470,7 +503,7 @@ final class NoteImportStoreTests: XCTestCase {
             enqueueResults: [.success(.receipt())],
             details: [
                 .fixture(status: .running),
-                .fixture(status: .cancelled, soulStatus: .cancelled)
+                .fixture(status: .cancelled)
             ]
         )
         let sleeper = NoteImportSleeperSpy()
@@ -494,7 +527,7 @@ final class NoteImportStoreTests: XCTestCase {
             enqueueResults: [.success(.receipt())],
             details: [
                 .fixture(status: .running),
-                .fixture(status: .cancelled, soulStatus: .cancelled)
+                .fixture(status: .cancelled)
             ],
             cancelResult: .failure(.requestFailed(code: "cancel_failed"))
         )
@@ -586,7 +619,7 @@ final class NoteImportStoreTests: XCTestCase {
             enqueueResults: [.success(.receipt())],
             details: [
                 .fixture(status: .running),
-                .fixture(status: .cancelled, soulStatus: .cancelled)
+                .fixture(status: .cancelled)
             ],
             cancelThrowsCancellation: true
         )
@@ -612,7 +645,7 @@ final class NoteImportStoreTests: XCTestCase {
             enqueueResults: [.success(.receipt())],
             details: [
                 .fixture(status: .running),
-                .fixture(status: .cancelled, soulStatus: .cancelled)
+                .fixture(status: .cancelled)
             ],
             jobCancellationCalls: [2]
         )
@@ -853,7 +886,6 @@ final class NoteImportStoreTests: XCTestCase {
     func testTerminalCountsAndPerFileAssetIDsRemainLossless() async {
         let terminal = NoteImportJobDetail.fixture(
             status: .done,
-            soulStatus: .failed,
             totalFiles: 5,
             importedCount: 1,
             updatedCount: 2,
@@ -1141,8 +1173,6 @@ private extension NoteImportJobSummary {
             jobID: jobID,
             clientRequestID: clientRequestID,
             status: status,
-            soulStatus: .notRequested,
-            soulStatusReason: nil,
             totalFiles: 1,
             importedCount: 0,
             updatedCount: 0,
@@ -1161,7 +1191,6 @@ private extension NoteImportJobDetail {
         jobID: String = "job_1",
         clientRequestID: String? = "req_generated",
         status: NoteImportJobStatus = .queued,
-        soulStatus: NoteImportSoulStatus = .notRequested,
         totalFiles: Int = 1,
         importedCount: Int = 0,
         updatedCount: Int = 0,
@@ -1173,8 +1202,6 @@ private extension NoteImportJobDetail {
             jobID: jobID,
             clientRequestID: clientRequestID,
             status: status,
-            soulStatus: soulStatus,
-            soulStatusReason: nil,
             totalFiles: totalFiles,
             importedCount: importedCount,
             updatedCount: updatedCount,

@@ -3726,9 +3726,8 @@ final class ArcNoteUITests: XCTestCase {
             "chora.contract.import.total-files": "2",
             "chora.contract.import.imported-count": "1",
             "chora.contract.import.asset-id": "ast_import_contract",
-            "chora.contract.import.nullable-fields": "nil,nil,nil,nil,nil,nil,nil",
+            "chora.contract.import.nullable-fields": "nil,nil,nil,nil,nil,nil",
             "chora.contract.import.unknown-status": "future_import_state",
-            "chora.contract.import.unknown-soul-status": "future_soul_state",
             "chora.contract.notion.workspace-id": "workspace_contract",
             "chora.contract.notion.page-id": "page_contract",
             "chora.contract.notion.enqueue-job-id": "job_notion_contract",
@@ -7939,6 +7938,43 @@ final class ArcNoteUITests: XCTestCase {
         captureVisual("live-trash-purged")
         XCTAssertThrowsError(try fetchSmokeCard(id: cardID, token: session.token)) { error in
             XCTAssertEqual((error as NSError).code, 404)
+        }
+    }
+
+    func testLocalGoImportRecoveryStatusSurvivesRelaunch() throws {
+        let environment = ProcessInfo.processInfo.environment
+        guard let goodSource = environment["CHORAI_UI_TEST_IMPORT_GOOD_SOURCE"],
+              let badSource = environment["CHORAI_UI_TEST_IMPORT_BAD_SOURCE"],
+              let phase = environment["CHORAI_UI_TEST_IMPORT_PHASE"] else {
+            throw XCTSkip("Requires the isolated Go import recovery scenario")
+        }
+        XCTAssertTrue(["running", "done"].contains(phase))
+        let session = try requireSmokeSession()
+        seedAppSession(session)
+        defer { app.terminate() }
+
+        for launch in 0..<2 {
+            launchAuthenticatedApp()
+            tapButton("side-menu.open")
+            tap("side-menu.settings")
+            waitFor("screen.settings.loaded")
+            let profile = waitForButton("settings.choraProfile")
+            for _ in 0..<5 where !profile.isHittable { app.swipeUp() }
+            profile.tap()
+            waitFor("screen.choraProfile")
+            let localNotes = waitFor("chora.sources.localNotes", timeout: 20)
+            for _ in 0..<6 where !localNotes.isHittable { app.swipeUp() }
+            localNotes.tap()
+            let good = waitFor("chora.sources.localNotes.file.\(goodSource)", timeout: 20)
+            let bad = waitFor("chora.sources.localNotes.file.\(badSource)", timeout: 20)
+            XCTAssertEqual(good.value as? String, phase == "done" ? "Imported" : "Pending")
+            XCTAssertEqual(bad.value as? String, phase == "done" ? "Failed" : "Pending")
+            XCTAssertEqual(
+                app.buttons["chora.sources.localNotes.cancel"].exists,
+                phase == "running"
+            )
+            captureVisual("live-import-\(phase)-launch-\(launch)")
+            app.terminate()
         }
     }
 

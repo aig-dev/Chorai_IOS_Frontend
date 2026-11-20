@@ -65,34 +65,6 @@ public struct NoteImportJobStatus: RawRepresentable, Codable, Hashable, Sendable
     }
 }
 
-public struct NoteImportSoulStatus: RawRepresentable, Codable, Hashable, Sendable {
-    public let rawValue: String
-
-    public init(rawValue: String) {
-        self.rawValue = rawValue
-    }
-
-    public static let notRequested = Self(rawValue: "not_requested")
-    public static let queued = Self(rawValue: "queued")
-    public static let running = Self(rawValue: "running")
-    public static let done = Self(rawValue: "done")
-    public static let failed = Self(rawValue: "failed")
-    public static let skipped = Self(rawValue: "skipped")
-    public static let cancelled = Self(rawValue: "cancelled")
-
-    public var isUnsettled: Bool {
-        self == .queued || self == .running
-    }
-
-    public var isSettled: Bool {
-        self == .notRequested
-            || self == .done
-            || self == .failed
-            || self == .skipped
-            || self == .cancelled
-    }
-}
-
 public struct NoteImportItemStatus: RawRepresentable, Codable, Hashable, Sendable {
     public let rawValue: String
 
@@ -136,8 +108,6 @@ public struct NoteImportJobSummary: Codable, Equatable, Sendable {
     public let jobID: String
     public let clientRequestID: String?
     public let status: NoteImportJobStatus
-    public let soulStatus: NoteImportSoulStatus
-    public let soulStatusReason: String?
     public let totalFiles: Int
     public let importedCount: Int
     public let updatedCount: Int
@@ -152,8 +122,6 @@ public struct NoteImportJobSummary: Codable, Equatable, Sendable {
         jobID: String,
         clientRequestID: String?,
         status: NoteImportJobStatus,
-        soulStatus: NoteImportSoulStatus,
-        soulStatusReason: String?,
         totalFiles: Int,
         importedCount: Int,
         updatedCount: Int,
@@ -167,8 +135,6 @@ public struct NoteImportJobSummary: Codable, Equatable, Sendable {
         self.jobID = jobID
         self.clientRequestID = clientRequestID
         self.status = status
-        self.soulStatus = soulStatus
-        self.soulStatusReason = soulStatusReason
         self.totalFiles = totalFiles
         self.importedCount = importedCount
         self.updatedCount = updatedCount
@@ -181,7 +147,7 @@ public struct NoteImportJobSummary: Codable, Equatable, Sendable {
     }
 
     public var isSettled: Bool {
-        status.isTerminal && soulStatus.isSettled
+        status.isTerminal
     }
 }
 
@@ -223,8 +189,6 @@ public struct NoteImportJobDetail: Codable, Equatable, Sendable {
     public let jobID: String
     public let clientRequestID: String?
     public let status: NoteImportJobStatus
-    public let soulStatus: NoteImportSoulStatus
-    public let soulStatusReason: String?
     public let totalFiles: Int
     public let importedCount: Int
     public let updatedCount: Int
@@ -241,8 +205,6 @@ public struct NoteImportJobDetail: Codable, Equatable, Sendable {
         jobID: String,
         clientRequestID: String?,
         status: NoteImportJobStatus,
-        soulStatus: NoteImportSoulStatus,
-        soulStatusReason: String?,
         totalFiles: Int,
         importedCount: Int,
         updatedCount: Int,
@@ -258,8 +220,6 @@ public struct NoteImportJobDetail: Codable, Equatable, Sendable {
         self.jobID = jobID
         self.clientRequestID = clientRequestID
         self.status = status
-        self.soulStatus = soulStatus
-        self.soulStatusReason = soulStatusReason
         self.totalFiles = totalFiles
         self.importedCount = importedCount
         self.updatedCount = updatedCount
@@ -274,7 +234,7 @@ public struct NoteImportJobDetail: Codable, Equatable, Sendable {
     }
 
     public var isSettled: Bool {
-        status.isTerminal && soulStatus.isSettled
+        status.isTerminal
     }
 }
 

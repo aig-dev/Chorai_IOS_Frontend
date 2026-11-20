@@ -123,6 +123,17 @@ public final class NoteImportStore: ObservableObject {
                     actorID: normalized,
                     generation: scope
                 )
+            } else if let latest = summaries
+                .filter({ $0.isSettled && $0.clientRequestID != nil })
+                .max(by: { $0.createdAt < $1.createdAt }) {
+                // The pending identity is cleared on completion, but its result
+                // remains visible after relaunch. Selecting files starts anew.
+                clientRequestID = latest.clientRequestID
+                await loadAndDrive(
+                    jobID: latest.jobID,
+                    actorID: normalized,
+                    generation: scope
+                )
             } else {
                 phase = .ready
             }

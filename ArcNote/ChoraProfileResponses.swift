@@ -323,8 +323,6 @@ struct NoteImportJobSummaryResponse: Codable {
     let jobID: String
     let clientRequestID: String?
     let status: String
-    let soulStatus: String
-    let soulStatusReason: String?
     let totalFiles: Int
     let importedCount: Int
     let updatedCount: Int
@@ -339,8 +337,6 @@ struct NoteImportJobSummaryResponse: Codable {
         case jobID = "job_id"
         case clientRequestID = "client_request_id"
         case status
-        case soulStatus = "soul_status"
-        case soulStatusReason = "soul_status_reason"
         case totalFiles = "total_files"
         case importedCount = "imported_count"
         case updatedCount = "updated_count"
@@ -357,8 +353,6 @@ struct NoteImportJobDetailResponse: Codable {
     let jobID: String
     let clientRequestID: String?
     let status: String
-    let soulStatus: String
-    let soulStatusReason: String?
     let totalFiles: Int
     let importedCount: Int
     let updatedCount: Int
@@ -375,8 +369,6 @@ struct NoteImportJobDetailResponse: Codable {
         case jobID = "job_id"
         case clientRequestID = "client_request_id"
         case status
-        case soulStatus = "soul_status"
-        case soulStatusReason = "soul_status_reason"
         case totalFiles = "total_files"
         case importedCount = "imported_count"
         case updatedCount = "updated_count"

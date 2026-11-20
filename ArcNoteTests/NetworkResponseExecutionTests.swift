@@ -5,6 +5,30 @@ import Alamofire
 
 @MainActor
 final class NetworkResponseExecutionTests: XCTestCase {
+    func testCurrentImportContractDecodesWithoutRetiredSoulFields() throws {
+        // Current Go DTO: recovery identity, file lifecycle, and RFC3339 dates.
+        let summary = #"{"job_id":"job_live","client_request_id":"req_live","status":"running","total_files":2,"imported_count":0,"updated_count":0,"skipped_count":0,"failed_count":0,"created_at":"2026-11-20T16:35:00.123456Z"}"#
+        let decoded = try JSONDecoder().decode(
+            NoteImportJobListResponse.self,
+            from: Data("{\"jobs\":[\(summary)]}".utf8)
+        )
+        let jobs = try NetworkNoteImportService.mapJobs(decoded)
+        XCTAssertEqual(jobs.first?.clientRequestID, "req_live")
+        XCTAssertEqual(jobs.first?.status.rawValue, "running")
+        XCTAssertEqual(jobs.first?.isSettled, false)
+
+        let detail = #"{"job_id":"job_live","client_request_id":"req_live","status":"done","total_files":2,"imported_count":1,"updated_count":0,"skipped_count":0,"failed_count":1,"created_at":"2026-11-20T16:35:00.123456Z","completed_at":"2026-11-20T16:36:00Z","items":[{"source_key":"good","original_filename":"note.md","original_format":"markdown","asset_id":"asset_live","asset_version_id":"version_live","status":"imported"},{"source_key":"empty","original_filename":"empty.md","original_format":"markdown","status":"failed","error_message":"Import could not be completed."}]}"#
+        let value = try NetworkNoteImportService.mapJob(
+            JSONDecoder().decode(NoteImportJobDetailResponse.self, from: Data(detail.utf8))
+        )
+        XCTAssertTrue(value.isSettled)
+        XCTAssertEqual(value.clientRequestID, "req_live")
+        XCTAssertEqual(value.importedCount, 1)
+        XCTAssertEqual(value.failedCount, 1)
+        XCTAssertEqual(value.items.first?.assetVersionID, "version_live")
+        XCTAssertEqual(value.items.last?.status.rawValue, "failed")
+    }
+
     func testChatStreamKeepsFrameOrderAndDeliversOnMain() async {
         let started = expectation(description: "stream started")
         let completed = expectation(description: "stream completed")

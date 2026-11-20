@@ -25,7 +25,7 @@
 | 真实同步 | 本轮 UI 成功路径使用管理员；常规门禁跳过六项需凭据的 M1/M2 live API 测试 | Task 2–3 验证所选上线合同与普通新用户；不为历史协议单列上线门槛 |
 | 聊天 | 主线程解析 SSE；SwiftUI body 调用消息排序/日期格式化；重叠消息刷新未见响应代际校验 | Task 4 先补请求归属，再消除重复计算和读取 |
 | 原图与文件 | 缩略图已有有界队列；编辑器原图读取逐请求创建 Task，原文件读写使用 detached task | Task 6–7 审查取消边界、真实并发和占用；尚无真机性能结论 |
-| 导入 | 逐项 Action、archive、source-state、outcome 分开写，部分失败只记日志 | Task 8 验证中断恢复，避免重复内容和假成功 |
+| 导入 | Task 8 已完成原子提交、请求重放与实际重启恢复 | 保留 Task 6 上传桥接时序和整体普通账号验收 |
 | Merge | 最终真实成功路径通过；此前 `TEXT_PROVIDER_FAILED` 原因未确认 | Task 5 补齐故障分类与恢复证据 |
 | 生产同步 | Go 拒绝生产 profile 启用 M1/M2 本地开关 | Task 2 为首次上线 P0，完成所选合同的生产接线和验收 |
 
@@ -149,11 +149,13 @@ ArcNoteUITests/ArcNoteUITests/testHomeRemovalKeepsLocalTrashWhenSyncIsUnavailabl
 
 **Files:** Go `chorai-go/internal/importnotes/worker.go`、相应 job/item/source-state repositories 与现有测试；`docs/modules/media.md` 及历史。iOS 复用 `NoteImportStoreTests.swift` 与上传桥接测试。
 
-**Interfaces:** 沿用现有 job/item 身份和 Action 入口，先在媒体模块记录提交与恢复边界。当前 Action 成功后 archive/source-state/outcome 独立写入，错误可能只记录日志；恢复方案必须能辨认已提交内容，不能靠重新生成操作身份重做。
+**Interfaces:** 沿用现有 job/item 身份和 Action 入口，先在媒体模块记录提交与恢复边界。原问题是 Action 成功后 archive/source-state/outcome 独立写入、失败只记录日志；现已通过同库事务与 item 终态复用已提交结果。
 
-- [ ] 在 Action 已成功、source-state/outcome 未完成处注入失败/终止并重启 worker，断言用户可见状态与实际内容一致、重试无重复 Asset/版本/Activity。
-- [ ] 补齐同一工作项的提交/回执或可重放修复路径；数据库内能共享事务的写入使用现有事务，外部副作用由既有任务身份恢复，不预设新增通用工作流引擎。
-- [ ] 验证部分成功、用户取消、撤权和同文件重试；保留已成功项，失败项可恢复，不能整批假报成功。真实数据库和 iOS 导入状态联调后更新模块验收。
+- [x] 在 Action 已成功、source-state/outcome 未完成处注入失败/终止并重启 worker，断言用户可见状态与实际内容一致、重试无重复 Asset/版本/Activity。
+- [x] 补齐同一工作项的提交/回执或可重放修复路径；数据库内能共享事务的写入使用现有事务，外部副作用由既有任务身份恢复，不预设新增通用工作流引擎。
+- [x] 验证部分成功、用户取消、撤权和同文件重试；保留已成功项，失败项可恢复，不能整批假报成功。真实数据库和 iOS 导入状态联调后更新模块验收。
+
+实施与验收已完成：[导入恢复记录](../../qa/2026-11-21-import-recovery.md)。额外关闭请求身份缺失、客户端旧 Soul 字段解码失败和终态重启丢显示；上传桥接终止时序的专项检查仍归 Task 6。
 
 ## Task 9 — 上线验收：用发布配置贯穿真实新用户流程
 
@@ -166,4 +168,4 @@ ArcNoteUITests/ArcNoteUITests/testHomeRemovalKeepsLocalTrashWhenSyncIsUnavailabl
 
 客户端下一包推荐 Task 4（聊天请求正确性与重复工作）和 Task 6（Swift 6 桥接边界）；已有明确 Merge 失败按 Task 5 处理。上线主线从 Task 2 的生产合同开始，再用 Task 3 的普通新用户贯穿，Task 8 导入恢复必须在对应功能上线前完成。Task 1 是贯穿保障，Task 7 按测量和故障证据优化，最后执行 Task 9。各任务独立提交，跨端写入合同先在所属模块明确设计。
 
-计划自查：旧版本迁移按用户明确范围移除，当前新数据可靠性仍保留；五项 Review Focus 均有任务；生产限制由代码确认，聊天/原图风险未伪装成已复现故障；不增加并行协议兼容负担，也不擅自删除首发功能。CI、最低系统运行、签名发布和生产合同仍待验收。当前 Task 4 已有实现与定向验证，其他任务和完整首发验收仍在推进。
+计划自查：旧版本迁移按用户明确范围移除，当前新数据可靠性仍保留；五项 Review Focus 均有任务；生产限制由代码确认，聊天/原图风险未伪装成已复现故障；不增加并行协议兼容负担，也不擅自删除首发功能。CI、最低系统运行、签名发布和生产合同仍待验收。当前 Task 4 已有实现与定向验证，Task 8 导入恢复已完成；其余任务和完整首发验收仍在推进。

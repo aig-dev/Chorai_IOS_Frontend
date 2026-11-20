@@ -890,8 +890,6 @@ private actor ChoraNoteImportFixtureService: CoreNoteImportServing {
                 jobID: detail.jobID,
                 clientRequestID: detail.clientRequestID,
                 status: detail.status,
-                soulStatus: detail.soulStatus,
-                soulStatusReason: detail.soulStatusReason,
                 totalFiles: detail.totalFiles,
                 importedCount: detail.importedCount,
                 updatedCount: detail.updatedCount,
@@ -917,38 +915,32 @@ private actor ChoraNoteImportFixtureService: CoreNoteImportServing {
 
     private func makeDetail() -> NoteImportJobDetail {
         let status: NoteImportJobStatus
-        let soul: NoteImportSoulStatus
         let imported: Int
         let failed: Int
         let errorMessage: String?
         switch mode {
         case .localImportCancelled:
             status = .cancelled
-            soul = .cancelled
             imported = 0
             failed = 0
             errorMessage = nil
         case .localUnknown:
             status = .init(rawValue: "future_import_state")
-            soul = .notRequested
             imported = 0
             failed = 0
             errorMessage = nil
         case .localImportActive, .localCancelling:
             status = .running
-            soul = .notRequested
             imported = 1
             failed = 0
             errorMessage = nil
         case .localImportFailure:
             status = .failed
-            soul = .failed
             imported = 1
             failed = 1
             errorMessage = "One file couldn’t be imported."
         default:
             status = .done
-            soul = .done
             imported = 2
             failed = 0
             errorMessage = nil
@@ -958,8 +950,6 @@ private actor ChoraNoteImportFixtureService: CoreNoteImportServing {
             jobID: "job_fixture",
             clientRequestID: "req_fixture",
             status: status,
-            soulStatus: soul,
-            soulStatusReason: nil,
             totalFiles: 2,
             importedCount: imported,
             updatedCount: 0,
@@ -3664,7 +3654,6 @@ private struct ChoraProfileContractFixtureView: View {
             values.merge(growthContractValues) { _, new in new }
 
             let importNullableFields: [String?] = [
-                importDetail.soulStatusReason,
                 importDetail.errorMessage,
                 importDetail.completedAt.map(String.init(describing:)),
                 importDetail.cancelRequestedAt.map(String.init(describing:)),
@@ -3681,7 +3670,6 @@ private struct ChoraProfileContractFixtureView: View {
                 "chora.contract.import.nullable-fields": importNullableFields
                     .map { $0 ?? "nil" }.joined(separator: ","),
                 "chora.contract.import.unknown-status": importList.first?.status.rawValue ?? "nil",
-                "chora.contract.import.unknown-soul-status": importList.first?.soulStatus.rawValue ?? "nil"
             ]
             values.merge(importValues) { _, new in new }
 
@@ -4279,7 +4267,6 @@ private struct ChoraProfileContractFixtureView: View {
       "jobs": [{
         "job_id": "job_future_contract",
         "status": "future_import_state",
-        "soul_status": "future_soul_state",
         "total_files": 2,
         "imported_count": 0,
         "updated_count": 0,
@@ -4295,7 +4282,6 @@ private struct ChoraProfileContractFixtureView: View {
       "job_id": "job_import_contract",
       "client_request_id": "req_import_contract",
       "status": "running",
-      "soul_status": "not_requested",
       "total_files": 2,
       "imported_count": 1,
       "updated_count": 0,
