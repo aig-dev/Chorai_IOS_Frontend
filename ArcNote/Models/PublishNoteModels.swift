@@ -31,7 +31,8 @@ struct UpdateCardRequest: Codable {
 }
 
 // MARK: 发布笔记管理器
-class PublishNoteManager: ObservableObject {
+@MainActor
+final class PublishNoteManager: ObservableObject {
     static let shared = PublishNoteManager()
     
     @Published var isPublishing = false

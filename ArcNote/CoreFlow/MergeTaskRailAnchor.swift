@@ -80,7 +80,7 @@ final class MergeTaskRailAnchorStore: ObservableObject {
 }
 
 struct MergeTaskRailAnchorPreferenceKey: PreferenceKey {
-    static var defaultValue: Anchor<CGRect>?
+    static let defaultValue: Anchor<CGRect>? = nil
 
     static func reduce(
         value: inout Anchor<CGRect>?,

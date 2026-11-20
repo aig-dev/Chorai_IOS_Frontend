@@ -28,7 +28,11 @@ public struct AccessState: Codable, Equatable, Sendable {
             .contains(mode)
         let knownStatus = ["allowed", "required"].contains(status)
         let knownScope = scope == nil || scope == "product_full"
-        let validUnavailable = mode != "unavailable" || status == "required"
+        // Go's current administrator scope bypasses the policy lookup. This
+        // exact authenticated response grants online entry, not a membership
+        // or an offline entitlement (NoteOfflineAccess still rejects this mode).
+        let administratorBypass = status == "allowed" && scope == nil && reasonCode == "admin_bypass"
+        let validUnavailable = mode != "unavailable" || status == "required" || administratorBypass
         return knownMode && knownStatus && knownScope && validUnavailable
     }
 

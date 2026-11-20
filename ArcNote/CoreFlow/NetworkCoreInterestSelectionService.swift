@@ -3,9 +3,10 @@ import CoreFlow
 import Foundation
 
 struct NetworkCoreInterestSelectionService: CoreInterestSelectionServing,
-    @unchecked Sendable {
+    Sendable {
     private let network: NetworkManager
 
+    @MainActor
     init(network: NetworkManager = .shared) {
         self.network = network
     }
@@ -43,12 +44,12 @@ struct NetworkCoreInterestSelectionService: CoreInterestSelectionServing,
         return response.data.domains
     }
 
-    private func firstValue<T>(
-        from publisher: AnyPublisher<T, NetworkError>
+    @MainActor
+    private func firstValue<T: Sendable>(
+        from publisher: @autoclosure @MainActor @Sendable () -> AnyPublisher<T, NetworkError>
     ) async throws -> T {
         do {
-            var iterator = publisher.values.makeAsyncIterator()
-            guard let value = try await iterator.next() else {
+            guard let value = try await NetworkManager.firstValue(publisher()) else {
                 throw InterestSelectionError.transport(code: "empty_response")
             }
             return value

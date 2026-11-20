@@ -7,9 +7,10 @@ struct NotionAuthorizationValues: Equatable {
     let state: String
 }
 
-struct NetworkNotionSourceService: CoreNotionSourceServing, @unchecked Sendable {
+struct NetworkNotionSourceService: CoreNotionSourceServing, Sendable {
     private let network: NetworkManager
 
+    @MainActor
     init(network: NetworkManager = .shared) {
         self.network = network
     }
@@ -168,11 +169,11 @@ struct NetworkNotionSourceService: CoreNotionSourceServing, @unchecked Sendable 
         )
     }
 
-    private func firstValue<Output>(
-        _ publisher: AnyPublisher<Output, NetworkError>
+    @MainActor
+    private func firstValue<Output: Sendable>(
+        _ publisher: @autoclosure @MainActor @Sendable () -> AnyPublisher<Output, NetworkError>
     ) async throws -> Output {
-        var iterator = publisher.values.makeAsyncIterator()
-        guard let value = try await iterator.next() else {
+        guard let value = try await NetworkManager.firstValue(publisher()) else {
             throw NetworkError.noData
         }
         return value

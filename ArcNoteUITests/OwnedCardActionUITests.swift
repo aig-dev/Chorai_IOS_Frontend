@@ -2,10 +2,12 @@ import XCTest
 
 /// Exercises the production shared menu without Home, authentication, or a backend.
 /// The DEBUG-only route injects a deterministic in-memory action service.
+@MainActor
 final class OwnedCardActionUITests: XCTestCase {
     private var app: XCUIApplication!
 
-    override func setUpWithError() throws {
+    override func setUp() async throws {
+        try await super.setUp()
         continueAfterFailure = false
         app = XCUIApplication()
         app.launchArguments = ["--ui-test-owned-card-actions"]

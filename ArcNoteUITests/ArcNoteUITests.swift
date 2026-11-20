@@ -1,5 +1,7 @@
 import CoreImage
+import Vision
 import XCTest
+import os
 
 enum UITestAPIConfiguration {
     static var baseURL: String {
@@ -30,6 +32,7 @@ enum UITestAPIConfiguration {
     }
 }
 
+@MainActor
 final class ArcNoteUITests: XCTestCase {
     private var app: XCUIApplication!
     private var sparkSessionScope: String!
@@ -40,7 +43,8 @@ final class ArcNoteUITests: XCTestCase {
             ?? "ast_cs_art_88ba36bc8dea"
     }
 
-    override func setUpWithError() throws {
+    override func setUp() async throws {
+        try await super.setUp()
         continueAfterFailure = false
         app = XCUIApplication()
         sparkSessionScope = "\(name).\(UUID().uuidString)"
@@ -247,14 +251,22 @@ final class ArcNoteUITests: XCTestCase {
         waitForMissing("cardEditorTag.review")
     }
 
-    func testNativeFidelityHomeMenuOpensRealUnboxedEditor() {
-        app.launchArguments.append("--dev-preview")
+    func testNativeFidelityHomeMenuOpensRealUnboxedEditor() throws {
+        let server = try RecentNotesServer(libraryFixture: .activeNote)
+        defer { app.terminate(); server.stop() }
+        app.launchEnvironment[APIEnvironment.overrideEnvironmentKey] = try server.start()
+        app.launchEnvironment["CHORAI_UI_TEST"] = "1"
+        app.launchEnvironment["CHORAI_UI_TEST_AUTH_TOKEN"] = server.token
+        app.launchEnvironment["CHORAI_UI_TEST_ACTOR_ID"] = server.actorID
         app.launch()
-        XCTAssertTrue(app.staticTexts["local-preview.indicator"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.tabBars.buttons["Home"].waitForExistence(timeout: 15))
         app.tabBars.buttons["Home"].tap()
         XCTAssertTrue(app.navigationBars["Home"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["note.create"].label.contains("New note"))
-        waitForButton("home.card.menu.preview-note").tap()
+        let noteMenu = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "home.card.menu.")).firstMatch
+        XCTAssertTrue(noteMenu.waitForExistence(timeout: 10))
+        let noteIdentifier = String(noteMenu.identifier.dropFirst("home.card.menu.".count))
+        noteMenu.tap()
         let menuShot = XCTAttachment(screenshot: app.screenshot())
         menuShot.name = "Fidelity native Home menu"
         menuShot.lifetime = .keepAlways
@@ -272,13 +284,53 @@ final class ArcNoteUITests: XCTestCase {
         back.tap()
         XCTAssertTrue(app.buttons["note.create"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.tabBars.buttons["Home"].isHittable)
-        waitFor("home.card.body.preview-note").tap()
+        waitFor("home.card.body.\(noteIdentifier)").tap()
         let directBack = waitForButton("cardEditorLeadingAction")
         XCTAssertFalse(app.tabBars.buttons["Home"].isHittable,
                        "Opening an existing note directly must also cover the browsing tab bar")
         directBack.tap()
         XCTAssertTrue(waitForButton("note.create").isHittable)
         XCTAssertTrue(app.tabBars.buttons["Home"].isHittable)
+    }
+
+    func testHomeRemovalKeepsLocalTrashWhenSyncIsUnavailable() throws {
+        let server = try RecentNotesServer(libraryFixture: .activeNote)
+        defer { app.terminate(); server.stop() }
+        app.launchEnvironment[APIEnvironment.overrideEnvironmentKey] = try server.start()
+        app.launchEnvironment["CHORAI_UI_TEST"] = "1"
+        app.launchEnvironment["CHORAI_UI_TEST_AUTH_TOKEN"] = server.token
+        app.launchEnvironment["CHORAI_UI_TEST_ACTOR_ID"] = server.actorID
+        app.launch()
+        XCTAssertTrue(app.tabBars.buttons["Home"].waitForExistence(timeout: 15))
+        app.tabBars.buttons["Home"].tap()
+        let menu = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "home.card.menu.local-note:")).firstMatch
+        XCTAssertTrue(menu.waitForExistence(timeout: 15))
+        let localID = String(menu.identifier.dropFirst("home.card.menu.".count))
+        menu.tap()
+        tap("popup-menu.item.remove")
+        app.buttons.matching(identifier: "card-action.remove.confirm").firstMatch.tap()
+        waitForMissing("home.card.menu.\(localID)")
+        XCTAssertFalse(exists("card-action.retry", timeout: 1))
+        tapButton("side-menu.open")
+        app.buttons["Trash"].tap()
+        waitForTrashCardVisible(localID)
+        captureVisual("home-removal-retained-in-local-trash")
+    }
+
+    func testExploreRetryActionRemainsReadable() throws {
+        // The authenticated loopback server deliberately has no feed route.
+        let server = try RecentNotesServer(libraryFixture: .activeNote)
+        defer { app.terminate(); server.stop() }
+        app.launchEnvironment[APIEnvironment.overrideEnvironmentKey] = try server.start()
+        app.launchEnvironment["CHORAI_UI_TEST"] = "1"
+        app.launchEnvironment["CHORAI_UI_TEST_AUTH_TOKEN"] = server.token
+        app.launchEnvironment["CHORAI_UI_TEST_ACTOR_ID"] = server.actorID
+        app.launch()
+        waitFor("screen.flow.error", timeout: 20)
+        let text = try renderedTextFrame(containing: "Retry")
+        XCTAssertTrue(app.windows.firstMatch.frame.contains(text),
+                      "The recovery action's rendered title must be readable")
+        captureVisual("explore-readable-retry")
     }
 
     func testNativeReviewExistingShortNoteUsesFullWritingPage() {
@@ -1036,7 +1088,7 @@ final class ArcNoteUITests: XCTestCase {
         ).firstMatch.waitForExistence(timeout: 10))
     }
 
-    func testMergeArtifactEditsInPlaceAndRestoresDraft() {
+    func testMergeArtifactEditsInPlaceAndRestoresDraft() throws {
         app.launchArguments.append("--ui-test-merge-artifact")
         app.launchEnvironment["CHORAI_UI_TEST_MERGE_SESSION_SCOPE"] =
             "\(name).stable"
@@ -1145,20 +1197,24 @@ final class ArcNoteUITests: XCTestCase {
         ).firstMatch
         XCTAssertTrue(replacementLine.waitForExistence(timeout: 3))
         XCTAssertTrue(replacementLine.isHittable)
-        XCTAssertGreaterThanOrEqual(replacementLine.frame.minY, visibleTop)
-        XCTAssertLessThanOrEqual(replacementLine.frame.maxY, visibleBottom)
+        // WebKit exposes the entire paragraph as one AX element. Selection can
+        // scroll its earlier lines above the viewport while the edited line is
+        // fully visible. Measure the rendered replacement, not that paragraph.
+        let editedTextFrame = try renderedTextFrame(containing: "horizontal-safe-input")
+        XCTAssertGreaterThanOrEqual(editedTextFrame.minY, visibleTop)
+        XCTAssertLessThanOrEqual(editedTextFrame.maxY, visibleBottom)
 
         origin.withOffset(
             CGVector(
-                dx: replacementLine.frame.midX,
-                dy: replacementLine.frame.midY
+                dx: editedTextFrame.midX,
+                dy: editedTextFrame.midY
             )
         ).press(
             forDuration: 0.08,
             thenDragTo: origin.withOffset(
                 CGVector(
-                    dx: replacementLine.frame.midX,
-                    dy: min(replacementLine.frame.midY + 72, visibleBottom - 4)
+                    dx: editedTextFrame.midX,
+                    dy: min(editedTextFrame.midY + 72, visibleBottom - 4)
                 )
             )
         )
@@ -1855,10 +1911,10 @@ final class ArcNoteUITests: XCTestCase {
                 + "editor=\(editor.frame), tags=\(tagViewport.frame)"
         )
         XCTAssertLessThanOrEqual(
-            tagViewport.frame.maxY,
-            syncState.frame.minY - 4,
-            "AX tag and sync rows must both render as complete rows; "
-                + "tags=\(tagViewport.frame), sync=\(syncState.frame)"
+            syncState.frame.maxY,
+            editor.frame.minY - 8,
+            "AX sync state must precede the editor without overlap; "
+                + "sync=\(syncState.frame), editor=\(editor.frame)"
         )
         XCTAssertLessThanOrEqual(
             syncState.frame.maxY,
@@ -1867,6 +1923,26 @@ final class ArcNoteUITests: XCTestCase {
                 + "sync=\(syncState.frame), actionTop=\(actionTop)"
         )
         XCTAssertGreaterThanOrEqual(syncState.frame.minY, window.frame.minY)
+        // At AX5 the outer surface scrolls; the editor and tags do not need
+        // to fit at once. Drag outside the nested WebKit editor to reveal tags.
+        for _ in 0..<5 {
+            if tagViewport.frame.maxY <= actionTop - 8 {
+                break
+            }
+            let start = window.coordinate(
+                withNormalizedOffset: CGVector(dx: 0.98, dy: 0.72)
+            )
+            let end = window.coordinate(
+                withNormalizedOffset: CGVector(dx: 0.98, dy: 0.28)
+            )
+            start.press(forDuration: 0.05, thenDragTo: end)
+        }
+        XCTAssertGreaterThanOrEqual(tagViewport.frame.minY, window.frame.minY)
+        XCTAssertLessThanOrEqual(
+            tagViewport.frame.maxY,
+            actionTop - 8,
+            "AX tags must scroll fully above the pinned actions"
+        )
         let addTag = waitForButton("merge.artifact.add-tag")
         if !addTag.isHittable || addTag.frame.maxX > tagViewport.frame.maxX {
             tagViewport.swipeLeft()
@@ -1874,6 +1950,12 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertTrue(addTag.isHittable)
         XCTAssertGreaterThanOrEqual(addTag.frame.minX, tagViewport.frame.minX)
         XCTAssertLessThanOrEqual(addTag.frame.maxX, tagViewport.frame.maxX)
+        for action in actions {
+            XCTAssertTrue(action.isHittable)
+            XCTAssertGreaterThanOrEqual(action.frame.width, 44)
+            XCTAssertGreaterThanOrEqual(action.frame.height, 44)
+        }
+        captureMergeVisual("artifact-accessibility-tags-and-pinned-actions")
     }
 
     func testMergeArtifactLocksEditorDuringDelayedAccept() {
@@ -5509,7 +5591,10 @@ final class ArcNoteUITests: XCTestCase {
             launchAuthenticatedApp()
 
             waitFor("screen.detail.loaded", timeout: 30)
-            tap("detail.menu.open")
+            let detailMenu = app.navigationBars["Note"].buttons.matching(identifier: "detail.menu.open").firstMatch
+            XCTAssertTrue(detailMenu.waitForExistence(timeout: 10))
+            XCTAssertTrue(detailMenu.isHittable, "The real Merge entry menu must be directly tappable")
+            detailMenu.tap()
             tap("popup-menu.item.merge")
             waitFor("screen.merge.loaded", timeout: 30)
             waitForMergeCardsLoaded()
@@ -5711,18 +5796,19 @@ final class ArcNoteUITests: XCTestCase {
         }
         captureMergeVisual("preview-open-no-rail")
 
-		let bodyMarker = " task12-body-\(uniqueSuffix)"
+		let bodyMarker = "task12-body-\(uniqueSuffix)"
 		let editedTag = "task12-edited"
 		let editor = waitFor("merge.artifact.editor")
 		XCTAssertTrue(
 			waitForEnabled(waitForButton("merge.artifact.accept")).isEnabled,
 			"The live artifact must be editable before exercising WYSIWYG changes"
 		)
-		editor.coordinate(
-			withNormalizedOffset: CGVector(dx: 0.35, dy: 0.35)
-		).tap()
+		let editableText = editor.descendants(matching: .textView).firstMatch
+		XCTAssertTrue(editableText.waitForExistence(timeout: 10))
+		XCTAssertTrue(editableText.isHittable)
+		editableText.tap()
 		XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 10))
-        app.typeText(bodyMarker)
+        app.typeText(" " + bodyMarker)
         editor.swipeDown()
         let bodyKeyboard = app.keyboards.firstMatch
         let bodyKeyboardDismissed = XCTNSPredicateExpectation(
@@ -5786,6 +5872,7 @@ final class ArcNoteUITests: XCTestCase {
         waitForEnabled(waitForButton("merge.artifact.accept")).tap()
         committedCardID = waitForCommittedMergeCardInLibrary(
             excluding: sourceCardID,
+            containing: bodyMarker,
             timeout: 90
         )
 
@@ -5839,7 +5926,10 @@ final class ArcNoteUITests: XCTestCase {
 		)
 		XCTAssertTrue(committedCard.tags.contains(editedTag))
         XCTAssertEqual(committedCard.rate, 3)
-        XCTAssertTrue(waitFor("card.home.\(committedCardID)").isHittable)
+        let committedLocalCard = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier BEGINSWITH %@", "card.home.local-note:"))
+            .containing(NSPredicate(format: "label CONTAINS %@", bodyMarker)).firstMatch
+        XCTAssertTrue(committedLocalCard.isHittable)
         XCTAssertFalse(
             app.descendants(matching: .any)["screen.detail.card-id"].exists,
             "Accept must return to Library instead of opening Community detail"
@@ -5856,6 +5946,8 @@ final class ArcNoteUITests: XCTestCase {
                 .waitForExistence(timeout: 3),
             "Completed Merge recovery should be cleared after returning to Library"
         )
+        XCTAssertFalse(exists("screen.flow.error", timeout: 1))
+        captureMergeVisual("post-commit-explore-relaunch")
     }
 
     func testRevokedSessionRelaunchReturnsToWelcome() throws {
@@ -7781,6 +7873,98 @@ final class ArcNoteUITests: XCTestCase {
         }
     }
 
+    func testLocalGoHomeEditRelaunchTrashRestoreAndPurge() throws {
+        let session = try requireSmokeSession()
+        seedAppSession(session)
+        let marker = "live-note-\(Int(Date().timeIntervalSince1970))"
+        let cardID = try createSmokeCard(token: session.token, searchToken: marker, isPublic: false)
+        defer { app.terminate(); permanentlyCleanUpSmokeCard(id: cardID, token: session.token) }
+        launchAuthenticatedApp()
+        app.tabBars.buttons["Home"].tap()
+        let row = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier BEGINSWITH %@", "card.home.local-note:"))
+            .containing(NSPredicate(format: "label CONTAINS %@", marker)).firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 20))
+        let localID = String(row.identifier.dropFirst("card.home.".count))
+        captureVisual("live-home-synced")
+        tap("home.card.menu.\(localID)")
+        tap("popup-menu.item.edit")
+        let editor = waitFor("cardEditorBodyWebView")
+        XCTAssertEqual(waitForButton("cardEditorLeadingAction").label, "Close note")
+        editor.coordinate(withNormalizedOffset: CGVector(dx: 0.2, dy: 0.04)).tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 8))
+        let edit = "Observed on this phone. "
+        app.typeText(edit)
+        dismissCardEditorKeyboardWithVerticalDrag()
+        waitForLabel("cardEditorLeadingAction", expected: "Close note")
+        captureVisual("live-editor-saved")
+        waitForButton("cardEditorLeadingAction").tap()
+        waitForSmokeCardState(id: cardID, token: session.token) { $0.content.contains(edit) }
+        app.terminate()
+        launchAuthenticatedApp()
+        app.tabBars.buttons["Home"].tap()
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", edit)).firstMatch.waitForExistence(timeout: 15))
+        captureVisual("live-home-relaunched")
+
+        tap("home.card.menu.\(localID)")
+        tap("popup-menu.item.remove")
+        app.buttons.matching(identifier: "card-action.remove.confirm").firstMatch.tap()
+        waitForTrashCard(id: cardID, token: session.token, isPresent: true)
+        tapButton("side-menu.open")
+        app.buttons["Trash"].tap()
+        waitForTrashCardVisible(localID)
+        captureVisual("live-trash-synced")
+        tap("trash.card.delete.\(localID)")
+        tap("trash.delete.cancel")
+        XCTAssertTrue(exists("trash.card.\(localID)", timeout: 5))
+        XCTAssertTrue(try fetchSmokeTrashCardIDs(token: session.token).contains(cardID))
+        tap("trash.card.restore.\(localID)")
+        waitForTrashCard(id: cardID, token: session.token, isPresent: false)
+        waitForMissing("trash.card.\(localID)")
+
+        app.terminate()
+        launchAuthenticatedApp()
+        app.tabBars.buttons["Home"].tap()
+        waitFor("home.card.menu.\(localID)").tap()
+        tap("popup-menu.item.remove")
+        app.buttons.matching(identifier: "card-action.remove.confirm").firstMatch.tap()
+        waitForTrashCard(id: cardID, token: session.token, isPresent: true)
+        tapButton("side-menu.open")
+        app.buttons["Trash"].tap()
+        waitForTrashCardVisible(localID)
+        tap("trash.card.delete.\(localID)")
+        tap("trash.delete.confirm")
+        waitForTrashCard(id: cardID, token: session.token, isPresent: false)
+        waitForMissing("trash.card.\(localID)")
+        captureVisual("live-trash-purged")
+        XCTAssertThrowsError(try fetchSmokeCard(id: cardID, token: session.token)) { error in
+            XCTAssertEqual((error as NSError).code, 404)
+        }
+    }
+
+    func testLocalGoProfileAndSettingsRetainAuthenticatedIdentity() throws {
+        let session = try requireSmokeSession()
+        seedAppSession(session)
+        launchAuthenticatedApp()
+        tapButton("side-menu.open")
+        tap("side-menu.profile")
+        waitFor("profile.primary-surface", timeout: 20)
+        captureVisual("live-my-profile")
+        app.terminate()
+        launchAuthenticatedApp()
+        tapButton("side-menu.open")
+        tap("side-menu.settings")
+        waitFor("screen.settings.loaded")
+        captureVisual("live-settings")
+        tap("settings.personal-data")
+        waitFor("screen.edit-profile.loaded", timeout: 20)
+        XCTAssertEqual(waitFor("edit-profile.profile-id").label, session.actorId)
+        captureVisual("live-personal-data")
+        tapButton("edit-profile.back")
+        waitFor("screen.settings.loaded")
+        app.terminate()
+    }
+
     func testLibrarySoftDeleteMovesCardToTrashAndRestoresIt() throws {
         let session = try requireSmokeSession()
         seedAppSession(session)
@@ -9572,7 +9756,7 @@ final class ArcNoteUITests: XCTestCase {
 
     @discardableResult
     private func waitFor(_ identifier: String, timeout: TimeInterval = 10, file: StaticString = #filePath, line: UInt = #line) -> XCUIElement {
-        let element = app.descendants(matching: .any)[identifier]
+        let element = systemTab(identifier) ?? app.descendants(matching: .any)[identifier]
         XCTAssertTrue(element.waitForExistence(timeout: timeout), "Missing accessibility identifier: \(identifier)", file: file, line: line)
         return element
     }
@@ -9584,7 +9768,7 @@ final class ArcNoteUITests: XCTestCase {
         file: StaticString = #filePath,
         line: UInt = #line
     ) -> XCUIElement {
-        let button = app.buttons[identifier]
+        let button = systemTab(identifier) ?? app.buttons[identifier]
         XCTAssertTrue(
             button.waitForExistence(timeout: timeout),
             "Missing button accessibility identifier: \(identifier)",
@@ -10175,6 +10359,29 @@ final class ArcNoteUITests: XCTestCase {
         add(attachment)
     }
 
+    private func renderedTextFrame(containing text: String) throws -> CGRect {
+        let request = VNRecognizeTextRequest()
+        request.recognitionLevel = .accurate
+        request.recognitionLanguages = ["en-US"]
+        request.usesLanguageCorrection = false
+        let shot = app.screenshot()
+        try VNImageRequestHandler(cgImage: XCTUnwrap(shot.image.cgImage)).perform([request])
+        for observation in request.results ?? [] {
+            guard let candidate = observation.topCandidates(1).first,
+                  let range = candidate.string.range(of: text),
+                  let box = try candidate.boundingBox(for: range)?.boundingBox else { continue }
+            let window = app.windows.firstMatch.frame
+            return CGRect(x: window.minX + box.minX * window.width,
+                          y: window.minY + (1 - box.maxY) * window.height,
+                          width: box.width * window.width, height: box.height * window.height)
+        }
+        let evidence = XCTAttachment(screenshot: shot)
+        evidence.name = "Missing rendered text: \(text)"
+        evidence.lifetime = .keepAlways
+        add(evidence)
+        return try XCTUnwrap(nil as CGRect?, "The actual edited text must be readable in the screenshot")
+    }
+
     private func captureVisual(_ name: String) {
         let attachment = XCTAttachment(screenshot: app.screenshot())
         attachment.name = name
@@ -10460,7 +10667,13 @@ final class ArcNoteUITests: XCTestCase {
     }
 
     private func exists(_ identifier: String, timeout: TimeInterval) -> Bool {
-        app.descendants(matching: .any)[identifier].waitForExistence(timeout: timeout)
+        (systemTab(identifier) ?? app.descendants(matching: .any)[identifier]).waitForExistence(timeout: timeout)
+    }
+
+    private func systemTab(_ identifier: String) -> XCUIElement? {
+        // Native TabView exposes the system button's title, not its Label's ID.
+        let titles = ["tab.flow": "Explore", "tab.library": "Home", "tab.chat": "Chat"]
+        return titles[identifier].map { app.tabBars.buttons[$0] }
     }
 
     private func openExploreSearchMode(file: StaticString = #filePath, line: UInt = #line) {
@@ -11116,6 +11329,7 @@ final class ArcNoteUITests: XCTestCase {
 
     private func waitForCommittedMergeCardInLibrary(
         excluding sourceCardID: String,
+        containing bodyMarker: String,
         timeout: TimeInterval = 90,
         file: StaticString = #filePath,
         line: UInt = #line
@@ -11143,9 +11357,9 @@ final class ArcNoteUITests: XCTestCase {
                 let value = committedID.label.trimmingCharacters(
                     in: .whitespacesAndNewlines
                 )
-                let card = app.descendants(matching: .any)[
-                    "card.home.\(value)"
-                ]
+                let card = app.descendants(matching: .any)
+                    .matching(NSPredicate(format: "identifier BEGINSWITH %@", "card.home.local-note:"))
+                    .containing(NSPredicate(format: "label CONTAINS %@", bodyMarker)).firstMatch
                 if !value.isEmpty,
                    value != sourceCardID,
                    library.exists,
@@ -11360,7 +11574,7 @@ final class ArcNoteUITests: XCTestCase {
         }
     }
 
-    private struct SmokeSession {
+    private struct SmokeSession: Sendable {
         let token: String
         let actorId: String
         let email: String
@@ -11397,6 +11611,7 @@ final class ArcNoteUITests: XCTestCase {
             let title: String?
             let content: String
             let contentJSON: String?
+            let syncToken: String?
             let isPublic: Bool
             let isPinned: Bool
             let tags: [String]
@@ -11407,6 +11622,7 @@ final class ArcNoteUITests: XCTestCase {
             enum CodingKeys: String, CodingKey {
                 case id, title, content, tags, rate
                 case contentJSON = "content_json"
+                case syncToken = "sync_token"
                 case isPublic = "is_public"
                 case isPinned = "is_pinned"
 				case backgroundMediaRef = "background_media_ref"
@@ -12249,9 +12465,20 @@ final class ArcNoteUITests: XCTestCase {
         request.httpMethod = "POST"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(UUID().uuidString, forHTTPHeaderField: "Idempotency-Key")
+        let text = "iOS typed search result navigation smoke \(searchToken)"
+        let blocks: [[String: Any]] = [[
+            "id": "blk_" + UUID().uuidString.replacingOccurrences(of: "-", with: ""),
+            "type": "paragraph", "props": [:], "children": [],
+            "content": [["type": "text", "text": text, "styles": [:]]]
+        ]]
+        let document = try JSONSerialization.data(withJSONObject: [
+            "editor_kind": "blocknote", "schema_version": 1, "blocks": blocks
+        ])
         request.httpBody = try JSONSerialization.data(withJSONObject: [
             "title": "iOS typed search UI \(searchToken)",
-            "content": "iOS typed search result navigation smoke \(searchToken)",
+            "content": text,
+            "content_json": try XCTUnwrap(String(data: document, encoding: .utf8)),
             "tags": ["ios-ui-smoke", searchToken],
             "is_public": isPublic
         ])
@@ -12330,6 +12557,11 @@ final class ArcNoteUITests: XCTestCase {
         var request = URLRequest(url: url)
         request.httpMethod = "DELETE"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        if let syncToken = try? fetchSmokeCard(id: id, token: token, sync: true).syncToken {
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue(UUID().uuidString, forHTTPHeaderField: "Idempotency-Key")
+            request.httpBody = try? JSONSerialization.data(withJSONObject: ["base_sync_token": syncToken])
+        }
         _ = try? sendRawRequest(request)
     }
 
@@ -12342,6 +12574,11 @@ final class ArcNoteUITests: XCTestCase {
         var request = URLRequest(url: url)
         request.httpMethod = "DELETE"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        if let syncToken = try? fetchSmokeCard(id: id, token: token, sync: true).syncToken {
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue(UUID().uuidString, forHTTPHeaderField: "Idempotency-Key")
+            request.httpBody = try? JSONSerialization.data(withJSONObject: ["base_sync_token": syncToken])
+        }
         _ = try? sendRawRequest(request)
     }
 
@@ -12482,10 +12719,11 @@ final class ArcNoteUITests: XCTestCase {
 
     private func fetchSmokeCard(
         id: String,
-        token: String
+        token: String,
+        sync: Bool = false
     ) throws -> SmokeCardResponse.SmokeCardData {
         let baseURL = UITestAPIConfiguration.baseURL
-        guard let url = URL(string: "\(baseURL)/api/cards/\(id)") else {
+        guard let url = URL(string: "\(baseURL)/api/cards/\(id)" + (sync ? "?sync=1" : "")) else {
             throw NSError(
                 domain: "ArcNoteUITests",
                 code: 12,
@@ -13586,7 +13824,7 @@ final class ArcNoteUITests: XCTestCase {
         ])
 
         let semaphore = DispatchSemaphore(value: 0)
-        var result: SmokeSession?
+        let result = OSAllocatedUnfairLock(initialState: SmokeSession?.none)
 
         URLSession.shared.dataTask(with: request) { data, _, _ in
             defer { semaphore.signal() }
@@ -13595,16 +13833,18 @@ final class ArcNoteUITests: XCTestCase {
                 return
             }
 
-            result = SmokeSession(
-                token: response.data.token,
-                actorId: response.data.user.id,
-                email: response.data.user.email,
-                username: response.data.user.username
-            )
+            result.withLock {
+                $0 = SmokeSession(
+                    token: response.data.token,
+                    actorId: response.data.user.id,
+                    email: response.data.user.email,
+                    username: response.data.user.username
+                )
+            }
         }.resume()
 
         _ = semaphore.wait(timeout: .now() + 10)
-        return result
+        return result.withLock { $0 }
     }
 
     private func fetchLocalPhoneSmokeSession(
@@ -13628,7 +13868,7 @@ final class ArcNoteUITests: XCTestCase {
             request.httpBody = try? JSONSerialization.data(withJSONObject: body)
 
             let semaphore = DispatchSemaphore(value: 0)
-            var result: SmokeSession?
+            let result = OSAllocatedUnfairLock(initialState: SmokeSession?.none)
             URLSession.shared.dataTask(with: request) { data, _, _ in
                 defer { semaphore.signal() }
                 guard let data,
@@ -13638,15 +13878,17 @@ final class ArcNoteUITests: XCTestCase {
                       ) else {
                     return
                 }
-                result = SmokeSession(
-                    token: response.data.token,
-                    actorId: response.data.user.id,
-                    email: response.data.user.email,
-                    username: response.data.user.username
-                )
+                result.withLock {
+                    $0 = SmokeSession(
+                        token: response.data.token,
+                        actorId: response.data.user.id,
+                        email: response.data.user.email,
+                        username: response.data.user.username
+                    )
+                }
             }.resume()
             _ = semaphore.wait(timeout: .now() + 10)
-            return result
+            return result.withLock { $0 }
         }
 
         if let session = request(
@@ -13689,14 +13931,12 @@ final class ArcNoteUITests: XCTestCase {
 
     private func sendRawRequest(_ request: URLRequest, timeout: TimeInterval = 15) throws -> Data {
         let semaphore = DispatchSemaphore(value: 0)
-        var responseData: Data?
-        var urlResponse: URLResponse?
-        var responseError: Error?
+        let responseState = OSAllocatedUnfairLock(initialState: (
+            data: Data?.none, response: URLResponse?.none, error: (any Error)?.none
+        ))
 
         URLSession.shared.dataTask(with: request) { data, response, error in
-            responseData = data
-            urlResponse = response
-            responseError = error
+            responseState.withLock { $0 = (data, response, error) }
             semaphore.signal()
         }.resume()
 
@@ -13704,15 +13944,16 @@ final class ArcNoteUITests: XCTestCase {
             throw NSError(domain: "ArcNoteUITests", code: 3, userInfo: [NSLocalizedDescriptionKey: "Timed out waiting for Go API response"])
         }
 
-        if let responseError {
+        let received = responseState.withLock { $0 }
+        if let responseError = received.error {
             throw responseError
         }
 
-        guard let httpResponse = urlResponse as? HTTPURLResponse else {
+        guard let httpResponse = received.response as? HTTPURLResponse else {
             throw NSError(domain: "ArcNoteUITests", code: 4, userInfo: [NSLocalizedDescriptionKey: "Missing HTTP response"])
         }
 
-        let data = responseData ?? Data()
+        let data = received.data ?? Data()
         guard (200..<300).contains(httpResponse.statusCode) else {
             let body = String(data: data, encoding: .utf8) ?? ""
             throw NSError(

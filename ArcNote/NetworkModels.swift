@@ -15,6 +15,8 @@ struct NetworkResponse<T: Codable>: Codable {
 
 struct EmptyResponseData: Codable {}
 
+extension NetworkResponse: Sendable where T: Sendable {}
+
 struct HealthResponse: Codable {
     let service: String
     let status: String

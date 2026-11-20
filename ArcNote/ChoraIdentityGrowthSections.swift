@@ -103,7 +103,7 @@ struct ChoraIdentitySection: View {
                 }
                 Spacer()
             }
-            ChoraField(label: "Display name", placeholder: "Chora", text: .init(get: { store.displayNameDraft }, set: store.setDisplayNameDraft), identifier: "chora.identity.displayName")
+            ChoraField(label: "Display name", placeholder: "Chora", text: .init(get: { store.displayNameDraft }, set: { store.setDisplayNameDraft($0) }), identifier: "chora.identity.displayName")
             ChoraField(label: "Preferred address", placeholder: "How Chora addresses you", text: .init(get: { store.preferredAddressDraft ?? "" }, set: { store.setPreferredAddressDraft($0.isEmpty ? nil : $0) }), identifier: "chora.identity.preferredAddress")
             ForEach(errors, id: \.0) { field, message in
                 Text(message).font(.footnote).foregroundColor(.red)

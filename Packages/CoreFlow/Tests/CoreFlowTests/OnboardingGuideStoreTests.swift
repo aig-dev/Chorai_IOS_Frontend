@@ -524,6 +524,7 @@ final class OnboardingGuideStoreTests: XCTestCase {
         )
     }
 
+    @MainActor
     private func settle(_ turns: Int) async {
         for _ in 0..<turns {
             await withCheckedContinuation { continuation in

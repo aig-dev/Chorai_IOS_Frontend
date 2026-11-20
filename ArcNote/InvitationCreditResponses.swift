@@ -102,6 +102,8 @@ struct InvitationPaginatedData<Item: Codable>: Codable {
     let limit: Int
 }
 
+extension InvitationPaginatedData: Sendable where Item: Sendable {}
+
 struct InvitationRecordItem: Codable, Identifiable {
     let invitationRecordId: String
     let inviterActorId: String

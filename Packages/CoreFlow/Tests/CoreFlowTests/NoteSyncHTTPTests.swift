@@ -3,6 +3,21 @@ import XCTest
 @testable import CoreFlow
 
 final class NoteSyncHTTPTests: XCTestCase {
+    func testInvalidAuthoredTimestampRejectsSnapshotWithoutChangingMissingTimeSupport() throws {
+        for value in ["not-a-date", "2026-01-01T00:00:60Z"] {
+            let data = Data("""
+            {"success":true,"data":{"id":"note","owner_actor_id":"actor","sync_token":"v1","lifecycle":"active","content":"body","tags":[],"is_public":false,"updated_at":"\(value)"}}
+            """.utf8)
+            XCTAssertThrowsError(try NoteSyncHTTP.snapshot(from: data, actorID: "actor")) {
+                XCTAssertEqual($0 as? NoteSyncFailure, .invalidResponse)
+            }
+        }
+        let missing = Data(#"{"success":true,"data":{"id":"note","owner_actor_id":"actor","sync_token":"v1","lifecycle":"active","content":"body","tags":[],"is_public":false}}"#.utf8)
+        let snapshot = try NoteSyncHTTP.snapshot(from: missing, actorID: "actor")
+        XCTAssertNil(snapshot.createdAt)
+        XCTAssertNil(snapshot.updatedAt)
+    }
+
     func testPageUsesTheSingleCardOwnerAndBodyChecksForEveryItem() throws {
         let mine: [String: Any] = ["id": "mine", "owner_actor_id": "owner", "sync_token": "v7", "lifecycle": "active",
                                    "content": "owned body", "content_json": #"{"blocks":[]}"#, "tags": ["test"], "is_public": false]

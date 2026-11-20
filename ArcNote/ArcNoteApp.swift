@@ -4363,6 +4363,7 @@ private struct ChoraProfileContractFixtureView: View {
     """#
 }
 
+@MainActor
 private enum APIMigrationUITestSeed {
     static func applyIfPresent() {
         let environment = ProcessInfo.processInfo.environment
@@ -4408,6 +4409,7 @@ private enum APIMigrationUITestSeed {
     }
 }
 
+@MainActor
 private final class APIMigrationSmokeRunner {
     private static let marker = "API_MIGRATION_SMOKE"
 
@@ -4429,8 +4431,7 @@ private final class APIMigrationSmokeRunner {
 
         Task {
             let code = await run()
-            fflush(stdout)
-            fflush(stderr)
+            fflush(nil)
             exit(Int32(code))
         }
     }
@@ -4707,7 +4708,7 @@ private final class APIMigrationSmokeRunner {
         }
     }
 
-    private static func expect<T>(_ name: String, operation: () -> AnyPublisher<T, NetworkError>) async throws -> T {
+    private static func expect<T: Sendable>(_ name: String, operation: @MainActor () -> AnyPublisher<T, NetworkError>) async throws -> T {
         let value = try await awaitPublisher(operation())
         log("PASS \(name)")
         return value
@@ -4748,7 +4749,7 @@ private final class APIMigrationSmokeRunner {
         return Data(base64Encoded: base64.trimmingCharacters(in: .whitespacesAndNewlines)) ?? Data()
     }
 
-    private static func awaitPublisher<T>(_ publisher: AnyPublisher<T, NetworkError>) async throws -> T {
+    private static func awaitPublisher<T: Sendable>(_ publisher: AnyPublisher<T, NetworkError>) async throws -> T {
         try await withCheckedThrowingContinuation { continuation in
             var cancellable: AnyCancellable?
             var didResume = false
@@ -4774,7 +4775,7 @@ private final class APIMigrationSmokeRunner {
         }
     }
 
-    private static func awaitCallback<T>(
+    private static func awaitCallback<T: Sendable>(
         _ operation: (@escaping (Result<T, NetworkError>) -> Void) -> Void
     ) async throws -> T {
         try await withCheckedThrowingContinuation { continuation in
@@ -4831,6 +4832,7 @@ enum LocalDevelopmentPreview {
         )
     }
 
+    @MainActor
     static func installDisplayProfile() {
         // A process-local display identity, without authenticating or writing credentials.
         AuthManager.shared.currentUser = User(

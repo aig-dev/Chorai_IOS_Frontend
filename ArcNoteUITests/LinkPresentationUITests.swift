@@ -1,10 +1,12 @@
 import XCTest
 
 /// Presentation and selection-only callbacks with an offline terminal transport.
+@MainActor
 final class LinkPresentationUITests: XCTestCase {
     private var app: XCUIApplication!
 
-    override func setUpWithError() throws {
+    override func setUp() async throws {
+        try await super.setUp()
         continueAfterFailure = false
         app = XCUIApplication()
         app.launchArguments += ["--dev-preview", "--ui-test-link-presentation"]

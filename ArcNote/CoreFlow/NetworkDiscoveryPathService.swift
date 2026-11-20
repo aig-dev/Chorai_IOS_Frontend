@@ -36,8 +36,7 @@ struct NetworkDiscoveryPathService: CoreDiscoveryPathServing {
 
         let response: NetworkResponse<DiscoveryPathData>
         do {
-            var iterator = fetchPath(cardID).values.makeAsyncIterator()
-            guard let value = try await iterator.next() else { throw NetworkError.noData }
+            guard let value = try await NetworkManager.firstValue(fetchPath(cardID)) else { throw NetworkError.noData }
             response = value
         } catch let error as NetworkError where error.cardReadStatus == 404 {
             // The original endpoint uses 404 for no source. Confirm the target again

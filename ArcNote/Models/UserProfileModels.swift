@@ -90,7 +90,8 @@ struct PrivacySettingsData: Codable, Equatable {
 }
 
 // MARK: 用户资料管理器
-class UserProfileManager: ObservableObject {
+@MainActor
+final class UserProfileManager: ObservableObject {
     @Published var userProfile: UserProfile?
     @Published var creditBalance: CreditBalanceData?
     @Published var isCreditLoading: Bool = false

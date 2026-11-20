@@ -130,6 +130,7 @@ enum MultipartUploadPublisherBuilder {
 }
 
 protocol NoteImportUploading: Sendable {
+    @MainActor
     func enqueue(
         parts: [NoteImportUploadPart],
         clientRequestID: String,
@@ -137,7 +138,7 @@ protocol NoteImportUploading: Sendable {
     ) -> AnyPublisher<NoteImportUploadTransportResult, NetworkError>
 }
 
-private final class NoteImportPublisherAwaitState<Output>:
+private final class NoteImportPublisherAwaitState<Output: Sendable>:
     @unchecked Sendable
 {
     private let lock = NSLock()
@@ -212,7 +213,7 @@ private final class NoteImportPublisherAwaitState<Output>:
     }
 }
 
-struct NetworkNoteImportUploader: NoteImportUploading, @unchecked Sendable {
+struct NetworkNoteImportUploader: NoteImportUploading, Sendable {
     let network: NetworkManager
 
     func enqueue(
@@ -228,12 +229,13 @@ struct NetworkNoteImportUploader: NoteImportUploading, @unchecked Sendable {
     }
 }
 
-struct NetworkNoteImportService: CoreNoteImportServing, @unchecked Sendable {
+struct NetworkNoteImportService: CoreNoteImportServing, Sendable {
     private let resourceAccessor: any SecurityScopedResourceAccessing
     private let metadataReader: any NoteImportFileMetadataReading
     private let uploader: any NoteImportUploading
     private let network: NetworkManager
 
+    @MainActor
     init(network: NetworkManager = .shared) {
         self.network = network
         resourceAccessor = SystemSecurityScopedResourceAccessor()
@@ -241,6 +243,7 @@ struct NetworkNoteImportService: CoreNoteImportServing, @unchecked Sendable {
         uploader = NetworkNoteImportUploader(network: network)
     }
 
+    @MainActor
     init(
         network: NetworkManager = .shared,
         resourceAccessor: any SecurityScopedResourceAccessing,
@@ -341,8 +344,9 @@ struct NetworkNoteImportService: CoreNoteImportServing, @unchecked Sendable {
         }
     }
 
+    @MainActor
     private func firstUploadValue(
-        _ publisher: AnyPublisher<
+        _ publisher: @autoclosure @MainActor @Sendable () -> AnyPublisher<
             NoteImportUploadTransportResult,
             NetworkError
         >
@@ -353,7 +357,7 @@ struct NetworkNoteImportService: CoreNoteImportServing, @unchecked Sendable {
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
                 state.install(continuation: continuation)
-                let cancellable = publisher.sink(
+                let cancellable = publisher().sink(
                     receiveCompletion: { completion in
                         state.finishWithoutValue(completion)
                     },
@@ -498,11 +502,11 @@ struct NetworkNoteImportService: CoreNoteImportServing, @unchecked Sendable {
         )
     }
 
-    private func firstValue<Output>(
-        _ publisher: AnyPublisher<Output, NetworkError>
+    @MainActor
+    private func firstValue<Output: Sendable>(
+        _ publisher: @autoclosure @MainActor @Sendable () -> AnyPublisher<Output, NetworkError>
     ) async throws -> Output {
-        var iterator = publisher.values.makeAsyncIterator()
-        guard let value = try await iterator.next() else {
+        guard let value = try await NetworkManager.firstValue(publisher()) else {
             throw NetworkError.noData
         }
         return value

@@ -1,9 +1,32 @@
+import Combine
 import Foundation
 import XCTest
 @testable import CoreFlow
 
 @MainActor
 final class CommentReadStoreTests: XCTestCase {
+    func testSessionInvalidationPublishesOnlyWhenClosingAnOpenRead() async {
+        let transport = CommentReader()
+        let store = transport.makeStore()
+        var publications = 0
+        let subscription = store.objectWillChange.sink { publications += 1 }
+        defer { subscription.cancel() }
+
+        NotificationCenter.default.post(name: .cardReadSessionDidChange, object: nil)
+        XCTAssertEqual(publications, 0, "An idle store must not publish during initial session restoration")
+
+        store.open("a")
+        publications = 0
+        NotificationCenter.default.post(name: .cardReadSessionDidChange, object: nil)
+        XCTAssertGreaterThan(publications, 0, "An open read must still notify its presentation when revoked")
+        XCTAssertNil(store.cardID)
+        let closingPublications = publications
+        transport.finish(0, .page([row("late-private")], total: 1))
+        XCTAssertTrue(store.comments.isEmpty)
+        NotificationCenter.default.post(name: .cardReadSessionDidChange, object: nil)
+        XCTAssertEqual(publications, closingPublications)
+    }
+
     func testReopenShowsThatCardsCachedThreadsBeforeTheNewResponse() async {
         let transport = CommentReader()
         let store = transport.makeStore()

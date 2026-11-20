@@ -2,7 +2,8 @@ import Combine
 import CoreFlow
 import Foundation
 
-protocol InvitationCreditNetworkTransporting {
+@MainActor
+protocol InvitationCreditNetworkTransporting: Sendable {
     func getUserGroup(
         presentsError: Bool
     ) -> AnyPublisher<InvitationReferralResponse, NetworkError>
@@ -39,9 +40,10 @@ extension NetworkManager: InvitationCreditNetworkTransporting {}
 
 struct NetworkInvitationCreditService:
     CoreInvitationCreditServing,
-    @unchecked Sendable {
+    Sendable {
     private let network: any InvitationCreditNetworkTransporting
 
+    @MainActor
     init(
         network: any InvitationCreditNetworkTransporting = NetworkManager.shared
     ) {
@@ -323,11 +325,11 @@ struct NetworkInvitationCreditService:
         )
     }
 
-    private func firstValue<Output>(
-        _ publisher: AnyPublisher<Output, NetworkError>
+    @MainActor
+    private func firstValue<Output: Sendable>(
+        _ publisher: @autoclosure @MainActor @Sendable () -> AnyPublisher<Output, NetworkError>
     ) async throws -> Output {
-        var iterator = publisher.values.makeAsyncIterator()
-        guard let value = try await iterator.next() else {
+        guard let value = try await NetworkManager.firstValue(publisher()) else {
             throw NetworkError.noData
         }
         return value

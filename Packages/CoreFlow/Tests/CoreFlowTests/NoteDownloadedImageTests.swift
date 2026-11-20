@@ -7,8 +7,8 @@ final class NoteDownloadedImageTests: XCTestCase {
     private var root: URL!
     private let scope = NoteStoreScope(actorID: "image-owner", environmentID: "local")
     private let ref = "med_0123456789abcdef"
-    override func setUpWithError() throws { root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString) }
-    override func tearDownWithError() throws { try? FileManager.default.removeItem(at: root) }
+    override func setUp() async throws { root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString) }
+    override func tearDown() async throws { try? FileManager.default.removeItem(at: root) }
 
     func testPersonalThumbnailAndEditorShareOneVerifiedDownloadByLocalOrServerID() async throws {
         let hydratedURL = "https://stale.example/remote.png"
@@ -37,6 +37,7 @@ final class NoteDownloadedImageTests: XCTestCase {
     }
 
     func testUncachedOwnedSearchImageOpensOnlineAndStaysAvailableOnlyInItsAccount() async throws {
+        let scope = scope
         let raw = #"[{"id":"photo","type":"image","props":{"mediaRef":"\#(ref)","url":"https://stale.example/photo.png"}}]"#
         let searchNote = NoteRemoteSnapshot(assetID: "search-note", syncToken: "search-version",
                                             body: OfflineNoteBody(content: "", contentJSON: raw), lifecycle: .active, isPublic: false)
@@ -74,6 +75,7 @@ final class NoteDownloadedImageTests: XCTestCase {
     }
 
     func testRemoteImageDownloadsOnDemandOnceAndSurvivesOfflineReopen() async throws {
+        let scope = scope
         let (library, transport, id) = try await fixture()
         let initial = try await library.open(identifier: id)
         let urls = try await library.imageDisplayURLs(identifier: id, scope: scope)

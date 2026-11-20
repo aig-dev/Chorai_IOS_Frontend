@@ -39,7 +39,7 @@ struct SparkContinuationView: View {
         _likeStore = StateObject(wrappedValue: CardLikeStore(
             state: CardLikeState(cardID: "", isLiked: false, likeCount: 0),
             service: NetworkCoreCardLikeService(),
-            onCommit: CardEngagementCenter.shared.publish
+            onCommit: { CardEngagementCenter.shared.publish($0) }
         ))
         let scope = ProcessInfo.processInfo.environment[
             "CHORAI_UI_TEST_SPARK_SESSION_SCOPE"

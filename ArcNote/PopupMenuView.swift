@@ -10,10 +10,10 @@ private struct OwnedCardActionRevisionKey: EnvironmentKey {
 private struct OwnedCardActionLockKey: EnvironmentKey {
     static let defaultValue = false
 }
-private struct OwnedCardActionCallbacks {
-    var onDelete: (() -> Void)?
-    var onToggleVisibility: ((UserCard) -> Void)?
-    var onTogglePin: ((UserCard) -> Void)?
+private struct OwnedCardActionCallbacks: Sendable {
+    var onDelete: (@MainActor @Sendable () -> Void)?
+    var onToggleVisibility: (@MainActor @Sendable (UserCard) -> Void)?
+    var onTogglePin: (@MainActor @Sendable (UserCard) -> Void)?
 }
 private struct OwnedCardActionCallbacksKey: EnvironmentKey {
     static let defaultValue = OwnedCardActionCallbacks()
@@ -43,7 +43,7 @@ private extension UserCard {
     }
 }
 
-/// Adapts only the existing requests. Receipts, not requested values, become state.
+/// Adapts existing owners: durable local lifecycle changes or confirmed cloud receipts.
 @MainActor
 private final class NetworkOwnedCardActionService: OwnedCardActionServing {
     func perform(_ request: OwnedCardActionRequest) async throws -> OwnedCardActionCommit {
@@ -53,6 +53,12 @@ private final class NetworkOwnedCardActionService: OwnedCardActionServing {
         }
         switch request.operation {
         case .remove:
+            if request.cardID.hasPrefix("local-note:") {
+                // My Notes is locally authoritative. The existing coordinator
+                // owns the guarded cloud operation and retains it on failure.
+                try await LocalNotesController.shared.setLifecycle(identifier: request.cardID, lifecycle: .trashed)
+                return .removed(cardID: request.cardID)
+            }
             return try await withCheckedThrowingContinuation { continuation in
                 NetworkManager.shared.deleteCard(cardId: request.cardID) { result in
                     switch result {
@@ -172,7 +178,7 @@ struct CardNavigationDismissal {
 }
 
 private struct NavigateCardActionKey: EnvironmentKey {
-    static let defaultValue: (CardNavigationRoute) -> Void = { _ in }
+    static let defaultValue: @MainActor @Sendable (CardNavigationRoute) -> Void = { _ in }
 }
 
 private struct CardNavigationOnboardingStoreKey: EnvironmentKey {
@@ -184,7 +190,7 @@ private struct CardNavigationContextualTipStoreKey: EnvironmentKey {
 }
 
 private struct CardNavigationRoutePresentationChangedKey: EnvironmentKey {
-    static let defaultValue: (Bool) -> Void = { _ in }
+    static let defaultValue: @MainActor @Sendable (Bool) -> Void = { _ in }
 }
 
 private struct CardNavigationMergeCoordinatorKey: EnvironmentKey {
@@ -192,7 +198,7 @@ private struct CardNavigationMergeCoordinatorKey: EnvironmentKey {
 }
 
 extension EnvironmentValues {
-    var navigateCard: (CardNavigationRoute) -> Void {
+    var navigateCard: @MainActor @Sendable (CardNavigationRoute) -> Void {
         get { self[NavigateCardActionKey.self] }
         set { self[NavigateCardActionKey.self] = newValue }
     }
@@ -207,7 +213,7 @@ extension EnvironmentValues {
         set { self[CardNavigationContextualTipStoreKey.self] = newValue }
     }
 
-    var cardNavigationRoutePresentationChanged: (Bool) -> Void {
+    var cardNavigationRoutePresentationChanged: @MainActor @Sendable (Bool) -> Void {
         get { self[CardNavigationRoutePresentationChangedKey.self] }
         set { self[CardNavigationRoutePresentationChangedKey.self] = newValue }
     }
@@ -241,7 +247,7 @@ private struct CardNavigationDestination: View {
     let route: CardNavigationRoute
     let onboardingStore: OnboardingGuideStore?
     let contextualTipStore: ContextualGuideTipStore?
-    let routePresentationChanged: (Bool) -> Void
+    let routePresentationChanged: @MainActor @Sendable (Bool) -> Void
 
     var body: some View {
         destination
@@ -307,7 +313,7 @@ private struct CardNavigationHostModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .environment(\.navigateCard, present)
+            .environment(\.navigateCard, { present($0) })
             .navigationDestination(isPresented: isPresentingRoute) {
                 if let presentedRoute {
                     CardNavigationDestination(
@@ -381,9 +387,9 @@ struct PopupMenuModifier: ViewModifier {
     let isOwnCard: Bool
     let isSparkEnabled: Bool
     let onSpark: (() -> Void)?
-    let onDelete: (() -> Void)?
-    let onToggleVisibility: ((UserCard) -> Void)?
-    let onTogglePin: ((UserCard) -> Void)?
+    let onDelete: (@MainActor @Sendable () -> Void)?
+    let onToggleVisibility: (@MainActor @Sendable (UserCard) -> Void)?
+    let onTogglePin: (@MainActor @Sendable (UserCard) -> Void)?
     let onRouteDismissed: (CardNavigationDismissal) -> Void
     let onRoutePresentationChanged: (Bool) -> Void
 
@@ -428,12 +434,12 @@ struct PopupMenuModifier: ViewModifier {
                             onToggleVisibility: onToggleVisibility,
                             onTogglePin: onTogglePin,
                             ownedActions: ownedActions,
-                            onNavigate: present
+                            onNavigate: { present($0) }
                         )
                     }
                 }
             )
-            .environment(\.navigateCard, present)
+            .environment(\.navigateCard, { present($0) })
             .environment(\.ownedCardActionCallbacks, OwnedCardActionCallbacks(
                 onDelete: onDelete, onToggleVisibility: onToggleVisibility, onTogglePin: onTogglePin
             ))
@@ -443,8 +449,7 @@ struct PopupMenuModifier: ViewModifier {
                         route: presentedRoute,
                         onboardingStore: onboardingStore,
                         contextualTipStore: contextualTipStore,
-                        routePresentationChanged:
-                            onRoutePresentationChanged
+                        routePresentationChanged: { onRoutePresentationChanged($0) }
                     )
                     .modifier(
                         ForwardMergeCoordinatorModifier(
@@ -469,10 +474,10 @@ struct PopupMenuOverlay: View {
     let isOwnCard: Bool
     let isSparkEnabled: Bool
     let onSpark: (() -> Void)?
-    let onDelete: (() -> Void)?
-    let onToggleVisibility: ((UserCard) -> Void)?
-    let onTogglePin: ((UserCard) -> Void)?
-    let onNavigate: (CardNavigationRoute) -> Void
+    let onDelete: (@MainActor @Sendable () -> Void)?
+    let onToggleVisibility: (@MainActor @Sendable (UserCard) -> Void)?
+    let onTogglePin: (@MainActor @Sendable (UserCard) -> Void)?
+    let onNavigate: @MainActor @Sendable (CardNavigationRoute) -> Void
     let onPrepare: (() -> Void)?
     let ownedActions: OwnedCardActionStore?
 
@@ -483,11 +488,11 @@ struct PopupMenuOverlay: View {
         isOwnCard: Bool,
         isSparkEnabled: Bool = true,
         onSpark: (() -> Void)? = nil,
-        onDelete: (() -> Void)? = nil,
-        onToggleVisibility: ((UserCard) -> Void)? = nil,
-        onTogglePin: ((UserCard) -> Void)? = nil,
+        onDelete: (@MainActor @Sendable () -> Void)? = nil,
+        onToggleVisibility: (@MainActor @Sendable (UserCard) -> Void)? = nil,
+        onTogglePin: (@MainActor @Sendable (UserCard) -> Void)? = nil,
         ownedActions: OwnedCardActionStore? = nil,
-        onNavigate: @escaping (CardNavigationRoute) -> Void = { _ in },
+        onNavigate: @escaping @MainActor @Sendable (CardNavigationRoute) -> Void = { _ in },
         onPrepare: (() -> Void)? = nil
     ) {
         _isPresented = isPresented
@@ -865,9 +870,9 @@ struct NativeCardActionsMenu<LabelContent: View>: View {
     let isSparkEnabled: Bool
     let onPrepare: (() -> Void)?
     let onSpark: (() -> Void)?
-    let onDelete: (() -> Void)?
-    let onToggleVisibility: ((UserCard) -> Void)?
-    let onTogglePin: ((UserCard) -> Void)?
+    let onDelete: (@MainActor @Sendable () -> Void)?
+    let onToggleVisibility: (@MainActor @Sendable (UserCard) -> Void)?
+    let onTogglePin: (@MainActor @Sendable (UserCard) -> Void)?
     private let label: LabelContent
 
     init(
@@ -877,9 +882,9 @@ struct NativeCardActionsMenu<LabelContent: View>: View {
         isSparkEnabled: Bool = true,
         onPrepare: (() -> Void)? = nil,
         onSpark: (() -> Void)? = nil,
-        onDelete: (() -> Void)? = nil,
-        onToggleVisibility: ((UserCard) -> Void)? = nil,
-        onTogglePin: ((UserCard) -> Void)? = nil,
+        onDelete: (@MainActor @Sendable () -> Void)? = nil,
+        onToggleVisibility: (@MainActor @Sendable (UserCard) -> Void)? = nil,
+        onTogglePin: (@MainActor @Sendable (UserCard) -> Void)? = nil,
         @ViewBuilder label: () -> LabelContent
     ) {
         self.cardData = cardData
@@ -973,9 +978,9 @@ extension View {
         isOwnCard: Bool = false,
         isSparkEnabled: Bool = true,
         onSpark: (() -> Void)? = nil,
-        onDelete: (() -> Void)? = nil,
-        onToggleVisibility: ((UserCard) -> Void)? = nil,
-        onTogglePin: ((UserCard) -> Void)? = nil,
+        onDelete: (@MainActor @Sendable () -> Void)? = nil,
+        onToggleVisibility: (@MainActor @Sendable (UserCard) -> Void)? = nil,
+        onTogglePin: (@MainActor @Sendable (UserCard) -> Void)? = nil,
         onRouteDismissed: @escaping (CardNavigationDismissal) -> Void = { _ in },
         onRoutePresentationChanged: @escaping (Bool) -> Void = { _ in },
         ownedCardActionService: (any OwnedCardActionServing)? = nil,

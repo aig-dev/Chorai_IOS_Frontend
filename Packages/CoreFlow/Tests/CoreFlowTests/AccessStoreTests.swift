@@ -84,6 +84,17 @@ final class AccessStoreTests: XCTestCase {
         XCTAssertEqual(store.phase, .failed)
     }
 
+    func testVerifiedAdministratorCanEnterAndLaterDenialClosesAccess() async {
+        let service = AccessServiceStub()
+        service.stateResult = .success(AccessState(mode: "unavailable", status: "allowed", scope: nil, reasonCode: "admin_bypass"))
+        let store = AccessStore(service: service, codes: CodeMemoryStore(), hosts: ["chorai.com"])
+        await store.load()
+        XCTAssertEqual(store.phase, .allowed)
+        service.stateResult = .success(AccessState(mode: "private_beta", status: "required", scope: nil, reasonCode: "grant_required"))
+        await store.load()
+        XCTAssertEqual(store.phase, .required)
+    }
+
     func testClaimFailureKeepsCodeAndReusesAttemptKey() async {
         let service = AccessServiceStub()
         service.claimResult = .failure(AccessStubError.failed)

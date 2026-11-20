@@ -47,7 +47,7 @@ struct DetailView: View {
                     likeCount: 0
                 ),
                 service: NetworkCoreCardLikeService(),
-                onCommit: CardEngagementCenter.shared.publish
+                onCommit: { CardEngagementCenter.shared.publish($0) }
             )
         )
     }

@@ -2,10 +2,12 @@ import XCTest
 
 /// Real detail and Spark surfaces with terminal, process-local fixture transport.
 /// These tests exercise presentation and keyboard state, not service mutations.
+@MainActor
 final class CommentPresentationUITests: XCTestCase {
     private var app: XCUIApplication!
 
-    override func setUpWithError() throws {
+    override func setUp() async throws {
+        try await super.setUp()
         continueAfterFailure = false
         app = XCUIApplication()
         app.launchArguments += ["--dev-preview", "--ui-test-comment-presentation"]

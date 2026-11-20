@@ -3,7 +3,7 @@ import CoreFlow
 import Foundation
 import Security
 
-final class KeychainStore: CodeStoring, @unchecked Sendable {
+final class KeychainStore: CodeStoring, Sendable {
     static let shared = KeychainStore()
 
     private static let service = "com.michen.arcnote.access"
@@ -74,7 +74,8 @@ final class KeychainStore: CodeStoring, @unchecked Sendable {
     }
 }
 
-final class NetworkAccess: AccessServing, AccessCodePreflighting, @unchecked Sendable {
+@MainActor
+final class NetworkAccess: AccessServing, AccessCodePreflighting {
     static let shared = NetworkAccess()
 
     private let network: NetworkManager
@@ -102,10 +103,10 @@ final class NetworkAccess: AccessServing, AccessCodePreflighting, @unchecked Sen
     func preflight(
         accessCode: String
     ) async throws -> AccessCodePreflightResult {
-        var values = network.preflightAccessCode(
+        let publisher = network.preflightAccessCode(
             AccessCodePreflightInput(accessCode: accessCode)
-        ).values.makeAsyncIterator()
-        guard let wireResult = await values.next() else {
+        )
+        guard let wireResult = try await NetworkManager.firstValue(publisher) else {
             throw AccessCodePreflightError.temporarilyUnavailable
         }
 
@@ -138,11 +139,10 @@ final class NetworkAccess: AccessServing, AccessCodePreflighting, @unchecked Sen
         }
     }
 
-    private func first<T>(
+    private func first<T: Sendable>(
         _ publisher: AnyPublisher<T, NetworkError>
     ) async throws -> T {
-        var values = publisher.values.makeAsyncIterator()
-        guard let value = try await values.next() else {
+        guard let value = try await NetworkManager.firstValue(publisher) else {
             throw NetworkError.unknown
         }
         return value

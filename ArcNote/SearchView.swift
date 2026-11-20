@@ -21,8 +21,9 @@ struct LibrarySearchCard: Identifiable {
     var author: UserAllCardAuthor? { source.author }
 }
 
+@MainActor
 final class LibrarySearchManager: ObservableObject {
-    typealias SearchRequest = (
+    typealias SearchRequest = @MainActor (
         _ query: String,
         _ scope: LibrarySearchScope
     ) -> AnyPublisher<[UserAllCard], NetworkError>
@@ -71,7 +72,7 @@ final class LibrarySearchManager: ObservableObject {
 
         requestCancellable = searchRequest(query, scope)
         .receive(on: Self.preparationQueue)
-        .map { cards in
+        .map { @Sendable cards in
             let parseDate = LibrarySearchSortKey.makeDateParser()
             return cards.map { LibrarySearchCard(source: $0, parseDate: parseDate) }
         }

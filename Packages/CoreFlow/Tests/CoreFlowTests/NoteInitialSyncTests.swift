@@ -6,11 +6,11 @@ final class NoteInitialSyncTests: XCTestCase {
     private let scope = NoteStoreScope(actorID: "reader", environmentID: "local")
     private var root: URL!
 
-    override func setUpWithError() throws {
+    override func setUp() async throws {
         root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     }
 
-    override func tearDownWithError() throws {
+    override func tearDown() async throws {
         try? FileManager.default.removeItem(at: root)
     }
 
@@ -55,9 +55,10 @@ final class NoteInitialSyncTests: XCTestCase {
     }
 
     func testInterruptedBackfillResumesFromDiskAndIgnoresLatePageAfterScopeSwitch() async throws {
+        let scope = scope
         let service = InitialSyncServer(scope: scope)
         let library = NoteLibraryStore(rootURL: root) { selected in
-            selected == self.scope ? service : InitialSyncServer(scope: selected)
+            selected == scope ? service : InitialSyncServer(scope: selected)
         }
         await library.configure(scope: scope, cloudEnabled: true)
         let first = Task { await library.synchronize() }

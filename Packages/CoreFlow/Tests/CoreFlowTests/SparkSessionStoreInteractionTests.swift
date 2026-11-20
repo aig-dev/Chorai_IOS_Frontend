@@ -141,7 +141,7 @@ final class SparkSessionStoreInteractionTests: XCTestCase {
         let favoriteSubject = harness.service.enqueueFavorite()
         var favoritedAssetIDs: [String] = []
 
-        harness.store.toggleFavoriteCurrent { favoritedAssetIDs.append($0) }
+        harness.store.toggleFavoriteCurrent { assetID, _, _ in favoritedAssetIDs.append(assetID) }
         harness.store.toggleFavoriteCurrent()
 
         XCTAssertEqual(

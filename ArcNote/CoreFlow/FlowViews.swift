@@ -569,7 +569,7 @@ struct FlowDeckView: View {
     @StateObject private var likeStore = CardLikeStore(
         state: CardLikeState(cardID: "", isLiked: false, likeCount: 0),
         service: NetworkCoreCardLikeService(),
-        onCommit: CardEngagementCenter.shared.publish
+        onCommit: { CardEngagementCenter.shared.publish($0) }
     )
     let onOpenDetail: (FlowCard) -> Void
     let onOpenAuthor: (FlowCard) -> Void
@@ -772,6 +772,7 @@ private struct FlowStateView: View {
             Button(button, action: action)
                 .buttonStyle(.borderedProminent)
                 .tint(ZenVisualTokens.accent)
+                .foregroundStyle(ChoraiTheme.onAccent)
         }
         .foregroundStyle(ChoraiTheme.ink)
         .frame(maxWidth: .infinity, maxHeight: .infinity)

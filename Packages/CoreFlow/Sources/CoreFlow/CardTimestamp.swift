@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// Presentation helpers for card timestamps returned by the API.
 public enum CardTimestamp {
@@ -15,15 +16,18 @@ public enum CardTimestamp {
         return String(value[..<separator])
     }
 
-    static func parse(_ value: String) -> Date? {
-        fractional.date(from: value) ?? standard.date(from: value)
+    public static func parse(_ value: String) -> Date? {
+        formatters.withLock { state in
+            state.fractional.date(from: value) ?? state.standard.date(from: value)
+        }
     }
 
-    private static let fractional: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter
-    }()
-
-    private static let standard = ISO8601DateFormatter()
+    // The legacy parser's precision and accepted inputs are part of sync decoding.
+    // Both non-Sendable formatters are created here, never escape this private lock,
+    // and are accessed only inside withLock, which returns a Sendable Date value.
+    private static let formatters = OSAllocatedUnfairLock(uncheckedState: {
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return (fractional: fractional, standard: ISO8601DateFormatter())
+    }())
 }

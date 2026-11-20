@@ -10,24 +10,33 @@ public enum CardReadInvalidation {
 }
 
 /// Main-thread snapshots of results the current session has already read.
+@MainActor
 public final class RecentCardReads<Value> {
     private let capacity: Int
     private var values: [String: Value] = [:]
     private var recency: [String] = []
     private var observations: [NSObjectProtocol] = []
+    private let center: NotificationCenter
 
-    public init(capacity: Int = 20) {
+    public convenience init(capacity: Int = 20) {
+        self.init(capacity: capacity, center: .default)
+    }
+
+    init(capacity: Int = 20, center: NotificationCenter) {
         self.capacity = max(capacity, 1)
-        let center = NotificationCenter.default
+        self.center = center
         observations.append(center.addObserver(forName: .cardReadSessionDidChange, object: nil, queue: .main) { [weak self] _ in
-            self?.removeAll()
+            // NotificationCenter explicitly delivers on the main operation queue.
+            // Preserve synchronous eviction; an asynchronous Task would leave stale reads.
+            MainActor.assumeIsolated { self?.removeAll() }
         })
         observations.append(center.addObserver(forName: .cardReadInvalidated, object: nil, queue: .main) { [weak self] event in
-            if let id = event.object as? String { self?.remove(id) }
+            guard let id = event.object as? String else { return }
+            MainActor.assumeIsolated { self?.remove(id) }
         })
     }
 
-    deinit { observations.forEach(NotificationCenter.default.removeObserver) }
+    isolated deinit { observations.forEach(center.removeObserver) }
 
     public func value(for cardID: String) -> Value? {
         guard let value = values[cardID] else { return nil }

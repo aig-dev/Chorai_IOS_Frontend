@@ -2,7 +2,7 @@ import Foundation
 
 /// Local registration details. The email code is checked only by registration.
 public struct RegistrationDraft {
-    public enum Step: String {
+    public enum Step: String, Sendable {
         case email, code, username, password, confirm
     }
 

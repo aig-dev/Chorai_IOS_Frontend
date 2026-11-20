@@ -1,10 +1,12 @@
 import XCTest
 
 /// Exercises production search with the existing read-only Local Preview transport.
+@MainActor
 final class SearchSummaryUITests: XCTestCase {
     private var app: XCUIApplication!
 
-    override func setUpWithError() throws {
+    override func setUp() async throws {
+        try await super.setUp()
         continueAfterFailure = false
         app = XCUIApplication()
         app.launchArguments = ["--dev-preview"]

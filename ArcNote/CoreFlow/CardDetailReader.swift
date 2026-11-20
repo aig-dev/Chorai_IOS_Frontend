@@ -89,8 +89,7 @@ final class CardDetailReader {
         }
         guard session() == scope.session else { throw NetworkError.unauthorized }
         let read = try reads[cardID] ?? startRead(cardID: cardID, scope: currentScope())
-        var iterator = read.outcome.compactMap { $0 }.values.makeAsyncIterator()
-        let outcome = await iterator.next()
+        let outcome = try await NetworkManager.firstValue(read.outcome.compactMap { $0 }.eraseToAnyPublisher())
         try Task.checkCancellation()
         guard case .received(let result, let confirmedScope) = outcome,
               isCurrent(confirmedScope, cardID: cardID) else {

@@ -31,6 +31,7 @@ struct CardReadAcceptanceFixture: View {
         guard condition else { throw Failure(description: message) }
     }
 
+    @MainActor
     private final class DetailTransport {
         var session: UInt64 = 1
         private(set) var sessionReads = 0

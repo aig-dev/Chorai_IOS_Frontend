@@ -1,5 +1,75 @@
 # Execution boundary history
 
+## 2026-11-20 — Local Go integration follow-up
+
+Investigated the three failures excluded from the Swift 6 checkpoint. Native/DOM
+measurements show the edited Merge line inside the viewport; only the earlier line
+of its multiline accessibility paragraph was clipped. The regression now measures
+the actual rendered replacement text, retaining selection/save/relaunch assertions.
+No production editor scrolling or generated assets changed. Home/Trash fixtures now
+authenticate and synchronize into the actual scoped note store, with exact cancel
+and failed-delete request counts.
+
+Real Go integration exposed additional client defects. The exact authenticated administrator
+bypass response is accepted for online product entry, including the scoped note
+library when connected; it creates no offline grant and token rejection cannot
+retain that online authorization. Explore's recovery button uses the existing
+onAccent color so its title is readable. Home removal of a `local-note:` identity
+now uses the existing local lifecycle transaction and guarded sync coordinator,
+including durable Trash state when the server is unavailable. Startup diagnostics
+also found an idle comment store publishing redundant changes during view creation;
+closing an unopened/already closed store is now a no-op, while active-read revocation
+still closes immediately and rejects late responses.
+
+Model/offline/store regressions, failing-then-passing hosted access and lifecycle
+tests, and screenshot OCR cover the changes. Real lifecycle/navigation acceptance,
+Local/Production builds and final review are
+tracked in the [live integration record](../qa/2026-11-20-ios-live-integration.md).
+
+## 2026-11-20 — App and test targets adopt Swift 6
+
+Migrated App networking, UI state owners, service adapters and both Xcode test
+targets after the editor/CoreFlow checkpoints. Network/authentication state and
+publisher lifetimes are MainActor-owned; response decoding and async service
+mapping retain their existing background execution. Added a Sendable value bridge
+for Combine and kept the specialized upload-termination/security-scope drain.
+Typed optional UI callbacks preserve action absence; WebKit/keyboard cleanup and
+XCTest lifecycle now express their owning actor.
+
+Removed unchecked service conformances where compiler-checked stored dependencies
+suffice. Locked test transport/result state without weakening business assertions.
+The original 1,484 test methods remain; 16 Swift regression methods were added
+across the migration. The formal gate now enforces Swift 6 in all nine Xcode
+configuration pairs and rejects first-party concurrency warnings that legacy SDKs
+can emit even on successful compilation. Final verification passed all three builds,
+1,067 CoreFlow cases (six unchanged skips), 76 editor cases, 78 hosted cases,
+18 runner checks and six exact editor UI flows. All 47 selected feature flows
+passed. Independent
+review found two gate defects (incremental warning escape and ordinary identifier
+false positives); both were fixed with failing-before/passing-after tests. The
+corrected gate recompiles into fresh temporary products while retaining downloads.
+A cold run exposed local disk exhaustion; package products are now released
+before Xcode builds, and App failure bundles survive temporary-product cleanup.
+Both changes have regression coverage. After freeing only task-generated products,
+the complete cold gate passed, including all five previously failed hosted cases.
+Final verification and the review disposition are tracked in the [migration validation record](../qa/2026-11-20-swift6-migration-validation.md).
+
+## 2026-11-20 — CoreFlow Swift 6 boundary
+
+Migrated CoreFlow and its tests to Swift 6 after characterizing date parsing,
+synchronous read-cache invalidation and persistent transaction behavior. Retained
+legacy ISO8601 parsing inside one private lock; made read-cache destruction
+MainActor-isolated; required Sendable transaction captures without changing the
+private Core Data queue or business guards. Test lifecycle/helper isolation and
+immutable captures preserve all existing cases and assertions.
+
+The package now requires Swift tools 6.2 for isolated destruction, retaining iOS
+16/macOS 13 deployment floors. Full CoreFlow 1,067 cases (six existing live-API
+skips), editor 76, hosted App 73, twelve exact simulator flows and all three build
+configurations passed. Fixed runner JSON parsing when SwiftPM emits a wait message
+on stderr. Evidence, trade-offs and remaining App scope are in the
+[CoreFlow validation record](../qa/2026-11-20-swift6-coreflow-validation.md).
+
 ## 2026-11-19 — Home row dependencies, local thumbnail reuse and legacy HTML
 
 Removed the unused whole-library observer from NotesCard while retaining its own input, actions, guidance and preview lifetime. Added a library-authorized thumbnail identity and background media-reference worker; the app reader shares verified image work, limits actual running pipelines, bounds decoded bitmap retention, and rejects canceled or obsolete scope/body/lifecycle results. Existing immutable attachment and file-integrity contracts remain authoritative.
@@ -69,3 +139,28 @@ Introduced a Library-owned background projection and coalescing drainer. Bulk ma
 CoreFlow 1050 tests (six live-API skips), editor 76 and full app 58 passed. A denied profile entry also retires an earlier owned-list projection, verified RED→GREEN. Synthetic 1000-row/200-change list update p50 fell from 12.11 ms on main to 2.23 ms including the worker round trip; the main publication measured 0.075 ms without layout. Final review/build/UI results and measurement limits are tracked in the [follow-up validation](../qa/2026-11-19-ios-merge-home-read-validation.md).
 
 The final independent review identified early loading completion during first offline list projection. A gated test reproduced the false empty state; loading now awaits the existing drainer and then rechecks the mode/generation. Full app regression passed 58/58 with complete-concurrency diagnostics. The review introduced no further deferred minor items; baseline limitations remain documented.
+
+## 2026-11-20 — Complete concurrency checks and Swift 6 editor pilot
+
+Persisted complete checking for every App/test configuration and both CoreFlow
+targets while retaining Swift 5. BlockNoteEditor production and tests now use
+Swift 6; iOS 16 and the explicit UI/worker execution boundaries are unchanged.
+The first full editor run passed all 76 existing tests without source workarounds.
+
+Added `make check-concurrency` to verify resolved settings, run package suites and
+build Local, Production and Release. An explicit simulator UUID adds App-hosted
+and six focused editor UI regressions. The command never forces a language mode
+or concurrency level on the compiler command line, so it exercises the committed
+configuration. Existing Swift 5 warnings remain visible future migration work.
+
+The [plan](../superpowers/plans/2026-11-20-swift6-editor.md) and
+[validation record](../qa/2026-11-20-swift6-editor-validation.md) capture scope,
+test/build evidence and remaining limits.
+
+Independent review found that a stale UI selector could silently omit a case.
+The runner now requires a passing xcresult entry for each selected identifier;
+five regressions first failed, then the full six runner tests passed. Final
+verification: CoreFlow 1056 (six intentional skips), editor 76, App 73, six focused
+UI cases and all three builds pass. The existing Merge paragraph-clipping test
+still reproduces its documented pre-migration failure and remains outside the
+focused lifecycle gate; its assertion was not changed.

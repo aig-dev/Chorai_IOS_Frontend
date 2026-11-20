@@ -348,7 +348,7 @@ struct InvitationCreditView: View {
                             "Enter invitation code",
                             text: Binding(
                                 get: { redemption.draft },
-                                set: redemption.setDraft
+                                set: { redemption.setDraft($0) }
                             )
                         )
                         .font(.body)

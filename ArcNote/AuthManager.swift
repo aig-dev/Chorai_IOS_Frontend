@@ -13,7 +13,8 @@ enum AuthSessionPhase: String, Equatable {
 }
 
 // MARK: 用户认证管理器
-class AuthManager: ObservableObject {
+@MainActor
+final class AuthManager: ObservableObject {
     static let shared = AuthManager()
     private static let foregroundVerificationDebounce: TimeInterval = 2
     private static let pendingInterestsActorKey = "pending_interests_actor_id"
@@ -357,7 +358,7 @@ class AuthManager: ObservableObject {
     }
 
     func markSessionNeedsLogin() {
-        guard canOpenLocalNotes else { invalidateLocalSession(); return }
+        guard offlineNoteAccess.allows(currentNoteScope) else { invalidateLocalSession(); return }
         sessionGeneration &+= 1
         sessionVerification?.cancel(); sessionVerification = nil
         verifiedToken = nil; accessState = nil; sessionPhase = .needsLogin
@@ -420,7 +421,10 @@ extension AuthManager {
         return NoteStoreScope(actorID: actorID, environmentID: APIConfiguration.baseURL)
     }
 
-    var canOpenLocalNotes: Bool { offlineNoteAccess.allows(currentNoteScope) }
+    var canOpenLocalNotes: Bool {
+        offlineNoteAccess.allows(currentNoteScope)
+            || (canEnterProduct && networkManager.isConnected)
+    }
 
     var isAuthenticated: Bool {
         return isLoggedIn && authToken != nil && currentUser != nil

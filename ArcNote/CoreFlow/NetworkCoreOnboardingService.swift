@@ -2,7 +2,8 @@ import Combine
 import CoreFlow
 import Foundation
 
-struct NetworkCoreOnboardingService: OnboardingGuideServing {
+@MainActor
+struct NetworkCoreOnboardingService: @MainActor OnboardingGuideServing {
     private let network: NetworkManager
 
     init(network: NetworkManager = .shared) {
@@ -56,7 +57,7 @@ struct NetworkCoreOnboardingService: OnboardingGuideServing {
             .eraseToAnyPublisher()
     }
 
-    private static func mapError(_ error: Error) -> OnboardingGuideError {
+    nonisolated private static func mapError(_ error: Error) -> OnboardingGuideError {
         if let guideError = error as? OnboardingGuideError {
             return guideError
         }

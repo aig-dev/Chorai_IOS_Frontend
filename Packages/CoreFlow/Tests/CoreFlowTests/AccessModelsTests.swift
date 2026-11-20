@@ -2,6 +2,17 @@ import XCTest
 @testable import CoreFlow
 
 final class AccessModelsTests: XCTestCase {
+    func testCanonicalAdministratorBypassIsValidWithoutGrantingMembership() throws {
+        let state = try JSONDecoder().decode(AccessState.self, from: Data(#"{"mode":"unavailable","status":"allowed","reason_code":"admin_bypass"}"#.utf8))
+        XCTAssertTrue(state.isValid)
+        XCTAssertEqual(state.membershipTier, .free)
+        XCTAssertFalse(AccessState(mode: "unavailable", status: "allowed", scope: "product_full", reasonCode: "admin_bypass").isValid)
+        XCTAssertFalse(AccessState(mode: "unknown", status: "allowed", scope: nil, reasonCode: "admin_bypass").isValid)
+        for reason in [nil, "policy_unavailable", "grant_required"] as [String?] {
+            XCTAssertFalse(AccessState(mode: "unavailable", status: "allowed", scope: nil, reasonCode: reason).isValid)
+        }
+    }
+
     func testAccessStateDecodesExplicitSnakeCaseKeys() throws {
         let data = Data(#"{"mode":"private_beta","status":"required","reason_code":"grant_required"}"#.utf8)
 

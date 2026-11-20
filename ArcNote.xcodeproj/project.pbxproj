@@ -174,6 +174,7 @@
 		3429A95ACEF908AA700EC6D1 /* LocalNoteThumbnailReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1E0FB957B117F6596BB718C /* LocalNoteThumbnailReader.swift */; };
 		4921AB68CC59BEE867FAA6C4 /* HTMLTextReaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16845431EF7D9B2AE676D3C9 /* HTMLTextReaderTests.swift */; };
 		96173B537BE66B36D958C303 /* HTMLTextReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = D62B0B96B71343CC59CD3B90 /* HTMLTextReader.swift */; };
+		F0C9B2094CE23E011AD29001 /* AuthNoteAccessTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0C9B2094CE23E011AD29002 /* AuthNoteAccessTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -355,6 +356,7 @@
 		B1E0FB957B117F6596BB718C /* LocalNoteThumbnailReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ArcNote/CoreFlow/LocalNoteThumbnailReader.swift"; sourceTree = SOURCE_ROOT; };
 		16845431EF7D9B2AE676D3C9 /* HTMLTextReaderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ArcNoteTests/HTMLTextReaderTests.swift"; sourceTree = SOURCE_ROOT; };
 		D62B0B96B71343CC59CD3B90 /* HTMLTextReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ArcNote/CoreFlow/HTMLTextReader.swift"; sourceTree = SOURCE_ROOT; };
+		F0C9B2094CE23E011AD29002 /* AuthNoteAccessTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ArcNoteTests/AuthNoteAccessTests.swift"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -601,6 +603,7 @@
 			sourceTree = "<group>";
 		};
 		94B3F7F5060CC463EB0E7E97 /* ArcNoteTests */ = {isa = PBXGroup; children = (
+				F0C9B2094CE23E011AD29002 /* AuthNoteAccessTests.swift */,
 				16845431EF7D9B2AE676D3C9 /* HTMLTextReaderTests.swift */,
 				AA3042831931F962B60EA636 /* LocalNoteThumbnailReaderTests.swift */,
 				A1E3A966527A35C05A070BB2 /* HomeCardRenderingTests.swift */,
@@ -899,6 +902,7 @@
 				4921AB68CC59BEE867FAA6C4 /* HTMLTextReaderTests.swift in Sources */,
 				554230038285A505D3A0F115 /* LocalNoteThumbnailReaderTests.swift in Sources */,
 				247139F1EBB290291A2B4A8C /* HomeCardRenderingTests.swift in Sources */,
+				F0C9B2094CE23E011AD29001 /* AuthNoteAccessTests.swift in Sources */,
 				EA17F9240516AFF4B92072BC /* HomeCardsLoadingTests.swift in Sources */,
 				AEC19E6E3C8FFA353C217FDB /* HomeCardProjectionTests.swift in Sources */,
 				47240F88F54B3581BA01AB4F /* MergeArtifactDraftExecutionTests.swift in Sources */,
@@ -985,6 +989,7 @@
 				SDKROOT = iphoneos;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_STRICT_CONCURRENCY = complete;
 			};
 			name = Debug;
 		};
@@ -1040,6 +1045,7 @@
 				MTL_FAST_MATH = YES;
 				SDKROOT = iphoneos;
 				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_STRICT_CONCURRENCY = complete;
 				VALIDATE_PRODUCT = YES;
 			};
 			name = Release;
@@ -1079,7 +1085,7 @@
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
 				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 5.0;
+				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Debug;
@@ -1119,7 +1125,7 @@
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
 				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 5.0;
+				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Release;
@@ -1136,7 +1142,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.michen.arcnoteUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_VERSION = 5.0;
+				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = 1;
 				TEST_TARGET_NAME = ArcNote;
 			};
@@ -1154,7 +1160,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.michen.arcnoteUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_VERSION = 5.0;
+				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = 1;
 				TEST_TARGET_NAME = ArcNote;
 			};
@@ -1220,6 +1226,7 @@
 				SDKROOT = iphoneos;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_STRICT_CONCURRENCY = complete;
 			};
 			name = "Debug-Production";
 		};
@@ -1258,7 +1265,7 @@
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
 				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 5.0;
+				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = "Debug-Production";
@@ -1275,7 +1282,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.michen.arcnoteUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_VERSION = 5.0;
+				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = 1;
 				TEST_TARGET_NAME = ArcNote;
 			};
@@ -1288,7 +1295,7 @@
                 IPHONEOS_DEPLOYMENT_TARGET = 16.0;
                 PRODUCT_BUNDLE_IDENTIFIER = com.michen.arcnote.tests;
                 PRODUCT_NAME = "$(TARGET_NAME)";
-                SWIFT_VERSION = 5.0;
+                SWIFT_VERSION = 6.0;
                 TARGETED_DEVICE_FAMILY = 1;
                 SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) DEBUG";
             }; name = "Debug"; };
@@ -1299,7 +1306,7 @@
                 IPHONEOS_DEPLOYMENT_TARGET = 16.0;
                 PRODUCT_BUNDLE_IDENTIFIER = com.michen.arcnote.tests;
                 PRODUCT_NAME = "$(TARGET_NAME)";
-                SWIFT_VERSION = 5.0;
+                SWIFT_VERSION = 6.0;
                 TARGETED_DEVICE_FAMILY = 1;
                 SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) DEBUG";
             }; name = "Release"; };
@@ -1310,7 +1317,7 @@
                 IPHONEOS_DEPLOYMENT_TARGET = 16.0;
                 PRODUCT_BUNDLE_IDENTIFIER = com.michen.arcnote.tests;
                 PRODUCT_NAME = "$(TARGET_NAME)";
-                SWIFT_VERSION = 5.0;
+                SWIFT_VERSION = 6.0;
                 TARGETED_DEVICE_FAMILY = 1;
                 SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) DEBUG";
             }; name = "Debug-Production"; };

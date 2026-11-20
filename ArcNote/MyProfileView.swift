@@ -2,20 +2,20 @@ import SwiftUI
 import Combine
 import CoreFlow
 
-struct MyCompanionChatDestination: Equatable {
+struct MyCompanionChatDestination: Equatable, Sendable {
     let humanActorID: String
     let conversationID: String
     let companionName: String
     let companionAvatarURL: String?
 }
 
-protocol MyCompanionConversationCreating {
+protocol MyCompanionConversationCreating: Sendable {
     func createConversation(
         participantActorID: String
     ) async throws -> CreateConversationData
 }
 
-protocol MyCompanionChatRouting {
+protocol MyCompanionChatRouting: Sendable {
     func openConversation(
         humanActorID: String
     ) async throws -> MyCompanionChatDestination
@@ -24,18 +24,16 @@ protocol MyCompanionChatRouting {
 struct NetworkMyCompanionConversationCreator:
     MyCompanionConversationCreating
 {
+    @MainActor
     func createConversation(
         participantActorID: String
     ) async throws -> CreateConversationData {
-        var iterator = NetworkManager.shared.createConversation(
+        let publisher = NetworkManager.shared.createConversation(
             request: CreateConversationRequest(
                 participantId: participantActorID
             )
         )
-        .values
-        .makeAsyncIterator()
-
-        guard let response = try await iterator.next() else {
+        guard let response = try await NetworkManager.firstValue(publisher) else {
             throw NetworkError.noData
         }
         guard response.success else {
@@ -49,6 +47,7 @@ struct NetworkMyCompanionChatRouter: MyCompanionChatRouting {
     private let profileService: any CoreChoraProfileServing
     private let conversationCreator: any MyCompanionConversationCreating
 
+    @MainActor
     init(
         profileService: any CoreChoraProfileServing =
             NetworkChoraProfileService(),
@@ -173,9 +172,9 @@ struct MyProfileView: View {
                             avatarUrl: userProfileManager.userProfile?.avatar,
                             disableFavorite: true,
                             ownsMenuActions: true,
-                            onDelete: requestCardDeletion,
-                            onToggleVisibility: toggleCardVisibility,
-                            onTogglePin: toggleCardPin
+                            onDelete: { requestCardDeletion() },
+                            onToggleVisibility: { toggleCardVisibility($0) },
+                            onTogglePin: { toggleCardPin($0) }
                         )
                         Divider().overlay(ChoraiTheme.separator)
                     }
@@ -234,9 +233,9 @@ struct MyProfileView: View {
             layout: popupMenuLayout,
             cardData: currentMenuCardData,
             isOwnCard: true,
-            onDelete: requestCardDeletion,
-            onToggleVisibility: toggleCardVisibility,
-            onTogglePin: toggleCardPin
+            onDelete: { requestCardDeletion() },
+            onToggleVisibility: { toggleCardVisibility($0) },
+            onTogglePin: { toggleCardPin($0) }
         )
         .confirmationDialog(
             "Remove this note?",

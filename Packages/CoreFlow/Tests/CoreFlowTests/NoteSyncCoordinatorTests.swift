@@ -195,8 +195,9 @@ final class NoteSyncCoordinatorTests: XCTestCase {
     func testOldAcknowledgmentDoesNotReplaceNewerEditAndNextOperationUsesReceiptBaseline() async throws {
         let store = try await open(); let note = try await store.create(body: body("first"))
         let service = NoteSyncTestTransport(scope: scope)
+        let newerBody = body("newer")
         await service.setSendHook { operation in
-            if operation.kind == .create { _ = try await store.saveBody(localID: note.localID, body: self.body("newer")) }
+            if operation.kind == .create { _ = try await store.saveBody(localID: note.localID, body: newerBody) }
         }
         let coordinator = try NoteSyncCoordinator(store: store, service: service)
         await coordinator.resume(); await coordinator.synchronize()
@@ -215,8 +216,9 @@ final class NoteSyncCoordinatorTests: XCTestCase {
             let note = try await store.create(body: body("unsupported old body"))
             let service = NoteSyncTestTransport(scope: scope)
             await service.failContent("unsupported old body", with: failure)
+            let correctedBody = body("corrected body")
             await service.setSendHook { _ in
-                _ = try await store.saveBody(localID: note.localID, body: self.body("corrected body"))
+                _ = try await store.saveBody(localID: note.localID, body: correctedBody)
             }
             let coordinator = try NoteSyncCoordinator(store: store, service: service)
             await coordinator.resume(); await coordinator.synchronize()
@@ -585,7 +587,8 @@ final class NoteSyncCoordinatorTests: XCTestCase {
         let original = NoteSyncTestTransport.snapshot("remote", token: "base", text: "old")
         let local = try unwrap(try await store.applyRemote(original, localID: nil, expectedGeneration: nil))
         await service.setRemote(NoteSyncTestTransport.snapshot("remote", token: "new", text: "remote new"))
-        await service.setDetailHook { _ in _ = try await store.saveBody(localID: local.localID, body: self.body("typed during pull")) }
+        let typedBody = body("typed during pull")
+        await service.setDetailHook { _ in _ = try await store.saveBody(localID: local.localID, body: typedBody) }
         let coordinator = try NoteSyncCoordinator(store: store, service: service)
         await coordinator.resume(); await coordinator.synchronize()
         let retained = try unwrap(try await store.note(localID: local.localID))

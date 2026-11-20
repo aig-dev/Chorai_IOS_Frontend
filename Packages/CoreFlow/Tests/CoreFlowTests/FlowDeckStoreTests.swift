@@ -530,6 +530,7 @@ final class FlowDeckStoreTests: XCTestCase {
         )
     }
 
+    @MainActor
     private func settle() async {
         await withCheckedContinuation { continuation in
             DispatchQueue.main.async {

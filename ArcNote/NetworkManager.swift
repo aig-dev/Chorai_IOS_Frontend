@@ -3,15 +3,13 @@ import Alamofire
 import Combine
 import CoreFlow
 import UIKit
+import os
 
-private final class LockedChatEventParser: @unchecked Sendable {
-    private let lock = NSLock()
-    private var parser = ChatServerSentEventParser()
+private final class LockedChatEventParser: Sendable {
+    private let parser = OSAllocatedUnfairLock(initialState: ChatServerSentEventParser())
 
     func append(_ data: Data) -> [ChatConversationEvent] {
-        lock.lock()
-        defer { lock.unlock() }
-        return parser.append(data)
+        parser.withLock { $0.append(data) }
     }
 }
 
@@ -29,49 +27,51 @@ private struct MergeRawJSONBodyEncoding: ParameterEncoding {
     }
 }
 
-private final class DetailRequestLifetime {
-    private let lock = NSLock()
-    private var request: DataRequest?
-    private var ended = false
-    private var cancelled = false
-
-    var isCancelled: Bool {
-        lock.lock(); defer { lock.unlock() }
-        return cancelled
+private final class DetailRequestLifetime: Sendable {
+    private struct State: Sendable {
+        var request: DataRequest?
+        var ended = false
+        var cancelled = false
     }
+    private let state = OSAllocatedUnfairLock(initialState: State())
+
+    var isCancelled: Bool { state.withLock { $0.cancelled } }
 
     func install(_ request: DataRequest) {
-        lock.lock()
-        let shouldCancel = cancelled
-        if !ended { self.request = request }
-        lock.unlock()
+        let shouldCancel = state.withLock { state in
+            if !state.ended { state.request = request }
+            return state.cancelled
+        }
         if shouldCancel { request.cancel() }
     }
 
     @discardableResult
     func cancel() -> Bool {
-        lock.lock()
-        guard !ended else { lock.unlock(); return false }
-        ended = true
-        cancelled = true
-        let request = self.request
-        self.request = nil
-        lock.unlock()
-        request?.cancel()
-        return true
+        let result = state.withLock { state -> (cancelled: Bool, request: DataRequest?) in
+            guard !state.ended else { return (false, nil) }
+            state.ended = true
+            state.cancelled = true
+            let request = state.request
+            state.request = nil
+            return (true, request)
+        }
+        result.request?.cancel()
+        return result.cancelled
     }
 
     func finish() -> Bool {
-        lock.lock(); defer { lock.unlock() }
-        guard !ended else { return false }
-        ended = true
-        request = nil
-        return true
+        state.withLock { state in
+            guard !state.ended else { return false }
+            state.ended = true
+            state.request = nil
+            return true
+        }
     }
 }
 
 // MARK: 网络管理器
-class NetworkManager: ObservableObject {
+@MainActor
+final class NetworkManager: ObservableObject, Sendable {
     static let shared = NetworkManager()
 
     // MARK: 配置
@@ -157,13 +157,42 @@ class NetworkManager: ObservableObject {
         return object
     }
 
-    private static func onMain(_ body: @escaping () -> Void) {
-        if Thread.isMainThread { body() }
+    nonisolated private static func onMain(_ body: @escaping @MainActor @Sendable () -> Void) {
+        if Thread.isMainThread { MainActor.assumeIsolated { body() } }
         else { DispatchQueue.main.async(execute: body) }
     }
 
+    // Combine's promise stays on its creating actor. Only immutable results and
+    // this explicitly isolated callback cross the response queue boundary.
+    private static func responseCompletion<Value: Sendable>(
+        _ completion: @escaping @MainActor @Sendable (Result<Value, NetworkError>) -> Void
+    ) -> @Sendable (Result<Value, NetworkError>) -> Void {
+        { result in DispatchQueue.main.async { completion(result) } }
+    }
+
+    // Subscribe and cancel on the publisher's owning actor. Combine's legacy
+    // AsyncPublisher iterator is non-Sendable and its next() leaves that actor.
+    // The stream transfers only Sendable values and keeps immediate results buffered.
+    static func firstValue<Value: Sendable, Failure: Error>(
+        _ publisher: AnyPublisher<Value, Failure>
+    ) async throws -> Value? {
+        let pair = AsyncThrowingStream<Value, Error>.makeStream()
+        let subscription = publisher.first().sink(receiveCompletion: { @Sendable result in
+            switch result {
+            case .finished: pair.continuation.finish()
+            case .failure(let error): pair.continuation.finish(throwing: error)
+            }
+        }, receiveValue: { @Sendable value in
+            pair.continuation.yield(value)
+            pair.continuation.finish()
+        })
+        defer { subscription.cancel() }
+        var iterator = pair.stream.makeAsyncIterator()
+        return try await iterator.next()
+    }
+
     // MARK: 通用请求方法
-    func request<T: Codable>(
+    func request<T: Codable & Sendable>(
         endpoint: String,
         method: HTTPMethod = .get,
         parameters: Parameters? = nil,
@@ -182,7 +211,7 @@ class NetworkManager: ObservableObject {
                     endpoint: endpoint, method: method, parameters: parameters,
                     encoding: encoding, headers: headers, responseType: responseType,
                     presentsError: presentsError, isCredentialExchange: isCredentialExchange,
-                    completion: promise
+                    completion: { promise($0) }
                 )
             }
         }.eraseToAnyPublisher()
@@ -190,13 +219,13 @@ class NetworkManager: ObservableObject {
 
     /// Request creation and delivery own all mutable UI/authentication access.
     @discardableResult
-    private func startRequest<T: Codable>(
+    private func startRequest<T: Codable & Sendable>(
         endpoint: String, method: HTTPMethod, parameters: Parameters? = nil,
         encoding: ParameterEncoding, headers: HTTPHeaders? = nil,
         responseType: T.Type, presentsError: Bool,
         isCredentialExchange: Bool = false,
-        acceptResult: @escaping () -> Bool = { true },
-        completion: @escaping (Result<T, NetworkError>) -> Void
+        acceptResult: @escaping @MainActor @Sendable () -> Bool = { true },
+        completion: @escaping @MainActor @Sendable (Result<T, NetworkError>) -> Void
     ) -> DataRequest {
         dispatchPrecondition(condition: .onQueue(.main))
         isLoading = true
@@ -218,7 +247,7 @@ class NetworkManager: ObservableObject {
     }
 
     /// Pure response interpretation; no authentication reads or UI effects.
-    private func prepareResponse<T: Codable>(
+    nonisolated private func prepareResponse<T: Codable & Sendable>(
         _ response: AFDataResponse<Data>, as type: T.Type,
         isCredentialExchange: Bool
     ) -> (result: Result<T, NetworkError>, alert: String?) {
@@ -286,11 +315,7 @@ class NetworkManager: ObservableObject {
                     promise(.failure(.unknown))
                     return
                 }
-                let finish: (Result<Data, NetworkError>) -> Void = { result in
-                    DispatchQueue.main.async {
-                        promise(result)
-                    }
-                }
+                let finish = Self.responseCompletion { promise($0) }
 
                 var requestHeaders = self.authorizedHeaders()
                 requestHeaders.update(
@@ -357,7 +382,7 @@ class NetworkManager: ObservableObject {
         .eraseToAnyPublisher()
     }
 
-    private func extractMessage(from data: Data) -> String? {
+    nonisolated private func extractMessage(from data: Data) -> String? {
         guard
             let json = try? JSONSerialization.jsonObject(with: data, options: []) as? [String: Any]
         else { return nil }
@@ -376,7 +401,7 @@ class NetworkManager: ObservableObject {
         return nil
     }
 
-    private func logResponseData(_ data: Data, label: String) {
+    nonisolated private func logResponseData(_ data: Data, label: String) {
 #if DEBUG
         print("\(label): \(data.count) bytes")
 #endif
@@ -407,7 +432,7 @@ class NetworkManager: ObservableObject {
 
     // MARK: 带包装响应的请求方法
     // MARK: 错误处理
-    private func handleError(_ error: AFError, response: HTTPURLResponse?) -> NetworkError {
+    nonisolated private func handleError(_ error: AFError, response: HTTPURLResponse?) -> NetworkError {
         if let statusCode = response?.statusCode {
             switch statusCode {
             case 401:
@@ -446,7 +471,7 @@ class NetworkManager: ObservableObject {
     // MARK: 网络状态监控
     private func startNetworkMonitoring() {
         reachabilityManager?.startListening { [weak self] status in
-            DispatchQueue.main.async {
+            DispatchQueue.main.async { [weak self] in
                 switch status {
                 case .reachable:
                     self?.isConnected = true
@@ -613,6 +638,7 @@ extension NetworkManager {
                 return
             }
 
+            let complete: @MainActor @Sendable (Result<AccessCodePreflightWireResult, Never>) -> Void = { promise($0) }
             let url = "\(self.baseURL)\(APIEnvironment.AccessRoute.preflight)"
             let parameters: Parameters = [
                 "access_code": input.accessCode,
@@ -628,42 +654,44 @@ extension NetworkManager {
                 encoding: JSONEncoding.default,
                 headers: self.authorizedHeaders()
             )
-            .responseData { response in
-                let statusCode = response.response?.statusCode
-                let retryAfterSeconds = response.response
-                    .flatMap { Self.positiveRetryAfter($0) }
+            .responseData(queue: .main) { response in
+                MainActor.assumeIsolated {
+                    let statusCode = response.response?.statusCode
+                    let retryAfterSeconds = response.response
+                        .flatMap { Self.positiveRetryAfter($0) }
 
-                guard case .success(let data) = response.result else {
+                    guard case .success(let data) = response.result else {
+                        print("响应数据: <redacted>")
+                        complete(.success(.failure(
+                            statusCode: statusCode,
+                            errorCode: nil,
+                            retryAfterSeconds: retryAfterSeconds
+                        )))
+                        return
+                    }
+
                     print("响应数据: <redacted>")
-                    promise(.success(.failure(
+                    if let statusCode,
+                       (200..<300).contains(statusCode),
+                       let decoded = try? JSONDecoder().decode(
+                           AccessCodePreflightResponse.self,
+                           from: data
+                       ),
+                       decoded.success {
+                        complete(.success(.success(decoded.data)))
+                        return
+                    }
+
+                    let errorCode = try? JSONDecoder().decode(
+                        ErrorResponse.self,
+                        from: data
+                    ).errorCode
+                    complete(.success(.failure(
                         statusCode: statusCode,
-                        errorCode: nil,
+                        errorCode: errorCode,
                         retryAfterSeconds: retryAfterSeconds
                     )))
-                    return
                 }
-
-                print("响应数据: <redacted>")
-                if let statusCode,
-                   (200..<300).contains(statusCode),
-                   let decoded = try? JSONDecoder().decode(
-                       AccessCodePreflightResponse.self,
-                       from: data
-                   ),
-                   decoded.success {
-                    promise(.success(.success(decoded.data)))
-                    return
-                }
-
-                let errorCode = try? JSONDecoder().decode(
-                    ErrorResponse.self,
-                    from: data
-                ).errorCode
-                promise(.success(.failure(
-                    statusCode: statusCode,
-                    errorCode: errorCode,
-                    retryAfterSeconds: retryAfterSeconds
-                )))
             }
         }
         .eraseToAnyPublisher()
@@ -1130,7 +1158,7 @@ extension NetworkManager {
             )
             .validate()
 
-            request.responseStream(on: .main) { [weak self] stream in
+            let receive: @MainActor @Sendable (DataStreamRequest.Stream<Data, Never>) -> Void = { [weak self] stream in
                 guard let self else {
                     stream.cancel()
                     return
@@ -1156,6 +1184,10 @@ extension NetworkManager {
                         subject.send(completion: .finished)
                     }
                 }
+            }
+
+            request.responseStream(on: .main) { stream in
+                MainActor.assumeIsolated { receive(stream) }
             }
 
             return subject
@@ -1469,11 +1501,9 @@ extension NetworkManager {
                     promise(.failure(.unknown))
                     return
                 }
-                let finish: (Result<AvatarUploadResponse, NetworkError>) -> Void = { result in
-                    DispatchQueue.main.async {
-                        self.isLoading = false
-                        promise(result)
-                    }
+                let finish = Self.responseCompletion { result in
+                    self.isLoading = false
+                    promise(result)
                 }
 
                 let url = "\(self.baseURL)\(endpoint)"
@@ -1670,11 +1700,9 @@ extension NetworkManager {
                     promise(.failure(.unknown))
                     return
                 }
-                let finish: (Result<UploadResponse, NetworkError>) -> Void = { result in
-                    DispatchQueue.main.async {
-                        self.isLoading = false
-                        promise(result)
-                    }
+                let finish = Self.responseCompletion { result in
+                    self.isLoading = false
+                    promise(result)
                 }
 
                 var headers = HTTPHeaders()
@@ -1732,11 +1760,9 @@ extension NetworkManager {
                     promise(.failure(.unknown))
                     return
                 }
-                let finish: (Result<UploadResponse, NetworkError>) -> Void = { result in
-                    DispatchQueue.main.async {
-                        self.isLoading = false
-                        promise(result)
-                    }
+                let finish = Self.responseCompletion { result in
+                    self.isLoading = false
+                    promise(result)
                 }
 
                 let url = "\(self.baseURL)/api/v1/media/upload"
@@ -1798,7 +1824,7 @@ extension NetworkManager {
         _ request: GetNotificationsRequest,
         presentsError: Bool = false
     ) -> AnyPublisher<NotificationInboxResponse, NetworkError> {
-        let parameters: [String: Any] = [
+        let parameters: Parameters = [
             "page": request.page,
             "per_page": request.perPage
         ]
@@ -2322,7 +2348,7 @@ extension NetworkManager {
                         endpoint: "/api/cards/\(cardId)", method: .get,
                         encoding: URLEncoding.default,
                         responseType: CardDetailResponse.self, presentsError: presentsError,
-                        acceptResult: { lifetime.finish() }, completion: promise
+                        acceptResult: { lifetime.finish() }, completion: { promise($0) }
                     )
                     lifetime.install(request)
                 }
@@ -2390,25 +2416,29 @@ extension NetworkManager {
         .eraseToAnyPublisher()
     }
 
+    // Called by the nonisolated async Merge service before entering MainActor.
+    // Body construction copies the original document bytes before request creation.
+    nonisolated static func mergeArtifactEncoding(_ request: MergeArtifactSaveRequestDTO) throws -> any ParameterEncoding {
+        do {
+            return MergeRawJSONBodyEncoding(body: try request.canonicalBody())
+        } catch {
+            throw NetworkError.encodingError
+        }
+    }
+
     func saveMergeArtifact(
         jobID: String,
-        request: MergeArtifactSaveRequestDTO
+        encoding: any ParameterEncoding
     ) -> AnyPublisher<MergeArtifactSaveResponse, NetworkError> {
-        do {
-            return self.request(
-                endpoint: "/api/merge/jobs/\(jobID)/artifact",
-                method: .put,
-                parameters: [:],
-                encoding: MergeRawJSONBodyEncoding(
-                    body: try request.canonicalBody()
-                ),
-                responseType: MergeArtifactSaveResponse.self,
-                presentsError: false,
-                suppressesPayloadLogging: true
-            )
-        } catch {
-            return Fail(error: NetworkError.encodingError).eraseToAnyPublisher()
-        }
+        request(
+            endpoint: "/api/merge/jobs/\(jobID)/artifact",
+            method: .put,
+            parameters: [:],
+            encoding: encoding,
+            responseType: MergeArtifactSaveResponse.self,
+            presentsError: false,
+            suppressesPayloadLogging: true
+        )
     }
 
     func cancelMergeJob(
@@ -3069,7 +3099,7 @@ extension NetworkManager {
 
 private final class AlamofireMultipartUploadHandle:
     MultipartUploadHandling,
-    @unchecked Sendable
+    Sendable
 {
     private let request: UploadRequest
 

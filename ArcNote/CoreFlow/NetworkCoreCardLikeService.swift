@@ -2,10 +2,11 @@ import Combine
 import CoreFlow
 import Foundation
 
-struct NetworkCoreCardLikeService: CoreCardLikeServing, @unchecked Sendable {
+struct NetworkCoreCardLikeService: CoreCardLikeServing, Sendable {
     private let network: NetworkManager
     private let scope: NoteStoreScope?
 
+    @MainActor
     init(network: NetworkManager = .shared) {
         self.network = network
         scope = AuthManager.shared.currentNoteScope
@@ -39,12 +40,12 @@ struct NetworkCoreCardLikeService: CoreCardLikeServing, @unchecked Sendable {
         guard AuthManager.shared.sessionGeneration == session else { throw CancellationError() }
     }
 
-    private func firstValue<T>(
-        from publisher: AnyPublisher<T, NetworkError>
+    @MainActor
+    private func firstValue<T: Sendable>(
+        from publisher: @autoclosure @MainActor @Sendable () -> AnyPublisher<T, NetworkError>
     ) async throws -> T {
         do {
-            var iterator = publisher.values.makeAsyncIterator()
-            guard let value = try await iterator.next() else {
+            guard let value = try await NetworkManager.firstValue(publisher()) else {
                 throw CardLikeError.transport(code: "empty_response")
             }
             return value

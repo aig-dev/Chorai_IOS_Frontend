@@ -1,10 +1,12 @@
 import XCTest
 
+@MainActor
 final class AuthEntryFlowUITests: XCTestCase {
     private let password = "SamplePass42"
     private let wrongPassword = "Mismatch42"
 
-    override func setUpWithError() throws {
+    override func setUp() async throws {
+        try await super.setUp()
         continueAfterFailure = false
     }
 

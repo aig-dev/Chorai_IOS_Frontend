@@ -126,25 +126,30 @@ final class CommittedMergeDownloadTests: XCTestCase {
         let persistence = InMemoryMergeSessionPersistence()
         persistence.save(snapshot)
         let service = MockCoreMergeService()
-        var canWrite = false
-        var accepted: [String] = []
+        let handoff = CommitHandoffState()
         let store = MergeSessionStore(actorID: scope.actorID, anchor: snapshot.createRequest.sources[0],
             service: service, persistence: persistence, queueCommittedNote: { actorID, id in
                 XCTAssertEqual(actorID, self.scope.actorID)
-                guard canWrite else { throw CocoaError(.fileWriteOutOfSpace) }
-                accepted.append(id)
+                guard handoff.canWrite else { throw CocoaError(.fileWriteOutOfSpace) }
+                handoff.accepted.append(id)
             })
         store.start()
         guard case .paused = store.phase else { return XCTFail("A failed local handoff must retain the receipt") }
         store.acknowledgeCompletion()
         XCTAssertEqual(persistence.snapshot(actorID: scope.actorID)?.committedAssetID, assetID)
-        canWrite = true
+        handoff.canWrite = true
         store.retry()
         XCTAssertEqual(store.phase, .completed(assetID: assetID))
-        XCTAssertEqual(accepted, [assetID])
+        XCTAssertEqual(handoff.accepted, [assetID])
         let commits = await service.commitCalls
         XCTAssertTrue(commits.isEmpty)
     }
+}
+
+@MainActor
+private final class CommitHandoffState {
+    var canWrite = false
+    var accepted: [String] = []
 }
 
 private actor MergeNoteServer: NoteSyncServing {

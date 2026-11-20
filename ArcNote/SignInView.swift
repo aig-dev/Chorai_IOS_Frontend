@@ -311,11 +311,15 @@ struct SignInView: View {
         }
 
         GIDSignIn.sharedInstance.signIn(withPresenting: presentingViewController) { result, error in
+            // Snapshot SDK-owned values before the existing UI delivery hop.
+            let idToken = result?.user.idToken?.tokenString
+            let succeeded = error == nil
+            let canceled = (error as? GIDSignInError)?.code == .canceled
             DispatchQueue.main.async {
                 guard isCurrentAttempt(id) else { return }
-                guard error == nil, let idToken = result?.user.idToken?.tokenString else {
+                guard succeeded, let idToken else {
                     endAttempt()
-                    if (error as? GIDSignInError)?.code != .canceled {
+                    if !canceled {
                         showAlert(message: "Google sign-in could not be verified. Please try again.")
                     }
                     return

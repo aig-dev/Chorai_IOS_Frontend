@@ -751,7 +751,7 @@ struct TabBarView: View {
         .environment(\.cardNavigationContextualTipStore, contextualTipStore)
         .environment(
             \.cardNavigationRoutePresentationChanged,
-            handleLibraryCardRoutePresentationChanged
+            { handleLibraryCardRoutePresentationChanged($0) }
         )
         .sheet(item: $shareRoute) { route in
             ShareCardView(cardID: route.cardID)

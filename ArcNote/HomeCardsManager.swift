@@ -52,7 +52,7 @@ class HomeCardsManager: ObservableObject {
     private var pendingChanges: [String: OfflineNote] = [:]
     private var pendingRemovals = Set<String>()
 
-    nonisolated init(projectionWorker: HomeCardProjectionWorker = HomeCardProjectionWorker(), library: NoteLibraryStore? = nil,
+    init(projectionWorker: HomeCardProjectionWorker = HomeCardProjectionWorker(), library: NoteLibraryStore? = nil,
                      readSession: (@MainActor @Sendable () -> UInt64?)? = nil,
                      fetchPublicCards: (@MainActor @Sendable (String, Int, Int) -> AnyPublisher<UserCardsListResponse, NetworkError>)? = nil) {
         self.projectionWorker = projectionWorker

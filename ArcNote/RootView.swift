@@ -235,6 +235,7 @@ private struct DiscoveryPathConnector: View {
 }
 
 private extension DiscoveryPathCard {
+    @MainActor
     var asMenuCard: UserCard {
         let actorID = AuthManager.shared.currentUser?.id
         return UserCard(

@@ -9,3 +9,7 @@ export IOS_DEVICE IOS_DERIVED_DATA
 .PHONY: ios-run
 ios-run:
 	@./scripts/ios-run.sh
+
+.PHONY: check-concurrency
+check-concurrency:
+	@python3 scripts/check-concurrency.py

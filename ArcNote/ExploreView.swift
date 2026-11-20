@@ -15,7 +15,7 @@ struct ExploreView: View {
     @State private var searchText = ""
     @FocusState private var isSearchFocused: Bool
     @StateObject private var searchEngagement = ExploreSearchEngagement()
-    @StateObject private var flowStore = FlowDeckStore(service: NetworkCoreFlowService(), onFavoriteCommitted: CardEngagementCenter.shared.publishFavorite)
+    @StateObject private var flowStore = FlowDeckStore(service: NetworkCoreFlowService(), onFavoriteCommitted: { CardEngagementCenter.shared.publishFavorite($0) })
     @StateObject private var searchManager = ExploreSearchManager.shared
 
     // 导航状态

@@ -137,6 +137,8 @@ struct ChoraDataEnvelope<Value: Codable>: Codable {
     let data: Value
 }
 
+extension ChoraDataEnvelope: Sendable where Value: Sendable {}
+
 struct ChoraAgentProfileResponse: Codable {
     let humanActorID: String
     let activeAgentActorID: String
@@ -525,14 +527,6 @@ struct NotionDisconnectResponse: Codable {
 
 enum ChoraContractDateParser {
     static func date(from value: String) -> Date? {
-        fractional.date(from: value) ?? standard.date(from: value)
+        CardTimestamp.parse(value)
     }
-
-    private static let fractional: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter
-    }()
-
-    private static let standard = ISO8601DateFormatter()
 }

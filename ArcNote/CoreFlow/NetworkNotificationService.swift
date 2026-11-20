@@ -57,9 +57,10 @@ struct NotificationInboxResponse: Codable {
     }
 }
 
-struct NetworkNotificationService: CoreNotificationServing, @unchecked Sendable {
+struct NetworkNotificationService: CoreNotificationServing, Sendable {
     private let network: NetworkManager
 
+    @MainActor
     init(network: NetworkManager = .shared) {
         self.network = network
     }
@@ -127,12 +128,12 @@ struct NetworkNotificationService: CoreNotificationServing, @unchecked Sendable 
         )
     }
 
-    private func firstValue<T>(
-        _ publisher: AnyPublisher<T, NetworkError>
+    @MainActor
+    private func firstValue<T: Sendable>(
+        _ publisher: @autoclosure @MainActor @Sendable () -> AnyPublisher<T, NetworkError>
     ) async throws -> T {
         do {
-            var iterator = publisher.values.makeAsyncIterator()
-            guard let value = try await iterator.next() else {
+            guard let value = try await NetworkManager.firstValue(publisher()) else {
                 throw NotificationInboxError.transport(code: "empty_response")
             }
             return value
@@ -203,15 +204,8 @@ struct NetworkNotificationService: CoreNotificationServing, @unchecked Sendable 
     }
 
     private static func parseDate(_ raw: String) -> Date? {
-        fractionalISO8601.date(from: raw)
-            ?? ISO8601DateFormatter().date(from: raw)
+        CardTimestamp.parse(raw)
     }
-
-    private static let fractionalISO8601: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter
-    }()
 
     private static func mapNetworkError(
         _ error: NetworkError

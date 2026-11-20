@@ -9,6 +9,13 @@ final class NoteOfflineAccessTests: XCTestCase {
         XCTAssertFalse(NoteOfflineAccess().allows(scope))
     }
 
+    func testAdministratorBypassDoesNotPersistOfflineEligibility() throws {
+        var access = NoteOfflineAccess()
+        access.recordConfirmed(AccessState(mode: "unavailable", status: "allowed", scope: nil, reasonCode: "admin_bypass"), scope: scope)
+        let restored = try JSONDecoder().decode(NoteOfflineAccess.self, from: JSONEncoder().encode(access))
+        XCTAssertFalse(restored.allows(scope))
+    }
+
     func testPreviouslyAllowedAccountSurvivesRevalidationAndRestartOnlyInSameEnvironment() throws {
         var access = NoteOfflineAccess()
         access.recordConfirmed(allowed, scope: scope)

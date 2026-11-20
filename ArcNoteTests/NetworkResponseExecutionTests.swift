@@ -121,4 +121,88 @@ final class NetworkResponseExecutionTests: XCTestCase {
         XCTAssertEqual(fixture.count, 1)
         withExtendedLifetime((one, two)) {}
     }
+
+    func testAsyncServiceCanRequestFromWorkerAndResumeMappingOffMain() async throws {
+        let started = expectation(description: "started")
+        let fixture = HTTPFixture(onStart: { started.fulfill() })
+        let network = NetworkManager(baseURL: fixture.baseURL, session: fixture.session)
+        let service = NetworkCoreInterestSelectionService(network: network)
+        let operation = Task.detached {
+            XCTAssertFalse(Thread.isMainThread)
+            let domains = try await service.fetchOptions()
+            XCTAssertFalse(Thread.isMainThread)
+            return domains
+        }
+        await fulfillment(of: [started], timeout: 3)
+        fixture.respond(#"{"success":true,"data":{"domains":["science","design"]}}"#)
+        let domains = try await operation.value
+        XCTAssertEqual(domains, ["science", "design"])
+        XCTAssertEqual(fixture.count, 1)
+    }
+
+    func testPublisherBridgeKeepsImmediateValueEmptyCompletionAndFailure() async throws {
+        let cached = Future<Int, NetworkError> { $0(.success(7)) }
+            .handleEvents(receiveSubscription: { _ in XCTAssertTrue(Thread.isMainThread) })
+            .eraseToAnyPublisher()
+        let value = try await NetworkManager.firstValue(cached)
+        XCTAssertEqual(value, 7)
+        let empty = try await NetworkManager.firstValue(Empty<Int, NetworkError>().eraseToAnyPublisher())
+        XCTAssertNil(empty)
+        do {
+            _ = try await NetworkManager.firstValue(Fail<Int, NetworkError>(error: .timeout).eraseToAnyPublisher())
+            XCTFail("Expected original transport failure")
+        } catch NetworkError.timeout {} catch { XCTFail("Unexpected: \(error)") }
+    }
+
+    func testPublisherBridgeCancellationReleasesSubscriptionOnMain() async throws {
+        let started = expectation(description: "subscribed")
+        let cancelled = expectation(description: "cancelled")
+        let subject = PassthroughSubject<Int, NetworkError>()
+        let operation = Task {
+            try await NetworkManager.firstValue(subject.handleEvents(
+                receiveSubscription: { _ in started.fulfill() },
+                receiveCancel: { XCTAssertTrue(Thread.isMainThread); cancelled.fulfill() }
+            ).eraseToAnyPublisher())
+        }
+        await fulfillment(of: [started], timeout: 3)
+        operation.cancel()
+        let result = try await operation.value
+        XCTAssertNil(result)
+        await fulfillment(of: [cancelled], timeout: 3)
+        subject.send(1)
+    }
+
+    func testRawShareResponseCrossesOnlyAsDataToWorker() async throws {
+        let started = expectation(description: "started")
+        let fixture = HTTPFixture(onStart: { started.fulfill() })
+        let network = NetworkManager(baseURL: fixture.baseURL, session: fixture.session)
+        let service = NetworkCoreShareService(network: network)
+        let operation = Task.detached {
+            try await service.artifactImage(cardID: "card", artifactID: "image")
+        }
+        await fulfillment(of: [started], timeout: 3)
+        fixture.respond("synthetic-image-bytes", contentType: "image/png")
+        let bytes = try await operation.value
+        XCTAssertEqual(bytes, Data("synthetic-image-bytes".utf8))
+        XCTAssertEqual(fixture.count, 1)
+    }
+
+    func testMergeRequestEncodingRetainsCanonicalBytesOutsideMainActor() async throws {
+        let document = Data(#"{"schemaVersion":"card_doc.v1","blocks":[{"id":"blk_body","type":"paragraph","content":[{"type":"text","text":"retained body"}]}],"meta":{}}"#.utf8)
+        let operation = Task.detached {
+            let dto = try MergeArtifactSaveRequestDTO(baseRevision: 3, baseHash: "base",
+                idemKey: "stable", documentJSON: document, tags: ["science"])
+            let encoding = try NetworkManager.mergeArtifactEncoding(dto)
+            XCTAssertFalse(Thread.isMainThread)
+            let request = try encoding.encode(URLRequest(url: URL(string: "https://fixture.invalid/artifact")!), with: nil)
+            XCTAssertEqual(request.httpBody, try dto.canonicalBody())
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Content-Type"), "application/json")
+            let body = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(request.httpBody)) as? [String: Any])
+            XCTAssertEqual(body["baseRevision"] as? Int, 3)
+            XCTAssertEqual(body["idemKey"] as? String, "stable")
+            XCTAssertEqual(body["tags"] as? [String], ["science"])
+            XCTAssertNil(body["rate"])
+        }
+        try await operation.value
+    }
 }

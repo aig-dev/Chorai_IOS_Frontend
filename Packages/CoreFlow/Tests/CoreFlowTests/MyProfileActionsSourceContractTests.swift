@@ -9,17 +9,17 @@ final class MyProfileActionsSourceContractTests: XCTestCase {
         XCTAssertFalse(profile.contains("my-profile.credit-balance"))
         XCTAssertFalse(profile.contains("Text(\"Credits\")"))
         XCTAssertTrue(profile.contains("popupMenuLayout = .grid3x3"))
-        XCTAssertTrue(profile.contains("onDelete: requestCardDeletion"))
+        XCTAssertTrue(profile.contains("onDelete: { requestCardDeletion() }"))
         XCTAssertTrue(
-            profile.contains("onToggleVisibility: toggleCardVisibility")
+            profile.contains("onToggleVisibility: { toggleCardVisibility($0) }")
         )
-        XCTAssertTrue(profile.contains("onTogglePin: toggleCardPin"))
+        XCTAssertTrue(profile.contains("onTogglePin: { toggleCardPin($0) }"))
 
-        XCTAssertTrue(popupMenu.contains("onDelete: (() -> Void)?"))
+        XCTAssertTrue(popupMenu.contains("onDelete: (@MainActor @Sendable () -> Void)?"))
         XCTAssertTrue(
-            popupMenu.contains("onToggleVisibility: ((UserCard) -> Void)?")
+            popupMenu.contains("onToggleVisibility: (@MainActor @Sendable (UserCard) -> Void)?")
         )
-        XCTAssertTrue(popupMenu.contains("onTogglePin: ((UserCard) -> Void)?"))
+        XCTAssertTrue(popupMenu.contains("onTogglePin: (@MainActor @Sendable (UserCard) -> Void)?"))
     }
 
     private func source(at path: String) throws -> String {

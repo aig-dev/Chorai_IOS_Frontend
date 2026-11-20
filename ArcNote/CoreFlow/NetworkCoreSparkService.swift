@@ -2,7 +2,8 @@ import Combine
 import CoreFlow
 import Foundation
 
-struct NetworkCoreSparkService: CoreSparkServing {
+@MainActor
+struct NetworkCoreSparkService: @MainActor CoreSparkServing {
     private let network: NetworkManager
 
     init(network: NetworkManager = .shared) {
@@ -355,7 +356,7 @@ struct NetworkCoreSparkService: CoreSparkServing {
         return formatter
     }()
 
-    private static func mapError(_ error: Error) -> CoreSparkError {
+    nonisolated private static func mapError(_ error: Error) -> CoreSparkError {
         if let coreError = error as? CoreSparkError {
             return coreError
         }
@@ -365,7 +366,7 @@ struct NetworkCoreSparkService: CoreSparkServing {
         return .unknown
     }
 
-    private static func mapNetworkError(_ error: NetworkError) -> CoreSparkError {
+    nonisolated private static func mapNetworkError(_ error: NetworkError) -> CoreSparkError {
         switch error {
         case .api(let statusCode, let code, let message):
 #if DEBUG

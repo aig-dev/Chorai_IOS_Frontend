@@ -4,7 +4,9 @@ import CryptoKit
 import Network
 import UIKit
 import XCTest
+import os
 
+@MainActor
 final class RecentNotesSyncUITests: XCTestCase {
     func testOtherDevicePhotoRendersOnHomeAfterOfflineRelaunch() throws {
         continueAfterFailure = false
@@ -287,8 +289,11 @@ final class RecentNotesSyncUITests: XCTestCase {
 }
 
 /// The app uses its regular verified session, disk store and HTTP stack. Only this test owns the loopback listener.
-private final class RecentNotesServer {
+// Network callbacks and mutable fixture state belong to `queue`. Public state
+// reads/writes use queue.sync; immutable configuration and SDK handles are shared.
+final class RecentNotesServer: @unchecked Sendable {
     enum RemoteChange { case changed, removed }
+    enum LibraryFixture { case activeNote, trashedNote }
 
     let actorID = "act_" + UUID().uuidString
     let token = UUID().uuidString
@@ -297,6 +302,9 @@ private final class RecentNotesServer {
     private let queue = DispatchQueue(label: "RecentNotesServer")
     private let listener: NWListener
     private let includesRemoteImage: Bool
+    private let libraryFixture: LibraryFixture?
+    private var deleteRequests = 0
+    var permanentDeleteRequests: Int { queue.sync { deleteRequests } }
     private var recentNoteChange: RemoteChange?
     private var sawRemoteImage = false
     private var imageBytes: Data?
@@ -309,14 +317,16 @@ private final class RecentNotesServer {
     private var recentReads = 0
     private var batchIDs: [String] = []
     private var detailIDs: [String] = []
-    private lazy var cards = (1...22).map(makeCard)
+    private lazy var cards = libraryFixture == nil ? (1...22).map(makeCard) : [makeCard(22)]
 
     var recentReadCount: Int { queue.sync { recentReads } }
     var backfillIDs: [String] { queue.sync { batchIDs } }
     var singleReads: [String] { queue.sync { detailIDs } }
 
-    init(includesRemoteImage: Bool = false) throws {
+    init(includesRemoteImage: Bool = false, libraryFixture: LibraryFixture? = nil) throws {
         self.includesRemoteImage = includesRemoteImage
+        self.libraryFixture = libraryFixture
+        manifestIsReleased = libraryFixture != nil
         let parameters = NWParameters.tcp
         parameters.requiredLocalEndpoint = .hostPort(host: .ipv4(.loopback), port: .any)
         listener = try NWListener(using: parameters)
@@ -330,7 +340,9 @@ private final class RecentNotesServer {
         listener.newConnectionHandler = { [weak self] connection in
             guard let self else { return }
             connection.start(queue: queue)
-            receive(connection, CFHTTPMessageCreateEmpty(nil, true).takeRetainedValue())
+            receive(connection, OSAllocatedUnfairLock(
+                uncheckedState: CFHTTPMessageCreateEmpty(nil, true).takeRetainedValue()
+            ))
         }
         listener.start(queue: queue)
         XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 5), .completed)
@@ -366,19 +378,24 @@ private final class RecentNotesServer {
         }
     }
 
-    private func receive(_ connection: NWConnection, _ request: CFHTTPMessage) {
+    private func receive(_ connection: NWConnection, _ request: OSAllocatedUnfairLock<CFHTTPMessage>) {
         connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { data, _, complete, error in
-            guard error == nil, let data, !data.isEmpty,
-                  data.withUnsafeBytes({ CFHTTPMessageAppendBytes(request, $0.bindMemory(to: UInt8.self).baseAddress!, data.count) })
-            else { connection.cancel(); return }
-            let body = CFHTTPMessageCopyBody(request)?.takeRetainedValue() as Data? ?? Data()
-            let length = Self.header("Content-Length", in: request).flatMap(Int.init) ?? 0
-            if CFHTTPMessageIsHeaderComplete(request), body.count >= length {
-                self.respond(connection, request: request, body: body)
-            } else if !complete {
-                self.receive(connection, request)
-            } else {
-                connection.cancel()
+            dispatchPrecondition(condition: .onQueue(self.queue))
+            // CFNetwork's mutable parser never leaves this lock. The next receive
+            // retains the same parser, preserving fragmented header/body handling.
+            request.withLock { message in
+                guard error == nil, let data, !data.isEmpty,
+                      data.withUnsafeBytes({ CFHTTPMessageAppendBytes(message, $0.bindMemory(to: UInt8.self).baseAddress!, data.count) })
+                else { connection.cancel(); return }
+                let body = CFHTTPMessageCopyBody(message)?.takeRetainedValue() as Data? ?? Data()
+                let length = Self.header("Content-Length", in: message).flatMap(Int.init) ?? 0
+                if CFHTTPMessageIsHeaderComplete(message), body.count >= length {
+                    self.respond(connection, request: message, body: body)
+                } else if !complete {
+                    self.receive(connection, request)
+                } else {
+                    connection.cancel()
+                }
             }
         }
     }
@@ -409,7 +426,7 @@ private final class RecentNotesServer {
             let query = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
             guard !query.isEmpty else {
                 recentReads += 1
-                send(connection, payload: Array(cards.suffix(20).reversed()))
+                send(connection, payload: Array(cards.filter { $0["lifecycle"] as? String == "active" }.suffix(20).reversed()))
                 return
             }
             guard query.count == 1, query[0].name == "ids", let ids = query[0].value?.components(separatedBy: ","),
@@ -419,6 +436,11 @@ private final class RecentNotesServer {
         case ("GET", "/api/cards/sync-manifest"):
             if !sawManifest { sawManifest = true; manifestRequested.fulfill() }
             if manifestIsReleased { sendManifest(connection) } else { waiting.append(connection) }
+        case ("DELETE", "/api/cards/ast_22") where libraryFixture == .activeNote:
+            send(connection, status: 503, reason: "fixture_sync_unavailable")
+        case ("DELETE", "/api/cards/trash/ast_22/permanent") where libraryFixture == .trashedNote:
+            deleteRequests += 1
+            send(connection, status: 503, reason: "fixture_delete_rejected")
         case ("GET", "/api/v1/media/media_trail"):
             if !sawRemoteImage { sawRemoteImage = true; remoteImageRequested.fulfill() }
             guard let imageBytes, URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.contains(
@@ -463,7 +485,7 @@ private final class RecentNotesServer {
     }
 
     private func sendManifest(_ connection: NWConnection) {
-        let entries = cards.map { ["asset_id": $0["id"]!, "sync_token": $0["sync_token"]!, "lifecycle": "active"] }
+        let entries = cards.map { ["asset_id": $0["id"]!, "sync_token": $0["sync_token"]!, "lifecycle": $0["lifecycle"]!] }
         send(connection, payload: ["protocol_version": 3, "complete": true, "notes": entries] as [String: Any])
     }
 
@@ -475,7 +497,8 @@ private final class RecentNotesServer {
         let imageURL = imageBytes == nil ? "" : #","url":"/api/media/media_trail/content?asset_id=ast_22""#
         let image = #"{"id":"blk_image","type":"image","props":{"mediaRef":"media_trail","name":"Trail picture"\#(imageURL)},"children":[]}"#
         let document = includesRemoteImage && number == 22 ? "[\(paragraph),\(image)]" : "[\(paragraph)]"
-        return ["id": id, "owner_actor_id": actorID, "lifecycle": "active", "sync_token": "token-\(number)",
+        return ["id": id, "owner_actor_id": actorID,
+                "lifecycle": libraryFixture == .trashedNote ? "trashed" : "active", "sync_token": "token-\(number)",
                 "note_document_version_id": "ver_\(number)", "title": "", "content": text, "content_json": document,
                 "tags": [], "is_public": false, "editor_atmosphere": "none", "created_at": date, "updated_at": date,
                 "is_pinned": number <= 2, "is_owner": true, "is_favorited": false, "is_liked": false, "is_following_author": false,

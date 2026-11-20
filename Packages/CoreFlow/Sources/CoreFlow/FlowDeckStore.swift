@@ -27,7 +27,7 @@ public final class FlowDeckStore: ObservableObject {
 
     private let service: CoreFlowServing
     private let pageSize: Int
-    private let onFavoriteCommitted: (CardFavoriteState) -> Void
+    private let onFavoriteCommitted: @MainActor (CardFavoriteState) -> Void
     private let maximumEmptyPageHops = 8
     private var nextRefreshToken: String?
     private var seenAssetIDs: Set<String> = []
@@ -49,7 +49,7 @@ public final class FlowDeckStore: ObservableObject {
         pendingFavorites[cardID] != nil
     }
 
-    public init(service: CoreFlowServing, pageSize: Int = 20, onFavoriteCommitted: @escaping (CardFavoriteState) -> Void = { _ in }) {
+    public init(service: CoreFlowServing, pageSize: Int = 20, onFavoriteCommitted: @escaping @MainActor (CardFavoriteState) -> Void = { _ in }) {
         self.service = service
         self.pageSize = pageSize
         self.onFavoriteCommitted = onFavoriteCommitted

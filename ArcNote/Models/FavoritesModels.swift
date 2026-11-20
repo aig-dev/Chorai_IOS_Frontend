@@ -128,7 +128,8 @@ struct FavoritesListResponse: Codable {
 }
 
 // MARK: 收藏管理器
-class FavoritesManager: ObservableObject {
+@MainActor
+final class FavoritesManager: ObservableObject {
     @Published var favorites: [FavoriteItem] = []
     @Published var isLoading: Bool = false
     @Published var hasMoreData: Bool = true

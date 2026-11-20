@@ -2,9 +2,10 @@ import Combine
 import CoreFlow
 import Foundation
 
-struct NetworkCommunityProfileService: CoreCommunityProfileServing, @unchecked Sendable {
+struct NetworkCommunityProfileService: CoreCommunityProfileServing, Sendable {
     private let network: NetworkManager
 
+    @MainActor
     init(network: NetworkManager = .shared) {
         self.network = network
     }
@@ -60,24 +61,23 @@ struct NetworkCommunityProfileService: CoreCommunityProfileServing, @unchecked S
         cursor: String?,
         limit: Int
     ) async throws -> FollowListPage {
-        let publisher: AnyPublisher<FollowListResponse, NetworkError>
+        let response: FollowListResponse
         switch kind {
         case .followers:
-            publisher = network.getFollowersList(
+            response = try await firstValue(network.getFollowersList(
                 actorId: actorID,
                 cursor: cursor,
                 limit: limit,
                 presentsError: false
-            )
+            ))
         case .following:
-            publisher = network.getFollowingList(
+            response = try await firstValue(network.getFollowingList(
                 actorId: actorID,
                 cursor: cursor,
                 limit: limit,
                 presentsError: false
-            )
+            ))
         }
-        let response = try await firstValue(publisher)
         guard response.success else {
             throw CommunitySocialError.transport(code: "follow_list_rejected")
         }
@@ -151,12 +151,12 @@ struct NetworkCommunityProfileService: CoreCommunityProfileServing, @unchecked S
         }
     }
 
-    private func firstValue<T>(
-        _ publisher: AnyPublisher<T, NetworkError>
+    @MainActor
+    private func firstValue<T: Sendable>(
+        _ publisher: @autoclosure @MainActor @Sendable () -> AnyPublisher<T, NetworkError>
     ) async throws -> T {
         do {
-            var iterator = publisher.values.makeAsyncIterator()
-            guard let value = try await iterator.next() else {
+            guard let value = try await NetworkManager.firstValue(publisher()) else {
                 throw CommunitySocialError.transport(code: "empty_response")
             }
             return value

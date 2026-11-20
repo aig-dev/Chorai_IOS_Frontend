@@ -14,7 +14,7 @@ public enum CommentReadPhase: Equatable {
 
 @MainActor
 public final class CommentReadStore: ObservableObject {
-    public typealias FetchPage = (String, Int, Int, @escaping (CommentPageResult) -> Void) -> Void
+    public typealias FetchPage = @MainActor (String, Int, Int, @escaping (CommentPageResult) -> Void) -> Void
 
     @Published public private(set) var cardID: String?
     @Published public private(set) var comments: [CommentModel] = []
@@ -75,6 +75,9 @@ public final class CommentReadStore: ObservableObject {
     }
 
     private func close() {
+        // An unopened/already closed store has no active read to invalidate.
+        // Avoid publishing an unchanged idle state during session restoration.
+        guard cardID != nil else { return }
         requestID = UUID()
         cardID = nil
         hasFirstPage = false

@@ -94,7 +94,7 @@ final class MergeEditorFixture {
         await controller.waitUntilPrepared()
         model.receive(.availabilityChanged(.ready))
     }
-    deinit { defaults.removePersistentDomain(forName: suite) }
+    isolated deinit { defaults.removePersistentDomain(forName: suite) }
     func edit(_ text: String, revision: Int) {
         model.receive(.documentChanged(.init(revision: revision, contentJSON: Self.body(text), fallbackMarkdown: text)))
     }

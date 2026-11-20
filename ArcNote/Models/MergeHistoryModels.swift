@@ -33,7 +33,8 @@ struct SparkHistoryItem: Codable, Identifiable {
 }
 
 // MARK: Spark 历史管理器
-class SparkHistoryManager: ObservableObject {
+@MainActor
+final class SparkHistoryManager: ObservableObject {
     @Published var isLoading = false
     @Published var error: String?
     @Published var historyItems: [SparkHistoryItem] = []

@@ -53,14 +53,105 @@ Runtime cases, synthetic measurements and limitations are recorded in [render/im
 
 ## Verification
 
+- Concurrency migration gate: `make check-concurrency`; add `IOS_DEVICE=<dedicated-simulator-UUID>` for App-hosted tests and six ordinary/Merge editor UI flows. See [Swift 6 migration validation](../qa/2026-11-20-swift6-migration-validation.md).
 - CoreFlow: `swift test --package-path Packages/CoreFlow`.
 - App-hosted tests: shared `ArcNoteTests` scheme, Local configuration, isolated network sessions.
 - [Synthetic baseline and limitations](../qa/2026-11-19-ios-execution-baseline.md).
 - [History](execution.history.md).
 
+### Swift 6 adoption — all first-party targets
+
+ArcNote, CoreFlow, BlockNoteEditor and their hosted/package/UI tests use Swift 6.
+All App/test configurations (Debug, Debug-Production, Release) also retain
+`SWIFT_STRICT_CONCURRENCY = complete`. The workspace requires Swift tools 6.2 or
+newer for isolated destruction and isolated protocol conformances; iOS 16 and
+package macOS 13 deployment floors remain unchanged. BlockNoteEditor's own
+manifest retains tools 6.0; its tests depend on the tools 6.2 CoreFlow package.
+
+Neither default MainActor isolation nor Approachable Concurrency is enabled.
+Mutable UI/authentication owners and synchronous publisher-facing services belong
+to MainActor. Async business adapters are checked Sendable and retain nonisolated
+mapping/file work; only publisher creation and consumption enter MainActor.
+Explicit workers, accepted-event draining and account/revision checks remain the
+execution contract. UI environment callbacks preserve actor ownership, Sendable
+captures and optional action absence. WebKit/keyboard observer cleanup uses
+isolated destruction; callbacks already delivered on main retain synchronous
+behavior without a new Task hop.
+
+CoreFlow date parsing keeps the original ISO8601DateFormatter behavior inside a
+private lock, also reused for App Chora/notification dates. Recent-read cache
+invalidation/destruction belongs to MainActor. Core Data transaction closures
+require Sendable captures while managed objects remain on their private queue.
+See the [CoreFlow checkpoint](../qa/2026-11-20-swift6-coreflow-validation.md) and
+[whole migration evidence](../qa/2026-11-20-swift6-migration-validation.md).
+
+`scripts/check-concurrency.py` inspects resolved Xcode settings and package
+manifests, runs its own regressions and both package suites, and builds Local,
+Production and Release. It never injects language-mode or checking overrides.
+An explicit `IOS_DEVICE` adds Local App and six ordinary/Merge editor UI tests;
+Production is never launched. The broader migration feature matrix is recorded
+in the validation document; six editor cases alone are not whole-App coverage.
+
+The gate checks every selected UI bundle/class/method and its passing status in
+a separate `.xcresult`. Missing, skipped or renamed cases fail even when
+`xcodebuild` exits zero. Machine-readable stdout is kept separate from stderr.
+First-party concurrency warnings also fail: legacy SDK imports can downgrade
+Swift 6 violations to warnings. Vendor and ordinary style warnings remain visible
+without redefining the migration scope. Runner regressions cover all nine App/test
+configuration pairs, implicit-actor settings drift, warning handling and incomplete
+UI results. Every gate run uses fresh temporary SwiftPM build products and Xcode
+DerivedData, preventing cached products from hiding an unchanged warning on retry.
+Downloaded dependencies are retained. Each package's products are removed before
+the next suite; Xcode products are removed when its phase exits. App and UI
+xcresults live outside those temporary products and survive a failed run.
+Logs, source-package downloads and xcresults default to `.build/concurrency/`,
+configurable with `CONCURRENCY_OUTPUT`; `--settings-only` checks configuration
+quickly. The full gate deliberately pays for recompilation to verify diagnostics.
+
+The [editor pilot](../qa/2026-11-20-swift6-editor-validation.md) and CoreFlow
+checkpoint record earlier mixed-mode states. Their pending-App statements describe
+those checkpoints, not the current language modes. New first-party features enter
+the existing actor/worker boundaries and compile under the same Swift 6 gate.
+
 ## Network responses — implemented
 
-NetworkManager owns a serial response decode queue for generic JSON, raw-response errors and native upload responses. Final results, loading state and alerts are delivered on main. Authentication headers are captured there when creating the request. Credential-exchange error mapping is preserved, including errors embedded in HTTP 200 responses.
+### Local lifecycle action dispatch
+
+A native owned-card menu must send `local-note:` removal through the existing
+`LocalNotesController.setLifecycle` operation. The local transaction is authoritative
+for My Notes; the coordinator owns the guarded cloud deletion, retry and receipt.
+The native confirmation and current account/environment validation remain intact.
+The failed-sync local Trash regression and real Go
+edit/relaunch/delete/restore/purge flow pass. Cloud-only action routing is unchanged.
+
+### Online administrator access and offline eligibility
+
+The real Go access resolver can return `mode: unavailable`, `status: allowed`,
+`reason_code: admin_bypass` for a currently authorized administrator, even when
+the policy service is unavailable. The client must recognize this exact online
+response without treating it as a private-beta membership or persisting offline
+note access. A verified, connected session may open its scoped local library;
+without connectivity it must have a separately retained offline grant. Token
+rejection must check that retained grant rather than the current online bypass.
+Other unavailable/allowed combinations remain invalid. Model/store/offline and
+hosted regressions cover these boundaries; the real authenticated simulator now
+loads and edits scoped notes. Full lifecycle evidence is tracked in the
+[live integration record](../qa/2026-11-20-ios-live-integration.md). Server
+permissions and policy configuration remain authoritative.
+
+NetworkManager owns authentication, request construction and UI delivery on
+MainActor. Its nonisolated response preparation continues on the existing serial
+decode queue for generic JSON, raw errors and native uploads. Final results,
+loading state and alerts return to MainActor; credential-exchange errors embedded
+in HTTP 200 responses retain their original meaning.
+
+Async adapters bridge Sendable values through `NetworkManager.firstValue` using
+AsyncThrowingStream, with subscription and cancellation on MainActor. This retains
+immediate cached values, empty completion and original failures without sending a
+Combine iterator between executors. Merge canonical request encoding is prepared
+by the nonisolated service before entering NetworkManager. NoteImport retains its
+specialized cancellation/termination drain: security-scoped files stay accessible
+until the upload actually terminates.
 
 Only card detail GET uses a subscription-owned cancelable request. CardDetailReader still owns the single shared transport; invalidating a card/session cancels the real Alamofire request. Canceling one async reader does not cancel another reader. Mutation publishers remain eager shared Futures. Payload and credential values are not logged.
 
@@ -98,7 +189,7 @@ Canonical clean-draft preparation now uses the same per-job worker as editor pro
 
 Synchronous Merge persistence remains unchanged (about 3 ms in the synthetic macOS Debug sample). The [follow-up validation record](../qa/2026-11-19-ios-merge-home-read-validation.md) distinguishes it from the decode moved off-main.
 
-Swift language mode and minimum deployment targets remain unchanged. CoreFlow/editor actor inputs and results are Sendable; the JPEG queue has checked Sendable ownership with an explicitly Sendable encoder. UIKit/WK interactions and observable state retain their main-thread ownership. The existing NetworkManager generic Combine interface still has complete-concurrency type-transfer warnings, including at the new decode boundary; the validation record distinguishes those from the legacy baseline. Complete concurrency diagnostics are checked separately from a future Swift 6 language migration.
+CoreFlow/editor actor inputs and results are Sendable; the JPEG queue has checked Sendable ownership with an explicitly Sendable encoder. UIKit/WK interactions and observable state retain their main-thread ownership. The Swift 6 migration resolved the former NetworkManager Combine type-transfer warnings through explicit callback ownership and a Sendable value bridge. Background response preparation and the existing execution boundaries remain covered by the migration regressions.
 
 ## Library list projection — implemented
 
@@ -111,3 +202,8 @@ NoteLibraryStore retains synchronous authority and revision checks while merging
 NoteLibraryStore owns one in-flight missing-note download per asset in its current account/environment generation, including the single apply/publish. Canceling a consumer only discards its own result; scope retirement cancels owned tasks and prevents their publication. Completed local notes are reused, failure is retryable, and an older completion cannot retire a replacement task. Existing NoteSyncCoordinator synchronization sharing remains the sole sync-flight owner.
 
 Chat referenced-note hydration uses CardDetailReader's lazy publisher adapter, sharing transport with asynchronous detail readers. Home post-edit cloud refresh uses the same reader with explicit fresh-read semantics; display cache values never bypass confirmation. Public profile pagination holds one session/profile/page request, coalesces repeated same-page loads, advances a page once and rejects superseded results. Refresh replaces an in-flight later page; account change retires and clears the profile list.
+
+Comment session invalidation closes an active read synchronously and invalidates
+its outstanding response. An unopened/already closed comment store does not publish
+an unchanged idle state during session restoration; this prevents nested SwiftUI
+publication when a view first resolves the authentication owner.

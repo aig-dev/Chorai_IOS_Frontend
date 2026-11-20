@@ -30,7 +30,8 @@ enum LinkPopupPresentationMode {
 }
 
 // MARK: - Link弹窗管理器
-class LinkPopupManager: ObservableObject {
+@MainActor
+final class LinkPopupManager: ObservableObject {
     @Published var isShowing = false
     @Published var searchText = ""
     @Published var linkItems: [LinkItem] = []
@@ -48,7 +49,7 @@ class LinkPopupManager: ObservableObject {
     private var isInitiatingCardOwned = true
     private var navigateAfterLink = true
     private var presentationMode: LinkPopupPresentationMode = .createLink
-    private var onNavigate: ((CardNavigationRoute) -> Void)?
+    private var onNavigate: (@MainActor @Sendable (CardNavigationRoute) -> Void)?
     private var presentationID = UUID()
     private var linkRequestCancellable: AnyCancellable?
     private var searchRequestID = UUID()
@@ -71,7 +72,7 @@ class LinkPopupManager: ObservableObject {
         isInitiatingCardOwned: Bool = true,
         navigateAfterLink: Bool = true,
         mode: LinkPopupPresentationMode = .createLink,
-        onNavigate: ((CardNavigationRoute) -> Void)? = nil
+        onNavigate: (@MainActor @Sendable (CardNavigationRoute) -> Void)? = nil
     ) {
         linkRequestCancellable?.cancel()
         linkRequestCancellable = nil

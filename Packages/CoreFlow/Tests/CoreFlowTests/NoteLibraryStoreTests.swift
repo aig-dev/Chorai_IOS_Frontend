@@ -7,8 +7,8 @@ final class NoteLibraryStoreTests: XCTestCase {
     private var root: URL!
     private let a = NoteStoreScope(actorID: "a", environmentID: "local")
     private let b = NoteStoreScope(actorID: "b", environmentID: "local")
-    override func setUpWithError() throws { root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString) }
-    override func tearDownWithError() throws { try? FileManager.default.removeItem(at: root) }
+    override func setUp() async throws { root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString) }
+    override func tearDown() async throws { try? FileManager.default.removeItem(at: root) }
 
     func testConcurrentSynchronizationKeepsExistingSingleFlight() async throws {
         let service = LibraryManifestGate(scope: a)
@@ -109,6 +109,7 @@ final class NoteLibraryStoreTests: XCTestCase {
     }
 
     func testFirstAutosaveAndPhotoShareOneDurableOfflineDraft() async throws {
+        let a = a
         let library = library()
         await library.configure(scope: a, cloudEnabled: false)
         let image = CardEditingImage(data: Data([1, 3, 5]), filename: "first.png", mimeType: "image/png")

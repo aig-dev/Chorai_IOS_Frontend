@@ -2,7 +2,8 @@ import Combine
 import CoreFlow
 import Foundation
 
-struct NetworkCoreFlowService: CoreFlowServing {
+@MainActor
+struct NetworkCoreFlowService: @MainActor CoreFlowServing {
     private let network: NetworkManager
     private let scope: NoteStoreScope?
 
@@ -55,7 +56,7 @@ struct NetworkCoreFlowService: CoreFlowServing {
             .eraseToAnyPublisher()
     }
 
-    private static func mapError(_ error: Error) -> CoreFlowError {
+    nonisolated private static func mapError(_ error: Error) -> CoreFlowError {
         if let coreError = error as? CoreFlowError {
             return coreError
         }

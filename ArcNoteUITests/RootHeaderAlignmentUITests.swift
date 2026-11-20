@@ -1,8 +1,12 @@
 import XCTest
 
 /// Uses real tab roots; a pushed Chat fixture cannot detect a hidden root toolbar.
+@MainActor
 final class RootHeaderAlignmentUITests: XCTestCase {
-    override func setUpWithError() throws { continueAfterFailure = false }
+    override func setUp() async throws {
+        try await super.setUp()
+        continueAfterFailure = false
+    }
     func testRealTabRootsKeepTheirTitlesAndChatActionsVisible() {
         let app = XCUIApplication()
         app.launchArguments = ["--dev-preview"]

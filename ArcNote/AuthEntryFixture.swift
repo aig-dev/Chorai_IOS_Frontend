@@ -8,6 +8,7 @@ enum AuthEntryDestination {
 }
 
 /// Account entry uses its live dependencies when this value is absent.
+@MainActor
 struct AuthEntryOverrides {
     let preflighter: any AccessCodePreflighting
     let codeStore: any CodeStoring

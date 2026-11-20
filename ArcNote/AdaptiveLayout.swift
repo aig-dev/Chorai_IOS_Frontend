@@ -144,7 +144,7 @@ private struct KeyboardViewportTopReader: UIViewRepresentable {
             fatalError("init(coder:) has not been implemented")
         }
 
-        deinit {
+        isolated deinit {
             keyboardObservers.forEach(NotificationCenter.default.removeObserver)
         }
 
@@ -181,7 +181,7 @@ private struct KeyboardViewportTopReader: UIViewRepresentable {
                     object: nil,
                     queue: .main
                 ) { [weak self] notification in
-                    self?.reportAfterLayout()
+                    MainActor.assumeIsolated { self?.reportAfterLayout() }
                     let duration = notification.userInfo?[
                         UIResponder.keyboardAnimationDurationUserInfoKey
                     ] as? Double ?? 0.25

@@ -2,10 +2,12 @@ import XCTest
 
 /// Guards against the glass button style adding padding to an already full-size
 /// label, and against multiline input moving its actions away from the baseline.
+@MainActor
 final class ChatControlSizingUITests: XCTestCase {
     private var app: XCUIApplication!
 
-    override func setUpWithError() throws {
+    override func setUp() async throws {
+        try await super.setUp()
         continueAfterFailure = false
         app = XCUIApplication()
     }
@@ -90,8 +92,10 @@ final class ChatControlSizingUITests: XCTestCase {
 }
 
 /// Exercises the real empty conversation response and real tab coordinator.
+@MainActor
 final class ChatEmptyStateUITests: XCTestCase {
-    override func setUpWithError() throws {
+    override func setUp() async throws {
+        try await super.setUp()
         continueAfterFailure = false
     }
 

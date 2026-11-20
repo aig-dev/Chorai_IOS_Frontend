@@ -32,7 +32,7 @@ struct SignUpInitialValues {
 
 @MainActor
 private final class SignUpFormState: ObservableObject {
-    struct PendingRequest: Equatable {
+    struct PendingRequest: Equatable, Sendable {
         let id = UUID()
         let step: RegistrationDraft.Step
         let loadingTitle: String
@@ -461,11 +461,13 @@ struct SignUpView: View {
 
         let operation = beginProviderRequest()
         GIDSignIn.sharedInstance.signIn(withPresenting: presentingViewController) { result, failure in
+            // Snapshot SDK-owned values before the existing UI delivery hop.
+            let idToken = result?.user.idToken?.tokenString
+            let canceled = (failure as NSError?)?.code == GIDSignInError.canceled.rawValue
             DispatchQueue.main.async {
                 guard pending == operation else { return }
-                guard let idToken = result?.user.idToken?.tokenString else {
+                guard let idToken else {
                     cancelRequest()
-                    let canceled = (failure as NSError?)?.code == GIDSignInError.canceled.rawValue
                     if !canceled {
                         showError("Google sign in failed. Please try again.", on: .email)
                     }

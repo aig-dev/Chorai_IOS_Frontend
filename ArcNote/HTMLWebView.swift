@@ -26,6 +26,7 @@ struct AdaptiveHTMLWebView: UIViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
+    @MainActor
     final class Coordinator: NSObject, WKNavigationDelegate {
         var parent: AdaptiveHTMLWebView
         var loadedContent: String?
@@ -33,13 +34,15 @@ struct AdaptiveHTMLWebView: UIViewRepresentable {
 
         init(_ parent: AdaptiveHTMLWebView) { self.parent = parent }
 
+        isolated deinit { contentSizeObservation?.invalidate() }
+
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             updateHeight(webView)
             // Images may finish after navigation. Observe rendered size rather
             // than reloading the document each time SwiftUI measures its height.
             contentSizeObservation = webView.scrollView.observe(\.contentSize, options: [.new]) { [weak self, weak webView] _, _ in
                 guard let webView else { return }
-                self?.updateHeight(webView)
+                MainActor.assumeIsolated { self?.updateHeight(webView) }
             }
         }
 
@@ -55,6 +58,7 @@ struct AdaptiveHTMLWebView: UIViewRepresentable {
 }
 
 private enum ChoraiHTMLAppearance {
+    @MainActor
     static func makeWebView() -> WKWebView {
         let webView = WKWebView()
         webView.isOpaque = false

@@ -191,6 +191,7 @@ struct SearchResponse: Codable {
 }
 
 // MARK: 搜索管理器
+@MainActor
 final class ExploreSearchManager: ObservableObject {
     static let shared = ExploreSearchManager()
 

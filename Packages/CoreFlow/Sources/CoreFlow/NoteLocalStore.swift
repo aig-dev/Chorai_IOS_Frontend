@@ -155,7 +155,9 @@ public actor NoteLocalStore {
         }
     }
 
-    func transaction<T: Sendable>(_ work: @escaping (NSManagedObjectContext) throws -> T) async throws -> T {
+    // The closure crosses from this actor to Core Data's private queue. Only its
+    // value inputs and result may cross; managed objects stay inside the closure.
+    func transaction<T: Sendable>(_ work: @escaping @Sendable (NSManagedObjectContext) throws -> T) async throws -> T {
         guard !isClosed else { throw NoteLocalStoreError.closed }
         let context = context
         return try await context.perform {
@@ -174,7 +176,7 @@ public actor NoteLocalStore {
     }
 
     func mutate(localID: String, creatingWith initialBody: OfflineNoteBody? = nil,
-                _ change: @escaping (inout OfflineNote) throws -> Void) async throws -> OfflineNote {
+                _ change: @escaping @Sendable (inout OfflineNote) throws -> Void) async throws -> OfflineNote {
         let scope = scope
         return try await transaction { context in
             let row = try Self.row(localID: localID, in: context)

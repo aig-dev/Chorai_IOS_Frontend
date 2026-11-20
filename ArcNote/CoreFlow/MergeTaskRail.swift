@@ -1159,8 +1159,9 @@ private struct MergeWorkingCancelFixtureScreen: View {
     }
 }
 
+@MainActor
 private final class MergeRootLifecycleOnboardingService:
-    OnboardingGuideServing {
+    @MainActor OnboardingGuideServing {
     private let actorTwoStatus = PassthroughSubject<
         OnboardingStatusSnapshot,
         OnboardingGuideError
@@ -1225,7 +1226,7 @@ private final class MergeRootLifecycleOnboardingService:
 
     func resolveActorTwo() {
         actorTwoStatus.send(onboardingFixtureStatus(actor: 2))
-        DispatchQueue.main.async { [actorTwoCurrent] in
+        DispatchQueue.main.async { [self] in
             actorTwoCurrent.send(onboardingFixtureSession(actor: 2))
         }
     }

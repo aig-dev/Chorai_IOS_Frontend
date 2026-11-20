@@ -5,7 +5,8 @@ import Combine
 
 
 // MARK: 选择卡片弹窗管理器
-class SelectCardPopupManager: ObservableObject {
+@MainActor
+final class SelectCardPopupManager: ObservableObject {
     @Published var isShowing = false
     @Published var noteCards: [NoteCard] = []
     @Published var selectedNotes: [NoteCard] = []

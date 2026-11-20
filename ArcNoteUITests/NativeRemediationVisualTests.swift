@@ -1,11 +1,13 @@
 import XCTest
 
 /// Captures the real migrated pages and exercises their existing navigation.
-/// Each route uses the existing process-local preview/fixture transport.
+/// Routes use preview transport or an authenticated, scoped loopback fixture.
+@MainActor
 final class NativeRemediationVisualTests: XCTestCase {
     private var app: XCUIApplication!
 
-    override func setUpWithError() throws {
+    override func setUp() async throws {
+        try await super.setUp()
         continueAfterFailure = false
         app = XCUIApplication()
     }
@@ -60,8 +62,16 @@ final class NativeRemediationVisualTests: XCTestCase {
         capture("blocked-users")
     }
 
-    func testTrashCancelAndRejectedDeleteKeepTheOriginalNote() {
-        openSidebar()
+    func testTrashCancelAndRejectedDeleteKeepTheOriginalNote() throws {
+        let server = try RecentNotesServer(libraryFixture: .trashedNote)
+        defer { app.terminate(); server.stop() }
+        launch([], environment: [
+            APIEnvironment.overrideEnvironmentKey: try server.start(),
+            "CHORAI_UI_TEST": "1",
+            "CHORAI_UI_TEST_AUTH_TOKEN": server.token,
+            "CHORAI_UI_TEST_ACTOR_ID": server.actorID
+        ])
+        tap("side-menu.open")
         app.buttons["Trash"].tap()
         ready("screen.trash")
         let delete = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "trash.card.delete.")).firstMatch
@@ -74,14 +84,17 @@ final class NativeRemediationVisualTests: XCTestCase {
         tap("trash.delete.cancel")
         gone("trash.delete.confirm")
         XCTAssertTrue(app.buttons[originalIdentifier].exists)
+        XCTAssertEqual(server.permanentDeleteRequests, 0, "Cancel must not issue a delete")
         app.buttons[originalIdentifier].tap()
         tap("trash.delete.confirm")
         ready("trash.delete.error")
+        XCTAssertEqual(server.permanentDeleteRequests, 1, "The rejected request must reach the server once")
         XCTAssertTrue(app.buttons["trash.delete.cancel"].isEnabled)
         capture("trash-failed-delete")
         tap("trash.delete.cancel")
         gone("trash.delete.confirm")
         XCTAssertTrue(app.buttons[originalIdentifier].exists)
+        XCTAssertEqual(server.permanentDeleteRequests, 1, "Closing the error must not retry deletion")
     }
 
     func testChoraSectionsRemainReadableAndHistoryHidingIsExplicit() {

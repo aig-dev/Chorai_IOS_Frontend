@@ -4,23 +4,25 @@ import Foundation
 
 struct NetworkInvitationAccountRegistrar:
     InvitationAccountRegistering,
-    @unchecked Sendable {
+    Sendable {
     private let authManager: AuthManager
 
+    @MainActor
     init(authManager: AuthManager = .shared) {
         self.authManager = authManager
     }
 
+    @MainActor
     func register(
         _ request: InvitationAccountRegistrationRequest
     ) async throws -> InvitationRegisteredAccount {
-        var iterator = authManager.register(
+        let publisher = authManager.register(
             username: request.username,
             email: request.email,
             password: request.password,
             verificationCode: request.verificationCode
-        ).values.makeAsyncIterator()
-        guard let response = try await iterator.next() else {
+        )
+        guard let response = try await NetworkManager.firstValue(publisher) else {
             throw NetworkError.noData
         }
         return InvitationRegisteredAccount(

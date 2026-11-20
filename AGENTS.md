@@ -53,6 +53,7 @@ then check `/health` and backend access logs. Do not assume the database is empt
 - Reuse existing SwiftUI, CoreFlow, and editor primitives before adding variants.
 - Use test-first changes for behavior and regression fixes.
 - Follow [execution boundaries](docs/architecture/execution.md) for background work, preview reuse and editor lifetime.
+- Keep complete concurrency checking enabled. App, CoreFlow, BlockNoteEditor and all their tests use Swift 6. The workspace requires Swift tools 6.2 or newer, retaining iOS 16. Run `make check-concurrency` to verify persisted modes, reject first-party concurrency warnings and exercise the execution boundaries; set `IOS_DEVICE` to a dedicated simulator UUID to include App and editor UI regressions.
 - Do not edit generated or vendored package output.
 
 ## Zen Aesthetic

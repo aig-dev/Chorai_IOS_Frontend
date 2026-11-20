@@ -190,14 +190,14 @@ struct ContentReportView: View {
     private var reasonBinding: Binding<ContentReportReason> {
         Binding(
             get: { store.reason },
-            set: store.selectReason
+            set: { store.selectReason($0) }
         )
     }
 
     private var detailBinding: Binding<String> {
         Binding(
             get: { store.detail },
-            set: store.updateDetail
+            set: { store.updateDetail($0) }
         )
     }
 }

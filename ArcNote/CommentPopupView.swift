@@ -14,7 +14,7 @@ final class CommentPopupManager: ObservableObject {
     @Published var errorMessage = ""
 
     static let shared = CommentPopupManager()
-    private let reads = CommentReadStore(session: { AuthManager.shared.cardReadSession }, fetch: CommentService.loadPage)
+    private let reads = CommentReadStore(session: { AuthManager.shared.cardReadSession }, fetch: { CommentService.loadPage(cardID: $0, page: $1, perPage: $2, completion: $3) })
     private var subscriptions = Set<AnyCancellable>()
     private var submissionID: UUID?
     private var pendingWrites: [UUID: String] = [:]

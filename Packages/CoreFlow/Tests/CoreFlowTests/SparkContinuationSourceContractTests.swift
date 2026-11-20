@@ -177,7 +177,7 @@ final class SparkContinuationSourceContractTests: XCTestCase {
             continuation.contains("service: NetworkCoreCardLikeService()")
         )
         XCTAssertTrue(
-            continuation.contains("onCommit: CardEngagementCenter.shared.publish")
+            continuation.contains("onCommit: { CardEngagementCenter.shared.publish($0) }")
         )
         XCTAssertTrue(continuation.contains("store.applyLikeState(state)"))
         XCTAssertTrue(card.contains("let isLikeMutationInFlight: Bool"))

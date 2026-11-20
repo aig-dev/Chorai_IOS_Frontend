@@ -1,5 +1,6 @@
 import XCTest
 import Combine
+import os
 @testable import ArcNote
 
 @MainActor
@@ -49,10 +50,10 @@ final class CardDetailReaderTests: XCTestCase {
         let started = expectation(description: "first")
         let nextStarted = expectation(description: "next")
         let stopped = expectation(description: "HTTP canceled")
-        var sequence = 0
+        let sequence = OSAllocatedUnfairLock(initialState: 0)
         let fixture = HTTPFixture(onStart: {
-            sequence += 1
-            if sequence == 1 { started.fulfill() } else { nextStarted.fulfill() }
+            let count = sequence.withLock { $0 += 1; return $0 }
+            if count == 1 { started.fulfill() } else { nextStarted.fulfill() }
         }, onStop: { stopped.fulfill() })
         let network = NetworkManager(baseURL: fixture.baseURL, session: fixture.session)
         var generation: UInt64? = 1

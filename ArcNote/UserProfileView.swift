@@ -367,11 +367,11 @@ struct UserPostCard: View {
     let avatarUrl: String?
     let disableFavorite: Bool
     let ownsMenuActions: Bool
-    let onDelete: (() -> Void)?
-    let onToggleVisibility: ((UserCard) -> Void)?
-    let onTogglePin: ((UserCard) -> Void)?
+    let onDelete: (@MainActor @Sendable () -> Void)?
+    let onToggleVisibility: (@MainActor @Sendable (UserCard) -> Void)?
+    let onTogglePin: (@MainActor @Sendable (UserCard) -> Void)?
 
-    init(card: UserCard, onShowMenu: @escaping (UserCard) -> Void, onCardTap: ((String) -> Void)? = nil, onChatTap: (() -> Void)? = nil, username: String, avatarUrl: String? = nil, disableFavorite: Bool = false, ownsMenuActions: Bool = false, onDelete: (() -> Void)? = nil, onToggleVisibility: ((UserCard) -> Void)? = nil, onTogglePin: ((UserCard) -> Void)? = nil) {
+    init(card: UserCard, onShowMenu: @escaping (UserCard) -> Void, onCardTap: ((String) -> Void)? = nil, onChatTap: (() -> Void)? = nil, username: String, avatarUrl: String? = nil, disableFavorite: Bool = false, ownsMenuActions: Bool = false, onDelete: (@MainActor @Sendable () -> Void)? = nil, onToggleVisibility: (@MainActor @Sendable (UserCard) -> Void)? = nil, onTogglePin: (@MainActor @Sendable (UserCard) -> Void)? = nil) {
         self.card = card
         self.onShowMenu = onShowMenu
         self.onCardTap = onCardTap
@@ -391,7 +391,7 @@ struct UserPostCard: View {
                     likeCount: card.likeCount
                 ),
                 service: NetworkCoreCardLikeService(),
-                onCommit: CardEngagementCenter.shared.publish
+                onCommit: { CardEngagementCenter.shared.publish($0) }
             )
         )
     }
