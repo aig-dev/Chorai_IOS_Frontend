@@ -40,6 +40,6 @@ This delivery does not claim ordinary-account live acceptance, in-place upgrade 
 
 ## Next stage
 
-The [upgrade and integration plan](../superpowers/plans/2026-11-20-post-swift6-integration.md) prioritizes mandatory simulator/CI checks, ordinary-account M1/M2 integration, account switching, retained-data app upgrades and Merge failure recovery. It records the production protocol restrictions confirmed in Go source. These next-stage tasks are planned, not implemented by this delivery.
+At delivery time, the [upgrade and integration plan](../superpowers/plans/2026-11-20-post-swift6-integration.md) prioritized simulator/CI checks, ordinary-account integration, account switching, retained-data app upgrades and Merge failure recovery. The user subsequently clarified the pre-launch scope: the current plan removes old-version upgrades and prioritizes production write readiness, Chat/concurrency work, import recovery and first-launch acceptance. These next-stage tasks remain planned, not implemented by this delivery.
 
 The follow-up documentation change was checked against the current source and test entry points. All 31 local Markdown links in its four files resolve, and `git diff --check` passes. No executable source changed after the fresh gate above.

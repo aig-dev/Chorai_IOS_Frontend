@@ -122,13 +122,21 @@ The complete migration and local integration fixes were committed and pushed to
 [delivery record](../qa/2026-11-20-main-delivery.md) for scope and evidence.
 
 The [next-stage plan](../superpowers/plans/2026-11-20-post-swift6-integration.md)
-is not yet implemented. It prioritizes mandatory simulator/CI wiring, ordinary
-account live synchronization, account switching, retained-data upgrades and
-Merge failure diagnosis. First-party language migration is complete; these
-runtime and cross-end checks remain distinct. The local M1/M2 backend options
+is in progress. The user clarified that the product has not launched:
+old-version data migration is outside this release scope. Priorities are the
+production NOTE write contract, first-use/ordinary-account acceptance, Chat
+request ownership and display preparation, Swift/SDK cancellation boundaries,
+original-image resource limits, and Merge/import recovery. Chat request ownership,
+event replay and presentation preparation are implemented with focused regression
+evidence; full first-launch acceptance remains open. See the
+[Chat execution record](../qa/2026-11-20-chat-execution.md).
+Current-session save/relaunch/offline/scope correctness remains required.
+
+First-party language migration is complete. The local M1/M2 backend options
 are restricted to dev/test and do not establish production synchronization
-readiness. Keep the current explicit concurrency semantics while closing these
-gaps.
+readiness; production closure is a launch requirement. Keep the current explicit
+concurrency semantics, wire CI alongside the work, and record signed-release and
+supported-OS acceptance separately from simulator checks.
 
 ## Network responses — implemented
 
@@ -219,6 +227,26 @@ NoteLibraryStore retains synchronous authority and revision checks while merging
 NoteLibraryStore owns one in-flight missing-note download per asset in its current account/environment generation, including the single apply/publish. Canceling a consumer only discards its own result; scope retirement cancels owned tasks and prevents their publication. Completed local notes are reused, failure is retryable, and an older completion cannot retire a replacement task. Existing NoteSyncCoordinator synchronization sharing remains the sole sync-flight owner.
 
 Chat referenced-note hydration uses CardDetailReader's lazy publisher adapter, sharing transport with asynchronous detail readers. Home post-edit cloud refresh uses the same reader with explicit fresh-read semantics; display cache values never bypass confirmation. Public profile pagination holds one session/profile/page request, coalesces repeated same-page loads, advances a page once and rejects superseded results. Refresh replaces an in-flight later page; account change retires and clears the profile list.
+
+ChatDetailManager owns a conversation epoch and separate detail, message,
+hydration and stream identities. One message read is active per conversation;
+events during that read request one trailing refresh. Superseded values, errors
+and completions cannot publish or clear a newer loading state. Leaving the screen
+cancels owned work; synchronous authentication retirement also clears private
+state and prevents that manager from reopening under a different session.
+
+SSE framing runs on NetworkManager's existing serial response queue. Ordered
+immutable events return to MainActor; only consumed event IDs advance replay.
+A send ACK cannot skip intervening events. Pending/recoverable replies follow
+`source_message_ids` (or the singular source for single-message replies), so an
+older failure cannot end a newer wait. A terminal stream event retires a pending
+retry callback before its late HTTP acceptance can reopen waiting.
+
+Message timestamps are parsed once per input publication using CardTimestamp.
+The manager publishes prepared display values when messages, hydration, partner
+avatar, visibility or significant clock/time-zone/locale conditions change.
+SwiftUI reads those values directly. Normal 20-message preparation stays on
+MainActor; synthetic measurements are recorded separately from device results.
 
 Comment session invalidation closes an active read synchronously and invalidates
 its outstanding response. An unopened/already closed comment store does not publish

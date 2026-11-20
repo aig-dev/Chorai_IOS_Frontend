@@ -5,6 +5,42 @@ import Alamofire
 
 @MainActor
 final class NetworkResponseExecutionTests: XCTestCase {
+    func testChatStreamKeepsFrameOrderAndDeliversOnMain() async {
+        let started = expectation(description: "stream started")
+        let completed = expectation(description: "stream completed")
+        let fixture = HTTPFixture(onStart: { started.fulfill() })
+        let network = NetworkManager(baseURL: fixture.baseURL, session: fixture.session)
+        var ids: [String] = []
+        let token = network.streamConversationEvents(conversationId: "chat", lastEventID: "9")
+            .sink(receiveCompletion: { completion in
+                XCTAssertTrue(Thread.isMainThread)
+                if case .failure(let error) = completion { XCTFail("\(error)") }
+                completed.fulfill()
+            }, receiveValue: { event in
+                XCTAssertTrue(Thread.isMainThread)
+                ids.append(event.id ?? "missing")
+            })
+        await fulfillment(of: [started], timeout: 3)
+        let frames = (10..<510).map { "event: agent.thinking\nid: \($0)\ndata: {\"source_message_id\":\"synthetic\"}\n\n" }.joined()
+        fixture.respond(frames, contentType: "text/event-stream")
+        await fulfillment(of: [completed], timeout: 3)
+        XCTAssertEqual(ids, (10..<510).map(String.init))
+        withExtendedLifetime(token) {}
+    }
+
+    func testCancelChatStreamCancelsTransportAndRejectsLateFrames() async {
+        let started = expectation(description: "stream started")
+        let canceled = expectation(description: "transport canceled")
+        let fixture = HTTPFixture(onStart: { started.fulfill() }, onStop: { canceled.fulfill() })
+        let network = NetworkManager(baseURL: fixture.baseURL, session: fixture.session)
+        let token = network.streamConversationEvents(conversationId: "chat", lastEventID: nil)
+            .sink(receiveCompletion: { _ in XCTFail("Canceled stream delivered completion") }, receiveValue: { _ in XCTFail("Canceled stream delivered a frame") })
+        await fulfillment(of: [started], timeout: 3)
+        token.cancel()
+        await fulfillment(of: [canceled], timeout: 3)
+        fixture.respond("event: agent.thinking\nid: 1\ndata: {}\n\n", contentType: "text/event-stream")
+    }
+
     private struct Probe: Codable {
         let decodedOnMain: Bool
         init(from decoder: Decoder) throws {

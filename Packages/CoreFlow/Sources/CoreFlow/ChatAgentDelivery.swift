@@ -128,24 +128,43 @@ public enum ChatAgentDeliveryState: Equatable, Sendable {
 public struct ChatAgentDeliveryUpdate: Equatable, Sendable {
     public let state: ChatAgentDeliveryState
     public let shouldRefreshMessages: Bool
+    /// A coordinated reply may complete several human messages at once. Its
+    /// singular source can be a batch ID; the array names the covered messages.
+    public let sourceMessageIDs: [String]
 
     public init(
         state: ChatAgentDeliveryState,
-        shouldRefreshMessages: Bool
+        shouldRefreshMessages: Bool,
+        sourceMessageIDs: [String]? = nil
     ) {
         self.state = state
         self.shouldRefreshMessages = shouldRefreshMessages
+        if let sourceMessageIDs {
+            self.sourceMessageIDs = sourceMessageIDs
+        } else if case .retryAvailable(let sourceMessageID) = state {
+            self.sourceMessageIDs = [sourceMessageID]
+        } else {
+            self.sourceMessageIDs = []
+        }
     }
 }
 
 public enum ChatAgentDeliveryReducer {
     private struct ResponseReadyPayload: Decodable {
-        let status: String
+        let status: String?
         let sourceMessageID: String?
+        let sourceMessageIDs: [String]?
+
+        var coveredSourceIDs: [String] {
+            let ids = (sourceMessageIDs ?? []).compactMap { normalizedSourceMessageID($0) }
+            if !ids.isEmpty { return ids }
+            return normalizedSourceMessageID(sourceMessageID).map { [$0] } ?? []
+        }
 
         private enum CodingKeys: String, CodingKey {
             case status
             case sourceMessageID = "source_message_id"
+            case sourceMessageIDs = "source_message_ids"
         }
     }
 
@@ -156,28 +175,32 @@ public enum ChatAgentDeliveryReducer {
         case "agent.thinking":
             return ChatAgentDeliveryUpdate(
                 state: .thinking,
-                shouldRefreshMessages: false
+                shouldRefreshMessages: false,
+                sourceMessageIDs: (try? JSONDecoder().decode(ResponseReadyPayload.self, from: event.data))?.coveredSourceIDs
             )
         case "agent.response_ready":
             guard
                 let payload = try? JSONDecoder().decode(
                     ResponseReadyPayload.self,
                     from: event.data
-                )
+                ),
+                let status = payload.status
             else {
                 return nil
             }
 
-            switch payload.status.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+            switch status.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
             case "succeeded":
                 return ChatAgentDeliveryUpdate(
                     state: .idle,
-                    shouldRefreshMessages: true
+                    shouldRefreshMessages: true,
+                    sourceMessageIDs: payload.coveredSourceIDs
                 )
             case "retrying":
                 return ChatAgentDeliveryUpdate(
                     state: .thinking,
-                    shouldRefreshMessages: false
+                    shouldRefreshMessages: false,
+                    sourceMessageIDs: payload.coveredSourceIDs
                 )
             case "retry_available", "failed":
                 guard let sourceMessageID = normalizedSourceMessageID(payload.sourceMessageID) else {
@@ -185,12 +208,14 @@ public enum ChatAgentDeliveryReducer {
                 }
                 return ChatAgentDeliveryUpdate(
                     state: .retryAvailable(sourceMessageID: sourceMessageID),
-                    shouldRefreshMessages: false
+                    shouldRefreshMessages: false,
+                    sourceMessageIDs: payload.coveredSourceIDs
                 )
             case "not_applicable":
                 return ChatAgentDeliveryUpdate(
                     state: .idle,
-                    shouldRefreshMessages: false
+                    shouldRefreshMessages: false,
+                    sourceMessageIDs: payload.coveredSourceIDs
                 )
             default:
                 return nil

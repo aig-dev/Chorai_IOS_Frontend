@@ -12,23 +12,8 @@ final class ChatAgentDeliverySourceContractTests: XCTestCase {
         XCTAssertTrue(source.contains("ChatServerSentEventParser"))
     }
 
-    func testChatManagerRefreshesOnReadyAndOwnsStreamLifecycle() throws {
-        let source = try source("ArcNote/Models/ChatModels.swift")
-
-        XCTAssertTrue(source.contains("func startConversationEvents("))
-        XCTAssertTrue(source.contains("func stopConversationEvents()"))
-        XCTAssertTrue(source.contains("ChatAgentDeliveryReducer.reduce"))
-        XCTAssertTrue(source.contains("update.shouldRefreshMessages"))
-        XCTAssertTrue(source.contains("loadMessages(conversationId: conversationId)"))
-        XCTAssertTrue(source.contains("eventConversationID != conversationId"))
-        XCTAssertTrue(source.contains("eventCancellable?.cancel()"))
-        XCTAssertTrue(source.contains("eventCursor.advance(to: eventID)"))
-        XCTAssertTrue(
-            source.contains(
-                "self.connectConversationEvents(\n                            conversationId: conversationId"
-            )
-        )
-    }
+    // Manager ordering, replay and lifetime are exercised by hosted
+    // ChatDetailManagerTests with controlled callbacks, not source substrings.
 
     func testChatViewStopsStreamOnDisappear() throws {
         let source = try source("ArcNote/ChatDetailView.swift")

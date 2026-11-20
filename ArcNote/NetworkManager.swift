@@ -1158,36 +1158,31 @@ extension NetworkManager {
             )
             .validate()
 
-            let receive: @MainActor @Sendable (DataStreamRequest.Stream<Data, Never>) -> Void = { [weak self] stream in
-                guard let self else {
-                    stream.cancel()
-                    return
-                }
-
-                switch stream.event {
-                case .stream(.success(let data)):
-                    parser.append(data).forEach(subject.send)
-                case .stream(.failure):
-                    break
-                case .complete(let completion):
-                    if let error = completion.error,
-                       !error.isExplicitlyCancelledError {
-                        subject.send(
-                            completion: .failure(
-                                self.handleError(
-                                    error,
-                                    response: completion.response
-                                )
-                            )
-                        )
-                    } else {
-                        subject.send(completion: .finished)
-                    }
+            let deliver: @MainActor @Sendable ([ChatConversationEvent]) -> Void = { events in
+                events.forEach(subject.send)
+            }
+            let finish: @MainActor @Sendable (AFError?, HTTPURLResponse?) -> Void = { [weak self] error, response in
+                guard let self else { return }
+                if let error, !error.isExplicitlyCancelledError {
+                    subject.send(completion: .failure(self.handleError(error, response: response)))
+                } else {
+                    subject.send(completion: .finished)
                 }
             }
 
-            request.responseStream(on: .main) { stream in
-                MainActor.assumeIsolated { receive(stream) }
+            // Use the existing serial response queue so incremental parsing and
+            // frame order stay together. Only immutable events cross to UI state.
+            request.responseStream(on: self.responseDecodeQueue) { stream in
+                switch stream.event {
+                case .stream(.success(let data)):
+                    let events = parser.append(data)
+                    guard !events.isEmpty else { return }
+                    DispatchQueue.main.async { deliver(events) }
+                case .stream(.failure):
+                    break
+                case .complete(let completion):
+                    DispatchQueue.main.async { finish(completion.error, completion.response) }
+                }
             }
 
             return subject

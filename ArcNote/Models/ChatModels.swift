@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 import Combine
 import CoreFlow
 
@@ -308,8 +309,11 @@ struct APIChatMessage: Codable, Identifiable {
 // MARK: 聊天详情管理器
 @MainActor
 class ChatDetailManager: ObservableObject {
-    @Published var conversation: ChatDetailConversation?
-    @Published var messages: [APIChatMessage] = []
+    @Published var conversation: ChatDetailConversation? {
+        didSet { refreshMessagePresentation() }
+    }
+    @Published private(set) var displayMessages: [ChatMessage] = []
+    @Published private(set) var messages: [APIChatMessage] = []
     @Published var isLoading = false
     @Published var error: String?
     @Published private(set) var agentDeliveryState: ChatAgentDeliveryState = .idle
@@ -319,15 +323,44 @@ class ChatDetailManager: ObservableObject {
     private let currentUserAvatarURL: String?
     private let participantAvatarURL: String?
     private var canonicalMessages: [APIChatMessage] = []
+    private var visibleMessageDates: [Date?] = []
+    private var timeChangeCancellable: AnyCancellable?
+    private let messageTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "HH:mm"
+        return formatter
+    }()
+    private let messageDayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }()
     private weak var visibilityDependency: ChatHistoryVisibilityDependency?
     private var visibilityCancellable: AnyCancellable?
     private var avatarUpdateCancellable: AnyCancellable?
     private var eventCancellable: AnyCancellable?
+    private var eventConnectionID: UUID?
+    private var sessionCancellable: AnyCancellable?
+    private var sessionRetired = false
+    private var thinkingSourceIDs: Set<String> = []
+    private var recoverySourceIDs: [String] = []
+    private var unscopedDeliveryState: ChatAgentDeliveryState = .idle
     private var agentReplyRecoveryCancellable: AnyCancellable?
     private var agentReplyRecoveryRequestID: UUID?
+    private var agentReplyRecoverySourceID: String?
     private var eventReconnectTask: Task<Void, Never>?
     private var eventConversationID: String?
     private var eventCursor = ChatConversationEventCursor()
+    private var conversationEpoch = UUID()
+    private var detailRequestID: UUID?
+    private var detailCancellable: AnyCancellable?
+    private var messageRequestID: UUID?
+    private var messageCancellable: AnyCancellable?
+    private var refreshPending = false
+    private var hydrationRequestID: UUID?
+    private var hydrationCancellable: AnyCancellable?
     private var cancellables = Set<AnyCancellable>()
     
     // 从AuthManager获取当前用户ID
@@ -345,6 +378,20 @@ class ChatDetailManager: ObservableObject {
         self.currentUserAvatarURL = currentUserAvatarURL
         self.participantAvatarURL = participantAvatarURL
         self.fetcher = fetcher
+        timeChangeCancellable = Publishers.MergeMany([
+            UIApplication.significantTimeChangeNotification,
+            NSLocale.currentLocaleDidChangeNotification,
+            .NSSystemTimeZoneDidChange
+        ].map { NotificationCenter.default.publisher(for: $0) })
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.refreshMessagePresentation() }
+        // AuthManager publishes this notification synchronously on MainActor.
+        // Retire before any queued response can reveal the prior account's data.
+        sessionCancellable = NotificationCenter.default.publisher(for: .cardReadSessionDidChange)
+            .sink { [weak self] _ in
+                self?.sessionRetired = true
+                self?.stopConversationEvents()
+            }
         avatarUpdateCancellable = NotificationCenter.default.publisher(
             for: ChoraAvatarUpdate.notification
         )
@@ -364,33 +411,37 @@ class ChatDetailManager: ObservableObject {
     }
     
     func loadConversationDetail(conversationId: String) {
+        guard !sessionRetired else { return }
         startConversationEvents(conversationId: conversationId)
-        isLoading = true
+        detailCancellable?.cancel()
+        let epoch = conversationEpoch
+        let requestID = UUID()
+        detailRequestID = requestID
         error = nil
-        
-        self.loadMessages(conversationId: conversationId)
-        fetcher.getConversationDetail(conversationId: conversationId)
+        loadMessages(conversationId: conversationId)
+        detailCancellable = fetcher.getConversationDetail(conversationId: conversationId)
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { [weak self] completion in
-                    self?.isLoading = false
+                    guard let self, self.conversationEpoch == epoch,
+                          self.detailRequestID == requestID else { return }
+                    self.detailRequestID = nil
+                    self.detailCancellable = nil
+                    self.updateLoadingState()
                     if case .failure(let error) = completion {
-                        self?.error = error.localizedDescription
-                        print("获取聊天详情失败: \(error)")
+                        self.error = error.localizedDescription
                     }
                 },
                 receiveValue: { [weak self] response in
-                    self?.conversation = response.conversation
-                    print("获取成功: \(response.conversation.partner.username ?? response.conversation.partner.id)")
-                    print("加载列表conversationId: \(response.conversation.id)")
-                    
-                    // 对话详情加载完成后，加载消息
+                    guard let self, self.conversationEpoch == epoch,
+                          self.detailRequestID == requestID else { return }
+                    self.conversation = response.conversation
                 }
             )
-            .store(in: &cancellables)
     }
 
     func startConversationEvents(conversationId: String) {
+        guard !sessionRetired else { return }
         guard eventConversationID != conversationId else {
             if eventCancellable == nil {
                 connectConversationEvents(conversationId: conversationId)
@@ -404,6 +455,28 @@ class ChatDetailManager: ObservableObject {
     }
 
     func stopConversationEvents() {
+        // Invalidate identities before canceling: cancellation may synchronously
+        // call a transport, and an already enqueued callback may still arrive.
+        conversationEpoch = UUID()
+        eventConnectionID = nil
+        detailRequestID = nil
+        messageRequestID = nil
+        hydrationRequestID = nil
+        refreshPending = false
+        detailCancellable?.cancel()
+        detailCancellable = nil
+        messageCancellable?.cancel()
+        messageCancellable = nil
+        hydrationCancellable?.cancel()
+        hydrationCancellable = nil
+        cancellables.removeAll()
+        canonicalMessages = []
+        visibleMessageDates = []
+        messages = []
+        displayMessages = []
+        conversation = nil
+        error = nil
+        updateLoadingState()
         eventConversationID = nil
         eventCursor = ChatConversationEventCursor()
         eventReconnectTask?.cancel()
@@ -413,16 +486,32 @@ class ChatDetailManager: ObservableObject {
         agentReplyRecoveryCancellable?.cancel()
         agentReplyRecoveryCancellable = nil
         agentReplyRecoveryRequestID = nil
+        agentReplyRecoverySourceID = nil
+        thinkingSourceIDs.removeAll()
+        recoverySourceIDs.removeAll()
+        unscopedDeliveryState = .idle
         agentDeliveryState = .idle
     }
     
     func loadMessages(conversationId: String) {
-        print("加载conversationId: \(conversationId)")
-        
-        isLoading = true
+        guard !sessionRetired else { return }
+        startConversationEvents(conversationId: conversationId)
+        if messageRequestID != nil {
+            refreshPending = true
+            return
+        }
+
+        let epoch = conversationEpoch
+        let requestID = UUID()
+        messageRequestID = requestID
+        refreshPending = false
+        hydrationRequestID = nil
+        hydrationCancellable?.cancel()
+        hydrationCancellable = nil
         error = nil
-        
-        fetcher.getMessages(
+        updateLoadingState()
+
+        messageCancellable = fetcher.getMessages(
             conversationId: conversationId,
             page: 1,
             perPage: 20
@@ -443,22 +532,34 @@ class ChatDetailManager: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { [weak self] completion in
-                    self?.isLoading = false
-                    if case .failure(let error) = completion {
-                        self?.error = error.localizedDescription
-                        print("获取失败: \(error)")
+                    guard let self, self.conversationEpoch == epoch,
+                          self.messageRequestID == requestID else { return }
+                    self.messageRequestID = nil
+                    self.messageCancellable = nil
+                    if self.refreshPending {
+                        self.loadMessages(conversationId: conversationId)
+                    } else {
+                        self.updateLoadingState()
+                        if case .failure(let error) = completion {
+                            self.error = error.localizedDescription
+                        }
                     }
                 },
                 receiveValue: { [weak self] response in
-                    self?.canonicalMessages = response.messages
-                    self?.publishVisibleMessages()
-                    self?.hydrateReferencedNotes()
-                    print("获取成功")
+                    guard let self, self.conversationEpoch == epoch,
+                          self.messageRequestID == requestID,
+                          !self.refreshPending else { return }
+                    self.canonicalMessages = response.messages
+                    self.publishVisibleMessages()
+                    self.hydrateReferencedNotes()
                 }
             )
-            .store(in: &cancellables)
     }
-    
+
+    private func updateLoadingState() {
+        isLoading = detailRequestID != nil || messageRequestID != nil
+    }
+
     func updateMessageOwnership() {
         guard let userId = currentUserId else {
             print("无法获取当前用户ID")
@@ -473,9 +574,9 @@ class ChatDetailManager: ObservableObject {
     }
     
     func sendMessage(conversationId: String, content: String, attachedNotes: [NoteCard]) {
+        guard !sessionRetired, eventConversationID == conversationId else { return }
+        let epoch = conversationEpoch
         let attachedCardId = attachedNotes.first?.id
-        print("发送消息conversationId: \(conversationId), contentLength: \(content.count), attachedCardId: \(attachedCardId ?? "")")
-        agentDeliveryState = .idle
         
         let request = SendMessageRequest(content: content, attachedCardId: attachedCardId)
         
@@ -483,18 +584,17 @@ class ChatDetailManager: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { [weak self] completion in
+                    guard let self, self.conversationEpoch == epoch else { return }
                     if case .failure(let error) = completion {
-                        self?.error = error.localizedDescription
-                        print("发送消息失败: \(error)")
+                        self.error = error.localizedDescription
                     }
                 },
                 receiveValue: { [weak self] response in
-                    guard let self else { return }
-                    if let eventID = response.data.eventId {
-                        self.eventCursor.advance(to: eventID)
-                        self.connectConversationEvents(
-                            conversationId: conversationId
-                        )
+                    guard let self, self.conversationEpoch == epoch else { return }
+                    // The send ACK identifies this message, not every event
+                    // preceding it. Only consumed SSE events advance replay.
+                    if self.eventCancellable == nil {
+                        self.connectConversationEvents(conversationId: conversationId)
                     }
                     var message = response.message
                     message.referencedAssetId = message.referencedAssetId ?? attachedCardId
@@ -519,7 +619,8 @@ class ChatDetailManager: ObservableObject {
         agentReplyRecoveryCancellable?.cancel()
         let requestID = UUID()
         agentReplyRecoveryRequestID = requestID
-        agentDeliveryState = .thinking
+        agentReplyRecoverySourceID = sourceMessageID
+        applyDeliveryUpdate(ChatAgentDeliveryUpdate(state: .thinking, shouldRefreshMessages: false, sourceMessageIDs: [sourceMessageID]))
 
         agentReplyRecoveryCancellable = fetcher.retryAgentReply(
             conversationId: conversationId,
@@ -534,10 +635,9 @@ class ChatDetailManager: ObservableObject {
                       self.eventConversationID == conversationId else { return }
                 self.agentReplyRecoveryCancellable = nil
                 self.agentReplyRecoveryRequestID = nil
+                self.agentReplyRecoverySourceID = nil
                 if case .failure = completion {
-                    self.agentDeliveryState = .retryAvailable(
-                        sourceMessageID: sourceMessageID
-                    )
+                    self.applyDeliveryUpdate(ChatAgentDeliveryUpdate(state: .retryAvailable(sourceMessageID: sourceMessageID), shouldRefreshMessages: false))
                 }
             },
             receiveValue: { [weak self] response in
@@ -547,22 +647,18 @@ class ChatDetailManager: ObservableObject {
                 let status = response.data.status.trimmingCharacters(
                     in: .whitespacesAndNewlines
                 ).lowercased()
-                guard response.success else {
-                    self.agentDeliveryState = .retryAvailable(
-                        sourceMessageID: sourceMessageID
-                    )
+                guard response.success, response.data.sourceMessageId == sourceMessageID else {
+                    self.applyDeliveryUpdate(ChatAgentDeliveryUpdate(state: .retryAvailable(sourceMessageID: sourceMessageID), shouldRefreshMessages: false))
                     return
                 }
                 switch status {
                 case "succeeded":
-                    self.agentDeliveryState = .idle
+                    self.applyDeliveryUpdate(ChatAgentDeliveryUpdate(state: .idle, shouldRefreshMessages: true, sourceMessageIDs: [sourceMessageID]))
                     self.loadMessages(conversationId: conversationId)
                 case "accepted":
-                    self.agentDeliveryState = .thinking
+                    self.applyDeliveryUpdate(ChatAgentDeliveryUpdate(state: .thinking, shouldRefreshMessages: false, sourceMessageIDs: [sourceMessageID]))
                 default:
-                    self.agentDeliveryState = .retryAvailable(
-                        sourceMessageID: sourceMessageID
-                    )
+                    self.applyDeliveryUpdate(ChatAgentDeliveryUpdate(state: .retryAvailable(sourceMessageID: sourceMessageID), shouldRefreshMessages: false))
                 }
             }
         )
@@ -573,6 +669,8 @@ class ChatDetailManager: ObservableObject {
 
         eventReconnectTask?.cancel()
         eventReconnectTask = nil
+        let connectionID = UUID()
+        eventConnectionID = connectionID
         eventCancellable?.cancel()
         eventCancellable = fetcher.streamConversationEvents(
             conversationId: conversationId,
@@ -582,12 +680,14 @@ class ChatDetailManager: ObservableObject {
         .sink(
             receiveCompletion: { [weak self] completion in
                 guard let self,
-                      self.eventConversationID == conversationId else { return }
+                      self.eventConversationID == conversationId,
+                      self.eventConnectionID == connectionID else { return }
+                self.eventConnectionID = nil
                 self.eventCancellable = nil
                 if case .failure(let error) = completion {
                     switch error {
                     case .unauthorized, .forbidden, .notFound:
-                        self.agentDeliveryState = .idle
+                        self.stopConversationEvents()
                         return
                     default:
                         break
@@ -597,22 +697,62 @@ class ChatDetailManager: ObservableObject {
             },
             receiveValue: { [weak self] event in
                 guard let self,
-                      self.eventConversationID == conversationId else { return }
+                      self.eventConversationID == conversationId,
+                      self.eventConnectionID == connectionID else { return }
                 if let eventID = event.id?.trimmingCharacters(
                     in: .whitespacesAndNewlines
                 ), !eventID.isEmpty {
+                    if let incoming = UInt64(eventID),
+                       let previous = self.eventCursor.lastEventID.flatMap(UInt64.init),
+                       incoming <= previous { return }
                     self.eventCursor.advance(to: eventID)
                 }
                 guard let update = ChatAgentDeliveryReducer.reduce(
                     event: event
                 ) else { return }
 
-                self.agentDeliveryState = update.state
+                if update.state != .thinking,
+                   let recoverySource = self.agentReplyRecoverySourceID,
+                   update.sourceMessageIDs.contains(recoverySource) {
+                    self.agentReplyRecoveryRequestID = nil
+                    self.agentReplyRecoverySourceID = nil
+                    self.agentReplyRecoveryCancellable?.cancel()
+                    self.agentReplyRecoveryCancellable = nil
+                }
+                self.applyDeliveryUpdate(update)
                 if update.shouldRefreshMessages {
                     self.loadMessages(conversationId: conversationId)
                 }
             }
         )
+    }
+
+    private func applyDeliveryUpdate(_ update: ChatAgentDeliveryUpdate) {
+        let sources = Set(update.sourceMessageIDs)
+        if sources.isEmpty {
+            unscopedDeliveryState = update.state
+        } else {
+            unscopedDeliveryState = .idle
+            switch update.state {
+            case .thinking:
+                thinkingSourceIDs.formUnion(sources)
+                recoverySourceIDs.removeAll { sources.contains($0) }
+            case .idle:
+                thinkingSourceIDs.subtract(sources)
+                recoverySourceIDs.removeAll { sources.contains($0) }
+            case .retryAvailable(let sourceMessageID):
+                thinkingSourceIDs.subtract(sources)
+                recoverySourceIDs.removeAll { sources.contains($0) || $0 == sourceMessageID }
+                recoverySourceIDs.append(sourceMessageID)
+            }
+        }
+        if !thinkingSourceIDs.isEmpty || unscopedDeliveryState == .thinking {
+            agentDeliveryState = .thinking
+        } else if let source = recoverySourceIDs.last {
+            agentDeliveryState = .retryAvailable(sourceMessageID: source)
+        } else {
+            agentDeliveryState = unscopedDeliveryState
+        }
     }
 
     private func scheduleEventReconnect(conversationId: String) {
@@ -628,28 +768,45 @@ class ChatDetailManager: ObservableObject {
         }
     }
     
-    func convertToChatMessages() -> [ChatMessage] {
+    private func refreshMessagePresentation() {
         guard let userId = currentUserId else {
-            print("无法获取当前用户ID")
-            return []
+            displayMessages = []
+            return
         }
-        print("转换消息原始消息数量: \(messages.count), 当前用户ID: \(userId)")
-        let sortedMessages = messages.sorted { lhs, rhs in
-            (ChatTimestamp.parse(lhs.createdAt) ?? .distantPast)
-                < (ChatTimestamp.parse(rhs.createdAt) ?? .distantPast)
-        }
-        return sortedMessages.map { apiMessage in
-            let isFromMe = apiMessage.senderId == userId
-            print("消息: id=\(apiMessage.id), senderId: \(apiMessage.senderId), isFromMe: \(isFromMe)")
+        let calendar = Calendar.current
+        let now = Date()
+        let yesterday = calendar.date(byAdding: .day, value: -1, to: now)
+        messageTimeFormatter.timeZone = calendar.timeZone
+        messageDayFormatter.timeZone = calendar.timeZone
+        // Parse once when message inputs change, and use source order to break
+        // timestamp ties. View updates only read the prepared values.
+        displayMessages = messages.enumerated().sorted { lhs, rhs in
+            let left = visibleMessageDates[lhs.offset] ?? .distantPast
+            let right = visibleMessageDates[rhs.offset] ?? .distantPast
+            return left == right ? lhs.offset < rhs.offset : left < right
+        }.map { index, message in
+            let timestamp: String
+            if let date = visibleMessageDates[index] {
+                if calendar.isDate(date, inSameDayAs: now) {
+                    timestamp = messageTimeFormatter.string(from: date)
+                } else if let yesterday, calendar.isDate(date, inSameDayAs: yesterday) {
+                    timestamp = "Yesterday \(messageTimeFormatter.string(from: date))"
+                } else {
+                    timestamp = messageDayFormatter.string(from: date)
+                }
+            } else {
+                timestamp = "Unknown"
+            }
+            let isFromMe = message.senderId == userId
             return ChatMessage(
-                id: apiMessage.id,
-                content: apiMessage.content,
+                id: message.id,
+                content: message.content,
                 isFromMe: isFromMe,
-                timestamp: formatMessageTime(apiMessage.createdAt),
+                timestamp: timestamp,
                 avatarURL: isFromMe
                     ? currentUserAvatarURL
                     : (conversation?.partner.avatarUrl ?? participantAvatarURL),
-                attachedNotes: apiMessage.attachedCards.isEmpty ? nil : apiMessage.attachedCards
+                attachedNotes: message.attachedCards.isEmpty ? nil : message.attachedCards
             )
         }
     }
@@ -672,19 +829,20 @@ class ChatDetailManager: ObservableObject {
     }
 
     private func publishVisibleMessages() {
-        guard let visibilityDependency else {
-            messages = canonicalMessages
-            return
+        let dated = canonicalMessages.map { (message: $0, date: ChatTimestamp.parse($0.createdAt)) }
+        let visible = dated.filter {
+            visibilityDependency?.visibility.isVisible(timestamp: $0.date, actorID: humanActorID) ?? true
         }
-        messages = canonicalMessages.filter {
-            visibilityDependency.isVisible(
-                timestampString: $0.createdAt,
-                actorID: humanActorID
-            )
-        }
+        visibleMessageDates = visible.map(\.date)
+        messages = visible.map(\.message)
+        refreshMessagePresentation()
     }
 
     private func hydrateReferencedNotes() {
+        hydrationCancellable?.cancel()
+        let epoch = conversationEpoch
+        let requestID = UUID()
+        hydrationRequestID = requestID
         let referencedIDs = Set(
             canonicalMessages.compactMap { message in
                 message.attachedCards.isEmpty
@@ -701,11 +859,14 @@ class ChatDetailManager: ObservableObject {
                 .eraseToAnyPublisher()
         }
 
-        Publishers.MergeMany(requests)
+        hydrationCancellable = Publishers.MergeMany(requests)
             .collect()
             .receive(on: DispatchQueue.main)
             .sink { [weak self] hydratedNotes in
-                guard let self else { return }
+                guard let self, self.conversationEpoch == epoch,
+                      self.hydrationRequestID == requestID else { return }
+                self.hydrationRequestID = nil
+                self.hydrationCancellable = nil
                 let notesByID = Dictionary(
                     uniqueKeysWithValues: hydratedNotes.compactMap { cardID, note in
                         note.map { (cardID, $0) }
@@ -726,51 +887,13 @@ class ChatDetailManager: ObservableObject {
                 }
                 self.publishVisibleMessages()
             }
-            .store(in: &cancellables)
     }
     
-    private func formatMessageTime(_ dateString: String) -> String {
-        guard let date = ChatTimestamp.parse(dateString) else {
-            return "Unknown"
-        }
-        let calendar = Calendar.current
-        
-        if calendar.isDateInToday(date) {
-            return timeString(from: date)
-        }
-        
-        if calendar.isDateInYesterday(date) {
-            return "Yesterday \(timeString(from: date))"
-        }
-        
-        let dateFormatter = DateFormatter()
-        dateFormatter.locale = Locale(identifier: "en_US_POSIX")
-        dateFormatter.dateFormat = "yyyy-MM-dd"
-        return dateFormatter.string(from: date)
-    }
-    
-    private func timeString(from date: Date) -> String {
-        let timeFormatter = DateFormatter()
-        timeFormatter.locale = Locale(identifier: "en_US_POSIX")
-        timeFormatter.dateFormat = "HH:mm"
-        return timeFormatter.string(from: date)
-    }
 }
 
 enum ChatTimestamp {
     static func parse(_ value: String) -> Date? {
-        let fractionalFormatter = ISO8601DateFormatter()
-        fractionalFormatter.formatOptions = [
-            .withInternetDateTime,
-            .withFractionalSeconds
-        ]
-        if let date = fractionalFormatter.date(from: value) {
-            return date
-        }
-
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime]
-        return formatter.date(from: value)
+        CardTimestamp.parse(value)
     }
 }
 

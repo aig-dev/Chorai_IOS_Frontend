@@ -175,6 +175,7 @@
 		4921AB68CC59BEE867FAA6C4 /* HTMLTextReaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16845431EF7D9B2AE676D3C9 /* HTMLTextReaderTests.swift */; };
 		96173B537BE66B36D958C303 /* HTMLTextReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = D62B0B96B71343CC59CD3B90 /* HTMLTextReader.swift */; };
 		F0C9B2094CE23E011AD29001 /* AuthNoteAccessTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0C9B2094CE23E011AD29002 /* AuthNoteAccessTests.swift */; };
+		347BB35375D545E9B0A9BBB0 /* ChatDetailManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D90B74C4070401F8591EB42 /* ChatDetailManagerTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -357,6 +358,7 @@
 		16845431EF7D9B2AE676D3C9 /* HTMLTextReaderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ArcNoteTests/HTMLTextReaderTests.swift"; sourceTree = SOURCE_ROOT; };
 		D62B0B96B71343CC59CD3B90 /* HTMLTextReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ArcNote/CoreFlow/HTMLTextReader.swift"; sourceTree = SOURCE_ROOT; };
 		F0C9B2094CE23E011AD29002 /* AuthNoteAccessTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ArcNoteTests/AuthNoteAccessTests.swift"; sourceTree = SOURCE_ROOT; };
+		0D90B74C4070401F8591EB42 /* ChatDetailManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ArcNoteTests/ChatDetailManagerTests.swift"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -614,6 +616,7 @@
 				A9B5CAE97CCFFC3595F96129 /* LocalNoteEditorPersistenceSessionTests.swift */,
 				725D1C8BC22A06A30C4A6279 /* CardImagePreparationTests.swift */,
 				C19E959B8363D8E79720B724 /* CardDetailReaderTests.swift */,
+				0D90B74C4070401F8591EB42 /* ChatDetailManagerTests.swift */,
 				E41C4CEBE69067D293BA7ECC /* NetworkResponseExecutionTests.swift */,
 				67C776D3EF12CAECFBCAFFF8 /* StubURLProtocol.swift */,
 				2EFB8C521110239D4BE5C6F7 /* ExecutionFixtures.swift */,
@@ -910,6 +913,7 @@
 				A29F677BDCCDD4ADD4B884C4 /* LocalNoteEditorPersistenceSessionTests.swift in Sources */,
 				CAA378EBD05FBE2C0CA7A9D7 /* CardImagePreparationTests.swift in Sources */,
 				C11D1AA997C7E2E5D12BA7CA /* CardDetailReaderTests.swift in Sources */,
+				347BB35375D545E9B0A9BBB0 /* ChatDetailManagerTests.swift in Sources */,
 				D25E56F61A293DB592B455C7 /* NetworkResponseExecutionTests.swift in Sources */,
 				21992CC082DB482281D3F0FE /* StubURLProtocol.swift in Sources */,
 				D5295C7C5BA1E0237CFAF2AB /* ExecutionFixtures.swift in Sources */,

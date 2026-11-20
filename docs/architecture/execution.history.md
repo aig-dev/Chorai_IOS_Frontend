@@ -1,5 +1,38 @@
 # Execution boundary history
 
+## 2026-11-20 — Chat ownership and repeated work
+
+Reproduced overlapping/retired response publication, redundant burst reads,
+duplicate-event regressions, old-source failures hiding new waits, send ACKs
+skipping unconsumed events and late retry acceptance reopening completed replies.
+Added owned read/stream identities, a coalesced trailing read, synchronous account
+retirement and source-specific delivery tracking. Existing pagination and compact
+attachment/visibility/avatar behavior remain covered.
+
+Moved SSE framing to the existing response queue and replaced View-time sorting
+and formatter creation with prepared display values. Removed the old conversion
+entry point rather than maintaining a second rendering path. Replaced one
+manager source-substring test with hosted behavioral coverage. Focused tests and
+five existing Chat UI cases passed; broader verification and real-account scope
+are tracked in the [execution evidence](../qa/2026-11-20-chat-execution.md).
+
+## 2026-11-20 — Scope refined for first launch
+
+The user clarified that Chorai has not launched and old-version data migration
+is not a goal. Removed the planned baseline-app overwrite exercise and elevated
+production NOTE write readiness from a later project to a launch requirement.
+Ordinary first-use, current-session persistence and account isolation remain.
+
+Source inspection identified the next client work in Chat: SSE parsing on main,
+View-triggered date parsing/sorting and overlapping message responses without a
+request generation check. Added characterization and targeted optimization work,
+plus Swift/SDK callback/cancellation auditing and original-image I/O limits.
+Recorded the existing import Action/source-state/archive/outcome recovery gap
+and kept Merge failure investigation and release acceptance explicit. These are
+planned changes and audit findings, not newly reproduced defects or performance
+claims. Updated the [first-launch plan](../superpowers/plans/2026-11-20-post-swift6-integration.md)
+and current execution page; executable code is unchanged.
+
 ## 2026-11-20 — Main delivery and next-stage investigation
 
 Committed the complete Swift 6 migration and local integration follow-up as

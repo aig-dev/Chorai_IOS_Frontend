@@ -170,7 +170,7 @@ struct ChatDetailView: View {
                             }
                             .frame(height: 200)
                         } else {
-                            let messages = chatDetailManager.convertToChatMessages()
+                            let messages = chatDetailManager.displayMessages
                             if messages.isEmpty {
                                 VStack {
                                     Spacer()
@@ -434,7 +434,6 @@ struct ChatDetailView: View {
         .onAppear {
             chatDetailManager.bindVisibility(chatHistoryDependency)
             chatDetailManager.loadConversationDetail(conversationId: conversationId)
-            // loadMessages会在对话详情加载完成后自动调用
         }
         .onDisappear {
             chatDetailManager.stopConversationEvents()
