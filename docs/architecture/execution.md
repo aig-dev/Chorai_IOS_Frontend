@@ -113,6 +113,23 @@ checkpoint record earlier mixed-mode states. Their pending-App statements descri
 those checkpoints, not the current language modes. New first-party features enter
 the existing actor/worker boundaries and compile under the same Swift 6 gate.
 
+### Main delivery and next integration checks
+
+The complete migration and local integration fixes were committed and pushed to
+`main` as `9ccbeea` on 2026-11-20. A fresh full gate passed all three builds,
+1,065 CoreFlow cases (six additional live-API cases skipped), 76 editor cases,
+79 hosted cases, 18 runner checks and six exact editor UI cases. See the
+[delivery record](../qa/2026-11-20-main-delivery.md) for scope and evidence.
+
+The [next-stage plan](../superpowers/plans/2026-11-20-post-swift6-integration.md)
+is not yet implemented. It prioritizes mandatory simulator/CI wiring, ordinary
+account live synchronization, account switching, retained-data upgrades and
+Merge failure diagnosis. First-party language migration is complete; these
+runtime and cross-end checks remain distinct. The local M1/M2 backend options
+are restricted to dev/test and do not establish production synchronization
+readiness. Keep the current explicit concurrency semantics while closing these
+gaps.
+
 ## Network responses — implemented
 
 ### Local lifecycle action dispatch

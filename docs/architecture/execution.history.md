@@ -1,5 +1,24 @@
 # Execution boundary history
 
+## 2026-11-20 — Main delivery and next-stage investigation
+
+Committed the complete Swift 6 migration and local integration follow-up as
+`9ccbeea`, then pushed normally to `main` under the user's explicit instruction.
+Fresh verification passed all three configurations, 1,071 CoreFlow tests with six
+explicit live-API skips and zero failures, 76 editor, 79 hosted, 18 gate-runner
+checks and six exact editor UI flows. No staged source changed during the run.
+Personal Xcode state and the unrelated Go binary deletion were preserved.
+
+Investigated the next work against current code: the concurrency runner has no
+repository CI wiring yet; the latest real UI acceptance used an administrator;
+the six live API cases need protocol-specific ordinary sessions; retained-data
+upgrade has not been exercised; an earlier provider failure remains unattributed;
+and Go explicitly restricts the local sync protocols to dev/test. The
+[next-stage plan](../superpowers/plans/2026-11-20-post-swift6-integration.md)
+orders these checks without changing execution semantics or enabling production.
+The [delivery record](../qa/2026-11-20-main-delivery.md) separates fresh results
+from prior real-backend evidence. Plan tasks remain unimplemented.
+
 ## 2026-11-20 — Local Go integration follow-up
 
 Investigated the three failures excluded from the Swift 6 checkpoint. Native/DOM
