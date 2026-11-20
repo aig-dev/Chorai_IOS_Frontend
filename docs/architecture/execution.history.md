@@ -216,3 +216,7 @@ verification: CoreFlow 1056 (six intentional skips), editor 76, App 73, six focu
 UI cases and all three builds pass. The existing Merge paragraph-clipping test
 still reproduces its documented pre-migration failure and remains outside the
 focused lifecycle gate; its assertion was not changed.
+
+## 2026-11-21 Ordinary-account sync fixture
+
+Made the opt-in M2 transient recovery case self-contained: persist a pending request after a pre-transmission transport failure, reopen SQLite and retry the frozen identity against the actual API. Full CoreFlow passed 1071 cases with all six live cases enabled, zero skips/failures. This is test infrastructure only; final production NOTE composition and backend process-interruption acceptance remain open. See [checkpoint](../qa/2026-11-21-ordinary-note-sync.md).

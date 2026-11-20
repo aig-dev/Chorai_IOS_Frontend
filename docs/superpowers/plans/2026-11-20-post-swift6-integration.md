@@ -79,9 +79,11 @@ ArcNoteUITests/ArcNoteUITests/testHomeRemovalKeepsLocalTrashWhenSyncIsUnavailabl
 - [ ] 通过现有账号/准入流程准备普通测试账号，核对实际 access 状态与离线资格。记录真实构建的 iOS、Go、Agent 版本、runtime 和协议；健康检查不能代替来源核对。
 - [ ] 对首发可达的原生编辑、Web、Import/Fork/Merge、Link/Unlink、分享入口列出 base、权限、Action、receipt 和媒体保留归属；功能范围未明确裁剪前，不默认为某入口已下线。排除旧用户迁移任务，保留这些入口新产生数据的一致性要求。
 - [ ] 在 Go 模块明确最终服务组合和能力探测，复用现有实现补齐生产路径；不能只移除 dev/test guard。M2 本地测试先使用合格且身份分离的 history/staging 存储，之后对最终生产合同复验同一业务断言。
-- [ ] 执行 `swift test --package-path Packages/CoreFlow --filter NoteSyncM2LiveAPITests`，要求三项 Passed、零 skipped/failed：上传/正文丢回执复用身份、离线删除恢复保留脏图文、持久 transient failure 以冻结请求恢复。
+- [x] 执行 `swift test --package-path Packages/CoreFlow --filter NoteSyncM2LiveAPITests`，要求三项 Passed、零 skipped/failed：上传/正文丢回执复用身份、离线删除恢复保留脏图文、持久 transient failure 以冻结请求恢复。
 - [ ] 将现有 M1 测试中并发冲突保留双方、另存不覆盖和旧基准拒绝等必要断言用于所选上线合同。M1 可继续作为历史回归，不因未上线产品而要求上线兼容两种本地协议。
 - [ ] 用真实 PostgreSQL 和 versioned 对象存储验正文、附件、删除/恢复/永久擦除、撤权、第二写入者及提交中断。验收当前客户端不再依赖 dev-only 开关即可按最终合同同步，operation ID/请求/receipt 精确，且没有重复事实或误删媒体。缺能力明确失败，不能显示已同步。
+
+普通账号基线与分享缺图修复见 [2026-11-21 验收](../../qa/2026-11-21-ordinary-note-sync.md)。当前 dev protocol 3 的六项实际 API 与完整 CoreFlow 1071 项通过、零跳过；最终生产合同及生命周期接线仍未完成。
 
 ## Task 3 — P0：首次使用、普通账号与换号隔离
 

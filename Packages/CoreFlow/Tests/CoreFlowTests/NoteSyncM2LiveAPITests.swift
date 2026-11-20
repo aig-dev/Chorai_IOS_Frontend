@@ -120,25 +120,36 @@ final class NoteSyncM2LiveAPITests: XCTestCase {
     }
 
     func testLiveM2RecoversPersistedTransientFailureWithFrozenRequest() async throws {
-        guard let path = ProcessInfo.processInfo.environment["CHORAI_M2_RECOVERY_ROOT"] else {
-            throw XCTSkip("Previously interrupted local M2 fixture not supplied")
-        }
-        let (_, unused, service, _) = try await fixture()
-        try await unused.close()
-        let store = try await NoteLocalStore.open(rootURL: URL(fileURLWithPath: path), scope: service.scope)
+        let (root, initialStore, service, bytes) = try await fixture()
+        let created = try await imageNote(initialStore, bytes: bytes, text: "M2 persisted transport failure " + UUID().uuidString)
+        let first = try NoteSyncCoordinator(store: initialStore, service: service)
+        await service.failNextBodyBeforeTransmission()
+        await first.resume(); await first.synchronize(); await first.suspend()
+        let interrupted = try unwrap(try await initialStore.note(localID: created.localID))
+        XCTAssertFalse(interrupted.isSynchronized)
+        XCTAssertGreaterThan(try unwrap(interrupted.pendingOperation).attemptCount, 0)
+        let beforeRecovery = await service.receipts
+        XCTAssertTrue(beforeRecovery.isEmpty)
+        try await initialStore.close()
+
+        let store = try await NoteLocalStore.open(rootURL: root, scope: service.scope)
         let note = try unwrap(try await store.notes().first { ($0.pendingOperation?.attemptCount ?? 0) > 0 })
         let pending = try unwrap(note.pendingOperation)
+        XCTAssertEqual(pending, interrupted.pendingOperation)
         let coordinator = try NoteSyncCoordinator(store: store, service: service)
         await coordinator.resume(); await coordinator.synchronize(forceRetry: true)
         let saved = try unwrap(try await store.note(localID: note.localID))
         XCTAssertTrue(saved.isSynchronized)
         XCTAssertEqual(saved.body, note.body)
         let operations = await service.operations
-        XCTAssertEqual(operations.count, 1)
-        XCTAssertEqual(operations.first?.operationID, pending.operationID)
-        XCTAssertEqual(operations.first?.requestBody, pending.requestBody)
+        XCTAssertEqual(operations.count, 2)
+        XCTAssertTrue(operations.allSatisfy { $0.operationID == pending.operationID && $0.requestBody == pending.requestBody })
+        let uploads = await service.uploads
+        XCTAssertEqual(uploads.count, 1)
         let remote = try await service.detail(assetID: try unwrap(saved.serverAssetID))
         XCTAssertEqual(remote.body.content.trimmingCharacters(in: .whitespacesAndNewlines), note.body.content)
+        let downloaded = try await service.downloadAttachment(assetID: try unwrap(saved.serverAssetID), mediaRef: try unwrap(saved.attachments.first?.mediaRef))
+        XCTAssertEqual(downloaded.data, bytes)
         try evidence("transient-recovery", ["asset_id":try unwrap(saved.serverAssetID), "operation_id":pending.operationID, "synchronized":saved.isSynchronized])
         await coordinator.suspend(); try await store.close()
     }
@@ -154,12 +165,14 @@ private actor M2LiveTransport: NoteSyncServing {
     private let token: String
     private var dropUpload = false
     private var dropBody = false
+    private var failBody = false
     private(set) var uploads: [String] = []
     private(set) var operations: [NotePendingOperation] = []
     private(set) var receipts: [NoteSyncReceipt] = []
     init(scope: NoteStoreScope, token: String) { self.scope = scope; self.token = token }
     func loseNextUploadACK() { dropUpload = true }
     func loseNextBodyACK() { dropBody = true }
+    func failNextBodyBeforeTransmission() { failBody = true }
     func manifest() async throws -> NoteSyncManifest {
         let value = try NoteSyncHTTP.payload(NoteSyncManifest.self, from: await request("/api/cards/sync-manifest"))
         guard value.protocolVersion == 3 else { throw NoteSyncFailure.notReady }; return value
@@ -169,6 +182,7 @@ private actor M2LiveTransport: NoteSyncServing {
     }
     func send(_ op: NotePendingOperation) async throws -> NoteSyncReceipt {
         operations.append(op)
+        if failBody { failBody = false; throw NoteSyncFailure.transient(retryAfter: 60) }
         let path = op.kind == .create ? "/api/cards" : op.kind == .restore ? "/api/cards/trash/" + op.serverAssetID! + "/restore" : "/api/cards/" + op.serverAssetID!
         let method = op.kind == .update ? "PUT" : op.kind == .delete ? "DELETE" : "POST"
         let receipt = try NoteSyncHTTP.receipt(from: await request(path, method: method, body: op.requestBody, key: op.operationID))
