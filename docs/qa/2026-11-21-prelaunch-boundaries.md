@@ -157,3 +157,28 @@ The controlled provider-fault matrix, ordinary-account multiphoto Merge,
 native import bridge tests, measured original-image I/O bounds, final
 production NOTE composition and release-device/signing checks remain open,
 along with the onboarding and Chat acceptance work above.
+
+## Ordinary session recovery
+
+iOS implementation `50dccfbebe435cd1ca85ad364bffff2d90e68274` on `9b9997a`, actual Go `5e601f58`, Xcode 27.2 and the dedicated iPhone 17 Pro simulator on iOS 26.2. A and B are independently admitted ordinary phone accounts. The switch uses a DEBUG UI-test button calling the public Go phone login endpoint and normal AuthManager session persistence. Both releases from the forwarder occur under the test's control. The app retains the same loopback origin for each complete scenario.
+
+Local result paths below are relative to `.superpowers/sdd/2026-11-20-post-swift6-integration/`.
+
+| Result bundle | Passed / failed / skipped | Coverage |
+| --- | --- | --- |
+| `Task3-Ordinary-Session-Boundaries.xcresult` | 1 / 2 / 0 | Original actor mismatch, cross-origin offline failure and granted-token revocation expectation failure |
+| `Task3-Ordinary-Logout.xcresult` | 0 / 1 / 0 | Original any-element sidebar locator failed before opening Settings |
+| `Task3-Session-Recovery-Boundary2.xcresult` | 5 / 0 / 0 | No-grant 401, granted-scope 401 and retained local edit, same-origin degraded relaunch, actor mismatch and actual Settings logout with server revocation |
+| `Task3-Session-Recovery-Ordinary5.xcresult` | 1 / 2 / 0 | Synthetic online 403 after prior eligibility blocks access, including on subsequent offline relaunch. Two outdated fixture expectations failed |
+| `Task3-Session-Recovery-Ordinary7.xcresult` | 3 / 0 / 0 | Both new ordinary selectors and corrected same-origin offline logout |
+| `Task3-Session-Recovery-Hosted.xcresult` | 2 / 0 / 0 | Hosted admin bypass and restricted-account state transition |
+| `Task3-Session-Recovery-HostedRegression2.xcresult` | 105 / 0 / 0 | Full hosted App suite, including the new access case |
+| `Task3-Session-Recovery-TenUI.xcresult` | 10 / 0 / 0 | All ten committed gate selector names matched the result tree |
+
+`ArcNoteUITests/ArcNoteUITests/testLocalGoOrdinaryAccountOfflineReopenAndSync` verified local text and the persisted image after termination without session reseeding. While the entire origin was offline, the coordinator could not obtain its manifest. On recovery, Go committed the pending PUT, the forwarder discarded the first receipt, and a later request reused its operation ID and exact body digest. The editor reached Synced, and the owner's API returned one note with the exact structured text and uploaded file bytes.
+
+`ArcNoteUITests/ArcNoteUITests/testLocalGoAccountSwitchRejectsOldSync` held a successful A update after the owner's API could already read the updated content. A logged out, B authenticated in the same process and opened Home, then the test released the held response. B had no A body, preview or pending status, and the author's private note was inaccessible with B's bearer. A signed back in, reopened the same local note and image, and confirmed the original server sync token, exact content, image bytes and one note. For each operation, a read-only query matched one Activity and one committed ActionLog. The Activity had one EXECUTED_BY for A, one GENERATED and one USED. Exact asset IDs, operation IDs, digests and counts are in `task-3-session-recovery-source.json`.
+
+Six task-owned photo notes remain trashed after the ordinary permanent-delete endpoint returned HTTP 503 with reason `note_action_outcome_unknown`. Their permanent outcome remains open. The existing test cleanup helper discards the first random idempotency key and suppresses errors. The privately retained six-request follow-up journal reconstructs later deterministic keys and current trashed baselines after the attempts. It cannot independently establish the original wire bytes. See `task-3-session-recovery-cleanup.json` for the affected IDs. The Ordinary7 UI assertions completed successfully before the separate cleanup inspection.
+
+The focused CoreFlow scope, access and coordinator suite passed 47/47. The local concurrency runner passed 26 runner tests, 1,093 CoreFlow tests with six opt-in live cases skipped, 76 editor tests and the Debug, Debug-Production and Release builds. Logs are in `task-3-session-build-gate/`. The first-note handoff, ten local UI selectors and historical 47-selector matrix remain in their existing scopes. First-use registration, the complete canonical onboarding → Explore/Spark/Merge → Chat journey, real credential-expiry timing, production and physical-device acceptance remain open.

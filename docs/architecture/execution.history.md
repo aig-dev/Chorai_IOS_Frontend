@@ -331,3 +331,7 @@ focused lifecycle gate; its assertion was not changed.
 Made the opt-in M2 transient recovery case self-contained: persist a pending request after a pre-transmission transport failure, reopen SQLite and retry the frozen identity against the actual API. Full CoreFlow passed 1071 cases with all six live cases enabled, zero skips/failures. This is test infrastructure only; final production NOTE composition and backend process-interruption acceptance remain open. See [checkpoint](../qa/2026-11-21-ordinary-note-sync.md).
 
 - 2026-11-21: Started first-launch Link/Unlink recovery integration. Preserve exact link identity and frozen request identity across retry/relaunch; keep journal I/O outside MainActor and current account ownership around awaits. Source and live acceptance remain in progress.
+
+## 2026-11-21 Ordinary session and account boundaries
+
+Corrected the cross-origin outage and no-grant revocation fixtures, verified offline logout and exercised a late response across two real ordinary accounts. A loopback test forwarder holds responses after the backend commits and can lose an acknowledgement at a fixed origin. The DEBUG phone sign-in entry uses existing session admission. The product access and note synchronization state machines required no change. See [ordinary session recovery](../qa/2026-11-21-prelaunch-boundaries.md#ordinary-session-recovery).
