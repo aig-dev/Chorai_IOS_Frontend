@@ -1,0 +1,12 @@
+[
+  "ArcNoteUITests/ArcNoteUITests/testCardEditorLeadingControlChangesFromBackToSaveAndBack",
+  "ArcNoteUITests/ArcNoteUITests/testCardEditorBridgeFailureFallbackRetriesIntoFreshWebView",
+  "ArcNoteUITests/ArcNoteUITests/testCardEditorInlineImageRendersPixelsWithinPhoneViewport",
+  "ArcNoteUITests/ArcNoteUITests/testCardEditorShellCompatibilityBlockIsReadOnlyAndCannotSave",
+  "ArcNoteUITests/ArcNoteUITests/testMergeArtifactImmediateBackReopensWithBodyAndPendingTag",
+  "ArcNoteUITests/ArcNoteUITests/testMergeArtifactBackRetainsLossyDraftAndCompletedTag",
+  "ArcNoteUITests/ArcNoteUITests/testMergeArtifactEditsInPlaceAndRestoresDraft",
+  "ArcNoteUITests/ArcNoteUITests/testNativeFidelityHomeMenuOpensRealUnboxedEditor",
+  "ArcNoteUITests/NativeRemediationVisualTests/testTrashCancelAndRejectedDeleteKeepTheOriginalNote",
+  "ArcNoteUITests/ArcNoteUITests/testHomeRemovalKeepsLocalTrashWhenSyncIsUnavailable"
+]

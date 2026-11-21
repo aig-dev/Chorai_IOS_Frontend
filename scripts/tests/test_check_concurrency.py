@@ -1,4 +1,4 @@
-"""Regression coverage for successful xcodebuild exits with missing UI results."""
+"""Regression coverage for concurrency gate inputs, builds, and UI results."""
 
 import contextlib
 import importlib.util
@@ -19,38 +19,66 @@ CHECK = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(CHECK)
 
 
-def result_tree():
+DEVICE = "EBACA372-C94A-4A14-9947-634DF3918495"
+IOS_RUNTIME = "com.apple.CoreSimulator.SimRuntime.iOS-26-2"
+DEFAULT_SELECTORS = tuple(f"ArcNoteUITests/ArcNoteUITests/{name}" for name in CHECK.EDITOR_FLOWS)
+SAME_METHOD_SELECTORS = (
+    "ArcNoteUITests/ArcNoteUITests/testShared",
+    "ArcNoteUITests/NativeRemediationVisualTests/testShared",
+    "AnotherBundle/ArcNoteUITests/testShared",
+)
+
+
+def result_tree(selectors=DEFAULT_SELECTORS):
     # xcresulttool get test-results tests: the bundle identity is in the URL,
     # while nodeIdentifier contains only the class and method.
     return {"testNodes": [{"nodeType": "Test Suite", "children": [
         {
             "nodeType": "Test Case",
-            "nodeIdentifier": f"ArcNoteUITests/{name}()",
-            "nodeIdentifierURL": f"test://com.apple.xcode/ArcNote/ArcNoteUITests/ArcNoteUITests/{name}",
+            "nodeIdentifier": f"{selector.split('/', 1)[1]}()",
+            "nodeIdentifierURL": f"test://com.apple.xcode/ArcNote/{selector}",
             "result": "Passed",
-        } for name in CHECK.EDITOR_FLOWS
+        } for selector in selectors
     ]}]}
 
 
 class ConcurrencyRunnerTests(unittest.TestCase):
-    def run_gate(self, tree, flows=None):
+    def setUp(self):
+        self.commands = {}
+
+    def run_gate(self, tree=None, *, flags=(), selector_json=None, device=DEVICE.lower(),
+                 inventory=None):
+        self.commands.clear()
+        if inventory is None:
+            inventory = {"devices": {IOS_RUNTIME: [{"udid": DEVICE, "isAvailable": True}]}}
         with tempfile.TemporaryDirectory() as directory:
+            args = ["check-concurrency.py", *flags]
+            if selector_json is not None:
+                path = Path(directory) / "selectors.json"
+                path.write_text(selector_json)
+                args.extend(["--ui-selectors-file", str(path)])
+
             def completed_command(output, label, command, **kwargs):
-                # All processes exit successfully, including the filtered UI run.
-                # The returned xcresult is the authority on what actually ran.
-                log = Path(directory) / f"{label}.log"
-                log.write_text(json.dumps(tree))
+                # Simulate successful processes. The inventory and xcresult
+                # contents are the authorities on availability and execution.
+                self.commands[label] = command
+                log = output / f"{label}.log"
+                log.write_text(json.dumps(inventory if label == "simulators" else tree))
                 return log
 
             with patch.dict(os.environ, {
                 "CONCURRENCY_OUTPUT": directory,
-                "IOS_DEVICE": "ebaca372-c94a-4a14-9947-634df3918495",
-            }), patch("sys.argv", ["check-concurrency.py"]), \
+                "IOS_DEVICE": device,
+            }), patch("sys.argv", args), \
                     patch.object(CHECK, "check_settings"), \
                     patch.object(CHECK, "run", side_effect=completed_command), \
-                    patch.object(CHECK, "EDITOR_FLOWS", flows or CHECK.EDITOR_FLOWS), \
-                    contextlib.redirect_stdout(io.StringIO()):
-                CHECK.main()
+                    contextlib.redirect_stdout(io.StringIO()) as stdout, \
+                    contextlib.redirect_stderr(io.StringIO()) as stderr:
+                try:
+                    CHECK.main()
+                except SystemExit as error:
+                    self.fail(f"unexpected argument parsing exit {error}: {stderr.getvalue()}")
+                return stdout.getvalue()
 
     def test_json_stdout_is_not_corrupted_by_tool_status_on_stderr(self):
         with tempfile.TemporaryDirectory() as directory, contextlib.redirect_stdout(io.StringIO()):
@@ -65,36 +93,85 @@ class ConcurrencyRunnerTests(unittest.TestCase):
         self.run_gate(result_tree())
 
     def test_misspelled_selector_cannot_pass_with_remaining_green_cases(self):
-        tree = result_tree()
-        tree["testNodes"][0]["children"].pop()
-        flows = CHECK.EDITOR_FLOWS[:-1] + (CHECK.EDITOR_FLOWS[-1] + "Misspelled",)
+        selectors = DEFAULT_SELECTORS[:-1] + (DEFAULT_SELECTORS[-1] + "Misspelled",)
         with self.assertRaisesRegex(RuntimeError, "Misspelled"):
-            self.run_gate(tree, flows)
+            self.run_gate(result_tree(DEFAULT_SELECTORS[:-1]), selector_json=json.dumps(selectors))
 
     def test_zero_executed_cases_cannot_pass(self):
         with self.assertRaises(RuntimeError):
             self.run_gate({"testNodes": []})
 
-    def test_skipped_case_cannot_pass(self):
-        tree = result_tree()
-        tree["testNodes"][0]["children"][0]["result"] = "Skipped"
-        with self.assertRaises(RuntimeError):
-            self.run_gate(tree)
+    def test_optional_simulator_omission_reports_skip(self):
+        stdout = self.run_gate(device="")
+        self.assertIn("Simulator regressions skipped", stdout)
+        self.assertNotIn("tests-App", self.commands)
+        self.assertNotIn("tests-EditorUI", self.commands)
 
-    def test_failed_case_cannot_pass(self):
-        tree = result_tree()
-        tree["testNodes"][0]["children"][0]["result"] = "Failed"
-        with self.assertRaises(RuntimeError):
-            self.run_gate(tree)
+    def test_required_simulator_omission_fails_before_tools(self):
+        with self.assertRaisesRegex(RuntimeError, "IOS_DEVICE"):
+            self.run_gate(flags=["--require-simulator"], device="")
+        self.assertEqual(self.commands, {})
 
-    def test_same_method_in_another_bundle_cannot_satisfy_selector(self):
-        tree = result_tree()
-        node = tree["testNodes"][0]["children"][0]
-        node["nodeIdentifierURL"] = node["nodeIdentifierURL"].replace(
-            "/ArcNote/ArcNoteUITests/", "/ArcNote/AnotherBundle/"
+    def test_required_simulator_unavailability_fails_before_builds(self):
+        for devices, runtime in (
+            ([], IOS_RUNTIME),
+            ([{"udid": DEVICE, "isAvailable": False}], IOS_RUNTIME),
+            ([{"udid": DEVICE, "isAvailable": True}], "com.apple.CoreSimulator.SimRuntime.tvOS-26-2"),
+        ):
+            with self.subTest(devices=devices, runtime=runtime):
+                with self.assertRaisesRegex(RuntimeError, "available iOS simulator"):
+                    self.run_gate(flags=["--require-simulator"],
+                                  inventory={"devices": {runtime: devices}})
+                self.assertEqual(list(self.commands), ["simulators"])
+
+    def test_required_simulator_cannot_be_combined_with_settings_only(self):
+        with self.assertRaisesRegex(RuntimeError, "settings-only"):
+            self.run_gate(flags=["--require-simulator", "--settings-only"])
+        self.assertEqual(self.commands, {})
+
+    def test_invalid_selector_files_fail_before_tools(self):
+        for contents in (
+            "", "{}", "[]", "[null]", '["Bundle/Class"]', '["Bundle/Class/*"]',
+            '["Bundle/Class/testOne()"]', '[" Bundle/Class/testOne"]',
+            '["Bundle//testOne"]', '["Bundle/Class/testOne/"]',
+            '["Bundle/Class/testOne", "Bundle/Class/testOne"]',
+        ):
+            with self.subTest(contents=contents):
+                with self.assertRaisesRegex(RuntimeError, "selector"):
+                    self.run_gate(flags=["--require-simulator"], selector_json=contents)
+                self.assertEqual(self.commands, {})
+
+    def test_selected_full_identifiers_are_forwarded_to_xcode_and_verified(self):
+        stdout = self.run_gate(result_tree(SAME_METHOD_SELECTORS), flags=["--require-simulator"],
+                               selector_json=json.dumps(SAME_METHOD_SELECTORS))
+        self.assertEqual(list(self.commands)[0], "simulators")
+        self.assertEqual(
+            [part for part in self.commands["tests-EditorUI"] if part.startswith("-only-testing:")],
+            [f"-only-testing:{selector}" for selector in SAME_METHOD_SELECTORS],
         )
-        with self.assertRaises(RuntimeError):
-            self.run_gate(tree)
+        self.assertIn(f"platform=iOS Simulator,id={DEVICE}", self.commands["tests-EditorUI"])
+        self.assertIn("All 3 requested UI cases passed.", stdout)
+
+    def test_same_method_in_another_class_or_bundle_cannot_satisfy_selector(self):
+        requested, *alternatives = SAME_METHOD_SELECTORS
+        for other_selector in alternatives:
+            with self.subTest(other_selector=other_selector):
+                with self.assertRaisesRegex(RuntimeError, requested):
+                    self.run_gate(result_tree([other_selector]),
+                                  selector_json=json.dumps([requested]))
+
+    def test_unsuccessful_or_mixed_results_cannot_pass(self):
+        for status in ("Skipped", "Failed", None):
+            for also_passed in (False, True):
+                with self.subTest(status=status, also_passed=also_passed):
+                    tree = result_tree(SAME_METHOD_SELECTORS)
+                    cases = tree["testNodes"][0]["children"]
+                    if also_passed:
+                        cases.append(dict(cases[0], result=status))
+                    else:
+                        cases[0]["result"] = status
+                    with self.assertRaisesRegex(RuntimeError, SAME_METHOD_SELECTORS[0]):
+                        self.run_gate(tree, selector_json=json.dumps(SAME_METHOD_SELECTORS))
 
 
 class ConcurrencySettingsTests(unittest.TestCase):

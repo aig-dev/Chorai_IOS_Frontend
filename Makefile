@@ -13,3 +13,7 @@ ios-run:
 .PHONY: check-concurrency
 check-concurrency:
 	@python3 scripts/check-concurrency.py
+
+.PHONY: check-concurrency-required
+check-concurrency-required:
+	@python3 scripts/check-concurrency.py --require-simulator --ui-selectors-file scripts/ios-ui-gate-selectors.json

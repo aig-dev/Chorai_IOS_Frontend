@@ -56,7 +56,8 @@ Runtime cases, synthetic measurements and limitations are recorded in [render/im
 - [First-launch boundary checks](../qa/2026-11-21-prelaunch-boundaries.md): ordinary-account Home/profile/search and purge UI passed; 26 existing hosted tests passed with verified Thread Sanitizer instrumentation. Two older session UI expectations conflict with ordinary offline eligibility and remain failed pending fixture correction. Production composition, direct import bridge tests and CI remain open.
 - [Ordinary-account sync checkpoint](../qa/2026-11-21-ordinary-note-sync.md): full CoreFlow 1071 cases passed with all six actual API cases enabled and zero skips. The transient recovery case creates its own interrupted local record; it does not require a previous test run's recovery directory. Final production NOTE composition remains a separate gate.
 
-- Concurrency migration gate: `make check-concurrency`; add `IOS_DEVICE=<dedicated-simulator-UUID>` for App-hosted tests and six ordinary/Merge editor UI flows. See [Swift 6 migration validation](../qa/2026-11-20-swift6-migration-validation.md).
+- Run the daily local gate with `make check-concurrency-required IOS_DEVICE=<dedicated-simulator-UUID>` for App-hosted tests and the [ten required UI cases](../../scripts/ios-ui-gate-selectors.json). See the [first-launch checkpoint](../qa/2026-11-21-prelaunch-boundaries.md#concurrency-and-daily-gate-baselines) for validation and CI status.
+- The migration command `make check-concurrency` keeps its original behavior. It reports that simulator tests were skipped when `IOS_DEVICE` is unset and uses the original six UI cases when a device is specified. See [Swift 6 migration validation](../qa/2026-11-20-swift6-migration-validation.md).
 - CoreFlow: `swift test --package-path Packages/CoreFlow`.
 - App-hosted tests: shared `ArcNoteTests` scheme, Local configuration, isolated network sessions.
 - [Synthetic baseline and limitations](../qa/2026-11-19-ios-execution-baseline.md).
@@ -91,9 +92,13 @@ See the [CoreFlow checkpoint](../qa/2026-11-20-swift6-coreflow-validation.md) an
 `scripts/check-concurrency.py` inspects resolved Xcode settings and package
 manifests, runs its own regressions and both package suites, and builds Local,
 Production and Release. It never injects language-mode or checking overrides.
-An explicit `IOS_DEVICE` adds Local App and six ordinary/Merge editor UI tests;
-Production is never launched. The broader migration feature matrix is recorded
-in the validation document; six editor cases alone are not whole-App coverage.
+`--require-simulator` requires an available iOS simulator UUID in `IOS_DEVICE`
+before any build. `--ui-selectors-file PATH` accepts a nonempty JSON array of
+unique `bundle/class/method` identifiers. The same identifiers select the XCTest
+cases and verify that every requested case has only Passed results in the
+xcresult. Simulator tests use Local. Production and Release are build checks.
+The [47-case migration matrix](../qa/2026-11-20-swift6-ui-selectors.json) records
+the broader migration coverage.
 
 The gate checks every selected UI bundle/class/method and its passing status in
 a separate `.xcresult`. Missing, skipped or renamed cases fail even when

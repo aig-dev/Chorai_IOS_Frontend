@@ -114,7 +114,37 @@ def check_settings(output):
     print("[concurrency] Persisted Swift 6 language modes and complete checks verified.", flush=True)
 
 
-def check_editor_results(tree):
+def load_ui_selectors(path):
+    try:
+        selectors = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        raise RuntimeError(f"Cannot read UI selector file {path}: {error}") from error
+    require(isinstance(selectors, list) and selectors, f"{path}: expected a nonempty UI selector array")
+    for selector in selectors:
+        require(
+            isinstance(selector, str)
+            and re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.-]*/[A-Za-z_][A-Za-z0-9_]*/[A-Za-z_][A-Za-z0-9_]*",
+                             selector),
+            f"{path}: invalid UI selector {selector!r}; expected bundle/class/method",
+        )
+    require(len(set(selectors)) == len(selectors), f"{path}: duplicate UI selectors")
+    return selectors
+
+
+def check_simulator(output, device):
+    log = run(output, "simulators", ["xcrun", "simctl", "list", "devices", "available", "-j"],
+              json_stdout=True)
+    inventory = json.loads(log.read_text())["devices"]
+    require(
+        any(entry["udid"] == device and entry["isAvailable"]
+            for runtime, devices in inventory.items()
+            if runtime.startswith("com.apple.CoreSimulator.SimRuntime.iOS-")
+            for entry in devices),
+        f"IOS_DEVICE={device} must refer to an available iOS simulator; see {log}",
+    )
+
+
+def check_editor_results(tree, selectors):
     results = {}
     pending = list(tree.get("testNodes", []))
     while pending:
@@ -122,25 +152,37 @@ def check_editor_results(tree):
         pending.extend(node.get("children", []))
         if node.get("nodeType") == "Test Case":
             # Include the test bundle: nodeIdentifier alone contains only class/method.
-            path = unquote(urlsplit(node.get("nodeIdentifierURL", "")).path)
-            identifier = "/".join(path.strip("/").split("/")[-3:])
-            results.setdefault(identifier, set()).add(node.get("result"))
-    missing = [f"ArcNoteUITests/ArcNoteUITests/{name}" for name in EDITOR_FLOWS
-               if results.get(f"ArcNoteUITests/ArcNoteUITests/{name}") != {"Passed"}]
+            path = urlsplit(node.get("nodeIdentifierURL", "")).path.split("/")
+            if len(path) == 5 and path[0] == "":
+                identifier = "/".join(unquote(component) for component in path[2:])
+                results.setdefault(identifier, set()).add(node.get("result"))
+    missing = [selector for selector in selectors if results.get(selector) != {"Passed"}]
     require(not missing, "UI cases missing or not passed: " + ", ".join(missing))
-    print(f"[concurrency] All {len(EDITOR_FLOWS)} requested UI cases passed.", flush=True)
+    print(f"[concurrency] All {len(selectors)} requested UI cases passed.", flush=True)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--settings-only", action="store_true", help="check effective configuration only")
+    parser.add_argument("--require-simulator", action="store_true",
+                        help="require an available iOS simulator UUID in IOS_DEVICE before building")
+    parser.add_argument("--ui-selectors-file", type=Path, metavar="PATH",
+                        help="select simulator UI tests with a JSON array of bundle/class/method identifiers")
     args = parser.parse_args()
-    output = Path(os.environ.get("CONCURRENCY_OUTPUT", ROOT / ".build/concurrency")).resolve()
-    output.mkdir(parents=True, exist_ok=True)
+    require(not (args.settings_only and args.require_simulator),
+            "--require-simulator cannot be combined with --settings-only")
+    selectors = (load_ui_selectors(args.ui_selectors_file) if args.ui_selectors_file else
+                 [f"ArcNoteUITests/ArcNoteUITests/{name}" for name in EDITOR_FLOWS])
     device = os.environ.get("IOS_DEVICE", "").strip()
+    require(device or not args.require_simulator,
+            "--require-simulator needs IOS_DEVICE set to a dedicated simulator UUID")
     if device:
         # Xcode destination IDs are case-sensitive even though UUID parsing is not.
         device = str(uuid.UUID(device)).upper()
+    output = Path(os.environ.get("CONCURRENCY_OUTPUT", ROOT / ".build/concurrency")).resolve()
+    output.mkdir(parents=True, exist_ok=True)
+    if args.require_simulator:
+        check_simulator(output, device)
     run(output, "toolchain", ["xcrun", "swift", "--version"])
     run(output, "xcode", ["xcodebuild", "-version"])
     check_settings(output)
@@ -179,11 +221,11 @@ def main():
             results = Path(tempfile.mkdtemp(prefix="editor-ui-", dir=output)) / "EditorUI.xcresult"
             run(output, "tests-EditorUI", common + ["-scheme", "ArcNoteUITests", "-parallel-testing-enabled", "NO"]
                 + destination + ["-resultBundlePath", str(results)]
-                + [f"-only-testing:ArcNoteUITests/ArcNoteUITests/{name}" for name in EDITOR_FLOWS]
+                + [f"-only-testing:{selector}" for selector in selectors]
                 + ["test"])
             tree = run(output, "results-EditorUI", ["xcrun", "xcresulttool", "get", "test-results",
                                                    "tests", "--path", str(results)], json_stdout=True)
-            check_editor_results(json.loads(tree.read_text()))
+            check_editor_results(json.loads(tree.read_text()), selectors)
         else:
             print("[concurrency] Simulator regressions skipped; set IOS_DEVICE to a dedicated simulator UUID.")
     print(f"[concurrency] PASS. Logs: {output}. First-party targets use Swift 6.")

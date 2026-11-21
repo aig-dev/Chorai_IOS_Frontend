@@ -68,7 +68,10 @@ ArcNoteUITests/ArcNoteUITests/testHomeRemovalKeepsLocalTrashWhenSyncIsUnavailabl
 
 - [ ] 核实仓库可用的 macOS runner，再固定 workflow 的 runner、`DEVELOPER_DIR`、Xcode/runtime 版本与专用模拟器创建步骤。目标复用本次通过的 Xcode 27.2；替代工具链先跑同一门禁，不能假设 `macos-latest` 自带所需版本。没有兼容 runner 时记录“尚未接入 CI”，保留可运行本地门禁，不能宣称 CI 已完成。
 - [ ] workflow 在 PR/main 执行强制模拟器门禁，凭据权限只读；只缓存下载，不复用编译产物；失败也保留日志/xcresult。生产环境仍只构建。
-- [ ] 运行 runner 回归与 `IOS_DEVICE=<专用 UUID> python3 scripts/check-concurrency.py --require-simulator --ui-selectors-file scripts/ios-ui-gate-selectors.json`。验收：三种构建、两个 package、App 测试和十项 UI 全部通过；六项 opt-in API 跳过在结果中单独声明。再核对实际 CI run 后独立提交。
+- [ ] 运行 runner 回归与 `IOS_DEVICE=<专用 UUID> python3 scripts/check-concurrency.py --require-simulator --ui-selectors-file scripts/ios-ui-gate-selectors.json`。验收：三种构建、两个 package、App 测试和十项 UI 全部通过；六项 opt-in API 跳过在结果中单独声明。独立提交本地门禁。
+- [ ] 接入后核对实际 PR/main CI run、日志和 xcresult。
+
+本地入口为 `make check-concurrency-required IOS_DEVICE=<专用 UUID>`。仓库可用的 macOS runner 和 Xcode 27.2 / iOS runtime 兼容性尚待核实，门禁尚未接入 CI。
 
 ## Task 2 — P0：普通笔记生产同步闭环
 

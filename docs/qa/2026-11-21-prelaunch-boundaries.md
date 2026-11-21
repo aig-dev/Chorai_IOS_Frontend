@@ -114,8 +114,14 @@ upload-termination cases still need direct tests.
 `Task1-Four-UI-Baseline.xcresult` passed the four additional fixture-backed
 daily UI selectors for Merge editing/draft restoration, Home's real editor, Trash
 cancel/rejection and local removal while sync is unavailable. Exact full
-selector matching was checked. The required-simulator CLI and CI workflow
-have not yet been implemented; runner availability is not established.
+selector matching was checked.
+
+Run the daily gate with `make check-concurrency-required IOS_DEVICE=<UUID>`
+using a dedicated iOS simulator. It verifies the
+[ten full selectors](../../scripts/ios-ui-gate-selectors.json) in the retained
+xcresult and rejects a missing or unavailable device before builds. The gate
+has yet to be connected to CI. Repository runner availability and compatibility
+with Xcode 27.2 are still under verification.
 
 ## Original Merge failure and remaining scope
 
