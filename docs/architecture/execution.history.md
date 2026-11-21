@@ -335,3 +335,7 @@ Made the opt-in M2 transient recovery case self-contained: persist a pending req
 ## 2026-11-21 Ordinary session and account boundaries
 
 Corrected the cross-origin outage and no-grant revocation fixtures, verified offline logout and exercised a late response across two real ordinary accounts. A loopback test forwarder holds responses after the backend commits and can lose an acknowledgement at a fixed origin. The DEBUG phone sign-in entry uses existing session admission. The product access and note synchronization state machines required no change. See [ordinary session recovery](../qa/2026-11-21-prelaunch-boundaries.md#ordinary-session-recovery).
+
+## 2026-11-21 Recovery fixture review
+
+Replaced marker-based cleanup in the new session cases with exact creation ownership and frozen teardown commands. The test proxy observes writes before forwarding, including keyless attempts and failed transport. The updated ordinary UI selectors check the reopened photo's rendered bounds and fallback, and observe B's own synced editor before and after release of A's held response. [Fixture verification and pending live acceptance](../qa/2026-11-21-prelaunch-boundaries.md#recovery-fixture-review).
