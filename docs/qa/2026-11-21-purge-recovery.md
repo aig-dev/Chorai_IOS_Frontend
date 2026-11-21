@@ -73,12 +73,16 @@ to make these selectors pass.
 The Web companion passed actual ordinary-account deletion, lost response after
 server commit, recovery after page reload when the server row is absent, exact
 original key/body reuse, and restore/retrash rejection of an open confirmation.
+A separate lost-response case also recovered the same complete receipt identity
+from a newly opened tab after closing the original tab.
 These checks do not represent a complete onboarding run or native lost-ACK UI
 relaunch; native durable recovery also has the SQLite/network tests above.
 
 A subsequent fresh plain-text NOTE setup reproduced first-attempt soft-delete
-`503/note_action_outcome_unknown`. Its original command remains available for
-diagnosis; the successful sequences above do not close that issue. Production
+`503/note_action_outcome_unknown`. Its original command later recovered without
+changing its key/body. Three immediate Python and three browser lifecycle
+sequences then passed, including same-second create/delete. The original cause
+remains unconfirmed; these successful sequences do not close that diagnosis. Production
 composition, all-writer coverage and complete object/vector erasure remain
 separate backend gates.
 
