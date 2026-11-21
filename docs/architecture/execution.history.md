@@ -1,5 +1,16 @@
 # Execution boundary history
 
+## 2026-11-21 — Native Swift 6 bridge verification
+
+Added eight hosted tests across synchronous import results, cross-thread
+task cancellation on both sides of subscription registration, multipart
+termination order and repeated signals. A DEBUG-only waiter count lets the
+tests observe the registered drain before delivering termination. A temporary
+mutation omitting the drain reproduced early resource release on accepted
+success, failure and cancellation. The existing production bridge passed
+all eight cases, so its state machine and SDK delivery contracts were kept.
+See the [ownership audit and simulator results](../qa/2026-11-21-native-bridge-validation.md).
+
 ## 2026-11-21 — Required local simulator gate
 
 Added a required local gate for App-hosted tests and ten fixture-backed UI

@@ -53,7 +53,8 @@ Runtime cases, synthetic measurements and limitations are recorded in [render/im
 
 ## Verification
 
-- [First-launch boundary checks](../qa/2026-11-21-prelaunch-boundaries.md): ordinary-account Home/profile/search and purge UI passed; 26 existing hosted tests passed with verified Thread Sanitizer instrumentation. Two older session UI expectations conflict with ordinary offline eligibility and remain failed pending fixture correction. Production composition, direct import bridge tests and CI remain open.
+- [First-launch boundary checks](../qa/2026-11-21-prelaunch-boundaries.md): ordinary-account Home/profile/search and purge UI passed; 26 existing hosted tests passed with verified Thread Sanitizer instrumentation. Two older session UI expectations conflict with ordinary offline eligibility and remain failed pending fixture correction. Production composition and CI remain open.
+- [Native Swift 6 boundary checks](../qa/2026-11-21-native-bridge-validation.md) cover import subscription races, security-scoped resource lifetime, off-main JPEG execution, and actor ownership.
 - [Ordinary-account sync checkpoint](../qa/2026-11-21-ordinary-note-sync.md): full CoreFlow 1071 cases passed with all six actual API cases enabled and zero skips. The transient recovery case creates its own interrupted local record; it does not require a previous test run's recovery directory. Final production NOTE composition remains a separate gate.
 
 - Run the daily local gate with `make check-concurrency-required IOS_DEVICE=<dedicated-simulator-UUID>` for App-hosted tests and the [ten required UI cases](../../scripts/ios-ui-gate-selectors.json). See the [first-launch checkpoint](../qa/2026-11-21-prelaunch-boundaries.md#concurrency-and-daily-gate-baselines) for validation and CI status.
@@ -209,8 +210,12 @@ AsyncThrowingStream, with subscription and cancellation on MainActor. This retai
 immediate cached values, empty completion and original failures without sending a
 Combine iterator between executors. Merge canonical request encoding is prepared
 by the nonisolated service before entering NetworkManager. NoteImport retains its
-specialized cancellation/termination drain: security-scoped files stay accessible
-until the upload actually terminates.
+specialized cancellation and termination drain. The first publisher result or
+task cancellation wins under the await state's lock. The Alamofire
+`UploadRequest.responseData` callback signals termination independently of
+Combine subscription cancellation. Enqueue holds its security-scoped URLs
+through both steps and releases each acquired URL once. See the
+[native boundary evidence](../qa/2026-11-21-native-bridge-validation.md).
 
 Import recovery binds the actor's persisted `client_request_id` to the canonical
 batch returned by Go. Replays retain the original request identity and conflict

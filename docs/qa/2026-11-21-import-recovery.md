@@ -46,7 +46,8 @@ The final backend also returned 400 for an empty source identity before staging.
 Default Debug, Debug-Production and Release simulator builds passed, with no
 first-party concurrency diagnostics. These are not signed Archive/TestFlight checks.
 Tests requiring live API credentials are not inferred from unit tests. Upload
-callback/termination lifetime remains Task 6 acceptance.
+callback and termination lifetime is documented in the
+[Task 6 native bridge checkpoint](2026-11-21-native-bridge-validation.md).
 
 Artifacts are in `.superpowers/sdd/2026-11-20-post-swift6-integration/` for this
 active launch plan. Private runtime credentials stay outside the repository.

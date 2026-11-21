@@ -107,9 +107,9 @@ This run sets no latency target.
 The credential-free hosted run in `Task6-TSan-Baseline.xcresult` passed all 26
 existing tests in `CardImagePreparationTests` and
 `NetworkResponseExecutionTests`, with zero skips and no sanitizer reports. The app and hosted test binaries both link the
-Thread Sanitizer runtime and contain its instrumentation. This is an existing
-boundary baseline; the native import continuation, cancellation and actual
-upload-termination cases still need direct tests.
+Thread Sanitizer runtime and contain its instrumentation. The subsequent
+[native bridge checkpoint](2026-11-21-native-bridge-validation.md) covers the
+import continuation, cancellation and independent transport termination.
 
 `Task1-Four-UI-Baseline.xcresult` passed the four additional fixture-backed
 daily UI selectors for Merge editing/draft restoration, Home's real editor, Trash

@@ -80,6 +80,16 @@ final class NoteImportUploadTermination: @unchecked Sendable {
     private var terminated = false
     private var waiters: [CheckedContinuation<Void, Never>] = []
 
+    #if DEBUG
+    // Hosted tests need to distinguish a registered waiter from an enqueue
+    // task that has yet to reach the transport drain.
+    var testWaiterCount: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return waiters.count
+    }
+    #endif
+
     func signal() {
         lock.lock()
         guard !terminated else {
