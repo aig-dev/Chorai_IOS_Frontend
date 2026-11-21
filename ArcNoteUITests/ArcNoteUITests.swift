@@ -5950,6 +5950,7 @@ final class ArcNoteUITests: XCTestCase {
     }
 
     private func createOrdinaryPhotoNote(marker: String, session: SmokeSession, proxy: OrdinaryGoProxy) throws -> (local: String, asset: String) {
+        app.launchArguments.append("--ui-test-ordinary-note-binding")
         try launchOrdinary(session, through: proxy)
         waitForSessionPhase("verified", timeout: 30)
         XCTAssertTrue(proxy.verifiedFullAccess(session.actorId))
@@ -5959,7 +5960,7 @@ final class ArcNoteUITests: XCTestCase {
         tap("note.create")
         typeInCardEditorBody(marker)
         let local = waitFor("note.created-card-id", timeout: 25).label
-        try journal.register(local: local)
+        let asset = try bindCreatedFixture(journal, local: local, session: session, proxy: proxy)
         tap("cardEditorFormatInlineImage")
         tapFirstHittableButton(label: "Photo Library")
         let photo = app.images.matching(identifier: "PXGGridLayout-Info").firstMatch
@@ -5968,7 +5969,6 @@ final class ArcNoteUITests: XCTestCase {
         app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: item.frame.midX, dy: item.frame.midY)).tap()
         XCTAssertTrue(app.images["Inline image"].waitForExistence(timeout: 20))
         XCTAssertTrue(app.staticTexts["Synced"].waitForExistence(timeout: 40))
-        let asset = try XCTUnwrap(journal.snapshot().asset, "Expected the exact Go create receipt")
         try assertOrdinaryPhotoNote(asset, text: marker, session: session, proxy: proxy)
         return (local, asset)
     }
@@ -6043,6 +6043,15 @@ final class ArcNoteUITests: XCTestCase {
         try assertOrdinaryPhotoNote(note.asset, text: marker + suffix, session: session, proxy: proxy)
         XCTAssertEqual(try fetchSmokeCards(search: marker, token: session.token).filter { $0.content.contains(marker) }.map(\.id), [note.asset])
         print("ORDINARY_OFFLINE asset=\(note.asset) operation=\(key) sha256=\(replay.digest.map { String(format: "%02x", $0) }.joined())")
+    }
+
+    private func bindCreatedFixture(_ journal: OrdinaryFixtureJournal, local: String,
+                                    session: SmokeSession, proxy: OrdinaryGoProxy) throws -> String {
+        try journal.expectLocal(local, appOrigin: proxy.origin)
+        let identifier = "note.created-ack|\(session.actorId)|\(proxy.origin)|\(local)"
+        let asset = waitFor(identifier, timeout: 40).label
+        try proxy.bindAcknowledgement(journal, actor: session.actorId, appOrigin: proxy.origin, local: local, asset: asset)
+        return asset
     }
 
     private func registerOrdinaryFixture(_ session: SmokeSession, account: String) throws -> OrdinaryFixtureJournal {
@@ -6126,10 +6135,9 @@ final class ArcNoteUITests: XCTestCase {
         let bText = "BControl" + UUID().uuidString.prefix(8)
         typeInCardEditorBody(bText)
         let bLocal = waitFor("note.created-card-id", timeout: 25).label
-        try bFixture.register(local: bLocal)
+        let bAsset = try bindCreatedFixture(bFixture, local: bLocal, session: other, proxy: proxy)
         let synced = app.staticTexts["Synced"]
         XCTAssertTrue(synced.waitForExistence(timeout: 30))
-        let bAsset = try XCTUnwrap(bFixture.snapshot().asset)
         XCTAssertEqual(try fetchSmokeCard(id: bAsset, token: other.token).content, bText)
         XCTAssertTrue(proxy.hasHeldResponse)
         proxy.release()
@@ -6214,7 +6222,7 @@ final class ArcNoteUITests: XCTestCase {
         let marker = "granted-" + UUID().uuidString
         let fixture = try registerOrdinaryFixture(session, account: "A")
         let id = try createSmokeCard(token: session.token, searchToken: marker, isPublic: false)
-        try fixture.register(asset: id)
+        try fixture.recordDirectCreate(asset: id)
         try launchOrdinary(session, through: proxy)
         waitForSessionPhase("verified", timeout: 30)
         XCTAssertTrue(proxy.verifiedFullAccess(session.actorId))

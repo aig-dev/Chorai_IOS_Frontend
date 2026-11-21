@@ -8,13 +8,71 @@ import os
 
 @MainActor
 final class RecentNotesSyncUITests: XCTestCase {
+    func testUnrelatedSameSessionCreateCannotAuthorizeCleanup() async throws {
+        let server = try RecentNotesServer(libraryFixture: .twoCreates)
+        defer { server.stop() }
+        let upstream = try server.start()
+        let proxy = try OrdinaryGoProxy(upstreamOrigin: upstream)
+        defer { proxy.stop() }
+        let origin = try proxy.start()
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let journal = try OrdinaryFixtureJournal(directory: directory, actor: server.actorID, origin: upstream)
+        let local = "local-note:T"
+        try journal.expectLocal(local, appOrigin: origin)
+        proxy.captureCreation(journal, token: server.token)
+
+        @Sendable func post(_ key: String) async throws -> String {
+            var request = URLRequest(url: try XCTUnwrap(URL(string: origin + "/api/cards")))
+            request.httpMethod = "POST"
+            request.setValue("Bearer " + server.token, forHTTPHeaderField: "Authorization")
+            request.setValue(key, forHTTPHeaderField: "Idempotency-Key")
+            let (bytes, response) = try await URLSession.shared.data(for: request)
+            XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200)
+            let envelope = try XCTUnwrap(try JSONSerialization.jsonObject(with: bytes) as? [String: Any])
+            return try XCTUnwrap((envelope["data"] as? [String: Any])?["id"] as? String)
+        }
+        async let target = post("target-create")
+        await fulfillment(of: [server.targetRequested], timeout: 5)
+        let other = try await post("other-create")
+        XCTAssertEqual(other, "asset-other-create")
+        var dispatched: [String] = []
+        func teardown() throws {
+            try journal.clean(actor: server.actorID, origin: upstream, token: server.token, baseline: { _ in "base" }, send: { req in
+                dispatched.append(try XCTUnwrap(req.url?.path))
+                let key = try XCTUnwrap(req.value(forHTTPHeaderField: "Idempotency-Key"))
+                let asset = "asset-target-create"
+                let data: [String: Any] = req.url?.lastPathComponent == "permanent"
+                    ? ["asset_id": asset, "request_id": key, "state": "ERASED", "activity_id": "act", "action_log_id": "log", "certificate_id": "cert", "cleanup_state": "COMPLETE"]
+                    : ["sync_receipt": ["asset_id": asset, "operation_id": key, "lifecycle": "trashed"]]
+                return try JSONSerialization.data(withJSONObject: ["success": true, "data": data])
+            })
+        }
+        XCTAssertThrowsError(try teardown())
+        XCTAssertTrue(dispatched.isEmpty, "A valid receipt for another note cannot authorize cleanup of T")
+        server.releaseTargetCreation()
+        let targetAsset = try await target
+        XCTAssertEqual(targetAsset, "asset-target-create")
+        // The confirmed local mapping for T becomes visible after its receipt.
+        XCTAssertThrowsError(try proxy.bindAcknowledgement(journal, actor: server.actorID, appOrigin: origin, local: "local-note:other", asset: other))
+        XCTAssertThrowsError(try proxy.bindAcknowledgement(journal, actor: server.actorID, appOrigin: upstream, local: local, asset: targetAsset))
+        XCTAssertThrowsError(try proxy.bindAcknowledgement(journal, actor: "other", appOrigin: origin, local: local, asset: targetAsset))
+        XCTAssertThrowsError(try proxy.bindAcknowledgement(journal, actor: server.actorID, appOrigin: origin, local: local, asset: "no-receipt"))
+        XCTAssertThrowsError(try teardown())
+        XCTAssertTrue(dispatched.isEmpty)
+        try proxy.bindAcknowledgement(journal, actor: server.actorID, appOrigin: origin, local: local, asset: targetAsset)
+        XCTAssertThrowsError(try proxy.bindAcknowledgement(journal, actor: server.actorID, appOrigin: origin, local: local, asset: other))
+        try teardown()
+        XCTAssertEqual(dispatched, ["/api/cards/" + targetAsset, "/api/cards/trash/" + targetAsset + "/permanent"])
+    }
+
     func testOrdinaryCleanupPersistsBothRequestsBeforeSendingAndResumesAfterLostReceipt() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
         let origin = "http://localhost"
         let journal = try OrdinaryFixtureJournal(directory: directory, actor: "owner", origin: origin)
-        try journal.register(local: "local-note:owned", asset: "owned")
-        XCTAssertThrowsError(try journal.register(asset: "unrelated"))
+        try journal.recordDirectCreate(asset: "owned")
+        XCTAssertThrowsError(try journal.recordDirectCreate(asset: "unrelated"))
         var attempts = [OrdinaryFixtureJournal.Command]()
         var baselines = ["active-base", "trash-base"]
         var acknowledged = Set<String>()
@@ -415,7 +473,7 @@ final class RecentNotesSyncUITests: XCTestCase {
 // reads/writes use queue.sync; immutable configuration and SDK handles are shared.
 final class RecentNotesServer: @unchecked Sendable {
     enum RemoteChange { case changed, removed }
-    enum LibraryFixture { case activeNote, trashedNote }
+    enum LibraryFixture { case activeNote, trashedNote, twoCreates }
 
     let actorID = "act_" + UUID().uuidString
     let token = UUID().uuidString
@@ -425,6 +483,18 @@ final class RecentNotesServer: @unchecked Sendable {
     private let listener: NWListener
     private let includesRemoteImage: Bool
     private let libraryFixture: LibraryFixture?
+    let targetRequested = XCTestExpectation(description: "Upstream is holding the target create")
+    private var pendingCreate: NWConnection?
+    func releaseTargetCreation() {
+        queue.sync {
+            if let connection = pendingCreate { sendCreateReceipt(connection, key: "target-create") }
+            pendingCreate = nil
+        }
+    }
+    private func sendCreateReceipt(_ connection: NWConnection, key: String) {
+        let asset = "asset-" + key
+        send(connection, payload: ["id": asset, "sync_receipt": ["asset_id": asset, "operation_id": key]] as [String: Any])
+    }
     private var deleteRequests = 0
     var permanentDeleteRequests: Int { queue.sync { deleteRequests } }
     private var recentNoteChange: RemoteChange?
@@ -537,6 +607,13 @@ final class RecentNotesServer: @unchecked Sendable {
         }
         let path = url.path
         switch (method, path) {
+        case ("POST", "/api/cards") where libraryFixture == .twoCreates:
+            guard let key = Self.header("Idempotency-Key", in: request) else { send(connection, status: 400); return }
+            if key == "target-create" {
+                pendingCreate = connection
+                targetRequested.fulfill()
+            } else { sendCreateReceipt(connection, key: key) }
+
         case ("GET", "/api/auth/verify-token") where verificationRestricted:
             send(connection, status: 403, reason: "account_restricted")
         case ("GET", "/api/auth/verify-token"):
@@ -672,9 +749,28 @@ final class OrdinaryGoProxy: @unchecked Sendable {
     private var dropPath: String?
     private var held: (() -> Void)?
     private var records = [Mutation]()
-    private var creating: (journal: OrdinaryFixtureJournal, token: String)?
+    private struct CreateCapture {
+        let journal: OrdinaryFixtureJournal
+        let token: String
+        var keysByAsset: [String: Set<String>] = [:]
+    }
+    private var creating: CreateCapture?
+    private(set) var origin = ""
+
     func captureCreation(_ journal: OrdinaryFixtureJournal, token: String) {
-        queue.sync { creating = (journal, token) }
+        queue.sync { creating = CreateCapture(journal: journal, token: token) }
+    }
+
+    func bindAcknowledgement(_ journal: OrdinaryFixtureJournal, actor: String, appOrigin: String,
+                             local: String, asset: String) throws {
+        try queue.sync {
+            guard appOrigin == origin, let capture = creating, capture.journal.file == journal.file,
+                  let keys = capture.keysByAsset[asset], keys.count == 1, let key = keys.first else {
+                throw URLError(.badServerResponse)
+            }
+            try journal.confirmLocal(actor: actor, appOrigin: appOrigin, local: local, asset: asset, key: key)
+            creating = nil
+        }
     }
     private var login: Data?
     private var uploads = [Data]()
@@ -690,8 +786,8 @@ final class OrdinaryGoProxy: @unchecked Sendable {
     func holdSuccessfulUpdate(asset: String) { queue.sync { holdPath = "/api/cards/" + asset } }
     func release() { queue.sync { held?(); held = nil } }
 
-    init() throws {
-        upstream = try XCTUnwrap(URL(string: UITestAPIConfiguration.baseURL))
+    init(upstreamOrigin: String = UITestAPIConfiguration.baseURL) throws {
+        upstream = try XCTUnwrap(URL(string: upstreamOrigin))
         guard upstream.scheme == "http", upstream.host == "127.0.0.1" else {
             throw URLError(.unsupportedURL)
         }
@@ -720,7 +816,8 @@ final class OrdinaryGoProxy: @unchecked Sendable {
         XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 5), .completed)
         var origin = URLComponents(url: upstream, resolvingAgainstBaseURL: false)
         origin?.port = Int(try XCTUnwrap(listener.port).rawValue)
-        return try XCTUnwrap(origin?.string)
+        self.origin = try XCTUnwrap(origin?.string)
+        return self.origin
     }
 
     func stop() {
@@ -770,8 +867,9 @@ final class OrdinaryGoProxy: @unchecked Sendable {
         if card {
             records.append(Mutation(key: key, method: method, digest: Data(SHA256.hash(data: body)), path: path))
         }
-        let creation = method == "POST" && path == "/api/cards" ? creating : nil
-        let authorized = creation.map { request.value(forHTTPHeaderField: "Authorization") == "Bearer " + $0.token } ?? false
+        let captureFile = method == "POST" && path == "/api/cards" && creating.map({
+            request.value(forHTTPHeaderField: "Authorization") == "Bearer " + $0.token
+        }) == true ? creating?.journal.file : nil
         if offline {
             if let index { records[index].transportFailed = true }
             connection.cancel()
@@ -805,11 +903,10 @@ final class OrdinaryGoProxy: @unchecked Sendable {
                 if let index {
                     self.records[index].receipt = receipt?["operation_id"] as? String
                 }
-                if let creation, authorized, let key, (200..<300).contains(http.statusCode),
-                   receipt?["operation_id"] as? String == key, let asset = receipt?["asset_id"] as? String,
-                   payload?["id"] as? String == asset {
-                    do { try creation.journal.register(asset: asset) }
-                    catch { XCTFail("Cannot journal the exact created note: " + asset); connection.cancel(); return }
+                if let captureFile, self.creating?.journal.file == captureFile, let key, !key.isEmpty,
+                   (200..<300).contains(http.statusCode), receipt?["operation_id"] as? String == key,
+                   let asset = receipt?["asset_id"] as? String, payload?["id"] as? String == asset {
+                    self.creating?.keysByAsset[asset, default: []].insert(key)
                 }
                 if card, let key {
                     if path == self.dropPath, method == "PUT", receipt?["operation_id"] as? String == key {
@@ -841,11 +938,23 @@ struct OrdinaryFixtureJournal: Sendable {
         let body: Data
         var acknowledged = false
     }
+    enum Creation: Codable {
+        case direct(asset: String)
+        case acknowledged(asset: String, operation: String)
+
+        var asset: String {
+            switch self {
+            case let .direct(asset), let .acknowledged(asset, _): return asset
+            }
+        }
+    }
     struct Entry: Codable {
         let actor: String
         let origin: String
         var local: String?
-        var asset: String?
+        var appOrigin: String?
+        var creation: Creation?
+        var asset: String? { creation?.asset }
         var commands: [Command] = []
     }
     let file: URL
@@ -869,13 +978,33 @@ struct OrdinaryFixtureJournal: Sendable {
         try JSONDecoder().decode(Entry.self, from: Data(contentsOf: file))
     }
     func snapshot() throws -> Entry { try lock.withLock { try read() } }
-    func register(local: String? = nil, asset: String? = nil) throws {
+    func expectLocal(_ local: String, appOrigin: String) throws {
         try lock.withLock {
             var entry = try read()
-            guard local == nil || entry.local == nil || entry.local == local,
-                  asset == nil || entry.asset == nil || entry.asset == asset else { throw URLError(.badServerResponse) }
-            entry.local = local ?? entry.local
-            entry.asset = asset ?? entry.asset
+            guard entry.creation == nil, entry.local == nil, local.hasPrefix("local-note:") else {
+                throw URLError(.badServerResponse)
+            }
+            entry.local = local
+            entry.appOrigin = appOrigin
+            try save(entry)
+        }
+    }
+
+    fileprivate func confirmLocal(actor: String, appOrigin: String, local: String, asset: String, key: String) throws {
+        try lock.withLock {
+            var entry = try read()
+            guard entry.creation == nil, entry.actor == actor, entry.appOrigin == appOrigin,
+                  entry.local == local, !asset.isEmpty, !key.isEmpty else { throw URLError(.badServerResponse) }
+            entry.creation = .acknowledged(asset: asset, operation: key)
+            try save(entry)
+        }
+    }
+
+    func recordDirectCreate(asset: String) throws {
+        try lock.withLock {
+            var entry = try read()
+            guard entry.local == nil, entry.creation == nil, !asset.isEmpty else { throw URLError(.badServerResponse) }
+            entry.creation = .direct(asset: asset)
             try save(entry)
         }
     }

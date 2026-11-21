@@ -732,6 +732,9 @@ struct TabBarView: View {
                         .foregroundStyle(ChoraiTheme.ink.opacity(0.01))
                         .frame(width: 1, height: 1)
                         .accessibilityIdentifier("note.created-card-id")
+                    if ProcessInfo.processInfo.arguments.contains("--ui-test-ordinary-note-binding") {
+                        AcknowledgedCreatedNote(localID: cardID)
+                    }
                 }
 
                 if let cardID = coordinator.lastMergedCardID {
@@ -874,3 +877,22 @@ private struct TabBarMergePortalPreview: View {
 #Preview {
     TabBarMergePortalPreview()
 }
+
+#if DEBUG
+private struct AcknowledgedCreatedNote: View {
+    let localID: String
+    @ObservedObject private var library = LocalNotesController.shared.library
+    @ObservedObject private var auth = AuthManager.shared
+
+    var body: some View {
+        if localID.hasPrefix("local-note:"), let scope = library.scope, scope == auth.currentNoteScope,
+           let serverID = LocalNotesController.shared.cloudAssetID(for: localID) {
+            Text(verbatim: serverID)
+                .font(.system(size: 1))
+                .foregroundStyle(ChoraiTheme.ink.opacity(0.01))
+                .frame(width: 1, height: 1)
+                .accessibilityIdentifier("note.created-ack|\(scope.actorID)|\(scope.environmentID)|\(localID)")
+        }
+    }
+}
+#endif
