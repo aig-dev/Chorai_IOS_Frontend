@@ -83,6 +83,17 @@ struct SignInView: View {
                             .accessibilityIdentifier("signin.error")
                             .id("signin.error")
                     }
+                    #if DEBUG
+                    if ProcessInfo.processInfo.arguments.contains("--ui-test-ordinary-phone-signin"),
+                       ProcessInfo.processInfo.environment["CHORAI_UI_TEST"] == "1" {
+                        ForEach(["A", "B"], id: \.self) { account in
+                            Button("Sign in with test account " + account) {
+                                signInWithOrdinaryTestAccount(account)
+                            }
+                            .accessibilityIdentifier("signin.test-account." + account)
+                        }
+                    }
+                    #endif
                     AuthProviderButtons(google: signInWithGoogle, apple: signInWithApple, disabled: isSigningIn)
                 }
                 .padding(.horizontal, 22)
@@ -156,6 +167,20 @@ struct SignInView: View {
             ?? authManager.login(email: usernameEmail, password: password)
         performLogin(publisher, attempt: id)
     }
+
+    #if DEBUG
+    private func signInWithOrdinaryTestAccount(_ account: String) {
+        let environment = ProcessInfo.processInfo.environment
+        let prefix = account == "A" ? "CHORAI_UI_TEST_" : "CHORAI_UI_TEST_TARGET_"
+        guard let phone = environment[prefix + "PHONE"], let password = environment[prefix + "PASSWORD"],
+              let id = beginAttempt() else { return }
+        let publisher = NetworkManager.shared.loginForPhoneUITest(phone: phone, password: password)
+            .receive(on: DispatchQueue.main)
+            .handleEvents(receiveOutput: { authManager.saveUserSession($0) })
+            .eraseToAnyPublisher()
+        performLogin(publisher, attempt: id)
+    }
+    #endif
 
     private func beginAttempt() -> UUID? {
         guard isVisible, attemptID == nil else { return nil }

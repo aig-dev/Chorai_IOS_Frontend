@@ -8,6 +8,33 @@ import os
 
 @MainActor
 final class RecentNotesSyncUITests: XCTestCase {
+    func testOnlineRestrictedVerificationRemovesExistingLocalAccess() throws {
+        let server = try RecentNotesServer()
+        defer { server.stop() }
+        let app = XCUIApplication()
+        app.launchEnvironment = [
+            APIEnvironment.overrideEnvironmentKey: try server.start(),
+            "CHORAI_UI_TEST": "1",
+            "CHORAI_UI_TEST_AUTH_TOKEN": server.token,
+            "CHORAI_UI_TEST_ACTOR_ID": server.actorID
+        ]
+        defer { app.terminate() }
+        app.launch()
+        XCTAssertTrue(app.tabBars.buttons["Home"].waitForExistence(timeout: 15))
+        app.terminate()
+        app.launchEnvironment.removeValue(forKey: "CHORAI_UI_TEST_AUTH_TOKEN")
+        app.launchEnvironment.removeValue(forKey: "CHORAI_UI_TEST_ACTOR_ID")
+        server.restrictVerification()
+        app.launch()
+        XCTAssertTrue(app.textFields["access.code"].waitForExistence(timeout: 15))
+        XCTAssertFalse(app.tabBars.buttons["Home"].exists)
+        app.terminate()
+        server.stop()
+        app.launch()
+        XCTAssertTrue(app.textFields["access.code"].waitForExistence(timeout: 15))
+        XCTAssertFalse(app.tabBars.buttons["Home"].exists)
+    }
+
     func testOtherDevicePhotoRendersOnHomeAfterOfflineRelaunch() throws {
         continueAfterFailure = false
         let server = try RecentNotesServer(includesRemoteImage: true)
@@ -311,6 +338,8 @@ final class RecentNotesServer: @unchecked Sendable {
     private var contentReads = 0
     var imageContentReads: Int { queue.sync { contentReads } }
     func serveImage(_ data: Data?) { queue.sync { imageBytes = data } }
+    private var verificationRestricted = false
+    func restrictVerification() { queue.sync { verificationRestricted = true } }
     private var manifestIsReleased = false
     private var sawManifest = false
     private var waiting: [NWConnection] = []
@@ -413,6 +442,8 @@ final class RecentNotesServer: @unchecked Sendable {
         }
         let path = url.path
         switch (method, path) {
+        case ("GET", "/api/auth/verify-token") where verificationRestricted:
+            send(connection, status: 403, reason: "account_restricted")
         case ("GET", "/api/auth/verify-token"):
             send(connection, payload: [
                 "valid": true, "issued_at": "2026-01-01T00:00:00Z", "expires_at": "2030-01-01T00:00:00Z",
@@ -513,5 +544,162 @@ final class RecentNotesServer: @unchecked Sendable {
         let json = try! JSONSerialization.data(withJSONObject: response)
         let header = "HTTP/1.1 \(status) \(HTTPURLResponse.localizedString(forStatusCode: status))\r\nContent-Type: application/json\r\nContent-Length: \(json.count)\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n"
         connection.send(content: Data(header.utf8) + json, completion: .contentProcessed { _ in connection.cancel() })
+    }
+}
+
+// Loopback transport for the ordinary Go scenarios. The serial queue owns all
+// connections, barriers and observations. Authentication and responses come from Go.
+final class OrdinaryGoProxy: @unchecked Sendable {
+    struct Mutation: Equatable {
+        let key: String
+        let digest: Data
+        let path: String
+        let status: Int?
+        let receipt: String?
+    }
+
+    private let queue = DispatchQueue(label: "OrdinaryGoProxy")
+    private let listener: NWListener
+    private let session: URLSession
+    private let upstream: URL
+    private var connections = [ObjectIdentifier: NWConnection]()
+    private var offline = false
+    private var holdPath: String?
+    private var dropPath: String?
+    private var held: (() -> Void)?
+    private var records = [Mutation]()
+    private var login: Data?
+    private var uploads = [Data]()
+    private var admitted = Set<String>()
+
+    var mutations: [Mutation] { queue.sync { records } }
+    var hasHeldResponse: Bool { queue.sync { held != nil } }
+    var lastLogin: Data? { queue.sync { login } }
+    var uploadedImages: [Data] { queue.sync { uploads } }
+    func verifiedFullAccess(_ actor: String) -> Bool { queue.sync { admitted.contains(actor) } }
+    func setOffline(_ value: Bool) { queue.sync { offline = value } }
+    func dropFirstUpdateReceipt(asset: String) { queue.sync { dropPath = "/api/cards/" + asset } }
+    func holdSuccessfulUpdate(asset: String) { queue.sync { holdPath = "/api/cards/" + asset } }
+    func release() { queue.sync { held?(); held = nil } }
+
+    init() throws {
+        upstream = try XCTUnwrap(URL(string: UITestAPIConfiguration.baseURL))
+        guard upstream.scheme == "http", upstream.host == "127.0.0.1" else {
+            throw URLError(.unsupportedURL)
+        }
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = 12
+        configuration.httpCookieStorage = nil
+        session = URLSession(configuration: configuration)
+        let parameters = NWParameters.tcp
+        parameters.requiredLocalEndpoint = .hostPort(host: .ipv4(.loopback), port: .any)
+        listener = try NWListener(using: parameters)
+    }
+
+    func start() throws -> String {
+        let ready = XCTestExpectation(description: "Go forwarder bound a loopback port")
+        listener.stateUpdateHandler = { if case .ready = $0 { ready.fulfill() } }
+        listener.newConnectionHandler = { [weak self] connection in
+            guard let self else { return }
+            self.connections[ObjectIdentifier(connection)] = connection
+            connection.stateUpdateHandler = { [weak self, weak connection] state in
+                if case .cancelled = state, let connection { self?.connections.removeValue(forKey: ObjectIdentifier(connection)) }
+            }
+            connection.start(queue: self.queue)
+            self.receive(connection, OSAllocatedUnfairLock(uncheckedState: CFHTTPMessageCreateEmpty(nil, true).takeRetainedValue()))
+        }
+        listener.start(queue: queue)
+        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 5), .completed)
+        var origin = URLComponents(url: upstream, resolvingAgainstBaseURL: false)
+        origin?.port = Int(try XCTUnwrap(listener.port).rawValue)
+        return try XCTUnwrap(origin?.string)
+    }
+
+    func stop() {
+        queue.sync {
+            listener.cancel()
+            connections.values.forEach { $0.cancel() }
+            session.invalidateAndCancel()
+            held = nil
+        }
+    }
+
+    private func receive(_ connection: NWConnection, _ parser: OSAllocatedUnfairLock<CFHTTPMessage>) {
+        connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { bytes, _, end, error in
+            parser.withLock { message in
+                guard error == nil, let bytes, !bytes.isEmpty,
+                      bytes.withUnsafeBytes({ CFHTTPMessageAppendBytes(message, $0.bindMemory(to: UInt8.self).baseAddress!, bytes.count) }) else { connection.cancel(); return }
+                let headers = CFHTTPMessageCopyAllHeaderFields(message)?.takeRetainedValue() as? [String: String] ?? [:]
+                let size = CFHTTPMessageCopyHeaderFieldValue(message, "Content-Length" as CFString)?.takeRetainedValue() as String?
+                let body = CFHTTPMessageCopyBody(message)?.takeRetainedValue() as Data? ?? Data()
+                if CFHTTPMessageIsHeaderComplete(message), body.count >= (Int(size ?? "") ?? 0) {
+                    guard let url = CFHTTPMessageCopyRequestURL(message)?.takeRetainedValue() as URL?,
+                          let method = CFHTTPMessageCopyRequestMethod(message)?.takeRetainedValue() as String? else { connection.cancel(); return }
+                    self.forward(method, url, headers, body, connection)
+                } else if end { connection.cancel() } else { self.receive(connection, parser) }
+            }
+        }
+    }
+
+    private func forward(_ method: String, _ incoming: URL, _ headers: [String: String], _ body: Data, _ connection: NWConnection) {
+        guard var target = URLComponents(url: upstream, resolvingAgainstBaseURL: false),
+              let source = URLComponents(url: incoming, resolvingAgainstBaseURL: false) else { connection.cancel(); return }
+        target.percentEncodedPath = source.percentEncodedPath
+        target.percentEncodedQuery = source.percentEncodedQuery
+        guard let url = target.url else { connection.cancel(); return }
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        if !body.isEmpty { request.httpBody = body }
+        for name in ["Content-Type", "Authorization", "Idempotency-Key", "Accept"] {
+            if let field = headers.first(where: { $0.key.caseInsensitiveCompare(name) == .orderedSame }) {
+                request.setValue(field.value, forHTTPHeaderField: name)
+            }
+        }
+        let key = request.value(forHTTPHeaderField: "Idempotency-Key")
+        let path = url.path
+        let card = key != nil && path.hasPrefix("/api/cards") && ["POST", "PUT"].contains(method)
+        let digest = card ? Data(SHA256.hash(data: body)) : Data()
+        if offline {
+            if card, let key { records.append(Mutation(key: key, digest: digest, path: path, status: nil, receipt: nil)) }
+            connection.cancel()
+            return
+        }
+        session.dataTask(with: request) { data, response, _ in
+            self.queue.async {
+                guard let http = response as? HTTPURLResponse, let data else { connection.cancel(); return }
+                let payload = ((try? JSONSerialization.jsonObject(with: data)) as? [String: Any])?["data"] as? [String: Any]
+                if http.statusCode == 200 {
+                    if path == "/api/auth/login" { self.login = data }
+                    if let access = payload?["product_access"] as? [String: Any], access["status"] as? String == "allowed",
+                       access["scope"] as? String == "product_full", let user = payload?["user"] as? [String: Any],
+                       let actor = user["id"] as? String { self.admitted.insert(actor) }
+                }
+                if path == "/api/v1/media/upload", (200..<300).contains(http.statusCode),
+                   let start = body.range(of: Data("\r\n\r\n".utf8)),
+                   let end = body.range(of: Data("\r\n--".utf8), in: start.upperBound..<body.endIndex) {
+                    self.uploads.append(Data(body[start.upperBound..<end.lowerBound]))
+                }
+                let send = {
+                    var header = "HTTP/1.1 \(http.statusCode) Response\r\nConnection: close\r\nCache-Control: no-store\r\nContent-Length: \(data.count)\r\n"
+                    if let type = http.value(forHTTPHeaderField: "Content-Type") { header += "Content-Type: \(type)\r\n" }
+                    connection.send(content: Data((header + "\r\n").utf8) + data, completion: .contentProcessed { _ in connection.cancel() })
+                }
+                if card, let key {
+                    let receipt = payload?["sync_receipt"] as? [String: Any]
+                    self.records.append(Mutation(key: key, digest: digest, path: path, status: http.statusCode, receipt: receipt?["operation_id"] as? String))
+                    if path == self.dropPath, method == "PUT", receipt?["operation_id"] as? String == key {
+                        self.dropPath = nil
+                        connection.cancel()
+                        return
+                    }
+                    if path == self.holdPath, method == "PUT", receipt?["operation_id"] as? String == key {
+                        self.holdPath = nil
+                        self.held = send
+                        return
+                    }
+                }
+                send()
+            }
+        }.resume()
     }
 }

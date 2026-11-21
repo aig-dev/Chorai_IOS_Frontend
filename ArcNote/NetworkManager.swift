@@ -493,12 +493,17 @@ extension NetworkManager {
 
     // MARK: 认证相关API
     func login(email: String, password: String) -> AnyPublisher<AuthResponse, NetworkError> {
-        let parameters: Parameters = [
-            "email": email,
-            "password": password
-        ]
+        passwordLogin(parameters: ["email": email, "password": password])
+    }
 
-        return self.request(
+    #if DEBUG
+    func loginForPhoneUITest(phone: String, password: String) -> AnyPublisher<AuthResponse, NetworkError> {
+        passwordLogin(parameters: ["credential_type": "phone", "phone": phone, "password": password])
+    }
+    #endif
+
+    private func passwordLogin(parameters: Parameters) -> AnyPublisher<AuthResponse, NetworkError> {
+        self.request(
             endpoint: "/api/auth/login",
             method: .post,
             parameters: parameters,

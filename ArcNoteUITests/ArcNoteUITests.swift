@@ -5949,33 +5949,263 @@ final class ArcNoteUITests: XCTestCase {
         captureMergeVisual("post-commit-explore-relaunch")
     }
 
-    func testRevokedSessionRelaunchReturnsToWelcome() throws {
-        let session = try requireFreshSmokeSession()
-        seedAppSession(session)
-        launchAuthenticatedApp()
-
-        waitFor("screen.flow.content", timeout: 30)
+    private func createOrdinaryPhotoNote(marker: String, session: SmokeSession, proxy: OrdinaryGoProxy) throws -> (local: String, asset: String) {
+        try launchOrdinary(session, through: proxy)
         waitForSessionPhase("verified", timeout: 30)
+        XCTAssertTrue(proxy.verifiedFullAccess(session.actorId))
+        openOrdinaryLibrary()
+        tap("note.create")
+        typeInCardEditorBody(marker)
+        let local = waitFor("note.created-card-id", timeout: 25).label
+        tap("cardEditorFormatInlineImage")
+        tapFirstHittableButton(label: "Photo Library")
+        let photo = app.images.matching(identifier: "PXGGridLayout-Info").firstMatch
+        let item = photo.waitForExistence(timeout: 5) ? photo : app.collectionViews.cells.firstMatch
+        XCTAssertTrue(item.waitForExistence(timeout: 8), "Preload the dedicated simulator photo library")
+        app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: item.frame.midX, dy: item.frame.midY)).tap()
+        XCTAssertTrue(app.images["Inline image"].waitForExistence(timeout: 20))
+        XCTAssertTrue(app.staticTexts["Synced"].waitForExistence(timeout: 40))
+        let rows = waitForSmokeCards(search: marker, token: session.token) { $0.contains { $0.content.contains(marker) } }
+        let asset = try XCTUnwrap(rows.first(where: { $0.content.contains(marker) })?.id)
+        try assertOrdinaryPhotoNote(asset, text: marker, session: session, proxy: proxy)
+        return (local, asset)
+    }
 
+    private func assertOrdinaryPhotoNote(_ asset: String, text: String, session: SmokeSession, proxy: OrdinaryGoProxy) throws {
+        let card = try fetchSmokeCard(id: asset, token: session.token)
+        let document = try XCTUnwrap(card.contentJSON?.data(using: .utf8))
+        let object = try XCTUnwrap(try JSONSerialization.jsonObject(with: document) as? [String: Any])
+        let blocks = try XCTUnwrap(object["blocks"] as? [[String: Any]])
+        let strings = blocks.flatMap { $0["content"] as? [[String: Any]] ?? [] }.compactMap { $0["text"] as? String }
+        XCTAssertEqual(strings.joined(), text)
+        let images = blocks.filter { ($0["type"] as? String) == "image" }
+        XCTAssertEqual(images.count, 1)
+        let props = try XCTUnwrap(images.first?["props"] as? [String: Any])
+        let ref = try XCTUnwrap(props["mediaRef"] as? String)
+        let url = try XCTUnwrap(URL(string: UITestAPIConfiguration.baseURL + "/api/v1/media/" + ref + "/content?asset_id=" + asset))
+        var request = URLRequest(url: url)
+        request.setValue("Bearer " + session.token, forHTTPHeaderField: "Authorization")
+        let bytes = try sendRawRequest(request)
+        XCTAssertFalse(bytes.isEmpty)
+        XCTAssertTrue(proxy.uploadedImages.contains(bytes), "Authorized API image must equal the uploaded file bytes")
+    }
+
+    private func appendToOrdinaryPhotoNote(_ text: String) {
+        let editor = waitFor("cardEditorBodyWebView")
+        editor.coordinate(withNormalizedOffset: CGVector(dx: 0.94, dy: 0.035)).tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 10))
+        app.typeText(text)
+    }
+
+    private func recoverAppAfterTransportRestores() {
+        XCUIDevice.shared.press(.home)
+        app.activate()
+        waitForSessionPhase("verified", timeout: 30)
+    }
+
+    func testLocalGoOrdinaryAccountOfflineReopenAndSync() throws {
+        let proxy = try OrdinaryGoProxy()
+        defer { proxy.stop() }
+        let session = try ordinarySession()
+        let marker = "Offline" + UUID().uuidString.prefix(8)
+        defer { cleanOrdinaryNotes(marker: marker, session: session) }
+        let note = try createOrdinaryPhotoNote(marker: marker, session: session, proxy: proxy)
+        proxy.setOffline(true)
+        let suffix = " recovered"
+        appendToOrdinaryPhotoNote(suffix)
+        XCTAssertTrue(app.staticTexts["Saved on this device · Waiting to sync"].waitForExistence(timeout: 20))
+        let path = "/api/cards/" + note.asset
+        app.terminate()
+        app.launch()
+        waitForSessionPhase("degraded", timeout: 30)
+        openOrdinaryLibrary()
+        XCTAssertTrue(app.staticTexts[marker + suffix].waitForExistence(timeout: 15))
+        tap("card.home." + note.local)
+        XCTAssertTrue(app.images["Inline image"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["Saved on this device · Waiting to sync"].exists)
+        let previous = proxy.mutations.count
+        proxy.dropFirstUpdateReceipt(asset: note.asset)
+        proxy.setOffline(false)
+        recoverAppAfterTransportRestores()
+        XCTAssertTrue(app.staticTexts["Synced"].waitForExistence(timeout: 40))
+        let delivered = proxy.mutations.dropFirst(previous).filter { $0.path == path && $0.receipt == $0.key }
+        XCTAssertGreaterThanOrEqual(delivered.count, 2, "Lost acknowledgement must replay the committed operation")
+        let frozen = try XCTUnwrap(delivered.first)
+        let replay = try XCTUnwrap(delivered.last)
+        XCTAssertEqual(replay.key, frozen.key)
+        XCTAssertEqual(replay.digest, frozen.digest)
+        try assertOrdinaryPhotoNote(note.asset, text: marker + suffix, session: session, proxy: proxy)
+        XCTAssertEqual(try fetchSmokeCards(search: marker, token: session.token).filter { $0.content.contains(marker) }.map(\.id), [note.asset])
+        print("ORDINARY_OFFLINE asset=\(note.asset) operation=\(replay.key) sha256=\(replay.digest.map { String(format: "%02x", $0) }.joined())")
+    }
+
+    private func cleanOrdinaryNotes(marker: String, session: SmokeSession) {
+        if let cards = try? fetchSmokeCards(search: marker, token: session.token) {
+            for card in cards where card.content.contains(marker) {
+                permanentlyCleanUpSmokeCard(id: card.id, token: session.token)
+            }
+        }
+    }
+
+    private func switchOrdinaryAccount(to account: String, proxy: OrdinaryGoProxy) throws -> SmokeSession {
+        openOrdinaryLibrary()
+        tapFirstHittableButton(label: "Open menu")
+        tap("side-menu.settings")
+        tap("settings.logout")
+        let confirm = app.alerts.buttons["Log Out"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 10))
+        confirm.tap()
+        waitForSessionPhase("signed-out", timeout: 25)
+        tap("welcome.login")
+        let button = waitForButton("signin.test-account." + account)
+        if !button.isHittable { app.swipeUp() }
+        button.tap()
+        waitForSessionPhase("verified", timeout: 30)
+        openOrdinaryLibrary()
+        return try ordinarySession(from: XCTUnwrap(proxy.lastLogin))
+    }
+
+    func testLocalGoAccountSwitchRejectsOldSync() throws {
+        let proxy = try OrdinaryGoProxy()
+        defer { proxy.stop() }
+        let session = try ordinarySession()
+        let marker = "Switch" + UUID().uuidString.prefix(8)
+        var cleanupSession = session
+        defer {
+            if (try? verifySmokeToken(token: cleanupSession.token)) == nil, let fresh = try? ordinarySession() {
+                cleanupSession = fresh
+            }
+            cleanOrdinaryNotes(marker: marker, session: cleanupSession)
+        }
+        app.launchArguments.append("--ui-test-ordinary-phone-signin")
+        for key in ["PHONE", "PASSWORD", "TARGET_PHONE", "TARGET_PASSWORD"] {
+            let name = "CHORAI_UI_TEST_" + key
+            app.launchEnvironment[name] = try XCTUnwrap(ProcessInfo.processInfo.environment[name])
+        }
+        let note = try createOrdinaryPhotoNote(marker: marker, session: session, proxy: proxy)
+        proxy.holdSuccessfulUpdate(asset: note.asset)
+        let suffix = " committed"
+        appendToOrdinaryPhotoNote(suffix)
+        let held = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in proxy.hasHeldResponse }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [held], timeout: 20), .completed)
+        let change = try XCTUnwrap(proxy.mutations.last { $0.path == "/api/cards/" + note.asset })
+        XCTAssertEqual(change.key, change.receipt)
+        try assertOrdinaryPhotoNote(note.asset, text: marker + suffix, session: session, proxy: proxy)
+        let committed = try XCTUnwrap(fetchSmokeCard(id: note.asset, token: session.token, sync: true).syncToken)
+        closeNewNoteEditor()
+        let other = try switchOrdinaryAccount(to: "B", proxy: proxy)
+        XCTAssertNotEqual(session.actorId, other.actorId)
+        XCTAssertTrue(proxy.verifiedFullAccess(other.actorId))
+        XCTAssertTrue(proxy.hasHeldResponse)
+        proxy.release()
+        XCTAssertThrowsError(try fetchSmokeCard(id: note.asset, token: other.token)) {
+            XCTAssertTrue([403, 404].contains(($0 as NSError).code))
+        }
+        XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", marker)).firstMatch.exists)
+        XCTAssertFalse(exists("card.home." + note.local, timeout: 1))
+        XCTAssertFalse(exists("home.card.body." + note.local, timeout: 1))
+        XCTAssertFalse(app.staticTexts["Saved on this device · Waiting to sync"].exists)
+        let returned = try switchOrdinaryAccount(to: "A", proxy: proxy)
+        cleanupSession = returned
+        XCTAssertEqual(returned.actorId, session.actorId)
+        tap("card.home." + note.local)
+        XCTAssertTrue(app.images["Inline image"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["Synced"].waitForExistence(timeout: 40))
+        XCTAssertEqual(try fetchSmokeCard(id: note.asset, token: returned.token, sync: true).syncToken, committed)
+        try assertOrdinaryPhotoNote(note.asset, text: marker + suffix, session: returned, proxy: proxy)
+        XCTAssertEqual(try fetchSmokeCards(search: marker, token: returned.token).filter { $0.content.contains(marker) }.map(\.id), [note.asset])
+        print("ORDINARY_SWITCH asset=\(note.asset) operation=\(change.key) sha256=\(change.digest.map { String(format: "%02x", $0) }.joined())")
+    }
+
+    func testRevokedSessionRelaunchReturnsToWelcome() throws {
+        let proxy = try OrdinaryGoProxy()
+        defer { proxy.stop() }
+        let session = try ordinarySession()
+        try revokeSmokeSession(token: session.token)
+        // This fresh origin has never admitted this actor.
+        try launchOrdinary(session, through: proxy)
+        waitFor("welcome.login", timeout: 30)
+        waitForSessionPhase("signed-out", timeout: 10)
+        XCTAssertFalse(proxy.verifiedFullAccess(session.actorId))
+    }
+
+    private func ordinarySession() throws -> SmokeSession {
+        let environment = ProcessInfo.processInfo.environment
+        let phone = try XCTUnwrap(environment["CHORAI_UI_TEST_PHONE"])
+        let password = try XCTUnwrap(environment["CHORAI_UI_TEST_PASSWORD"])
+        var request = URLRequest(url: try XCTUnwrap(URL(string: UITestAPIConfiguration.baseURL + "/api/auth/login")))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: ["credential_type": "phone", "phone": phone, "password": password])
+        return try ordinarySession(from: sendRawRequest(request))
+    }
+
+    private func ordinarySession(from bytes: Data) throws -> SmokeSession {
+        let data = try JSONDecoder().decode(LoginResponse.self, from: bytes).data
+        let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: bytes) as? [String: Any])
+        let payload = try XCTUnwrap(json["data"] as? [String: Any])
+        let access = try XCTUnwrap(payload["product_access"] as? [String: Any])
+        XCTAssertEqual(access["status"] as? String, "allowed")
+        XCTAssertEqual(access["scope"] as? String, "product_full")
+        return SmokeSession(token: data.token, actorId: data.user.id, email: data.user.email, username: data.user.username)
+    }
+
+    private func launchOrdinary(_ session: SmokeSession, through proxy: OrdinaryGoProxy) throws {
+        seedAppSession(session)
+        app.launchEnvironment["CHORAI_UI_TEST"] = "1"
+        app.launchEnvironment[APIEnvironment.overrideEnvironmentKey] = try proxy.start()
+        app.launch()
+        // Subsequent launches must restore the same Keychain session and disk scope.
+        for key in ["AUTH_TOKEN", "ACTOR_ID", "EMAIL", "USERNAME"] {
+            app.launchEnvironment.removeValue(forKey: "CHORAI_UI_TEST_" + key)
+        }
+    }
+
+    private func openOrdinaryLibrary() {
+        let home = waitForButton("tab.library", timeout: 30)
+        if !home.isSelected { home.tap() }
+        waitFor("screen.home.content", timeout: 20)
+    }
+
+    func testRevokedSessionRelaunchWithGrantedScopeRetainsLocalNotes() throws {
+        let proxy = try OrdinaryGoProxy()
+        defer { proxy.stop() }
+        let session = try ordinarySession()
+        let marker = "granted-" + UUID().uuidString
+        let id = try createSmokeCard(token: session.token, searchToken: marker, isPublic: false)
+        defer { if let fresh = try? ordinarySession() { permanentlyCleanUpSmokeCard(id: id, token: fresh.token) } }
+        try launchOrdinary(session, through: proxy)
+        waitForSessionPhase("verified", timeout: 30)
+        XCTAssertTrue(proxy.verifiedFullAccess(session.actorId))
+        openOrdinaryLibrary()
+        let preview = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", marker)).firstMatch
+        XCTAssertTrue(preview.waitForExistence(timeout: 25))
         app.terminate()
         try revokeSmokeSession(token: session.token)
         app.launch()
-
-        waitFor("welcome.login", timeout: 30)
-        waitForSessionPhase("signed-out", timeout: 10)
-        XCTAssertFalse(exists("screen.flow.content", timeout: 1))
+        waitForSessionPhase("needs-login", timeout: 30)
+        openOrdinaryLibrary()
+        XCTAssertTrue(preview.waitForExistence(timeout: 10))
+        preview.tap()
+        typeInCardEditorBody(" retained local edit")
+        XCTAssertTrue(app.staticTexts["Saved on this device · Sign in to sync"].waitForExistence(timeout: 15))
+        closeNewNoteEditor()
+        XCTAssertTrue(proxy.mutations.isEmpty)
+        try assertSmokeTokenUnauthorized(session.token)
     }
 
     func testOfflineSessionVerificationKeepsRestoredShell() throws {
-        let session = try requireFreshSmokeSession()
-        seedAppSession(session)
-        app.launchEnvironment["CHORAI_UI_TEST"] = "1"
-        app.launchEnvironment["CHORAI_API_BASE_URL"] = "http://127.0.0.1:1"
+        let proxy = try OrdinaryGoProxy()
+        defer { proxy.stop() }
+        let session = try ordinarySession()
+        try launchOrdinary(session, through: proxy)
+        waitForSessionPhase("verified", timeout: 30)
+        XCTAssertTrue(proxy.verifiedFullAccess(session.actorId))
+        app.terminate()
+        proxy.setOffline(true)
         app.launch()
-
-        waitFor("tab.flow", timeout: 15)
         waitForSessionPhase("degraded", timeout: 30)
-        XCTAssertTrue(exists("screen.flow.content", timeout: 2))
+        openOrdinaryLibrary()
     }
 
     func testSessionActorMismatchClearsLocalProjection() throws {
@@ -6000,7 +6230,8 @@ final class ArcNoteUITests: XCTestCase {
         launchAuthenticatedApp()
 
         waitForSessionPhase("verified", timeout: 30)
-        tap("side-menu.open")
+        waitFor("screen.flow.content", timeout: 20)
+        tapFirstHittableButton(label: "Open sidebar")
         tap("side-menu.settings")
         waitFor("screen.settings.loaded", timeout: 20)
         captureVisual("session-settings-before-logout")
@@ -6020,16 +6251,19 @@ final class ArcNoteUITests: XCTestCase {
         try assertSmokeTokenUnauthorized(session.token)
     }
 
-    func testSettingsLogoutTransportFailureKeepsRestoredSession() throws {
-        let session = try requireFreshSmokeSession()
-        seedAppSession(session)
-        app.launchEnvironment["CHORAI_UI_TEST"] = "1"
-        app.launchEnvironment["CHORAI_API_BASE_URL"] = "http://127.0.0.1:1"
+    func testOfflineLogoutClearsLocalSessionWhileRemoteTokenRemainsValid() throws {
+        let proxy = try OrdinaryGoProxy()
+        defer { proxy.stop() }
+        let session = try ordinarySession()
+        try launchOrdinary(session, through: proxy)
+        waitForSessionPhase("verified", timeout: 30)
+        XCTAssertTrue(proxy.verifiedFullAccess(session.actorId))
+        app.terminate()
+        proxy.setOffline(true)
         app.launch()
-
-        waitFor("screen.flow.content", timeout: 15)
         waitForSessionPhase("degraded", timeout: 30)
-        tap("side-menu.open")
+        openOrdinaryLibrary()
+        tapFirstHittableButton(label: "Open menu")
         tap("side-menu.settings")
         waitFor("screen.settings.loaded", timeout: 20)
         tap("settings.logout")
@@ -6038,13 +6272,16 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertTrue(confirmation.waitForExistence(timeout: 10))
         confirmation.tap()
 
-        waitFor("settings.logout.error", timeout: 15)
-        XCTAssertTrue(exists("settings.logout", timeout: 2))
-        XCTAssertFalse(exists("welcome.login", timeout: 2))
+        waitForSessionPhase("signed-out", timeout: 15)
+        waitFor("welcome.login", timeout: 15)
+        XCTAssertFalse(app.tabBars.buttons["Home"].exists)
+        app.terminate()
+        app.launch()
+        waitForSessionPhase("signed-out", timeout: 15)
         XCTAssertEqual(
             try verifySmokeToken(token: session.token).user.id,
             session.actorId,
-            "A transport failure must not revoke or discard the current session"
+            "The disconnected app could not revoke the remote token"
         )
     }
 
