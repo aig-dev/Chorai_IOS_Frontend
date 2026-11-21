@@ -121,7 +121,7 @@ ArcNoteUITests/ArcNoteUITests/testHomeRemovalKeepsLocalTrashWhenSyncIsUnavailabl
 
 **Interfaces:** 沿用现有 job/stage correlation 与 `DispatchCode` 类型，核对既有 generation/provider trace。只有现有证据确实丢失分类时才在所属边界补最小诊断；不新建诊断数据库，不记录 prompt、URL、token 或原始模型正文。
 
-- [ ] 对之前 `TEXT_PROVIDER_FAILED` 尝试关联原 job、stage、Go dispatch 和 Python provider 证据。当前只证明后续成功，尚未证明首次失败原因；若原证据不足，保留“原因未确认”。
+- [x] 对之前 `TEXT_PROVIDER_FAILED` 尝试关联原 job、stage、Go dispatch 和 Python provider 证据。已从隔离主库定位原任务、首次 text_fusion 派发及失败时间；保留日志没有对应 job correlation，首次失败原因仍未确认。见 [边界检查](../../qa/2026-11-21-prelaunch-boundaries.md)。
 - [ ] 通过受控 provider/transport 故障覆盖 unavailable、timeout、非法输出、明确拒绝、取消和调用结果未知。断言持久终态、客户端可恢复动作、晚到结果拒绝与原有调用预算，不把结果未知当成未调用自动重试。
 - [ ] 使用既有 `worker_failure_test.go`、`test_provider_wiring.py` 和 UI cancel/relaunch 用例验证分类或恢复修复；先 RED 后 GREEN。真实 gRPC 联调确认同一 job/stage 的端到端诊断，不改公开错误语义来掩盖内部问题。
 - [ ] 补真实多图来源 Merge：上传与 visual evidence 就绪 → 冻结来源版本 → 生成 → 编辑/提交 → 重启；核对媒体、来源关系和权限。文字成功路径不代表视觉路由已覆盖。

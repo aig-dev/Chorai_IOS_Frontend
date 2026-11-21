@@ -53,6 +53,7 @@ Runtime cases, synthetic measurements and limitations are recorded in [render/im
 
 ## Verification
 
+- [First-launch boundary checks](../qa/2026-11-21-prelaunch-boundaries.md): ordinary-account Home/profile/search and purge UI passed; 26 existing hosted tests passed with verified Thread Sanitizer instrumentation. Two older session UI expectations conflict with ordinary offline eligibility and remain failed pending fixture correction. Production composition, direct import bridge tests and CI remain open.
 - [Ordinary-account sync checkpoint](../qa/2026-11-21-ordinary-note-sync.md): full CoreFlow 1071 cases passed with all six actual API cases enabled and zero skips. The transient recovery case creates its own interrupted local record; it does not require a previous test run's recovery directory. Final production NOTE composition remains a separate gate.
 
 - Concurrency migration gate: `make check-concurrency`; add `IOS_DEVICE=<dedicated-simulator-UUID>` for App-hosted tests and six ordinary/Merge editor UI flows. See [Swift 6 migration validation](../qa/2026-11-20-swift6-migration-validation.md).

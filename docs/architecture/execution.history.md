@@ -1,5 +1,21 @@
 # Execution boundary history
 
+## 2026-11-21 — Ordinary session and concurrency baselines
+
+Re-ran Home lifecycle, profile/settings and search/detail with an ordinary
+account, and verified the two purge UI selectors against the updated backend.
+All five passed. The session boundary baseline retained two failures: switching
+API origin is not an outage of an already authorized environment, and token
+revocation with valid offline eligibility does not discard local notes. Actual
+app/API diagnosis confirmed both distinctions; automatic fixture correction
+remains open. No production authentication behavior was changed.
+
+The existing JPEG and network-response hosted suites passed 26 cases with
+verified Thread Sanitizer instrumentation. Four additional daily UI selectors
+also passed. Neither result completes the planned import-bridge or CI work.
+The [checkpoint](../qa/2026-11-21-prelaunch-boundaries.md) records the exact
+scope, original Merge failure evidence and remaining first-launch gates.
+
 ## 2026-11-21 — Ordinary-account purge UI checks
 
 The actual Trash uses durable local NOTE identities. Two older cloud-focused
