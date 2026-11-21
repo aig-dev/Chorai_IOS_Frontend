@@ -339,3 +339,7 @@ Corrected the cross-origin outage and no-grant revocation fixtures, verified off
 ## 2026-11-21 Recovery fixture review
 
 Replaced marker-based cleanup in the new session cases with exact creation ownership and frozen teardown commands. The test proxy observes writes before forwarding, including keyless attempts and failed transport. The updated ordinary UI selectors check the reopened photo's rendered bounds and fallback, and observe B's own synced editor before and after release of A's held response. [Fixture verification and pending live acceptance](../qa/2026-11-21-prelaunch-boundaries.md#recovery-fixture-review).
+
+## 2026-11-21 Bind the recovery fixture to its local note
+
+A valid create receipt can belong to another queued note on the same account. The ordinary recovery tests retain candidate receipts until the exact current actor, API origin and local editor ID acknowledge a matching server asset. A DEBUG readout observes the existing library under an explicit recovery-test flag. Missing ownership leaves cleanup unresolved. See [recovery fixture review](../qa/2026-11-21-prelaunch-boundaries.md#recovery-fixture-review).
