@@ -134,8 +134,8 @@ The original six defaults and historical 47-selector matrix remain unchanged.
 
 Evidence is under this plan's local SDD workspace in
 `task-1-local-gate-root/`, with `task-1-local-gate-root-summary.json` and its
-App/UI summary files. The root-held command exited zero and verified an
-unchanged source digest throughout. Its App and EditorUI xcresults remain in
+App/UI summary files. The root-held command exited zero, and the pre- and
+post-run source hashes matched. Its App and EditorUI xcresults remain in
 that directory. The preceding agent-held attempt ended without an exit marker
 or a complete UI result bundle; that attempt is retained as interrupted, with
 no claim of a full pass. Existing ordinary compiler/Xcode warnings remain
