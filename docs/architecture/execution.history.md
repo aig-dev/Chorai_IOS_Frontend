@@ -4,15 +4,27 @@
 
 Re-ran Home lifecycle, profile/settings and search/detail with an ordinary
 account, and verified the two purge UI selectors against the updated backend.
-All five passed. The session boundary baseline retained two failures: switching
-API origin is not an outage of an already authorized environment, and token
-revocation with valid offline eligibility does not discard local notes. Actual
-app/API diagnosis confirmed both distinctions; automatic fixture correction
-remains open. No production authentication behavior was changed.
+All five passed. Home verifies API-visible permanent deletion through native
+and API Trash absence and an asset 404. Five separate original requests
+returned complete cleanup receipts after restart. The session boundary
+baseline retained two failures. Changing API origin tests a different
+environment, and token revocation with valid offline eligibility retains
+local notes. App/API diagnosis confirmed both behaviors. Automatic fixture
+correction remains open.
 
-The existing JPEG and network-response hosted suites passed 26 cases with
-verified Thread Sanitizer instrumentation. Four additional daily UI selectors
-also passed. Neither result completes the planned import-bridge or CI work.
+The credential-free hosted JPEG and network-response suites passed 26 cases
+with verified Thread Sanitizer instrumentation. Four fixture-backed daily UI
+selectors also passed. Import-bridge and CI work remain open.
+
+Ordinary-account Chat passed native send and API/SSE reply and reconnect
+checks. A separate account received 403 on detail, messages and events.
+Native late-reply presentation, native reconnect and account-switch
+acceptance remain open. Onboarding passed empty-note cancellation and failed
+library-note/Flow resume. Autosave closed the editor and advanced the guide
+to Explore before explicit finish. The full sample was saved, and the timing
+bug is queued for Task 3. First-use registration and the full Spark/Merge
+loop remain open.
+
 The [checkpoint](../qa/2026-11-21-prelaunch-boundaries.md) records the exact
 scope, original Merge failure evidence and remaining first-launch gates.
 

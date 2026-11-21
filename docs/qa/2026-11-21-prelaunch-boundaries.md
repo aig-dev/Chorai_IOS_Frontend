@@ -2,11 +2,11 @@
 
 2026-11-21. App and test products are from `b78ffc2`; the actual isolated Go
 service was rebuilt from `c538df6b`, with source and binary digests recorded.
-The earlier purge UI rerun used Go `f122f19e`. These are Local, protocol 3
-checks with ordinary account A (`allowed/product_full`), not production
-enablement. The dedicated simulator is iPhone 17 Pro / iOS 26.2, with Xcode
-27.2. Swift 6 migration is already complete; the work below checks behavior
-that language-mode compilation alone cannot prove.
+The earlier purge UI rerun used Go `f122f19e`. Live integration checks used
+the Local dev environment, protocol 3 and ordinary account A
+(`allowed/product_full`). Production enablement remains open. The dedicated
+simulator is iPhone 17 Pro / iOS 26.2, with Xcode 27.2. Swift 6 migration was
+already complete before these behavior checks.
 
 Evidence is retained in `.superpowers/sdd/2026-11-20-post-swift6-integration/`.
 Credentials and request journals remain in the private task runtime directory.
@@ -22,10 +22,11 @@ zero skipped tests:
 - `ArcNoteUITests/ArcNoteUITests/testExploreTypedSearchResultTapOpensGoDetailRoute`
 
 The Home case verifies edited server content, relaunch, soft deletion, cancelled
-permanent deletion, restoration, another deletion and permanent erasure with
-the original asset returning API 404. Profile/settings verifies the actor ID;
+permanent deletion, restoration, another soft deletion and API-visible
+permanent deletion. The note disappears from native and API Trash, and the
+original asset returns API 404. Profile/settings verifies the actor ID, and
 search checks that the selected result opens the same canonical asset. These
-tests seed an authenticated session and do not validate first-use onboarding.
+tests start with a seeded authenticated session.
 
 `Purge-Ordinary-UI-Fix1.xcresult` separately passed the permanent-delete success
 and retryable-confirmation cases, zero skips. After the later backend restart,
@@ -63,17 +64,44 @@ request, and the distinct no-grant, token-revoked and account-restricted states.
 Do not weaken authorization or erase legitimate local access to satisfy the
 old fixture expectations.
 
+## Ordinary-account onboarding
+
+`Task3-Ordinary-Onboarding-Resume.xcresult` recorded one pass and one failure,
+with zero skips. `testCancellingOnboardingNoteKeepsLibraryStep` passed.
+`testCanonicalOnboardingLibraryNoteAndFlowResumeGoV1` failed. The activity
+recording shows the editor closing and the guide advancing to Explore before
+the user explicitly finishes. Autosave emits the creation callback that
+triggers this handoff. The saved note contains the full sample input. The premature handoff is a confirmed
+product bug queued for Task 3. First-use registration and the full Spark/Merge
+loop remain open.
+
+## Ordinary-account Chat send and replay
+
+`Task4-Ordinary-Chat-Send.xcresult` recorded one pass in 19.494 s with zero
+skips for `testChatConversationSendMessageAppearsInGoList`. The send used the
+actual `ACTIVE` binding for ordinary account A. The API confirmed one persisted
+input and one `AGENT_REACTIVE` reply. The single persistence-to-persistence
+sample was 47.486516 s.
+
+After the native stream disconnected, an authenticated SSE request with
+`Last-Event-ID: 17` replayed `agent.thinking` (18), `message.created` (19) and
+`agent.response_ready` (20, `succeeded`) for the exact original source. Ordinary
+account B received 403 for conversation detail, messages and events. This
+checks native send and API/SSE reply and reconnect. Native late-reply
+presentation, native reconnect and account-switch acceptance remain open.
+This run sets no latency target.
+
 ## Concurrency and daily-gate baselines
 
-`Task6-TSan-Baseline.xcresult` passed all 26 existing hosted tests in
-`CardImagePreparationTests` and `NetworkResponseExecutionTests`, zero skips,
-with no sanitizer reports. The app and hosted test binaries both link the
+The credential-free hosted run in `Task6-TSan-Baseline.xcresult` passed all 26
+existing tests in `CardImagePreparationTests` and
+`NetworkResponseExecutionTests`, with zero skips and no sanitizer reports. The app and hosted test binaries both link the
 Thread Sanitizer runtime and contain its instrumentation. This is an existing
 boundary baseline; the native import continuation, cancellation and actual
 upload-termination cases still need direct tests.
 
-`Task1-Four-UI-Baseline.xcresult` passed the four additional planned daily UI
-selectors: Merge editing/draft restoration, Home's real editor, Trash
+`Task1-Four-UI-Baseline.xcresult` passed the four additional fixture-backed
+daily UI selectors for Merge editing/draft restoration, Home's real editor, Trash
 cancel/rejection and local removal while sync is unavailable. Exact full
 selector matching was checked. The required-simulator CLI and CI workflow
 have not yet been implemented; runner availability is not established.
@@ -89,7 +117,7 @@ contains the original job correlation. This identifies the failing dispatch
 branch but does not establish whether the provider, transport or returned
 output caused it. Later successful calls do not resolve that uncertainty.
 
-The controlled provider-fault matrix, ordinary-user onboarding/Chat/multiphoto
-Merge, native import bridge tests, measured original-image I/O bounds, final
-production NOTE composition and release-device/signing checks remain open.
-These checkpoints are not a first-launch readiness declaration.
+The controlled provider-fault matrix, ordinary-account multiphoto Merge,
+native import bridge tests, measured original-image I/O bounds, final
+production NOTE composition and release-device/signing checks remain open,
+along with the onboarding and Chat acceptance work above.
