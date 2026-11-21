@@ -734,28 +734,20 @@ struct LinkData: Codable {
     let cardId: String
     let linkedCardId: String
     let createdAt: String
+    let clientRequestID: String
+    let activityID: String
+    let actionLogID: String
+    let state: String
 
     enum CodingKeys: String, CodingKey {
         case linkId = "note_link_id"
-        case sourceAssetId = "source_asset_id"
-        case targetAssetId = "target_asset_id"
+        case cardId = "source_asset_id"
+        case linkedCardId = "target_asset_id"
         case createdAt = "created_at"
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        linkId = try container.decode(String.self, forKey: .linkId)
-        cardId = try container.decode(String.self, forKey: .sourceAssetId)
-        linkedCardId = try container.decode(String.self, forKey: .targetAssetId)
-        createdAt = try container.decode(String.self, forKey: .createdAt)
-    }
-
-    func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(linkId, forKey: .linkId)
-        try container.encode(cardId, forKey: .sourceAssetId)
-        try container.encode(linkedCardId, forKey: .targetAssetId)
-        try container.encode(createdAt, forKey: .createdAt)
+        case clientRequestID = "client_request_id"
+        case activityID = "activity_id"
+        case actionLogID = "action_log_id"
+        case state
     }
 }
 

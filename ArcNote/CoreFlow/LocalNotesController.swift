@@ -174,15 +174,25 @@ final class LocalCoreCardEditingService: CoreCardEditingServing {
         try await library.imageDisplayURLs(identifier: identifier ?? "local-note:" + creationID, scope: scope)
     }
 
-    func createLink(_ link: CardEditingLink) async throws { try await cloud.createLink(serverLink(link)) }
+    func createLink(_ link: CardEditingLink) async throws -> CardEditingLink {
+        let created = try await cloud.createLink(serverLink(link))
+        return CardEditingLink(sourceCardID: link.sourceCardID, targetCardID: link.targetCardID,
+            title: link.title, noteLinkID: created.noteLinkID, previewHTML: link.previewHTML,
+            authorName: link.authorName, authorAvatarURL: link.authorAvatarURL)
+    }
     func deleteLink(_ link: CardEditingLink) async throws { try await cloud.deleteLink(serverLink(link)) }
     func fetchLinks(cardID: String) async throws -> [CardEditingLink] {
         let server = try serverID(cardID)
+        let generation = AuthManager.shared.sessionGeneration
         let links = try await cloud.fetchLinks(cardID: server)
+        guard AuthManager.shared.sessionGeneration == generation,
+              try serverID(cardID) == server else {
+            throw CardEditingError.transport(code: "cloud_unavailable")
+        }
         return links.map { link in
             CardEditingLink(sourceCardID: link.sourceCardID == server ? cardID : link.sourceCardID,
                 targetCardID: link.targetCardID == server ? cardID : link.targetCardID,
-                title: link.title, previewHTML: link.previewHTML, authorName: link.authorName, authorAvatarURL: link.authorAvatarURL)
+                title: link.title, noteLinkID: link.noteLinkID, previewHTML: link.previewHTML, authorName: link.authorName, authorAvatarURL: link.authorAvatarURL)
         }
     }
     func replaceBackground(cardID: String, image: CardEditingImage) async throws -> String {
@@ -206,7 +216,7 @@ final class LocalCoreCardEditingService: CoreCardEditingServing {
 
     private func serverLink(_ link: CardEditingLink) throws -> CardEditingLink {
         try CardEditingLink(sourceCardID: serverID(link.sourceCardID), targetCardID: serverID(link.targetCardID),
-            title: link.title, previewHTML: link.previewHTML, authorName: link.authorName, authorAvatarURL: link.authorAvatarURL)
+            title: link.title, noteLinkID: link.noteLinkID, previewHTML: link.previewHTML, authorName: link.authorName, authorAvatarURL: link.authorAvatarURL)
     }
 
     private func editorSnapshot(_ note: OfflineNote, savedDraft: CardEditingDraft) -> CardEditingSnapshot {

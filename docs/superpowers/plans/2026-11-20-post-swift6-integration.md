@@ -85,6 +85,8 @@ ArcNoteUITests/ArcNoteUITests/testHomeRemovalKeepsLocalTrashWhenSyncIsUnavailabl
 
 普通账号基线与分享缺图修复见 [2026-11-21 验收](../../qa/2026-11-21-ordinary-note-sync.md)。当前 dev protocol 3 的六项实际 API 与完整 CoreFlow 1071 项通过、零跳过；最终生产合同及生命周期接线仍未完成。
 
+后续关联切片见 [Link / 生命周期验收](../../qa/2026-11-21-link-lifecycle.md)：公开 Link / Unlink、条件删除／恢复与 iOS / Web 精确请求已接线，双向关联删除、恢复不复活、旧请求不误删新关联以及真实编辑器通过；审查修复自动保存／关联读取竞态后，完整门禁更新为 CoreFlow 1,089、编辑器 76、App 101 和六项 UI，零跳过。永久删除仍缺完整执行编排，现有 preparation / proof 组件不能等同完整 runner；擦除、Merge 来源与全部写入者生产组合保持未完成。
+
 ## Task 3 — P0：首次使用、普通账号与换号隔离
 
 **Files:** `ArcNoteUITests/ArcNoteUITests.swift`、现有 `RecentNotesSyncUITests.swift` 夹具；复用 `ArcNoteTests/AuthNoteAccessTests.swift` 与 CoreFlow access/offline 测试。必要修复仍归 `AuthManager`、`LocalNotesController`、`NoteSyncCoordinator`。

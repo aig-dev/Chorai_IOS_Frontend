@@ -47,6 +47,12 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
         completed = true
         client?.urlProtocolDidFinishLoading(self)
     }
+    func fail(_ error: URLError) {
+        stateLock.lock(); defer { stateLock.unlock() }
+        guard !stopped, !completed else { return }
+        completed = true
+        client?.urlProtocol(self, didFailWithError: error)
+    }
 }
 
 final class HTTPFixture: Sendable {
@@ -55,6 +61,8 @@ final class HTTPFixture: Sendable {
     private let requests = OSAllocatedUnfairLock(initialState: [StubURLProtocol]())
     var baseURL: String { "https://" + host }
     var count: Int { requests.withLock { $0.count } }
+    func request(at index: Int = 0) -> URLRequest { requests.withLock { $0[index].request } }
+    func fail(at index: Int = 0) { requests.withLock { $0[index] }.fail(URLError(.networkConnectionLost)) }
 
     init(onStart: @escaping @Sendable () -> Void = {}, onStop: @escaping @Sendable () -> Void = {}) {
         let configuration = URLSessionConfiguration.ephemeral

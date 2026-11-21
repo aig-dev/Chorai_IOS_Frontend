@@ -67,7 +67,7 @@ final class LinkPopupSelectionSourceContractTests: XCTestCase {
             canonicalBranch.range(of: "NetworkManager.shared.createCardLink")
         )
         let success = try XCTUnwrap(
-            canonicalBranch.range(of: "if response.success")
+            canonicalBranch.range(of: "guard response.success else")
         )
         let callback = try XCTUnwrap(
             canonicalBranch.range(of: "selectionCallback?(linkItem)")
@@ -78,20 +78,20 @@ final class LinkPopupSelectionSourceContractTests: XCTestCase {
         let transportFailure = try XCTUnwrap(
             Self.slice(
                 canonicalBranch,
-                from: "if case .failure(let error) = completion",
-                through: "receiveValue:"
+                from: "} catch {",
+                through: "self.showErrorAlert = true"
             )
         )
-        XCTAssertFalse(transportFailure.contains("onCardSelected"))
+        XCTAssertFalse(transportFailure.contains("selectionCallback"))
 
         let rejectedResponse = try XCTUnwrap(
             Self.slice(
                 canonicalBranch,
-                from: "} else {\n                            print(\"失败:",
-                through: "self.showErrorAlert = true\n                        }"
+                from: "guard response.success else",
+                through: "return"
             )
         )
-        XCTAssertFalse(rejectedResponse.contains("onCardSelected"))
+        XCTAssertFalse(rejectedResponse.contains("selectionCallback"))
     }
 
     private static func linkPopupSource() throws -> String {

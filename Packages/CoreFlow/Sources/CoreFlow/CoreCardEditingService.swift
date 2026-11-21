@@ -11,7 +11,7 @@ public protocol CoreCardEditingServing: Sendable {
         draft: CardEditingDraft
     ) async throws -> CardEditingSnapshot
 
-    func createLink(_ link: CardEditingLink) async throws
+    func createLink(_ link: CardEditingLink) async throws -> CardEditingLink
     func deleteLink(_ link: CardEditingLink) async throws
     func fetchLinks(cardID: String) async throws -> [CardEditingLink]
 

@@ -1,10 +1,157 @@
 import XCTest
 import Combine
 import Alamofire
+import CoreFlow
+import os
 @testable import ArcNote
 
 @MainActor
 final class NetworkResponseExecutionTests: XCTestCase {
+    private func prepareLinkAuth() {
+        let auth = AuthManager.shared
+        let previousUser = auth.currentUser
+        let previousToken = auth.authToken
+        let previousAccess = auth.accessState
+        let wasVerified = auth.canEnterProduct
+        addTeardownBlock {
+            await MainActor.run {
+                if wasVerified, let user = previousUser, let token = previousToken, let access = previousAccess {
+                    auth.saveUserSession(AuthResponse(success: true, message: nil, data: AuthResponseData(
+                        token: token, user: user, isNewUser: false, productAccess: access)))
+                } else if let user = previousUser, let token = previousToken {
+                    auth.installUITestSession(token: token, actorID: user.id, email: user.email, username: user.username, createdAt: user.createdAt)
+                } else {
+                    auth.invalidateLocalSession()
+                }
+                auth.applyAccess(previousAccess ?? AccessState(mode: "", status: "", scope: nil, reasonCode: nil))
+            }
+        }
+        auth.saveUserSession(AuthResponse(success: true, message: nil, data: AuthResponseData(
+            token: "synthetic-link-token",
+            user: User(id: "link_actor", username: "Link", email: "link@fixture.invalid",
+                       avatar: nil, bio: nil, credit: 0, createdAt: "2026-11-21T00:00:00Z"),
+            isNewUser: false,
+            productAccess: AccessState(mode: "private_beta", status: "allowed", scope: "product_full", reasonCode: nil))))
+        XCTAssertTrue(auth.canEnterProduct)
+    }
+
+    private func linkJournalDirectory() -> URL {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        addTeardownBlock { try? FileManager.default.removeItem(at: root) }
+        return root
+    }
+
+    private func linkReceipt(_ key: String) -> String {
+        #"{"success":true,"data":{"note_link_id":"exact_link","source_asset_id":"source","target_asset_id":"target","created_at":"2026-11-21T00:00:00Z","state":"ACTIVE","client_request_id":"\#(key)","activity_id":"original_activity","action_log_id":"original_log"}}"#
+    }
+
+    func testLinkLostAckAndMismatchedSuccessRetainTheExactRequestAcrossReopen() async throws {
+        prepareLinkAuth()
+        let starts = (0..<3).map { expectation(description: "link request \($0)") }
+        let next = OSAllocatedUnfairLock(initialState: 0)
+        let fixture = HTTPFixture(onStart: {
+            let index = next.withLock { value in defer { value += 1 }; return value }
+            if index < starts.count { starts[index].fulfill() }
+        })
+        let root = linkJournalDirectory()
+        var originalKey: String?
+        for index in 0..<3 {
+            let network = NetworkManager(baseURL: fixture.baseURL, session: fixture.session,
+                linkWriteJournal: NoteLinkWriteJournal(directory: root))
+            network.setAuthToken("synthetic-link-token")
+            let operation = Task { try await network.createCardLink(cardId: "source", reques: LinkRequest(linkedCardId: "target")) }
+            await fulfillment(of: [starts[index]], timeout: 5)
+            guard fixture.count > index else {
+                operation.cancel()
+                _ = try await operation.value
+                throw URLError(.timedOut)
+            }
+            let key = try XCTUnwrap(fixture.request(at: index).value(forHTTPHeaderField: "Idempotency-Key"))
+            if let originalKey { XCTAssertEqual(key, originalKey) } else { originalKey = key }
+            if index == 0 { fixture.fail(at: index) }
+            else { fixture.respond(linkReceipt(index == 1 ? "wrong_key" : key), status: 201, at: index) }
+            if index < 2 {
+                do { _ = try await operation.value; XCTFail("An unconfirmed receipt must retain the request") } catch {}
+            } else {
+                let value = try await operation.value
+                XCTAssertEqual(value.data.linkId, "exact_link")
+            }
+        }
+        let nextAttempt = try await NoteLinkWriteJournal(directory: root).begin(apiBaseURL: fixture.baseURL, actorID: "link_actor", operation: .link, sourceID: "source", targetID: "target")
+        XCTAssertNotEqual(nextAttempt.requestID, originalKey)
+    }
+
+    func testLinkAccountChangeRejectsLateReceiptWithoutClearingOriginalPendingRequest() async throws {
+        prepareLinkAuth()
+        let started = expectation(description: "link request")
+        let fixture = HTTPFixture(onStart: { started.fulfill() })
+        let root = linkJournalDirectory()
+        let network = NetworkManager(baseURL: fixture.baseURL, session: fixture.session,
+            linkWriteJournal: NoteLinkWriteJournal(directory: root))
+        network.setAuthToken("synthetic-link-token")
+        let operation = Task { try await network.createCardLink(cardId: "source", reques: LinkRequest(linkedCardId: "target")) }
+        await fulfillment(of: [started], timeout: 5)
+        guard fixture.count > 0 else {
+            operation.cancel()
+            _ = try await operation.value
+            throw URLError(.timedOut)
+        }
+        let key = try XCTUnwrap(fixture.request().value(forHTTPHeaderField: "Idempotency-Key"))
+        AuthManager.shared.installUITestSession(token: "other-token", actorID: "other_actor", email: "other@fixture.invalid", username: "Other", createdAt: "2026-11-21T00:00:00Z")
+        fixture.respond(linkReceipt(key), status: 201)
+        do { _ = try await operation.value; XCTFail("The previous account cannot deliver into the new session") }
+        catch is CancellationError {} catch { XCTFail("Expected session cancellation, got \(error)") }
+        let retained = try await NoteLinkWriteJournal(directory: root).begin(apiBaseURL: fixture.baseURL, actorID: "link_actor", operation: .link, sourceID: "source", targetID: "target")
+        XCTAssertEqual(retained.requestID, key)
+    }
+
+    func testUnlinkLostAckResolvesOriginalIdentityBeforeTheReplacement() async throws {
+        prepareLinkAuth()
+        let starts = (0..<3).map { expectation(description: "unlink request \($0)") }
+        let next = OSAllocatedUnfairLock(initialState: 0)
+        let fixture = HTTPFixture(onStart: {
+            let index = next.withLock { value in defer { value += 1 }; return value }
+            if index < starts.count { starts[index].fulfill() }
+        })
+        let root = linkJournalDirectory()
+        var originalKey: String?
+        for index in 0..<3 {
+            let network = NetworkManager(baseURL: fixture.baseURL, session: fixture.session,
+                linkWriteJournal: NoteLinkWriteJournal(directory: root))
+            network.setAuthToken("synthetic-link-token")
+            let operation = Task { try await network.deleteCardLink(cardId: "source", linkedCardId: "target",
+                noteLinkID: index == 0 ? "old_link" : "replacement") }
+            await fulfillment(of: [starts[index]], timeout: 5)
+            guard fixture.count > index else {
+                operation.cancel()
+                _ = try await operation.value
+                throw URLError(.timedOut)
+            }
+            let request = fixture.request(at: index)
+            let key = try XCTUnwrap(request.value(forHTTPHeaderField: "Idempotency-Key"))
+            let exact = try XCTUnwrap(URLComponents(url: try XCTUnwrap(request.url), resolvingAgainstBaseURL: false)?
+                .queryItems?.first(where: { $0.name == "note_link_id" })?.value)
+            XCTAssertEqual(request.httpMethod, "DELETE")
+            XCTAssertEqual(exact, index < 2 ? "old_link" : "replacement")
+            if index == 0 { originalKey = key; fixture.fail(at: index) }
+            else {
+                fixture.respond(#"{"success":true,"data":{"note_link_id":"\#(exact)","source_asset_id":"source","target_asset_id":"target","removed":true,"client_request_id":"\#(key)","activity_id":"original_activity","action_log_id":"original_log"}}"#, at: index)
+            }
+            if index < 2 {
+                XCTAssertEqual(key, originalKey)
+                do { _ = try await operation.value; XCTFail("A recovered old unlink cannot acknowledge the replacement") }
+                catch let error as NetworkError where index == 1 {
+                    guard case .api(_, let code, _) = error else { return XCTFail("Expected recovery result") }
+                    XCTAssertEqual(code, "link_previous_request_recovered")
+                } catch { if index == 1 { XCTFail("Unexpected recovery result: \(error)") } }
+            } else {
+                XCTAssertNotEqual(key, originalKey)
+                let response = try await operation.value
+                XCTAssertEqual(response.data?.noteLinkID, "replacement")
+            }
+        }
+    }
+
     func testCurrentImportContractDecodesWithoutRetiredSoulFields() throws {
         // Current Go DTO: recovery identity, file lifecycle, and RFC3339 dates.
         let summary = #"{"job_id":"job_live","client_request_id":"req_live","status":"running","total_files":2,"imported_count":0,"updated_count":0,"skipped_count":0,"failed_count":0,"created_at":"2026-11-20T16:35:00.123456Z"}"#

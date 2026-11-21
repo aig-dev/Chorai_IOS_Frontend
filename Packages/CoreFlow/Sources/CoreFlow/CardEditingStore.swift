@@ -43,9 +43,36 @@ public final class CardEditingStore: ObservableObject {
         let retryOperation: RetryOperation?
     }
 
+    private enum RelatedLinkMutation {
+        case created(CardEditingLink)
+        case removed(CardEditingLink)
+
+        func apply(to links: inout [CardEditingLink]) {
+            switch self {
+            case let .created(link):
+                if !links.contains(where: { Self.sameIdentity($0, link) }) {
+                    links.append(link)
+                }
+            case let .removed(link):
+                links.removeAll { Self.sameIdentity($0, link) }
+            }
+        }
+
+        private static func sameIdentity(_ lhs: CardEditingLink, _ rhs: CardEditingLink) -> Bool {
+            if let lhsID = lhs.noteLinkID, let rhsID = rhs.noteLinkID { return lhsID == rhsID }
+            return lhs == rhs
+        }
+    }
+
+    private struct RelatedLinksRead {
+        let id = UUID()
+        var acknowledgedMutations: [RelatedLinkMutation] = []
+    }
+
     private let service: any CoreCardEditingServing
     private let preservesLocalDrafts: Bool
     private var stateGeneration = 0
+    private var relatedLinksRead: RelatedLinksRead?
     private var activeOperationID: UUID?
     private var failureContext: FailureContext?
 
@@ -100,6 +127,7 @@ public final class CardEditingStore: ObservableObject {
     ) {
         let operationIsActive = activeOperationID != nil
         stateGeneration += 1
+        relatedLinksRead = nil
         let revision = bodyRevision ?? self.bodyRevision
         self.draft = draft
         self.bodyRevision = revision
@@ -126,7 +154,32 @@ public final class CardEditingStore: ObservableObject {
     }
 
     public func replaceLinks(_ links: [CardEditingLink]) {
+        relatedLinksRead = nil
         self.links = links
+    }
+
+    @discardableResult
+    public func loadRelatedLinks() async -> Bool {
+        guard let cardID else { return false }
+        do { return try await fetchRelatedLinks(cardID: cardID) }
+        catch { return false }
+    }
+
+    private func fetchRelatedLinks(cardID: String) async throws -> Bool {
+        let read = RelatedLinksRead()
+        relatedLinksRead = read
+        defer {
+            if relatedLinksRead?.id == read.id { relatedLinksRead = nil }
+        }
+        var loaded = try await service.fetchLinks(cardID: cardID)
+        guard !Task.isCancelled, self.cardID == cardID,
+              let current = relatedLinksRead, current.id == read.id else { return false }
+        // Keep the complete snapshot and every write acknowledged while it
+        // was in flight. Discarding the read loses unrelated existing links;
+        // publishing it unchanged could revive a link already removed.
+        for mutation in current.acknowledgedMutations { mutation.apply(to: &loaded) }
+        links = loaded
+        return true
     }
 
     @discardableResult
@@ -327,7 +380,10 @@ public final class CardEditingStore: ObservableObject {
 
         phase = .linking
         do {
-            links = try await service.fetchLinks(cardID: cardID)
+            guard try await fetchRelatedLinks(cardID: cardID) else {
+                phase = .failed(retainedFailure.error)
+                return false
+            }
             clearFailure()
             phase = .ready
             return true
@@ -352,10 +408,8 @@ public final class CardEditingStore: ObservableObject {
         clearFailure()
         phase = .linking
         do {
-            try await service.createLink(link)
-            if !links.contains(link) {
-                links.append(link)
-            }
+            let created = try await service.createLink(link)
+            applyAcknowledgedRelatedLinkMutation(.created(created))
             phase = .ready
             return true
         } catch {
@@ -382,10 +436,7 @@ public final class CardEditingStore: ObservableObject {
         phase = .linking
         do {
             try await service.deleteLink(link)
-            links.removeAll {
-                $0.sourceCardID == link.sourceCardID
-                    && $0.targetCardID == link.targetCardID
-            }
+            applyAcknowledgedRelatedLinkMutation(.removed(link))
             phase = .ready
             return true
         } catch {
@@ -418,6 +469,11 @@ public final class CardEditingStore: ObservableObject {
         case .idle, .ready, .failed:
             return false
         }
+    }
+
+    private func applyAcknowledgedRelatedLinkMutation(_ mutation: RelatedLinkMutation) {
+        mutation.apply(to: &links)
+        relatedLinksRead?.acknowledgedMutations.append(mutation)
     }
 
     private func beginOperation() -> UUID? {

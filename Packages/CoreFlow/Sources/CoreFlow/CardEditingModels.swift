@@ -285,6 +285,7 @@ public struct CardEditingSnapshot: Equatable, Sendable {
 public struct CardEditingLink: Equatable, Sendable {
     public let sourceCardID: String
     public let targetCardID: String
+    public let noteLinkID: String?
     public let title: String
     public let previewHTML: String?
     public let authorName: String?
@@ -294,12 +295,14 @@ public struct CardEditingLink: Equatable, Sendable {
         sourceCardID: String,
         targetCardID: String,
         title: String,
+        noteLinkID: String? = nil,
         previewHTML: String? = nil,
         authorName: String? = nil,
         authorAvatarURL: String? = nil
     ) {
         self.sourceCardID = sourceCardID
         self.targetCardID = targetCardID
+        self.noteLinkID = noteLinkID
         self.title = title
         self.previewHTML = previewHTML
         self.authorName = authorName

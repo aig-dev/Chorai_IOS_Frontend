@@ -4,6 +4,187 @@ import XCTest
 
 @MainActor
 final class CardEditingStoreTests: XCTestCase {
+    func testRelationshipHydrationSurvivesBodyAutosaveBeforeAndAfterItsResponse() async {
+        for saveCompletesFirst in [true, false] {
+            let service = MockCardEditingService()
+            let linksGate = AsyncGate()
+            let saveGate = AsyncGate()
+            service.fetchLinksGate = linksGate
+            service.updateGate = saveGate
+            let link = CardEditingLink(sourceCardID: "ast_1", targetCardID: "ast_2", title: "Related", noteLinkID: "link_1")
+            service.fetchLinksResults = [.success([link])]
+            service.updateResults = [.success(snapshot(id: "ast_1", title: nil, content: "After", tags: []))]
+            let store = CardEditingStore(cardID: "ast_1", draft: .init(title: nil, content: "Before", tags: [], isPublic: false), backgroundMediaRef: nil, links: [], service: service)
+            let read = Task { await store.loadRelatedLinks() }
+            await waitForStore { service.fetchLinksRequests.count == 1 }
+            store.updateDraft(.init(title: nil, content: "After", tags: [], isPublic: false))
+            let save = Task { await store.save() }
+            await waitForStore { service.updateRequests.count == 1 }
+            if saveCompletesFirst {
+                await saveGate.open()
+                let saved = await save.value
+                XCTAssertTrue(saved)
+            }
+            await linksGate.open()
+            let loaded = await read.value
+            XCTAssertTrue(loaded, "Body autosave must not discard existing relationships")
+            XCTAssertEqual(store.links, [link])
+            XCTAssertEqual(store.draft.content, "After")
+            if !saveCompletesFirst {
+                XCTAssertEqual(store.phase, .saving, "Related reads must not finish an active body save")
+                await saveGate.open()
+                let saved = await save.value
+                XCTAssertTrue(saved)
+            }
+            XCTAssertFalse(store.isDirty)
+        }
+    }
+
+    func testRelationshipReadDuringBodySaveDoesNotInvalidateItsCompletion() async {
+        let service = MockCardEditingService()
+        let saveGate = AsyncGate()
+        service.updateGate = saveGate
+        let link = CardEditingLink(sourceCardID: "ast_1", targetCardID: "ast_2", title: "Related", noteLinkID: "link_1")
+        service.fetchLinksResults = [.success([link])]
+        service.updateResults = [.success(snapshot(id: "ast_1", title: nil, content: "After", tags: []))]
+        let store = CardEditingStore(cardID: "ast_1", draft: .init(title: nil, content: "Before", tags: [], isPublic: false), backgroundMediaRef: nil, links: [], service: service)
+        store.updateDraft(.init(title: nil, content: "After", tags: [], isPublic: false))
+        let save = Task { await store.save() }
+        await waitForStore { service.updateRequests.count == 1 }
+        let loaded = await store.loadRelatedLinks()
+        XCTAssertTrue(loaded)
+        XCTAssertEqual(store.links, [link])
+        XCTAssertEqual(store.phase, .saving)
+        await saveGate.open()
+        let saved = await save.value
+        XCTAssertTrue(saved)
+        XCTAssertFalse(store.isDirty)
+    }
+
+    func testRelationshipHydrationPreservesDraftAndExactIdentity() async {
+        let service = MockCardEditingService()
+        let link = CardEditingLink(sourceCardID: "ast_1", targetCardID: "ast_2", title: "Related", noteLinkID: "link_1")
+        service.fetchLinksResults = [.success([link])]
+        let store = CardEditingStore(cardID: "ast_1", draft: .init(title: nil, content: "Draft", tags: [], isPublic: false), backgroundMediaRef: nil, links: [], service: service)
+        let loaded = await store.loadRelatedLinks()
+        XCTAssertTrue(loaded)
+        XCTAssertEqual(store.links, [link])
+        XCTAssertEqual(store.draft.content, "Draft")
+    }
+
+    func testDelayedRelationshipReadKeepsOtherLinksAndAcknowledgedChanges() async {
+        for removeAgain in [false, true] {
+            let service = MockCardEditingService()
+            let gate = AsyncGate()
+            service.fetchLinksGate = gate
+            let existing = CardEditingLink(sourceCardID: "ast_1", targetCardID: "ast_existing", title: "Existing", noteLinkID: "existing")
+            let added = CardEditingLink(sourceCardID: "ast_1", targetCardID: "ast_new", title: "Added", noteLinkID: "added")
+            // The server read can finish before create or between create/delete,
+            // while its delivery remains blocked until both ACKs were observed.
+            service.fetchLinksResults = [.success(removeAgain ? [existing, added] : [existing])]
+            service.createLinkResults = [.success(())]
+            service.deleteLinkResults = [.success(())]
+            let store = CardEditingStore(cardID: "ast_1", draft: .init(title: nil, content: "Draft", tags: [], isPublic: false), backgroundMediaRef: nil, links: [], service: service)
+            let read = Task { await store.loadRelatedLinks() }
+            await waitForStore { service.fetchLinksRequests.count == 1 }
+            let created = await store.createLink(added)
+            XCTAssertTrue(created)
+            if removeAgain {
+                let removed = await store.deleteLink(added)
+                XCTAssertTrue(removed)
+            }
+            await gate.open()
+            let loaded = await read.value
+            XCTAssertTrue(loaded)
+            XCTAssertEqual(store.links, removeAgain ? [existing] : [existing, added])
+            XCTAssertEqual(service.fetchLinksRequests.count, 1)
+        }
+    }
+
+    func testRelatedReadThatObservesUnacknowledgedCreateDoesNotDuplicateItsIdentity() async {
+        let service = MockCardEditingService()
+        let gate = AsyncGate()
+        service.createLinkGate = gate
+        let command = CardEditingLink(sourceCardID: "ast_1", targetCardID: "ast_2", title: "Picker title", noteLinkID: "same-id")
+        let fetched = CardEditingLink(sourceCardID: "ast_1", targetCardID: "ast_2", title: "Canonical title", noteLinkID: "same-id")
+        service.createLinkResults = [.success(())]
+        service.fetchLinksResults = [.success([fetched])]
+        let store = CardEditingStore(cardID: "ast_1", draft: .init(title: nil, content: "Draft", tags: [], isPublic: false), backgroundMediaRef: nil, links: [], service: service)
+        let create = Task { await store.createLink(command) }
+        await waitForStore { service.createLinkRequests.count == 1 }
+        let loaded = await store.loadRelatedLinks()
+        XCTAssertTrue(loaded)
+        XCTAssertEqual(store.phase, .linking)
+        await gate.open()
+        let created = await create.value
+        XCTAssertTrue(created)
+        XCTAssertEqual(store.links, [fetched], "One association ID remains one row even if preview metadata differs")
+    }
+
+    func testDelayedRelationshipReadCannotReplaceExplicitHydrationOrReplacement() async {
+        for hydrateBody in [true, false] {
+            let service = MockCardEditingService()
+            let gate = AsyncGate()
+            service.fetchLinksGate = gate
+            service.fetchLinksResults = [.success([])]
+            let current = CardEditingLink(sourceCardID: "ast_1", targetCardID: "ast_2", title: "Current", noteLinkID: "current")
+            let draft = CardEditingDraft(title: nil, content: "Current draft", tags: [], isPublic: false)
+            let store = CardEditingStore(cardID: "ast_1", draft: draft, backgroundMediaRef: nil, links: [], service: service)
+            let read = Task { await store.loadRelatedLinks() }
+            await waitForStore { service.fetchLinksRequests.count == 1 }
+            if hydrateBody {
+                store.hydrate(draft: draft, backgroundMediaRef: nil, links: [current])
+            } else {
+                store.replaceLinks([current])
+            }
+            await gate.open()
+            let loaded = await read.value
+            XCTAssertFalse(loaded)
+            XCTAssertEqual(store.links, [current])
+            XCTAssertEqual(store.draft, draft)
+        }
+    }
+
+    func testLateRelationshipHydrationCannotEraseNewLinkOrRestoreDeletedLink() async {
+        for creating in [true, false] {
+            let service = MockCardEditingService()
+            let gate = AsyncGate()
+            service.fetchLinksGate = gate
+            let link = CardEditingLink(sourceCardID: "ast_1", targetCardID: "ast_2", title: "Related", noteLinkID: "link_1")
+            service.fetchLinksResults = [.success(creating ? [] : [link])]
+            service.createLinkResults = [.success(())]
+            service.deleteLinkResults = [.success(())]
+            let store = CardEditingStore(cardID: "ast_1", draft: .init(title: nil, content: "Draft", tags: [], isPublic: false), backgroundMediaRef: nil, links: creating ? [] : [link], service: service)
+            let read = Task { await store.loadRelatedLinks() }
+            await waitForStore { service.fetchLinksRequests.count == 1 }
+            let changed = creating ? await store.createLink(link) : await store.deleteLink(link)
+            XCTAssertTrue(changed)
+            await gate.open()
+            let accepted = await read.value
+            XCTAssertTrue(accepted, "The snapshot retains acknowledged exact-instance changes")
+            XCTAssertEqual(store.links, creating ? [link] : [])
+        }
+    }
+
+    func testLateRelationshipHydrationCannotReplaceNewerHydration() async {
+        let service = MockCardEditingService()
+        let gate = AsyncGate()
+        service.fetchLinksGate = gate
+        let old = CardEditingLink(sourceCardID: "ast_1", targetCardID: "ast_2", title: "Old", noteLinkID: "old")
+        let current = CardEditingLink(sourceCardID: "ast_1", targetCardID: "ast_2", title: "New", noteLinkID: "new")
+        service.fetchLinksResults = [.success([old]), .success([current])]
+        let store = CardEditingStore(cardID: "ast_1", draft: .init(title: nil, content: "Draft", tags: [], isPublic: false), backgroundMediaRef: nil, links: [], service: service)
+        let first = Task { await store.loadRelatedLinks() }
+        await waitForStore { service.fetchLinksRequests.count == 1 }
+        service.fetchLinksGate = nil
+        let second = await store.loadRelatedLinks()
+        XCTAssertTrue(second)
+        await gate.open()
+        let accepted = await first.value
+        XCTAssertFalse(accepted)
+        XCTAssertEqual(store.links, [current])
+    }
+
     func testNewNoteSaveCreatesCanonicalCardOnce() async {
         let service = MockCardEditingService()
         let draft = CardEditingDraft(
@@ -1841,6 +2022,29 @@ final class CardEditingStoreTests: XCTestCase {
         XCTAssertTrue(service.createRequests.isEmpty)
     }
 
+    func testCreateLinkRetainsTheServerAssociationIdentity() async {
+        let draft = CardEditingLink(sourceCardID: "ast_1", targetCardID: "ast_2", title: "Related")
+        let created = CardEditingLink(sourceCardID: "ast_1", targetCardID: "ast_2", title: "Related", noteLinkID: "server_link")
+        let service = MockCardEditingService()
+        service.createLinkResults = [.success(())]
+        service.createdLink = created
+        let store = CardEditingStore(cardID: "ast_1", draft: .init(title: nil, content: "Body", tags: [], isPublic: false), backgroundMediaRef: nil, links: [], service: service)
+        let succeeded = await store.createLink(draft)
+        XCTAssertTrue(succeeded)
+        XCTAssertEqual(store.links, [created])
+    }
+
+    func testDeleteLinkReceiptOnlyRemovesTheExactAssociation() async {
+        let old = CardEditingLink(sourceCardID: "ast_1", targetCardID: "ast_2", title: "Old", noteLinkID: "old_link")
+        let replacement = CardEditingLink(sourceCardID: "ast_1", targetCardID: "ast_2", title: "New", noteLinkID: "new_link")
+        let service = MockCardEditingService()
+        service.deleteLinkResults = [.success(())]
+        let store = CardEditingStore(cardID: "ast_1", draft: .init(title: nil, content: "Body", tags: [], isPublic: false), backgroundMediaRef: nil, links: [old, replacement], service: service)
+        let succeeded = await store.deleteLink(old)
+        XCTAssertTrue(succeeded)
+        XCTAssertEqual(store.links, [replacement])
+    }
+
     func testDeleteLinkFailureRetainsLinkUntilCanonicalSuccess() async {
         let link = CardEditingLink(
             sourceCardID: "ast_1",
@@ -2461,6 +2665,7 @@ private final class MockCardEditingService: CoreCardEditingServing, @unchecked S
     var createGate: AsyncGate?
     var updateGate: AsyncGate?
     var createLinkGate: AsyncGate?
+    var fetchLinksGate: AsyncGate?
     var replaceBackgroundGate: AsyncGate?
 
     private(set) var events: [Event] = []
@@ -2497,7 +2702,9 @@ private final class MockCardEditingService: CoreCardEditingServing, @unchecked S
         return try updateResults.removeFirst().get()
     }
 
-    func createLink(_ link: CardEditingLink) async throws {
+    var createdLink: CardEditingLink?
+
+    func createLink(_ link: CardEditingLink) async throws -> CardEditingLink {
         createLinkRequests.append(link)
         events.append(
             .createLink(
@@ -2509,6 +2716,7 @@ private final class MockCardEditingService: CoreCardEditingServing, @unchecked S
             await createLinkGate.wait()
         }
         try createLinkResults.removeFirst().get()
+        return createdLink ?? link
     }
 
     func deleteLink(_ link: CardEditingLink) async throws {
@@ -2524,7 +2732,9 @@ private final class MockCardEditingService: CoreCardEditingServing, @unchecked S
 
     func fetchLinks(cardID: String) async throws -> [CardEditingLink] {
         fetchLinksRequests.append(cardID)
-        return try fetchLinksResults.removeFirst().get()
+        let result = fetchLinksResults.removeFirst()
+        if let fetchLinksGate { await fetchLinksGate.wait() }
+        return try result.get()
     }
 
     func replaceBackground(

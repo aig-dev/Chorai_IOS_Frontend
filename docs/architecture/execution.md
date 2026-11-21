@@ -264,3 +264,11 @@ Comment session invalidation closes an active read synchronously and invalidates
 its outstanding response. An unopened/already closed comment store does not publish
 an unchanged idle state during session restoration; this prevents nested SwiftUI
 publication when a view first resolves the authentication owner.
+
+## Link request recovery — implementation in progress
+
+First-launch Link/Unlink uses one retained request identity per account, API environment, action and endpoint pair. The client writes the frozen command before sending it, retains it through timeout/relaunch, and removes only the exact attempt acknowledged by a matching server receipt. Unlink preserves the read-time `note_link_id`; a recovered older unlink cannot remove a replacement association. A separate serial actor performs this small file journal off MainActor, reusing the same NetworkManager session and its async transport. This is a pending-command record, not a second note/body synchronization queue.
+
+Both editor and popup callers use this path. Before transmission and after suspension, current account/environment ownership must still match. A stored older command is resolved first; if it differs from the visible unlink or the original create is already ended, refresh/retry is required before a new intent. Existing automatic favorite/like behavior remains server-owned.
+
+Related links load through the existing CardEditingStore after local body hydration establishes its identity. Each in-flight read has its own identity and records only relationship mutations acknowledged during that read. A returned complete list applies those exact-ID changes, preserving other existing links without an extra request; body autosave neither retires that read nor has its completion retired by it. A newer read, hydrate or explicit replacement retires the older read. The local service also rechecks account generation and the local-to-server mapping after suspension. This closes reproduced hydration and autosave races. Ordinary-account unlink/reopen and new-note/link simulator flows passed; [evidence and remaining launch scope](../qa/2026-11-21-link-lifecycle.md). The authoritative API/lifecycle design is in the Go assets module.

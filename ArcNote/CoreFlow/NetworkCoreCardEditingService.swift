@@ -97,18 +97,17 @@ struct NetworkCoreCardEditingService: CoreCardEditingServing, Sendable {
         }
     }
 
-    func createLink(_ link: CardEditingLink) async throws {
+    func createLink(_ link: CardEditingLink) async throws -> CardEditingLink {
         do {
-            let response = try await firstValue(
-                network.createCardLink(
-                    cardId: link.sourceCardID,
-                    reques: LinkRequest(linkedCardId: link.targetCardID),
-                    presentsError: false
-                )
+            let response = try await network.createCardLink(
+                cardId: link.sourceCardID, reques: LinkRequest(linkedCardId: link.targetCardID), presentsError: false
             )
             guard response.success else {
                 throw CardEditingError.transport(code: "card_link_rejected")
             }
+            return CardEditingLink(sourceCardID: response.data.cardId, targetCardID: response.data.linkedCardId,
+                title: link.title, noteLinkID: response.data.linkId, previewHTML: link.previewHTML,
+                authorName: link.authorName, authorAvatarURL: link.authorAvatarURL)
         } catch {
             throw Self.mapError(error)
         }
@@ -116,11 +115,11 @@ struct NetworkCoreCardEditingService: CoreCardEditingServing, Sendable {
 
     func deleteLink(_ link: CardEditingLink) async throws {
         do {
-            let response = try await firstValue(
-                network.deleteCardLink(
-                    cardId: link.sourceCardID,
-                    linkedCardId: link.targetCardID
-                )
+            guard let noteLinkID = link.noteLinkID, !noteLinkID.isEmpty else {
+                throw CardEditingError.transport(code: "card_link_identity_missing")
+            }
+            let response = try await network.deleteCardLink(
+                cardId: link.sourceCardID, linkedCardId: link.targetCardID, noteLinkID: noteLinkID
             )
             guard response.success, response.data?.removed == true else {
                 throw CardEditingError.transport(code: "card_unlink_rejected")
@@ -147,6 +146,7 @@ struct NetworkCoreCardEditingService: CoreCardEditingServing, Sendable {
                     sourceCardID: item.sourceAssetId,
                     targetCardID: item.targetAssetId,
                     title: item.title ?? "Related note",
+                    noteLinkID: item.linkId,
                     previewHTML: item.content,
                     authorName: item.author?.userName,
                     authorAvatarURL: item.author?.avatar

@@ -51,7 +51,7 @@ final class LinkPopupManager: ObservableObject {
     private var presentationMode: LinkPopupPresentationMode = .createLink
     private var onNavigate: (@MainActor @Sendable (CardNavigationRoute) -> Void)?
     private var presentationID = UUID()
-    private var linkRequestCancellable: AnyCancellable?
+    private var linkRequestTask: Task<Void, Never>?
     private var searchRequestID = UUID()
     private var searchRequestCancellable: AnyCancellable?
 
@@ -74,8 +74,8 @@ final class LinkPopupManager: ObservableObject {
         mode: LinkPopupPresentationMode = .createLink,
         onNavigate: (@MainActor @Sendable (CardNavigationRoute) -> Void)? = nil
     ) {
-        linkRequestCancellable?.cancel()
-        linkRequestCancellable = nil
+        linkRequestTask?.cancel()
+        linkRequestTask = nil
         searchRequestCancellable?.cancel()
         searchRequestCancellable = nil
         isLinking = false
@@ -96,8 +96,8 @@ final class LinkPopupManager: ObservableObject {
     }
 
     func hide() {
-        linkRequestCancellable?.cancel()
-        linkRequestCancellable = nil
+        linkRequestTask?.cancel()
+        linkRequestTask = nil
         searchRequestCancellable?.cancel()
         searchRequestCancellable = nil
         isLinking = false
@@ -155,66 +155,42 @@ final class LinkPopupManager: ObservableObject {
             let navigate = onNavigate
             let selectionCallback = onCardSelected
 
-            linkRequestCancellable = NetworkManager.shared.createCardLink(
-                cardId: actualCardId,
-                reques: linkRequest,
-                presentsError: false
-            )
-                .receive(on: DispatchQueue.main)
-                .sink(
-                    receiveCompletion: { [weak self] completion in
-                        guard let self,
-                              self.presentationID == requestPresentationID else {
-                            return
-                        }
-                        self.isLinking = false
-                        if case .failure(let error) = completion {
-                            print("关联卡片失败: \(error.localizedDescription)")
-                            // 检查是否是400错误（卡片链接已存在）
-                            switch error {
-                            case .serverError(let code, _):
-                                if code == 400 {
-                                    self.errorMessage = "卡片链接已存在"
-                                } else {
-                                    self.errorMessage = "链接失败"
-                                }
-                                self.showErrorAlert = true
-                            case .api(let statusCode, _, _):
-                                self.errorMessage = statusCode == 400 ? "卡片链接已存在" : "链接失败"
-                                self.showErrorAlert = true
-                            default:
-                                self.errorMessage = "链接失败"
-                                self.showErrorAlert = true
-                            }
-                        }
-                    },
-                    receiveValue: { [weak self] response in
-                        guard let self,
-                              self.presentationID == requestPresentationID else {
-                            return
-                        }
-                        self.isLinking = false
-                        if response.success {
-                            self.hide()
-
-                            if shouldNavigate {
-                                let isOwnCard = linkItem.authorId == currentActorId
-                                navigate?(
-                                    isOwnCard
-                                        ? .editor(linkItem.id)
-                                        : .detail(linkItem.id)
-                                )
-                            }
-
-                            // 调用回调
-                            selectionCallback?(linkItem)
-                        } else {
-                            print("失败: \(response.message ?? "未知错误")")
-                            self.errorMessage = "链接失败"
-                            self.showErrorAlert = true
-                        }
+            linkRequestTask = Task { [weak self] in
+                do {
+                    let response = try await NetworkManager.shared.createCardLink(
+                        cardId: actualCardId, reques: linkRequest, presentsError: false
+                    )
+                    guard let self, self.presentationID == requestPresentationID else { return }
+                    self.isLinking = false
+                    guard response.success else {
+                        self.errorMessage = "关联失败，请重试"
+                        self.showErrorAlert = true
+                        return
                     }
-                )
+                    self.hide()
+                    if shouldNavigate {
+                        let isOwnCard = linkItem.authorId == currentActorId
+                        navigate?(isOwnCard ? .editor(linkItem.id) : .detail(linkItem.id))
+                    }
+                    selectionCallback?(linkItem)
+                } catch is CancellationError {
+                    // A retired presentation cannot publish a late result.
+                } catch {
+                    guard let self, self.presentationID == requestPresentationID else { return }
+                    self.isLinking = false
+                    if case NetworkError.api(_, let code, _) = error,
+                       code == "link_previous_request_recovered" {
+                        self.errorMessage = "上次操作已恢复，请刷新后重试"
+                    } else if case NetworkError.api(_, let code, _) = error,
+                              code == "NOTE_LINK_ACTIVE_CONFLICT" {
+                        self.errorMessage = "卡片已有关联，请刷新后查看"
+                    } else {
+                        self.errorMessage = "关联失败，请重试"
+                    }
+                    self.showErrorAlert = true
+                }
+            }
+
         } else {
             print("选择卡片: \(linkItem.title)")
             hide()

@@ -75,6 +75,10 @@ final class NetworkManager: ObservableObject, Sendable {
     static let shared = NetworkManager()
 
     // MARK: 配置
+    private static let defaultLinkWriteJournal = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first.map {
+        NoteLinkWriteJournal(directory: $0.appendingPathComponent("NoteLinkRequests", isDirectory: true))
+    }
+    private let linkWriteJournal: NoteLinkWriteJournal?
     private let baseURL: String
     private let session: Session
     private let responseDecodeQueue = DispatchQueue(label: "app.chorai.response-decode", qos: .userInitiated)
@@ -112,7 +116,8 @@ final class NetworkManager: ObservableObject, Sendable {
         self.init(baseURL: APIConfiguration.baseURL, session: Session(configuration: configuration, serverTrustManager: serverTrustPolicy), startsMonitoring: true)
     }
 
-    init(baseURL: String, session: Session, startsMonitoring: Bool = false, errorPresenter: ((String) -> Void)? = nil) {
+    init(baseURL: String, session: Session, startsMonitoring: Bool = false, errorPresenter: ((String) -> Void)? = nil, linkWriteJournal: NoteLinkWriteJournal? = nil) {
+        self.linkWriteJournal = linkWriteJournal ?? Self.defaultLinkWriteJournal
         self.baseURL = baseURL
         self.session = session
         self.errorPresenter = errorPresenter
@@ -1386,30 +1391,84 @@ extension NetworkManager {
     }
 
     func createCardLink(
-        cardId: String,
-        reques: LinkRequest,
-        presentsError: Bool = true
-    ) -> AnyPublisher<LinkResponse, NetworkError> {
-        let parameters: Parameters = [
-            "linked_card_id": reques.linkedCardId,
-            "link_type": "MANUAL"
-        ]
-
-        return request(
-            endpoint: "/api/cards/\(cardId)/links",
-            method: .post,
-            parameters: parameters,
-            responseType: LinkResponse.self,
-            presentsError: presentsError
-        )
+        cardId: String, reques: LinkRequest, presentsError: Bool = false
+    ) async throws -> LinkResponse {
+        try await performLinkWrite(operation: .link, sourceID: cardId, targetID: reques.linkedCardId,
+            noteLinkID: nil, responseType: LinkResponse.self) { response in
+            guard response.success, let state = NoteLinkWriteReceipt.State(rawValue: response.data.state) else {
+                throw NetworkError.decodingError
+            }
+            return NoteLinkWriteReceipt(requestID: response.data.clientRequestID,
+                sourceID: response.data.cardId, targetID: response.data.linkedCardId, noteLinkID: response.data.linkId,
+                activityID: response.data.activityID, actionLogID: response.data.actionLogID, state: state)
+        }
     }
 
-    func removeCardLink(cardId: String, linkedCardId: String) -> AnyPublisher<NetworkResponse<DeleteLinkData>, NetworkError> {
-        return request(
-            endpoint: "/api/cards/\(cardId)/links/\(linkedCardId)",
-            method: .delete,
-            responseType: NetworkResponse<DeleteLinkData>.self
-        )
+    func deleteCardLink(cardId: String, linkedCardId: String, noteLinkID: String) async throws -> NetworkResponse<DeleteLinkData> {
+        try await performLinkWrite(operation: .unlink, sourceID: cardId, targetID: linkedCardId,
+            noteLinkID: noteLinkID, responseType: NetworkResponse<DeleteLinkData>.self) { response in
+            guard response.success, let data = response.data, data.removed else { throw NetworkError.decodingError }
+            return NoteLinkWriteReceipt(requestID: data.clientRequestID, sourceID: data.sourceAssetId,
+                targetID: data.targetAssetId, noteLinkID: data.noteLinkID,
+                activityID: data.activityId, actionLogID: data.actionLogId, state: .ended)
+        }
+    }
+
+    private struct LinkFailureEnvelope: Decodable {
+        struct Failure: Decodable { let code: String?; let reason: String?; let message: String? }
+        let error: Failure?
+    }
+
+    private func performLinkWrite<Response: Codable & Sendable>(
+        operation: NoteLinkWriteAttempt.Operation, sourceID: String, targetID: String, noteLinkID: String?,
+        responseType: Response.Type, receipt: (Response) throws -> NoteLinkWriteReceipt
+    ) async throws -> Response {
+        guard let journal = linkWriteJournal else { throw NetworkError.encodingError }
+        guard let actorID = AuthManager.shared.currentUser?.id else { throw NetworkError.unauthorized }
+        let scope = NoteStoreScope(actorID: actorID, environmentID: baseURL)
+        let (token, generation) = try noteSyncCredentials(scope)
+        let attempt = try await journal.begin(apiBaseURL: baseURL, actorID: actorID, operation: operation,
+            sourceID: sourceID, targetID: targetID, noteLinkID: noteLinkID)
+        try checkNoteSyncSession(scope, token: token, generation: generation)
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "_-"))
+        guard let source = attempt.sourceID.addingPercentEncoding(withAllowedCharacters: allowed),
+              let target = attempt.targetID.addingPercentEncoding(withAllowedCharacters: allowed) else {
+            throw NetworkError.invalidURL
+        }
+        let path = operation == .link ? "/api/cards/\(source)/links" : "/api/cards/\(source)/links/\(target)"
+        guard var components = URLComponents(string: baseURL + path) else { throw NetworkError.invalidURL }
+        if operation == .unlink { components.queryItems = [URLQueryItem(name: "note_link_id", value: attempt.noteLinkID)] }
+        guard let url = components.url else { throw NetworkError.invalidURL }
+        var request = URLRequest(url: url)
+        request.httpMethod = operation == .link ? "POST" : "DELETE"
+        request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue(attempt.requestID, forHTTPHeaderField: "Idempotency-Key")
+        if operation == .link {
+            request.httpBody = try JSONEncoder().encode(["linked_card_id": attempt.targetID, "link_type": "MANUAL"])
+        }
+        let response = await session.request(request).redirect(using: Redirector(behavior: .doNotFollow)).serializingData().response
+        try checkNoteSyncSession(scope, token: token, generation: generation)
+        guard let status = response.response?.statusCode else { throw NetworkError.networkError(response.error ?? AFError.explicitlyCancelled) }
+        guard (200..<300).contains(status) else {
+            let failure = response.data.flatMap { try? JSONDecoder().decode(LinkFailureEnvelope.self, from: $0).error }
+            if status == 409, let reason = failure?.reason {
+                try await journal.reject(attempt, reason: reason)
+                try checkNoteSyncSession(scope, token: token, generation: generation)
+            }
+            if status == 401 { throw NetworkError.unauthorized }
+            throw NetworkError.api(statusCode: status, code: failure?.reason ?? failure?.code, message: failure?.message)
+        }
+        guard response.error == nil, let bytes = response.value else { throw NetworkError.noData }
+        let value = try JSONDecoder().decode(Response.self, from: bytes)
+        let confirmed = try receipt(value)
+        try await journal.complete(attempt, receipt: confirmed)
+        try checkNoteSyncSession(scope, token: token, generation: generation)
+        guard attempt.noteLinkID == noteLinkID, operation != .link || confirmed.state == .active else {
+            throw NetworkError.api(statusCode: 409, code: "link_previous_request_recovered", message: "The earlier link request was recovered. Refresh and retry your current change.")
+        }
+        return value
     }
 
     // MARK: 卡片Pin相关API
@@ -2752,10 +2811,7 @@ extension NetworkManager {
     }
 
 
-    // MARK: 删除卡片关联
-    func deleteCardLink(cardId: String, linkedCardId: String) -> AnyPublisher<NetworkResponse<DeleteLinkData>, NetworkError> {
-        return removeCardLink(cardId: cardId, linkedCardId: linkedCardId)
-    }
+
 }
 
 // MARK: - Chora profile, note import, and Notion source APIs
@@ -3127,13 +3183,17 @@ struct DeleteLinkData: Codable {
     let removed: Bool
     let sourceAssetId: String
     let targetAssetId: String
-    let activityId: String?
-    let actionLogId: String?
+    let noteLinkID: String
+    let clientRequestID: String
+    let activityId: String
+    let actionLogId: String
 
     enum CodingKeys: String, CodingKey {
         case removed
         case sourceAssetId = "source_asset_id"
         case targetAssetId = "target_asset_id"
+        case noteLinkID = "note_link_id"
+        case clientRequestID = "client_request_id"
         case activityId = "activity_id"
         case actionLogId = "action_log_id"
     }

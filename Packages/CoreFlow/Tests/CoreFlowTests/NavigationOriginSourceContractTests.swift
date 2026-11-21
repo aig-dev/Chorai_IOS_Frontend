@@ -109,7 +109,7 @@ final class NavigationOriginSourceContractTests: XCTestCase {
                 "self.presentationID == requestPresentationID else"
             )
         )
-        XCTAssertTrue(linkPopup.contains("linkRequestCancellable?.cancel()"))
+        XCTAssertTrue(linkPopup.contains("linkRequestTask?.cancel()"))
     }
 
     func testLinkSearchCannotEscapeItsPresentationOrQueryGeneration() throws {

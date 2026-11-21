@@ -1,5 +1,35 @@
 # Execution boundary history
 
+## 2026-11-21 — Durable association writes and editor hydration
+
+Replaced pair-only Link/Unlink requests with retained operation identities and
+exact association receipts. Both editor and popup use the same async transport;
+the file journal runs outside MainActor and session generation is rechecked
+around awaits. Lost or malformed receipts keep the frozen request; an old unlink
+cannot acknowledge a replacement association.
+
+Real ordinary-account UI exposed related links being overwritten by later body
+hydration. The existing store now loads links after identity hydration, rejects
+superseded reads and preserves draft content. Removed the duplicate View loader;
+local/server mapping retains association ID, preview, author and avatar. A UI
+test also incorrectly treated the documented local-note callback ID as a server
+ID; it now resolves its uniquely created server note without changing product
+identity semantics. Focused behavioral tests and both real editor flows passed;
+full gate results and remaining production scope are recorded in
+[Link acceptance](../qa/2026-11-21-link-lifecycle.md).
+
+Checkpoint review then found body autosave retiring the only initial related
+read. Gated tests reproduced that race and a second omission: dropping a read
+after a link mutation also discarded unrelated existing links. Reads now carry
+their own identity plus acknowledged exact-instance changes; their completion
+combines both without repeating the GET. Newer reads, hydration and explicit
+replacement still reject old delivery. Create/delete during a delayed read,
+create/delete ABA, and GET observing a committed create before its ACK are covered;
+the same association ID cannot duplicate a row when preview metadata differs.
+All 83 editor store tests pass. Review follow-up and the final complete gate pass:
+CoreFlow 1,089 including six live APIs with zero skips, editor 76, App 101, three
+build configurations and all six exact UI selectors.
+
 ## 2026-11-20 — Chat ownership and repeated work
 
 Reproduced overlapping/retired response publication, redundant burst reads,
@@ -220,3 +250,5 @@ focused lifecycle gate; its assertion was not changed.
 ## 2026-11-21 Ordinary-account sync fixture
 
 Made the opt-in M2 transient recovery case self-contained: persist a pending request after a pre-transmission transport failure, reopen SQLite and retry the frozen identity against the actual API. Full CoreFlow passed 1071 cases with all six live cases enabled, zero skips/failures. This is test infrastructure only; final production NOTE composition and backend process-interruption acceptance remain open. See [checkpoint](../qa/2026-11-21-ordinary-note-sync.md).
+
+- 2026-11-21: Started first-launch Link/Unlink recovery integration. Preserve exact link identity and frozen request identity across retry/relaunch; keep journal I/O outside MainActor and current account ownership around awaits. Source and live acceptance remain in progress.

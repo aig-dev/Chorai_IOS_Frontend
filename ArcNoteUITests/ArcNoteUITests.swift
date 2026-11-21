@@ -8175,13 +8175,17 @@ final class ArcNoteUITests: XCTestCase {
         )
         targetID = targetCardID
 
-        let directedIdentifier = "\(sourceCardID)--\(targetCardID)"
-        let rowIdentifier = "cardEditorLink.\(directedIdentifier)"
-        let removeIdentifier = "cardEditorRemoveLink.\(directedIdentifier)"
-
         launchAuthenticatedApp()
         tap("tab.library")
-        waitFor("card.home.\(sourceCardID)", timeout: 30).tap()
+        let sourceRow = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier BEGINSWITH %@", "card.home.local-note:"))
+            .containing(NSPredicate(format: "label CONTAINS %@", sourceToken)).firstMatch
+        XCTAssertTrue(sourceRow.waitForExistence(timeout: 30))
+        let localID = String(sourceRow.identifier.dropFirst("card.home.".count))
+        let directedIdentifier = "\(localID.replacingOccurrences(of: ":", with: "-"))--\(targetCardID)"
+        let rowIdentifier = "cardEditorLink.\(directedIdentifier)"
+        let removeIdentifier = "cardEditorRemoveLink.\(directedIdentifier)"
+        sourceRow.tap()
         waitFor("cardEditorContent", timeout: 20)
 
         openEditorCardActions()
@@ -8210,7 +8214,7 @@ final class ArcNoteUITests: XCTestCase {
         )
 
         closeNewNoteEditor()
-        waitFor("card.home.\(sourceCardID)", timeout: 30).tap()
+        waitFor("card.home.\(localID)", timeout: 30).tap()
         waitFor("cardEditorContent", timeout: 20)
         waitForButton("cardEditorLinksDisclosure", timeout: 30).tap()
         XCTAssertTrue(waitFor(rowIdentifier, timeout: 30).exists)
@@ -8238,7 +8242,7 @@ final class ArcNoteUITests: XCTestCase {
         )
 
         closeNewNoteEditor()
-        waitFor("card.home.\(sourceCardID)", timeout: 30).tap()
+        waitFor("card.home.\(localID)", timeout: 30).tap()
         waitFor("cardEditorContent", timeout: 20)
         let disclosure = app.buttons["cardEditorLinksDisclosure"]
         if disclosure.waitForExistence(timeout: 3) {
@@ -8314,28 +8318,27 @@ final class ArcNoteUITests: XCTestCase {
 
         waitForMissing("linkPopup", timeout: 20)
         waitForButton("cardEditorLinksDisclosure", timeout: 30).tap()
-        waitFor("cardEditorLink.\(targetID)", timeout: 30)
+        let selectedLink = app.descendants(matching: .any).matching(NSPredicate(
+            format: "identifier BEGINSWITH %@ AND identifier ENDSWITH %@",
+            "cardEditorLink.local-note-", "--\(targetID)"
+        ))
+        XCTAssertTrue(selectedLink.firstMatch.waitForExistence(timeout: 30))
+        XCTAssertEqual(selectedLink.count, 1, "The current local editor must expose exactly one link to the selected server note")
         closeNewNoteEditor()
 
-        let canonicalID = waitFor("note.created-card-id", timeout: 30)
-            .label
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        XCTAssertFalse(canonicalID.isEmpty)
+        let localID = waitFor("note.created-card-id", timeout: 30)
+            .label.trimmingCharacters(in: .whitespacesAndNewlines)
+        XCTAssertTrue(localID.hasPrefix("local-note:"), "The create callback identifies the durable local note")
+        let matchingSources = waitForSmokeCards(search: bodyText, token: session.token) {
+            $0.filter { $0.content.contains(bodyText) }.count == 1
+        }.filter { $0.content.contains(bodyText) }
+        XCTAssertEqual(matchingSources.count, 1, "Link and Back must keep exactly one canonical note")
+        let canonicalID = try XCTUnwrap(matchingSources.first?.id)
         XCTAssertNotEqual(canonicalID, targetID)
         createdID = canonicalID
-
         let card = try fetchSmokeCard(id: canonicalID, token: session.token)
         XCTAssertTrue(card.content.contains(bodyText))
         XCTAssertNotNil(card.contentJSON)
-        let matchingSources = try fetchSmokeCards(
-            search: bodyText,
-            token: session.token
-        ).filter { $0.content.contains(bodyText) }
-        XCTAssertEqual(
-            matchingSources.map(\.id),
-            [canonicalID],
-            "Card Actions Link and Back must reuse one canonical new card"
-        )
         let matchingEdges = try fetchSmokeCardLinks(
             id: canonicalID,
             token: session.token

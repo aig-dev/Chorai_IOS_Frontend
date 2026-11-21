@@ -209,7 +209,7 @@ private final class NoteEditorTestService: CoreCardEditingServing {
     }
     func create(draft: CardEditingDraft, createRequestID: String) async throws -> CardEditingSnapshot { try await persist(draft, id: nil) }
     func update(cardID: String, draft: CardEditingDraft) async throws -> CardEditingSnapshot { try await persist(draft, id: cardID) }
-    func createLink(_ link: CardEditingLink) async throws { throw CardEditingError.transport(code: "unused") }
+    func createLink(_ link: CardEditingLink) async throws -> CardEditingLink { throw CardEditingError.transport(code: "unused") }
     func deleteLink(_ link: CardEditingLink) async throws { throw CardEditingError.transport(code: "unused") }
     func fetchLinks(cardID: String) async throws -> [CardEditingLink] { [] }
     func uploadInlineImage(_ image: CardEditingImage) async throws -> CardEditingInlineImageUpload { throw CardEditingError.transport(code: "unused") }

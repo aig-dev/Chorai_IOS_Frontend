@@ -4590,8 +4590,8 @@ private final class APIMigrationSmokeRunner {
                 NetworkManager.shared.updateCardVisibility(cardId: firstCardId, isPublic: true)
             }
 
-            _ = try await expect("create-link") {
-                NetworkManager.shared.createCardLink(cardId: firstCardId, reques: LinkRequest(linkedCardId: secondCardId))
+            let createdLink = try await expectAsync("create-link") {
+                try await NetworkManager.shared.createCardLink(cardId: firstCardId, reques: LinkRequest(linkedCardId: secondCardId))
             }
             _ = try await expect("get-card-links") {
                 NetworkManager.shared.getCardLinks(cardId: firstCardId)
@@ -4599,8 +4599,8 @@ private final class APIMigrationSmokeRunner {
             _ = try await expect("get-my-links") {
                 NetworkManager.shared.getUserAllLinks(limit: 5)
             }
-            _ = try await expect("delete-link") {
-                NetworkManager.shared.deleteCardLink(cardId: firstCardId, linkedCardId: secondCardId)
+            _ = try await expectAsync("delete-link") {
+                try await NetworkManager.shared.deleteCardLink(cardId: firstCardId, linkedCardId: secondCardId, noteLinkID: createdLink.data.linkId)
             }
             _ = try await expect("trash-delete-restore-target") {
                 NetworkManager.shared.deleteCard(id: secondCardId)
@@ -4692,6 +4692,12 @@ private final class APIMigrationSmokeRunner {
 
             return 1
         }
+    }
+
+    private static func expectAsync<T: Sendable>(_ name: String, operation: @MainActor () async throws -> T) async throws -> T {
+        let value = try await operation()
+        log("PASS \(name)")
+        return value
     }
 
     private static func expect<T: Sendable>(_ name: String, operation: @MainActor () -> AnyPublisher<T, NetworkError>) async throws -> T {

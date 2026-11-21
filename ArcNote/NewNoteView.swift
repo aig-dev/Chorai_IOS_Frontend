@@ -49,9 +49,6 @@ struct NewNoteView: View {
     @State private var loadErrorMessage: String?
     @State private var isLoading = false
     @State private var didStartLoading = false
-    @State private var cancellables = Set<AnyCancellable>()
-
-    private let networkManager = NetworkManager.shared
     @State private var localEditingService: LocalCoreCardEditingService
 
     init(
@@ -111,7 +108,6 @@ struct NewNoteView: View {
             guard !cardId.isEmpty, !didStartLoading else { return }
             didStartLoading = true
             loadExistingCard()
-            loadRelatedLinks()
         }
         .cardNavigationHost()
         .toolbar(.hidden, for: .tabBar)
@@ -133,38 +129,16 @@ struct NewNoteView: View {
                     bodyRevision: Int(note.bodyRevision), backgroundMediaRef: note.backgroundMediaRef, links: [])
                 editorSeed = CardEditorSeed(id: UUID(), document: BlockNoteInitialDocument.existingCard(contentJSON: note.body.contentJSON, fallbackMarkdown: note.body.content, displayURLsByMediaReference: displayURLs),
                     revision: Int(note.bodyRevision), isNew: false, initialFocus: false, initialIsPublic: note.isPublic, isPinned: note.isPinned ?? false)
+                // Body hydration establishes the local identity before its relationships.
+                // The store rejects reads overtaken by a newer edit/link operation.
+                await editingStore.loadRelatedLinks()
             } catch {
                 loadErrorMessage = "Couldn't open this local note. Your saved data has been kept."
             }
         }
     }
 
-    private func loadRelatedLinks() {
-        guard AuthManager.shared.canEnterProduct,
-              let serverID = LocalNotesController.shared.library.serverID(for: cardId) else { return }
-        networkManager.getCardLinks(cardId: serverID)
-            .receive(on: DispatchQueue.main)
-            .sink(
-                receiveCompletion: { _ in },
-                receiveValue: { response in
-                    guard response.success else { return }
-                    let items = response.data.outgoingLinks
-                        + response.data.incomingLinks
-                    let links = items.map { item in
-                        CardEditingLink(
-                            sourceCardID: item.sourceAssetId == serverID ? cardId : item.sourceAssetId,
-                            targetCardID: item.targetAssetId == serverID ? cardId : item.targetAssetId,
-                            title: item.title ?? "Related note",
-                            previewHTML: item.content,
-                            authorName: item.author?.userName,
-                            authorAvatarURL: item.author?.avatar
-                        )
-                    }
-                    editingStore.replaceLinks(links)
-                }
-            )
-            .store(in: &cancellables)
-    }
+
 }
 
 @MainActor

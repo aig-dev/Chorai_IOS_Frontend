@@ -790,10 +790,17 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         }
 
         let newNote = try source(at: "ArcNote/NewNoteView.swift")
+        XCTAssertTrue(newNote.contains("await editingStore.loadRelatedLinks()"))
+        let localService = try source(at: "ArcNote/CoreFlow/LocalNotesController.swift")
         for mapping in [
-            "previewHTML: item.content",
-            "authorName: item.author?.userName",
-            "authorAvatarURL: item.author?.avatar",
+            "noteLinkID: link.noteLinkID",
+            "previewHTML: link.previewHTML",
+            "authorName: link.authorName",
+            "authorAvatarURL: link.authorAvatarURL",
+        ] {
+            XCTAssertTrue(localService.contains(mapping), "Local identity mapping must retain \(mapping)")
+        }
+        for mapping in [
             "previewHTML: item.description",
             "authorName: item.username",
             "authorAvatarURL: item.avatar",
