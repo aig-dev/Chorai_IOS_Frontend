@@ -76,6 +76,16 @@ The first-note follow-up reproduced the missing editor after observing the first
 
 One intervening launch (`Task3-Handoff-Green3.xcresult`) reached verified authentication and `elicit_signal` but displayed Explore before the editor was opened. The session had zero user events before the next test restarted it. Holding the tab mount until the real guide became active reproduced the missing Home route in `Task3-Handoff-MountRed.xcresult`. TabBarView now applies the initial route and contextual tips when mounting with an active guide. On the final products, `Task3-Handoff-Final.xcresult` passed both exact selectors with zero skips or runtime warnings: the unforced empty cancellation and the already-loaded guide, two-chunk edit and Flow resume. The final server session `onb_d2b088094a6a48ac` again recorded exactly one text event with the complete 54-character input, one matching NOTE owned by the ordinary actor and the transition to `product_spark_intro`. First-use registration and the full Spark/Merge loop remain open.
 
+### Required check for the two-chunk selector
+
+Run `ArcNoteUITests/ArcNoteUITests/testCanonicalOnboardingLibraryNoteAndFlowResumeGoV1` with an ordinary account against the isolated local Go service. After the selector passes, run the companion against that exact result bundle and its PostgreSQL database from the repository root.
+
+```sh
+python3 scripts/check-first-note-handoff.py "$RESULT_BUNDLE" --database "$IOS_LIVE_DATABASE"
+```
+
+The selector retains an XCTest attachment with the session ID, ordinary actor ID, server NOTE ID and expected text. The companion reads the isolated `ios_live_*` database in the local `chorai-postgres-dev` container using a read-only transaction. It requires exactly one text submission with the full body for that actor and session, and exactly one matching NOTE owned by that actor with the recorded ID. Both the selector and companion must pass.
+
 ## Ordinary-account Chat send and replay
 
 `Task4-Ordinary-Chat-Send.xcresult` recorded one pass in 19.494 s with zero

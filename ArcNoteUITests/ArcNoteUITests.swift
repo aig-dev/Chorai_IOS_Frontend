@@ -6139,6 +6139,15 @@ final class ArcNoteUITests: XCTestCase {
         )
         waitFor("onboarding.tip.flow-spark", timeout: 15)
         captureVisual("onboarding-v1-resumed")
+
+        let expectation = try JSONEncoder().encode([
+            "actor_id": smoke.actorId, "session_id": started.sessionID,
+            "note_id": cardID, "body": signal + suffix
+        ])
+        let evidence = XCTAttachment(data: expectation, uniformTypeIdentifier: "public.json")
+        evidence.name = "first-note-guide-expectation"
+        evidence.lifetime = .keepAlways
+        add(evidence)
     }
 
     func testCancellingOnboardingNoteKeepsLibraryStep() throws {
