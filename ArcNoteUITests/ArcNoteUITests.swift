@@ -6058,6 +6058,7 @@ final class ArcNoteUITests: XCTestCase {
 
         seedAppSession(smoke)
         app.launchEnvironment["CHORAI_UI_TEST_ONBOARDING"] = "1"
+        app.launchArguments.append("--ui-test-mount-tabs-after-guide")
         launchAuthenticatedApp()
 
         waitForSessionPhase("verified", timeout: 30)
@@ -6070,7 +6071,22 @@ final class ArcNoteUITests: XCTestCase {
         let signal = "iOS onboarding signal \(Int(Date().timeIntervalSince1970))"
         tap("note.create")
         typeInCardEditorBody(signal)
-        closeNewNoteEditor()
+        // Creation is announced only after the first local commit.
+        let localID = waitFor("note.created-card-id", timeout: 30).label
+        XCTAssertTrue(localID.hasPrefix("local-note:"))
+        waitFor("cardEditorContent", timeout: 5)
+        XCTAssertEqual(try fetchCurrentSmokeOnboarding(token: smoke.token).state, "elicit_signal")
+
+        let suffix = " with a second thought"
+        app.typeText(suffix)
+        finishOnboardingNote()
+        let cards = waitForSmokeCards(search: signal, token: smoke.token) { cards in
+            cards.contains { $0.content.contains(signal + suffix) }
+        }.filter { $0.content.contains(signal) }
+        XCTAssertEqual(cards.count, 1)
+        let cardID = try XCTUnwrap(cards.first?.id)
+        defer { deleteSmokeCard(id: cardID, token: smoke.token) }
+        XCTAssertTrue(try fetchSmokeCard(id: cardID, token: smoke.token).content.contains(signal + suffix))
 
         waitFor("screen.flow.content", timeout: 30)
         waitForOnboardingAnchor(
@@ -6085,9 +6101,10 @@ final class ArcNoteUITests: XCTestCase {
         waitFor("onboarding.tip.flow-card", timeout: 15)
         captureVisual("onboarding-flow-card")
 
-        tap("explore.search.open.test-hook")
+        waitForButton("explore.search.open").tap()
         waitForMissing("onboarding.tip.flow-card", timeout: 10)
-        tap("explore.search.back")
+        waitForButton("Cancel").tap()
+        waitForMissing("explore.search.input")
         XCTAssertFalse(
             exists("onboarding.tip.flow-card", timeout: 2),
             "A non-target search action must dismiss the Flow tip"
@@ -6167,7 +6184,7 @@ final class ArcNoteUITests: XCTestCase {
         ] = deliberateSparkResumeMismatch
         launchAuthenticatedApp()
 
-        var noteCardID: String?
+        var serverNoteID: String?
         var savedSparkCardID: String?
         var committedCardID: String?
         defer {
@@ -6177,8 +6194,8 @@ final class ArcNoteUITests: XCTestCase {
             if let savedSparkCardID {
                 deleteFavorite(id: savedSparkCardID, token: smoke.token)
             }
-            if let noteCardID {
-                deleteSmokeCard(id: noteCardID, token: smoke.token)
+            if let serverNoteID {
+                deleteSmokeCard(id: serverNoteID, token: smoke.token)
             }
         }
 
@@ -6189,11 +6206,14 @@ final class ArcNoteUITests: XCTestCase {
         let signal = "iOS complete loop \(Int(Date().timeIntervalSince1970))"
         tap("note.create")
         typeInCardEditorBody(signal)
-        saveCardEditorAndExpectDismissal()
-        noteCardID = waitFor("note.created-card-id", timeout: 30)
-            .label
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        XCTAssertFalse(noteCardID?.isEmpty ?? true)
+        finishOnboardingNote()
+        let localNoteID = waitFor("note.created-card-id", timeout: 30).label
+        XCTAssertTrue(localNoteID.hasPrefix("local-note:"))
+        let notes = waitForSmokeCards(search: signal, token: smoke.token) { cards in
+            cards.contains { $0.content.contains(signal) }
+        }.filter { $0.content.contains(signal) }
+        XCTAssertEqual(notes.count, 1)
+        serverNoteID = try XCTUnwrap(notes.first?.id)
 
         waitFor("screen.flow.content", timeout: 30)
         waitForOnboardingAnchor(
@@ -6282,13 +6302,9 @@ final class ArcNoteUITests: XCTestCase {
         )
         captureVisual("onboarding-library-merge-intro")
 
-        guard let noteCardID else {
-            XCTFail("Library note creation did not expose its canonical card ID")
-            return
-        }
-        waitFor("card.home.\(noteCardID)", timeout: 30)
+        waitFor("card.home.\(localNoteID)", timeout: 30)
         waitFor("onboarding.tip.library-merge-entry", timeout: 15)
-        tap("home.card.menu.\(noteCardID)")
+        tap("home.card.menu.\(localNoteID)")
         waitForMissing("onboarding.tip.library-merge-entry", timeout: 15)
         tap("popup-menu.item.edit")
         waitFor("cardEditorContent", timeout: 20)
@@ -6321,7 +6337,7 @@ final class ArcNoteUITests: XCTestCase {
         committedCardID = waitFor("merge.committed-card-id", timeout: 30)
             .label
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        XCTAssertNotEqual(committedCardID, noteCardID)
+        XCTAssertNotEqual(committedCardID, serverNoteID)
         waitForOnboardingAnchor(
             "onboarding.phase",
             value: "completed",
@@ -7755,16 +7771,23 @@ final class ArcNoteUITests: XCTestCase {
         let content = "Library note \(Int(Date().timeIntervalSince1970))"
         tap("note.create")
         typeInCardEditorBody(content)
-        closeNewNoteEditor()
 
         let cardId = waitFor("note.created-card-id", timeout: 30)
             .label
             .trimmingCharacters(in: .whitespacesAndNewlines)
+        XCTAssertTrue(cardId.hasPrefix("local-note:"))
+        waitFor("cardEditorContent")
+        closeNewNoteEditor()
+        let notes = waitForSmokeCards(search: content, token: session.token) { cards in
+            cards.contains { $0.content.contains(content) }
+        }.filter { $0.content.contains(content) }
+        XCTAssertEqual(notes.count, 1)
+        let serverID = try XCTUnwrap(notes.first?.id)
         defer {
-            deleteSmokeCard(id: cardId, token: session.token)
+            deleteSmokeCard(id: serverID, token: session.token)
         }
 
-        let card = try fetchSmokeCard(id: cardId, token: session.token)
+        let card = try fetchSmokeCard(id: serverID, token: session.token)
         XCTAssertTrue(card.content.contains(content))
         XCTAssertFalse(card.isPublic)
 
@@ -10929,7 +10952,7 @@ final class ArcNoteUITests: XCTestCase {
         )
     }
 
-    private func saveCardEditorAndExpectDismissal(
+    private func finishOnboardingNote(
         file: StaticString = #filePath,
         line: UInt = #line
     ) {
@@ -10939,8 +10962,8 @@ final class ArcNoteUITests: XCTestCase {
             line: line
         )
         XCTAssertTrue(
-            ["Save note", "Retry saving note"].contains(leading.label),
-            "Expected a commit action, got \(leading.label)",
+            ["Save note", "Retry saving note", "Close note"].contains(leading.label),
+            "Expected an explicit finish action, got \(leading.label)",
             file: file,
             line: line
         )

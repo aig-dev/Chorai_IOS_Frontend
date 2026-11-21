@@ -161,9 +161,11 @@ struct TabBarView: View {
     }
     #endif
 
-    private func routeInitialOnboardingState(_ state: String?) {
-        guard !hasRoutedInitialOnboardingState,
-              let state,
+    private func routeInitialOnboardingState() {
+        syncContextualTipsWithOnboardingSession()
+        guard !hasRoutedInitialOnboardingState, allowsCommunityTabs,
+              onboardingStore.phase == .active,
+              let state = onboardingStore.contextualTipState,
               OnboardingGuideNavigationDirective.forState(state) != nil else {
             return
         }
@@ -317,9 +319,6 @@ struct TabBarView: View {
         lastCreatedNoteID = cardID
         #endif
         coordinator.noteCreated()
-        onboardingStore.receive(
-            .noteCreated(cardID: cardID, content: content)
-        )
     }
 
     private func handleSparkRequested(proposedCardID: String) {
@@ -785,11 +784,8 @@ struct TabBarView: View {
         .onChange(of: allowsCommunityTabs) { allowed in
             if !allowed { coordinator.selectedTab = .library }
         }
-        .onChange(of: onboardingStore.phase) { phase in
-            syncContextualTipsWithOnboardingSession()
-            if phase == .active {
-                routeInitialOnboardingState(onboardingStore.session?.state)
-            }
+        .onChange(of: onboardingStore.phase) { _ in
+            routeInitialOnboardingState()
         }
         .onChange(of: onboardingStore.session?.state) { state in
             isLibrarySurfaceVisible = false
@@ -833,6 +829,7 @@ struct TabBarView: View {
         .onAppear {
             if !allowsCommunityTabs { coordinator.selectedTab = .library }
             lastSelectedTab = coordinator.selectedTab
+            routeInitialOnboardingState()
         }
         #if DEBUG
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ExploreVisibleRecommendedCardChanged"))) { notification in

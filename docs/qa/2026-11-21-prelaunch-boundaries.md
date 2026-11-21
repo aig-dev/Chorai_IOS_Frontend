@@ -10,7 +10,7 @@ already complete before these behavior checks.
 
 Evidence is retained in `.superpowers/sdd/2026-11-20-post-swift6-integration/`.
 Credentials and request journals remain in the private task runtime directory.
-No App production code changed for this checkpoint.
+The original checkpoint used unchanged App production code. The first-note follow-up below uses updated App and test products against Go `646b3fab`.
 
 ## Ordinary-account UI
 
@@ -70,10 +70,11 @@ old fixture expectations.
 with zero skips. `testCancellingOnboardingNoteKeepsLibraryStep` passed.
 `testCanonicalOnboardingLibraryNoteAndFlowResumeGoV1` failed. The activity
 recording shows the editor closing and the guide advancing to Explore before
-the user explicitly finishes. Autosave emits the creation callback that
-triggers this handoff. The saved note contains the full sample input. The premature handoff is a confirmed
-product bug queued for Task 3. First-use registration and the full Spark/Merge
-loop remain open.
+the user explicitly finishes. The saved note contained the full sample input.
+
+The first-note follow-up reproduced the missing editor after observing the first durable local ID on the old App (`Task3-Handoff-Red.xcresult`). With the fix, `testCanonicalOnboardingLibraryNoteAndFlowResumeGoV1` observed that ID, the open editor and server state `elicit_signal`. It appended more text, explicitly finished, verified a single matching server NOTE containing both chunks, then dismissed a Flow card and resumed the same canonical v1 session after relaunch. The selector passed with zero skips in `Task3-Handoff-Resume.xcresult`. Read-only server inspection found exactly one first-note text event, containing the full 54-character body, and one matching NOTE by the same actor. The ordinary Library autosave and refresh selector passed in `Task3-Handoff-Normal.xcresult`.
+
+One intervening launch (`Task3-Handoff-Green3.xcresult`) reached verified authentication and `elicit_signal` but displayed Explore before the editor was opened. The session had zero user events before the next test restarted it. Holding the tab mount until the real guide became active reproduced the missing Home route in `Task3-Handoff-MountRed.xcresult`. TabBarView now applies the initial route and contextual tips when mounting with an active guide. On the final products, `Task3-Handoff-Final.xcresult` passed both exact selectors with zero skips or runtime warnings: the unforced empty cancellation and the already-loaded guide, two-chunk edit and Flow resume. The final server session `onb_d2b088094a6a48ac` again recorded exactly one text event with the complete 54-character input, one matching NOTE owned by the ordinary actor and the transition to `product_spark_intro`. First-use registration and the full Spark/Merge loop remain open.
 
 ## Ordinary-account Chat send and replay
 

@@ -1,5 +1,9 @@
 # Execution boundary history
 
+## 2026-11-21 — Explicit first-note handoff
+
+A real ordinary-account test observed a durable local ID, then found that the editor had already disappeared. The first local save refreshed Library and sent guide evidence in the same callback. Home now submits the committed text only when an explicit Save or Close finishes in the original active editing session. A failed flush, a superseded revision and an empty cancellation leave the guide at its current step. The existing local save, card actions and account-transition drains retain their owners. A separate ordinary launch exposed an already-active guide mounting on Explore. A test that delays the tab mount until the real guide has loaded reproduced it. The tab shell now reconciles the initial route and tips on appearance as well as guide updates. The [ordinary-account checkpoint](../qa/2026-11-21-prelaunch-boundaries.md) records both results.
+
 ## 2026-11-21 — Ordinary session and concurrency baselines
 
 Re-ran Home lifecycle, profile/settings and search/detail with an ordinary

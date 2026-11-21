@@ -43,6 +43,7 @@ struct NewNoteView: View {
 
     let cardId: String
     let onCreated: (String, String) -> Void
+    let onFinishCreation: ((String, String) -> Bool)?
 
     @StateObject private var editingStore: CardEditingStore
     @State private var editorSeed: CardEditorSeed?
@@ -53,10 +54,12 @@ struct NewNoteView: View {
 
     init(
         cardId: String = "",
-        onCreated: @escaping (String, String) -> Void = { _, _ in }
+        onCreated: @escaping (String, String) -> Void = { _, _ in },
+        onFinishCreation: ((String, String) -> Bool)? = nil
     ) {
         self.cardId = cardId
         self.onCreated = onCreated
+        self.onFinishCreation = onFinishCreation
         let scope = AuthManager.shared.currentNoteScope ?? NoteStoreScope(actorID: "", environmentID: APIConfiguration.baseURL)
         let creationID = UUID().uuidString
         let service = LocalCoreCardEditingService(identifier: cardId.isEmpty ? nil : cardId, creationID: creationID, scope: scope)
@@ -89,7 +92,8 @@ struct NewNoteView: View {
                     seed: seed,
                     editingStore: editingStore,
                     localEditingService: localEditingService,
-                    onCreated: onCreated
+                    onCreated: onCreated,
+                    onFinishCreation: onFinishCreation
                 )
                 .id(seed.id)
             } else {
@@ -175,6 +179,7 @@ private struct CardEditorSessionView: View {
 
     let seed: CardEditorSeed
     let onCreated: (String, String) -> Void
+    let onFinishCreation: ((String, String) -> Bool)?
 
     @ObservedObject private var editingStore: CardEditingStore
     @ObservedObject private var linkPopupManager = LinkPopupManager.shared
@@ -219,10 +224,12 @@ private struct CardEditorSessionView: View {
         seed: CardEditorSeed,
         editingStore: CardEditingStore,
         localEditingService: LocalCoreCardEditingService,
-        onCreated: @escaping (String, String) -> Void
+        onCreated: @escaping (String, String) -> Void,
+        onFinishCreation: ((String, String) -> Bool)?
     ) {
         self.seed = seed
         self.onCreated = onCreated
+        self.onFinishCreation = onFinishCreation
         _editingStore = ObservedObject(wrappedValue: editingStore)
         _didNotifyCreation = State(initialValue: !seed.isNew)
         _isPinned = State(initialValue: seed.isPinned)
@@ -518,7 +525,8 @@ private struct CardEditorSessionView: View {
         }
     }
 
-    private func persistLocalDraft() async {
+    @discardableResult
+    private func persistLocalDraft() async -> Bool {
         let saved = await persistenceSession.flushAcceptedEdits()
         notifyCreationIfNeeded()
         if !saved, persistenceSession.hasSaveFailure {
@@ -528,6 +536,7 @@ private struct CardEditorSessionView: View {
             saveMessage = nil
             resolveSaveFailure()
         }
+        return saved
     }
 
     private var isBusy: Bool {
@@ -765,6 +774,7 @@ private struct CardEditorSessionView: View {
     private func saveCurrentSnapshot() {
         guard !isSaving else { return }
         completeTagEntry()
+        let finishGeneration = authManager.sessionGeneration
         let priorFailedBaseline = failedCommitBaseline
         isSaving = true
         saveMessage = nil
@@ -803,6 +813,9 @@ private struct CardEditorSessionView: View {
                 case .clean:
                     saveMessage = nil
                     resolveSaveFailure()
+                    if onFinishCreation != nil, await persistLocalDraft() {
+                        _ = finishCreationIfCurrent(snapshot, generation: finishGeneration)
+                    }
                 case .pendingNewerChanges:
                     saveMessage = nil
                     if let failureBaseline {
@@ -859,6 +872,7 @@ private struct CardEditorSessionView: View {
 
     private func verifyCurrentSnapshotAndDismiss() {
         guard !isSaving else { return }
+        let finishGeneration = authManager.sessionGeneration
         completeTagEntry()
         isSaving = true
 
@@ -867,10 +881,10 @@ private struct CardEditorSessionView: View {
             do {
                 let snapshot = try await applyCurrentSnapshot()
                 // Back can receive a newer WebKit revision than the last autosave.
-                await persistLocalDraft()
+                guard await persistLocalDraft() else { return }
                 if isUntouchedNewSnapshot(snapshot) || snapshotMatchesCommittedBaseline(snapshot) {
                     resolveSaveFailure()
-                    dismiss()
+                    if !finishCreationIfCurrent(snapshot, generation: finishGeneration) { dismiss() }
                 }
             } catch CardEditorSessionError.staleSnapshot {
                 saveMessage = nil
@@ -882,6 +896,17 @@ private struct CardEditorSessionView: View {
                 showCloseWithoutSavingConfirmation = true
             }
         }
+    }
+
+    private func finishCreationIfCurrent(_ snapshot: BlockNoteSnapshot, generation: UInt64) -> Bool {
+        guard seed.isNew, persistenceSession.isVisible,
+              authManager.sessionGeneration == generation,
+              authManager.currentNoteScope == persistenceSession.scope,
+              localNotes.canDisplayNotes(for: persistenceSession.scope),
+              snapshotMatchesCommittedBaseline(snapshot),
+              let cardID = editingStore.cardID,
+              let draft = editingStore.lastCommittedDraft else { return false }
+        return onFinishCreation?(cardID, draft.content) == true
     }
 
     private func snapshotMatchesCommittedBaseline(

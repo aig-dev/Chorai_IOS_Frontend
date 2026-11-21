@@ -108,6 +108,9 @@ struct ContentView: View {
             } else {
                 TabBarView()
                     .id(authManager.currentNoteScope)
+                    #if DEBUG
+                    .modifier(PreloadedGuideUITestMount())
+                    #endif
             }
         } else if authManager.accessState?.status == "required" {
             NavigationStack { accessGate(unavailable: false) }
@@ -707,3 +710,20 @@ struct ChoraiWelcomeView: View {
             .clipped()
     }
 }
+
+#if DEBUG
+/// Lets the real guide finish loading before the first tab mount in the resume UI regression.
+private struct PreloadedGuideUITestMount: ViewModifier {
+    @EnvironmentObject private var guide: OnboardingGuideStore
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if ProcessInfo.processInfo.arguments.contains("--ui-test-mount-tabs-after-guide"),
+           guide.phase == .idle || guide.phase == .loading {
+            ProgressView()
+        } else {
+            content
+        }
+    }
+}
+#endif

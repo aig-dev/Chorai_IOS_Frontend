@@ -1146,15 +1146,19 @@ struct NotesListView: View {
         )
     }
 
-    private func handleCreatedNote(cardID: String, content: String) {
-        let shouldRevealNextOnboardingStep =
-            onboardingStore?.contextualTipState == "elicit_signal"
-        onNoteCreated(cardID, content)
-        if shouldRevealNextOnboardingStep {
-            navigateToCreate = false
-        }
+    private var onboardingFinishAction: ((String, String) -> Bool)? {
+        guard onboardingStore?.contextualTipState == "elicit_signal" else { return nil }
+        return finishOnboardingNote
     }
-    
+
+    private func finishOnboardingNote(cardID: String, content: String) -> Bool {
+        guard navigateToCreate, let onboardingStore,
+              onboardingStore.contextualTipState == "elicit_signal" else { return false }
+        navigateToCreate = false
+        onboardingStore.receive(.noteCreated(cardID: cardID, content: content))
+        return true
+    }
+
     var body: some View {
         ZStack {
             ScrollView {
@@ -1283,7 +1287,10 @@ struct NotesListView: View {
             }
         }
         .navigationDestination(isPresented: $navigateToCreate) {
-            NewNoteView(onCreated: handleCreatedNote)
+            NewNoteView(
+                onCreated: onNoteCreated,
+                onFinishCreation: onboardingFinishAction
+            )
         }
         .onChange(of: navigateToCreate) { isPresented in
             // Pair one coverage update with each actual push/pop transition.
