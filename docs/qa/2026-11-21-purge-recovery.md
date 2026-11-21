@@ -41,6 +41,15 @@ the command. Original unconditional purge transports are removed.
   the existing frozen-write helper, bounded persistent records and Web Locks,
   defers removing the row until resolution, and checks session generation.
 
+Review follow-up reproduced late manifest and detail responses after the local
+purge had already removed the row. Sync now treats those observations as
+superseded, including both 404 and successful detail responses, without aborting
+other notes. Trash also checks the captured session before applying a terminal
+rejection. Fresh validation passed all 1,099 CoreFlow cases (six live API cases
+enabled), 19 hosted networking cases, and the companion Web suite of 1,044 tests
+plus its production build. Independent fix review and public UI acceptance are
+recorded separately; these results do not certify backend cleanup.
+
 Private raw logs live under `.superpowers/sdd/2026-11-20-post-swift6-integration/`.
 Credentials remain outside the repository. Public ordinary-account API and UI
 acceptance will be recorded only after the final Go implementation is running.

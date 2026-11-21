@@ -156,6 +156,7 @@ bytes and local generation in the existing `OfflineNote` transaction. This
 manual online intent survives termination; it is not sent by the synchronization
 coordinator. Until resolution, that note rejects edits/restoration and normal
 pulls cannot overwrite it or mark it unavailable. Other notes continue syncing.
+Manifest/detail responses overtaken by confirmed local deletion are discarded.
 `NetworkManager.permanentlyDeleteNote` verifies account/session, exact receipt
 identities and the declared `PENDING`/`COMPLETE` cleanup state. The two former
 unconditional permanent-delete transport methods are removed.

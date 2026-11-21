@@ -141,6 +141,7 @@ public actor NoteSyncCoordinator {
                         do { try await store.recordSyncIssue(localID: note.localID, issue: "remote_unavailable", expectedGeneration: note.generation) }
                         catch NoteLocalStoreError.staleGeneration { /* A newer local decision wins. */ }
                         catch NoteLocalStoreError.pendingOperationExists { /* Manual purge owns its unresolved receipt. */ }
+                        catch NoteLocalStoreError.noteNotFound { /* Purge resolved after this manifest began. */ }
                     }
                     continue
                 }
@@ -433,10 +434,13 @@ public actor NoteSyncCoordinator {
             _ = try await store.applyRemote(snapshot, localID: localID, expectedGeneration: generation)
         } catch {
             guard valid(session) else { return }
+            if localID != nil, error as? NoteLocalStoreError == .noteNotFound { return }
             if let failure = error as? NoteSyncFailure, failure == .notFound || failure == .permissionDenied {
                 if let localID {
                     do { try await store.recordSyncIssue(localID: localID, issue: "remote_unavailable", expectedGeneration: generation) }
                     catch NoteLocalStoreError.staleGeneration { }
+                    catch NoteLocalStoreError.pendingOperationExists { }
+                    catch NoteLocalStoreError.noteNotFound { }
                     catch { status = .localFailure }
                 }
             } else { throw error }

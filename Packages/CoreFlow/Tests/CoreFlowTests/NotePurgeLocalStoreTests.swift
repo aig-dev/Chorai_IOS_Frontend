@@ -106,6 +106,14 @@ final class NotePurgeLocalStoreTests: XCTestCase {
     }
 
     func testSyncStartedBeforePurgeDoesNotMarkItsUnknownOutcomeUnavailable() async throws {
+        try await checkManifestOverlap(completed: false)
+    }
+
+    func testCompletedPurgeDoesNotAbortAnEarlierManifest() async throws {
+        try await checkManifestOverlap(completed: true)
+    }
+
+    private func checkManifestOverlap(completed: Bool) async throws {
         let store = try await NoteLocalStore.open(rootURL: root, scope: scope)
         let note = try await seed(store)
         let started = expectation(description: "manifest read")
@@ -115,17 +123,49 @@ final class NotePurgeLocalStoreTests: XCTestCase {
         let work = Task { await sync.synchronize(forceRetry: true) }
         await fulfillment(of: [started], timeout: 2)
         let attempt = try await store.beginPurge(localID: note.localID, baseSyncToken: "trash_base")
+        if completed { try await store.confirmPurge(attempt, receipt: receipt(attempt)) }
         // The server already erased this note, but the DELETE response was lost.
         await service.finish()
         await work.value
         let retained = try await store.note(localID: note.localID)
-        XCTAssertEqual(retained?.pendingPurge, attempt)
+        XCTAssertEqual(retained?.pendingPurge, completed ? nil : attempt)
         XCTAssertNil(retained?.syncIssue)
         let state = await sync.status
         XCTAssertEqual(state, .idle)
         let writes = await service.writes
         XCTAssertEqual(writes, 0)
         await sync.suspend(); try await store.close()
+    }
+
+    func testDelayedDetailAbsenceDoesNotFailSyncWhenPurgeOwnsOrRemovedTheNote() async throws {
+        try await checkDetailOverlap(succeeds: false)
+    }
+
+    func testDelayedDetailSuccessCannotReviveOrFailACompletedPurge() async throws {
+        try await checkDetailOverlap(succeeds: true)
+    }
+
+    private func checkDetailOverlap(succeeds: Bool) async throws {
+        for completed in [false, true] {
+            let store = try await NoteLocalStore.open(rootURL: root.appendingPathComponent(UUID().uuidString), scope: scope)
+            let note = try await seed(store)
+            let started = expectation(description: "detail read")
+            let service = PurgeManifestTransport(scope: scope, onStart: { started.fulfill() }, delayDetail: true, detailSucceeds: succeeds)
+            let sync = try NoteSyncCoordinator(store: store, service: service)
+            await sync.resume()
+            let work = Task { await sync.synchronize(forceRetry: true) }
+            await fulfillment(of: [started], timeout: 2)
+            let attempt = try await store.beginPurge(localID: note.localID, baseSyncToken: "trash_base")
+            if completed { try await store.confirmPurge(attempt, receipt: receipt(attempt)) }
+            await service.finishDetail()
+            await work.value
+            let state = await sync.status
+            XCTAssertEqual(state, .idle)
+            let retained = try await store.note(localID: note.localID)
+            XCTAssertEqual(retained?.pendingPurge, completed ? nil : attempt)
+            XCTAssertNil(retained?.syncIssue)
+            await sync.suspend(); try await store.close()
+        }
     }
 
     func testAuthoritativeAbsenceRemovesOnlyItsUnchangedUserConfirmedLocalCopy() async throws {
@@ -147,16 +187,31 @@ final class NotePurgeLocalStoreTests: XCTestCase {
 private actor PurgeManifestTransport: NoteSyncServing {
     nonisolated let scope: NoteStoreScope
     let onStart: @Sendable () -> Void
+    let delayDetail: Bool
+    let detailSucceeds: Bool
     private var continuation: CheckedContinuation<NoteSyncManifest, Never>?
+    private var detailContinuation: CheckedContinuation<Void, Never>?
     private(set) var writes = 0
-    init(scope: NoteStoreScope, onStart: @escaping @Sendable () -> Void) { self.scope = scope; self.onStart = onStart }
+    init(scope: NoteStoreScope, onStart: @escaping @Sendable () -> Void, delayDetail: Bool = false, detailSucceeds: Bool = false) {
+        self.scope = scope; self.onStart = onStart; self.delayDetail = delayDetail; self.detailSucceeds = detailSucceeds
+    }
     func manifest() async throws -> NoteSyncManifest {
-        await withCheckedContinuation { continuation in
+        if delayDetail { return NoteSyncManifest(protocolVersion: 3, complete: true, notes: [.init(assetID: "asset", syncToken: "different", lifecycle: .trashed)]) }
+        return await withCheckedContinuation { continuation in
             self.continuation = continuation; onStart()
         }
     }
     func finish() { continuation?.resume(returning: NoteSyncManifest(protocolVersion: 3, complete: true, notes: [])); continuation = nil }
-    func detail(assetID: String) async throws -> NoteRemoteSnapshot { throw NoteSyncFailure.notFound }
+    func finishDetail() { detailContinuation?.resume(); detailContinuation = nil }
+    func detail(assetID: String) async throws -> NoteRemoteSnapshot {
+        if delayDetail {
+            await withCheckedContinuation { continuation in
+                detailContinuation = continuation; onStart()
+            }
+        }
+        if detailSucceeds { return NoteRemoteSnapshot(assetID: assetID, syncToken: "different", body: OfflineNoteBody(content: "old response"), lifecycle: .trashed, isPublic: false) }
+        throw NoteSyncFailure.notFound
+    }
     func send(_ operation: NotePendingOperation) async throws -> NoteSyncReceipt { writes += 1; throw NoteSyncFailure.transient(retryAfter: nil) }
     func upload(_ attachment: NoteLocalAttachment, data: Data) async throws -> NoteSyncUploadReceipt { throw NoteSyncFailure.transient(retryAfter: nil) }
     func downloadAttachment(assetID: String, mediaRef: String) async throws -> NoteSyncDownloadedAttachment { throw NoteSyncFailure.notFound }

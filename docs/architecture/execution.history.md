@@ -16,6 +16,11 @@ session checks prevent old results from removing a newer or another account's
 copy. A proved absent target has its own terminal path; generic 404 stays unknown.
 Evidence and remaining launch gates are in [purge recovery](../qa/2026-11-21-purge-recovery.md).
 
+The review follow-up fences the rejection branch before local mutation and
+treats manifest/detail observations overtaken by completed purge as superseded.
+Gated tests reproduce both pending and already-removed rows, with delayed detail
+404 and success. Full CoreFlow 1,099 and hosted networking 19 pass.
+
 ## 2026-11-21 — Durable association writes and editor hydration
 
 Replaced pair-only Link/Unlink requests with retained operation identities and
