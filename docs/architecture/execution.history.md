@@ -1,5 +1,15 @@
 # Execution boundary history
 
+## 2026-11-21 — Ordinary-account purge UI checks
+
+The actual Trash uses durable local NOTE identities. Two older cloud-focused
+UI fixtures now resolve the test's local row by its unique content marker and
+select native buttons explicitly, while retaining separate API assertions for
+the remote asset. Both exact selectors passed with an ordinary account, including
+restore/retrash while deletion confirmation is open. Product code is unchanged.
+The [live checkpoint](../qa/2026-11-21-purge-recovery.md) separates these results
+from remaining first-attempt soft-delete and backend erasure gates.
+
 ## 2026-11-21 — Atomic local purge recovery
 
 The old permanent-delete transport sent neither the displayed baseline nor a

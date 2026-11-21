@@ -166,8 +166,10 @@ explicit precommit rejection releases the intent. The distinct
 `404/purge_target_absent` response proves the target is absent and this key has
 no owned outcome; it may remove only the unchanged, user-confirmed local copy,
 without inventing an ERASED receipt. Generic 404, timeout and unknown outcomes
-retain the intent. See [purge recovery validation](../qa/2026-11-21-purge-recovery.md)
-for current evidence and remaining public integration gates.
+retain the intent. Two ordinary-account native UI scenarios now verify success
+and an open confirmation invalidated by restore/retrash. See
+[purge recovery validation](../qa/2026-11-21-purge-recovery.md) for the separate
+API/restart/browser evidence and remaining production integration gates.
 
 ### Online administrator access and offline eligibility
 

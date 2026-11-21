@@ -1,8 +1,8 @@
 # Permanent deletion recovery — 2026-11-21
 
-This checkpoint covers the current first-launch client contract. Public backend
-composition, physical object cleanup and real ordinary-account UI validation
-remain pending; unit coverage alone does not establish launch readiness.
+This checkpoint covers the current first-launch client contract and the targeted
+ordinary-account API/UI checks below. Final backend composition, remote erasure
+fencing and whole-product acceptance remain open.
 
 ## Contract
 
@@ -50,9 +50,41 @@ enabled), 19 hosted networking cases, and the companion Web suite of 1,044 tests
 plus its production build. Independent fix review and public UI acceptance are
 recorded separately; these results do not certify backend cleanup.
 
-Private raw logs live under `.superpowers/sdd/2026-11-20-post-swift6-integration/`.
-Credentials remain outside the repository. Public ordinary-account API and UI
-acceptance will be recorded only after the final Go implementation is running.
+## Ordinary-account live checkpoint
+
+The isolated Local API was rebuilt from a recorded source digest. The ordinary
+account API sequence passed 36 checks, including recovering the original unknown
+purge commands, exact receipt identity, source LINK audit after erasure, foreign
+actor rejection, restore/retrash baseline rejection and independent image owners.
+After a real API process restart, all five retained erasure commands recovered
+their original asset/request/Activity/ActionLog/certificate identities.
+
+Two exact native UI selectors passed, zero skips, in 45.875 seconds:
+`testTrashPermanentlyDeletesCardFromGo` and
+`testTrashPermanentDeleteFailureKeepsRetryableConfirmation`. The latter restores
+and retrashes through the actual API while confirmation remains open; it verifies
+that the stale confirmation stays retryable. Fixture corrections select the
+actual sidebar button and the local Trash row by this test's unique marker;
+remote asset IDs are still used for independent API assertions. The prior tests
+failed before deletion because they used a generic toolbar element and a remote
+ID for a `local-note:` row. No product navigation or deletion behavior was changed
+to make these selectors pass.
+
+The Web companion passed actual ordinary-account deletion, lost response after
+server commit, recovery after page reload when the server row is absent, exact
+original key/body reuse, and restore/retrash rejection of an open confirmation.
+These checks do not represent a complete onboarding run or native lost-ACK UI
+relaunch; native durable recovery also has the SQLite/network tests above.
+
+A subsequent fresh plain-text NOTE setup reproduced first-attempt soft-delete
+`503/note_action_outcome_unknown`. Its original command remains available for
+diagnosis; the successful sequences above do not close that issue. Production
+composition, all-writer coverage and complete object/vector erasure remain
+separate backend gates.
+
+Private raw logs, source manifest, exact xcresult and checks live under
+`.superpowers/sdd/2026-11-20-post-swift6-integration/`. Credentials and frozen
+ordinary-account requests remain outside the repository.
 
 The backend cleanup receipt describes server-owned objects. Existing local image
 cache/orphan reclamation is not certified by that receipt and remains part of

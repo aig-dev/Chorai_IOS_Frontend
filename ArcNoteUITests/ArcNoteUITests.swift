@@ -8810,17 +8810,17 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertEqual(try fetchSmokeTrashCardIDsInOrder(token: session.token).first, cardID)
 
         launchAuthenticatedApp()
-        tap("side-menu.open")
+        tapButton("side-menu.open")
         tap("side-menu.item.Trash")
         waitFor("screen.trash", timeout: 20)
-        waitForTrashCardVisible(cardID)
-        tap("trash.card.delete.\(cardID)")
+        let localID = waitForLocalTrashCard(containing: suffix)
+        tapButton("trash.card.delete.\(localID)")
         waitFor("trash.delete.confirmation", timeout: 10)
         captureVisual("trash-permanent-delete-confirmation")
-        tap("trash.delete.confirm")
+        tapButton("trash.delete.confirm")
 
         waitForTrashCard(id: cardID, token: session.token, isPresent: false)
-        waitForMissing("trash.card.\(cardID)", timeout: 20)
+        waitForMissing("trash.card.\(localID)", timeout: 20)
     }
 
     func testTrashPermanentDeleteFailureKeepsRetryableConfirmation() throws {
@@ -8839,11 +8839,11 @@ final class ArcNoteUITests: XCTestCase {
         waitForTrashCard(id: cardID, token: session.token, isPresent: true)
 
         launchAuthenticatedApp()
-        tap("side-menu.open")
+        tapButton("side-menu.open")
         tap("side-menu.item.Trash")
         waitFor("screen.trash", timeout: 20)
-        waitForTrashCardVisible(cardID)
-        tap("trash.card.delete.\(cardID)")
+        let localID = waitForLocalTrashCard(containing: suffix)
+        tapButton("trash.card.delete.\(localID)")
         waitFor("trash.delete.confirmation", timeout: 10)
 
         // Preserve the open confirmation's old baseline while another device
@@ -8854,16 +8854,16 @@ final class ArcNoteUITests: XCTestCase {
         deleteSmokeCard(id: cardID, token: session.token)
         let newBase = try XCTUnwrap(fetchSmokeCard(id: cardID, token: session.token, sync: true).syncToken)
         XCTAssertNotEqual(oldBase, newBase)
-        tap("trash.delete.confirm")
+        tapButton("trash.delete.confirm")
 
         waitFor("trash.delete.error", timeout: 20)
         waitFor("trash.delete.confirm")
         XCTAssertFalse(app.alerts["Error"].exists)
         captureVisual("trash-permanent-delete-retryable-error")
 
-        tap("trash.delete.cancel")
+        tapButton("trash.delete.cancel")
         waitForMissing("trash.delete.confirmation", timeout: 10)
-        XCTAssertFalse(app.descendants(matching: .any)["trash.card.error.\(cardID)"].exists)
+        XCTAssertFalse(app.descendants(matching: .any)["trash.card.error.\(localID)"].exists)
     }
 
     func testTrashRestoreFailureStaysOnCardAndCanRetry() throws {
@@ -12758,6 +12758,18 @@ final class ArcNoteUITests: XCTestCase {
         }
         captureVisual("trash-card-not-visible")
         XCTFail("Newest Trash card \(id) was not visible on the first page", file: file, line: line)
+    }
+
+    private func waitForLocalTrashCard(
+        containing marker: String,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) -> String {
+        let row = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier BEGINSWITH %@", "trash.card.local-note:"))
+            .containing(NSPredicate(format: "label CONTAINS %@", marker)).firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 20), "Missing local Trash card", file: file, line: line)
+        return String(row.identifier.dropFirst("trash.card.".count))
     }
 
     private func fetchSmokeTrashCardIDs(token: String) throws -> Set<String> {
