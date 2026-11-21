@@ -123,6 +123,25 @@ xcresult and rejects a missing or unavailable device before builds. The gate
 has yet to be connected to CI. Repository runner availability and compatibility
 with Xcode 27.2 are still under verification.
 
+The complete required invocation passed against frozen code `48ae69f` on
+Xcode 27.2 / Swift 6.4.2, using the dedicated iPhone 17 Pro simulator on iOS
+26.2. The runner suite passed 26 tests; CoreFlow passed 1,093, with exactly
+three M1 and three M2 opt-in API tests skipped because no session files were
+supplied; BlockNoteEditor passed 76. Debug, Debug-Production and Release built
+successfully. The hosted bundle passed 104 cases and the UI bundle passed all
+ten manifest selectors, with zero missing, skipped or failed required cases.
+The original six defaults and historical 47-selector matrix remain unchanged.
+
+Evidence is under this plan's local SDD workspace in
+`task-1-local-gate-root/`, with `task-1-local-gate-root-summary.json` and its
+App/UI summary files. The root-held command exited zero and verified an
+unchanged source digest throughout. Its App and EditorUI xcresults remain in
+that directory. The preceding agent-held attempt ended without an exit marker
+or a complete UI result bundle; that attempt is retained as interrupted, with
+no claim of a full pass. Existing ordinary compiler/Xcode warnings remain
+visible. This acceptance closes the local gate; the workflow and actual CI
+run still require a qualified runner.
+
 ## Original Merge failure and remaining scope
 
 The original failed Merge job and stage are still present in the isolated

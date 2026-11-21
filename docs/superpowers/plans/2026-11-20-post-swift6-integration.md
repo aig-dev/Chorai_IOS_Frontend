@@ -55,9 +55,9 @@ Swift 的 `NonisolatedNonsendingByDefault` 会改变 nonisolated async 的执行
 
 **Interfaces:** 现有命令兼容保留；新增 `--require-simulator` 与 `--ui-selectors-file <path>`。selector 文件为完整 `bundle/class/method` 字符串数组。CI 必须指定前者和明确的模拟器 UUID；不指定新参数时仍可进行原有本地检查。
 
-- [ ] 增加 runner 回归：缺少必需模拟器须在构建前失败；空/重复/非法 selector 拒绝；不同 class 的同名方法不能互相替代；missing、Skipped、Failed 或混合结果均失败；仅全量 Passed 成功。先运行 `python3 -B -m unittest discover -s scripts/tests -p 'test_*.py'`，确认新增条件失败。
-- [ ] 将既有 xcresult 精确匹配逻辑推广到传入的完整 selector；沿用当前临时编译目录、日志与结果留存，不另造测试框架。
-- [ ] 将现有六项 editor UI 加上下列四项形成十项日常门禁。保留历史 47 项迁移清单原样。
+- [x] 增加 runner 回归：缺少必需模拟器须在构建前失败；空/重复/非法 selector 拒绝；不同 class 的同名方法不能互相替代；missing、Skipped、Failed 或混合结果均失败；仅全量 Passed 成功。先运行 `python3 -B -m unittest discover -s scripts/tests -p 'test_*.py'`，确认新增条件失败。
+- [x] 将既有 xcresult 精确匹配逻辑推广到传入的完整 selector；沿用当前临时编译目录、日志与结果留存，不另造测试框架。
+- [x] 将现有六项 editor UI 加上下列四项形成十项日常门禁。保留历史 47 项迁移清单原样。
 
 ```text
 ArcNoteUITests/ArcNoteUITests/testMergeArtifactEditsInPlaceAndRestoresDraft
@@ -68,10 +68,10 @@ ArcNoteUITests/ArcNoteUITests/testHomeRemovalKeepsLocalTrashWhenSyncIsUnavailabl
 
 - [ ] 核实仓库可用的 macOS runner，再固定 workflow 的 runner、`DEVELOPER_DIR`、Xcode/runtime 版本与专用模拟器创建步骤。目标复用本次通过的 Xcode 27.2；替代工具链先跑同一门禁，不能假设 `macos-latest` 自带所需版本。没有兼容 runner 时记录“尚未接入 CI”，保留可运行本地门禁，不能宣称 CI 已完成。
 - [ ] workflow 在 PR/main 执行强制模拟器门禁，凭据权限只读；只缓存下载，不复用编译产物；失败也保留日志/xcresult。生产环境仍只构建。
-- [ ] 运行 runner 回归与 `IOS_DEVICE=<专用 UUID> python3 scripts/check-concurrency.py --require-simulator --ui-selectors-file scripts/ios-ui-gate-selectors.json`。验收：三种构建、两个 package、App 测试和十项 UI 全部通过；六项 opt-in API 跳过在结果中单独声明。独立提交本地门禁。
+- [x] 运行 runner 回归与 `IOS_DEVICE=<专用 UUID> python3 scripts/check-concurrency.py --require-simulator --ui-selectors-file scripts/ios-ui-gate-selectors.json`。验收：三种构建、两个 package、App 测试和十项 UI 全部通过；六项 opt-in API 跳过在结果中单独声明。独立提交本地门禁。
 - [ ] 接入后核对实际 PR/main CI run、日志和 xcresult。
 
-本地入口为 `make check-concurrency-required IOS_DEVICE=<专用 UUID>`。仓库可用的 macOS runner 和 Xcode 27.2 / iOS runtime 兼容性尚待核实，门禁尚未接入 CI。
+本地入口为 `make check-concurrency-required IOS_DEVICE=<专用 UUID>`。仓库可用的 macOS runner 和 Xcode 27.2 / iOS runtime 兼容性尚待核实，门禁尚未接入 CI。本地强制门禁已在 `48ae69f` 通过三构建、104 项 hosted、十项完整 UI selector、26 项 runner 与两个 package；CoreFlow 明确跳过六项需凭据的 API 回归。详见[本地验收记录](../../qa/2026-11-21-prelaunch-boundaries.md)。
 
 ## Task 2 — P0：普通笔记生产同步闭环
 

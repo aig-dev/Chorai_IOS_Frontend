@@ -100,6 +100,12 @@ xcresult. Simulator tests use Local. Production and Release are build checks.
 The [47-case migration matrix](../qa/2026-11-20-swift6-ui-selectors.json) records
 the broader migration coverage.
 
+The required local invocation passed all ten fixture-backed UI cases and 104
+hosted tests on `48ae69f`, with zero required-case skips or failures. Its six
+credential-dependent API cases were explicitly skipped. The
+[acceptance record](../qa/2026-11-21-prelaunch-boundaries.md) separates that
+local result from the still-unverified CI runner and workflow.
+
 The gate checks every selected UI bundle/class/method and its passing status in
 a separate `.xcresult`. Missing, skipped or renamed cases fail even when
 `xcodebuild` exits zero. Machine-readable stdout is kept separate from stderr.

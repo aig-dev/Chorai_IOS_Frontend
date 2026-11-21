@@ -9,6 +9,13 @@ each exact bundle, class and method in the saved xcresult. The original
 optional six-case command and 47-case migration matrix remain available.
 CI awaits confirmation of a compatible macOS runner and Xcode/runtime.
 
+The complete required invocation passed on frozen code `48ae69f`: 26 runner
+tests, CoreFlow 1,093 passed with six opt-in API cases skipped, BlockNoteEditor
+76 passed, all three builds, 104 hosted tests and all ten exact UI selectors.
+Hosted and required UI cases had zero skips or failures. The root-owned run
+retained an exit code of zero and complete xcresults; an earlier interrupted
+UI run remains excluded. See the [acceptance record](../qa/2026-11-21-prelaunch-boundaries.md).
+
 ## 2026-11-21 — Explicit first-note handoff
 
 A real ordinary-account test observed a durable local ID, then found that the editor had already disappeared. The first local save refreshed Library and sent guide evidence in the same callback. Home now submits the committed text only when an explicit Save or Close finishes in the original active editing session. A failed flush, a superseded revision and an empty cancellation leave the guide at its current step. The existing local save, card actions and account-transition drains retain their owners. A separate ordinary launch exposed an already-active guide mounting on Explore. A test that delays the tab mount until the real guide has loaded reproduced it. The tab shell now reconciles the initial route and tips on appearance as well as guide updates. The [ordinary-account checkpoint](../qa/2026-11-21-prelaunch-boundaries.md) records both results.
