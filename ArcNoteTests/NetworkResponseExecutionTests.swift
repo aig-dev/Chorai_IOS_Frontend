@@ -7,6 +7,77 @@ import os
 
 @MainActor
 final class NetworkResponseExecutionTests: XCTestCase {
+    private func purgeReceipt(_ key: String, cleanup: String = "PENDING") -> String {
+        #"{"success":true,"data":{"asset_id":"source","request_id":"\#(key)","state":"ERASED","activity_id":"purge_activity","action_log_id":"purge_log","certificate_id":"certificate","cleanup_state":"\#(cleanup)"}}"#
+    }
+
+    func testPurgeLostAckAndWrongReceiptRetryTheFrozenBytesAndExactIdentity() async throws {
+        prepareLinkAuth()
+        let starts = (0..<3).map { expectation(description: "purge request \($0)") }
+        let next = OSAllocatedUnfairLock(initialState: 0)
+        let fixture = HTTPFixture(onStart: {
+            let index = next.withLock { value in defer { value += 1 }; return value }
+            if index < starts.count { starts[index].fulfill() }
+        })
+        let attempt = try NotePurgeWriteAttempt(scope: NoteStoreScope(actorID: "link_actor", environmentID: fixture.baseURL),
+            assetID: "source", localID: "local_note", localGeneration: 2, baseSyncToken: "displayed_trash")
+        for index in 0..<3 {
+            let network = NetworkManager(baseURL: fixture.baseURL, session: fixture.session)
+            network.setAuthToken("synthetic-link-token")
+            let operation = Task { try await network.permanentlyDeleteNote(attempt) }
+            await fulfillment(of: [starts[index]], timeout: 5)
+            guard fixture.count > index else { operation.cancel(); _ = try await operation.value; throw URLError(.timedOut) }
+            let request = fixture.request(at: index)
+            XCTAssertEqual(request.httpMethod, "DELETE")
+            XCTAssertEqual(request.url?.path, "/api/cards/trash/source/permanent")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Idempotency-Key"), attempt.requestID)
+            // URLProtocol exposes upload bytes as a stream on some runtimes;
+            // the frozen body itself is covered through SQLite reopen tests.
+            if let bytes = request.httpBody { XCTAssertEqual(bytes, attempt.requestBody) }
+            if index == 0 { fixture.fail(at: index) }
+            else { fixture.respond(purgeReceipt(index == 1 ? "wrong_key" : attempt.requestID), at: index) }
+            if index < 2 {
+                do { _ = try await operation.value; XCTFail("Unverified erase acknowledged") } catch {}
+            } else {
+                let receipt = try await operation.value
+                XCTAssertEqual(receipt.requestID, attempt.requestID)
+                XCTAssertEqual(receipt.cleanupState, .pending)
+            }
+        }
+    }
+
+    func testPurgeSameActorNewSessionRejectsLateResponse() async throws {
+        prepareLinkAuth()
+        let started = expectation(description: "purge request")
+        let fixture = HTTPFixture(onStart: { started.fulfill() })
+        let attempt = try NotePurgeWriteAttempt(scope: NoteStoreScope(actorID: "link_actor", environmentID: fixture.baseURL),
+            assetID: "source", localID: "local_note", localGeneration: 2, baseSyncToken: "displayed_trash")
+        let network = NetworkManager(baseURL: fixture.baseURL, session: fixture.session)
+        network.setAuthToken("synthetic-link-token")
+        let operation = Task { try await network.permanentlyDeleteNote(attempt) }
+        await fulfillment(of: [started], timeout: 5)
+        guard fixture.count > 0 else { operation.cancel(); _ = try await operation.value; throw URLError(.timedOut) }
+        prepareLinkAuth()
+        fixture.respond(purgeReceipt(attempt.requestID))
+        do { _ = try await operation.value; XCTFail("Previous login response accepted") }
+        catch is CancellationError {} catch { XCTFail("Unexpected error: \(error)") }
+    }
+
+    func testPurgeUnknownCleanupReceiptIsRejected() async throws {
+        prepareLinkAuth()
+        let started = expectation(description: "purge request")
+        let fixture = HTTPFixture(onStart: { started.fulfill() })
+        let attempt = try NotePurgeWriteAttempt(scope: NoteStoreScope(actorID: "link_actor", environmentID: fixture.baseURL),
+            assetID: "source", localID: "local_note", localGeneration: 2, baseSyncToken: "displayed_trash")
+        let network = NetworkManager(baseURL: fixture.baseURL, session: fixture.session)
+        network.setAuthToken("synthetic-link-token")
+        let operation = Task { try await network.permanentlyDeleteNote(attempt) }
+        await fulfillment(of: [started], timeout: 5)
+        guard fixture.count > 0 else { operation.cancel(); _ = try await operation.value; throw URLError(.timedOut) }
+        fixture.respond(purgeReceipt(attempt.requestID, cleanup: "UNKNOWN"))
+        do { _ = try await operation.value; XCTFail("Unknown cleanup state accepted") } catch {}
+    }
+
     private func prepareLinkAuth() {
         let auth = AuthManager.shared
         let previousUser = auth.currentUser

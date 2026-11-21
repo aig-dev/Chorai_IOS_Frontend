@@ -8846,7 +8846,14 @@ final class ArcNoteUITests: XCTestCase {
         tap("trash.card.delete.\(cardID)")
         waitFor("trash.delete.confirmation", timeout: 10)
 
-        permanentlyCleanUpSmokeCard(id: cardID, token: session.token)
+        // Preserve the open confirmation's old baseline while another device
+        // restores and trashes the same note. Absence now has a successful local
+        // resolution path, so it is no longer a valid failure fixture.
+        let oldBase = try XCTUnwrap(fetchSmokeCard(id: cardID, token: session.token, sync: true).syncToken)
+        try restoreSmokeCard(id: cardID, token: session.token)
+        deleteSmokeCard(id: cardID, token: session.token)
+        let newBase = try XCTUnwrap(fetchSmokeCard(id: cardID, token: session.token, sync: true).syncToken)
+        XCTAssertNotEqual(oldBase, newBase)
         tap("trash.delete.confirm")
 
         waitFor("trash.delete.error", timeout: 20)
@@ -12602,6 +12609,18 @@ final class ArcNoteUITests: XCTestCase {
             request.httpBody = try? JSONSerialization.data(withJSONObject: ["base_sync_token": syncToken])
         }
         _ = try? sendRawRequest(request)
+    }
+
+    private func restoreSmokeCard(id: String, token: String) throws {
+        let baseline = try XCTUnwrap(fetchSmokeCard(id: id, token: token, sync: true).syncToken)
+        let url = try XCTUnwrap(URL(string: "\(UITestAPIConfiguration.baseURL)/api/cards/trash/\(id)/restore"))
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(UUID().uuidString, forHTTPHeaderField: "Idempotency-Key")
+        request.httpBody = try JSONSerialization.data(withJSONObject: ["base_sync_token": baseline])
+        _ = try sendRawRequest(request)
     }
 
     private func permanentlyCleanUpSmokeCard(id: String, token: String) {

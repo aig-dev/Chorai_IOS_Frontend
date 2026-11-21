@@ -151,6 +151,23 @@ The native confirmation and current account/environment validation remain intact
 The failed-sync local Trash regression and real Go
 edit/relaunch/delete/restore/purge flow pass. Cloud-only action routing is unchanged.
 
+Permanent deletion now freezes the displayed trash baseline, request identity,
+bytes and local generation in the existing `OfflineNote` transaction. This
+manual online intent survives termination; it is not sent by the synchronization
+coordinator. Until resolution, that note rejects edits/restoration and normal
+pulls cannot overwrite it or mark it unavailable. Other notes continue syncing.
+`NetworkManager.permanentlyDeleteNote` verifies account/session, exact receipt
+identities and the declared `PENDING`/`COMPLETE` cleanup state. The two former
+unconditional permanent-delete transport methods are removed.
+
+A matching receipt removes the local row and pending intent atomically. Only
+explicit precommit rejection releases the intent. The distinct
+`404/purge_target_absent` response proves the target is absent and this key has
+no owned outcome; it may remove only the unchanged, user-confirmed local copy,
+without inventing an ERASED receipt. Generic 404, timeout and unknown outcomes
+retain the intent. See [purge recovery validation](../qa/2026-11-21-purge-recovery.md)
+for current evidence and remaining public integration gates.
+
 ### Online administrator access and offline eligibility
 
 The real Go access resolver can return `mode: unavailable`, `status: allowed`,

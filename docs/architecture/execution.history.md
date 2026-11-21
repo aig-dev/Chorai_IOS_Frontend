@@ -1,5 +1,21 @@
 # Execution boundary history
 
+## 2026-11-21 — Atomic local purge recovery
+
+The old permanent-delete transport sent neither the displayed baseline nor a
+stable request key and accepted any successful envelope. It now sends a frozen
+manual intent owned by the local NOTE transaction, checks exact erasure evidence,
+and clears the intent with the local row. Reusing the NOTE transaction also
+prevents a separate journal from losing its association after a crash or pull.
+The former unconditional publisher/callback methods were retired.
+
+A gated regression reproduced normal synchronization reporting localFailure
+when a purge started during its manifest request. The coordinator now leaves
+manual purge ownership intact. Account/environment, local generation and current
+session checks prevent old results from removing a newer or another account's
+copy. A proved absent target has its own terminal path; generic 404 stays unknown.
+Evidence and remaining launch gates are in [purge recovery](../qa/2026-11-21-purge-recovery.md).
+
 ## 2026-11-21 — Durable association writes and editor hydration
 
 Replaced pair-only Link/Unlink requests with retained operation identities and

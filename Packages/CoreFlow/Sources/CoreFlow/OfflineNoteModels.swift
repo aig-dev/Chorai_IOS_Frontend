@@ -144,6 +144,7 @@ public struct OfflineNote: Codable, Equatable, Identifiable, Sendable {
     public internal(set) var baseSyncToken: String?
     public internal(set) var generation: Int64 = 1
     public internal(set) var pendingOperation: NotePendingOperation?
+    public internal(set) var pendingPurge: NotePurgeWriteAttempt?
     public internal(set) var remoteSnapshot: NoteRemoteSnapshot?
     public internal(set) var syncIssue: String?
     public internal(set) var attachments: [NoteLocalAttachment] = []
@@ -157,7 +158,7 @@ public struct OfflineNote: Codable, Equatable, Identifiable, Sendable {
     public var hasUnacknowledgedBody: Bool { bodyRevision != acknowledgedBodyRevision }
     public var isSynchronized: Bool {
         serverAssetID != nil && baseSyncToken != nil && !hasUnacknowledgedBody
-            && confirmedLifecycle == desiredLifecycle && pendingOperation == nil
+            && confirmedLifecycle == desiredLifecycle && pendingOperation == nil && pendingPurge == nil
             && remoteSnapshot == nil && syncIssue == nil
     }
 

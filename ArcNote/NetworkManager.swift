@@ -859,14 +859,6 @@ extension NetworkManager {
             responseType: SearchResponse.self
         )
     }
-    func permanentlyDeleteCard(cardId: String) -> AnyPublisher<NetworkResponse<CardMessageData>, NetworkError> {
-        return request(
-            endpoint: "/api/cards/trash/\(cardId)/permanent",
-            method: .delete,
-            responseType: NetworkResponse<CardMessageData>.self
-        )
-    }
-
     func restoreCard(cardId: String) -> AnyPublisher<NetworkResponse<CreateCardData>, NetworkError> {
         return self.request(
             endpoint: "/api/cards/trash/\(cardId)/restore",
@@ -2282,26 +2274,41 @@ extension NetworkManager {
         .store(in: &cancellables)
     }
 
-    // MARK: - 永久删除卡片
-    func permanentlyDeleteCard(cardId: String, completion: @escaping (Result<NetworkResponse<CardMessageData>, NetworkError>) -> Void) {
-        self.request(
-            endpoint: "/api/cards/trash/\(cardId)/permanent",
-            method: .delete,
-            encoding: URLEncoding.default,
-            responseType: NetworkResponse<CardMessageData>.self,
-            presentsError: false
-        )
-        .sink(
-            receiveCompletion: { completionResult in
-                if case .failure(let error) = completionResult {
-                    completion(.failure(error))
-                }
-            },
-            receiveValue: { response in
-                completion(.success(response))
-            }
-        )
-        .store(in: &cancellables)
+    // MARK: - Confirmed permanent deletion
+    private struct PurgeResponse: Decodable {
+        let success: Bool
+        let data: NotePurgeWriteReceipt
+    }
+
+    /// The local NOTE transaction owns this frozen command until its matching
+    /// receipt and local deletion commit together. This transport never clears it.
+    func permanentlyDeleteNote(_ attempt: NotePurgeWriteAttempt) async throws -> NotePurgeWriteReceipt {
+        try attempt.validate()
+        let (token, generation) = try noteSyncCredentials(attempt.scope)
+        guard let url = URL(string: baseURL + "/api/cards/trash/\(attempt.assetID)/permanent") else {
+            throw NetworkError.invalidURL
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue(attempt.requestID, forHTTPHeaderField: "Idempotency-Key")
+        request.httpBody = attempt.requestBody
+        let response = await session.request(request).redirect(using: Redirector(behavior: .doNotFollow)).serializingData().response
+        try checkNoteSyncSession(attempt.scope, token: token, generation: generation)
+        guard let status = response.response?.statusCode else {
+            throw NetworkError.networkError(response.error ?? AFError.explicitlyCancelled)
+        }
+        guard (200..<300).contains(status) else {
+            let failure = response.data.flatMap { try? JSONDecoder().decode(LinkFailureEnvelope.self, from: $0).error }
+            throw NetworkError.api(statusCode: status, code: failure?.reason ?? failure?.code, message: failure?.message)
+        }
+        guard response.error == nil, let bytes = response.value, bytes.count <= 16_384 else { throw NetworkError.noData }
+        let value = try JSONDecoder().decode(PurgeResponse.self, from: bytes)
+        guard value.success else { throw NoteLocalStoreError.invalidReceipt }
+        try value.data.validate(for: attempt)
+        return value.data
     }
 
     // MARK: 更新用户资料

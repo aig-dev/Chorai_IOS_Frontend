@@ -119,6 +119,11 @@ struct TrashView: View {
         .onAppear {
             trashManager.loadTrashCards(refresh: true)
         }
+        .onReceive(NotificationCenter.default.publisher(for: .cardReadSessionDidChange)) { _ in
+            busyCardID = nil
+            showDeleteConfirmation = false
+            clearDeleteSelection()
+        }
         .sheet(isPresented: $showDeleteConfirmation, onDismiss: clearDeleteSelection) {
             deleteConfirmation
         }
@@ -188,7 +193,9 @@ struct TrashView: View {
         busyCardID = card.id
         actionError = nil
         actionErrorCardID = nil
+        let generation = AuthManager.shared.sessionGeneration
         trashManager.restoreCard(cardId: card.id) { result in
+            guard AuthManager.shared.sessionGeneration == generation else { return }
             busyCardID = nil
             switch result {
             case .success:
@@ -217,7 +224,9 @@ struct TrashView: View {
         busyCardID = card.id
         actionError = nil
         actionErrorCardID = nil
-        trashManager.permanentlyDeleteCard(cardId: card.id) { result in
+        let generation = AuthManager.shared.sessionGeneration
+        trashManager.permanentlyDeleteCard(cardId: card.id, baseSyncToken: card.syncToken) { result in
+            guard AuthManager.shared.sessionGeneration == generation else { return }
             busyCardID = nil
             switch result {
             case .success:
@@ -252,7 +261,7 @@ struct TrashCardView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            Text("Cloud Trash retains synced deletions for 30 days.")
+            Text(card.isPurgePending ? "Deletion is not yet confirmed. Retry to check its status." : "Cloud Trash retains synced deletions for 30 days.")
                 .font(.caption)
                 .foregroundStyle(ChoraiTheme.gold)
 
@@ -292,7 +301,7 @@ struct TrashCardView: View {
             .frame(minWidth: 44, minHeight: 44)
         }
         .buttonStyle(.borderless)
-        .disabled(isBusy)
+        .disabled(isBusy || card.isPurgePending)
         .accessibilityIdentifier("trash.card.restore.\(card.id)")
     }
 

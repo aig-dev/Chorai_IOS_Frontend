@@ -189,6 +189,7 @@ public actor NoteLocalStore {
             } else {
                 throw NoteLocalStoreError.noteNotFound
             }
+            guard note.pendingPurge == nil else { throw NoteLocalStoreError.pendingOperationExists }
             let original = note
             try change(&note)
             if row == nil || original != note {

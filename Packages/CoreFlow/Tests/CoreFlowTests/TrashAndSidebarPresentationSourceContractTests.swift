@@ -7,7 +7,7 @@ final class TrashAndSidebarPresentationSourceContractTests: XCTestCase {
         XCTAssertTrue(trash.contains(".sheet(isPresented: $showDeleteConfirmation"))
         XCTAssertTrue(trash.contains(".interactiveDismissDisabled(busyCardID != nil)"))
         XCTAssertTrue(trash.contains("guard let card = cardToDelete, busyCardID == nil else { return }"))
-        XCTAssertTrue(trash.contains("trashManager.permanentlyDeleteCard(cardId: card.id)"))
+        XCTAssertTrue(trash.contains("trashManager.permanentlyDeleteCard(cardId: card.id, baseSyncToken: card.syncToken)"))
         XCTAssertTrue(trash.contains("trashManager.restoreCard(cardId: card.id)"))
         for identifier in ["trash.delete.error", "trash.delete.confirm", "trash.delete.cancel", "trash.delete.close", "trash.card.error."] {
             XCTAssertTrue(trash.contains(identifier))

@@ -24,6 +24,7 @@ struct TrashCard: Codable, Identifiable {
     let deletedAt: String
     let daysRemaining: Int
     var syncToken: String? = nil
+    var isPurgePending = false
 
     enum CodingKeys: String, CodingKey {
         case id, title, content, tags
@@ -97,6 +98,7 @@ extension TrashCard {
         isLiked = false
         daysRemaining = max(0, 30 - max(0, Int(Date().timeIntervalSince(note.updatedAt) / 86_400)))
         syncToken = note.baseSyncToken
+        isPurgePending = note.pendingPurge != nil
     }
 }
 
@@ -145,26 +147,33 @@ class TrashManager: ObservableObject {
         }
     }
 
-    // The existing permanent-delete action stays online and is never queued.
-    func permanentlyDeleteCard(cardId: String, completion: @escaping (Result<Bool, NetworkError>) -> Void) {
+    // A manual retry confirms the retained request; no background erase queue.
+    func permanentlyDeleteCard(cardId: String, baseSyncToken: String?, completion: @escaping (Result<Bool, NetworkError>) -> Void) {
         let library = LocalNotesController.shared.library
-        guard let scope = library.scope,
-              let note = library.notes.first(where: { NoteLibraryStore.identifier($0) == cardId }),
-              note.isSynchronized, note.confirmedLifecycle == .trashed,
-              let serverID = LocalNotesController.shared.cloudAssetID(for: cardId) else {
+        let generation = AuthManager.shared.sessionGeneration
+        guard let scope = library.scope, let baseSyncToken else {
             completion(.failure(.forbidden)); return
         }
-        NetworkManager.shared.permanentlyDeleteCard(cardId: serverID) { result in
-            Task { @MainActor in
-                switch result {
-                case .success(let response) where response.success:
-                    do {
-                        try await library.discardConfirmedPurge(identifier: cardId, expectedGeneration: note.generation, scope: scope)
-                        completion(.success(true))
-                    } catch { completion(.failure(.networkError(error))) }
-                case .success: completion(.failure(.serverError(500, "Couldn't permanently delete this note.")))
-                case .failure(let error): completion(.failure(error))
+        Task {
+            do {
+                let attempt = try await library.beginPurge(identifier: cardId, baseSyncToken: baseSyncToken, scope: scope)
+                guard AuthManager.shared.sessionGeneration == generation else { throw CancellationError() }
+                let receipt: NotePurgeWriteReceipt
+                do { receipt = try await NetworkManager.shared.permanentlyDeleteNote(attempt) }
+                catch let error as NetworkError {
+                    if case .api(let status, let reason, _) = error, let reason {
+                        let removed = try await library.rejectPurge(attempt, status: status, reason: reason)
+                        guard AuthManager.shared.sessionGeneration == generation else { throw CancellationError() }
+                        if removed { completion(.success(true)); return }
+                    }
+                    throw error
                 }
+                guard AuthManager.shared.sessionGeneration == generation else { throw CancellationError() }
+                try await library.confirmPurge(attempt, receipt: receipt)
+                guard AuthManager.shared.sessionGeneration == generation else { throw CancellationError() }
+                completion(.success(true))
+            } catch {
+                completion(.failure((error as? NetworkError) ?? .networkError(error)))
             }
         }
     }

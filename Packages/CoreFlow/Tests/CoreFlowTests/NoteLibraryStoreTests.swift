@@ -200,6 +200,7 @@ final class NoteLibraryStoreTests: XCTestCase {
         let library = library()
         await library.configure(scope: a, cloudEnabled: false)
         let keep = try await library.save(identifier: nil, createID: "keep", body: OfflineNoteBody(content: "keep"))
+        let attempt = try await library.beginPurge(identifier: "trash", baseSyncToken: "v1", scope: a)
         var removedIDs = Set<String>()
         let subscription = library.changes.sink { change in
             if case let .updated(updated, removed) = change {
@@ -208,7 +209,9 @@ final class NoteLibraryStoreTests: XCTestCase {
             }
         }
         defer { subscription.cancel() }
-        try await library.discardConfirmedPurge(identifier: "trash", expectedGeneration: note.generation, scope: a)
+        let receipt = NotePurgeWriteReceipt(assetID: "trash", requestID: attempt.requestID, state: "ERASED",
+            activityID: "activity", actionLogID: "log", certificateID: "certificate", cleanupState: .pending)
+        try await library.confirmPurge(attempt, receipt: receipt)
         XCTAssertEqual(removedIDs, [note.localID])
         XCTAssertEqual(library.notes, [keep])
         await library.configure(scope: nil, cloudEnabled: false)
@@ -362,9 +365,8 @@ final class NoteLibraryStoreTests: XCTestCase {
         let note = try await library.save(identifier: nil, createID: "keep", body: OfflineNoteBody(content: "retained"))
         let id = NoteLibraryStore.identifier(note)
         try await library.setLifecycle(identifier: id, lifecycle: .trashed)
-        let current = try await library.open(identifier: id)
         do {
-            try await library.discardConfirmedPurge(identifier: id, expectedGeneration: current.generation, scope: a)
+            _ = try await library.beginPurge(identifier: id, baseSyncToken: "cloud", scope: a)
             XCTFail("A cloud deletion must never confirm unsent local body")
         } catch { XCTAssertEqual(error as? NoteLocalStoreError, .invalidOperation) }
         XCTAssertEqual(library.notes.first?.body.content, "retained")

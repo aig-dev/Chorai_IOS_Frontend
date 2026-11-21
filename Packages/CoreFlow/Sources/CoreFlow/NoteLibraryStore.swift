@@ -339,17 +339,29 @@ public final class NoteLibraryStore: ObservableObject {
         try check(epoch); publish([updated])
     }
 
-    public func discardConfirmedPurge(identifier: String, expectedGeneration: Int64, scope expectedScope: NoteStoreScope) async throws {
+    public func beginPurge(identifier: String, baseSyncToken: String, scope expectedScope: NoteStoreScope) async throws -> NotePurgeWriteAttempt {
         let (store, epoch) = try await context(expectedScope)
         guard let note = try await find(identifier, store: store) else { throw NoteLocalStoreError.noteNotFound }
-        try await store.transaction { context in
-            guard let row = try NoteLocalStore.row(localID: note.localID, in: context) else { throw NoteLocalStoreError.noteNotFound }
-            let current = try NoteLocalStore.decode(row, scope: expectedScope)
-            guard current.generation == expectedGeneration else { throw NoteLocalStoreError.staleGeneration }
-            guard current.isSynchronized, current.confirmedLifecycle == .trashed else { throw NoteLocalStoreError.invalidOperation }
-            context.delete(row)
-        }
-        try check(epoch); publish([], removed: [note.localID])
+        let attempt = try await store.beginPurge(localID: note.localID, baseSyncToken: baseSyncToken)
+        let updated = try await store.note(localID: note.localID)
+        try check(epoch); if let updated { publish([updated]) }
+        return attempt
+    }
+
+    public func confirmPurge(_ attempt: NotePurgeWriteAttempt, receipt: NotePurgeWriteReceipt) async throws {
+        let (store, epoch) = try await context(attempt.scope)
+        try await store.confirmPurge(attempt, receipt: receipt)
+        try check(epoch); publish([], removed: [attempt.localID])
+    }
+
+    public func rejectPurge(_ attempt: NotePurgeWriteAttempt, status: Int, reason: String) async throws -> Bool {
+        let (store, epoch) = try await context(attempt.scope)
+        let removed = try await store.rejectPurge(attempt, status: status, reason: reason)
+        let updated = try await store.note(localID: attempt.localID)
+        try check(epoch)
+        if removed { publish([], removed: [attempt.localID]) }
+        else if let updated { publish([updated]) }
+        return removed
     }
 
     private func context(_ expected: NoteStoreScope?) async throws -> (NoteLocalStore, UInt64) {

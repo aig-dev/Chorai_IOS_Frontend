@@ -122,7 +122,7 @@ public actor NoteSyncCoordinator {
             let entries = Dictionary(uniqueKeysWithValues: manifest.notes.map { ($0.assetID, $0) })
             for note in initial {
                 guard valid(session) else { return }
-                if note.isSynchronized { continue }
+                if note.isSynchronized || note.pendingPurge != nil { continue }
                 if ["needs_login", "sync_not_ready", "precondition_required"].contains(note.syncIssue ?? "") ||
                     (note.syncIssue == "unsupported_operation" && !textOnly) ||
                     (note.syncIssue == "unsupported_document" && protocolVersion == 3 &&
@@ -135,17 +135,18 @@ public actor NoteSyncCoordinator {
             guard valid(session) else { return }
             for note in initial {
                 guard valid(session) else { return }
-                guard let assetID = note.serverAssetID else { continue }
+                guard note.pendingPurge == nil, let assetID = note.serverAssetID else { continue }
                 guard let entry = entries[assetID] else {
                     if note.pendingOperation == nil {
                         do { try await store.recordSyncIssue(localID: note.localID, issue: "remote_unavailable", expectedGeneration: note.generation) }
                         catch NoteLocalStoreError.staleGeneration { /* A newer local decision wins. */ }
+                        catch NoteLocalStoreError.pendingOperationExists { /* Manual purge owns its unresolved receipt. */ }
                     }
                     continue
                 }
                 if note.isSynchronized && note.baseSyncToken == entry.syncToken { continue }
                 let latest = try await store.note(localID: note.localID)
-                guard let latest, latest.pendingOperation == nil else { continue }
+                guard let latest, latest.pendingOperation == nil, latest.pendingPurge == nil else { continue }
                 // A definite conflict needs its remote copy even though recording
                 // that rejection advanced the local generation in this pass.
                 let rejected = latest.syncIssue == "conflict"
@@ -232,7 +233,7 @@ public actor NoteSyncCoordinator {
             do {
                 guard var note = try await store.note(localID: localID), valid(session) else { return }
                 attemptedBodyRevision = note.bodyRevision
-                guard note.remoteSnapshot == nil, note.syncIssue == nil else { edits[localID] = nil; return }
+                guard note.remoteSnapshot == nil, note.syncIssue == nil, note.pendingPurge == nil else { edits[localID] = nil; return }
                 if let existing = note.pendingOperation {
                     if textOnly || (protocolVersion == 3 && (existing.kind == .create || existing.kind == .update)) {
                         do {

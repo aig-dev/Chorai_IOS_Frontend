@@ -87,7 +87,7 @@ extension NoteLocalStore {
             guard let row = try Self.row(localID: localID, in: context) else { throw NoteLocalStoreError.noteNotFound }
             note = try Self.decode(row, scope: scope)
             guard note.serverAssetID == snapshot.assetID else { throw NoteLocalStoreError.invalidIdentity }
-            guard note.generation == expectedGeneration, note.pendingOperation == nil else { return nil }
+            guard note.generation == expectedGeneration, note.pendingOperation == nil, note.pendingPurge == nil else { return nil }
             // Transport/access warnings do not make an otherwise clean
             // working copy dirty. An authorized read may clear them.
             if note.hasUnacknowledgedBody || note.desiredLifecycle != note.confirmedLifecycle || note.remoteSnapshot != nil {
