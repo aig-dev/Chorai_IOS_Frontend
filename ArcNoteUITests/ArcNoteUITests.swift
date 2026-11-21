@@ -5954,9 +5954,12 @@ final class ArcNoteUITests: XCTestCase {
         waitForSessionPhase("verified", timeout: 30)
         XCTAssertTrue(proxy.verifiedFullAccess(session.actorId))
         openOrdinaryLibrary()
+        let journal = try registerOrdinaryFixture(session, account: "A")
+        proxy.captureCreation(journal, token: session.token)
         tap("note.create")
         typeInCardEditorBody(marker)
         let local = waitFor("note.created-card-id", timeout: 25).label
+        try journal.register(local: local)
         tap("cardEditorFormatInlineImage")
         tapFirstHittableButton(label: "Photo Library")
         let photo = app.images.matching(identifier: "PXGGridLayout-Info").firstMatch
@@ -5965,8 +5968,7 @@ final class ArcNoteUITests: XCTestCase {
         app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: item.frame.midX, dy: item.frame.midY)).tap()
         XCTAssertTrue(app.images["Inline image"].waitForExistence(timeout: 20))
         XCTAssertTrue(app.staticTexts["Synced"].waitForExistence(timeout: 40))
-        let rows = waitForSmokeCards(search: marker, token: session.token) { $0.contains { $0.content.contains(marker) } }
-        let asset = try XCTUnwrap(rows.first(where: { $0.content.contains(marker) })?.id)
+        let asset = try XCTUnwrap(journal.snapshot().asset, "Expected the exact Go create receipt")
         try assertOrdinaryPhotoNote(asset, text: marker, session: session, proxy: proxy)
         return (local, asset)
     }
@@ -6008,7 +6010,6 @@ final class ArcNoteUITests: XCTestCase {
         defer { proxy.stop() }
         let session = try ordinarySession()
         let marker = "Offline" + UUID().uuidString.prefix(8)
-        defer { cleanOrdinaryNotes(marker: marker, session: session) }
         let note = try createOrdinaryPhotoNote(marker: marker, session: session, proxy: proxy)
         proxy.setOffline(true)
         let suffix = " recovered"
@@ -6021,30 +6022,58 @@ final class ArcNoteUITests: XCTestCase {
         openOrdinaryLibrary()
         XCTAssertTrue(app.staticTexts[marker + suffix].waitForExistence(timeout: 15))
         tap("card.home." + note.local)
-        XCTAssertTrue(app.images["Inline image"].waitForExistence(timeout: 10))
+        let image = app.images["Inline image"]
+        XCTAssertTrue(image.waitForExistence(timeout: 10))
+        XCTAssertGreaterThan(image.frame.width, 240)
+        XCTAssertGreaterThan(image.frame.height, 160)
+        XCTAssertTrue(waitFor("cardEditorBodyWebView").frame.contains(CGPoint(x: image.frame.midX, y: image.frame.midY)))
+        XCTAssertFalse(app.staticTexts["Inline image"].exists)
         XCTAssertTrue(app.staticTexts["Saved on this device · Waiting to sync"].exists)
+        captureVisual("ordinary-offline-reopened-photo")
         let previous = proxy.mutations.count
         proxy.dropFirstUpdateReceipt(asset: note.asset)
         proxy.setOffline(false)
         recoverAppAfterTransportRestores()
         XCTAssertTrue(app.staticTexts["Synced"].waitForExistence(timeout: 40))
-        let delivered = proxy.mutations.dropFirst(previous).filter { $0.path == path && $0.receipt == $0.key }
-        XCTAssertGreaterThanOrEqual(delivered.count, 2, "Lost acknowledgement must replay the committed operation")
-        let frozen = try XCTUnwrap(delivered.first)
-        let replay = try XCTUnwrap(delivered.last)
-        XCTAssertEqual(replay.key, frozen.key)
-        XCTAssertEqual(replay.digest, frozen.digest)
+        let attempts = proxy.mutations.dropFirst(previous).filter { $0.method == "PUT" && $0.path == path }
+        XCTAssertTrue(OrdinaryGoProxy.sameFrozenRequest(attempts))
+        let replay = try XCTUnwrap(attempts.first)
+        let key = try XCTUnwrap(replay.key)
+        XCTAssertGreaterThanOrEqual(attempts.filter { $0.receipt == key }.count, 2)
         try assertOrdinaryPhotoNote(note.asset, text: marker + suffix, session: session, proxy: proxy)
         XCTAssertEqual(try fetchSmokeCards(search: marker, token: session.token).filter { $0.content.contains(marker) }.map(\.id), [note.asset])
-        print("ORDINARY_OFFLINE asset=\(note.asset) operation=\(replay.key) sha256=\(replay.digest.map { String(format: "%02x", $0) }.joined())")
+        print("ORDINARY_OFFLINE asset=\(note.asset) operation=\(key) sha256=\(replay.digest.map { String(format: "%02x", $0) }.joined())")
     }
 
-    private func cleanOrdinaryNotes(marker: String, session: SmokeSession) {
-        if let cards = try? fetchSmokeCards(search: marker, token: session.token) {
-            for card in cards where card.content.contains(marker) {
-                permanentlyCleanUpSmokeCard(id: card.id, token: session.token)
+    private func registerOrdinaryFixture(_ session: SmokeSession, account: String) throws -> OrdinaryFixtureJournal {
+        let directory = try XCTUnwrap(ProcessInfo.processInfo.environment["CHORAI_UI_TEST_CLEANUP_DIRECTORY"],
+                                     "Provide a private, retained directory for the recovery run")
+        let origin = UITestAPIConfiguration.baseURL
+        let journal = try OrdinaryFixtureJournal(directory: URL(fileURLWithPath: directory), actor: session.actorId, origin: origin)
+        addTeardownBlock { @MainActor [self] in
+            let entry = try journal.snapshot()
+            guard let asset = entry.asset else {
+                XCTFail("Missing create receipt for run " + journal.file.lastPathComponent)
+                return
+            }
+            let auth: SmokeSession
+            if (try? verifySmokeToken(token: session.token).user.id) == entry.actor {
+                auth = session
+            } else {
+                auth = try ordinarySession(account: account)
+            }
+            do {
+                try journal.clean(actor: auth.actorId, origin: origin, token: auth.token, baseline: { id in
+                    try XCTUnwrap(fetchSmokeCard(id: id, token: auth.token, sync: true).syncToken)
+                }, send: { request in
+                    try sendRawRequest(request)
+                })
+            } catch {
+                XCTFail("Unconfirmed teardown of " + asset + ", journal " + journal.file.lastPathComponent
+                        + ", error " + String((error as NSError).code))
             }
         }
+        return journal
     }
 
     private func switchOrdinaryAccount(to account: String, proxy: OrdinaryGoProxy) throws -> SmokeSession {
@@ -6070,13 +6099,6 @@ final class ArcNoteUITests: XCTestCase {
         defer { proxy.stop() }
         let session = try ordinarySession()
         let marker = "Switch" + UUID().uuidString.prefix(8)
-        var cleanupSession = session
-        defer {
-            if (try? verifySmokeToken(token: cleanupSession.token)) == nil, let fresh = try? ordinarySession() {
-                cleanupSession = fresh
-            }
-            cleanOrdinaryNotes(marker: marker, session: cleanupSession)
-        }
         app.launchArguments.append("--ui-test-ordinary-phone-signin")
         for key in ["PHONE", "PASSWORD", "TARGET_PHONE", "TARGET_PASSWORD"] {
             let name = "CHORAI_UI_TEST_" + key
@@ -6088,8 +6110,9 @@ final class ArcNoteUITests: XCTestCase {
         appendToOrdinaryPhotoNote(suffix)
         let held = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in proxy.hasHeldResponse }, object: nil)
         XCTAssertEqual(XCTWaiter.wait(for: [held], timeout: 20), .completed)
-        let change = try XCTUnwrap(proxy.mutations.last { $0.path == "/api/cards/" + note.asset })
-        XCTAssertEqual(change.key, change.receipt)
+        let change = try XCTUnwrap(proxy.mutations.last {
+            $0.method == "PUT" && $0.path == "/api/cards/" + note.asset && $0.key != nil && $0.key == $0.receipt
+        })
         try assertOrdinaryPhotoNote(note.asset, text: marker + suffix, session: session, proxy: proxy)
         let committed = try XCTUnwrap(fetchSmokeCard(id: note.asset, token: session.token, sync: true).syncToken)
         closeNewNoteEditor()
@@ -6097,16 +6120,32 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertNotEqual(session.actorId, other.actorId)
         XCTAssertTrue(proxy.verifiedFullAccess(other.actorId))
         XCTAssertTrue(proxy.hasHeldResponse)
+        let bFixture = try registerOrdinaryFixture(other, account: "B")
+        proxy.captureCreation(bFixture, token: other.token)
+        tap("note.create")
+        let bText = "BControl" + UUID().uuidString.prefix(8)
+        typeInCardEditorBody(bText)
+        let bLocal = waitFor("note.created-card-id", timeout: 25).label
+        try bFixture.register(local: bLocal)
+        let synced = app.staticTexts["Synced"]
+        XCTAssertTrue(synced.waitForExistence(timeout: 30))
+        let bAsset = try XCTUnwrap(bFixture.snapshot().asset)
+        XCTAssertEqual(try fetchSmokeCard(id: bAsset, token: other.token).content, bText)
+        XCTAssertTrue(proxy.hasHeldResponse)
         proxy.release()
         XCTAssertThrowsError(try fetchSmokeCard(id: note.asset, token: other.token)) {
             XCTAssertTrue([403, 404].contains(($0 as NSError).code))
         }
+        XCTAssertTrue(synced.exists)
+        XCTAssertFalse(app.staticTexts["Saved on this device · Waiting to sync"].exists)
+        closeNewNoteEditor()
+        tap("card.home." + bLocal)
+        XCTAssertTrue(synced.waitForExistence(timeout: 15))
+        closeNewNoteEditor()
         XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", marker)).firstMatch.exists)
         XCTAssertFalse(exists("card.home." + note.local, timeout: 1))
         XCTAssertFalse(exists("home.card.body." + note.local, timeout: 1))
-        XCTAssertFalse(app.staticTexts["Saved on this device · Waiting to sync"].exists)
         let returned = try switchOrdinaryAccount(to: "A", proxy: proxy)
-        cleanupSession = returned
         XCTAssertEqual(returned.actorId, session.actorId)
         tap("card.home." + note.local)
         XCTAssertTrue(app.images["Inline image"].waitForExistence(timeout: 10))
@@ -6114,7 +6153,7 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertEqual(try fetchSmokeCard(id: note.asset, token: returned.token, sync: true).syncToken, committed)
         try assertOrdinaryPhotoNote(note.asset, text: marker + suffix, session: returned, proxy: proxy)
         XCTAssertEqual(try fetchSmokeCards(search: marker, token: returned.token).filter { $0.content.contains(marker) }.map(\.id), [note.asset])
-        print("ORDINARY_SWITCH asset=\(note.asset) operation=\(change.key) sha256=\(change.digest.map { String(format: "%02x", $0) }.joined())")
+        print("ORDINARY_SWITCH asset=\(note.asset) operation=\(try XCTUnwrap(change.key)) sha256=\(change.digest.map { String(format: "%02x", $0) }.joined())")
     }
 
     func testRevokedSessionRelaunchReturnsToWelcome() throws {
@@ -6129,10 +6168,11 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertFalse(proxy.verifiedFullAccess(session.actorId))
     }
 
-    private func ordinarySession() throws -> SmokeSession {
+    private func ordinarySession(account: String = "A") throws -> SmokeSession {
         let environment = ProcessInfo.processInfo.environment
-        let phone = try XCTUnwrap(environment["CHORAI_UI_TEST_PHONE"])
-        let password = try XCTUnwrap(environment["CHORAI_UI_TEST_PASSWORD"])
+        let prefix = account == "A" ? "CHORAI_UI_TEST_" : "CHORAI_UI_TEST_TARGET_"
+        let phone = try XCTUnwrap(environment[prefix + "PHONE"])
+        let password = try XCTUnwrap(environment[prefix + "PASSWORD"])
         var request = URLRequest(url: try XCTUnwrap(URL(string: UITestAPIConfiguration.baseURL + "/api/auth/login")))
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -6172,8 +6212,9 @@ final class ArcNoteUITests: XCTestCase {
         defer { proxy.stop() }
         let session = try ordinarySession()
         let marker = "granted-" + UUID().uuidString
+        let fixture = try registerOrdinaryFixture(session, account: "A")
         let id = try createSmokeCard(token: session.token, searchToken: marker, isPublic: false)
-        defer { if let fresh = try? ordinarySession() { permanentlyCleanUpSmokeCard(id: id, token: fresh.token) } }
+        try fixture.register(asset: id)
         try launchOrdinary(session, through: proxy)
         waitForSessionPhase("verified", timeout: 30)
         XCTAssertTrue(proxy.verifiedFullAccess(session.actorId))

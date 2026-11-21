@@ -8,6 +8,101 @@ import os
 
 @MainActor
 final class RecentNotesSyncUITests: XCTestCase {
+    func testOrdinaryCleanupPersistsBothRequestsBeforeSendingAndResumesAfterLostReceipt() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let origin = "http://localhost"
+        let journal = try OrdinaryFixtureJournal(directory: directory, actor: "owner", origin: origin)
+        try journal.register(local: "local-note:owned", asset: "owned")
+        XCTAssertThrowsError(try journal.register(asset: "unrelated"))
+        var attempts = [OrdinaryFixtureJournal.Command]()
+        var baselines = ["active-base", "trash-base"]
+        var acknowledged = Set<String>()
+
+        func exercise(_ entry: OrdinaryFixtureJournal, actor: String = "owner") throws {
+            try entry.clean(actor: actor, origin: origin, token: "fixture-token", baseline: { asset in
+                XCTAssertEqual(asset, "owned")
+                return try XCTUnwrap(baselines.isEmpty ? nil : baselines.removeFirst())
+            }, send: { request in
+                let disk = try OrdinaryFixtureJournal(reopening: journal.file).snapshot()
+                let command = try XCTUnwrap(disk.commands.last)
+                XCTAssertEqual(request.httpMethod, command.method)
+                XCTAssertEqual(request.url?.absoluteString, origin + command.path)
+                XCTAssertEqual(request.value(forHTTPHeaderField: "Idempotency-Key"), command.key)
+                XCTAssertEqual(request.value(forHTTPHeaderField: "Content-Type"), command.contentType)
+                XCTAssertEqual(request.httpBody, command.body, "The exact outgoing bytes must already be on disk")
+                XCTAssertEqual(try JSONDecoder().decode([String: String].self, from: command.body),
+                               ["base_sync_token": command.baseline])
+                attempts.append(command)
+                // Each first request commits at the fixture. Its acknowledgement is lost.
+                guard !acknowledged.insert(command.key).inserted else { throw URLError(.networkConnectionLost) }
+                let data: [String: Any]
+                if command.path.hasSuffix("/permanent") {
+                    data = ["asset_id": "owned", "request_id": command.key, "state": "ERASED",
+                            "activity_id": "activity", "action_log_id": "log", "certificate_id": "cert", "cleanup_state": "COMPLETE"]
+                } else {
+                    data = ["sync_receipt": ["asset_id": "owned", "operation_id": command.key, "lifecycle": "trashed"]]
+                }
+                return try JSONSerialization.data(withJSONObject: ["success": true, "data": data])
+            })
+        }
+        XCTAssertThrowsError(try exercise(journal, actor: "other"))
+        XCTAssertTrue(attempts.isEmpty)
+        XCTAssertThrowsError(try exercise(journal))
+        XCTAssertFalse(try XCTUnwrap(journal.snapshot().commands.last).acknowledged)
+        XCTAssertThrowsError(try exercise(OrdinaryFixtureJournal(reopening: journal.file)))
+        XCTAssertFalse(try XCTUnwrap(journal.snapshot().commands.last).acknowledged)
+        try exercise(OrdinaryFixtureJournal(reopening: journal.file))
+        try exercise(OrdinaryFixtureJournal(reopening: journal.file))
+        XCTAssertEqual(attempts.count, 4)
+        XCTAssertEqual(attempts[0], attempts[1])
+        XCTAssertEqual(attempts[2], attempts[3])
+        XCTAssertNotEqual(attempts[0].key, attempts[2].key)
+        XCTAssertEqual(acknowledged.count, 2)
+        XCTAssertTrue(try journal.snapshot().commands.allSatisfy(\.acknowledged))
+    }
+
+    func testOrdinaryProxyRecordsKeylessWritesAtIngress() async throws {
+        let proxy = try OrdinaryGoProxy()
+        defer { proxy.stop() }
+        let origin = try proxy.start()
+        proxy.setOffline(true)
+        try await sendIsolatedUpdate(origin, key: nil, body: "keyless")
+        let mutation = try XCTUnwrap(proxy.mutations.first)
+        XCTAssertEqual(mutation.method, "PUT")
+        XCTAssertEqual(mutation.path, "/api/cards/fixture")
+        XCTAssertEqual(mutation.digest, Data(SHA256.hash(data: Data("keyless".utf8))))
+        XCTAssertNil(mutation.key)
+        XCTAssertTrue(mutation.transportFailed)
+        XCTAssertEqual(proxy.mutations.count, 1)
+    }
+
+    func testOrdinaryReplayRejectsIntermediateKeyAndBodyChanges() async throws {
+        let proxy = try OrdinaryGoProxy()
+        defer { proxy.stop() }
+        let origin = try proxy.start()
+        proxy.setOffline(true)
+        for (key, body) in [("original", "body"), ("different", "body"), ("original", "changed"), ("original", "body")] {
+            try await sendIsolatedUpdate(origin, key: key, body: body)
+        }
+        let attempts = proxy.mutations
+        XCTAssertEqual(attempts.count, 4)
+        XCTAssertFalse(OrdinaryGoProxy.sameFrozenRequest([attempts[0], attempts[1], attempts[3]]))
+        XCTAssertFalse(OrdinaryGoProxy.sameFrozenRequest([attempts[0], attempts[2], attempts[3]]))
+        XCTAssertTrue(OrdinaryGoProxy.sameFrozenRequest([attempts[0], attempts[3]]))
+    }
+
+    private func sendIsolatedUpdate(_ origin: String, key: String?, body: String) async throws {
+        var request = URLRequest(url: try XCTUnwrap(URL(string: origin + "/api/cards/fixture")))
+        request.httpMethod = "PUT"
+        request.httpBody = Data(body.utf8)
+        request.setValue(key, forHTTPHeaderField: "Idempotency-Key")
+        do {
+            _ = try await URLSession.shared.data(for: request)
+            XCTFail("The isolated transport must drop this request")
+        } catch is URLError {}
+    }
+
     func testOnlineRestrictedVerificationRemovesExistingLocalAccess() throws {
         let server = try RecentNotesServer()
         defer { server.stop() }
@@ -551,11 +646,20 @@ final class RecentNotesServer: @unchecked Sendable {
 // connections, barriers and observations. Authentication and responses come from Go.
 final class OrdinaryGoProxy: @unchecked Sendable {
     struct Mutation: Equatable {
-        let key: String
+        let key: String?
+        let method: String
         let digest: Data
         let path: String
-        let status: Int?
-        let receipt: String?
+        var transportFailed = false
+        var status: Int?
+        var receipt: String?
+    }
+
+    static func sameFrozenRequest(_ attempts: [Mutation]) -> Bool {
+        guard let first = attempts.first, let key = first.key, !key.isEmpty else { return false }
+        return attempts.allSatisfy {
+            $0.method == first.method && $0.path == first.path && $0.key == key && $0.digest == first.digest
+        }
     }
 
     private let queue = DispatchQueue(label: "OrdinaryGoProxy")
@@ -568,6 +672,10 @@ final class OrdinaryGoProxy: @unchecked Sendable {
     private var dropPath: String?
     private var held: (() -> Void)?
     private var records = [Mutation]()
+    private var creating: (journal: OrdinaryFixtureJournal, token: String)?
+    func captureCreation(_ journal: OrdinaryFixtureJournal, token: String) {
+        queue.sync { creating = (journal, token) }
+    }
     private var login: Data?
     private var uploads = [Data]()
     private var admitted = Set<String>()
@@ -657,16 +765,25 @@ final class OrdinaryGoProxy: @unchecked Sendable {
         }
         let key = request.value(forHTTPHeaderField: "Idempotency-Key")
         let path = url.path
-        let card = key != nil && path.hasPrefix("/api/cards") && ["POST", "PUT"].contains(method)
-        let digest = card ? Data(SHA256.hash(data: body)) : Data()
+        let card = (path == "/api/cards" || path.hasPrefix("/api/cards/")) && ["POST", "PUT", "PATCH", "DELETE"].contains(method)
+        let index = card ? records.count : nil
+        if card {
+            records.append(Mutation(key: key, method: method, digest: Data(SHA256.hash(data: body)), path: path))
+        }
+        let creation = method == "POST" && path == "/api/cards" ? creating : nil
+        let authorized = creation.map { request.value(forHTTPHeaderField: "Authorization") == "Bearer " + $0.token } ?? false
         if offline {
-            if card, let key { records.append(Mutation(key: key, digest: digest, path: path, status: nil, receipt: nil)) }
+            if let index { records[index].transportFailed = true }
             connection.cancel()
             return
         }
-        session.dataTask(with: request) { data, response, _ in
+        session.dataTask(with: request) { data, response, error in
             self.queue.async {
-                guard let http = response as? HTTPURLResponse, let data else { connection.cancel(); return }
+                if let index {
+                    self.records[index].status = (response as? HTTPURLResponse)?.statusCode
+                    self.records[index].transportFailed = error != nil
+                }
+                guard let http = response as? HTTPURLResponse, let data, error == nil else { connection.cancel(); return }
                 let payload = ((try? JSONSerialization.jsonObject(with: data)) as? [String: Any])?["data"] as? [String: Any]
                 if http.statusCode == 200 {
                     if path == "/api/auth/login" { self.login = data }
@@ -684,9 +801,17 @@ final class OrdinaryGoProxy: @unchecked Sendable {
                     if let type = http.value(forHTTPHeaderField: "Content-Type") { header += "Content-Type: \(type)\r\n" }
                     connection.send(content: Data((header + "\r\n").utf8) + data, completion: .contentProcessed { _ in connection.cancel() })
                 }
+                let receipt = payload?["sync_receipt"] as? [String: Any]
+                if let index {
+                    self.records[index].receipt = receipt?["operation_id"] as? String
+                }
+                if let creation, authorized, let key, (200..<300).contains(http.statusCode),
+                   receipt?["operation_id"] as? String == key, let asset = receipt?["asset_id"] as? String,
+                   payload?["id"] as? String == asset {
+                    do { try creation.journal.register(asset: asset) }
+                    catch { XCTFail("Cannot journal the exact created note: " + asset); connection.cancel(); return }
+                }
                 if card, let key {
-                    let receipt = payload?["sync_receipt"] as? [String: Any]
-                    self.records.append(Mutation(key: key, digest: digest, path: path, status: http.statusCode, receipt: receipt?["operation_id"] as? String))
                     if path == self.dropPath, method == "PUT", receipt?["operation_id"] as? String == key {
                         self.dropPath = nil
                         connection.cancel()
@@ -701,5 +826,102 @@ final class OrdinaryGoProxy: @unchecked Sendable {
                 send()
             }
         }.resume()
+    }
+}
+
+// Each note gets a private file before creation. Only identities from this run
+// may be bound. An unresolved step is replayed from its persisted bytes.
+struct OrdinaryFixtureJournal: Sendable {
+    struct Command: Codable, Equatable {
+        let method: String
+        let path: String
+        let contentType: String
+        let key: String
+        let baseline: String
+        let body: Data
+        var acknowledged = false
+    }
+    struct Entry: Codable {
+        let actor: String
+        let origin: String
+        var local: String?
+        var asset: String?
+        var commands: [Command] = []
+    }
+    let file: URL
+    private let lock = OSAllocatedUnfairLock()
+
+    init(directory: URL, actor: String, origin: String) throws {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true,
+                                                attributes: [.posixPermissions: 0o700])
+        file = directory.appendingPathComponent(UUID().uuidString + ".json")
+        try save(Entry(actor: actor, origin: origin))
+    }
+    init(reopening file: URL) { self.file = file }
+    private func save(_ value: Entry) throws {
+        try JSONEncoder().encode(value).write(to: file, options: .atomic)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
+        let handle = try FileHandle(forWritingTo: file)
+        try handle.synchronize()
+        try handle.close()
+    }
+    private func read() throws -> Entry {
+        try JSONDecoder().decode(Entry.self, from: Data(contentsOf: file))
+    }
+    func snapshot() throws -> Entry { try lock.withLock { try read() } }
+    func register(local: String? = nil, asset: String? = nil) throws {
+        try lock.withLock {
+            var entry = try read()
+            guard local == nil || entry.local == nil || entry.local == local,
+                  asset == nil || entry.asset == nil || entry.asset == asset else { throw URLError(.badServerResponse) }
+            entry.local = local ?? entry.local
+            entry.asset = asset ?? entry.asset
+            try save(entry)
+        }
+    }
+
+    func clean(actor: String, origin: String, token: String, baseline: (String) throws -> String,
+               send: (URLRequest) throws -> Data) throws {
+        var entry = try snapshot()
+        guard entry.actor == actor, entry.origin == origin, let asset = entry.asset else { throw URLError(.userAuthenticationRequired) }
+        for (index, path) in ["/api/cards/" + asset, "/api/cards/trash/" + asset + "/permanent"].enumerated() {
+            if entry.commands.count == index {
+                let base = try baseline(asset)
+                guard !base.isEmpty else { throw URLError(.cannotParseResponse) }
+                let body = try JSONEncoder().encode(["base_sync_token": base])
+                entry.commands.append(Command(method: "DELETE", path: path, contentType: "application/json", key: UUID().uuidString, baseline: base, body: body))
+                try save(entry)
+            }
+            let command = entry.commands[index]
+            guard command.method == "DELETE", command.path == path else { throw URLError(.badURL) }
+            if command.acknowledged { continue }
+            guard let url = URL(string: origin + command.path) else { throw URLError(.badURL) }
+            var request = URLRequest(url: url)
+            request.httpMethod = command.method
+            request.setValue(command.contentType, forHTTPHeaderField: "Content-Type")
+            request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+            request.setValue(command.key, forHTTPHeaderField: "Idempotency-Key")
+            request.httpBody = command.body
+            let bytes = try send(request)
+            let envelope = try JSONSerialization.jsonObject(with: bytes) as? [String: Any]
+            guard envelope?["success"] as? Bool == true, let data = envelope?["data"] as? [String: Any] else {
+                throw URLError(.cannotParseResponse)
+            }
+            if index == 0 {
+                guard let receipt = data["sync_receipt"] as? [String: Any],
+                      receipt["asset_id"] as? String == asset, receipt["operation_id"] as? String == command.key,
+                      receipt["lifecycle"] as? String == "trashed" else { throw URLError(.badServerResponse) }
+            } else {
+                guard data["asset_id"] as? String == asset, data["request_id"] as? String == command.key,
+                      data["state"] as? String == "ERASED", let certificate = data["certificate_id"] as? String,
+                      !certificate.isEmpty, let activity = data["activity_id"] as? String, !activity.isEmpty,
+                      let log = data["action_log_id"] as? String, !log.isEmpty,
+                      ["COMPLETE", "PENDING"].contains(data["cleanup_state"] as? String ?? "") else {
+                    throw URLError(.badServerResponse)
+                }
+            }
+            entry.commands[index].acknowledged = true
+            try save(entry)
+        }
     }
 }
