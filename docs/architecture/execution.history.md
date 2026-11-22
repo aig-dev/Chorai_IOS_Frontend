@@ -1,5 +1,11 @@
 # Execution boundary history
 
+## 2026-11-23 — Conditional note audience
+
+An unconditional native POST received HTTP 428 on the local server. The Library, profile and editor now use the same scoped conditional write. The isolated recovery fixture terminates the app after a committed response is lost and resumes the exact operation from the editor. It verifies the current restricted audience after replay.
+
+Two simulator crash reports during hosted tests showed the Swift back-deployment thunk for the keyboard viewport reader’s isolated deinitializer freeing an invalid pointer. SwiftUI now removes that reader’s observers in dismantleUIView. Each mounted reader retains its existing frame reporting and observer registration.
+
 ## 2026-11-21 — Native Swift 6 bridge verification
 
 Added eight hosted tests across synchronous import results, cross-thread

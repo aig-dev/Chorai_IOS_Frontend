@@ -293,82 +293,14 @@ class HomeCardsManager: ObservableObject {
     }
     
     // MARK: - 切换卡片可见性
-    func toggleCardVisibility(
-        cardId: String,
-        fallbackCard: UserCard? = nil,
-        completion: @escaping (Result<Bool, NetworkError>) -> Void
-    ) {
-        guard authManager.currentUser != nil else {
-            print("用户未登录")
-            completion(.failure(.unauthorized))
-            return
-        }
-        
-        // 获取当前卡片的可见性状态，然后切换
-        let matchingFallbackCard = fallbackCard.flatMap {
-            $0.id == cardId ? $0 : nil
-        }
-        guard let currentCard = cards.first(where: { $0.id == cardId })
-            ?? matchingFallbackCard else {
-            print("未找到卡片: cardId=\(cardId)")
-            completion(.failure(.serverError(404, "卡片未找到")))
-            return
-        }
-        
-        guard let scope = authManager.currentNoteScope, authManager.canEnterProduct,
-              let serverID = LocalNotesController.shared.library.serverID(for: cardId) else {
-            completion(.failure(.forbidden)); return
-        }
-        let newIsPublic = !currentCard.isPublic
-        
-        networkManager.toggleCardVisibility(cardId: serverID, isPublic: newIsPublic) { [weak self] result in
-            DispatchQueue.main.async {
-                switch result {
-                case .success(let response):
-                    if response.success {
-                        Task { try? await LocalNotesController.shared.library.recordMetadata(identifier: cardId, isPublic: response.data.isPublic, scope: scope) }
-                        // 更新本地卡片数据
-                        if let index = self?.cards.firstIndex(where: { $0.id == cardId }) {
-                            self?.cards[index] = UserCard(
-                                id: self?.cards[index].id ?? "",
-                                title: self?.cards[index].title ?? "",
-                                content: self?.cards[index].content ?? "",
-                                contentJSON: self?.cards[index].contentJSON,
-                                backgroundMediaRef: self?.cards[index].backgroundMediaRef,
-                                contentHash: self?.cards[index].contentHash ?? "",
-                                isPublic: response.data.isPublic,
-                                tags: self?.cards[index].tags ?? [],
-                                createdAt: self?.cards[index].createdAt ?? "",
-                                updatedAt: self?.cards[index].updatedAt ?? "",
-                                likeCount: self?.cards[index].likeCount ?? 0,
-                                commentCount: self?.cards[index].commentCount,
-                                isLiked: self?.cards[index].isLiked ?? false,
-                                isPinned: self?.cards[index].isPinned ?? false,
-                                pinnedAt: self?.cards[index].pinnedAt,
-                                isFavorited: self?.cards[index].isFavorited,
-                                favoriteCount: self?.cards[index].favoriteCount,
-                                rate: self?.cards[index].rate ?? 0,
-                                ownerActorId: self?.cards[index].ownerActorId,
-                                isOwner: self?.cards[index].isOwner,
-                                localPreviewIdentity: self?.cards[index].localPreviewIdentity
-                            )
-                        }
-                        // The visibility response is the committed source state. The card
-                        // list is an asynchronous projection and can briefly lag behind it,
-                        // so an immediate reload would overwrite this value with stale data.
-                        completion(.success(true))
-                    } else {
-                        print("卡片可见性切换失败: \(response.message ?? "未知错误")")
-                        completion(.failure(.serverError(500, response.message)))
-                    }
-                case .failure(let error):
-                    print("卡片可见性切换失败: \(error.localizedDescription)")
-                    completion(.failure(error))
-                }
-            }
+    func toggleCardVisibility(cardId: String, observation: NotePrivacyObservation, desired: Bool) async throws {
+        let policy = try await LocalNotesController.shared.setPrivacy(identifier: cardId, observation: observation, isPublic: desired)
+        guard authManager.currentNoteScope == observation.scope, authManager.sessionGeneration == observation.session else { throw CancellationError() }
+        if let index = cards.firstIndex(where: { $0.id == cardId }) {
+            cards[index].isPublic = policy.audience.isPublic
         }
     }
-    
+
     // MARK: - 切换卡片置顶状态
     func toggleCardPin(
         cardId: String,

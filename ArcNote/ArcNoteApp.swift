@@ -626,18 +626,23 @@ private enum MyProfileActionsFixtureIdentity {
 
 @MainActor
 private struct MyProfileActionsFixtureScreen: View {
+    @ObservedObject private var auth = AuthManager.shared
+    @ObservedObject private var localNotes = LocalNotesController.shared
+    private let verifiesPolicy = ProcessInfo.processInfo.arguments.contains("--ui-test-profile-policy")
     private let cardsManager: HomeCardsManager
     private let companionChatRouter: NetworkMyCompanionChatRouter
     private let chatDetailService: ChatVisibilityFixtureService
 
     init() {
-        AuthManager.shared.installUITestSession(
-            token: "my-profile-fixture-token",
-            actorID: MyProfileActionsFixtureIdentity.humanActorID,
-            email: "my-profile-fixture@example.com",
-            username: "Fixture Human",
-            createdAt: "2026-08-15T00:00:00Z"
-        )
+        if AuthManager.shared.authToken != "my-profile-fixture-token" || AuthManager.shared.currentUser?.id != MyProfileActionsFixtureIdentity.humanActorID {
+            AuthManager.shared.installUITestSession(
+                token: "my-profile-fixture-token",
+                actorID: MyProfileActionsFixtureIdentity.humanActorID,
+                email: "my-profile-fixture@example.com",
+                username: "Fixture Human",
+                createdAt: "2026-08-15T00:00:00Z"
+            )
+        }
         UserProfileManager.shared.userProfile = nil
 
         let conversationCreator = MyProfileFixtureConversationCreator()
@@ -651,7 +656,8 @@ private struct MyProfileActionsFixtureScreen: View {
             partnerAvatarURL: "/fixture-companion-avatar.png"
         )
 
-        let cardsManager = HomeCardsManager()
+        // The fixture supplies the complete profile list in memory, independent of remote list pagination.
+        let cardsManager = HomeCardsManager(readSession: { nil })
         cardsManager.cards = [
             UserCard(
                 id: "my-profile-actions-fixture",
@@ -684,6 +690,13 @@ private struct MyProfileActionsFixtureScreen: View {
             companionChatRouter: companionChatRouter,
             chatDetailFetcher: chatDetailService
         )
+        .disabled(verifiesPolicy && !(auth.canEnterProduct && localNotes.library.cloudEnabled && localNotes.library.scope == auth.currentNoteScope))
+        .task {
+            if verifiesPolicy {
+                AuthManager.shared.verifyRestoredSession(force: true)
+                await LocalNotesController.shared.refreshAccess().value
+            }
+        }
     }
 }
 
@@ -4583,11 +4596,13 @@ private final class APIMigrationSmokeRunner {
             _ = try await expect("unpin") {
                 NetworkManager.shared.unpinCard(cardId: firstCardId)
             }
-            _ = try await expect("visibility-private") {
-                NetworkManager.shared.updateCardVisibility(cardId: firstCardId, isPublic: false)
+            _ = try await expectAsync("visibility-private") {
+                let observed = try await LocalNotesController.shared.observePrivacy(identifier: firstCardId)
+                return try await LocalNotesController.shared.setPrivacy(identifier: firstCardId, observation: observed, isPublic: false)
             }
-            _ = try await expect("visibility-public") {
-                NetworkManager.shared.updateCardVisibility(cardId: firstCardId, isPublic: true)
+            _ = try await expectAsync("visibility-public") {
+                let observed = try await LocalNotesController.shared.observePrivacy(identifier: firstCardId)
+                return try await LocalNotesController.shared.setPrivacy(identifier: firstCardId, observation: observed, isPublic: true)
             }
 
             let createdLink = try await expectAsync("create-link") {

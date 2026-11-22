@@ -293,6 +293,61 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertTrue(app.tabBars.buttons["Home"].isHittable)
     }
 
+    func testLibraryPrivacyRecoversLostReceiptInReopenedEditor() throws {
+        continueAfterFailure = false
+        let server = try RecentNotesServer(libraryFixture: .activeNote)
+        defer { app.terminate(); server.stop() }
+        app.launchEnvironment = [APIEnvironment.overrideEnvironmentKey: try server.start(), "CHORAI_UI_TEST": "1",
+            "CHORAI_UI_TEST_AUTH_TOKEN": server.token, "CHORAI_UI_TEST_ACTOR_ID": server.actorID]
+        app.launch()
+        openOrdinaryLibrary()
+        let menu = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "home.card.menu.local-note:")).firstMatch
+        XCTAssertTrue(menu.waitForExistence(timeout: 20))
+        let local = String(menu.identifier.dropFirst("home.card.menu.".count))
+        menu.tap()
+        tap("popup-menu.item.public")
+        waitForButton("Make Public").tap()
+        XCTAssertEqual(XCTWaiter.wait(for: [server.privacyCommitLost], timeout: 10), .completed)
+        app.terminate()
+        app.launch()
+        openOrdinaryLibrary()
+        tap("home.card.body." + local)
+        waitForEnabledButton("cardEditorPrivacyButton").tap()
+        waitForButton("Retry previous change").tap()
+        let replayed = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in server.replayedPrivacyExactly }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [replayed], timeout: 10), .completed)
+        waitForLabel("cardEditorPrivacyButton", expected: "Make Public")
+        waitForEnabledButton("cardEditorPrivacyButton").tap()
+        XCTAssertTrue(waitForButton("Make Private").exists)
+        XCTAssertFalse(app.buttons["Retry previous change"].exists)
+    }
+
+    func testRemoteOnlyProfilePrivacyRequiresNewDecisionAfterStalePolicy() throws {
+        continueAfterFailure = false
+        let server = try RecentNotesServer(libraryFixture: .activeNote, actorID: "act_my_profile_fixture", token: "my-profile-fixture-token")
+        defer { app.terminate(); server.stop() }
+        app.launchArguments += ["--ui-test-my-profile-actions", "--ui-test-profile-policy"]
+        app.launchEnvironment[APIEnvironment.overrideEnvironmentKey] = try server.start()
+        app.launchEnvironment["CHORAI_UI_TEST"] = "1"
+        app.launch()
+        let menu = waitForEnabledButton("profile.card.menu.my-profile-actions-fixture", timeout: 30)
+        menu.tap()
+        tap("popup-menu.item.private")
+        XCTAssertTrue(app.staticTexts["Current audience: Workspace"].waitForExistence(timeout: 10))
+        waitForButton("Make Public").tap()
+        let alert = app.alerts.firstMatch
+        XCTAssertTrue(alert.waitForExistence(timeout: 10))
+        alert.buttons.firstMatch.tap()
+        menu.tap()
+        tap("popup-menu.item.private")
+        XCTAssertTrue(app.staticTexts["Current audience: Workspace"].waitForExistence(timeout: 10))
+        waitForButton("Make Private").tap()
+        let changed = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in server.confirmedFreshProfileDecision }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [changed], timeout: 10), .completed)
+        menu.tap()
+        XCTAssertTrue(waitForButton("popup-menu.item.public").exists)
+    }
+
     func testHomeRemovalKeepsLocalTrashWhenSyncIsUnavailable() throws {
         let server = try RecentNotesServer(libraryFixture: .activeNote)
         defer { app.terminate(); server.stop() }
@@ -8120,74 +8175,53 @@ final class ArcNoteUITests: XCTestCase {
     }
 
     func testLibraryOwnedCardVisibilityAndPinMutateGoState() throws {
-        let session = try requireSmokeSession()
-        seedAppSession(session)
-        let suffix = "stewardship-\(Int(Date().timeIntervalSince1970))"
-        let cardID = try createSmokeCard(
-            token: session.token,
-            searchToken: suffix,
-            isPublic: false
-        )
-        defer {
-            permanentlyCleanUpSmokeCard(id: cardID, token: session.token)
+        let proxy = try OrdinaryGoProxy()
+        defer { proxy.stop() }
+        let session = try ordinarySession()
+        let marker = "Steward" + UUID().uuidString.prefix(8)
+        app.launchArguments.append("--ui-test-ordinary-note-binding")
+        try launchOrdinary(session, through: proxy)
+        waitForSessionPhase("verified", timeout: 30)
+        openOrdinaryLibrary()
+        let journal = try registerOrdinaryFixture(session, account: "A")
+        proxy.captureCreation(journal, token: session.token, recordReceiptImmediately: true)
+        tap("note.create")
+        typeInCardEditorBody(marker)
+        let local = waitFor("note.created-card-id", timeout: 25).label
+        XCTAssertTrue(app.staticTexts["Synced"].waitForExistence(timeout: 40))
+        let cardID = try XCTUnwrap(journal.snapshot().asset)
+        closeNewNoteEditor()
+        waitFor("card.home.\(local)", timeout: 30)
+
+        let menu = waitFor("home.card.menu.\(local)")
+        menu.tap()
+        for action in ["edit", "spark", "merge", "public", "share", "link", "root", "remove", "pin"] {
+            XCTAssertTrue(waitForButton("popup-menu.item." + action).isHittable)
         }
-
-        launchAuthenticatedApp()
-        tap("tab.library")
-        waitFor("card.home.\(cardID)", timeout: 30)
-
-        let cardMenu = waitFor("home.card.menu.\(cardID)")
-        cardMenu.tap()
-        _ = waitFor("popup-menu.overlay")
-        let surface = waitFor("popup-menu.overlay.surface")
-        let mainstreamActions = [
-            "edit", "spark", "merge", "public", "share",
-            "link", "root", "remove", "pin",
-        ].map { waitForButton("popup-menu.item.\($0)") }
-        XCTAssertEqual(surface.buttons.allElementsBoundByIndex.count, 9)
-        let finalRowMaxY = mainstreamActions.suffix(3)
-            .map(\.frame.maxY)
-            .max() ?? surface.frame.maxY
-        XCTAssertGreaterThanOrEqual(
-            surface.frame.maxY - finalRowMaxY,
-            15,
-            "The mainstream 3 x 3 Action Box needs visible bottom padding"
-        )
-        XCTAssertFalse(cardMenu.isHittable)
         XCTAssertFalse(app.buttons["popup-menu.close"].exists)
-        dismissActionBoxFromBackdrop(
-            surfaceIdentifier: "popup-menu.overlay.surface",
-            overlayIdentifier: "popup-menu.overlay"
-        )
-        XCTAssertTrue(cardMenu.waitForExistence(timeout: 10))
-        XCTAssertTrue(cardMenu.isHittable)
-
-        cardMenu.tap()
-        waitFor("popup-menu.item.root")
-        tap("popup-menu.item.public")
-        waitForSmokeCardState(id: cardID, token: session.token) {
-            $0.isPublic
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.04, dy: 0.14)).tap()
+        waitForMissing("popup-menu.item.edit")
+        XCTAssertTrue(menu.isHittable)
+        for (action, desired) in [("public", true), ("private", false)] {
+            menu.tap()
+            tap("popup-menu.item." + action)
+            waitForButton(desired ? "Make Public" : "Make Private").tap()
+            waitForSmokeCardState(id: cardID, token: session.token) { $0.isPublic == desired }
+            let path = "/api/v1/assets/" + cardID + "/visibility"
+            let observations = proxy.mutations.filter { $0.path == path && $0.status == 200 }
+            let write = try XCTUnwrap(observations.last { $0.method == "POST" })
+            XCTAssertNotNil(write.key)
+            XCTAssertEqual(write.receipt, write.key)
+            XCTAssertEqual(write.audience, desired ? "PUBLIC" : "PRIVATE")
+            XCTAssertEqual(write.basePolicy, observations.last { $0.method == "GET" }?.policyToken)
         }
-
-        waitFor("home.card.menu.\(cardID)", timeout: 30).tap()
-        tap("popup-menu.item.private")
-        waitForSmokeCardState(id: cardID, token: session.token) {
-            !$0.isPublic
-        }
-
-        waitFor("home.card.menu.\(cardID)", timeout: 30).tap()
+        menu.tap()
         tap("popup-menu.item.pin")
-        waitForSmokeCardState(id: cardID, token: session.token) {
-            $0.isPinned
-        }
-
-        waitFor("home.card.menu.\(cardID)", timeout: 30).tap()
-        waitFor("popup-menu.item.unpin", timeout: 20)
+        waitForSmokeCardState(id: cardID, token: session.token) { $0.isPinned }
+        menu.tap()
         captureVisual("library-owned-card-pinned")
         tap("popup-menu.item.unpin")
-        waitForSmokeCardState(id: cardID, token: session.token) {
-            !$0.isPinned
-        }
+        waitForSmokeCardState(id: cardID, token: session.token) { !$0.isPinned }
     }
 
     func testLocalGoHomeEditRelaunchTrashRestoreAndPurge() throws {
@@ -8671,90 +8705,64 @@ final class ArcNoteUITests: XCTestCase {
     }
 
     func testNewCardStagesBackgroundAndPrivacyBeforeFirstSave() throws {
-        let session = try requireSmokeSession()
-        seedAppSession(session)
-        let bodyText = "New staged editor \(UUID().uuidString.lowercased())"
-        var canonicalID: String?
-        defer {
-            if let canonicalID {
-                permanentlyCleanUpSmokeCard(
-                    id: canonicalID,
-                    token: session.token
-                )
-            }
-            if let matching = try? fetchSmokeCards(
-                search: bodyText,
-                token: session.token
-            ) {
-                for card in matching
-                where card.content.contains(bodyText) && card.id != canonicalID {
-                    permanentlyCleanUpSmokeCard(
-                        id: card.id,
-                        token: session.token
-                    )
-                }
-            }
-        }
+        let proxy = try OrdinaryGoProxy()
+        defer { proxy.stop() }
+        let session = try ordinarySession()
+        let marker = "Audience" + UUID().uuidString.prefix(8)
+        app.launchArguments.append("--ui-test-ordinary-note-binding")
+        try launchOrdinary(session, through: proxy)
+        waitForSessionPhase("verified", timeout: 30)
+        openOrdinaryLibrary()
+        let fixture = try registerOrdinaryFixture(session, account: "A")
+        proxy.captureCreation(fixture, token: session.token, recordReceiptImmediately: true)
 
-        launchAuthenticatedApp()
-        tap("tab.library")
-        waitForButton("note.create", timeout: 20).tap()
-        waitFor("cardEditorContent", timeout: 20)
-        typeInCardEditorBody(bodyText)
-        dismissCardEditorKeyboardWithVerticalDrag()
+        proxy.setOffline(true)
+        tap("note.create")
+        typeInCardEditorBody(marker)
+        let local = waitFor("note.created-card-id", timeout: 25).label
+        XCTAssertTrue(local.hasPrefix("local-note:"))
+        XCTAssertFalse(waitForButton("cardEditorPrivacyButton").isEnabled)
+        openEditorCardActions()
+        XCTAssertFalse(waitForEditorCardAction("cardEditorBackgroundButton", requireEnabled: false).isEnabled)
+        dismissEditorCardActions()
+        closeNewNoteEditor()
+        app.terminate()
+        app.launch()
+        waitForSessionPhase("degraded", timeout: 30)
+        openOrdinaryLibrary()
+        XCTAssertTrue(app.staticTexts[marker].waitForExistence(timeout: 20))
+        tap("card.home." + local)
+        XCTAssertFalse(waitForButton("cardEditorPrivacyButton").isEnabled)
+        XCTAssertTrue(proxy.mutations.filter { $0.path.hasSuffix("/visibility") || $0.path == "/api/v1/media/upload" }.isEmpty)
+        XCTAssertTrue(proxy.uploadedImages.isEmpty)
+        XCTAssertTrue(try fetchSmokeCards(search: marker, token: session.token).filter { $0.content.contains(marker) }.isEmpty)
 
-        let privacy = waitForEnabledButton("cardEditorPrivacyButton")
-        XCTAssertEqual(privacy.label, "Make Public")
-        privacy.tap()
-        XCTAssertEqual(privacy.label, "Make Private")
-        XCTAssertEqual(privacy.value as? String, "Public")
-
+        proxy.setOffline(false)
+        recoverAppAfterTransportRestores()
+        XCTAssertTrue(app.staticTexts["Synced"].waitForExistence(timeout: 40))
+        let asset = try XCTUnwrap(fixture.snapshot().asset)
+        XCTAssertFalse(try fetchSmokeCard(id: asset, token: session.token).isPublic)
+        waitForEnabledButton("cardEditorPrivacyButton", timeout: 30).tap()
+        waitForButton("Make Public").tap()
+        waitForSmokeCardState(id: asset, token: session.token) { $0.isPublic }
+        waitForLabel("cardEditorPrivacyButton", expected: "Make Private")
         revealEditorBackgroundButton().tap()
         try selectFirstPhotoFromImagePicker()
-
-        openEditorCardActions()
-        XCTAssertEqual(
-            waitForEditorCardAction("cardEditorBackgroundButton").label,
-            "Background",
-            "The selected photo must remain staged in Card Actions before first save"
-        )
-        let cardsBeforeSave = try fetchSmokeCards(
-            search: bodyText,
-            token: session.token
-        ).filter { $0.content.contains(bodyText) }
-        XCTAssertTrue(
-            cardsBeforeSave.isEmpty,
-            "Staging privacy and a background must not create a server card"
-        )
-        captureVisual("card-editor-new-background-privacy-staged")
-
-        dismissEditorCardActions()
-        XCTAssertEqual(
-            waitForButton("cardEditorPrivacyButton").label,
-            "Make Private",
-            "Privacy must remain staged in the unsaved draft"
-        )
+        waitForSmokeCardState(id: asset, token: session.token) { $0.isPublic && !($0.backgroundMediaRef ?? "").isEmpty }
         closeNewNoteEditor()
-
-        let callbackID = waitFor("note.created-card-id", timeout: 30)
-            .label
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        XCTAssertFalse(callbackID.isEmpty)
-        canonicalID = callbackID
-
-        let matchingCards = waitForSmokeCards(
-            search: bodyText,
-            token: session.token
-        ) { cards in
-            cards.filter { $0.content.contains(bodyText) }.count == 1
-        }.filter { $0.content.contains(bodyText) }
-        XCTAssertEqual(matchingCards.map(\.id), [callbackID])
-        waitForSmokeCardState(id: callbackID, token: session.token) { card in
-            card.isPublic && !(card.backgroundMediaRef ?? "").isEmpty
-        }
-        let persisted = try fetchSmokeCard(id: callbackID, token: session.token)
-        XCTAssertTrue(persisted.isPublic)
-        XCTAssertFalse((persisted.backgroundMediaRef ?? "").isEmpty)
+        tap("card.home." + local)
+        waitForLabel("cardEditorPrivacyButton", expected: "Make Private")
+        let saved = try fetchSmokeCard(id: asset, token: session.token)
+        XCTAssertEqual(saved.content, marker)
+        XCTAssertFalse((saved.backgroundMediaRef ?? "").isEmpty)
+        XCTAssertEqual(try fetchSmokeCards(search: marker, token: session.token).filter { $0.content.contains(marker) }.map(\.id), [asset])
+        let creates = proxy.mutations.filter { $0.method == "POST" && $0.path == "/api/cards" && $0.status == 201 }
+        XCTAssertEqual(creates.count, 1)
+        let creation = try XCTUnwrap(creates.first)
+        XCTAssertNotNil(creation.key)
+        XCTAssertEqual(creation.receipt, creation.key)
+        XCTAssertEqual(creation.initialIsPublic, false)
+        captureVisual("card-editor-synced-background-privacy")
     }
 
     func testOpeningCardActionsOnNewCardDoesNotCreateServerCard() throws {

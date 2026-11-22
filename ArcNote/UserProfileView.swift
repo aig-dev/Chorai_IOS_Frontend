@@ -368,10 +368,10 @@ struct UserPostCard: View {
     let disableFavorite: Bool
     let ownsMenuActions: Bool
     let onDelete: (@MainActor @Sendable () -> Void)?
-    let onToggleVisibility: (@MainActor @Sendable (UserCard) -> Void)?
+    let onToggleVisibility: (@MainActor @Sendable (UserCard, NotePrivacyObservation, Bool) -> Void)?
     let onTogglePin: (@MainActor @Sendable (UserCard) -> Void)?
 
-    init(card: UserCard, onShowMenu: @escaping (UserCard) -> Void, onCardTap: ((String) -> Void)? = nil, onChatTap: (() -> Void)? = nil, username: String, avatarUrl: String? = nil, disableFavorite: Bool = false, ownsMenuActions: Bool = false, onDelete: (@MainActor @Sendable () -> Void)? = nil, onToggleVisibility: (@MainActor @Sendable (UserCard) -> Void)? = nil, onTogglePin: (@MainActor @Sendable (UserCard) -> Void)? = nil) {
+    init(card: UserCard, onShowMenu: @escaping (UserCard) -> Void, onCardTap: ((String) -> Void)? = nil, onChatTap: (() -> Void)? = nil, username: String, avatarUrl: String? = nil, disableFavorite: Bool = false, ownsMenuActions: Bool = false, onDelete: (@MainActor @Sendable () -> Void)? = nil, onToggleVisibility: (@MainActor @Sendable (UserCard, NotePrivacyObservation, Bool) -> Void)? = nil, onTogglePin: (@MainActor @Sendable (UserCard) -> Void)? = nil) {
         self.card = card
         self.onShowMenu = onShowMenu
         self.onCardTap = onCardTap

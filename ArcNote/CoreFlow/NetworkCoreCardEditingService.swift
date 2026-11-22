@@ -84,8 +84,7 @@ struct NetworkCoreCardEditingService: CoreCardEditingServing, Sendable {
                     content: draft.content,
                     contentJSON: draft.contentJSON,
                     editorAtmosphere: draft.editorAtmosphere,
-                    tags: draft.tags,
-                    isPublic: draft.isPublic
+                    tags: draft.tags
                 )
             )
             guard response.success else {

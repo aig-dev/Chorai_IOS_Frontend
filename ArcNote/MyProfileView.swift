@@ -173,7 +173,7 @@ struct MyProfileView: View {
                             disableFavorite: true,
                             ownsMenuActions: true,
                             onDelete: { requestCardDeletion() },
-                            onToggleVisibility: { toggleCardVisibility($0) },
+                            onToggleVisibility: toggleCardVisibility,
                             onTogglePin: { toggleCardPin($0) }
                         )
                         Divider().overlay(ChoraiTheme.separator)
@@ -234,7 +234,7 @@ struct MyProfileView: View {
             cardData: currentMenuCardData,
             isOwnCard: true,
             onDelete: { requestCardDeletion() },
-            onToggleVisibility: { toggleCardVisibility($0) },
+            onToggleVisibility: toggleCardVisibility,
             onTogglePin: { toggleCardPin($0) }
         )
         .confirmationDialog(
@@ -345,13 +345,14 @@ struct MyProfileView: View {
         }
     }
 
-    private func toggleCardVisibility(_ card: UserCard) {
-        cardsManager.toggleCardVisibility(
-            cardId: card.id,
-            fallbackCard: card
-        ) { result in
-            if case .failure = result {
-                deleteErrorMessage = "Couldn’t update this note. Please try again."
+    private func toggleCardVisibility(_ card: UserCard, observation: NotePrivacyObservation, desired: Bool) {
+        Task {
+            do {
+                try await cardsManager.toggleCardVisibility(cardId: card.id, observation: observation, desired: desired)
+            } catch {
+                guard AuthManager.shared.currentNoteScope == observation.scope,
+                      AuthManager.shared.sessionGeneration == observation.session else { return }
+                deleteErrorMessage = (error as? NotePrivacyError)?.errorDescription ?? "Open the note audience to check the previous change."
             }
         }
     }

@@ -63,7 +63,7 @@ final class CardDeletionConfirmationPolicyTests: XCTestCase {
         XCTAssertTrue(popup.contains("isOwned: isOwnCard && isOwner != false"))
         XCTAssertTrue(popup.contains(".confirmationDialog(\"Remove this note?\""))
         XCTAssertTrue(popup.contains("store.confirmRemoval(of: target)"))
-        let observation = try section(home, from: "for: NSNotification.Name(\"DeleteCard\")", to: "for: NSNotification.Name(\"ToggleCardVisibility\")")
+        let observation = try section(home, from: "for: NSNotification.Name(\"DeleteCard\")", to: "for: NSNotification.Name(\"ToggleCardPin\")")
         XCTAssertTrue(observation.contains("notification.userInfo?[\"cardId\"] as? String"))
         XCTAssertTrue(observation.contains("CardDeletionConfirmationPolicy.target("))
         XCTAssertFalse(observation.contains("currentCardId"))

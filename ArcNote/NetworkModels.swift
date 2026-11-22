@@ -493,7 +493,7 @@ struct UserCard: Codable, Identifiable, Sendable {
     let contentJSON: String?
     let backgroundMediaRef: String?
     let contentHash: String
-    let isPublic: Bool
+    var isPublic: Bool
     let tags: [String]
     let createdAt: String
     let updatedAt: String

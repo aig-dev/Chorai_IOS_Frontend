@@ -1,6 +1,71 @@
 import CoreFlow
 import SwiftUI
 
+@MainActor
+final class NoteAudiencePicker: ObservableObject {
+    struct Choice: Identifiable {
+        let id: UUID
+        let observation: NotePrivacyObservation
+        let select: (NotePrivacyObservation, Bool) -> Void
+    }
+    @Published var choice: Choice?
+    @Published var failed = false
+    private var visit = UUID()
+
+    func open(_ identifier: String, select: @escaping (NotePrivacyObservation, Bool) -> Void) {
+        let id = UUID()
+        visit = id
+        choice = nil
+        failed = false
+        Task {
+            do {
+                let observation = try await LocalNotesController.shared.observePrivacy(identifier: identifier)
+                guard visit == id else { return }
+                choice = Choice(id: id, observation: observation, select: select)
+            } catch {
+                if visit == id { failed = true }
+            }
+        }
+    }
+
+    func close() { visit = UUID(); choice = nil; failed = false }
+}
+
+private struct AudiencePickerKey: EnvironmentKey {
+    static let defaultValue: NoteAudiencePicker? = nil
+}
+
+private extension EnvironmentValues {
+    var noteAudiencePicker: NoteAudiencePicker? {
+        get { self[AudiencePickerKey.self] }
+        set { self[AudiencePickerKey.self] = newValue }
+    }
+}
+
+struct NoteAudienceDialog: ViewModifier {
+    @ObservedObject var picker: NoteAudiencePicker
+    @ObservedObject private var auth = AuthManager.shared
+    func body(content: Content) -> some View {
+        content
+            .confirmationDialog("Note audience", isPresented: Binding(
+                get: { picker.choice != nil }, set: { if !$0 { picker.choice = nil } }
+            ), titleVisibility: .visible, presenting: picker.choice) { choice in
+                if let pending = choice.observation.pending {
+                    Button("Retry previous change") { choice.select(choice.observation, pending.desired == .PUBLIC) }
+                } else {
+                    Button("Make Public") { choice.select(choice.observation, true) }
+                    Button("Make Private") { choice.select(choice.observation, false) }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: { choice in
+                Text("Current audience: \(choice.observation.policy.audience.rawValue.capitalized)")
+            }
+            .alert("Couldn’t load the note audience", isPresented: $picker.failed) { Button("OK") {} }
+            .onChange(of: auth.sessionGeneration) { _ in picker.close() }
+            .onDisappear { picker.close() }
+    }
+}
+
 private struct OwnedCardActionStoreKey: EnvironmentKey {
     static let defaultValue: OwnedCardActionStore? = nil
 }
@@ -12,7 +77,7 @@ private struct OwnedCardActionLockKey: EnvironmentKey {
 }
 private struct OwnedCardActionCallbacks: Sendable {
     var onDelete: (@MainActor @Sendable () -> Void)?
-    var onToggleVisibility: (@MainActor @Sendable (UserCard) -> Void)?
+    var onToggleVisibility: (@MainActor @Sendable (UserCard, NotePrivacyObservation, Bool) -> Void)?
     var onTogglePin: (@MainActor @Sendable (UserCard) -> Void)?
 }
 private struct OwnedCardActionCallbacksKey: EnvironmentKey {
@@ -70,16 +135,9 @@ private final class NetworkOwnedCardActionService: OwnedCardActionServing {
                 }
             }
         case .setVisibility(let value):
-            return try await withCheckedThrowingContinuation { continuation in
-                NetworkManager.shared.toggleCardVisibility(cardId: request.cardID, isPublic: value) { result in
-                    switch result {
-                    case .success(let response) where response.success:
-                        continuation.resume(returning: .visibility(cardID: response.data.id, isPublic: response.data.isPublic))
-                    case .success: continuation.resume(throwing: OwnedCardActionError.requestFailed)
-                    case .failure(let error): continuation.resume(throwing: error)
-                    }
-                }
-            }
+            guard let observation = request.privacy else { throw NotePrivacyError.invalidCommand }
+            let result = try await LocalNotesController.shared.setPrivacy(identifier: request.cardID, observation: observation, isPublic: value)
+            return .visibility(cardID: request.cardID, isPublic: result.audience.isPublic)
         case .setPinned(let value):
             return try await withCheckedThrowingContinuation { continuation in
                 let completion: (Result<ToggleCardPinResponse, NetworkError>) -> Void = { result in
@@ -101,12 +159,16 @@ private final class NetworkOwnedCardActionService: OwnedCardActionServing {
 }
 
 private struct OwnedCardActionHostModifier: ViewModifier {
+    @ObservedObject private var auth = AuthManager.shared
+    @StateObject private var picker = NoteAudiencePicker()
+    private let usesNetwork: Bool
     @StateObject private var store: OwnedCardActionStore
     let onCommit: (OwnedCardActionCommit) -> Void
     let authoritativeRefresh: OwnedCardActionRefresh?
     let refreshInFlight: Bool
 
     init(service: (any OwnedCardActionServing)?, authoritativeRefresh: OwnedCardActionRefresh?, refreshInFlight: Bool, onCommit: @escaping (OwnedCardActionCommit) -> Void) {
+        usesNetwork = service == nil
         _store = StateObject(wrappedValue: OwnedCardActionStore(service: service ?? NetworkOwnedCardActionService()))
         self.onCommit = onCommit
         self.authoritativeRefresh = authoritativeRefresh
@@ -116,6 +178,8 @@ private struct OwnedCardActionHostModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .environment(\.ownedCardActionCallbacks, OwnedCardActionCallbacks())
+            .modifier(NoteAudienceDialog(picker: picker))
+            .environment(\.noteAudiencePicker, usesNetwork ? picker : nil)
             .environment(\.ownedCardActions, store)
             .environment(\.ownedCardActionRevision, store.stateRevision)
             .environment(\.ownedCardActionsAreLocked, store.isInteractionLocked || refreshInFlight)
@@ -133,13 +197,19 @@ private struct OwnedCardActionHostModifier: ViewModifier {
                 get: { store.failure != nil },
                 set: { if !$0 { store.dismissFailure() } }
             ), presenting: store.failure) { failure in
-                Button("Retry") { store.retry(failure) }
-                    .accessibilityIdentifier("card-action.retry")
+                if failure.error.mayRetry {
+                    Button("Retry") { store.retry(failure) }
+                        .accessibilityIdentifier("card-action.retry")
+                }
                 Button("Cancel", role: .cancel) { store.dismissFailure() }
             } message: { failure in
-                Text(failure.request.operation == .remove
-                    ? "The note wasn’t removed. Try again."
-                    : "The change wasn’t confirmed. Try again.")
+                if case .privacy(let error) = failure.error {
+                    Text(error.localizedDescription)
+                } else {
+                    Text(failure.request.operation == .remove
+                        ? "The note wasn’t removed. Try again."
+                        : "The change wasn’t confirmed. Try again.")
+                }
             }
             .overlay(alignment: .top) {
                 if let request = store.workingRequest {
@@ -151,6 +221,7 @@ private struct OwnedCardActionHostModifier: ViewModifier {
                         .allowsHitTesting(false)
                 }
             }
+            .onChange(of: auth.sessionGeneration) { _ in store.retireSession() }
             .onAppear { applyAuthoritativeRefresh() }
             .onChange(of: authoritativeRefresh) { refresh in
                 if let refresh { store.applyAuthoritativeRefresh(refresh) }
@@ -376,6 +447,7 @@ enum PopupMenuLayout {
 
 // MARK: - PopupMenu Modifier
 struct PopupMenuModifier: ViewModifier {
+    @Environment(\.noteAudiencePicker) private var audiencePicker
     @Environment(\.ownedCardActions) private var ownedActions
     @Environment(\.ownedCardActionRevision) private var ownedActionRevision
     @Environment(\.cardNavigationOnboardingStore) private var onboardingStore
@@ -388,7 +460,7 @@ struct PopupMenuModifier: ViewModifier {
     let isSparkEnabled: Bool
     let onSpark: (() -> Void)?
     let onDelete: (@MainActor @Sendable () -> Void)?
-    let onToggleVisibility: (@MainActor @Sendable (UserCard) -> Void)?
+    let onToggleVisibility: (@MainActor @Sendable (UserCard, NotePrivacyObservation, Bool) -> Void)?
     let onTogglePin: (@MainActor @Sendable (UserCard) -> Void)?
     let onRouteDismissed: (CardNavigationDismissal) -> Void
     let onRoutePresentationChanged: (Bool) -> Void
@@ -433,7 +505,7 @@ struct PopupMenuModifier: ViewModifier {
                             onDelete: onDelete,
                             onToggleVisibility: onToggleVisibility,
                             onTogglePin: onTogglePin,
-                            ownedActions: ownedActions,
+                            ownedActions: ownedActions, audiencePicker: audiencePicker,
                             onNavigate: { present($0) }
                         )
                     }
@@ -468,6 +540,7 @@ struct PopupMenuModifier: ViewModifier {
 
 // MARK: - PopupMenu Overlay
 struct PopupMenuOverlay: View {
+    let audiencePicker: NoteAudiencePicker?
     @Binding var isPresented: Bool
     let layout: PopupMenuLayout
     let cardData: UserCard?
@@ -475,7 +548,7 @@ struct PopupMenuOverlay: View {
     let isSparkEnabled: Bool
     let onSpark: (() -> Void)?
     let onDelete: (@MainActor @Sendable () -> Void)?
-    let onToggleVisibility: (@MainActor @Sendable (UserCard) -> Void)?
+    let onToggleVisibility: (@MainActor @Sendable (UserCard, NotePrivacyObservation, Bool) -> Void)?
     let onTogglePin: (@MainActor @Sendable (UserCard) -> Void)?
     let onNavigate: @MainActor @Sendable (CardNavigationRoute) -> Void
     let onPrepare: (() -> Void)?
@@ -489,9 +562,10 @@ struct PopupMenuOverlay: View {
         isSparkEnabled: Bool = true,
         onSpark: (() -> Void)? = nil,
         onDelete: (@MainActor @Sendable () -> Void)? = nil,
-        onToggleVisibility: (@MainActor @Sendable (UserCard) -> Void)? = nil,
+        onToggleVisibility: (@MainActor @Sendable (UserCard, NotePrivacyObservation, Bool) -> Void)? = nil,
         onTogglePin: (@MainActor @Sendable (UserCard) -> Void)? = nil,
         ownedActions: OwnedCardActionStore? = nil,
+        audiencePicker: NoteAudiencePicker? = nil,
         onNavigate: @escaping @MainActor @Sendable (CardNavigationRoute) -> Void = { _ in },
         onPrepare: (() -> Void)? = nil
     ) {
@@ -506,6 +580,7 @@ struct PopupMenuOverlay: View {
         self.onTogglePin = onTogglePin
         self.onNavigate = onNavigate
         self.onPrepare = onPrepare
+        self.audiencePicker = audiencePicker
         self.ownedActions = ownedActions
     }
 
@@ -537,9 +612,15 @@ struct PopupMenuOverlay: View {
     private func toggleCardVisibility() {
         defer { isPresented = false }
         guard let card = cardData else { return }
-        if let onToggleVisibility { onToggleVisibility(card); return }
         guard let target = ownedState else { return }
-        ownedActions?.toggleVisibility(of: target)
+        if let audiencePicker {
+            audiencePicker.open(card.id) { observation, desired in
+                if let onToggleVisibility { onToggleVisibility(card, observation, desired); return }
+                ownedActions?.setVisibility(of: target, desired: desired, observation: observation)
+            }
+        } else {
+            ownedActions?.toggleVisibility(of: target)
+        }
     }
 
     private func toggleCardPin() {
@@ -859,6 +940,7 @@ struct PopupMenuOverlay: View {
 /// An anchored system menu for the approved card interaction. The surrounding
 /// screen retains its existing popupMenu/cardNavigationHost solely as route owner.
 struct NativeCardActionsMenu<LabelContent: View>: View {
+    @Environment(\.noteAudiencePicker) private var audiencePicker
     @Environment(\.navigateCard) private var navigateCard
     @Environment(\.ownedCardActions) private var ownedActions
     @Environment(\.ownedCardActionCallbacks) private var inheritedCallbacks
@@ -871,7 +953,7 @@ struct NativeCardActionsMenu<LabelContent: View>: View {
     let onPrepare: (() -> Void)?
     let onSpark: (() -> Void)?
     let onDelete: (@MainActor @Sendable () -> Void)?
-    let onToggleVisibility: (@MainActor @Sendable (UserCard) -> Void)?
+    let onToggleVisibility: (@MainActor @Sendable (UserCard, NotePrivacyObservation, Bool) -> Void)?
     let onTogglePin: (@MainActor @Sendable (UserCard) -> Void)?
     private let label: LabelContent
 
@@ -883,7 +965,7 @@ struct NativeCardActionsMenu<LabelContent: View>: View {
         onPrepare: (() -> Void)? = nil,
         onSpark: (() -> Void)? = nil,
         onDelete: (@MainActor @Sendable () -> Void)? = nil,
-        onToggleVisibility: (@MainActor @Sendable (UserCard) -> Void)? = nil,
+        onToggleVisibility: (@MainActor @Sendable (UserCard, NotePrivacyObservation, Bool) -> Void)? = nil,
         onTogglePin: (@MainActor @Sendable (UserCard) -> Void)? = nil,
         @ViewBuilder label: () -> LabelContent
     ) {
@@ -912,7 +994,7 @@ struct NativeCardActionsMenu<LabelContent: View>: View {
                 onDelete: onDelete ?? inheritedCallbacks.onDelete,
                 onToggleVisibility: onToggleVisibility ?? inheritedCallbacks.onToggleVisibility,
                 onTogglePin: onTogglePin ?? inheritedCallbacks.onTogglePin,
-                ownedActions: ownedActions,
+                ownedActions: ownedActions, audiencePicker: audiencePicker,
                 onNavigate: navigateCard,
                 onPrepare: onPrepare
             ).nativeMenuContent
@@ -979,7 +1061,7 @@ extension View {
         isSparkEnabled: Bool = true,
         onSpark: (() -> Void)? = nil,
         onDelete: (@MainActor @Sendable () -> Void)? = nil,
-        onToggleVisibility: (@MainActor @Sendable (UserCard) -> Void)? = nil,
+        onToggleVisibility: (@MainActor @Sendable (UserCard, NotePrivacyObservation, Bool) -> Void)? = nil,
         onTogglePin: (@MainActor @Sendable (UserCard) -> Void)? = nil,
         onRouteDismissed: @escaping (CardNavigationDismissal) -> Void = { _ in },
         onRoutePresentationChanged: @escaping (Bool) -> Void = { _ in },

@@ -37,6 +37,7 @@ struct CardEditorShell: View {
     let isLinkRemovalEnabled: Bool
     let background: CardEditorBackgroundSource
     let isPublic: Bool
+    let audienceName: String?
     let isMetadataEditable: Bool
     let isInlineImageProcessing: Bool
     let saveMessage: String?
@@ -63,6 +64,7 @@ struct CardEditorShell: View {
         isLinkRemovalEnabled: Bool = false,
         background: CardEditorBackgroundSource,
         isPublic: Bool,
+        audienceName: String? = nil,
         isMetadataEditable: Bool,
         isInlineImageProcessing: Bool = false,
         saveMessage: String? = nil,
@@ -88,6 +90,7 @@ struct CardEditorShell: View {
         self.isLinkRemovalEnabled = isLinkRemovalEnabled
         self.background = background
         self.isPublic = isPublic
+        self.audienceName = audienceName
         self.isMetadataEditable = isMetadataEditable
         self.isInlineImageProcessing = isInlineImageProcessing
         self.saveMessage = saveMessage
@@ -112,6 +115,7 @@ struct CardEditorShell: View {
             CardEditorFloatingControls(
                 bodyModel: bodyModel,
                 isPublic: isPublic,
+                audienceName: audienceName,
                 isMetadataEditable: isMetadataEditable,
                 isPrivacyEditable: isPrivacyEditable,
                 leadingControlState: leadingControlState,
@@ -392,6 +396,7 @@ private struct CardEditorBlankTapSurface: View {
 private struct CardEditorFloatingControls: View {
     @ObservedObject var bodyModel: BlockNoteCardEditorModel
     let isPublic: Bool
+    let audienceName: String?
     let isMetadataEditable: Bool
     let isPrivacyEditable: Bool
     let leadingControlState: CardEditorLeadingControlState
@@ -452,7 +457,7 @@ private struct CardEditorFloatingControls: View {
                 .foregroundStyle(ChoraiTheme.ink)
                 .disabled(!isMetadataEditable || !isPrivacyEditable)
                 .accessibilityLabel(isPublic ? "Make Private" : "Make Public")
-                .accessibilityValue(isPublic ? "Public" : "Private")
+                .accessibilityValue(audienceName ?? (isPublic ? "Public" : "Private"))
                 .accessibilityIdentifier("cardEditorPrivacyButton")
                 .accessibilitySortPriority(2)
 

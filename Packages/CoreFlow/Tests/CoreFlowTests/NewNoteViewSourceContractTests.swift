@@ -273,7 +273,7 @@ final class NewNoteViewSourceContractTests: XCTestCase {
         )
         XCTAssertTrue(
             privacy.contains(
-                "NetworkManager.shared.updateCardVisibility(cardId: serverID, isPublic: value)"
+                "localNotes.setPrivacy(identifier: id, observation: observation, isPublic: desired)"
             )
         )
         XCTAssertFalse(privacy.contains("editingStore.save()"))

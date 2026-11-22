@@ -443,6 +443,9 @@ final class IOSRunCommandContractTests: XCTestCase {
         \t@/usr/bin/printf '%s\\n' "$$IOS_DEVICE" > "\(outputURL.path)"
         """.write(to: makefileURL, atomically: true, encoding: .utf8)
         var environment = ProcessInfo.processInfo.environment
+        // The outer gate may supply IOS_DEVICE on its own Make command line.
+        // This probe tests environment input and needs an independent child Make.
+        for key in ["MAKEFLAGS", "MFLAGS", "MAKEOVERRIDES"] { environment.removeValue(forKey: key) }
         environment["IOS_DEVICE"] = rawValue
 
         let result = try runCommand(

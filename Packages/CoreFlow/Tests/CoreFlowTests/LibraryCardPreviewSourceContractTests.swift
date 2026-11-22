@@ -228,12 +228,9 @@ final class LibraryCardPreviewSourceContractTests: XCTestCase {
         )
 
         let manager = try source(at: "ArcNote/HomeCardsManager.swift")
-        XCTAssertEqual(
-            manager.components(
-                separatedBy: "backgroundMediaRef: self?.cards[index].backgroundMediaRef"
-            ).count - 1,
-            2
-        )
+        // Privacy changes one field in place. Pin still rebuilds the card and copies its background.
+        XCTAssertTrue(manager.contains("cards[index].isPublic = policy.audience.isPublic"))
+        XCTAssertTrue(manager.contains("backgroundMediaRef: self?.cards[index].backgroundMediaRef"))
 
         let detail = try source(at: "ArcNote/DetailView.swift")
         XCTAssertTrue(detail.contains("backgroundMediaRef: detail.backgroundMediaRef"))

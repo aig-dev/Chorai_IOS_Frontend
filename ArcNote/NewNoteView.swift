@@ -173,6 +173,7 @@ private final class CardEditorNativeActionRouter: ObservableObject {
 private struct CardEditorSessionView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
+    @StateObject private var audiencePicker = NoteAudiencePicker()
     @ObservedObject private var localNotes = LocalNotesController.shared
     @ObservedObject private var authManager = AuthManager.shared
     @Environment(\.navigateCard) private var navigateCard
@@ -272,7 +273,8 @@ private struct CardEditorSessionView: View {
                 && cloudCardID != nil
                 && unlinkingLinkID == nil,
             background: editorBackground,
-            isPublic: editingStore.draft.isPublic,
+            isPublic: localNotes.currentAudience(for: cloudCardID)?.audience.isPublic ?? currentLocalNote?.isPublic ?? editingStore.draft.isPublic,
+            audienceName: localNotes.currentAudience(for: cloudCardID)?.audience.rawValue.capitalized,
             isMetadataEditable: bodyModel.canMutate && !isBusy,
             isInlineImageProcessing: isProcessingInlineImage,
             saveMessage: saveMessage,
@@ -299,6 +301,11 @@ private struct CardEditorSessionView: View {
 
     var body: some View {
         editorShell
+        .modifier(NoteAudienceDialog(picker: audiencePicker))
+        .task(id: cloudCardID) {
+            guard let id = cloudCardID else { return }
+            _ = try? await localNotes.observePrivacy(identifier: id)
+        }
         .overlay {
             if showCardActions {
                 CardEditorActionBox(
@@ -1025,26 +1032,21 @@ private struct CardEditorSessionView: View {
     }
 
     private func togglePrivacy() {
-        guard let serverID = cloudCardID, let id = editingStore.cardID,
-              let scope = authManager.currentNoteScope else {
+        guard let id = cloudCardID else {
             saveMessage = "Sync this note before changing who can see it."
             return
         }
         completeTagEntry()
-        let value = !editingStore.draft.isPublic
-        NetworkManager.shared.updateCardVisibility(cardId: serverID, isPublic: value)
-            .receive(on: DispatchQueue.main)
-            .sink(receiveCompletion: { result in
-                if case .failure = result { saveMessage = "Couldn't update visibility." }
-            }, receiveValue: { response in
-                guard response.success, authManager.currentNoteScope == scope else { return }
-                Task {
-                    do {
-                        try await localNotes.library.recordMetadata(identifier: id, isPublic: response.data.isPublic, scope: scope)
-                        updateMetadata(isPublic: response.data.isPublic)
-                    } catch { saveMessage = "Visibility changed in the cloud. Refresh to check it." }
+        audiencePicker.open(id) { observation, desired in
+            Task {
+                do {
+                    _ = try await localNotes.setPrivacy(identifier: id, observation: observation, isPublic: desired)
+                } catch {
+                    guard cloudCardID == id, authManager.sessionGeneration == observation.session else { return }
+                    saveMessage = (error as? NotePrivacyError)?.errorDescription ?? "Open the note audience to check the previous change."
                 }
-            }).store(in: &cancellables)
+            }
+        }
     }
 
     private func presentBackgroundActions() {

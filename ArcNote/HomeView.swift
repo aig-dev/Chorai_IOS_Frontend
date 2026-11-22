@@ -830,29 +830,6 @@ struct HomeView: View {
             deleteCardError = nil
             showDeleteConfirmation = true
         }
-        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ToggleCardVisibility"))) { notification in
-            guard let userInfo = notification.userInfo,
-                  let cardId = userInfo["cardId"] as? String,
-                  let _ = userInfo["isPublic"] as? Bool else {
-                print("通知缺少必要参数")
-                return
-            }
-            
-            cardsManager.toggleCardVisibility(
-                cardId: cardId,
-                fallbackCard: currentMenuCardData
-            ) { result in
-                switch result {
-                case .success:
-                    print("卡片可见性切换成功")
-                    if librarySearchSession.isActive {
-                        retryLibrarySearch()
-                    }
-                case .failure(let error):
-                    print("卡片可见性切换失败: \(error.localizedDescription)")
-                }
-            }
-        }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ToggleCardPin"))) { notification in
             guard let userInfo = notification.userInfo,
                   let cardId = userInfo["cardId"] as? String,

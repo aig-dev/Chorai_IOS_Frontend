@@ -36,7 +36,9 @@ public struct OwnedCardActionRequest: Equatable, Sendable {
     }
     public let cardID: String
     public let operation: Operation
-    public init(cardID: String, operation: Operation) {
+    public let privacy: NotePrivacyObservation?
+    public init(cardID: String, operation: Operation, privacy: NotePrivacyObservation? = nil) {
+        self.privacy = privacy
         self.cardID = cardID
         self.operation = operation
     }
@@ -57,6 +59,14 @@ public enum OwnedCardActionCommit: Equatable, Sendable {
 public enum OwnedCardActionError: Error, Equatable, Sendable {
     case requestFailed
     case invalidResponse
+    case privacy(NotePrivacyError)
+
+    public var mayRetry: Bool {
+        switch self {
+        case .privacy(.stalePolicy), .privacy(.idempotencyConflict), .privacy(.rejected), .privacy(.invalidCommand): false
+        default: true
+        }
+    }
 }
 
 public struct OwnedCardActionFailure: Identifiable, Equatable, Sendable {
@@ -82,6 +92,7 @@ public final class OwnedCardActionStore: ObservableObject {
     @Published public private(set) var stateRevision = 0
     private var snapshots: [String: OwnedCardActionSnapshot] = [:]
     private var removedIDs: Set<String> = []
+    private var sessionEpoch: UInt64 = 0
     private var retryIdentity: UUID?
     private var pendingRemoval: OwnedCardActionSnapshot?
     private var appliedRefreshIDs: Set<UUID> = []
@@ -140,6 +151,11 @@ public final class OwnedCardActionStore: ObservableObject {
         start(.init(cardID: target.cardID, operation: .remove), snapshot: target)
     }
 
+    public func setVisibility(of candidate: OwnedCardActionSnapshot, desired: Bool, observation: NotePrivacyObservation) {
+        guard canStart(candidate) else { return }
+        start(.init(cardID: candidate.cardID, operation: .setVisibility(desired), privacy: observation), snapshot: resolved(candidate))
+    }
+
     public func toggleVisibility(of candidate: OwnedCardActionSnapshot) {
         guard canStart(candidate) else { return }
         let target = resolved(candidate)
@@ -152,12 +168,26 @@ public final class OwnedCardActionStore: ObservableObject {
         start(.init(cardID: target.cardID, operation: .setPinned(!target.isPinned)), snapshot: target)
     }
 
+    public func retireSession() {
+        sessionEpoch &+= 1
+        retryIdentity = nil
+        removalTarget = nil
+        pendingRemoval = nil
+        workingRequest = nil
+        failure = nil
+        lastCommit = nil
+        snapshots.removeAll()
+        removedIDs.removeAll()
+        appliedRefreshIDs.removeAll()
+        stateRevision += 1
+    }
+
     public func dismissFailure() { failure = nil }
 
     /// The failure token prevents an old alert from retrying after a later action.
     /// Dismissing the system alert before its Retry callback does not lose its request.
     public func retry(_ failed: OwnedCardActionFailure) {
-        guard retryIdentity == failed.id,
+        guard failed.error.mayRetry, retryIdentity == failed.id,
               workingRequest == nil, removalTarget == nil,
               failure == nil || failure?.id == failed.id,
               let snapshot = snapshots[failed.request.cardID], snapshot.isOwned,
@@ -181,11 +211,12 @@ public final class OwnedCardActionStore: ObservableObject {
         pendingRemoval = nil
         snapshots[snapshot.cardID] = snapshot
         workingRequest = request
+        let epoch = sessionEpoch
         Task { [weak self] in
             guard let self else { return }
             do {
                 let commit = try await service.perform(request)
-                guard workingRequest == request else { return }
+                guard sessionEpoch == epoch, workingRequest == request else { return }
                 guard matches(commit, request: request) else { throw OwnedCardActionError.invalidResponse }
                 var updated = snapshot
                 switch commit {
@@ -199,10 +230,10 @@ public final class OwnedCardActionStore: ObservableObject {
                 commitRevision += 1
                 stateRevision += 1
             } catch {
-                guard workingRequest == request else { return }
+                guard sessionEpoch == epoch, workingRequest == request else { return }
                 workingRequest = nil
                 let failed = OwnedCardActionFailure(id: UUID(), request: request,
-                    error: error as? OwnedCardActionError ?? .requestFailed)
+                    error: (error as? NotePrivacyError).map(OwnedCardActionError.privacy) ?? (error as? OwnedCardActionError) ?? .requestFailed)
                 retryIdentity = failed.id
                 failure = failed
             }

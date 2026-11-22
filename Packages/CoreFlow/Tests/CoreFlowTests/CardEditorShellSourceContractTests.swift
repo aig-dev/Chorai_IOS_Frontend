@@ -946,7 +946,7 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         )
         XCTAssertTrue(
             controls.contains(
-                ".accessibilityValue(isPublic ? \"Public\" : \"Private\")"
+                ".accessibilityValue(audienceName ?? (isPublic ? \"Public\" : \"Private\"))"
             )
         )
         XCTAssertTrue(controls.contains("onOpenCardActions?()"))

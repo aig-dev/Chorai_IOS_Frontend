@@ -105,6 +105,9 @@ final class AuthManager: ObservableObject {
         createdAt: String
     ) {
         sessionGeneration &+= 1
+        sessionVerification?.cancel()
+        sessionVerification = nil
+        lastVerificationStartedAt = nil
         needsInterestSelection = false
         authToken = token
         isLoggedIn = true

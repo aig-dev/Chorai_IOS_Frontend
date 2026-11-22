@@ -10,6 +10,30 @@ final class LocalNotesController: ObservableObject {
     static let shared = LocalNotesController()
     let library: NoteLibraryStore
     private var subscriptions = Set<AnyCancellable>()
+    private let privacyJournal = NotePrivacyJournal(directory: FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        .appendingPathComponent("NotePrivacy", isDirectory: true))
+    private struct PrivacyTarget: Hashable {
+        let scope: NoteStoreScope
+        let session: UInt64
+        let asset: String
+    }
+    private var privacyBusy = Set<PrivacyTarget>()
+    @Published private var latestPrivacy: NotePrivacyObservation?
+
+    func currentAudience(for assetID: String?) -> NotePrivacyPolicy? {
+        guard let state = latestPrivacy, state.policy.assetID == assetID,
+              state.scope == AuthManager.shared.currentNoteScope, state.session == AuthManager.shared.sessionGeneration
+        else { return nil }
+        return state.policy
+    }
+
+    private func publishPrivacy(_ policy: NotePrivacyPolicy, scope: NoteStoreScope, session: UInt64) async throws {
+        latestPrivacy = NotePrivacyObservation(scope: scope, session: session, policy: policy, pending: nil)
+        if library.serverID(for: policy.assetID) != nil {
+            try await library.recordMetadata(identifier: policy.assetID, isPublic: policy.audience.isPublic, scope: scope)
+        }
+    }
+
     private var foreground = true
     private var accessTask: Task<Void, Never>?
     @Published private(set) var scopeTransition: NoteScopeTransitionState = .ready
@@ -115,6 +139,64 @@ final class LocalNotesController: ObservableObject {
             NotificationCenter.default.post(name: .cardReadInvalidated, object: serverID ?? identifier)
         }
         Task { await library.synchronize() }
+    }
+
+    private func checkPrivacy(_ scope: NoteStoreScope, session: UInt64, identifier: String, assetID: String) throws {
+        guard foreground, scopeTransition == .ready, library.cloudEnabled, scope == library.scope,
+              AuthManager.shared.currentNoteScope == scope, AuthManager.shared.sessionGeneration == session,
+              cloudAssetID(for: identifier) == assetID, NotePrivacyWire.validID(assetID)
+        else { throw NoteLocalStoreError.invalidScope }
+    }
+
+    func observePrivacy(identifier: String) async throws -> NotePrivacyObservation {
+        guard let scope = library.scope, let asset = cloudAssetID(for: identifier) else { throw NoteLocalStoreError.invalidScope }
+        let session = AuthManager.shared.sessionGeneration
+        try checkPrivacy(scope, session: session, identifier: identifier, assetID: asset)
+        let target = PrivacyTarget(scope: scope, session: session, asset: asset)
+        guard privacyBusy.insert(target).inserted else { throw NotePrivacyError.pendingCommand }
+        defer { privacyBusy.remove(target) }
+        let pending = try await privacyJournal.pending(scope: scope, assetID: asset)
+        try checkPrivacy(scope, session: session, identifier: identifier, assetID: asset)
+        let policy = try await NetworkManager.shared.notePrivacyRequest(scope: scope, assetID: asset)
+        try checkPrivacy(scope, session: session, identifier: identifier, assetID: asset)
+        try await publishPrivacy(policy, scope: scope, session: session)
+        try checkPrivacy(scope, session: session, identifier: identifier, assetID: asset)
+        return NotePrivacyObservation(scope: scope, session: session, policy: policy, pending: pending)
+    }
+
+    func setPrivacy(identifier: String, observation: NotePrivacyObservation, isPublic: Bool) async throws -> NotePrivacyPolicy {
+        let scope = observation.scope, asset = observation.policy.assetID
+        func check() throws { try checkPrivacy(scope, session: observation.session, identifier: identifier, assetID: asset) }
+        try check()
+        let target = PrivacyTarget(scope: scope, session: observation.session, asset: asset)
+        guard privacyBusy.insert(target).inserted else { throw NotePrivacyError.pendingCommand }
+        defer { privacyBusy.remove(target) }
+        let command: NotePrivacyCommand
+        if let pending = observation.pending {
+            guard pending == (try await privacyJournal.pending(scope: scope, assetID: asset)) else { throw NotePrivacyError.invalidCommand }
+            command = pending
+        } else {
+            command = try await privacyJournal.begin(scope: scope, path: APIEnvironment.visibilityPath(assetID: asset), observed: observation.policy, desired: isPublic ? .PUBLIC : .PRIVATE, requestID: observation.decisionID)
+        }
+        try check()
+        let policy: NotePrivacyPolicy
+        do {
+            policy = try await NetworkManager.shared.notePrivacyRequest(scope: scope, assetID: asset, command: command)
+        } catch NotePrivacyError.stalePolicy {
+            try check()
+            let current = try await NetworkManager.shared.notePrivacyRequest(scope: scope, assetID: asset)
+            try check()
+            try await publishPrivacy(current, scope: scope, session: observation.session)
+            try check()
+            try await privacyJournal.settle(command)
+            throw NotePrivacyError.stalePolicy
+        }
+        try check()
+        try await publishPrivacy(policy, scope: scope, session: observation.session)
+        try check()
+        try await privacyJournal.settle(command)
+        try check()
+        return policy
     }
 
     func cloudAssetID(for identifier: String) -> String? {

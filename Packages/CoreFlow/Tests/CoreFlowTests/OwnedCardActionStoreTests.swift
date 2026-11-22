@@ -212,6 +212,30 @@ final class OwnedCardActionStoreTests: XCTestCase {
         XCTAssertFalse(store.resolved(card("A")).isPinned)
     }
 
+    func testRetiringSessionDiscardsLateVisibilityAndStaleDecisionCannotRetry() async throws {
+        let service = ActionService()
+        service.suspends = true
+        let store = OwnedCardActionStore(service: service)
+        store.toggleVisibility(of: card())
+        await waitFor { service.pending != nil }
+        store.retireSession()
+        service.pending?.resume(returning: .visibility(cardID: "outside-home", isPublic: true))
+        service.pending = nil
+        await Task.yield()
+        XCTAssertNil(store.lastCommit)
+        XCTAssertFalse(store.resolved(card()).isPublic)
+        store.toggleVisibility(of: card())
+        await waitFor { service.pending != nil }
+        service.pending?.resume(throwing: NotePrivacyError.stalePolicy)
+        service.pending = nil
+        await waitFor { store.failure != nil }
+        let failure = try XCTUnwrap(store.failure)
+        XCTAssertFalse(failure.error.mayRetry)
+        store.retry(failure)
+        XCTAssertEqual(service.requests.count, 2)
+        XCTAssertNil(store.workingRequest)
+    }
+
     private func waitFor(_ predicate: @MainActor () -> Bool, file: StaticString = #filePath, line: UInt = #line) async {
         let end = Date().addingTimeInterval(2)
         while !predicate(), Date() < end { try? await Task.sleep(nanoseconds: 1_000_000) }

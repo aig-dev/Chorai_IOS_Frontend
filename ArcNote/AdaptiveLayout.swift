@@ -127,6 +127,10 @@ private struct KeyboardViewportTopReader: UIViewRepresentable {
         uiView.reportAfterLayout()
     }
 
+    static func dismantleUIView(_ uiView: ReportingView, coordinator: ()) {
+        uiView.stopReporting()
+    }
+
     final class ReportingView: UIView {
         var onChange: ((CGFloat) -> Void)?
         private var lastMinY: CGFloat?
@@ -144,8 +148,10 @@ private struct KeyboardViewportTopReader: UIViewRepresentable {
             fatalError("init(coder:) has not been implemented")
         }
 
-        isolated deinit {
+        func stopReporting() {
+            onChange = nil
             keyboardObservers.forEach(NotificationCenter.default.removeObserver)
+            keyboardObservers.removeAll()
         }
 
         override func didMoveToWindow() {
@@ -202,9 +208,8 @@ private struct KeyboardViewportTopReader: UIViewRepresentable {
                 return
             }
             lastMinY = minY
-            let callback = onChange
-            DispatchQueue.main.async {
-                callback?(minY)
+            DispatchQueue.main.async { [weak self] in
+                self?.onChange?(minY)
             }
         }
     }

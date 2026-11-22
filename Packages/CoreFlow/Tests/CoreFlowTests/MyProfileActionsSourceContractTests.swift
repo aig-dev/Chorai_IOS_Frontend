@@ -11,13 +11,13 @@ final class MyProfileActionsSourceContractTests: XCTestCase {
         XCTAssertTrue(profile.contains("popupMenuLayout = .grid3x3"))
         XCTAssertTrue(profile.contains("onDelete: { requestCardDeletion() }"))
         XCTAssertTrue(
-            profile.contains("onToggleVisibility: { toggleCardVisibility($0) }")
+            profile.contains("onToggleVisibility: toggleCardVisibility")
         )
         XCTAssertTrue(profile.contains("onTogglePin: { toggleCardPin($0) }"))
 
         XCTAssertTrue(popupMenu.contains("onDelete: (@MainActor @Sendable () -> Void)?"))
         XCTAssertTrue(
-            popupMenu.contains("onToggleVisibility: (@MainActor @Sendable (UserCard) -> Void)?")
+            popupMenu.contains("onToggleVisibility: (@MainActor @Sendable (UserCard, NotePrivacyObservation, Bool) -> Void)?")
         )
         XCTAssertTrue(popupMenu.contains("onTogglePin: (@MainActor @Sendable (UserCard) -> Void)?"))
     }

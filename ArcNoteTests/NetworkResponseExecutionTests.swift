@@ -7,6 +7,59 @@ import os
 
 @MainActor
 final class NetworkResponseExecutionTests: XCTestCase {
+    func testCanceledPolicyResponseCannotSettleTheRecoveredRequest() async throws {
+        prepareLinkAuth()
+        let started = expectation(description: "privacy command dispatched")
+        let fixture = HTTPFixture(onStart: { started.fulfill() })
+        let scope = NoteStoreScope(actorID: "link_actor", environmentID: fixture.baseURL)
+        let token = "vp1." + String(repeating: "A", count: 43)
+        let bytes = try JSONSerialization.data(withJSONObject: ["success": true, "data": ["current_policy":
+            ["asset_id": "source", "space_id": NSNull(), "visibility": "PRIVATE", "policy_token": token]]])
+        let policy = try NotePrivacyWire.decode(status: 200, data: bytes, assetID: "source")
+        let directory = linkJournalDirectory()
+        let journal = NotePrivacyJournal(directory: directory)
+        let attempt = try await journal.begin(scope: scope, path: APIEnvironment.visibilityPath(assetID: "source"), observed: policy, desired: .PUBLIC)
+        let network = NetworkManager(baseURL: fixture.baseURL, session: fixture.session)
+        network.setAuthToken("synthetic-link-token")
+        let operation = Task { try await network.notePrivacyRequest(scope: scope, assetID: "source", command: attempt) }
+        await fulfillment(of: [started], timeout: 5)
+        let request = try XCTUnwrap(fixture.count == 1 ? fixture.request() : nil)
+        XCTAssertEqual(request.httpMethod, "POST")
+        XCTAssertEqual(request.url?.path, "/api/v1/assets/source/visibility")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Idempotency-Key"), attempt.requestID.uuidString)
+        operation.cancel()
+        fixture.respond("{}")
+        do { _ = try await operation.value; XCTFail("Canceled request accepted") } catch is CancellationError {}
+        let retained = try await NotePrivacyJournal(directory: directory).pending(scope: scope, assetID: "source")
+        XCTAssertEqual(retained, attempt)
+    }
+
+    func testBodyEditingAdapterExcludesPrivacyFromTransport() async throws {
+        let started = expectation(description: "body update")
+        let fixture = HTTPFixture(onStart: { started.fulfill() })
+        let service = NetworkCoreCardEditingService(network: NetworkManager(baseURL: fixture.baseURL, session: fixture.session))
+        let operation = Task { try await service.update(cardID: "source",
+            draft: CardEditingDraft(title: "title", content: "body", tags: [], isPublic: true)) }
+        await fulfillment(of: [started], timeout: 5)
+        let request = try XCTUnwrap(fixture.count == 1 ? fixture.request() : nil)
+        let bytes: Data
+        if let body = request.httpBody { bytes = body }
+        else {
+            let stream = try XCTUnwrap(request.httpBodyStream)
+            stream.open()
+            defer { stream.close() }
+            var buffer = [UInt8](repeating: 0, count: 4096)
+            let length = stream.read(&buffer, maxLength: buffer.count)
+            XCTAssertGreaterThan(length, 0)
+            bytes = Data(buffer.prefix(max(0, length)))
+        }
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: bytes) as? [String: Any])
+        XCTAssertNil(body["is_public"])
+        XCTAssertEqual(body["content"] as? String, "body")
+        fixture.respond(HTTPFixture.detail)
+        _ = try? await operation.value
+    }
+
     private func purgeReceipt(_ key: String, cleanup: String = "PENDING") -> String {
         #"{"success":true,"data":{"asset_id":"source","request_id":"\#(key)","state":"ERASED","activity_id":"purge_activity","action_log_id":"purge_log","certificate_id":"certificate","cleanup_state":"\#(cleanup)"}}"#
     }

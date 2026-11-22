@@ -972,13 +972,11 @@ extension NetworkManager {
         content: String,
         contentJSON: String? = nil,
         editorAtmosphere: String? = nil,
-        tags: [String],
-        isPublic: Bool
+        tags: [String]
     ) -> AnyPublisher<CardResponse, NetworkError> {
         var parameters: Parameters = [
             "content": content,
-            "tags": tags,
-            "is_public": isPublic
+            "tags": tags
         ]
         addCardEditingTitle(title, to: &parameters)
         addStructuredEditorParameters(
@@ -1594,19 +1592,6 @@ extension NetworkManager {
         }
         .eraseToAnyPublisher()
     }
-    func updateCardVisibility(cardId: String, isPublic: Bool) -> AnyPublisher<ToggleCardVisibilityResponse, NetworkError> {
-        let parameters: Parameters = [
-            "visibility": isPublic ? "PUBLIC" : "PRIVATE"
-        ]
-
-        return request(
-            endpoint: "/api/v1/assets/\(cardId)/visibility",
-            method: .post,
-            parameters: parameters,
-            responseType: ToggleCardVisibilityResponse.self
-        )
-    }
-
     func getUserCredit(
         presentsError: Bool = false
     ) -> AnyPublisher<NetworkResponse<CreditBalanceData>, NetworkError> {
@@ -2146,31 +2131,6 @@ extension NetworkManager {
 
     func deleteCard(cardId: String, completion: @escaping (Result<NetworkResponse<CardMessageData>, NetworkError>) -> Void) {
         deleteCard(id: cardId, presentsError: false)
-        .sink(
-            receiveCompletion: { completionResult in
-                if case .failure(let error) = completionResult {
-                    completion(.failure(error))
-                }
-            },
-            receiveValue: { response in
-                completion(.success(response))
-            }
-        )
-        .store(in: &cancellables)
-    }
-
-    // MARK: 切换卡片可见性
-    func toggleCardVisibility(cardId: String, isPublic: Bool, completion: @escaping (Result<ToggleCardVisibilityResponse, NetworkError>) -> Void) {
-        let parameters: Parameters = [
-            "visibility": isPublic ? "PUBLIC" : "PRIVATE"
-        ]
-
-        self.request(
-            endpoint: "/api/v1/assets/\(cardId)/visibility",
-            method: .post,
-            parameters: parameters,
-            responseType: ToggleCardVisibilityResponse.self
-        )
         .sink(
             receiveCompletion: { completionResult in
                 if case .failure(let error) = completionResult {
@@ -3216,6 +3176,27 @@ extension NetworkManager {
     @MainActor
     func noteSyncRequest(scope: NoteStoreScope, path: String, method: NoteSyncHTTPMethod,
                          body: Data? = nil, operationID: String? = nil) async throws -> Data {
+        let response = try await scopedNoteResponse(scope: scope, path: path, method: method, body: body, operationID: operationID)
+        return try noteSyncData(response)
+    }
+
+    @MainActor
+    func notePrivacyRequest(scope: NoteStoreScope, assetID: String, command: NotePrivacyCommand? = nil) async throws -> NotePrivacyPolicy {
+        guard NotePrivacyWire.validID(assetID), command == nil || (command?.assetID == assetID && command?.scope == scope)
+        else { throw NotePrivacyError.invalidCommand }
+        let path = APIEnvironment.visibilityPath(assetID: assetID)
+        guard command == nil || command?.path == path else { throw NotePrivacyError.invalidCommand }
+        let response = try await scopedNoteResponse(scope: scope, path: command?.path ?? path,
+            method: command == nil ? .get : .post, body: command?.bytes, operationID: command?.requestID.uuidString)
+        guard let status = response.response?.statusCode, let data = response.data, response.error == nil else {
+            throw NotePrivacyError.outcomeUnknown
+        }
+        return try NotePrivacyWire.decode(status: status, data: data, assetID: assetID, command: command)
+    }
+
+    @MainActor
+    private func scopedNoteResponse(scope: NoteStoreScope, path: String, method: NoteSyncHTTPMethod,
+                                    body: Data?, operationID: String?) async throws -> AFDataResponse<Data> {
         let (token, generation) = try noteSyncCredentials(scope)
         guard path.hasPrefix("/api/"), let url = URL(string: baseURL + path) else { throw NoteSyncFailure.invalidResponse }
         var request = URLRequest(url: url)
@@ -3228,7 +3209,7 @@ extension NetworkManager {
         let response = await session.request(request).redirect(using: Redirector(behavior: .doNotFollow))
             .serializingData().response
         try checkNoteSyncSession(scope, token: token, generation: generation)
-        return try noteSyncData(response)
+        return response
     }
 
     @MainActor

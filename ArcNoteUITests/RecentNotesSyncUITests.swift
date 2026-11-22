@@ -475,8 +475,8 @@ final class RecentNotesServer: @unchecked Sendable {
     enum RemoteChange { case changed, removed }
     enum LibraryFixture { case activeNote, trashedNote, twoCreates }
 
-    let actorID = "act_" + UUID().uuidString
-    let token = UUID().uuidString
+    let actorID: String
+    let token: String
     let manifestRequested = XCTestExpectation(description: "The app requested the complete manifest")
     let remoteImageRequested = XCTestExpectation(description: "The app requested the uncached image")
     private let queue = DispatchQueue(label: "RecentNotesServer")
@@ -495,6 +495,13 @@ final class RecentNotesServer: @unchecked Sendable {
         let asset = "asset-" + key
         send(connection, payload: ["id": asset, "sync_receipt": ["asset_id": asset, "operation_id": key]] as [String: Any])
     }
+    let privacyCommitLost = XCTestExpectation(description: "First committed visibility response lost")
+    private var policyAttempts: [(key: String, bytes: Data)] = []
+    var replayedPrivacyExactly: Bool {
+        queue.sync { policyAttempts.count == 2 && policyAttempts[0].key == policyAttempts[1].key && policyAttempts[0].bytes == policyAttempts[1].bytes }
+    }
+    private var profileKeys: [String] = []
+    var confirmedFreshProfileDecision: Bool { queue.sync { profileKeys.count == 2 && Set(profileKeys).count == 2 } }
     private var deleteRequests = 0
     var permanentDeleteRequests: Int { queue.sync { deleteRequests } }
     private var recentNoteChange: RemoteChange?
@@ -517,7 +524,10 @@ final class RecentNotesServer: @unchecked Sendable {
     var backfillIDs: [String] { queue.sync { batchIDs } }
     var singleReads: [String] { queue.sync { detailIDs } }
 
-    init(includesRemoteImage: Bool = false, libraryFixture: LibraryFixture? = nil) throws {
+    init(includesRemoteImage: Bool = false, libraryFixture: LibraryFixture? = nil,
+         actorID: String = "act_" + UUID().uuidString, token: String = UUID().uuidString) throws {
+        self.actorID = actorID
+        self.token = token
         self.includesRemoteImage = includesRemoteImage
         self.libraryFixture = libraryFixture
         manifestIsReleased = libraryFixture != nil
@@ -607,6 +617,44 @@ final class RecentNotesServer: @unchecked Sendable {
         }
         let path = url.path
         switch (method, path) {
+        case ("GET", "/api/v1/assets/my-profile-actions-fixture/visibility"):
+            let head = profileKeys.isEmpty ? "A" : "E"
+            send(connection, payload: ["current_policy": ["asset_id": "my-profile-actions-fixture", "space_id": NSNull(),
+                "visibility": "WORKSPACE", "policy_token": "vp1." + String(repeating: head, count: 43)] as [String: Any]])
+        case ("POST", "/api/v1/assets/my-profile-actions-fixture/visibility"):
+            let head = profileKeys.isEmpty ? "A" : "E"
+            let base = "vp1." + String(repeating: head, count: 43)
+            let desired = profileKeys.isEmpty ? "PUBLIC" : "PRIVATE"
+            guard let key = Self.header("Idempotency-Key", in: request), !key.isEmpty,
+                  let payload = try? JSONSerialization.jsonObject(with: body) as? [String: String],
+                  payload == ["visibility": desired, "base_policy_token": base] else { send(connection, status: 400); return }
+            profileKeys.append(key)
+            if profileKeys.count == 1 { send(connection, status: 409, reason: "stale_policy"); return }
+            let asset = "my-profile-actions-fixture", result = "vp1." + String(repeating: "I", count: 43)
+            let current: [String: Any] = ["asset_id": asset, "space_id": NSNull(), "visibility": desired, "policy_token": result]
+            let receipt: [String: Any] = ["client_request_id": key, "actor_id": actorID, "asset_id": asset, "action": "SET_VISIBILITY",
+                "requested_visibility": desired, "requested_space_id": NSNull(), "base_policy_token": base, "result_policy_token": result,
+                "activity_id": "activity", "action_log_id": "log"]
+            send(connection, payload: ["current_policy": current, "visibility_receipt": receipt])
+        case ("GET", "/api/v1/assets/ast_22/visibility"):
+            send(connection, payload: ["current_policy": fixturePolicy()])
+        case ("POST", "/api/v1/assets/ast_22/visibility"):
+            let base = "vp1." + String(repeating: "A", count: 43)
+            guard let key = Self.header("Idempotency-Key", in: request), !key.isEmpty,
+                  let json = try? JSONSerialization.jsonObject(with: body) as? [String: String],
+                  json == ["visibility": "PUBLIC", "base_policy_token": base]
+            else { send(connection, status: 428); return }
+            policyAttempts.append((key, body))
+            if policyAttempts.count == 1 {
+                privacyCommitLost.fulfill()
+                connection.cancel()
+            } else {
+                let receipt: [String: Any] = ["client_request_id": key, "asset_id": "ast_22", "actor_id": actorID,
+                    "action": "SET_VISIBILITY", "requested_visibility": "PUBLIC", "requested_space_id": NSNull(),
+                    "base_policy_token": base, "result_policy_token": "vp1." + String(repeating: "E", count: 43),
+                    "activity_id": "activity", "action_log_id": "log"]
+                send(connection, payload: ["visibility_receipt": receipt, "current_policy": fixturePolicy()])
+            }
         case ("POST", "/api/cards") where libraryFixture == .twoCreates:
             guard let key = Self.header("Idempotency-Key", in: request) else { send(connection, status: 400); return }
             if key == "target-create" {
@@ -687,6 +735,13 @@ final class RecentNotesServer: @unchecked Sendable {
         }
     }
 
+    private func fixturePolicy() -> [String: Any] {
+        // A second writer restricted the note after the first command committed.
+        let digit = policyAttempts.isEmpty ? "A" : "I"
+        return ["asset_id": "ast_22", "space_id": NSNull(), "visibility": "PRIVATE",
+                "policy_token": "vp1." + String(repeating: digit, count: 43)]
+    }
+
     private func sendManifest(_ connection: NWConnection) {
         let entries = cards.map { ["asset_id": $0["id"]!, "sync_token": $0["sync_token"]!, "lifecycle": $0["lifecycle"]!] }
         send(connection, payload: ["protocol_version": 3, "complete": true, "notes": entries] as [String: Any])
@@ -712,7 +767,7 @@ final class RecentNotesServer: @unchecked Sendable {
 
     private func send(_ connection: NWConnection, status: Int = 200, payload: Any = NSNull(), reason: String? = nil) {
         var response: [String: Any] = ["success": status == 200, "data": payload]
-        if let reason { response["error"] = ["reason": reason] }
+        if let reason { response["error"] = ["reason": reason, "code": reason, "message": reason] }
         let json = try! JSONSerialization.data(withJSONObject: response)
         let header = "HTTP/1.1 \(status) \(HTTPURLResponse.localizedString(forStatusCode: status))\r\nContent-Type: application/json\r\nContent-Length: \(json.count)\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n"
         connection.send(content: Data(header.utf8) + json, completion: .contentProcessed { _ in connection.cancel() })
@@ -730,6 +785,10 @@ final class OrdinaryGoProxy: @unchecked Sendable {
         var transportFailed = false
         var status: Int?
         var receipt: String?
+        var audience: String?
+        var policyToken: String?
+        var basePolicy: String?
+        var initialIsPublic: Bool?
     }
 
     static func sameFrozenRequest(_ attempts: [Mutation]) -> Bool {
@@ -752,13 +811,14 @@ final class OrdinaryGoProxy: @unchecked Sendable {
     private struct CreateCapture {
         let journal: OrdinaryFixtureJournal
         let token: String
+        var recordReceiptImmediately = false
         var keysByAsset: [String: Set<String>] = [:]
     }
     private var creating: CreateCapture?
     private(set) var origin = ""
 
-    func captureCreation(_ journal: OrdinaryFixtureJournal, token: String) {
-        queue.sync { creating = CreateCapture(journal: journal, token: token) }
+    func captureCreation(_ journal: OrdinaryFixtureJournal, token: String, recordReceiptImmediately: Bool = false) {
+        queue.sync { creating = CreateCapture(journal: journal, token: token, recordReceiptImmediately: recordReceiptImmediately) }
     }
 
     func bindAcknowledgement(_ journal: OrdinaryFixtureJournal, actor: String, appOrigin: String,
@@ -863,9 +923,15 @@ final class OrdinaryGoProxy: @unchecked Sendable {
         let key = request.value(forHTTPHeaderField: "Idempotency-Key")
         let path = url.path
         let card = (path == "/api/cards" || path.hasPrefix("/api/cards/")) && ["POST", "PUT", "PATCH", "DELETE"].contains(method)
-        let index = card ? records.count : nil
-        if card {
-            records.append(Mutation(key: key, method: method, digest: Data(SHA256.hash(data: body)), path: path))
+        let policy = path.hasPrefix("/api/v1/assets/") && path.hasSuffix("/visibility")
+        let tracked = card || policy || (method == "POST" && path == "/api/v1/media/upload")
+        let index = tracked ? records.count : nil
+        if tracked {
+            var record = Mutation(key: key, method: method, digest: Data(SHA256.hash(data: body)), path: path)
+            if method == "POST", path == "/api/cards", let create = try? JSONSerialization.jsonObject(with: body) as? [String: Any] {
+                record.initialIsPublic = create["is_public"] as? Bool
+            }
+            records.append(record)
         }
         let captureFile = method == "POST" && path == "/api/cards" && creating.map({
             request.value(forHTTPHeaderField: "Authorization") == "Bearer " + $0.token
@@ -902,10 +968,23 @@ final class OrdinaryGoProxy: @unchecked Sendable {
                 let receipt = payload?["sync_receipt"] as? [String: Any]
                 if let index {
                     self.records[index].receipt = receipt?["operation_id"] as? String
+                    if policy {
+                        let current = payload?["current_policy"] as? [String: Any]
+                        let write = payload?["visibility_receipt"] as? [String: Any]
+                        self.records[index].receipt = write?["client_request_id"] as? String
+                        self.records[index].audience = current?["visibility"] as? String
+                        self.records[index].policyToken = current?["policy_token"] as? String
+                        self.records[index].basePolicy = write?["base_policy_token"] as? String
+                    }
                 }
                 if let captureFile, self.creating?.journal.file == captureFile, let key, !key.isEmpty,
                    (200..<300).contains(http.statusCode), receipt?["operation_id"] as? String == key,
                    let asset = receipt?["asset_id"] as? String, payload?["id"] as? String == asset {
+                    if let capture = self.creating, capture.recordReceiptImmediately {
+                        do {
+                            try capture.journal.recordCreateReceipt(asset: asset, operation: key)
+                        } catch { connection.cancel(); return }
+                    }
                     self.creating?.keysByAsset[asset, default: []].insert(key)
                 }
                 if card, let key {
@@ -996,6 +1075,20 @@ struct OrdinaryFixtureJournal: Sendable {
             guard entry.creation == nil, entry.actor == actor, entry.appOrigin == appOrigin,
                   entry.local == local, !asset.isEmpty, !key.isEmpty else { throw URLError(.badServerResponse) }
             entry.creation = .acknowledged(asset: asset, operation: key)
+            try save(entry)
+        }
+    }
+
+    func recordCreateReceipt(asset: String, operation: String) throws {
+        try lock.withLock {
+            var entry = try read()
+            guard !asset.isEmpty, !operation.isEmpty else { throw URLError(.badServerResponse) }
+            if let creation = entry.creation {
+                guard case .acknowledged(let confirmed, let original) = creation, confirmed == asset, original == operation
+                else { throw URLError(.badServerResponse) }
+                return
+            }
+            entry.creation = .acknowledged(asset: asset, operation: operation)
             try save(entry)
         }
     }
