@@ -1,5 +1,9 @@
 # Execution boundary history
 
+## 2026-11-23 — Library Pin identity
+
+An ordinary Library Pin sent its local row ID to the server and received 404. A fixture reproduced the request path through the menu. The notes owner now resolves the server asset, validates its reply in the initiating scope and returns the confirmed state to that row. Tests cover Pin and Unpin, mismatched replies, unbound rows, remote-only canonical cards and session retirement.
+
 ## 2026-11-23 — Audience observation and fixture ownership
 
 An isolated proxy test reproduced an unrelated same-account CREATE receipt selecting the cleanup target. The audience fixtures now bind exactly the private CREATE authored by their test. Simulator cases also cover external publication with the editor open, an early tap while the owner GET is pending, and recovery after a lost CREATE acknowledgement. A contradictory stale response retains the original privacy request across a successful owner GET and relaunch.

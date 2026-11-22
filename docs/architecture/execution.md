@@ -31,6 +31,10 @@ CardPreviewValue(input: card.previewInput(snapshotID: snapshotID)) { value in
 
 Production views use the shared reader. Explicit DEBUG visual-fixture roots inject an isolated reader/cache; this does not grant anonymous product access.
 
+### Library Pin and Unpin
+
+The owned-card action service resolves a Library row to its synchronized server asset before sending a Pin or Unpin request. A remote-only card uses its canonical ID directly. The local notes owner checks the actor, API origin, session generation and row mapping before dispatch and after the response. A matching server ID and requested pin state authorize the local metadata update. The action store receives the original row ID so the same menu offers the next action.
+
 ### Home row dependencies
 
 `NotesCard` receives its own immutable card and action closures. It does not observe `HomeCardsManager`; list loading and another card's favorite state cannot independently invalidate every row. The owning list still projects changed card values, and preview authorization keeps its own subscription. Small guidance decorations independently observe their tip store, so dismissing or re-enabling a tip updates both halo and callout without a card change. DEBUG-only optional environment observers count actual body evaluations and guide visibility without retaining or logging note content.

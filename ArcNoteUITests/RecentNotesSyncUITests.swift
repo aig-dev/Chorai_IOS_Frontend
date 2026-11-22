@@ -599,6 +599,12 @@ final class RecentNotesServer: @unchecked Sendable {
     }
     private var profileKeys: [String] = []
     var confirmedFreshProfileDecision: Bool { queue.sync { profileKeys.count == 2 && Set(profileKeys).count == 2 } }
+    enum PinReply { case matching, wrongAsset, wrongState }
+    private var pinReply: PinReply = .matching
+    private var pinPaths: [String] = []
+    var receivedPins: [String] { queue.sync { pinPaths } }
+    func replyToPin(with value: PinReply) { queue.sync { pinReply = value } }
+
     private var deleteRequests = 0
     var permanentDeleteRequests: Int { queue.sync { deleteRequests } }
     private var recentNoteChange: RemoteChange?
@@ -714,6 +720,15 @@ final class RecentNotesServer: @unchecked Sendable {
         }
         let path = url.path
         switch (method, path) {
+        case (_, let route) where route.hasPrefix("/api/cards/") && route.hasSuffix("/pin"):
+            pinPaths.append(method + " " + route)
+            guard ["POST", "DELETE"].contains(method),
+                  route == "/api/cards/ast_22/pin" else { send(connection, status: 404); return }
+            var card = makeCard(22)
+            card["id"] = pinReply == .wrongAsset ? "ast_unrelated" : "ast_22"
+            card["is_pinned"] = pinReply == .wrongState ? method != "POST" : method == "POST"
+            if pinReply == .matching { cards[0]["is_pinned"] = card["is_pinned"] }
+            send(connection, payload: card)
         case ("GET", "/api/v1/assets/my-profile-actions-fixture/visibility"):
             let head = profileKeys.isEmpty ? "A" : "E"
             send(connection, payload: ["current_policy": ["asset_id": "my-profile-actions-fixture", "space_id": NSNull(),

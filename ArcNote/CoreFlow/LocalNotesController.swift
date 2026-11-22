@@ -64,12 +64,12 @@ final class LocalNotesController: ObservableObject {
         do {
             let updated = try await library.recordMetadata(identifier: policy.assetID, isPublic: policy.audience.isPublic,
                 scope: scope, expectedGeneration: expectedGeneration)
-            try checkPrivacy(scope, session: session, identifier: policy.assetID, assetID: policy.assetID)
+            try checkCloudTarget(scope, session: session, identifier: policy.assetID, assetID: policy.assetID)
             confirmedPrivacy[target] = ConfirmedAudience(policy: policy, projection: PrivacyProjection(updated))
         } catch NoteLocalStoreError.staleGeneration {
             throw NoteLocalStoreError.staleGeneration
         } catch {
-            try checkPrivacy(scope, session: session, identifier: policy.assetID, assetID: policy.assetID)
+            try checkCloudTarget(scope, session: session, identifier: policy.assetID, assetID: policy.assetID)
             if localNote(for: policy.assetID).map(PrivacyProjection.init) == confirmed.projection {
                 confirmedPrivacy[target] = confirmed
             }
@@ -184,16 +184,37 @@ final class LocalNotesController: ObservableObject {
         Task { await library.synchronize() }
     }
 
-    private func checkPrivacy(_ scope: NoteStoreScope, session: UInt64, identifier: String, assetID: String) throws {
+    private func checkCloudTarget(_ scope: NoteStoreScope, session: UInt64, identifier: String, assetID: String) throws {
         guard foreground, scopeTransition == .ready, library.cloudEnabled, scope == library.scope,
               AuthManager.shared.currentNoteScope == scope, AuthManager.shared.sessionGeneration == session,
               cloudAssetID(for: identifier) == assetID, NotePrivacyWire.validID(assetID)
         else { throw NoteLocalStoreError.invalidScope }
     }
 
+    func setPinned(identifier: String, isPinned: Bool,
+                   send: (String, @escaping (Result<ToggleCardPinResponse, NetworkError>) -> Void) -> Void) async throws -> OwnedCardActionCommit {
+        guard let scope = library.scope, let asset = cloudAssetID(for: identifier) else { throw NoteLocalStoreError.invalidScope }
+        let session = AuthManager.shared.sessionGeneration
+        func check() throws { try checkCloudTarget(scope, session: session, identifier: identifier, assetID: asset) }
+        let response: ToggleCardPinResponse = try await withCheckedThrowingContinuation { continuation in
+            do {
+                try check()
+                send(asset) { continuation.resume(with: $0) }
+            } catch { continuation.resume(throwing: error) }
+        }
+        try check()
+        guard response.success, let card = response.data, card.id == asset, card.isPinned == isPinned
+        else { throw OwnedCardActionError.invalidResponse }
+        if localNote(for: asset) != nil {
+            try await library.recordMetadata(identifier: asset, isPinned: isPinned, scope: scope)
+            try check()
+        }
+        return .pin(cardID: identifier, isPinned: isPinned, pinnedAt: card.pinnedAt)
+    }
+
     private func readCurrentPrivacy(_ target: PrivacyTarget) async throws -> NotePrivacyPolicy {
         func check() throws {
-            try checkPrivacy(target.scope, session: target.session, identifier: target.asset, assetID: target.asset)
+            try checkCloudTarget(target.scope, session: target.session, identifier: target.asset, assetID: target.asset)
         }
         while true {
             try check()
@@ -211,7 +232,7 @@ final class LocalNotesController: ObservableObject {
     func observePrivacy(identifier: String) async throws -> NotePrivacyObservation {
         guard let scope = library.scope, let asset = cloudAssetID(for: identifier) else { throw NoteLocalStoreError.invalidScope }
         let session = AuthManager.shared.sessionGeneration
-        try checkPrivacy(scope, session: session, identifier: identifier, assetID: asset)
+        try checkCloudTarget(scope, session: session, identifier: identifier, assetID: asset)
         let target = PrivacyTarget(scope: scope, session: session, asset: asset)
         if confirmedPrivacy.keys.contains(where: { $0.session != session || $0.scope != scope }) {
             confirmedPrivacy = confirmedPrivacy.filter { $0.key.session == session && $0.key.scope == scope }
@@ -232,7 +253,7 @@ final class LocalNotesController: ObservableObject {
         }
         let observed = try await read.value
         try Task.checkCancellation()
-        try checkPrivacy(scope, session: session, identifier: identifier, assetID: asset)
+        try checkCloudTarget(scope, session: session, identifier: identifier, assetID: asset)
         guard !privacyWrites.contains(target), currentAudience(for: asset) == observed.policy else {
             throw NotePrivacyError.pendingCommand
         }
@@ -241,7 +262,7 @@ final class LocalNotesController: ObservableObject {
 
     func setPrivacy(identifier: String, observation: NotePrivacyObservation, isPublic: Bool) async throws -> NotePrivacyPolicy {
         let scope = observation.scope, asset = observation.policy.assetID
-        func check() throws { try checkPrivacy(scope, session: observation.session, identifier: identifier, assetID: asset) }
+        func check() throws { try checkCloudTarget(scope, session: observation.session, identifier: identifier, assetID: asset) }
         try check()
         let target = PrivacyTarget(scope: scope, session: observation.session, asset: asset)
         guard privacyReads[target] == nil, privacyWrites.insert(target).inserted else { throw NotePrivacyError.pendingCommand }

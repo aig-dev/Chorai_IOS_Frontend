@@ -7,6 +7,60 @@ import os
 
 @MainActor
 final class NetworkResponseExecutionTests: XCTestCase {
+    private func pinFixture() async throws -> (LocalNotesController, NoteStoreScope, ToggleCardPinResponse) {
+        prepareLinkAuth()
+        let scope = try XCTUnwrap(AuthManager.shared.currentNoteScope)
+        let library = NoteLibraryStore(rootURL: linkJournalDirectory(), service: { HomeOfflineTransport(scope: $0) })
+        await library.configure(scope: scope, cloudEnabled: true)
+        let owner = LocalNotesController(library: library, access: { (scope, true) })
+        let json = #"{"id":"remote","content":"","is_public":false,"tags":[],"created_at":"now","updated_at":"now","favorite_count":0,"like_count":0,"view_count":0,"comment_count":0,"rate":0,"is_pinned":true,"pinned_at":"now"}"#
+        let card = try JSONDecoder().decode(Card.self, from: Data(json.utf8))
+        return (owner, scope, .init(success: true, message: nil, data: card, errorCode: nil))
+    }
+
+    func testPinAcceptsRemoteOnlyCanonicalCardAndDeniesUnsyncedLocalRows() async throws {
+        let (owner, scope, response) = try await pinFixture()
+        let draft = try await owner.library.save(identifier: nil, createID: "unsent", body: .init(content: "Fixture"), scope: scope)
+        for id in [NoteLibraryStore.identifier(draft), "local-note:unbound"] {
+            do {
+                _ = try await owner.setPinned(identifier: id, isPinned: true) { _, complete in
+                    XCTFail("Dispatched an unbound local row")
+                    complete(.success(response))
+                }
+                XCTFail("Accepted an unbound local row")
+            } catch NoteLocalStoreError.invalidScope {}
+        }
+        let commit = try await owner.setPinned(identifier: "remote", isPinned: true) { asset, complete in
+            XCTAssertEqual(asset, "remote")
+            complete(.success(response))
+        }
+        XCTAssertEqual(commit, .pin(cardID: "remote", isPinned: true, pinnedAt: "now"))
+        XCTAssertFalse(owner.library.notes.contains { $0.serverAssetID == "remote" })
+    }
+
+    func testPinRejectsCanonicalReplyAfterSameActorSessionOrLibraryScopeChanges() async throws {
+        let (owner, scope, response) = try await pinFixture()
+        do {
+            _ = try await owner.setPinned(identifier: "remote", isPinned: true) { _, complete in
+                self.prepareLinkAuth()
+                complete(.success(response))
+            }
+            XCTFail("Accepted the previous login’s response")
+        } catch NoteLocalStoreError.invalidScope {}
+        let other = NoteStoreScope(actorID: "another-fixture", environmentID: scope.environmentID)
+        do {
+            _ = try await owner.setPinned(identifier: "remote", isPinned: true) { _, complete in
+                Task { @MainActor in
+                    await owner.library.configure(scope: other, cloudEnabled: false)
+                    complete(.success(response))
+                }
+            }
+            XCTFail("Accepted the previous library’s response")
+        } catch NoteLocalStoreError.invalidScope {}
+        XCTAssertEqual(owner.library.scope, other)
+        XCTAssertTrue(owner.library.notes.isEmpty)
+    }
+
     func testCanceledPolicyResponseCannotSettleTheRecoveredRequest() async throws {
         prepareLinkAuth()
         let started = expectation(description: "privacy command dispatched")

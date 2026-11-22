@@ -335,6 +335,46 @@ final class ArcNoteUITests: XCTestCase {
         openOrdinaryLibrary()
     }
 
+    func testLibraryPinAndUnpinRoundTripKeepsItsLocalRow() throws {
+        continueAfterFailure = false
+        let server = try RecentNotesServer(libraryFixture: .activeNote)
+        defer { app.terminate(); server.stop() }
+        try openPrivacyFixture(server)
+        let row = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "home.card.menu.local-note:")).firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 15))
+        let menu = app.buttons[row.identifier]
+        for (index, action) in ["pin", "unpin"].enumerated() {
+            waitForEnabledButton(menu.identifier).tap()
+            tap("popup-menu.item." + action)
+            let received = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in server.receivedPins.count > index }, object: nil)
+            XCTAssertEqual(XCTWaiter.wait(for: [received], timeout: 10), .completed)
+            XCTAssertEqual(server.receivedPins[index], (index == 0 ? "POST" : "DELETE") + " /api/cards/ast_22/pin")
+            waitForMissing("card-action.progress")
+        }
+        menu.tap()
+        XCTAssertTrue(waitForButton("popup-menu.item.pin").exists)
+    }
+
+    func testLibraryPinRejectsWrongAssetAndWrongState() throws {
+        continueAfterFailure = false
+        let server = try RecentNotesServer(libraryFixture: .activeNote)
+        defer { app.terminate(); server.stop() }
+        try openPrivacyFixture(server)
+        let menu = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "home.card.menu.local-note:")).firstMatch
+        XCTAssertTrue(menu.waitForExistence(timeout: 15))
+        for reply in [RecentNotesServer.PinReply.wrongAsset, .wrongState] {
+            server.replyToPin(with: reply)
+            menu.tap()
+            tap("popup-menu.item.pin")
+            let alert = app.alerts["Couldn’t update this note"]
+            XCTAssertTrue(alert.waitForExistence(timeout: 10))
+            alert.buttons["Cancel"].tap()
+        }
+        XCTAssertEqual(server.receivedPins, Array(repeating: "POST /api/cards/ast_22/pin", count: 2))
+        menu.tap()
+        XCTAssertTrue(waitForButton("popup-menu.item.pin").exists)
+    }
+
     func testEditorWaitsForInitialOwnerReadWhenTapped() throws {
         continueAfterFailure = false
         let server = try RecentNotesServer(libraryFixture: .activeNote)

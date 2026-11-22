@@ -139,21 +139,9 @@ private final class NetworkOwnedCardActionService: OwnedCardActionServing {
             let result = try await LocalNotesController.shared.setPrivacy(identifier: request.cardID, observation: observation, isPublic: value)
             return .visibility(cardID: request.cardID, isPublic: result.audience.isPublic)
         case .setPinned(let value):
-            return try await withCheckedThrowingContinuation { continuation in
-                let completion: (Result<ToggleCardPinResponse, NetworkError>) -> Void = { result in
-                    switch result {
-                    case .success(let response):
-                        guard response.success, let card = response.data, let pinned = card.isPinned else {
-                            continuation.resume(throwing: OwnedCardActionError.invalidResponse)
-                            return
-                        }
-                        continuation.resume(returning: .pin(cardID: card.id, isPinned: pinned, pinnedAt: card.pinnedAt))
-                    case .failure(let error): continuation.resume(throwing: error)
-                    }
-                }
-                if value { NetworkManager.shared.toggleCardPin(cardId: request.cardID, completion: completion) }
-                else { NetworkManager.shared.unpinCard(cardId: request.cardID, completion: completion) }
-            }
+            let network = NetworkManager.shared
+            return try await LocalNotesController.shared.setPinned(identifier: request.cardID, isPinned: value,
+                send: value ? network.toggleCardPin : network.unpinCard)
         }
     }
 }
