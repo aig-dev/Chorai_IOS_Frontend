@@ -36,7 +36,7 @@ struct CardEditorShell: View {
     let unlinkingLinkID: String?
     let isLinkRemovalEnabled: Bool
     let background: CardEditorBackgroundSource
-    let isPublic: Bool
+    let isPublic: Bool?
     let audienceName: String?
     let isMetadataEditable: Bool
     let isInlineImageProcessing: Bool
@@ -63,7 +63,7 @@ struct CardEditorShell: View {
         unlinkingLinkID: String? = nil,
         isLinkRemovalEnabled: Bool = false,
         background: CardEditorBackgroundSource,
-        isPublic: Bool,
+        isPublic: Bool?,
         audienceName: String? = nil,
         isMetadataEditable: Bool,
         isInlineImageProcessing: Bool = false,
@@ -331,7 +331,7 @@ struct CardEditorShell: View {
         case .saving: return "Saving…"
         case .retry: return "Save needs retry"
         case .readOnly, .bridgeFailed: return "Read only"
-        case .back: return isPublic ? "Public note" : "Private note"
+        case .back: return isPublic.map { $0 ? "Public note" : "Private note" } ?? "Note audience unknown"
         }
     }
 
@@ -395,7 +395,7 @@ private struct CardEditorBlankTapSurface: View {
 
 private struct CardEditorFloatingControls: View {
     @ObservedObject var bodyModel: BlockNoteCardEditorModel
-    let isPublic: Bool
+    let isPublic: Bool?
     let audienceName: String?
     let isMetadataEditable: Bool
     let isPrivacyEditable: Bool
@@ -448,7 +448,7 @@ private struct CardEditorFloatingControls: View {
                     onInteraction()
                     onTogglePrivacy()
                 } label: {
-                    Image(systemName: isPublic ? "globe" : "lock")
+                    Image(systemName: isPublic.map { $0 ? "globe" : "lock" } ?? "questionmark.circle")
                         .font(.system(size: 17, weight: .semibold))
                         .frame(width: 44, height: 44)
                         .contentShape(Circle())
@@ -456,8 +456,8 @@ private struct CardEditorFloatingControls: View {
                 .buttonStyle(.plain)
                 .foregroundStyle(ChoraiTheme.ink)
                 .disabled(!isMetadataEditable || !isPrivacyEditable)
-                .accessibilityLabel(isPublic ? "Make Private" : "Make Public")
-                .accessibilityValue(audienceName ?? (isPublic ? "Public" : "Private"))
+                .accessibilityLabel(isPublic.map { $0 ? "Make Private" : "Make Public" } ?? "Check note audience")
+                .accessibilityValue(audienceName ?? isPublic.map { $0 ? "Public" : "Private" } ?? "Unknown")
                 .accessibilityIdentifier("cardEditorPrivacyButton")
                 .accessibilitySortPriority(2)
 

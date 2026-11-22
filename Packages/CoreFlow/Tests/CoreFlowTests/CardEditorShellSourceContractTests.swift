@@ -937,16 +937,16 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         XCTAssertTrue(controls.contains(".choraiGlassSurface(cornerRadius: 24)"))
         XCTAssertTrue(controls.contains("Text(\"Note\")"))
         XCTAssertTrue(
-            controls.contains("Image(systemName: isPublic ? \"globe\" : \"lock\")")
+            controls.contains("Image(systemName: isPublic.map { $0 ? \"globe\" : \"lock\" } ?? \"questionmark.circle\")")
         )
         XCTAssertTrue(
             controls.contains(
-                ".accessibilityLabel(isPublic ? \"Make Private\" : \"Make Public\")"
+                ".accessibilityLabel(isPublic.map { $0 ? \"Make Private\" : \"Make Public\" } ?? \"Check note audience\")"
             )
         )
         XCTAssertTrue(
             controls.contains(
-                ".accessibilityValue(audienceName ?? (isPublic ? \"Public\" : \"Private\"))"
+                ".accessibilityValue(audienceName ?? isPublic.map { $0 ? \"Public\" : \"Private\" } ?? \"Unknown\")"
             )
         )
         XCTAssertTrue(controls.contains("onOpenCardActions?()"))

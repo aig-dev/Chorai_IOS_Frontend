@@ -12,25 +12,68 @@ final class LocalNotesController: ObservableObject {
     private var subscriptions = Set<AnyCancellable>()
     private let privacyJournal = NotePrivacyJournal(directory: FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         .appendingPathComponent("NotePrivacy", isDirectory: true))
-    private struct PrivacyTarget: Hashable {
+    struct PrivacyTarget: Hashable {
         let scope: NoteStoreScope
         let session: UInt64
         let asset: String
     }
-    private var privacyBusy = Set<PrivacyTarget>()
-    @Published private var latestPrivacy: NotePrivacyObservation?
+    private var privacyWrites = Set<PrivacyTarget>()
+    private typealias PolicyRead = (policy: NotePrivacyPolicy, pending: NotePrivacyCommand?)
+    private var privacyReads: [PrivacyTarget: Task<PolicyRead, Error>] = [:]
+
+    struct PrivacyProjection: Equatable {
+        let syncToken: String?
+        let isPublic: Bool
+
+        init(_ note: OfflineNote) {
+            syncToken = note.baseSyncToken
+            isPublic = note.isPublic
+        }
+    }
+
+    private struct ConfirmedAudience {
+        let policy: NotePrivacyPolicy
+        let projection: PrivacyProjection?
+    }
+    @Published private var confirmedPrivacy: [PrivacyTarget: ConfirmedAudience] = [:]
+
+    private func localNote(for asset: String) -> OfflineNote? {
+        library.notes.first { $0.serverAssetID == asset }
+    }
+
+    func privacyTarget(for assetID: String?) -> PrivacyTarget? {
+        guard let assetID, let scope = AuthManager.shared.currentNoteScope else { return nil }
+        return PrivacyTarget(scope: scope, session: AuthManager.shared.sessionGeneration, asset: assetID)
+    }
 
     func currentAudience(for assetID: String?) -> NotePrivacyPolicy? {
-        guard let state = latestPrivacy, state.policy.assetID == assetID,
-              state.scope == AuthManager.shared.currentNoteScope, state.session == AuthManager.shared.sessionGeneration
-        else { return nil }
+        guard let target = privacyTarget(for: assetID), let state = confirmedPrivacy[target] else { return nil }
+        if let projection = localNote(for: target.asset).map(PrivacyProjection.init),
+           projection != state.projection, projection.isPublic != state.policy.audience.isPublic { return nil }
         return state.policy
     }
 
-    private func publishPrivacy(_ policy: NotePrivacyPolicy, scope: NoteStoreScope, session: UInt64) async throws {
-        latestPrivacy = NotePrivacyObservation(scope: scope, session: session, policy: policy, pending: nil)
-        if library.serverID(for: policy.assetID) != nil {
-            try await library.recordMetadata(identifier: policy.assetID, isPublic: policy.audience.isPublic, scope: scope)
+    private func publishPrivacy(_ policy: NotePrivacyPolicy, scope: NoteStoreScope, session: UInt64,
+                                expectedGeneration: Int64? = nil) async throws {
+        let target = PrivacyTarget(scope: scope, session: session, asset: policy.assetID)
+        let local = localNote(for: policy.assetID)
+        let confirmed = ConfirmedAudience(policy: policy, projection: local.map(PrivacyProjection.init))
+        // The confirmed write remains visible even if storing its local projection fails.
+        if expectedGeneration == nil { confirmedPrivacy[target] = confirmed }
+        guard local != nil else { return }
+        do {
+            let updated = try await library.recordMetadata(identifier: policy.assetID, isPublic: policy.audience.isPublic,
+                scope: scope, expectedGeneration: expectedGeneration)
+            try checkPrivacy(scope, session: session, identifier: policy.assetID, assetID: policy.assetID)
+            confirmedPrivacy[target] = ConfirmedAudience(policy: policy, projection: PrivacyProjection(updated))
+        } catch NoteLocalStoreError.staleGeneration {
+            throw NoteLocalStoreError.staleGeneration
+        } catch {
+            try checkPrivacy(scope, session: session, identifier: policy.assetID, assetID: policy.assetID)
+            if localNote(for: policy.assetID).map(PrivacyProjection.init) == confirmed.projection {
+                confirmedPrivacy[target] = confirmed
+            }
+            throw error
         }
     }
 
@@ -148,20 +191,52 @@ final class LocalNotesController: ObservableObject {
         else { throw NoteLocalStoreError.invalidScope }
     }
 
+    private func readCurrentPrivacy(_ target: PrivacyTarget) async throws -> NotePrivacyPolicy {
+        func check() throws {
+            try checkPrivacy(target.scope, session: target.session, identifier: target.asset, assetID: target.asset)
+        }
+        while true {
+            try check()
+            let generation = localNote(for: target.asset)?.generation
+            let policy = try await NetworkManager.shared.notePrivacyRequest(scope: target.scope, assetID: target.asset)
+            try check()
+            guard localNote(for: target.asset)?.generation == generation else { continue }
+            do {
+                try await publishPrivacy(policy, scope: target.scope, session: target.session, expectedGeneration: generation)
+                return policy
+            } catch NoteLocalStoreError.staleGeneration { continue }
+        }
+    }
+
     func observePrivacy(identifier: String) async throws -> NotePrivacyObservation {
         guard let scope = library.scope, let asset = cloudAssetID(for: identifier) else { throw NoteLocalStoreError.invalidScope }
         let session = AuthManager.shared.sessionGeneration
         try checkPrivacy(scope, session: session, identifier: identifier, assetID: asset)
         let target = PrivacyTarget(scope: scope, session: session, asset: asset)
-        guard privacyBusy.insert(target).inserted else { throw NotePrivacyError.pendingCommand }
-        defer { privacyBusy.remove(target) }
-        let pending = try await privacyJournal.pending(scope: scope, assetID: asset)
+        if confirmedPrivacy.keys.contains(where: { $0.session != session || $0.scope != scope }) {
+            confirmedPrivacy = confirmedPrivacy.filter { $0.key.session == session && $0.key.scope == scope }
+        }
+        guard !privacyWrites.contains(target) else { throw NotePrivacyError.pendingCommand }
+        let read: Task<PolicyRead, Error>
+        if let active = privacyReads[target] {
+            read = active
+        } else {
+            read = Task {
+                // Only this task removes its slot. Scope and session are part of its key.
+                defer { privacyReads[target] = nil }
+                let pending = try await privacyJournal.pending(scope: scope, assetID: asset)
+                let policy = try await readCurrentPrivacy(target)
+                return (policy, pending)
+            }
+            privacyReads[target] = read
+        }
+        let observed = try await read.value
+        try Task.checkCancellation()
         try checkPrivacy(scope, session: session, identifier: identifier, assetID: asset)
-        let policy = try await NetworkManager.shared.notePrivacyRequest(scope: scope, assetID: asset)
-        try checkPrivacy(scope, session: session, identifier: identifier, assetID: asset)
-        try await publishPrivacy(policy, scope: scope, session: session)
-        try checkPrivacy(scope, session: session, identifier: identifier, assetID: asset)
-        return NotePrivacyObservation(scope: scope, session: session, policy: policy, pending: pending)
+        guard !privacyWrites.contains(target), currentAudience(for: asset) == observed.policy else {
+            throw NotePrivacyError.pendingCommand
+        }
+        return NotePrivacyObservation(scope: scope, session: session, policy: observed.policy, pending: observed.pending)
     }
 
     func setPrivacy(identifier: String, observation: NotePrivacyObservation, isPublic: Bool) async throws -> NotePrivacyPolicy {
@@ -169,8 +244,8 @@ final class LocalNotesController: ObservableObject {
         func check() throws { try checkPrivacy(scope, session: observation.session, identifier: identifier, assetID: asset) }
         try check()
         let target = PrivacyTarget(scope: scope, session: observation.session, asset: asset)
-        guard privacyBusy.insert(target).inserted else { throw NotePrivacyError.pendingCommand }
-        defer { privacyBusy.remove(target) }
+        guard privacyReads[target] == nil, privacyWrites.insert(target).inserted else { throw NotePrivacyError.pendingCommand }
+        defer { privacyWrites.remove(target) }
         let command: NotePrivacyCommand
         if let pending = observation.pending {
             guard pending == (try await privacyJournal.pending(scope: scope, assetID: asset)) else { throw NotePrivacyError.invalidCommand }
@@ -184,9 +259,7 @@ final class LocalNotesController: ObservableObject {
             policy = try await NetworkManager.shared.notePrivacyRequest(scope: scope, assetID: asset, command: command)
         } catch NotePrivacyError.stalePolicy {
             try check()
-            let current = try await NetworkManager.shared.notePrivacyRequest(scope: scope, assetID: asset)
-            try check()
-            try await publishPrivacy(current, scope: scope, session: observation.session)
+            _ = try await readCurrentPrivacy(target)
             try check()
             try await privacyJournal.settle(command)
             throw NotePrivacyError.stalePolicy

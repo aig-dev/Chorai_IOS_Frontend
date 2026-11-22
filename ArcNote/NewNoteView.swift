@@ -273,8 +273,8 @@ private struct CardEditorSessionView: View {
                 && cloudCardID != nil
                 && unlinkingLinkID == nil,
             background: editorBackground,
-            isPublic: localNotes.currentAudience(for: cloudCardID)?.audience.isPublic ?? currentLocalNote?.isPublic ?? editingStore.draft.isPublic,
-            audienceName: localNotes.currentAudience(for: cloudCardID)?.audience.rawValue.capitalized,
+            isPublic: currentLocalNote?.serverAssetID == nil ? editingStore.draft.isPublic : confirmedAudience?.isPublic,
+            audienceName: confirmedAudience?.rawValue.capitalized,
             isMetadataEditable: bodyModel.canMutate && !isBusy,
             isInlineImageProcessing: isProcessingInlineImage,
             saveMessage: saveMessage,
@@ -302,9 +302,13 @@ private struct CardEditorSessionView: View {
     var body: some View {
         editorShell
         .modifier(NoteAudienceDialog(picker: audiencePicker))
-        .task(id: cloudCardID) {
+        .task(id: localNotes.privacyTarget(for: cloudCardID)) {
             guard let id = cloudCardID else { return }
             _ = try? await localNotes.observePrivacy(identifier: id)
+        }
+        .onChange(of: currentLocalNote.map(LocalNotesController.PrivacyProjection.init)) { _ in
+            guard let id = cloudCardID, confirmedAudience == nil else { return }
+            Task { _ = try? await localNotes.observePrivacy(identifier: id) }
         }
         .overlay {
             if showCardActions {
@@ -464,6 +468,10 @@ private struct CardEditorSessionView: View {
     private var currentLocalNote: OfflineNote? {
         guard let id = editingStore.cardID else { return nil }
         return localNotes.library.notes.first { NoteLibraryStore.identifier($0) == id || $0.serverAssetID == id }
+    }
+
+    private var confirmedAudience: NotePrivacyPolicy.Audience? {
+        localNotes.currentAudience(for: cloudCardID)?.audience
     }
 
     private var cloudCardID: String? {

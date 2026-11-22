@@ -326,17 +326,21 @@ public final class NoteLibraryStore: ObservableObject {
 
     /// Cache only metadata confirmed by its own online endpoint. Body and its
     /// baseline remain untouched, including a concurrently edited local draft.
+    @discardableResult
     public func recordMetadata(identifier: String, isPublic: Bool? = nil, isPinned: Bool? = nil,
-                               backgroundMediaRef: String?? = nil, scope expectedScope: NoteStoreScope) async throws {
+                               backgroundMediaRef: String?? = nil, scope expectedScope: NoteStoreScope,
+                               expectedGeneration: Int64? = nil) async throws -> OfflineNote {
         let (store, epoch) = try await context(expectedScope)
         guard let note = try await find(identifier, store: store) else { throw NoteLocalStoreError.noteNotFound }
         let updated = try await store.mutate(localID: note.localID) { current in
+            if let expectedGeneration, current.generation != expectedGeneration { throw NoteLocalStoreError.staleGeneration }
             if let isPublic { current.isPublic = isPublic }
             if let isPinned { current.isPinned = isPinned }
             if let backgroundMediaRef { current.backgroundMediaRef = backgroundMediaRef }
             current.generation += 1
         }
         try check(epoch); publish([updated])
+        return updated
     }
 
     public func beginPurge(identifier: String, baseSyncToken: String, scope expectedScope: NoteStoreScope) async throws -> NotePurgeWriteAttempt {

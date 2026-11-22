@@ -53,6 +53,19 @@ final class NotePrivacyTests: XCTestCase {
         XCTAssertNil(cleared)
     }
 
+    func testMalformedStaleEnvelopeDoesNotAuthorizeRetirement() throws {
+        let stale = ["code": "stale_policy", "reason": "stale_policy", "message": "changed"]
+        for envelope: [String: Any] in [
+            ["success": false, "error": stale, "data": ["contradiction": true]],
+            ["success": false, "error": stale.merging(["extra": "unexpected"]) { _, new in new }]
+        ] {
+            let data = try JSONSerialization.data(withJSONObject: envelope)
+            XCTAssertThrowsError(try NotePrivacyWire.decode(status: 409, data: data, assetID: "asset")) {
+                XCTAssertEqual($0 as? NotePrivacyError, .invalidResponse)
+            }
+        }
+    }
+
     func testOnlyVerifiedStaleResponseCanRetireAnAttempt() throws {
         for (status, code, expected) in [(409, "stale_policy", NotePrivacyError.stalePolicy),
             (409, "idempotency_conflict", .idempotencyConflict), (503, "action_outcome_unknown", .outcomeUnknown)] {

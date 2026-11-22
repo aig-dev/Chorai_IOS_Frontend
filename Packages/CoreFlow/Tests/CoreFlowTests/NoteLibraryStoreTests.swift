@@ -76,6 +76,26 @@ final class NoteLibraryStoreTests: XCTestCase {
         await library.configure(scope: nil, cloudEnabled: false)
     }
 
+    func testOlderAudienceReadCannotOverwriteAConfirmedPublication() async throws {
+        let store = try await NoteLocalStore.open(rootURL: root, scope: a)
+        let snapshot = NoteRemoteSnapshot(assetID: "shared", syncToken: "base", body: OfflineNoteBody(content: "saved"),
+                                          lifecycle: .active, isPublic: false)
+        let inserted = try await store.applyRemote(snapshot, localID: nil, expectedGeneration: nil)
+        let initial = try XCTUnwrap(inserted)
+        try await store.close()
+        let library = library()
+        await library.configure(scope: a, cloudEnabled: false)
+        let confirmed = try await library.recordMetadata(identifier: "shared", isPublic: true, scope: a)
+        do {
+            _ = try await library.recordMetadata(identifier: "shared", isPublic: false, scope: a,
+                                                 expectedGeneration: initial.generation)
+            XCTFail("An older owner GET replaced confirmed metadata")
+        } catch NoteLocalStoreError.staleGeneration {}
+        let retained = try await library.open(identifier: "shared")
+        XCTAssertEqual(retained, confirmed)
+        await library.configure(scope: nil, cloudEnabled: false)
+    }
+
     func testLocalCreateEditReopenNeverRequiresCloudAndUsesStableIdentity() async throws {
         let library = library()
         await library.configure(scope: a, cloudEnabled: false)

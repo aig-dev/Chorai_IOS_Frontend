@@ -326,4 +326,8 @@ The Library menu, owned-card fallback, profile and editor load the owner's curre
 
 The owner reads the asset visibility route with GET and posts the selected visibility and base_policy_token with the frozen Idempotency-Key. Both responses require HTTP 200. The write validates visibility_receipt against its original command and validates current_policy independently. A 409 stale_policy refreshes the owner read. A 503 action_outcome_unknown, cancellation, connection loss or an invalid receipt retains the frozen request.
 
+Concurrent audience reads for the same admitted session and asset share one owner GET. A synchronized editor shows an unknown audience until it has a verified policy. If a newer synchronized public/private value disagrees with the displayed policy, the editor reads it again. Each GET checks the local generation before storing its result. A matching committed SET remains authoritative if caching its projection fails. Only the declared stale error envelope followed by a successful owner read can retire a stale attempt.
+
+The two audience UI flows paste a full unique marker into the real editor. Their proxy compares the entire exported Markdown body, including its final line feed, and saves the matching CREATE method, path, key and byte digest before forwarding. It binds the actor’s asset only after verifying the CREATE receipt and synchronizes that binding before delivering the response.
+
 New personal notes use the existing private atomic CREATE and body acknowledgement. The editor opens the audience action after synchronization. Body editing, image presentation and visibility have independent command owners.

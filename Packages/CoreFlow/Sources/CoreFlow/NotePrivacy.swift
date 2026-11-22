@@ -59,8 +59,10 @@ public enum NotePrivacyWire {
         else { throw NotePrivacyError.invalidResponse }
         guard status == 200, success.boolValue else {
             guard !success.boolValue else { throw NotePrivacyError.invalidResponse }
-            if let code = root["error_code"] as? String { throw NotePrivacyError.admission(code) }
-            guard let error = root["error"] as? [String: String], let reason = error["reason"],
+            if [401, 403, 503].contains(status), let code = root["error_code"] as? String,
+               root["message"] is String, root["error"] == nil { throw NotePrivacyError.admission(code) }
+            guard Set(root.keys) == ["success", "error"], let error = root["error"] as? [String: String],
+                  Set(error.keys) == ["code", "reason", "message"], let reason = error["reason"],
                   let code = error["code"], error["message"] != nil else { throw NotePrivacyError.invalidResponse }
             switch (status, code, reason) {
             case (409, "stale_policy", "stale_policy"): throw NotePrivacyError.stalePolicy

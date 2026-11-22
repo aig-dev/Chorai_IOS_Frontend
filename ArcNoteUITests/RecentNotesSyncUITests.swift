@@ -28,7 +28,7 @@ final class RecentNotesSyncUITests: XCTestCase {
             request.setValue("Bearer " + server.token, forHTTPHeaderField: "Authorization")
             request.setValue(key, forHTTPHeaderField: "Idempotency-Key")
             let (bytes, response) = try await URLSession.shared.data(for: request)
-            XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200)
+            XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 201)
             let envelope = try XCTUnwrap(try JSONSerialization.jsonObject(with: bytes) as? [String: Any])
             return try XCTUnwrap((envelope["data"] as? [String: Any])?["id"] as? String)
         }
@@ -64,6 +64,72 @@ final class RecentNotesSyncUITests: XCTestCase {
         XCTAssertThrowsError(try proxy.bindAcknowledgement(journal, actor: server.actorID, appOrigin: origin, local: local, asset: other))
         try teardown()
         XCTAssertEqual(dispatched, ["/api/cards/" + targetAsset, "/api/cards/trash/" + targetAsset + "/permanent"])
+    }
+
+    func testImmediateCaptureCleansOnlyTheExpectedCreate() async throws {
+        let server = try RecentNotesServer(libraryFixture: .twoCreates)
+        defer { server.stop() }
+        let upstream = try server.start()
+        let proxy = try OrdinaryGoProxy(upstreamOrigin: upstream)
+        defer { proxy.stop() }
+        let origin = try proxy.start()
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let journal = try OrdinaryFixtureJournal(directory: directory, actor: server.actorID, origin: upstream)
+        let marker = "Fixture-" + UUID().uuidString
+        proxy.captureCreation(journal, token: server.token, expectedContent: marker)
+
+        @Sendable func post(_ key: String, content: String) async throws {
+            var request = URLRequest(url: try XCTUnwrap(URL(string: origin + "/api/cards")))
+            request.httpMethod = "POST"
+            request.httpBody = try JSONSerialization.data(withJSONObject: ["content": content, "is_public": false], options: [.sortedKeys])
+            request.setValue("Bearer " + server.token, forHTTPHeaderField: "Authorization")
+            request.setValue(key, forHTTPHeaderField: "Idempotency-Key")
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            let (_, response) = try await URLSession.shared.data(for: request)
+            XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 201)
+        }
+        let reopened = OrdinaryFixtureJournal(reopening: journal.file)
+        try await post("unrelated", content: "different note")
+        XCTAssertNil(try reopened.snapshot().asset)
+        async let intended: Void = post("target-create", content: marker)
+        await fulfillment(of: [server.targetRequested], timeout: 5)
+        XCTAssertNil(try reopened.snapshot().asset)
+        let bound = try XCTUnwrap(reopened.snapshot().expectedCreate)
+        XCTAssertEqual(bound.method, "POST")
+        XCTAssertEqual(bound.path, "/api/cards")
+        XCTAssertEqual(bound.key, "target-create")
+        let expectedBytes = try JSONSerialization.data(withJSONObject: ["content": marker, "is_public": false], options: [.sortedKeys])
+        XCTAssertEqual(bound.digest, Data(SHA256.hash(data: expectedBytes)))
+        var alteredDigest = bound.digest
+        alteredDigest.append(0)
+        let altered = OrdinaryFixtureJournal.CreateRequest(method: bound.method, path: bound.path, key: bound.key, digest: alteredDigest)
+        XCTAssertFalse(try reopened.reserveCreate(altered, origin: upstream))
+        XCTAssertThrowsError(try reopened.recordCreateReceipt(asset: "asset-unrelated", owner: server.actorID, request: altered))
+        proxy.holdCapturedCreateReceipt()
+        server.releaseTargetCreation()
+        let held = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in proxy.hasHeldResponse }, object: nil)
+        await fulfillment(of: [held], timeout: 5)
+        let asset = "asset-target-create"
+        XCTAssertEqual(try reopened.snapshot().asset, asset, "Cleanup identity must be durable before client delivery")
+        proxy.release()
+        try await intended
+        XCTAssertEqual(try reopened.snapshot().asset, asset)
+        var paths: [String] = []
+        try reopened.clean(actor: server.actorID, origin: upstream, token: server.token, baseline: { actual in
+            XCTAssertEqual(actual, asset)
+            return "base"
+        }, send: { request in
+            let key = try XCTUnwrap(request.value(forHTTPHeaderField: "Idempotency-Key"))
+            let path = try XCTUnwrap(request.url?.path)
+            paths.append(path)
+            let receipt: [String: Any] = path.hasSuffix("/permanent")
+                ? ["asset_id": asset, "request_id": key, "state": "ERASED", "activity_id": "act", "action_log_id": "log",
+                   "certificate_id": "cert", "cleanup_state": "COMPLETE"]
+                : ["sync_receipt": ["asset_id": asset, "operation_id": key, "lifecycle": "trashed"]]
+            return try JSONSerialization.data(withJSONObject: ["success": true, "data": receipt])
+        })
+        XCTAssertEqual(paths, ["/api/cards/" + asset, "/api/cards/trash/" + asset + "/permanent"])
     }
 
     func testOrdinaryCleanupPersistsBothRequestsBeforeSendingAndResumesAfterLostReceipt() throws {
@@ -473,7 +539,7 @@ final class RecentNotesSyncUITests: XCTestCase {
 // reads/writes use queue.sync; immutable configuration and SDK handles are shared.
 final class RecentNotesServer: @unchecked Sendable {
     enum RemoteChange { case changed, removed }
-    enum LibraryFixture { case activeNote, trashedNote, twoCreates }
+    enum LibraryFixture { case activeNote, trashedNote, twoCreates, lostCreate, malformedStale }
 
     let actorID: String
     let token: String
@@ -493,8 +559,39 @@ final class RecentNotesServer: @unchecked Sendable {
     }
     private func sendCreateReceipt(_ connection: NWConnection, key: String) {
         let asset = "asset-" + key
-        send(connection, payload: ["id": asset, "sync_receipt": ["asset_id": asset, "operation_id": key]] as [String: Any])
+        send(connection, status: 201, payload: ["id": asset, "owner_actor_id": actorID,
+            "sync_receipt": ["asset_id": asset, "operation_id": key, "sync_token": "created",
+                             "note_document_version_id": "version", "lifecycle": "active"]] as [String: Any])
     }
+    let createLost = XCTestExpectation(description: "The fixture received the full private CREATE")
+    let ownerRead = XCTestExpectation(description: "First owner policy GET")
+    private var ownerReadCount = 0
+    var ownerReads: Int { queue.sync { ownerReadCount } }
+    private var holdPolicy = false
+    private var heldPolicy: [NWConnection] = []
+    func holdOwnerRead() { queue.sync { holdPolicy = true } }
+    func releaseOwnerRead() {
+        queue.sync {
+            holdPolicy = false
+            heldPolicy.forEach { send($0, payload: ["current_policy": fixturePolicy()]) }
+            heldPolicy.removeAll()
+        }
+    }
+    private var externalPublication = false
+    private var servedPublicDetail = false
+    func publishElsewhere() {
+        queue.sync {
+            externalPublication = true
+            cards[0]["is_public"] = true
+            cards[0]["sync_token"] = "token-external-public"
+        }
+    }
+    private var lostCreate: (key: String, bytes: Data)?
+    private var expectedMarker: String?
+    func expectPrivateCreate(_ marker: String) { queue.sync { expectedMarker = marker } }
+    private var createdPolicyAvailable = false
+    func restoreCreatedPolicy() { queue.sync { createdPolicyAvailable = true } }
+
     let privacyCommitLost = XCTestExpectation(description: "First committed visibility response lost")
     private var policyAttempts: [(key: String, bytes: Data)] = []
     var replayedPrivacyExactly: Bool {
@@ -637,7 +734,18 @@ final class RecentNotesServer: @unchecked Sendable {
                 "activity_id": "activity", "action_log_id": "log"]
             send(connection, payload: ["current_policy": current, "visibility_receipt": receipt])
         case ("GET", "/api/v1/assets/ast_22/visibility"):
-            send(connection, payload: ["current_policy": fixturePolicy()])
+            ownerReadCount += 1
+            if ownerReadCount == 1 { ownerRead.fulfill() }
+            if holdPolicy { heldPolicy.append(connection) }
+            else if externalPublication && !servedPublicDetail { send(connection, status: 503) }
+            else { send(connection, payload: ["current_policy": fixturePolicy()]) }
+        case ("GET", "/api/v1/assets/ast_23/visibility") where libraryFixture == .lostCreate:
+            ownerReadCount += 1
+            if ownerReadCount == 1 { ownerRead.fulfill() }
+            if createdPolicyAvailable {
+                send(connection, payload: ["current_policy": ["asset_id": "ast_23", "visibility": "PRIVATE",
+                     "space_id": NSNull(), "policy_token": "vp1." + String(repeating: "A", count: 43)] as [String: Any]])
+            } else { send(connection, status: 503) }
         case ("POST", "/api/v1/assets/ast_22/visibility"):
             let base = "vp1." + String(repeating: "A", count: 43)
             guard let key = Self.header("Idempotency-Key", in: request), !key.isEmpty,
@@ -647,13 +755,35 @@ final class RecentNotesServer: @unchecked Sendable {
             policyAttempts.append((key, body))
             if policyAttempts.count == 1 {
                 privacyCommitLost.fulfill()
-                connection.cancel()
+                if libraryFixture == .malformedStale {
+                    send(connection, status: 409, payload: ["unexpected": true], reason: "stale_policy")
+                } else { connection.cancel() }
             } else {
                 let receipt: [String: Any] = ["client_request_id": key, "asset_id": "ast_22", "actor_id": actorID,
                     "action": "SET_VISIBILITY", "requested_visibility": "PUBLIC", "requested_space_id": NSNull(),
                     "base_policy_token": base, "result_policy_token": "vp1." + String(repeating: "E", count: 43),
                     "activity_id": "activity", "action_log_id": "log"]
                 send(connection, payload: ["visibility_receipt": receipt, "current_policy": fixturePolicy()])
+            }
+        case ("POST", "/api/cards") where libraryFixture == .lostCreate:
+            guard let key = Self.header("Idempotency-Key", in: request),
+                  let json = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
+                  let expectedMarker, json["content"] as? String == expectedMarker + "\n", json["is_public"] as? Bool == false
+            else { send(connection, status: 400); return }
+            if let lostCreate {
+                guard key == lostCreate.key, body == lostCreate.bytes else { send(connection, status: 409); return }
+                if !cards.contains(where: { $0["id"] as? String == "ast_23" }) {
+                    var new = makeCard(23)
+                    new["content"] = json["content"]
+                    new["content_json"] = json["content_json"]
+                    cards.append(new)
+                }
+                send(connection, status: 201, payload: ["id": "ast_23", "owner_actor_id": actorID, "sync_receipt": ["operation_id": key, "asset_id": "ast_23",
+                     "sync_token": "token-23", "note_document_version_id": "ver_23", "lifecycle": "active"]] as [String: Any])
+            } else {
+                lostCreate = (key, body)
+                createLost.fulfill()
+                connection.cancel()
             }
         case ("POST", "/api/cards") where libraryFixture == .twoCreates:
             guard let key = Self.header("Idempotency-Key", in: request) else { send(connection, status: 400); return }
@@ -709,7 +839,10 @@ final class RecentNotesServer: @unchecked Sendable {
             send(connection, payload: ["outgoing_links": [], "incoming_links": [], "linked_cards": []] as [String: [String]])
         case ("GET", _) where path.hasPrefix("/api/cards/ast_"):
             detailIDs.append(url.lastPathComponent)
-            if recentNoteChange == .changed, path == "/api/cards/ast_22", let recent = cards.last {
+            if externalPublication, path == "/api/cards/ast_22" {
+                servedPublicDetail = true
+                send(connection, payload: cards[0])
+            } else if recentNoteChange == .changed, path == "/api/cards/ast_22", let recent = cards.last {
                 send(connection, payload: recent)
             } else {
                 send(connection, status: 404)
@@ -737,8 +870,8 @@ final class RecentNotesServer: @unchecked Sendable {
 
     private func fixturePolicy() -> [String: Any] {
         // A second writer restricted the note after the first command committed.
-        let digit = policyAttempts.isEmpty ? "A" : "I"
-        return ["asset_id": "ast_22", "space_id": NSNull(), "visibility": "PRIVATE",
+        let digit = policyAttempts.isEmpty && !externalPublication ? "A" : "I"
+        return ["asset_id": "ast_22", "space_id": NSNull(), "visibility": externalPublication ? "PUBLIC" : "PRIVATE",
                 "policy_token": "vp1." + String(repeating: digit, count: 43)]
     }
 
@@ -766,7 +899,9 @@ final class RecentNotesServer: @unchecked Sendable {
     }
 
     private func send(_ connection: NWConnection, status: Int = 200, payload: Any = NSNull(), reason: String? = nil) {
-        var response: [String: Any] = ["success": status == 200, "data": payload]
+        let succeeded = (200..<300).contains(status)
+        var response: [String: Any] = ["success": succeeded]
+        if succeeded || !(payload is NSNull) { response["data"] = payload }
         if let reason { response["error"] = ["reason": reason, "code": reason, "message": reason] }
         let json = try! JSONSerialization.data(withJSONObject: response)
         let header = "HTTP/1.1 \(status) \(HTTPURLResponse.localizedString(forStatusCode: status))\r\nContent-Type: application/json\r\nContent-Length: \(json.count)\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n"
@@ -807,18 +942,19 @@ final class OrdinaryGoProxy: @unchecked Sendable {
     private var holdPath: String?
     private var dropPath: String?
     private var held: (() -> Void)?
+    private var holdCreateReceipt = false
     private var records = [Mutation]()
     private struct CreateCapture {
         let journal: OrdinaryFixtureJournal
         let token: String
-        var recordReceiptImmediately = false
+        let expectedContent: String?
         var keysByAsset: [String: Set<String>] = [:]
     }
     private var creating: CreateCapture?
     private(set) var origin = ""
 
-    func captureCreation(_ journal: OrdinaryFixtureJournal, token: String, recordReceiptImmediately: Bool = false) {
-        queue.sync { creating = CreateCapture(journal: journal, token: token, recordReceiptImmediately: recordReceiptImmediately) }
+    func captureCreation(_ journal: OrdinaryFixtureJournal, token: String, expectedContent: String? = nil) {
+        queue.sync { creating = CreateCapture(journal: journal, token: token, expectedContent: expectedContent) }
     }
 
     func bindAcknowledgement(_ journal: OrdinaryFixtureJournal, actor: String, appOrigin: String,
@@ -843,6 +979,7 @@ final class OrdinaryGoProxy: @unchecked Sendable {
     func verifiedFullAccess(_ actor: String) -> Bool { queue.sync { admitted.contains(actor) } }
     func setOffline(_ value: Bool) { queue.sync { offline = value } }
     func dropFirstUpdateReceipt(asset: String) { queue.sync { dropPath = "/api/cards/" + asset } }
+    func holdCapturedCreateReceipt() { queue.sync { holdCreateReceipt = true } }
     func holdSuccessfulUpdate(asset: String) { queue.sync { holdPath = "/api/cards/" + asset } }
     func release() { queue.sync { held?(); held = nil } }
 
@@ -936,6 +1073,17 @@ final class OrdinaryGoProxy: @unchecked Sendable {
         let captureFile = method == "POST" && path == "/api/cards" && creating.map({
             request.value(forHTTPHeaderField: "Authorization") == "Bearer " + $0.token
         }) == true ? creating?.journal.file : nil
+        let createIdentity: OrdinaryFixtureJournal.CreateRequest?
+        if captureFile != nil, let capture = creating, let expected = capture.expectedContent, !expected.isEmpty,
+           let key, !key.isEmpty, source.percentEncodedPath == "/api/cards", source.percentEncodedQuery == nil,
+           let object = try? JSONSerialization.jsonObject(with: body) as? [String: Any], object["content"] as? String == expected,
+           let isPublic = object["is_public"] as? NSNumber, CFGetTypeID(isPublic) == CFBooleanGetTypeID(), !isPublic.boolValue {
+            let identity = OrdinaryFixtureJournal.CreateRequest(method: method, path: path, key: key,
+                digest: Data(SHA256.hash(data: body)))
+            do {
+                createIdentity = try capture.journal.reserveCreate(identity, origin: upstream.absoluteString) ? identity : nil
+            } catch { connection.cancel(); return }
+        } else { createIdentity = nil }
         if offline {
             if let index { records[index].transportFailed = true }
             connection.cancel()
@@ -948,7 +1096,8 @@ final class OrdinaryGoProxy: @unchecked Sendable {
                     self.records[index].transportFailed = error != nil
                 }
                 guard let http = response as? HTTPURLResponse, let data, error == nil else { connection.cancel(); return }
-                let payload = ((try? JSONSerialization.jsonObject(with: data)) as? [String: Any])?["data"] as? [String: Any]
+                let envelope = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+                let payload = envelope?["data"] as? [String: Any]
                 if http.statusCode == 200 {
                     if path == "/api/auth/login" { self.login = data }
                     if let access = payload?["product_access"] as? [String: Any], access["status"] as? String == "allowed",
@@ -978,14 +1127,25 @@ final class OrdinaryGoProxy: @unchecked Sendable {
                     }
                 }
                 if let captureFile, self.creating?.journal.file == captureFile, let key, !key.isEmpty,
-                   (200..<300).contains(http.statusCode), receipt?["operation_id"] as? String == key,
+                   (200..<300).contains(http.statusCode), let success = envelope?["success"] as? NSNumber,
+                   CFGetTypeID(success) == CFBooleanGetTypeID(), success.boolValue, receipt?["operation_id"] as? String == key,
                    let asset = receipt?["asset_id"] as? String, payload?["id"] as? String == asset {
-                    if let capture = self.creating, capture.recordReceiptImmediately {
+                    if let capture = self.creating, let createIdentity {
                         do {
-                            try capture.journal.recordCreateReceipt(asset: asset, operation: key)
+                            guard http.statusCode == 201, let owner = payload?["owner_actor_id"] as? String,
+                                  receipt?["lifecycle"] as? String == "active",
+                                  let token = receipt?["sync_token"] as? String, !token.isEmpty,
+                                  let version = receipt?["note_document_version_id"] as? String, !version.isEmpty
+                            else { connection.cancel(); return }
+                            try capture.journal.recordCreateReceipt(asset: asset, owner: owner, request: createIdentity)
+                            if self.holdCreateReceipt {
+                                self.holdCreateReceipt = false
+                                self.held = send
+                                return
+                            }
                         } catch { connection.cancel(); return }
                     }
-                    self.creating?.keysByAsset[asset, default: []].insert(key)
+                    if self.creating?.expectedContent == nil { self.creating?.keysByAsset[asset, default: []].insert(key) }
                 }
                 if card, let key {
                     if path == self.dropPath, method == "PUT", receipt?["operation_id"] as? String == key {
@@ -1027,9 +1187,16 @@ struct OrdinaryFixtureJournal: Sendable {
             }
         }
     }
+    struct CreateRequest: Codable, Equatable {
+        let method: String
+        let path: String
+        let key: String
+        let digest: Data
+    }
     struct Entry: Codable {
         let actor: String
         let origin: String
+        var expectedCreate: CreateRequest?
         var local: String?
         var appOrigin: String?
         var creation: Creation?
@@ -1079,10 +1246,25 @@ struct OrdinaryFixtureJournal: Sendable {
         }
     }
 
-    func recordCreateReceipt(asset: String, operation: String) throws {
+    fileprivate func reserveCreate(_ request: CreateRequest, origin: String) throws -> Bool {
         try lock.withLock {
             var entry = try read()
-            guard !asset.isEmpty, !operation.isEmpty else { throw URLError(.badServerResponse) }
+            guard entry.origin == origin, entry.local == nil else { throw URLError(.badServerResponse) }
+            if let expected = entry.expectedCreate { return expected == request }
+            guard entry.creation == nil else { throw URLError(.badServerResponse) }
+            entry.expectedCreate = request
+            try save(entry)
+            return true
+        }
+    }
+
+    fileprivate func recordCreateReceipt(asset: String, owner: String, request: CreateRequest) throws {
+        let operation = request.key
+        try lock.withLock {
+            var entry = try read()
+            guard entry.actor == owner, entry.expectedCreate == request,
+                  asset.range(of: #"\A[A-Za-z0-9_-]{1,64}\z"#, options: .regularExpression) != nil
+            else { throw URLError(.badServerResponse) }
             if let creation = entry.creation {
                 guard case .acknowledged(let confirmed, let original) = creation, confirmed == asset, original == operation
                 else { throw URLError(.badServerResponse) }

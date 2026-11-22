@@ -306,20 +306,119 @@ final class ArcNoteUITests: XCTestCase {
         let local = String(menu.identifier.dropFirst("home.card.menu.".count))
         menu.tap()
         tap("popup-menu.item.public")
-        waitForButton("Make Public").tap()
+        audienceAction("Make Public").tap()
         XCTAssertEqual(XCTWaiter.wait(for: [server.privacyCommitLost], timeout: 10), .completed)
         app.terminate()
         app.launch()
         openOrdinaryLibrary()
         tap("home.card.body." + local)
         waitForEnabledButton("cardEditorPrivacyButton").tap()
-        waitForButton("Retry previous change").tap()
+        audienceAction("Retry previous change").tap()
         let replayed = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in server.replayedPrivacyExactly }, object: nil)
         XCTAssertEqual(XCTWaiter.wait(for: [replayed], timeout: 10), .completed)
         waitForLabel("cardEditorPrivacyButton", expected: "Make Public")
         waitForEnabledButton("cardEditorPrivacyButton").tap()
-        XCTAssertTrue(waitForButton("Make Private").exists)
+        XCTAssertTrue(audienceAction("Make Private").exists)
         XCTAssertFalse(app.buttons["Retry previous change"].exists)
+    }
+
+    private func audienceAction(_ title: String, file: StaticString = #filePath, line: UInt = #line) -> XCUIElement {
+        let button = app.sheets["Note audience"].buttons[title]
+        XCTAssertTrue(button.waitForExistence(timeout: 10), "Missing audience dialog action " + title, file: file, line: line)
+        return button
+    }
+
+    private func openPrivacyFixture(_ server: RecentNotesServer, origin: String? = nil) throws {
+        app.launchEnvironment = [APIEnvironment.overrideEnvironmentKey: try origin ?? server.start(), "CHORAI_UI_TEST": "1",
+            "CHORAI_UI_TEST_AUTH_TOKEN": server.token, "CHORAI_UI_TEST_ACTOR_ID": server.actorID]
+        app.launch()
+        openOrdinaryLibrary()
+    }
+
+    func testEditorWaitsForInitialOwnerReadWhenTapped() throws {
+        continueAfterFailure = false
+        let server = try RecentNotesServer(libraryFixture: .activeNote)
+        defer { app.terminate(); server.stop() }
+        server.holdOwnerRead()
+        try openPrivacyFixture(server)
+        app.staticTexts["Recent field note 22"].firstMatch.tap()
+        XCTAssertEqual(XCTWaiter.wait(for: [server.ownerRead], timeout: 10), .completed)
+        waitForEnabledButton("cardEditorPrivacyButton").tap()
+        server.releaseOwnerRead()
+        XCTAssertTrue(audienceAction("Make Public").isHittable)
+        XCTAssertTrue(audienceAction("Make Private").isHittable)
+        XCTAssertFalse(app.alerts.firstMatch.exists)
+        XCTAssertEqual(server.ownerReads, 1)
+    }
+
+    func testEditorRefreshesExternalPublicationWhileOpen() throws {
+        continueAfterFailure = false
+        let server = try RecentNotesServer(libraryFixture: .activeNote)
+        defer { app.terminate(); server.stop() }
+        try openPrivacyFixture(server)
+        app.staticTexts["Recent field note 22"].firstMatch.tap()
+        XCTAssertEqual(XCTWaiter.wait(for: [server.ownerRead], timeout: 10), .completed)
+        waitForLabel("cardEditorPrivacyButton", expected: "Make Public")
+        server.publishElsewhere()
+        XCUIDevice.shared.press(.home)
+        app.activate()
+        let detail = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in server.singleReads.contains("ast_22") }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [detail], timeout: 20), .completed)
+        waitForLabel("cardEditorPrivacyButton", expected: "Make Private", timeout: 15)
+        XCTAssertEqual(app.buttons["cardEditorPrivacyButton"].value as? String, "Public")
+    }
+
+    func testReplayedCreateShowsUnresolvedAudienceUntilOwnerReadRecovers() throws {
+        continueAfterFailure = false
+        let server = try RecentNotesServer(libraryFixture: .lostCreate)
+        defer { app.terminate(); server.stop() }
+        let marker = "Audience" + UUID().uuidString
+        server.expectPrivateCreate(marker)
+        let upstream = try server.start()
+        let proxy = try OrdinaryGoProxy(upstreamOrigin: upstream)
+        defer { proxy.stop() }
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let journal = try OrdinaryFixtureJournal(directory: directory, actor: server.actorID, origin: upstream)
+        proxy.captureCreation(journal, token: server.token, expectedContent: marker + "\n")
+        try openPrivacyFixture(server, origin: proxy.start())
+        tap("note.create")
+        XCTAssertFalse(waitForButton("cardEditorPrivacyButton").isEnabled)
+        pasteFixtureMarker(marker)
+        XCTAssertEqual(XCTWaiter.wait(for: [server.createLost], timeout: 20), .completed)
+        XCTAssertEqual(XCTWaiter.wait(for: [server.ownerRead], timeout: 40), .completed)
+        XCTAssertEqual(try OrdinaryFixtureJournal(reopening: journal.file).snapshot().asset, "ast_23")
+        waitForLabel("cardEditorPrivacyButton", expected: "Check note audience")
+        let button = app.buttons["cardEditorPrivacyButton"]
+        XCTAssertEqual(button.value as? String, "Unknown")
+        server.restoreCreatedPolicy()
+        button.tap()
+        XCTAssertTrue(app.staticTexts["Current audience: Private"].waitForExistence(timeout: 10))
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.04, dy: 0.52)).tap()
+        XCTAssertFalse(app.sheets["Note audience"].exists)
+        waitForLabel("cardEditorPrivacyButton", expected: "Make Public")
+        XCTAssertEqual(button.value as? String, "Private")
+    }
+
+    func testMalformedStaleAndSuccessfulOwnerReadRetainFrozenPrivacyCommand() throws {
+        continueAfterFailure = false
+        let server = try RecentNotesServer(libraryFixture: .malformedStale)
+        defer { app.terminate(); server.stop() }
+        try openPrivacyFixture(server)
+        app.staticTexts["Recent field note 22"].firstMatch.tap()
+        waitForEnabledButton("cardEditorPrivacyButton").tap()
+        audienceAction("Make Public").tap()
+        XCTAssertEqual(XCTWaiter.wait(for: [server.privacyCommitLost], timeout: 10), .completed)
+        XCTAssertTrue(app.staticTexts["The audience change could not be verified."].waitForExistence(timeout: 10))
+        app.terminate()
+        app.launch()
+        openOrdinaryLibrary()
+        app.staticTexts["Recent field note 22"].firstMatch.tap()
+        waitForEnabledButton("cardEditorPrivacyButton").tap()
+        XCTAssertTrue(app.staticTexts["Current audience: Private"].waitForExistence(timeout: 10))
+        audienceAction("Retry previous change").tap()
+        let replay = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in server.replayedPrivacyExactly }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [replay], timeout: 10), .completed)
     }
 
     func testRemoteOnlyProfilePrivacyRequiresNewDecisionAfterStalePolicy() throws {
@@ -334,14 +433,14 @@ final class ArcNoteUITests: XCTestCase {
         menu.tap()
         tap("popup-menu.item.private")
         XCTAssertTrue(app.staticTexts["Current audience: Workspace"].waitForExistence(timeout: 10))
-        waitForButton("Make Public").tap()
+        audienceAction("Make Public").tap()
         let alert = app.alerts.firstMatch
         XCTAssertTrue(alert.waitForExistence(timeout: 10))
         alert.buttons.firstMatch.tap()
         menu.tap()
         tap("popup-menu.item.private")
         XCTAssertTrue(app.staticTexts["Current audience: Workspace"].waitForExistence(timeout: 10))
-        waitForButton("Make Private").tap()
+        audienceAction("Make Private").tap()
         let changed = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in server.confirmedFreshProfileDecision }, object: nil)
         XCTAssertEqual(XCTWaiter.wait(for: [changed], timeout: 10), .completed)
         menu.tap()
@@ -8178,15 +8277,15 @@ final class ArcNoteUITests: XCTestCase {
         let proxy = try OrdinaryGoProxy()
         defer { proxy.stop() }
         let session = try ordinarySession()
-        let marker = "Steward" + UUID().uuidString.prefix(8)
+        let marker = "Steward" + UUID().uuidString
         app.launchArguments.append("--ui-test-ordinary-note-binding")
         try launchOrdinary(session, through: proxy)
         waitForSessionPhase("verified", timeout: 30)
         openOrdinaryLibrary()
         let journal = try registerOrdinaryFixture(session, account: "A")
-        proxy.captureCreation(journal, token: session.token, recordReceiptImmediately: true)
+        proxy.captureCreation(journal, token: session.token, expectedContent: marker + "\n")
         tap("note.create")
-        typeInCardEditorBody(marker)
+        pasteFixtureMarker(marker)
         let local = waitFor("note.created-card-id", timeout: 25).label
         XCTAssertTrue(app.staticTexts["Synced"].waitForExistence(timeout: 40))
         let cardID = try XCTUnwrap(journal.snapshot().asset)
@@ -8205,7 +8304,7 @@ final class ArcNoteUITests: XCTestCase {
         for (action, desired) in [("public", true), ("private", false)] {
             menu.tap()
             tap("popup-menu.item." + action)
-            waitForButton(desired ? "Make Public" : "Make Private").tap()
+            audienceAction(desired ? "Make Public" : "Make Private").tap()
             waitForSmokeCardState(id: cardID, token: session.token) { $0.isPublic == desired }
             let path = "/api/v1/assets/" + cardID + "/visibility"
             let observations = proxy.mutations.filter { $0.path == path && $0.status == 200 }
@@ -8708,17 +8807,17 @@ final class ArcNoteUITests: XCTestCase {
         let proxy = try OrdinaryGoProxy()
         defer { proxy.stop() }
         let session = try ordinarySession()
-        let marker = "Audience" + UUID().uuidString.prefix(8)
+        let marker = "Audience" + UUID().uuidString
         app.launchArguments.append("--ui-test-ordinary-note-binding")
         try launchOrdinary(session, through: proxy)
         waitForSessionPhase("verified", timeout: 30)
         openOrdinaryLibrary()
         let fixture = try registerOrdinaryFixture(session, account: "A")
-        proxy.captureCreation(fixture, token: session.token, recordReceiptImmediately: true)
+        proxy.captureCreation(fixture, token: session.token, expectedContent: marker + "\n")
 
         proxy.setOffline(true)
         tap("note.create")
-        typeInCardEditorBody(marker)
+        pasteFixtureMarker(marker)
         let local = waitFor("note.created-card-id", timeout: 25).label
         XCTAssertTrue(local.hasPrefix("local-note:"))
         XCTAssertFalse(waitForButton("cardEditorPrivacyButton").isEnabled)
@@ -8743,7 +8842,7 @@ final class ArcNoteUITests: XCTestCase {
         let asset = try XCTUnwrap(fixture.snapshot().asset)
         XCTAssertFalse(try fetchSmokeCard(id: asset, token: session.token).isPublic)
         waitForEnabledButton("cardEditorPrivacyButton", timeout: 30).tap()
-        waitForButton("Make Public").tap()
+        audienceAction("Make Public").tap()
         waitForSmokeCardState(id: asset, token: session.token) { $0.isPublic }
         waitForLabel("cardEditorPrivacyButton", expected: "Make Private")
         revealEditorBackgroundButton().tap()
@@ -11058,6 +11157,19 @@ final class ArcNoteUITests: XCTestCase {
         }
 
         _ = waitFor("explore.search.input", timeout: 10, file: file, line: line)
+    }
+
+    private func pasteFixtureMarker(_ marker: String) {
+        UIPasteboard.general.setItems([["public.utf8-plain-text": marker]], options: [
+            .localOnly: true, .expirationDate: Date().addingTimeInterval(90)
+        ])
+        let point = waitFor("cardEditorBodyWebView").coordinate(withNormalizedOffset: CGVector(dx: 0.22, dy: 0.10))
+        point.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 10))
+        point.press(forDuration: 1.0)
+        let paste = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Paste")).firstMatch
+        XCTAssertTrue(paste.waitForExistence(timeout: 5))
+        paste.tap()
     }
 
     private func typeInCardEditorBody(

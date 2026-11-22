@@ -1,5 +1,9 @@
 # Execution boundary history
 
+## 2026-11-23 — Audience observation and fixture ownership
+
+An isolated proxy test reproduced an unrelated same-account CREATE receipt selecting the cleanup target. The audience fixtures now bind exactly the private CREATE authored by their test. Simulator cases also cover external publication with the editor open, an early tap while the owner GET is pending, and recovery after a lost CREATE acknowledgement. A contradictory stale response retains the original privacy request across a successful owner GET and relaunch.
+
 ## 2026-11-23 — Conditional note audience
 
 An unconditional native POST received HTTP 428 on the local server. The Library, profile and editor now use the same scoped conditional write. The isolated recovery fixture terminates the app after a committed response is lost and resumes the exact operation from the editor. It verifies the current restricted audience after replay.
