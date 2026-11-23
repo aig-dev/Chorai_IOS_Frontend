@@ -8,6 +8,7 @@ import os
 @MainActor
 final class NetworkResponseExecutionTests: XCTestCase {
     func testScopedBackgroundUploadPatchAndDeleteUseOriginalWireIdentity() async throws {
+        let admission = NoteBackgroundGeneration().admission(for: 0)
         prepareLinkAuth()
         let starts = (0..<4).map { expectation(description: "background request \($0)") }
         let next = OSAllocatedUnfairLock(initialState: 0)
@@ -24,10 +25,10 @@ final class NetworkResponseExecutionTests: XCTestCase {
         let snapshot = NoteRemoteSnapshot(assetID: "asset", syncToken: "token", body: .init(content: "fixture"), lifecycle: .active, isPublic: false)
         let imported = try await store.applyRemote(snapshot, localID: nil, expectedGeneration: nil)
         let localID = try XCTUnwrap(imported?.localID)
-        let bytes = try XCTUnwrap(Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jAhkAAAAASUVORK5CYII="))
-        let image = CardEditingImage(data: bytes, filename: "fixture.png", mimeType: "image/png")
-        let staged = try await store.stageBackground(localID: localID, assetID: "asset", baseline: 7, image: image, expected: nil, createPlaceholder: false)
-        let command = try await store.advanceBackground(staged, assetID: "asset", phase: .submitted)
+        let bytes = try XCTUnwrap(Data(base64Encoded: "/9j/4QAiRXhpZgAASUkqAAgAAAABABIBAwABAAAABgAAAAAAAAD/4AAQSkZJRgABAgAAAQABAAD//gAQTGF2YzYyLjI4LjEwMgD/2wBDAAgEBAQEBAUFBQUFBQYGBgYGBgYGBgYGBgYHBwcICAgHBwcGBgcHCAgICAkJCQgICAgJCQoKCgwMCwsODg4RERT/xABMAAEBAAAAAAAAAAAAAAAAAAAABgEBAQAAAAAAAAAAAAAAAAAABgcQAQAAAAAAAAAAAAAAAAAAAAARAQAAAAAAAAAAAAAAAAAAAAD/wAARCAADAAIDASIAAhEAAxEA/9oADAMBAAIRAxEAPwCLAE1/f//Z"))
+        let image = CardEditingImage(data: bytes, filename: "fixture.png", mimeType: "image/jpeg")
+        let staged = try await store.stageBackground(localID: localID, assetID: "asset", baseline: 7, image: image, expected: nil, createPlaceholder: false, admission: admission)
+        let command = try await store.advanceBackground(staged, assetID: "asset", phase: .submitted, admission: admission)
         let file = try XCTUnwrap(command.image)
         let ref = "med_1234567890abcdef"
         let content = APIEnvironment.mediaContentPath(ref)
@@ -55,10 +56,10 @@ final class NetworkResponseExecutionTests: XCTestCase {
         XCTAssertEqual(request.value(forHTTPHeaderField: "Idempotency-Key"), command.id.uuidString)
         XCTAssertTrue(request.value(forHTTPHeaderField: "Content-Type")?.hasPrefix("multipart/form-data") == true)
         let descriptor: [String: Any] = ["bucket":"private","object_key":"test","media_ref":ref,"public_url":content,"mime":file.mimeType,
-            "size_bytes":bytes.count,"width":1,"height":1,"sha256":file.sha256,"upload_kind":"background"]
+            "size_bytes":bytes.count,"width":3,"height":2,"sha256":file.sha256,"upload_kind":"background"]
         fixture.respond(String(decoding: try JSONSerialization.data(withJSONObject: ["success":true,"data":descriptor]), as: UTF8.self), status: 201, at: 1)
         let verified = try await upload.value
-        let linked = try await store.advanceBackground(command, assetID: "asset", phase: .attachedRef, ref: verified)
+        let linked = try await store.advanceBackground(command, assetID: "asset", phase: .attachedRef, ref: verified, admission: admission)
         let patch = Task { try await network.writeBackground(linked) }
         await fulfillment(of: [starts[2]], timeout: 4)
         guard fixture.count == 3 else { patch.cancel(); return XCTFail("Missing attachment") }
@@ -79,9 +80,9 @@ final class NetworkResponseExecutionTests: XCTestCase {
         fixture.respond(card(8, ref: display), at: 2)
         let current = try await patch.value
         XCTAssertEqual(current.displayRef, display)
-        try await store.retireBackground(linked, current: current)
-        let removal = try await store.stageBackground(localID: localID, assetID: "asset", baseline: 8, image: nil, expected: nil, createPlaceholder: false)
-        let frozen = try await store.advanceBackground(removal, assetID: "asset", phase: .submitted)
+        try await store.retireBackground(linked, current: current, admission: admission)
+        let removal = try await store.stageBackground(localID: localID, assetID: "asset", baseline: 8, image: nil, expected: nil, createPlaceholder: false, admission: admission)
+        let frozen = try await store.advanceBackground(removal, assetID: "asset", phase: .submitted, admission: admission)
         let clear = Task { try await network.writeBackground(frozen) }
         await fulfillment(of: [starts[3]], timeout: 4)
         guard fixture.count == 4 else { clear.cancel(); return XCTFail("Missing removal") }
@@ -269,34 +270,6 @@ final class NetworkResponseExecutionTests: XCTestCase {
         guard fixture.count > 0 else { operation.cancel(); _ = try await operation.value; throw URLError(.timedOut) }
         fixture.respond(purgeReceipt(attempt.requestID, cleanup: "UNKNOWN"))
         do { _ = try await operation.value; XCTFail("Unknown cleanup state accepted") } catch {}
-    }
-
-    private func prepareLinkAuth() {
-        let auth = AuthManager.shared
-        let previousUser = auth.currentUser
-        let previousToken = auth.authToken
-        let previousAccess = auth.accessState
-        let wasVerified = auth.canEnterProduct
-        addTeardownBlock {
-            await MainActor.run {
-                if wasVerified, let user = previousUser, let token = previousToken, let access = previousAccess {
-                    auth.saveUserSession(AuthResponse(success: true, message: nil, data: AuthResponseData(
-                        token: token, user: user, isNewUser: false, productAccess: access)))
-                } else if let user = previousUser, let token = previousToken {
-                    auth.installUITestSession(token: token, actorID: user.id, email: user.email, username: user.username, createdAt: user.createdAt)
-                } else {
-                    auth.invalidateLocalSession()
-                }
-                auth.applyAccess(previousAccess ?? AccessState(mode: "", status: "", scope: nil, reasonCode: nil))
-            }
-        }
-        auth.saveUserSession(AuthResponse(success: true, message: nil, data: AuthResponseData(
-            token: "synthetic-link-token",
-            user: User(id: "link_actor", username: "Link", email: "link@fixture.invalid",
-                       avatar: nil, bio: nil, credit: 0, createdAt: "2026-11-21T00:00:00Z"),
-            isNewUser: false,
-            productAccess: AccessState(mode: "private_beta", status: "allowed", scope: "product_full", reasonCode: nil))))
-        XCTAssertTrue(auth.canEnterProduct)
     }
 
     private func linkJournalDirectory() -> URL {
@@ -675,5 +648,36 @@ final class NetworkResponseExecutionTests: XCTestCase {
             XCTAssertNil(body["rate"])
         }
         try await operation.value
+    }
+}
+
+extension XCTestCase {
+    @MainActor
+    func prepareLinkAuth() {
+        let auth = AuthManager.shared
+        let previousUser = auth.currentUser
+        let previousToken = auth.authToken
+        let previousAccess = auth.accessState
+        let wasVerified = auth.canEnterProduct
+        addTeardownBlock {
+            await MainActor.run {
+                if wasVerified, let user = previousUser, let token = previousToken, let access = previousAccess {
+                    auth.saveUserSession(AuthResponse(success: true, message: nil, data: AuthResponseData(
+                        token: token, user: user, isNewUser: false, productAccess: access)))
+                } else if let user = previousUser, let token = previousToken {
+                    auth.installUITestSession(token: token, actorID: user.id, email: user.email, username: user.username, createdAt: user.createdAt)
+                } else {
+                    auth.invalidateLocalSession()
+                }
+                auth.applyAccess(previousAccess ?? AccessState(mode: "", status: "", scope: nil, reasonCode: nil))
+            }
+        }
+        auth.saveUserSession(AuthResponse(success: true, message: nil, data: AuthResponseData(
+            token: "synthetic-link-token",
+            user: User(id: "link_actor", username: "Link", email: "link@fixture.invalid",
+                       avatar: nil, bio: nil, credit: 0, createdAt: "2026-11-21T00:00:00Z"),
+            isNewUser: false,
+            productAccess: AccessState(mode: "private_beta", status: "allowed", scope: "product_full", reasonCode: nil))))
+        XCTAssertTrue(auth.canEnterProduct)
     }
 }

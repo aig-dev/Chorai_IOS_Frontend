@@ -8843,6 +8843,82 @@ final class ArcNoteUITests: XCTestCase {
         )
     }
 
+    func testBackgroundOnlySaveAndReopenedCancelUseRealEditor() {
+        app.launchArguments.append("--ui-test-card-editor-shell")
+        app.launchEnvironment["CHORAI_CARD_EDITOR_FIXTURE_MODE"] = "persisted-background"
+        app.launch()
+        for _ in 0..<2 {
+            waitForLabel("cardEditorLeadingAction", expected: "Save note")
+            waitForButton("cardEditorLeadingAction").tap()
+            waitForEnabled(waitForButton("cardEditorLeadingAction"))
+            tap("fixture.background.inspect")
+            waitForLabel("fixture.background.live-proof", expected: "creates=0 uploads=0 writes=0 revision=1 ack=0 phase=staged public=false body=")
+            XCTAssertTrue(app.staticTexts["Add content before saving this background."].exists)
+            revealEditorBackgroundButton().tap()
+            tapBackgroundDialogAction("cardEditorCloseWithPendingBackground")
+            let proof = waitFor("fixture.background.proof", timeout: 10)
+            waitForLabel("fixture.background.proof", expected: "creates=0 uploads=0 writes=0 revision=1 ack=0 phase=staged public=false body=")
+            XCTAssertTrue(proof.exists)
+            tap("fixture.background.open")
+        }
+        revealEditorBackgroundButton().tap()
+        tapBackgroundDialogAction("cardEditorRestoreBackgroundButton")
+        typeInCardEditorBody("New authored body")
+        dismissCardEditorKeyboardWithVerticalDrag()
+        closeNewNoteEditor()
+        let proof = waitFor("fixture.background.proof", timeout: 10)
+        waitForBackgroundProof(proof, counts: "creates=1 uploads=0 writes=0", state: "phase=none public=false body=New authored body")
+        tap("fixture.background.open")
+        XCTAssertTrue(waitFor("cardEditorBodyWebView", timeout: 15).exists)
+        waitForLabel("cardEditorLeadingAction", expected: "Close note")
+
+        // Start a new isolated note and keep its original picture through its first private CREATE.
+        app.terminate()
+        app.launch()
+        waitForLabel("cardEditorLeadingAction", expected: "Save note")
+        typeInCardEditorBody("First meaningful body")
+        dismissCardEditorKeyboardWithVerticalDrag()
+        tap("fixture.background.inspect")
+        let first = waitFor("fixture.background.live-proof", timeout: 10)
+        waitForBackgroundProof(first, counts: "creates=1 uploads=0 writes=0", state: "phase=staged public=false body=First meaningful body")
+        saveCardEditor()
+        tap("fixture.background.inspect")
+        waitForBackgroundProof(first, counts: "creates=1 uploads=1 writes=1", state: "phase=none public=false body=First meaningful body")
+    }
+
+    func testHeldBackgroundAllowsRealEditorCloseWithLatestBody() {
+        app.launchArguments.append("--ui-test-card-editor-shell")
+        app.launchEnvironment["CHORAI_CARD_EDITOR_FIXTURE_MODE"] = "held-background"
+        app.launch()
+        waitForLabel("cardEditorLeadingAction", expected: "Save note")
+        assertRenderedEditorParagraph("Initial body")
+        appendToCardEditorParagraph(" prepared")
+        dismissCardEditorKeyboardWithVerticalDrag()
+        tap("fixture.background.inspect")
+        let preflight = waitFor("fixture.background.live-proof", timeout: 10)
+        waitForBackgroundProof(preflight, counts: "creates=1 uploads=0 writes=0", state: "phase=staged public=false body=Initial body prepared")
+        func field(_ name: String, in label: String) -> Int? {
+            let token = label.split(separator: " ").first { $0.hasPrefix(name + "=") }
+            return token.flatMap { Int($0.dropFirst(name.count + 1)) }
+        }
+        let before = field("revision", in: preflight.label)
+        saveCardEditor()
+        waitForLabel("cardEditorLeadingAction", expected: "Close note")
+        appendToCardEditorParagraph(" edited during upload")
+        dismissCardEditorKeyboardWithVerticalDrag()
+        waitForButton("cardEditorLeadingAction").tap()
+        waitForMissing("cardEditorContent", timeout: 10)
+        waitForMissing("cardEditorBodyWebView", timeout: 10)
+        let proof = waitFor("fixture.background.proof", timeout: 15)
+        waitForBackgroundProof(proof, counts: "creates=1 uploads=1 writes=0", state: "phase=submitted public=false body=Initial body prepared edited during upload")
+        guard let before, let latest = field("revision", in: proof.label) else { return XCTFail("Missing stored body revisions") }
+        XCTAssertGreaterThan(latest, before)
+        XCTAssertEqual(field("ack", in: proof.label), latest)
+        tap("fixture.background.release")
+        tap("fixture.background.open")
+        assertRenderedEditorParagraph("Initial body prepared edited during upload")
+    }
+
     func testNewCardStagesBackgroundAndPrivacyBeforeFirstSave() throws {
         let proxy = try OrdinaryGoProxy()
         defer { proxy.stop() }
@@ -8862,7 +8938,7 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Background selected · Save to apply"].waitForExistence(timeout: 15))
         XCTAssertFalse(proxy.mutations.contains { $0.path == "/api/cards" || $0.path == "/api/v1/media/upload" || $0.path.hasSuffix("/background") })
         revealEditorBackgroundButton().tap()
-        waitForButton("cardEditorRestoreBackgroundButton").tap()
+        tapBackgroundDialogAction("cardEditorRestoreBackgroundButton")
         pasteFixtureMarker(marker)
         let local = waitFor("note.created-card-id", timeout: 25).label
         XCTAssertTrue(local.hasPrefix("local-note:"))
@@ -8897,20 +8973,20 @@ final class ArcNoteUITests: XCTestCase {
         try selectFirstPhotoFromImagePicker()
         XCTAssertTrue(app.staticTexts["Background selected · Save to apply"].waitForExistence(timeout: 15))
         revealEditorBackgroundButton().tap()
-        waitForButton("cardEditorRestoreBackgroundButton").tap()
+        tapBackgroundDialogAction("cardEditorRestoreBackgroundButton")
         waitForLabel("cardEditorLeadingAction", expected: "Close note")
         XCTAssertEqual(try fetchSmokeCard(id: asset, token: session.token).backgroundRevision, priorRevision)
         revealEditorBackgroundButton().tap()
         try selectFirstPhotoFromImagePicker()
         XCTAssertTrue(app.staticTexts["Background selected · Save to apply"].waitForExistence(timeout: 15))
         revealEditorBackgroundButton().tap()
-        waitForButton("cardEditorCloseWithPendingBackground").tap()
+        tapBackgroundDialogAction("cardEditorCloseWithPendingBackground")
         tap("card.home." + local)
         XCTAssertTrue(app.staticTexts["Background selected · Save to apply"].waitForExistence(timeout: 15))
         let updated = marker + " edited"
-        replaceCardEditorBody(with: updated)
+        appendToCardEditorParagraph(" edited")
         dismissCardEditorKeyboardWithVerticalDrag()
-        waitForSmokeCardState(id: asset, token: session.token) { $0.content == updated }
+        waitForSmokeCardState(id: asset, token: session.token) { $0.content == updated || $0.content == updated + "\n" }
         let afterFlush = try fetchSmokeCard(id: asset, token: session.token)
         XCTAssertEqual(afterFlush.backgroundMediaRef, prior.backgroundMediaRef)
         XCTAssertEqual(afterFlush.backgroundRevision, priorRevision)
@@ -8930,8 +9006,9 @@ final class ArcNoteUITests: XCTestCase {
         closeNewNoteEditor()
         tap("card.home." + local)
         waitForLabel("cardEditorPrivacyButton", expected: "Make Private")
+        assertRenderedEditorParagraph(updated)
         let saved = try fetchSmokeCard(id: asset, token: session.token)
-        XCTAssertEqual(saved.content, updated)
+        XCTAssertEqual(saved.content, afterFlush.content)
         XCTAssertEqual(saved.backgroundMediaRef, "/api/v1/media/" + ref + "/content?asset_id=" + asset)
         XCTAssertFalse((saved.backgroundMediaRef ?? "").isEmpty)
         XCTAssertEqual(try fetchSmokeCards(search: marker, token: session.token).filter { $0.content.contains(marker) }.map(\.id), [asset])
@@ -11398,6 +11475,20 @@ final class ArcNoteUITests: XCTestCase {
         "cardEditorRemoveLink.\(sourceID)--\(targetID)"
     }
 
+    private func assertRenderedEditorParagraph(_ text: String, file: StaticString = #filePath, line: UInt = #line) {
+        let web = waitFor("cardEditorBodyWebView", timeout: 15)
+        let paragraph = web.descendants(matching: .any).matching(NSPredicate(format: "label == %@ OR value == %@", text, text)).firstMatch
+        XCTAssertTrue(paragraph.waitForExistence(timeout: 10), "Reopened editor did not render its exact accepted paragraph", file: file, line: line)
+    }
+
+    private func appendToCardEditorParagraph(_ suffix: String) {
+        let body = waitFor("cardEditorBodyWebView", timeout: 15)
+        body.coordinate(withNormalizedOffset: CGVector(dx: 0.22, dy: 0.10)).tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 8))
+        app.typeKey(.rightArrow, modifierFlags: .command)
+        app.typeText(suffix)
+    }
+
     private func replaceCardEditorBody(
         with text: String,
         file: StaticString = #filePath,
@@ -11718,6 +11809,17 @@ final class ArcNoteUITests: XCTestCase {
             file: file,
             line: line
         )
+    }
+
+    private func tapBackgroundDialogAction(_ identifier: String) {
+        let button = app.sheets["Background"].buttons.matching(identifier: identifier).firstMatch
+        XCTAssertTrue(button.waitForExistence(timeout: 8))
+        button.tap()
+    }
+
+    private func waitForBackgroundProof(_ element: XCUIElement, counts: String, state: String) {
+        let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@ AND label CONTAINS %@", counts, state), object: element)
+        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 10), .completed, element.label)
     }
 
     private func revealEditorBackgroundButton(

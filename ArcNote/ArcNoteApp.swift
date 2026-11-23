@@ -227,7 +227,10 @@ struct ArcNoteApp: App {
         } else if isPrivateBetaEntryUITestRoute {
             PrivateBetaEntryFixtureScreen()
         } else if isCardEditorShellUITestRoute {
-            CardEditorShellFixtureScreen()
+            if let mode = ProcessInfo.processInfo.environment["CHORAI_CARD_EDITOR_FIXTURE_MODE"],
+               ["persisted-background", "held-background"].contains(mode) {
+                BackgroundRecoveryFixture(held: mode == "held-background")
+            } else { CardEditorShellFixtureScreen() }
         } else if isSignInUITestRoute {
             NavigationStack {
                 SignInView()

@@ -51,9 +51,12 @@ struct NewNoteView: View {
     @State private var isLoading = false
     @State private var didStartLoading = false
     @State private var localEditingService: LocalCoreCardEditingService
+    private let localNotes: LocalNotesController
 
     init(
         cardId: String = "",
+        creationID: String = UUID().uuidString, suppliedService: LocalCoreCardEditingService? = nil,
+        localNotes: LocalNotesController = .shared,
         onCreated: @escaping (String, String) -> Void = { _, _ in },
         onFinishCreation: ((String, String) -> Bool)? = nil
     ) {
@@ -61,8 +64,8 @@ struct NewNoteView: View {
         self.onCreated = onCreated
         self.onFinishCreation = onFinishCreation
         let scope = AuthManager.shared.currentNoteScope ?? NoteStoreScope(actorID: "", environmentID: APIConfiguration.baseURL)
-        let creationID = UUID().uuidString
-        let service = LocalCoreCardEditingService(identifier: cardId.isEmpty ? nil : cardId, creationID: creationID, scope: scope)
+        self.localNotes = localNotes
+        let service = suppliedService ?? LocalCoreCardEditingService(identifier: cardId.isEmpty ? nil : cardId, creationID: creationID, scope: scope)
         _localEditingService = State(initialValue: service)
 
         let isNew = cardId.isEmpty
@@ -92,6 +95,7 @@ struct NewNoteView: View {
                     seed: seed,
                     editingStore: editingStore,
                     localEditingService: localEditingService,
+                    localNotes: localNotes,
                     onCreated: onCreated,
                     onFinishCreation: onFinishCreation
                 )
@@ -174,7 +178,7 @@ private struct CardEditorSessionView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var audiencePicker = NoteAudiencePicker()
-    @ObservedObject private var localNotes = LocalNotesController.shared
+    @ObservedObject private var localNotes: LocalNotesController
     @ObservedObject private var authManager = AuthManager.shared
     @Environment(\.navigateCard) private var navigateCard
 
@@ -210,6 +214,8 @@ private struct CardEditorSessionView: View {
     @State private var hasSaveFailure = false
     @State private var failedCommitBaseline: CardEditorCommitBaseline?
     @State private var isSaving = false
+    @State private var isDeliveringBackground = false
+    @State private var isClosing = false
     @State private var isLoadingBackgroundPhoto = false
     @State private var isProcessingInlineImage = false
     @State private var inlineImageTask: Task<Void, Never>?
@@ -227,12 +233,14 @@ private struct CardEditorSessionView: View {
         seed: CardEditorSeed,
         editingStore: CardEditingStore,
         localEditingService: LocalCoreCardEditingService,
+        localNotes: LocalNotesController,
         onCreated: @escaping (String, String) -> Void,
         onFinishCreation: ((String, String) -> Bool)?
     ) {
         self.seed = seed
         self.onCreated = onCreated
         self.onFinishCreation = onFinishCreation
+        _localNotes = ObservedObject(wrappedValue: localNotes)
         _localEditingService = ObservedObject(wrappedValue: localEditingService)
         _editingStore = ObservedObject(wrappedValue: editingStore)
         _didNotifyCreation = State(initialValue: !seed.isNew)
@@ -570,7 +578,7 @@ private struct CardEditorSessionView: View {
     }
 
     private var isBusy: Bool {
-        if isSaving || isResolvingConflict || isLoadingBackgroundPhoto || isProcessingInlineImage
+        if isSaving || isClosing || isDeliveringBackground || isResolvingConflict || isLoadingBackgroundPhoto || isProcessingInlineImage
             || isPreparingCardAction || isCardActionInFlight {
             return true
         }
@@ -594,12 +602,7 @@ private struct CardEditorSessionView: View {
             ) != nil
     }
 
-    private var isUntouchedNewDraft: Bool {
-        ((editingStore.cardID == nil && seed.isNew) || localEditingService.isUnpublishedEmptyPlaceholder)
-            && !editingStore.draft.hasMeaningfulContent
-            && editingStore.draft.tags.isEmpty
-            && editingStore.draft.isPublic == seed.initialIsPublic
-    }
+    private var isUntouchedNewDraft: Bool { persistenceSession.isUntouchedNewDraft }
 
     private var hasPendingCommit: Bool {
         if localEditingService.pendingBackground != nil || hasPendingInlineTagCandidate { return true }
@@ -636,7 +639,8 @@ private struct CardEditorSessionView: View {
     }
 
     private var leadingControlState: CardEditorLeadingControlState {
-        if isSaving { return .saving }
+        if isSaving || isClosing { return .saving }
+        if isDeliveringBackground { return .back }
         if bodyModel.compatibilityNotice != nil { return .readOnly }
         if bodyModel.bridgeFailureNotice != nil { return .bridgeFailed }
         if hasCorrelatedSaveFailure { return .retry }
@@ -786,7 +790,7 @@ private struct CardEditorSessionView: View {
     }
 
     private func handleLeadingControl() {
-        guard !isBusy else { return }
+        guard !isBusy || (isDeliveringBackground && leadingControlState == .back) else { return }
         switch leadingControlState {
         case .save, .retry:
             saveCurrentSnapshot()
@@ -801,25 +805,9 @@ private struct CardEditorSessionView: View {
         }
     }
 
-    private func saveBodyAndChosenBackground() async throws -> Bool {
-        if editingStore.draft.validationError == nil { try await localEditingService.freezeBackgroundForSave() }
-        guard await editingStore.ensurePersisted() != nil else { return false }
-        guard backgroundLoaded, !localEditingService.backgroundUnreadable else { throw NoteBackgroundError.unreadable }
-        if localEditingService.pendingBackground != nil {
-            do {
-                let ref = try await localEditingService.submitBackground()
-                editingStore.restoreStoredBackground(.unchanged, confirmed: ref)
-            } catch NoteBackgroundError.stale {
-                editingStore.restoreStoredBackground(.unchanged, confirmed: localEditingService.confirmedBackground)
-                throw NoteBackgroundError.stale
-            } catch let error as NoteBackgroundError { throw error }
-            catch { throw NoteBackgroundError.unknown }
-        }
-        return !editingStore.isDirty
-    }
-
     private func saveCurrentSnapshot() {
-        guard !isSaving else { return }
+        guard !isSaving, !isClosing, !isDeliveringBackground else { return }
+        let admission = localEditingService.backgroundAdmission()
         completeTagEntry()
         let finishGeneration = authManager.sessionGeneration
         let priorFailedBaseline = failedCommitBaseline
@@ -827,9 +815,11 @@ private struct CardEditorSessionView: View {
         saveMessage = nil
 
         Task {
-            defer { isSaving = false }
+            defer { isSaving = false; isDeliveringBackground = false }
+            var attemptedRevision: Int?
             do {
                 let snapshot = try await applyCurrentSnapshot()
+                attemptedRevision = snapshot.revision
                 let baseline = try commitBaseline(matching: snapshot)
                 let didRecover = await recoverFrozenFailedOperationIfNeeded()
                 let outcome: CardEditorCommitOutcome
@@ -844,7 +834,13 @@ private struct CardEditorSessionView: View {
                 } else if !commitBaselineMatchesCurrent(baseline) {
                     outcome = .pendingNewerChanges
                 } else {
-                    let didSave = try await saveBodyAndChosenBackground()
+                    let didSave = try await persistenceSession.saveBodyAndChosenBackground(
+                        service: localEditingService, admission: admission, backgroundLoaded: backgroundLoaded
+                    ) {
+                        isDeliveringBackground = true
+                        isSaving = false
+                    }
+                    guard persistenceSession.isVisible else { return }
                     if !didSave, editingStoreHasFailure {
                         failureBaseline = baseline
                     }
@@ -877,14 +873,10 @@ private struct CardEditorSessionView: View {
                     hasSaveFailure = true
                 }
             } catch let error as NoteBackgroundError {
-                switch error {
-                case .stale: saveMessage = "Background changed elsewhere. Choose again."
-                case .rejected: saveMessage = "Image rejected. Cancel the background to choose again."
-                case .unreadable: saveMessage = "Body saved · Background unconfirmed"
-                default: saveMessage = "Body saved · Retry the pending background."
-                }
-                hasSaveFailure = error != .stale
-                failedCommitBaseline = error == .stale ? nil : currentCommitBaseline
+                guard persistenceSession.isVisible else { return }
+                saveMessage = persistenceSession.backgroundFailureMessage(error, bodyRevision: attemptedRevision)
+                hasSaveFailure = error != .stale && error != .needsBody
+                failedCommitBaseline = hasSaveFailure ? currentCommitBaseline : nil
             } catch CardEditorSessionError.staleSnapshot {
                 saveMessage = nil
                 failedCommitBaseline = priorFailedBaseline
@@ -927,13 +919,13 @@ private struct CardEditorSessionView: View {
     }
 
     private func verifyCurrentSnapshotAndDismiss() {
-        guard !isSaving else { return }
+        guard !isSaving, !isClosing else { return }
         let finishGeneration = authManager.sessionGeneration
         completeTagEntry()
-        isSaving = true
+        isClosing = true
 
         Task {
-            defer { isSaving = false }
+            defer { isClosing = false }
             do {
                 let snapshot = try await applyCurrentSnapshot()
                 // Back can receive a newer WebKit revision than the last autosave.

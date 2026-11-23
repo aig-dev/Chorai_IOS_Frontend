@@ -47,6 +47,39 @@ final class LocalNoteEditorPersistenceSession: ObservableObject {
         if !visible { releaseIfFinished() }
     }
 
+    func saveBodyAndChosenBackground(service: LocalCoreCardEditingService, admission: NoteBackgroundAdmission,
+                                     backgroundLoaded: Bool, willDeliver: () -> Void) async throws -> Bool {
+        if isUntouchedNewDraft && service.pendingBackground != nil { throw NoteBackgroundError.needsBody }
+        if editingStore.draft.validationError == nil { try await service.freezeBackgroundForSave(admission) }
+        guard await editingStore.ensurePersisted() != nil else { return false }
+        guard backgroundLoaded, !service.backgroundUnreadable else { throw NoteBackgroundError.unreadable }
+        if service.pendingBackground != nil {
+            do {
+                willDeliver()
+                let ref = try await service.submitBackground(admission)
+                editingStore.restoreStoredBackground(.unchanged, confirmed: ref)
+            } catch NoteBackgroundError.stale {
+                editingStore.restoreStoredBackground(.unchanged, confirmed: service.confirmedBackground)
+                throw NoteBackgroundError.stale
+            } catch let error as NoteBackgroundError { throw error }
+            catch { throw NoteBackgroundError.unknown }
+        }
+        return !editingStore.isDirty
+    }
+
+    func backgroundFailureMessage(_ error: NoteBackgroundError, bodyRevision: Int?) -> String {
+        switch error {
+        case .needsBody: return "Add content before saving this background."
+        case .stale: return "Background changed elsewhere. Choose again."
+        case .rejected: return "Image rejected. Cancel the background to choose again."
+        default:
+            let acknowledged = bodyRevision != nil && editingStore.cardID != nil && !editingStore.isDraftDirty
+                && editingStore.lastCommittedBodyRevision == bodyRevision && editingStore.bodyRevision == bodyRevision
+            let status = error == .unreadable ? "Background unconfirmed" : "Retry the pending background."
+            return acknowledged ? "Body saved · " + status : status
+        }
+    }
+
     func flushAcceptedEdits() async -> Bool {
         let binding = bodyModel.controller.attachment
         await binding?.drainAcceptedEvents()
@@ -135,7 +168,7 @@ final class LocalNoteEditorPersistenceSession: ObservableObject {
         return saved
     }
 
-    private var isUntouchedNewDraft: Bool {
+    var isUntouchedNewDraft: Bool {
         ((editingStore.cardID == nil && isNew) || isUnpublishedEmptyPlaceholder())
             && !editingStore.draft.hasMeaningfulContent
             && editingStore.draft.tags.isEmpty

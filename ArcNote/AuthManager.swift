@@ -26,8 +26,12 @@ final class AuthManager: ObservableObject {
     @Published private(set) var accessState: AccessState?
     @Published private(set) var needsInterestSelection = false
     @Published private(set) var offlineNoteAccess = NoteOfflineAccess()
+    let backgroundGeneration = NoteBackgroundGeneration()
     private(set) var sessionGeneration: UInt64 = 0 {
-        didSet { NotificationCenter.default.post(name: .cardReadSessionDidChange, object: nil) }
+        didSet {
+            backgroundGeneration.replace(with: sessionGeneration)
+            NotificationCenter.default.post(name: .cardReadSessionDidChange, object: nil)
+        }
     }
     
     private let userDefaults = UserDefaults.standard
@@ -347,6 +351,10 @@ final class AuthManager: ObservableObject {
             NotificationCenter.default.post(name: .cardReadSessionDidChange, object: nil)
             return
         }
+        // A verified denial retires queued presentation effects before publishing access.
+        // The token verification that delivered it still owns the same login generation.
+        let retainsOfflineGrant = state.mode == "unavailable" && offlineNoteAccess.allows(currentNoteScope)
+        backgroundGeneration.setAccessAllowed(state.status == "allowed" || retainsOfflineGrant)
         accessState = state
         if state.status != "allowed" {
             NotificationCenter.default.post(name: .cardReadSessionDidChange, object: nil)

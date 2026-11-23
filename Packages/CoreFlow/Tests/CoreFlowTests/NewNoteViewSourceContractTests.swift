@@ -82,7 +82,7 @@ final class NewNoteViewSourceContractTests: XCTestCase {
         )
         XCTAssertTrue(save.contains("completeTagEntry()"))
         XCTAssertTrue(save.contains("applyCurrentSnapshot()"))
-        XCTAssertTrue(save.contains("saveBodyAndChosenBackground()"))
+        XCTAssertTrue(save.contains("persistenceSession.saveBodyAndChosenBackground("))
         XCTAssertTrue(save.contains("classifyCommit("))
         XCTAssertFalse(save.contains("dismiss()"))
         XCTAssertFalse(save.contains("thenDismiss"))
@@ -117,12 +117,9 @@ final class NewNoteViewSourceContractTests: XCTestCase {
 
     func testEmptyStructuredNewNoteDoesNotBecomePendingFromRevisionAlone() throws {
         let source = try Self.newNoteSource()
-        let untouchedDraft = try XCTUnwrap(
-            Self.functionBody(
-                in: source,
-                signature: "var isUntouchedNewDraft: Bool"
-            )
-        )
+        XCTAssertTrue(source.contains("var isUntouchedNewDraft: Bool { persistenceSession.isUntouchedNewDraft }"))
+        let owner = try String(contentsOf: Self.repositoryRoot.appendingPathComponent("ArcNote/CoreFlow/LocalNoteEditorPersistenceSession.swift"), encoding: .utf8)
+        let untouchedDraft = try XCTUnwrap(Self.functionBody(in: owner, signature: "var isUntouchedNewDraft: Bool"))
         XCTAssertTrue(
             untouchedDraft.contains("!editingStore.draft.hasMeaningfulContent")
         )
@@ -491,7 +488,7 @@ final class NewNoteViewSourceContractTests: XCTestCase {
         let exactCheck = try XCTUnwrap(
             save.range(of: "!commitBaselineMatchesCurrent(baseline)")
         )
-        let persist = try XCTUnwrap(save.range(of: "saveBodyAndChosenBackground()"))
+        let persist = try XCTUnwrap(save.range(of: "persistenceSession.saveBodyAndChosenBackground("))
 
         XCTAssertLessThan(snapshot.lowerBound, baseline.lowerBound)
         XCTAssertLessThan(baseline.lowerBound, recovery.lowerBound)
@@ -681,7 +678,7 @@ final class NewNoteViewSourceContractTests: XCTestCase {
         let preserveFailure = try XCTUnwrap(
             save.range(of: "failureBaseline = priorFailedBaseline")
         )
-        let persist = try XCTUnwrap(save.range(of: "saveBodyAndChosenBackground()"))
+        let persist = try XCTUnwrap(save.range(of: "persistenceSession.saveBodyAndChosenBackground("))
 
         XCTAssertLessThan(priorFailure.lowerBound, recovery.lowerBound)
         XCTAssertLessThan(recovery.lowerBound, recoveryFailure.lowerBound)

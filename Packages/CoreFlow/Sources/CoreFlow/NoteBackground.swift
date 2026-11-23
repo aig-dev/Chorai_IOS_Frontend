@@ -2,10 +2,59 @@ import CoreData
 import CryptoKit
 import Foundation
 import ImageIO
+import os
+import zlib
 import UniformTypeIdentifiers
 
+/// Publication and synchronous session retirement share this lock. Media preparation and
+/// body transactions remain outside it. Capturing a generation never grants a future one.
+public final class NoteBackgroundGeneration: Sendable {
+    fileprivate struct State: Sendable {
+        var session: UInt64
+        var revision: UInt64 = 0
+        var allowed = true
+    }
+    fileprivate let current: OSAllocatedUnfairLock<State>
+
+    public init(_ generation: UInt64 = 0) { current = .init(initialState: State(session: generation)) }
+    public func replace(with generation: UInt64) {
+        current.withLock { state in
+            state.session = generation
+            state.revision &+= 1
+            state.allowed = true
+        }
+    }
+    public func setAccessAllowed(_ allowed: Bool) {
+        current.withLock { state in
+            guard state.allowed != allowed else { return }
+            state.revision &+= 1
+            state.allowed = allowed
+        }
+    }
+    public func admission(for generation: UInt64) -> NoteBackgroundAdmission {
+        current.withLock { NoteBackgroundAdmission(owner: self, generation: generation, revision: $0.revision) }
+    }
+}
+
+public struct NoteBackgroundAdmission: Sendable {
+    fileprivate let owner: NoteBackgroundGeneration
+    public let generation: UInt64
+    fileprivate let revision: UInt64
+
+    public func check() throws { try commit {} }
+
+    fileprivate func commit(_ effect: @Sendable () throws -> Void) throws {
+        try owner.current.withLock { current in
+            guard current.session == generation, current.revision == revision, current.allowed else {
+                throw NoteLocalStoreError.invalidScope
+            }
+            try effect()
+        }
+    }
+}
+
 public enum NoteBackgroundError: Error, Equatable, Sendable {
-    case invalidImage, unreadable, changed, unresolved, stale, rejected, expired, unknown
+    case needsBody, invalidImage, unreadable, changed, unresolved, stale, rejected, expired, unknown
 }
 
 public struct NoteBackgroundObservation: Equatable, Sendable {
@@ -62,6 +111,48 @@ public struct NoteBackgroundCommand: Codable, Equatable, Sendable {
 }
 
 extension NoteLocalStore {
+    private static func backgroundDescriptor(_ image: CardEditingImage) throws
+        -> (filename: String, mime: String, width: Int, height: Int) {
+        guard image.isValidBackground,
+              let source = CGImageSourceCreateWithData(image.data as CFData, nil),
+              CGImageSourceGetStatus(source) == .statusComplete,
+              let type = CGImageSourceGetType(source) as String?,
+              let ext = ["public.png": "png", "public.jpeg": "jpg", "com.compuserve.gif": "gif", "org.webmproject.webp": "webp"][type],
+              let mime = UTType(type)?.preferredMIMEType,
+              let info = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let w = info[kCGImagePropertyPixelWidth] as? Int, (1...32_768).contains(w),
+              let h = info[kCGImagePropertyPixelHeight] as? Int, (1...32_768).contains(h),
+              w * h <= 100_000_000 else { throw NoteBackgroundError.invalidImage }
+
+        // ImageIO can return complete, decoded pixels even when an IDAT CRC is wrong.
+        if type == "public.png" { try checkPNGChunks(image.data) }
+        guard CGImageSourceCreateImageAtIndex(source, 0, [kCGImageSourceShouldCacheImmediately: true] as CFDictionary) != nil,
+              CGImageSourceGetStatusAtIndex(source, 0) == .statusComplete else { throw NoteBackgroundError.invalidImage }
+        let orientation = info[kCGImagePropertyOrientation] as? Int ?? 1
+        let swapAxes = type == "public.jpeg" && (5...8).contains(orientation)
+        return ("card-background." + ext, mime, swapAxes ? h : w, swapAxes ? w : h)
+    }
+
+    private static func checkPNGChunks(_ data: Data) throws {
+        try data.withUnsafeBytes { (bytes: UnsafeRawBufferPointer) in
+            guard let start = bytes.bindMemory(to: UInt8.self).baseAddress else { throw NoteBackgroundError.invalidImage }
+            var offset = 8
+            while bytes.count - offset >= 12 {
+                let size = Int(UInt32(bigEndian: bytes.loadUnaligned(fromByteOffset: offset, as: UInt32.self)))
+                guard size <= bytes.count - offset - 12 else { throw NoteBackgroundError.invalidImage }
+                let type = UInt32(bigEndian: bytes.loadUnaligned(fromByteOffset: offset + 4, as: UInt32.self))
+                let stored = UInt32(bigEndian: bytes.loadUnaligned(fromByteOffset: offset + 8 + size, as: UInt32.self))
+                guard crc32(0, start + offset + 4, UInt32(size + 4)) == stored else { throw NoteBackgroundError.invalidImage }
+                offset += size + 12
+                if type == 0x49454e44 { // IEND
+                    guard size == 0, offset == bytes.count else { throw NoteBackgroundError.invalidImage }
+                    return
+                }
+            }
+            throw NoteBackgroundError.invalidImage
+        }
+    }
+
     private static func backgroundName(_ localID: String) -> String {
         SHA256.hash(data: Data(localID.utf8)).map { String(format: "%02x", $0) }.joined()
     }
@@ -116,7 +207,7 @@ extension NoteLocalStore {
     }
 
     public func stageBackground(localID: String, assetID: String?, baseline: Int64, image: CardEditingImage?,
-                                expected: NoteBackgroundCommand?, createPlaceholder: Bool) async throws -> NoteBackgroundCommand {
+                                expected: NoteBackgroundCommand?, createPlaceholder: Bool, admission: NoteBackgroundAdmission) async throws -> NoteBackgroundCommand {
         guard (0...NoteBackgroundCommand.maxRevision).contains(baseline), assetID.map(NotePrivacyWire.validID) ?? (baseline == 0) else {
             throw NoteBackgroundError.changed
         }
@@ -128,17 +219,10 @@ extension NoteLocalStore {
         var width: Int?, height: Int?
         let files = try backgroundBytes(localID)
         if let image {
-            guard image.isValidBackground,
-                  let source = CGImageSourceCreateWithData(image.data as CFData, nil),
-                  let type = CGImageSourceGetType(source) as String?,
-                  let ext = ["public.png":"png", "public.jpeg":"jpg", "com.compuserve.gif":"gif", "org.webmproject.webp":"webp"][type],
-                  let mime = UTType(type)?.preferredMIMEType,
-                  let info = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
-                  let w = info[kCGImagePropertyPixelWidth] as? Int, w > 0,
-                  let h = info[kCGImagePropertyPixelHeight] as? Int, h > 0 else { throw NoteBackgroundError.invalidImage }
-            // PhotosPicker can advertise a different image representation from its transferred bytes.
-            retained = try files.retain(data: image.data, filename: "card-background." + ext, mimeType: mime, uploadID: id.uuidString)
-            width = w; height = h
+            let descriptor = try Self.backgroundDescriptor(image)
+            retained = try files.retain(data: image.data, filename: descriptor.filename, mimeType: descriptor.mime, uploadID: id.uuidString)
+            width = descriptor.width
+            height = descriptor.height
         }
         let command = NoteBackgroundCommand(scope: scope, localID: localID, id: id, assetID: assetID, baseline: baseline,
             image: retained, width: width, height: height, logicalRef: nil, phase: .staged)
@@ -155,12 +239,14 @@ extension NoteLocalStore {
                     guard createPlaceholder, assetID == nil, expected == nil else { throw NoteBackgroundError.changed }
                     try Self.write(OfflineNote(localID: localID, body: .init(content: "")), scope: scope, in: context)
                 }
-                try Self.writeBackground(command, to: url)
-                if context.hasChanges {
-                    do { try context.save() }
-                    catch {
-                        try FileManager.default.removeItem(at: url)
-                        throw error
+                try admission.commit {
+                    try Self.writeBackground(command, to: url)
+                    if context.hasChanges {
+                        do { try context.save() }
+                        catch {
+                            try FileManager.default.removeItem(at: url)
+                            throw error
+                        }
                     }
                 }
             }
@@ -173,7 +259,7 @@ extension NoteLocalStore {
     }
 
     public func advanceBackground(_ command: NoteBackgroundCommand, assetID: String?, phase: NoteBackgroundCommand.Phase,
-                                  ref: String? = nil, bindBody: Bool = false) async throws -> NoteBackgroundCommand {
+                                  ref: String? = nil, bindBody: Bool = false, admission: NoteBackgroundAdmission) async throws -> NoteBackgroundCommand {
         guard ref == nil || command.logicalRef == nil || ref == command.logicalRef else { throw NoteBackgroundError.changed }
         let url = try backgroundFile(command.localID)
         let scope = scope
@@ -202,8 +288,9 @@ extension NoteLocalStore {
             }
             var frozen = update
             if bindBody, frozen.requiredBodyRevision == nil { frozen.requiredBodyRevision = note.bodyRevision }
-            try Self.writeBackground(frozen, to: url)
-            return frozen
+            let committed = frozen
+            try admission.commit { try Self.writeBackground(committed, to: url) }
+            return committed
         }
     }
 
@@ -223,7 +310,7 @@ extension NoteLocalStore {
     }
 
     public func retireBackground(_ command: NoteBackgroundCommand, current: NoteBackgroundObservation?,
-                                 cancel: Bool = false) async throws {
+                                 cancel: Bool = false, admission: NoteBackgroundAdmission) async throws {
         let url = try backgroundFile(command.localID)
         let files = try backgroundBytes(command.localID)
         let scope = scope
@@ -238,13 +325,11 @@ extension NoteLocalStore {
                 note.backgroundMediaRef = current.displayRef
                 note.generation += 1
                 try Self.write(note, scope: scope, in: context)
-                // A crash after the confirmed metadata write leaves the original command replayable.
-                try context.save()
             }
-            try FileManager.default.removeItem(at: url)
-            if cancel, note.serverAssetID == nil, note.bodyRevision == 1, note.body == OfflineNoteBody(content: ""),
-               note.attachments.isEmpty, note.pendingOperation == nil, note.remoteSnapshot == nil, note.syncIssue == nil {
-                context.delete(row)
+            try admission.commit {
+                // Commit the confirmed projection before retiring the original command.
+                if context.hasChanges { try context.save() }
+                try FileManager.default.removeItem(at: url)
             }
         }
         if let image = command.image {

@@ -1,5 +1,9 @@
 # Execution boundary history
 
+## 2026-11-23 — Background picker, Close and retired sessions
+
+A blank WK paragraph advanced the placeholder and created a private note on explicit Save. Cancelling after reopen could remove the row beneath the active editor. Real-editor regressions reproduce both paths. ImageIO returned decoded pixels for a CRC-corrupt PNG and unrotated pixel dimensions for a valid orientation-6 JPEG. The store now verifies the PNG checksums and freezes JPEG display dimensions before staging. A held body write and held private Core Data queue reproduced old-session delivery under a same-scope successor. A verified product-access denial followed by a new grant within the same login also let a queued response overwrite the original command. The editor now carries both login and grant identity through its waits and checks them at the durable effect. Its Close action flushes newer accepted input while a presentation response is held.
+
 ## 2026-11-23 — Durable note backgrounds
 
 The editor’s final body flush previously tried to apply a staged picture. The native adapter now persists each background choice under its local note identity, checks the original body acknowledgement and replays the conditional presentation operation across reopening. Hosted regressions cover lost upload, attachment and removal responses, stale observations, damaged retained bytes and a scope change while an upload is held. The staged picker UI case checks the server before and after explicit Save.

@@ -962,3 +962,133 @@ private extension CardEditorShellFixtureMode {
     }
 }
 #endif
+
+#if DEBUG
+/// Isolated real-editor fixture. Only transport and app storage are substituted.
+@MainActor
+struct BackgroundRecoveryFixture: View {
+    @StateObject private var owner = BackgroundRecoveryFixtureOwner()
+    @State private var showing = false
+    @State private var openingNew = true
+    @State private var proof = ""
+    @State private var dismissedProof = ""
+    let held: Bool
+
+    var body: some View {
+        VStack {
+            Text(dismissedProof).accessibilityIdentifier("fixture.background.proof")
+            Button("Open note") { dismissedProof = ""; showing = true }.accessibilityIdentifier("fixture.background.open")
+            Button("Release upload") { owner.release() }.accessibilityIdentifier("fixture.background.release")
+        }
+        .accessibilityHidden(showing)
+        .task {
+            do {
+                try await owner.prepare(held: held)
+                openingNew = !held
+                showing = true
+            } catch { proof = String(describing: error) }
+        }
+        .sheet(isPresented: $showing, onDismiss: {
+            openingNew = false
+            Task {
+                do { dismissedProof = try await owner.readback() }
+                catch { dismissedProof = String(describing: error) }
+            }
+        }) {
+            NewNoteView(cardId: openingNew ? "" : owner.identifier,
+                        creationID: owner.id, suppliedService: owner.editor(new: openingNew), localNotes: owner.notes)
+                .safeAreaInset(edge: .bottom) {
+                    VStack {
+                        Button("Inspect local note") {
+                            Task {
+                                do { proof = try await owner.readback() }
+                                catch { proof = String(describing: error) }
+                            }
+                        }.accessibilityIdentifier("fixture.background.inspect")
+                        Text(proof).accessibilityIdentifier("fixture.background.live-proof")
+                    }
+                }
+        }
+    }
+}
+
+@MainActor
+private final class BackgroundRecoveryFixtureOwner: ObservableObject, NoteBackgroundTransport {
+    let id = UUID().uuidString
+    let scope = NoteStoreScope(actorID: UUID().uuidString, environmentID: "offline-real-background-editor")
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    lazy var source = BackgroundRecoveryFixtureSync(scope: scope)
+    lazy var library = NoteLibraryStore(rootURL: root, service: { [source] _ in source })
+    lazy var notes = LocalNotesController(library: library, access: { [scope] in (scope, true) })
+    var identifier: String { "local-note:" + id }
+    private let generation = NoteBackgroundGeneration()
+    private var uploads = 0
+    private var writes = 0
+    private var waiting: CheckedContinuation<Void, Never>?
+    private var holdUpload = false
+
+    func editor(new: Bool) -> LocalCoreCardEditingService {
+        LocalCoreCardEditingService(identifier: new ? nil : identifier, creationID: id, scope: scope, library: library,
+                                    backgroundTransport: self, backgroundGeneration: generation, backgroundAccess: { [scope] in (scope, 0, true) })
+    }
+    func prepare(held: Bool) async throws {
+        holdUpload = held
+        await library.configure(scope: scope, cloudEnabled: true)
+        if held {
+            _ = try await library.save(identifier: nil, createID: id, body: .init(content: "Initial body", contentJSON: #"[{"id":"held-initial","type":"paragraph","props":{},"content":[{"type":"text","text":"Initial body","styles":{}}],"children":[]}]"#), scope: scope)
+            await library.synchronize(forceRetry: true)
+        }
+        let service = editor(new: !held)
+        _ = try await service.readBackground()
+        try await service.observeBackgroundChoice()
+        let data = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=")!
+        _ = try await service.stageBackground(.init(data: data, filename: "photo.png", mimeType: "image/png"))
+    }
+    func readback() async throws -> String {
+        await library.synchronize(forceRetry: true)
+        let target = try await library.backgroundTarget(identifier: identifier, createID: id, scope: scope)
+        let record = try await target.store.background(localID: id)
+        let count = await source.creates
+        return "creates=\(count) uploads=\(uploads) writes=\(writes) revision=\(target.note?.bodyRevision ?? 0) ack=\(target.note?.acknowledgedBodyRevision ?? 0) phase=\(record?.phase.rawValue ?? "none") public=\(target.note?.isPublic ?? false) body=\(target.note?.body.content ?? "")"
+    }
+    func release() { holdUpload = false; waiting?.resume(); waiting = nil }
+    func backgroundObservation(scope: NoteStoreScope, asset: String) async throws -> NoteBackgroundObservation {
+        .init(revision: 0, displayRef: nil)
+    }
+    func uploadBackground(_ command: NoteBackgroundCommand, bytes: Data) async throws -> String {
+        uploads += 1
+        if holdUpload { await withCheckedContinuation { waiting = $0 } }
+        return "med_1234567890abcdef"
+    }
+    func writeBackground(_ command: NoteBackgroundCommand) async throws -> NoteBackgroundObservation {
+        writes += 1
+        return .init(revision: command.baseline + 1, displayRef: "/fixture/background")
+    }
+}
+
+private actor BackgroundRecoveryFixtureSync: NoteSyncServing {
+    let scope: NoteStoreScope
+    private(set) var creates = 0
+    private var current: NoteRemoteSnapshot?
+    init(scope: NoteStoreScope) { self.scope = scope }
+    func manifest() async throws -> NoteSyncManifest {
+        .init(protocolVersion: 3, complete: true, notes: current.map { [.init(assetID: $0.assetID, syncToken: $0.syncToken, lifecycle: $0.lifecycle)] } ?? [])
+    }
+    func detail(assetID: String) async throws -> NoteRemoteSnapshot {
+        guard let current, current.assetID == assetID else { throw NoteSyncFailure.notFound }
+        return current
+    }
+    func send(_ op: NotePendingOperation) async throws -> NoteSyncReceipt {
+        if op.kind == .create { creates += 1 }
+        let data = try JSONSerialization.jsonObject(with: op.requestBody) as? [String: Any]
+        let token = UUID().uuidString
+        let asset = op.serverAssetID ?? "fixture-asset"
+        current = .init(assetID: asset, syncToken: token,
+                        body: .init(content: data?["content"] as? String ?? "", contentJSON: data?["content_json"] as? String),
+                        lifecycle: op.lifecycle, isPublic: data?["is_public"] as? Bool ?? false)
+        return .init(operationID: op.operationID, assetID: asset, syncToken: token, noteDocumentVersionID: token, lifecycle: op.lifecycle)
+    }
+    func upload(_ attachment: NoteLocalAttachment, data: Data) async throws -> NoteSyncUploadReceipt { throw NoteSyncFailure.notReady }
+    func downloadAttachment(assetID: String, mediaRef: String) async throws -> NoteSyncDownloadedAttachment { throw NoteSyncFailure.notReady }
+}
+#endif

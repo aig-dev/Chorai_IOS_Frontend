@@ -1,5 +1,5 @@
 import XCTest
-import CoreFlow
+@testable import CoreFlow
 import Combine
 import SwiftUI
 import WebKit
@@ -315,12 +315,14 @@ private final class NoteEditorTestService: CoreCardEditingServing {
     let scope: NoteStoreScope
     var shouldFail = false
     var beforeSave: (() async -> Void)?
+    var afterLocalSave: (() async -> Void)?
     var onSave: (() -> Void)?
     init(library: NoteLibraryStore, scope: NoteStoreScope) { self.library = library; self.scope = scope }
     private func persist(_ draft: CardEditingDraft, id: String?) async throws -> CardEditingSnapshot {
         await beforeSave?()
         if shouldFail { throw CardEditingError.transport(code: "injected_disk_failure") }
         let note = try await library.save(identifier: id, createID: "draft", body: OfflineNoteBody(draft: draft), scope: scope)
+        await afterLocalSave?()
         onSave?()
         return .init(id: NoteLibraryStore.identifier(note), title: draft.title, content: draft.content, contentJSON: draft.contentJSON, tags: draft.tags, isPublic: draft.isPublic, backgroundMediaRef: nil)
     }
@@ -344,11 +346,11 @@ private struct EditorOfflineTransport: NoteSyncServing {
 
 @MainActor
 final class LocalNoteBackgroundRecoveryTests: XCTestCase {
-    private let png = CardEditingImage(data: Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jAhkAAAAASUVORK5CYII=")!,
+    private let png = CardEditingImage(data: Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=")!,
         filename: "picker.png", mimeType: "image/png")
 
-    private func setupEditor() async throws -> BackgroundEditorFixture {
-        let fixture = BackgroundEditorFixture()
+    private func setupEditor(auth: AuthManager? = nil) async throws -> BackgroundEditorFixture {
+        let fixture = BackgroundEditorFixture(auth: auth)
         addTeardownBlock { @MainActor in
             await fixture.library.configure(scope: nil, cloudEnabled: false)
             try FileManager.default.removeItem(at: fixture.root)
@@ -366,7 +368,7 @@ final class LocalNoteBackgroundRecoveryTests: XCTestCase {
             _ = try await original.stageBackground(loss == .remove ? nil : png)
             let staged = try XCTUnwrap(original.pendingBackground)
             f.wire.loss = loss
-            do { _ = try await original.submitBackground(); XCTFail("Lost response was confirmed") }
+            do { _ = try await original.submitBackground(original.backgroundAdmission()); XCTFail("Lost response was confirmed") }
             catch NoteBackgroundError.unknown {}
             await f.library.configure(scope: nil, cloudEnabled: false)
             await f.library.configure(scope: f.scope, cloudEnabled: true)
@@ -374,7 +376,7 @@ final class LocalNoteBackgroundRecoveryTests: XCTestCase {
             XCTAssertEqual(reopened.pendingBackground?.id, staged.id)
             XCTAssertFalse(reopened.pendingBackground?.canCancel ?? true)
             if loss == .patch { XCTAssertEqual(reopened.pendingBackground?.logicalRef, f.wire.ref) }
-            let current = try await reopened.submitBackground()
+            let current = try await reopened.submitBackground(reopened.backgroundAdmission())
             XCTAssertEqual(current, f.wire.current.displayRef)
             XCTAssertNil(reopened.pendingBackground)
             XCTAssertEqual(f.wire.current.revision, 5)
@@ -396,11 +398,11 @@ final class LocalNoteBackgroundRecoveryTests: XCTestCase {
         let original = try XCTUnwrap(editor.pendingBackground)
         f.wire.current = .init(revision: 2, displayRef: nil)
         f.wire.failRead = true
-        do { _ = try await editor.submitBackground(); XCTFail("Stale accepted") }
+        do { _ = try await editor.submitBackground(editor.backgroundAdmission()); XCTFail("Stale accepted") }
         catch NoteBackgroundError.unknown {}
         XCTAssertEqual(editor.pendingBackground?.id, original.id)
         f.wire.failRead = false
-        do { _ = try await editor.submitBackground(); XCTFail("Stale accepted") }
+        do { _ = try await editor.submitBackground(editor.backgroundAdmission()); XCTFail("Stale accepted") }
         catch NoteBackgroundError.stale {}
         XCTAssertNil(editor.pendingBackground)
         XCTAssertEqual(f.wire.current.revision, 2)
@@ -408,7 +410,7 @@ final class LocalNoteBackgroundRecoveryTests: XCTestCase {
         _ = try await editor.stageBackground(png)
         XCTAssertNotEqual(editor.pendingBackground?.id, original.id)
         XCTAssertEqual(editor.pendingBackground?.baseline, 2)
-        _ = try await editor.submitBackground()
+        _ = try await editor.submitBackground(editor.backgroundAdmission())
         XCTAssertEqual(f.wire.current.revision, 3)
     }
 
@@ -418,7 +420,7 @@ final class LocalNoteBackgroundRecoveryTests: XCTestCase {
         try await editor.observeBackgroundChoice()
         _ = try await editor.stageBackground(png)
         f.wire.uploadError = .rejected
-        do { _ = try await editor.submitBackground(); XCTFail("Accepted rejected upload") }
+        do { _ = try await editor.submitBackground(editor.backgroundAdmission()); XCTFail("Accepted rejected upload") }
         catch NoteBackgroundError.rejected {}
         XCTAssertEqual(editor.pendingBackground?.phase, .rejected)
         try await editor.cancelBackground()
@@ -427,14 +429,14 @@ final class LocalNoteBackgroundRecoveryTests: XCTestCase {
         try await editor.observeBackgroundChoice()
         _ = try await editor.stageBackground(png)
         f.wire.writeError = .expired
-        do { _ = try await editor.submitBackground(); XCTFail("Expired ref acknowledged") }
+        do { _ = try await editor.submitBackground(editor.backgroundAdmission()); XCTFail("Expired ref acknowledged") }
         catch NoteBackgroundError.expired {}
         let frozen = try XCTUnwrap(editor.pendingBackground)
         XCTAssertEqual(frozen.phase, .refreshUpload)
         XCTAssertEqual(frozen.logicalRef, f.wire.ref)
         f.wire.uploadError = .unknown
         let reopened = try await f.openEditor()
-        do { _ = try await reopened.submitBackground(); XCTFail("Malformed refresh acknowledged") }
+        do { _ = try await reopened.submitBackground(reopened.backgroundAdmission()); XCTFail("Malformed refresh acknowledged") }
         catch NoteBackgroundError.unknown {}
         XCTAssertEqual(reopened.pendingBackground, frozen)
         do { try await reopened.cancelBackground(); XCTFail("Canceled after original ref") }
@@ -442,7 +444,7 @@ final class LocalNoteBackgroundRecoveryTests: XCTestCase {
         XCTAssertEqual(f.wire.uploads.last?.id, frozen.id)
         XCTAssertEqual(f.wire.bytes.last, png.data)
         f.wire.writeError = nil; f.wire.uploadError = nil
-        _ = try await reopened.submitBackground()
+        _ = try await reopened.submitBackground(reopened.backgroundAdmission())
         XCTAssertNil(reopened.pendingBackground)
     }
 
@@ -459,7 +461,7 @@ final class LocalNoteBackgroundRecoveryTests: XCTestCase {
         let files = try XCTUnwrap(FileManager.default.enumerator(at: f.root, includingPropertiesForKeys: nil)?.allObjects as? [URL])
         let path = try XCTUnwrap(files.first { $0.lastPathComponent == frozen.image?.relativePath })
         try Data("damaged".utf8).write(to: path)
-        do { _ = try await editor.submitBackground(); XCTFail("Sent unverified bytes") }
+        do { _ = try await editor.submitBackground(editor.backgroundAdmission()); XCTFail("Sent unverified bytes") }
         catch NoteLocalStoreError.attachmentMismatch {}
         XCTAssertTrue(f.wire.uploads.isEmpty)
         XCTAssertTrue(f.wire.writes.isEmpty)
@@ -467,6 +469,207 @@ final class LocalNoteBackgroundRecoveryTests: XCTestCase {
         do { _ = try await editor.readBackground(); XCTFail("Reported damaged bytes as settled") }
         catch NoteLocalStoreError.attachmentMismatch {}
         XCTAssertTrue(editor.backgroundUnreadable)
+    }
+
+    func testSaveCannotAdoptSameScopeSuccessorDuringBodyWrite() async throws {
+        let f = try await setupEditor()
+        let editor = try await f.openEditor()
+        try await editor.observeBackgroundChoice()
+        _ = try await editor.stageBackground(png)
+        try await assertBodyWaitRetainsOriginal(f, editor: editor) { f.session += 1 }
+    }
+
+    func testExplicitRetryCannotPatchAfterSameLoginAccessRevocationDuringBodyWrite() async throws {
+        prepareLinkAuth()
+        let auth = AuthManager.shared
+        let allowed = try XCTUnwrap(auth.accessState)
+        let f = try await setupEditor(auth: auth)
+        let editor = try await f.openEditor()
+        try await editor.observeBackgroundChoice()
+        _ = try await editor.stageBackground(png)
+        f.wire.loss = .patch
+        do { _ = try await editor.submitBackground(editor.backgroundAdmission()); XCTFail("Lost PATCH confirmed") }
+        catch NoteBackgroundError.unknown {}
+        let retry = try await f.openEditor()
+        let command = try XCTUnwrap(retry.pendingBackground)
+        XCTAssertEqual(command.phase, .attachedRef)
+        XCTAssertNotNil(command.requiredBodyRevision)
+        try await assertBodyWaitRetainsOriginal(f, editor: retry) {
+            auth.applyAccess(AccessState(mode: "private_beta", status: "required", scope: nil, reasonCode: "account_restricted"))
+            auth.applyAccess(allowed)
+        }
+        let restored = try await f.openEditor()
+        XCTAssertEqual(restored.pendingBackground, command)
+        _ = try await restored.submitBackground(restored.backgroundAdmission())
+        XCTAssertEqual(f.wire.uploads.count, 1)
+        XCTAssertEqual(f.wire.writes.map(\.id), [command.id, command.id])
+        XCTAssertNil(restored.pendingBackground)
+    }
+
+    private func assertBodyWaitRetainsOriginal(_ f: BackgroundEditorFixture, editor: LocalCoreCardEditingService,
+                                              changeAccess: () -> Void) async throws {
+        let original = try XCTUnwrap(editor.pendingBackground)
+        let uploads = f.wire.uploads.count
+        let writes = f.wire.writes.count
+        let body = NoteEditorTestService(library: f.library, scope: f.scope)
+        body.afterLocalSave = { await f.library.synchronize(forceRetry: true) }
+        let editing = CardEditingStore(cardID: "asset", draft: .init(title: nil, content: "Original body", tags: [], isPublic: true),
+                                      backgroundMediaRef: nil, links: [], service: body, preservesLocalDrafts: true)
+        _ = editing.applyBodyRevision(content: "Accepted during first session", contentJSON: nil, revision: 8)
+        let model = BlockNoteCardEditorModel(document: .init(contentJSON: nil, fallbackMarkdown: "Original body"))
+        let session = LocalNoteEditorPersistenceSession(scope: f.scope, editingStore: editing, bodyModel: model, isNew: false, initialIsPublic: true)
+        let gate = EditorExecutionGate()
+        let entered = expectation(description: "original Save is waiting for the independent body write")
+        body.beforeSave = { entered.fulfill(); await gate.wait() }
+        let admission = editor.backgroundAdmission()
+        let save = Task { try await session.saveBodyAndChosenBackground(service: editor, admission: admission, backgroundLoaded: true) {} }
+        await fulfillment(of: [entered], timeout: 5)
+        defer { gate.open() }
+        XCTAssertEqual(editor.pendingBackground?.phase, original.phase == .staged ? .submitted : original.phase)
+        changeAccess()
+        gate.open()
+        do { _ = try await save.value; XCTFail("Old Save adopted the successor session") }
+        catch NoteBackgroundError.unknown {} // The view reports this presentation as unconfirmed.
+        catch NoteLocalStoreError.invalidScope {}
+        XCTAssertEqual(editor.pendingBackground?.id, original.id)
+        XCTAssertEqual(f.wire.uploads.count, uploads)
+        XCTAssertEqual(f.wire.writes.count, writes)
+        let reopened = try await f.library.open(identifier: "asset", scope: f.scope)
+        XCTAssertEqual(reopened.body.content, "Accepted during first session")
+    }
+
+    func testFailureBeforeFreezeReportsOnlyAcknowledgedBodyRevision() async throws {
+        let f = try await setupEditor()
+        let editor = try await f.openEditor()
+        try await editor.observeBackgroundChoice()
+        _ = try await editor.stageBackground(png)
+        let other = try await f.openEditor()
+        try await other.cancelBackground() // The first editor still holds the old command in memory.
+        let editing = CardEditingStore(cardID: "asset", draft: .init(title: nil, content: "Original body", tags: [], isPublic: true),
+                                      backgroundMediaRef: nil, links: [], service: editor, preservesLocalDrafts: true)
+        _ = editing.applyBodyRevision(content: "Still waiting locally", contentJSON: nil, revision: 9)
+        let model = BlockNoteCardEditorModel(document: .init(contentJSON: nil, fallbackMarkdown: "Original body"))
+        let session = LocalNoteEditorPersistenceSession(scope: f.scope, editingStore: editing, bodyModel: model, isNew: false, initialIsPublic: true)
+        do {
+            _ = try await session.saveBodyAndChosenBackground(service: editor, admission: editor.backgroundAdmission(), backgroundLoaded: true) {}
+            XCTFail("Stale slot froze over a newer choice")
+        } catch let reason as NoteBackgroundError {
+            XCTAssertEqual(reason, .changed)
+            XCTAssertFalse(session.backgroundFailureMessage(reason, bodyRevision: 9).contains("Body saved"))
+        }
+        let beforeFlush = try await f.library.open(identifier: "asset", scope: f.scope)
+        XCTAssertEqual(beforeFlush.body.content, "Original body")
+        let flushed = await session.flushAcceptedEdits()
+        XCTAssertTrue(flushed)
+        let afterFlush = try await f.library.open(identifier: "asset", scope: f.scope)
+        XCTAssertEqual(afterFlush.body.content, "Still waiting locally")
+        XCTAssertTrue(session.backgroundFailureMessage(.changed, bodyRevision: 9).contains("Body saved"))
+        XCTAssertTrue(f.wire.uploads.isEmpty)
+        // Existing notes still accept a deliberately blank document.
+        _ = editing.applyBodyRevision(content: "", contentJSON: #"[{"type":"paragraph","content":[],"children":[]}]"#, revision: 10)
+        let savedEmpty = await session.flushAcceptedEdits()
+        XCTAssertTrue(savedEmpty)
+        let emptied = try await f.library.open(identifier: "asset", scope: f.scope)
+        XCTAssertEqual(emptied.body.content, "")
+        XCTAssertEqual(emptied.serverAssetID, beforeFlush.serverAssetID)
+    }
+
+    func testQueuedOriginalReceiptAndRetirementCannotMutateAfterSameScopeGenerationChanges() async throws {
+        for holdWrite in [false, true] {
+            let f = try await setupEditor()
+            try await assertQueuedReceiptRetainsOriginal(f, holdWrite: holdWrite) { f.session += 1 }
+        }
+    }
+
+    func testProductAccessRevocationFencesQueuedBackgroundReceipt() async throws {
+        prepareLinkAuth()
+        let auth = AuthManager.shared
+        let session = auth.sessionGeneration
+        let allowed = try XCTUnwrap(auth.accessState)
+        let required = AccessState(mode: "private_beta", status: "required", scope: nil, reasonCode: "account_restricted")
+        XCTAssertTrue(required.isValid)
+        for holdWrite in [false, true] {
+            let f = try await setupEditor(auth: auth)
+            try await assertQueuedReceiptRetainsOriginal(f, holdWrite: holdWrite) {
+                auth.applyAccess(required)
+                XCTAssertFalse(auth.canOpenLocalNotes)
+                XCTAssertFalse(auth.canEnterProduct)
+                // Readmit the same login before its already queued SQLite effect runs.
+                auth.applyAccess(allowed)
+                XCTAssertTrue(auth.canEnterProduct)
+                XCTAssertEqual(auth.sessionGeneration, session)
+            }
+            f.wire.onUpload = nil
+            f.wire.onWrite = nil
+            let reopened = try await f.openEditor()
+            let pending = try XCTUnwrap(reopened.pendingBackground)
+            let confirmed = try await reopened.submitBackground(reopened.backgroundAdmission())
+            XCTAssertNotNil(confirmed)
+            XCTAssertNil(reopened.pendingBackground)
+            XCTAssertEqual(f.wire.writes.last?.id, pending.id)
+        }
+    }
+
+    func testTemporarilyUnavailableAccessRetainsLocalChoiceWithoutNetwork() async throws {
+        prepareLinkAuth()
+        let auth = AuthManager.shared
+        let allowed = try XCTUnwrap(auth.accessState)
+        let f = try await setupEditor(auth: auth)
+        let editor = try await f.openEditor()
+        try await editor.observeBackgroundChoice()
+        let admission = editor.backgroundAdmission()
+        auth.applyAccess(AccessState(mode: "unavailable", status: "required", scope: nil, reasonCode: nil))
+        XCTAssertTrue(auth.canOpenLocalNotes)
+        XCTAssertFalse(auth.canEnterProduct)
+        _ = try await editor.stageBackground(png)
+        let original = try XCTUnwrap(editor.pendingBackground)
+        do { _ = try await editor.submitBackground(admission); XCTFail("Sent while product unavailable") }
+        catch NoteLocalStoreError.invalidScope {}
+        XCTAssertTrue(f.wire.uploads.isEmpty)
+        XCTAssertTrue(f.wire.writes.isEmpty)
+        auth.applyAccess(allowed)
+        let reopened = try await f.openEditor()
+        XCTAssertEqual(reopened.pendingBackground?.id, original.id)
+        _ = try await reopened.submitBackground(reopened.backgroundAdmission())
+        XCTAssertEqual(f.wire.writes.map(\.id), [original.id])
+    }
+
+    private func assertQueuedReceiptRetainsOriginal(_ f: BackgroundEditorFixture, holdWrite: Bool,
+                                                   changeAccess: () -> Void) async throws {
+        let editor = try await f.openEditor()
+        try await editor.observeBackgroundChoice()
+        _ = try await editor.stageBackground(png)
+        let original = try XCTUnwrap(editor.pendingBackground)
+        let target = try await f.library.backgroundTarget(identifier: "asset", createID: "unused", scope: f.scope)
+        let queued = expectation(description: "real private Core Data queue blocked before the next receipt effect")
+        let checked = expectation(description: "old session authorized the returned transport response")
+        let release = DispatchSemaphore(value: 0)
+        var blocker: Task<Void, Error>?
+        let beforeReply: () async -> Void = {
+            blocker = Task {
+                try await target.store.transaction { _ in
+                    queued.fulfill()
+                    guard release.wait(timeout: .now() + 10) == .success else { throw NoteBackgroundError.unknown }
+                }
+            }
+            await self.fulfillment(of: [queued], timeout: 4)
+            f.nextAccessCheck = { checked.fulfill() }
+        }
+        if holdWrite { f.wire.onWrite = beforeReply } else { f.wire.onUpload = beforeReply }
+        let delivery = Task { try await editor.submitBackground(editor.backgroundAdmission()) }
+        await fulfillment(of: [checked], timeout: 5)
+        changeAccess()
+        release.signal()
+        try await blocker?.value
+        do { _ = try await delivery.value; XCTFail("A queued old-session effect was accepted") }
+        catch NoteLocalStoreError.invalidScope {}
+        let after = try await target.store.background(localID: original.localID)
+        XCTAssertEqual(after?.id, original.id)
+        XCTAssertEqual(after?.phase, holdWrite ? .attachedRef : .submitted)
+        XCTAssertEqual(after?.logicalRef, holdWrite ? f.wire.ref : nil)
+        let row = try await target.store.note(localID: original.localID)
+        XCTAssertNil(row?.backgroundMediaRef)
+        XCTAssertEqual(f.wire.writes.count, holdWrite ? 1 : 0)
     }
 
     func testHeldUploadAllowsBodyCloseAndLateSessionCannotAttach() async throws {
@@ -478,7 +681,7 @@ final class LocalNoteBackgroundRecoveryTests: XCTestCase {
         let gate = EditorExecutionGate()
         let entered = expectation(description: "upload awaits response")
         f.wire.onUpload = { entered.fulfill(); await gate.wait() }
-        let pending = Task { try await editor.submitBackground() }
+        let pending = Task { try await editor.submitBackground(editor.backgroundAdmission()) }
         await fulfillment(of: [entered], timeout: 4)
 
         let note = try await editor.openExisting()
@@ -508,29 +711,53 @@ final class LocalNoteBackgroundRecoveryTests: XCTestCase {
 @MainActor
 private final class BackgroundEditorFixture {
     let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-    let scope = NoteStoreScope(actorID: UUID().uuidString, environmentID: "offline-background-tests")
+    let scope: NoteStoreScope
+    private let auth: AuthManager?
+    init(auth: AuthManager?) {
+        self.auth = auth
+        scope = auth?.currentNoteScope ?? NoteStoreScope(actorID: UUID().uuidString, environmentID: "offline-background-tests")
+    }
     let wire = BackgroundTestWire()
-    var session: UInt64 = 1
+    let generation = NoteBackgroundGeneration(1)
+    var session: UInt64 = 1 { didSet { generation.replace(with: session) } }
+    var nextAccessCheck: (() -> Void)?
     lazy var accessScope = scope
     lazy var library = NoteLibraryStore(rootURL: root, service: { BackgroundNoteSource(scope: $0) })
     func openEditor() async throws -> LocalCoreCardEditingService {
         let editor = LocalCoreCardEditingService(identifier: "asset", creationID: UUID().uuidString, scope: scope, library: library,
-            backgroundTransport: wire, backgroundAccess: { (self.accessScope, self.session, true) })
+            backgroundTransport: wire, backgroundGeneration: auth?.backgroundGeneration ?? generation, backgroundAccess: {
+                let check = self.nextAccessCheck
+                self.nextAccessCheck = nil
+                check?()
+                if let auth = self.auth {
+                    return (auth.canOpenLocalNotes ? auth.currentNoteScope : nil, auth.sessionGeneration, auth.canEnterProduct)
+                }
+                return (self.accessScope, self.session, true)
+            })
         _ = try await editor.openExisting()
         _ = try await editor.readBackground()
         return editor
     }
 }
 
-private struct BackgroundNoteSource: NoteSyncServing {
+private actor BackgroundNoteSource: NoteSyncServing {
     let scope: NoteStoreScope
+    private var token = "token"
+    private var body = OfflineNoteBody(content: "Original body")
+    init(scope: NoteStoreScope) { self.scope = scope }
     func manifest() async throws -> NoteSyncManifest {
-        .init(protocolVersion: 3, complete: true, notes: [.init(assetID: "asset", syncToken: "token", lifecycle: .active)])
+        .init(protocolVersion: 3, complete: true, notes: [.init(assetID: "asset", syncToken: token, lifecycle: .active)])
     }
     func detail(assetID: String) async throws -> NoteRemoteSnapshot {
-        .init(assetID: assetID, syncToken: "token", body: .init(content: "Original body"), lifecycle: .active, isPublic: true)
+        .init(assetID: assetID, syncToken: token, body: body, lifecycle: .active, isPublic: true)
     }
-    func send(_ operation: NotePendingOperation) async throws -> NoteSyncReceipt { throw NoteSyncFailure.notReady }
+    func send(_ operation: NotePendingOperation) async throws -> NoteSyncReceipt {
+        guard operation.serverAssetID == "asset", let payload = try JSONSerialization.jsonObject(with: operation.requestBody) as? [String: Any],
+              let content = payload["content"] as? String else { throw NoteSyncFailure.notReady }
+        body = .init(content: content, contentJSON: payload["content_json"] as? String)
+        token = UUID().uuidString
+        return .init(operationID: operation.operationID, assetID: "asset", syncToken: token, noteDocumentVersionID: token, lifecycle: .active)
+    }
     func upload(_ attachment: NoteLocalAttachment, data: Data) async throws -> NoteSyncUploadReceipt { throw NoteSyncFailure.notReady }
     func downloadAttachment(assetID: String, mediaRef: String) async throws -> NoteSyncDownloadedAttachment { throw NoteSyncFailure.notReady }
 }
@@ -548,6 +775,7 @@ private final class BackgroundTestWire: NoteBackgroundTransport {
     var uploadError: NoteBackgroundError?
     var writeError: NoteBackgroundError?
     var onUpload: (() async -> Void)?
+    var onWrite: (() async -> Void)?
     func backgroundObservation(scope: NoteStoreScope, asset: String) async throws -> NoteBackgroundObservation {
         if failRead { throw NoteBackgroundError.unknown }
         return current
@@ -561,6 +789,7 @@ private final class BackgroundTestWire: NoteBackgroundTransport {
     }
     func writeBackground(_ command: NoteBackgroundCommand) async throws -> NoteBackgroundObservation {
         writes.append(command)
+        await onWrite?()
         if let writeError { throw writeError }
         let desired = command.logicalRef.map { "/api/v1/media/" + $0 + "/content?asset_id=asset" }
         if current.revision == command.baseline {
