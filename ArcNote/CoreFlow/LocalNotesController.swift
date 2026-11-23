@@ -312,9 +312,10 @@ final class LocalCoreCardEditingService: CoreCardEditingServing {
     private var identifier: String?
     private var observedBodyRevision: Int64?
 
-    init(identifier: String?, creationID: String, scope: NoteStoreScope) {
+    init(identifier: String?, creationID: String, scope: NoteStoreScope,
+         library: NoteLibraryStore = LocalNotesController.shared.library) {
         self.identifier = identifier; self.creationID = creationID; self.scope = scope
-        library = LocalNotesController.shared.library
+        self.library = library
     }
 
     func create(draft: CardEditingDraft, createRequestID: String) async throws -> CardEditingSnapshot {

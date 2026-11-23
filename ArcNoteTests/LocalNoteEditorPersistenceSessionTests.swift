@@ -1,6 +1,8 @@
 import XCTest
 import CoreFlow
 import Combine
+import SwiftUI
+import WebKit
 @testable import BlockNoteEditor
 @testable import ArcNote
 
@@ -9,6 +11,105 @@ final class LocalNoteEditorPersistenceSessionTests: XCTestCase {
     private let alice = NoteStoreScope(actorID: "alice", environmentID: "local")
     private let bob = NoteStoreScope(actorID: "bob", environmentID: "local")
     private let carol = NoteStoreScope(actorID: "carol", environmentID: "local")
+
+    func testBundledEditorSelectionAndRichEditPersistInReopenedNote() async throws {
+        let id = UUID().uuidString
+        let scope = NoteStoreScope(actorID: id, environmentID: "offline-editor-test")
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(id)
+        let library = NoteLibraryStore(rootURL: root, service: { EditorOfflineTransport(scope: $0) })
+        let reopened = NoteLibraryStore(rootURL: root, service: { EditorOfflineTransport(scope: $0) })
+        addTeardownBlock { @MainActor in
+            await library.configure(scope: nil, cloudEnabled: false)
+            await reopened.configure(scope: nil, cloudEnabled: false)
+            try FileManager.default.removeItem(at: root)
+        }
+        await library.configure(scope: scope, cloudEnabled: false)
+        let service = LocalCoreCardEditingService(identifier: nil, creationID: id, scope: scope, library: library)
+        let store = CardEditingStore(cardID: nil, createRequestID: id,
+            draft: .init(title: nil, content: "", tags: [], isPublic: false),
+            backgroundMediaRef: nil, links: [], service: service, preservesLocalDrafts: true)
+        let model = BlockNoteCardEditorModel(document: .init(contentJSON: nil,
+            fallbackMarkdown: "Plain paragraph\n\n## **Rich heading**")) { revision in
+            _ = store.applyBodyRevision(content: revision.fallbackMarkdown,
+                contentJSON: revision.contentJSON, revision: revision.revision)
+        }
+        let host = UIHostingController(rootView: BlockNoteCardEditor(model: model))
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let previousWindow = scene.keyWindow
+        let window = UIWindow(windowScene: scene)
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true; window.rootViewController = nil; previousWindow?.makeKey() }
+
+        func observe(_ description: String, _ predicate: () -> Bool) async throws {
+            let deadline = ContinuousClock.now + .seconds(10)
+            while !predicate(), ContinuousClock.now < deadline {
+                try await Task.sleep(for: .milliseconds(20))
+            }
+            _ = try XCTUnwrap(predicate() ? true : nil, description)
+        }
+        try await observe("Generated editor ready") { model.availability == .ready }
+        func webView(in view: UIView) -> WKWebView? {
+            if let result = view as? WKWebView { return result }
+            for child in view.subviews {
+                if let result = webView(in: child) { return result }
+            }
+            return nil
+        }
+        let web = try XCTUnwrap(webView(in: host.view))
+        // Move only the DOM caret. The native model must learn both positions through the bridge.
+        func selectText(_ text: String) async throws {
+            let script = """
+                const editor = document.querySelector('.bn-editor[contenteditable=true]');
+                editor.focus();
+                const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT);
+                let node;
+                while ((node = walker.nextNode())) {
+                  if (node.textContent === text) {
+                    window.getSelection().setBaseAndExtent(node, 4, node, 4);
+                    return true;
+                  }
+                }
+                return false;
+                """
+            let matched = try await web.callAsyncJavaScript(script, arguments: ["text": text], in: nil, contentWorld: .page)
+            XCTAssertEqual(matched as? Bool, true)
+        }
+        try await selectText("Plain paragraph")
+        try await observe("Caret in plain paragraph") {
+            model.selectionState?.blockType == .paragraph && model.selectionState?.formats.bold == false
+        }
+        try await selectText("Rich heading")
+        try await observe("Caret moved to bold heading") {
+            model.selectionState?.blockType == .heading2 && model.selectionState?.formats.bold == true
+        }
+        let before = model.revision
+        let inserted = try await web.evaluateJavaScript("document.execCommand('insertText', false, ' saved')")
+        XCTAssertEqual(inserted as? Bool, true)
+        try await observe("Edited body accepted by native store") {
+            model.revision > before && store.bodyRevision == model.revision
+                && store.draft.content.contains("Rich saved heading")
+        }
+        let snapshot = try await model.requestSnapshot()
+        XCTAssertEqual(snapshot.revision, store.bodyRevision)
+        XCTAssertEqual(snapshot.contentJSON, store.draft.contentJSON)
+        XCTAssertEqual(snapshot.fallbackMarkdown, store.draft.content)
+        let saved = await store.save()
+        XCTAssertTrue(saved)
+        await library.configure(scope: nil, cloudEnabled: false)
+        await reopened.configure(scope: scope, cloudEnabled: false)
+        let note = try await reopened.open(identifier: "local-note:" + id, scope: scope)
+        XCTAssertEqual(note.body.content, snapshot.fallbackMarkdown)
+        XCTAssertEqual(note.body.contentJSON, snapshot.contentJSON)
+        let json = try XCTUnwrap(note.body.contentJSON)
+        let document = try JSONSerialization.jsonObject(with: Data(json.utf8))
+        let blocks = try XCTUnwrap((document as? [[String: Any]]) ?? (document as? [String: Any])?["blocks"] as? [[String: Any]])
+        let heading = try XCTUnwrap(blocks.first { $0["type"] as? String == "heading" })
+        XCTAssertEqual((heading["props"] as? [String: Any])?["level"] as? Int, 2)
+        let spans = try XCTUnwrap(heading["content"] as? [[String: Any]])
+        XCTAssertEqual(spans.compactMap { $0["text"] as? String }.joined(), "Rich saved heading")
+        XCTAssertTrue(spans.allSatisfy { ($0["styles"] as? [String: Any])?["bold"] as? Bool == true })
+    }
 
     func testDisappearBeforeAppliedEventSavesFinalRevision() async throws {
         let fixture = try await NoteEditorFixture(scope: alice)
