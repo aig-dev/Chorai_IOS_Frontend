@@ -17,6 +17,7 @@ public final class NoteLibraryStore: ObservableObject {
     @Published public private(set) var status: NoteSyncStatus = .paused
     @Published public private(set) var localError: String?
     public private(set) var cloudEnabled = false
+    private var backgroundDeliveries: [String: UUID] = [:]
     private let rootURL: URL
     private let serviceFactory: @Sendable (NoteStoreScope) throws -> any NoteSyncServing
     private var store: NoteLocalStore?
@@ -65,6 +66,7 @@ public final class NoteLibraryStore: ObservableObject {
             if store != nil { await configure(scope: nextScope, cloudEnabled: nextCloud) }
             return
         }
+        backgroundDeliveries.removeAll()
         generation &+= 1
         mediaWorker = NoteMediaReferenceWorker()
         committedDownloads.suspend(scopeChanged: true)
@@ -118,6 +120,33 @@ public final class NoteLibraryStore: ObservableObject {
     /// Persist the known cloud ID before the Merge receipt can be acknowledged.
     public func queueCommittedNote(assetID: String, scope: NoteStoreScope) throws {
         try committedDownloads.enqueue(assetID: assetID, scope: scope, in: self)
+    }
+
+    public func backgroundTarget(identifier: String?, createID: String, scope: NoteStoreScope) async throws
+        -> (store: NoteLocalStore, localID: String, note: OfflineNote?) {
+        let (store, epoch) = try await context(scope)
+        let id = try await localID(for: identifier, createID: createID, store: store)
+        let note = try await store.note(localID: id)
+        try check(epoch)
+        return (store, id, note)
+    }
+
+    public func publishBackgroundChange(localID: String, scope: NoteStoreScope) async throws {
+        let (store, epoch) = try await context(scope)
+        let note = try await store.note(localID: localID)
+        try check(epoch)
+        if let note { publish([note]) } else { publish([], removed: [localID]) }
+    }
+
+    public func beginBackgroundDelivery(localID: String, scope: NoteStoreScope) throws -> UUID {
+        guard self.scope == scope, backgroundDeliveries[localID] == nil else { throw NoteBackgroundError.unresolved }
+        let id = UUID()
+        backgroundDeliveries[localID] = id
+        return id
+    }
+
+    public func endBackgroundDelivery(localID: String, id: UUID) {
+        if backgroundDeliveries[localID] == id { backgroundDeliveries[localID] = nil }
     }
 
     public func synchronize(forceRetry: Bool = false) async {

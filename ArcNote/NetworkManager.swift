@@ -1016,30 +1016,6 @@ extension NetworkManager {
         }
     }
 
-    func updateCardBackground(
-        cardId: String,
-        mediaRef: String
-    ) -> AnyPublisher<CardResponse, NetworkError> {
-        request(
-            endpoint: "/api/cards/\(cardId)/background",
-            method: .patch,
-            parameters: ["background_media_ref": mediaRef],
-            responseType: CardResponse.self,
-            presentsError: false
-        )
-    }
-
-    func clearCardBackground(
-        cardId: String
-    ) -> AnyPublisher<CardResponse, NetworkError> {
-        request(
-            endpoint: "/api/cards/\(cardId)/background",
-            method: .delete,
-            responseType: CardResponse.self,
-            presentsError: false
-        )
-    }
-
     // MARK: 获取对话列表
     func getConversations() -> AnyPublisher<ConversationsResponse, NetworkError> {
         return self.request(
@@ -3196,7 +3172,7 @@ extension NetworkManager {
 
     @MainActor
     private func scopedNoteResponse(scope: NoteStoreScope, path: String, method: NoteSyncHTTPMethod,
-                                    body: Data?, operationID: String?) async throws -> AFDataResponse<Data> {
+                                    body: Data?, operationID: String?, backgroundRevision: Int64? = nil) async throws -> AFDataResponse<Data> {
         let (token, generation) = try noteSyncCredentials(scope)
         guard path.hasPrefix("/api/"), let url = URL(string: baseURL + path) else { throw NoteSyncFailure.invalidResponse }
         var request = URLRequest(url: url)
@@ -3206,6 +3182,7 @@ extension NetworkManager {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
         if let operationID { request.setValue(operationID, forHTTPHeaderField: "Idempotency-Key") }
+        if let backgroundRevision { request.setValue("\"" + String(backgroundRevision) + "\"", forHTTPHeaderField: "If-Match") }
         let response = await session.request(request).redirect(using: Redirector(behavior: .doNotFollow))
             .serializingData().response
         try checkNoteSyncSession(scope, token: token, generation: generation)
@@ -3214,6 +3191,12 @@ extension NetworkManager {
 
     @MainActor
     func noteSyncUpload(scope: NoteStoreScope, attachment: NoteLocalAttachment, data: Data) async throws -> Data {
+        let response = try await scopedMediaUpload(scope: scope, attachment: attachment, data: data, kind: "inline")
+        return try noteSyncData(response)
+    }
+
+    @MainActor
+    private func scopedMediaUpload(scope: NoteStoreScope, attachment: NoteLocalAttachment, data: Data, kind: String) async throws -> AFDataResponse<Data> {
         let (token, generation) = try noteSyncCredentials(scope)
         guard !data.isEmpty, data.count == attachment.byteCount, data.count <= 25 * 1024 * 1024 else {
             throw NoteSyncFailure.validation
@@ -3222,11 +3205,11 @@ extension NetworkManager {
             HTTPHeader(name: "Idempotency-Key", value: attachment.uploadID)]
         let response = await session.upload(multipartFormData: { form in
             form.append(data, withName: "file", fileName: attachment.originalFilename, mimeType: attachment.mimeType)
-            form.append(Data("inline".utf8), withName: "kind")
-        }, to: baseURL + "/api/v1/media/upload", method: .post, headers: headers)
+            form.append(Data(kind.utf8), withName: "kind")
+        }, to: baseURL + APIEnvironment.noteMediaUploadPath, method: .post, headers: headers)
             .redirect(using: Redirector(behavior: .doNotFollow)).serializingData().response
         try checkNoteSyncSession(scope, token: token, generation: generation)
-        return try noteSyncData(response)
+        return response
     }
 
     @MainActor
@@ -3271,5 +3254,49 @@ extension NetworkManager {
         }
         guard response.error == nil, let data = response.value else { throw NoteSyncFailure.transient(retryAfter: nil) }
         return data
+    }
+}
+
+@MainActor
+protocol NoteBackgroundTransport {
+    func backgroundObservation(scope: NoteStoreScope, asset: String) async throws -> NoteBackgroundObservation
+    func uploadBackground(_ command: NoteBackgroundCommand, bytes: Data) async throws -> String
+    func writeBackground(_ command: NoteBackgroundCommand) async throws -> NoteBackgroundObservation
+}
+
+extension NetworkManager: NoteBackgroundTransport {
+    @MainActor
+    func backgroundObservation(scope: NoteStoreScope, asset: String) async throws -> NoteBackgroundObservation {
+        guard NotePrivacyWire.validID(asset) else { throw NoteBackgroundError.changed }
+        let r = try await scopedNoteResponse(scope: scope, path: APIEnvironment.noteCardPath(asset), method: .get, body: nil, operationID: nil)
+        guard r.error == nil, let status = r.response?.statusCode, let data = r.data else { throw NoteBackgroundError.unknown }
+        return try await Task.detached { try NoteBackgroundWire.observation(status: status, data: data, scope: scope, asset: asset, contentPath: APIEnvironment.mediaContentPath) }.value
+    }
+
+    @MainActor
+    func uploadBackground(_ command: NoteBackgroundCommand, bytes: Data) async throws -> String {
+        guard let image = command.image else { throw NoteBackgroundError.changed }
+        let r = try await scopedMediaUpload(scope: command.scope, attachment: image, data: bytes, kind: "background")
+        guard r.error == nil, let status = r.response?.statusCode, let data = r.data else { throw NoteBackgroundError.unknown }
+        return try NoteBackgroundWire.upload(status: status, data: data, command: command, contentPath: APIEnvironment.mediaContentPath)
+    }
+
+    @MainActor
+    func writeBackground(_ command: NoteBackgroundCommand) async throws -> NoteBackgroundObservation {
+        guard let asset = command.assetID, NotePrivacyWire.validID(asset), (command.logicalRef != nil) == (command.image != nil) else {
+            throw NoteBackgroundError.changed
+        }
+        let body = try command.logicalRef.map { try JSONEncoder().encode(["background_media_ref": $0]) }
+        let r = try await scopedNoteResponse(scope: command.scope, path: APIEnvironment.noteBackgroundPath(asset),
+            method: body == nil ? .delete : .patch, body: body, operationID: nil, backgroundRevision: command.baseline)
+        guard r.error == nil, let status = r.response?.statusCode, let data = r.data else { throw NoteBackgroundError.unknown }
+        let current = try await Task.detached {
+            try NoteBackgroundWire.observation(status: status, data: data, scope: command.scope, asset: asset, contentPath: APIEnvironment.mediaContentPath)
+        }.value
+        guard current.revision == command.baseline + 1,
+              current.displayRef == command.logicalRef.map({ APIEnvironment.mediaContentPath($0) + "?asset_id=" + asset }) else {
+            throw NoteBackgroundError.unknown
+        }
+        return current
     }
 }

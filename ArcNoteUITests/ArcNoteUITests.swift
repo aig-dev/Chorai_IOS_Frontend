@@ -8857,12 +8857,18 @@ final class ArcNoteUITests: XCTestCase {
 
         proxy.setOffline(true)
         tap("note.create")
+        revealEditorBackgroundButton().tap()
+        try selectFirstPhotoFromImagePicker()
+        XCTAssertTrue(app.staticTexts["Background selected · Save to apply"].waitForExistence(timeout: 15))
+        XCTAssertFalse(proxy.mutations.contains { $0.path == "/api/cards" || $0.path == "/api/v1/media/upload" || $0.path.hasSuffix("/background") })
+        revealEditorBackgroundButton().tap()
+        waitForButton("cardEditorRestoreBackgroundButton").tap()
         pasteFixtureMarker(marker)
         let local = waitFor("note.created-card-id", timeout: 25).label
         XCTAssertTrue(local.hasPrefix("local-note:"))
         XCTAssertFalse(waitForButton("cardEditorPrivacyButton").isEnabled)
         openEditorCardActions()
-        XCTAssertFalse(waitForEditorCardAction("cardEditorBackgroundButton", requireEnabled: false).isEnabled)
+        XCTAssertTrue(waitForEditorCardAction("cardEditorBackgroundButton").isEnabled)
         dismissEditorCardActions()
         closeNewNoteEditor()
         app.terminate()
@@ -8885,14 +8891,48 @@ final class ArcNoteUITests: XCTestCase {
         audienceAction("Make Public").tap()
         waitForSmokeCardState(id: asset, token: session.token) { $0.isPublic }
         waitForLabel("cardEditorPrivacyButton", expected: "Make Private")
+        let prior = try fetchSmokeCard(id: asset, token: session.token)
+        let priorRevision = try XCTUnwrap(prior.backgroundRevision)
         revealEditorBackgroundButton().tap()
         try selectFirstPhotoFromImagePicker()
-        waitForSmokeCardState(id: asset, token: session.token) { $0.isPublic && !($0.backgroundMediaRef ?? "").isEmpty }
+        XCTAssertTrue(app.staticTexts["Background selected · Save to apply"].waitForExistence(timeout: 15))
+        revealEditorBackgroundButton().tap()
+        waitForButton("cardEditorRestoreBackgroundButton").tap()
+        waitForLabel("cardEditorLeadingAction", expected: "Close note")
+        XCTAssertEqual(try fetchSmokeCard(id: asset, token: session.token).backgroundRevision, priorRevision)
+        revealEditorBackgroundButton().tap()
+        try selectFirstPhotoFromImagePicker()
+        XCTAssertTrue(app.staticTexts["Background selected · Save to apply"].waitForExistence(timeout: 15))
+        revealEditorBackgroundButton().tap()
+        waitForButton("cardEditorCloseWithPendingBackground").tap()
+        tap("card.home." + local)
+        XCTAssertTrue(app.staticTexts["Background selected · Save to apply"].waitForExistence(timeout: 15))
+        let updated = marker + " edited"
+        replaceCardEditorBody(with: updated)
+        dismissCardEditorKeyboardWithVerticalDrag()
+        waitForSmokeCardState(id: asset, token: session.token) { $0.content == updated }
+        let afterFlush = try fetchSmokeCard(id: asset, token: session.token)
+        XCTAssertEqual(afterFlush.backgroundMediaRef, prior.backgroundMediaRef)
+        XCTAssertEqual(afterFlush.backgroundRevision, priorRevision)
+        XCTAssertFalse(proxy.mutations.contains { $0.path == "/api/v1/media/upload" || $0.path.hasSuffix("/background") })
+        saveCardEditor()
+        waitForSmokeCardState(id: asset, token: session.token) {
+            $0.isPublic && $0.backgroundRevision == priorRevision + 1 && !($0.backgroundMediaRef ?? "").isEmpty
+        }
+        let upload = try XCTUnwrap(proxy.mutations.first { $0.path == "/api/v1/media/upload" })
+        XCTAssertTrue(upload.backgroundUpload)
+        XCTAssertEqual(upload.status, 201)
+        XCTAssertFalse((upload.key ?? "").isEmpty)
+        let attachment = try XCTUnwrap(proxy.mutations.first { $0.method == "PATCH" && $0.path.hasSuffix("/background") })
+        XCTAssertEqual(attachment.ifMatch, "\"" + String(priorRevision) + "\"")
+        let ref = try XCTUnwrap(attachment.backgroundRef)
+        XCTAssertNotNil(ref.range(of: "^med_[a-f0-9]{16}$", options: .regularExpression))
         closeNewNoteEditor()
         tap("card.home." + local)
         waitForLabel("cardEditorPrivacyButton", expected: "Make Private")
         let saved = try fetchSmokeCard(id: asset, token: session.token)
-        XCTAssertEqual(saved.content, marker)
+        XCTAssertEqual(saved.content, updated)
+        XCTAssertEqual(saved.backgroundMediaRef, "/api/v1/media/" + ref + "/content?asset_id=" + asset)
         XCTAssertFalse((saved.backgroundMediaRef ?? "").isEmpty)
         XCTAssertEqual(try fetchSmokeCards(search: marker, token: session.token).filter { $0.content.contains(marker) }.map(\.id), [asset])
         let creates = proxy.mutations.filter { $0.method == "POST" && $0.path == "/api/cards" && $0.status == 201 }
@@ -12140,6 +12180,7 @@ final class ArcNoteUITests: XCTestCase {
             let isPinned: Bool
             let tags: [String]
 			let backgroundMediaRef: String?
+            let backgroundRevision: Int64?
 			let rate: Int
 			let updatedAt: String
 
@@ -12150,6 +12191,7 @@ final class ArcNoteUITests: XCTestCase {
                 case isPublic = "is_public"
                 case isPinned = "is_pinned"
 				case backgroundMediaRef = "background_media_ref"
+                case backgroundRevision = "background_revision"
 				case updatedAt = "updated_at"
 			}
         }

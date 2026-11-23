@@ -185,6 +185,8 @@ private struct CardEditorSessionView: View {
     @ObservedObject private var editingStore: CardEditingStore
     @ObservedObject private var linkPopupManager = LinkPopupManager.shared
     @StateObject private var bodyModel: BlockNoteCardEditorModel
+    @ObservedObject private var localEditingService: LocalCoreCardEditingService
+    @State private var backgroundLoaded = false
     @StateObject private var persistenceSession: LocalNoteEditorPersistenceSession
     @StateObject private var nativeActionRouter: CardEditorNativeActionRouter
 
@@ -231,6 +233,7 @@ private struct CardEditorSessionView: View {
         self.seed = seed
         self.onCreated = onCreated
         self.onFinishCreation = onFinishCreation
+        _localEditingService = ObservedObject(wrappedValue: localEditingService)
         _editingStore = ObservedObject(wrappedValue: editingStore)
         _didNotifyCreation = State(initialValue: !seed.isNew)
         _isPinned = State(initialValue: seed.isPinned)
@@ -258,7 +261,8 @@ private struct CardEditorSessionView: View {
         _bodyModel = StateObject(wrappedValue: model)
         _persistenceSession = StateObject(wrappedValue: LocalNoteEditorPersistenceSession(
             scope: localEditingService.scope, editingStore: editingStore,
-            bodyModel: model, isNew: seed.isNew, initialIsPublic: seed.initialIsPublic
+            bodyModel: model, isNew: seed.isNew, initialIsPublic: seed.initialIsPublic,
+            isUnpublishedEmptyPlaceholder: { localEditingService.isUnpublishedEmptyPlaceholder }
         ))
     }
 
@@ -367,7 +371,8 @@ private struct CardEditorSessionView: View {
         .photosPicker(
             isPresented: $showBackgroundPicker,
             selection: $selectedBackgroundPhoto,
-            matching: .images
+            matching: .images,
+            preferredItemEncoding: .compatible
         )
         .photosPicker(
             isPresented: $showInlineImagePhotoPicker,
@@ -421,6 +426,7 @@ private struct CardEditorSessionView: View {
             persistenceSession.setVisible(true)
             localNotes.registerEditor(persistenceSession)
         }
+        .task { await reloadBackground() }
         .onChange(of: editingStore.draft) { _ in scheduleLocalSave() }
         .onChange(of: persistenceSession.hasSaveFailure) { failed in
             if failed {
@@ -509,7 +515,16 @@ private struct CardEditorSessionView: View {
     }
 
     private var localSaveStatus: String? {
-        if editingStore.isDirty { return "Saving on this device…" }
+        if localEditingService.backgroundUnreadable { return "Background unconfirmed · Open Background to retry" }
+        if !backgroundLoaded { return "Checking background…" }
+        if let command = localEditingService.pendingBackground {
+            switch command.phase {
+            case .staged: return "Background selected · Save to apply"
+            case .rejected: return "Image rejected · Cancel the background to choose again"
+            default: return "Background unconfirmed · Retry Save"
+            }
+        }
+        if editingStore.isDraftDirty && !isUntouchedNewDraft { return "Saving on this device…" }
         guard let note = currentLocalNote else { return nil }
         if note.remoteSnapshot != nil || note.syncIssue == "conflict" { return "Saved on this device · Cloud version changed" }
         if note.syncIssue == "remote_unavailable" { return "Saved on this device · Cloud version unavailable" }
@@ -525,7 +540,7 @@ private struct CardEditorSessionView: View {
             do { try await Task.sleep(nanoseconds: 300_000_000) } catch { autosaveTask = nil; return }
             await persistLocalDraft()
             autosaveTask = nil
-            if editingStore.isDirty, !hasSaveFailure { scheduleLocalSave() }
+            if editingStore.isDraftDirty, !isUntouchedNewDraft, !hasSaveFailure { scheduleLocalSave() }
         }
     }
 
@@ -580,17 +595,14 @@ private struct CardEditorSessionView: View {
     }
 
     private var isUntouchedNewDraft: Bool {
-        editingStore.cardID == nil
-            && seed.isNew
+        ((editingStore.cardID == nil && seed.isNew) || localEditingService.isUnpublishedEmptyPlaceholder)
             && !editingStore.draft.hasMeaningfulContent
             && editingStore.draft.tags.isEmpty
             && editingStore.draft.isPublic == seed.initialIsPublic
-            && editingStore.backgroundIntent == .unchanged
-            && editingStore.backgroundMediaRef == nil
     }
 
     private var hasPendingCommit: Bool {
-        if hasPendingInlineTagCandidate { return true }
+        if localEditingService.pendingBackground != nil || hasPendingInlineTagCandidate { return true }
         if editingStore.cardID == nil, isUntouchedNewDraft { return false }
         if hasUncommittedEditorRevision { return true }
         if editingStore.cardID != nil { return editingStore.isDirty }
@@ -676,6 +688,9 @@ private struct CardEditorSessionView: View {
     }
 
     private var backgroundActionContext: CardEditorBackgroundActionContext {
+        if let command = localEditingService.pendingBackground {
+            return .pending(canCancel: command.canCancel, canReplace: command.phase == .staged)
+        }
         switch editingStore.backgroundIntent {
         case .unchanged:
             return .visible(canRestoreOriginal: false)
@@ -786,6 +801,23 @@ private struct CardEditorSessionView: View {
         }
     }
 
+    private func saveBodyAndChosenBackground() async throws -> Bool {
+        if editingStore.draft.validationError == nil { try await localEditingService.freezeBackgroundForSave() }
+        guard await editingStore.ensurePersisted() != nil else { return false }
+        guard backgroundLoaded, !localEditingService.backgroundUnreadable else { throw NoteBackgroundError.unreadable }
+        if localEditingService.pendingBackground != nil {
+            do {
+                let ref = try await localEditingService.submitBackground()
+                editingStore.restoreStoredBackground(.unchanged, confirmed: ref)
+            } catch NoteBackgroundError.stale {
+                editingStore.restoreStoredBackground(.unchanged, confirmed: localEditingService.confirmedBackground)
+                throw NoteBackgroundError.stale
+            } catch let error as NoteBackgroundError { throw error }
+            catch { throw NoteBackgroundError.unknown }
+        }
+        return !editingStore.isDirty
+    }
+
     private func saveCurrentSnapshot() {
         guard !isSaving else { return }
         completeTagEntry()
@@ -812,7 +844,7 @@ private struct CardEditorSessionView: View {
                 } else if !commitBaselineMatchesCurrent(baseline) {
                     outcome = .pendingNewerChanges
                 } else {
-                    let didSave = await editingStore.save()
+                    let didSave = try await saveBodyAndChosenBackground()
                     if !didSave, editingStoreHasFailure {
                         failureBaseline = baseline
                     }
@@ -844,6 +876,15 @@ private struct CardEditorSessionView: View {
                     failedCommitBaseline = failureBaseline ?? baseline
                     hasSaveFailure = true
                 }
+            } catch let error as NoteBackgroundError {
+                switch error {
+                case .stale: saveMessage = "Background changed elsewhere. Choose again."
+                case .rejected: saveMessage = "Image rejected. Cancel the background to choose again."
+                case .unreadable: saveMessage = "Body saved · Background unconfirmed"
+                default: saveMessage = "Body saved · Retry the pending background."
+                }
+                hasSaveFailure = error != .stale
+                failedCommitBaseline = error == .stale ? nil : currentCommitBaseline
             } catch CardEditorSessionError.staleSnapshot {
                 saveMessage = nil
                 failedCommitBaseline = priorFailedBaseline
@@ -897,7 +938,7 @@ private struct CardEditorSessionView: View {
                 let snapshot = try await applyCurrentSnapshot()
                 // Back can receive a newer WebKit revision than the last autosave.
                 guard await persistLocalDraft() else { return }
-                if isUntouchedNewSnapshot(snapshot) || snapshotMatchesCommittedBaseline(snapshot) {
+                if isUntouchedNewSnapshot(snapshot) || snapshotMatchesCommittedBaseline(snapshot, includingBackground: false) {
                     resolveSaveFailure()
                     if !finishCreationIfCurrent(snapshot, generation: finishGeneration) { dismiss() }
                 }
@@ -925,14 +966,16 @@ private struct CardEditorSessionView: View {
     }
 
     private func snapshotMatchesCommittedBaseline(
-        _ snapshot: BlockNoteSnapshot
+        _ snapshot: BlockNoteSnapshot, includingBackground: Bool = true
     ) -> Bool {
         guard editingStore.cardID != nil,
               let committedDraft = editingStore.lastCommittedDraft,
               let committedRevision = editingStore.lastCommittedBodyRevision else {
             return false
         }
-        return !editingStore.isDirty
+        let backgroundSettled = backgroundLoaded && !localEditingService.backgroundUnreadable
+            && localEditingService.pendingBackground == nil && !editingStore.isDirty
+        return !editingStore.isDraftDirty && (!includingBackground || backgroundSettled)
             && editingStore.draft.isCommitEquivalent(to: committedDraft)
             && committedRevision == snapshot.revision
             && editingStore.bodyRevision == snapshot.revision
@@ -988,7 +1031,7 @@ private struct CardEditorSessionView: View {
             }
         }
         guard editingStore.failureStage != nil else { return true }
-        let didRetry = await editingStore.retry()
+        let didRetry = await editingStore.retry(includingBackground: false)
         if didRetry {
             return true
         }
@@ -1058,36 +1101,65 @@ private struct CardEditorSessionView: View {
     }
 
     private func presentBackgroundActions() {
-        guard !isBusy, cloudCardID != nil else { return }
+        guard !isBusy else { return }
         completeTagEntry()
         bodyModel.dismissKeyboard()
-        saveMessage = nil
-        hideSaveFailure()
-        if editingStore.backgroundIntent == .unchanged,
-           editingStore.backgroundMediaRef == nil {
-            showBackgroundPicker = true
-        } else {
-            showBackgroundActions = true
+        Task {
+            if !backgroundLoaded || localEditingService.backgroundUnreadable { await reloadBackground() }
+            guard backgroundLoaded, !localEditingService.backgroundUnreadable else { return }
+            if localEditingService.pendingBackground != nil {
+                showBackgroundActions = true
+                return
+            }
+            do {
+                try await localEditingService.observeBackgroundChoice()
+                guard persistenceSession.isVisible else { return }
+                editingStore.restoreStoredBackground(.unchanged, confirmed: localEditingService.confirmedBackground)
+                if localEditingService.confirmedBackground == nil { showBackgroundPicker = true }
+                else { showBackgroundActions = true }
+            } catch { saveMessage = "Couldn’t check the current background. Try again." }
+        }
+    }
+
+    private func reloadBackground() async {
+        do {
+            let intent = try await localEditingService.readBackground()
+            guard !Task.isCancelled else { return }
+            editingStore.restoreStoredBackground(intent, confirmed: localEditingService.confirmedBackground)
+            backgroundLoaded = true
+        } catch {
+            if !Task.isCancelled { backgroundLoaded = false; saveMessage = "Couldn’t read the pending background. Open Background to retry." }
         }
     }
 
     private func handleBackgroundAction(_ action: CardEditorBackgroundAction) {
-        switch action {
-        case .choosePhoto:
-            saveMessage = nil
-            hideSaveFailure()
-            showBackgroundPicker = true
-        case .remove:
-            editingStore.stageBackgroundRemoval()
-            saveMessage = nil
-            hideSaveFailure()
-        case .restore:
-            guard editingStore.restoreBackground() else {
-                saveMessage = "Retry the pending background change before restoring."
-                return
-            }
-            saveMessage = nil
-            hideSaveFailure()
+        Task {
+            do {
+                switch action {
+                case .choosePhoto:
+                    try await localEditingService.observeBackgroundChoice()
+                    guard persistenceSession.isVisible else { return }
+                    showBackgroundPicker = true
+                case .remove:
+                    try await localEditingService.observeBackgroundChoice()
+                    if localEditingService.confirmedBackground == nil {
+                        try await localEditingService.cancelBackground()
+                        editingStore.restoreStoredBackground(.unchanged, confirmed: nil)
+                    } else {
+                        let intent = try await localEditingService.stageBackground(nil)
+                        editingStore.restoreStoredBackground(intent, confirmed: localEditingService.confirmedBackground)
+                    }
+                case .restore:
+                    try await localEditingService.cancelBackground()
+                    editingStore.restoreStoredBackground(.unchanged, confirmed: localEditingService.confirmedBackground)
+                case .close:
+                    if bodyModel.canSave { _ = try await applyCurrentSnapshot() }
+                    guard await persistLocalDraft() else { return }
+                    dismiss()
+                }
+                saveMessage = nil
+                hideSaveFailure()
+            } catch { saveMessage = "Couldn’t change the pending background. Retry when ready." }
         }
     }
 
@@ -1213,6 +1285,7 @@ private struct CardEditorSessionView: View {
         saveMessage = nil
         hideSaveFailure()
         isLoadingBackgroundPhoto = true
+        let generation = authManager.sessionGeneration
         Task {
             defer {
                 selectedBackgroundPhoto = nil
@@ -1223,11 +1296,10 @@ private struct CardEditorSessionView: View {
                     from: item,
                     stem: "card-background"
                 )
-                guard editingStore.stageBackground(image) else {
-                    saveMessage = "That background image can't be used."
-                    hideSaveFailure()
-                    return
-                }
+                guard persistenceSession.isVisible, authManager.sessionGeneration == generation else { return }
+                let intent = try await localEditingService.stageBackground(image)
+                guard persistenceSession.isVisible, authManager.sessionGeneration == generation else { return }
+                editingStore.restoreStoredBackground(intent, confirmed: localEditingService.confirmedBackground)
                 saveMessage = nil
                 hideSaveFailure()
             } catch {

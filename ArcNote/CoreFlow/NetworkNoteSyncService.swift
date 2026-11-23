@@ -76,4 +76,4 @@ struct NetworkNoteSyncService: NoteSyncServing, Sendable {
     }
 }
 
-enum NoteSyncHTTPMethod: String { case get = "GET", post = "POST", put = "PUT", delete = "DELETE" }
+enum NoteSyncHTTPMethod: String { case get = "GET", post = "POST", put = "PUT", patch = "PATCH", delete = "DELETE" }

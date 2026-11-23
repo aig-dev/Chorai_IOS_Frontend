@@ -774,6 +774,8 @@ struct CardEditorShellFixtureScreen: View {
             background = .none
             isFixtureBackgroundRemoved = true
             actionRouter.markDirty()
+        case .close:
+            isDismissed = true
         case .restore:
             background = .local(Self.fixtureBackgroundData)
             isFixtureBackgroundRemoved = false

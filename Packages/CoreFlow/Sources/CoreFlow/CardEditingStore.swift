@@ -268,6 +268,15 @@ public final class CardEditingStore: ObservableObject {
         return true
     }
 
+    public func restoreStoredBackground(_ intent: CardEditingBackgroundIntent, confirmed: String?) {
+        backgroundMediaRef = confirmed
+        backgroundIntent = intent
+        if failureStage == .replacingBackground || failureStage == .removingBackground {
+            clearFailure()
+            phase = .ready
+        }
+    }
+
     public func stageBackgroundRemoval() {
         let hasUncertainBackgroundWrite = failureStage == .replacingBackground
             || failureStage == .removingBackground
@@ -342,14 +351,14 @@ public final class CardEditingStore: ObservableObject {
     }
 
     @discardableResult
-    public func retry() async -> Bool {
+    public func retry(includingBackground: Bool = true) async -> Bool {
         guard let retryOperation = failureContext?.retryOperation,
               !isBusy else {
             return false
         }
         switch retryOperation {
         case .create, .update:
-            return await retryDraft(retryOperation)
+            return await retryDraft(retryOperation, includingBackground: includingBackground)
         case let .replaceBackground(cardID, image):
             return await retryBackground(cardID: cardID, image: image)
         case let .removeBackground(cardID):
@@ -449,7 +458,7 @@ public final class CardEditingStore: ObservableObject {
         }
     }
 
-    private var isDraftDirty: Bool {
+    public var isDraftDirty: Bool {
         guard cardID != nil,
               let lastCommittedDraft,
               let lastCommittedBodyRevision else {
@@ -495,16 +504,16 @@ public final class CardEditingStore: ObservableObject {
         return false
     }
 
-    private func retryDraft(_ retryOperation: RetryOperation) async -> Bool {
+    private func retryDraft(_ retryOperation: RetryOperation, includingBackground: Bool) async -> Bool {
         guard let operationID = beginOperation() else { return false }
         defer { endOperation(operationID) }
         clearFailure()
         guard await persistDraft(retryOperation) else { return false }
-        if backgroundIntent != .unchanged {
+        if includingBackground, backgroundIntent != .unchanged {
             guard await persistBackgroundIntent() else { return false }
         }
         phase = .ready
-        return !isDirty
+        return includingBackground ? !isDirty : !isDraftDirty
     }
 
     private func retryBackground(cardID: String, image: CardEditingImage) async -> Bool {

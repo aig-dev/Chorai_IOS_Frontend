@@ -3,12 +3,14 @@ import SwiftUI
 enum CardEditorBackgroundActionContext: Equatable {
     case visible(canRestoreOriginal: Bool)
     case removed(canRestoreBackground: Bool)
+    case pending(canCancel: Bool, canReplace: Bool)
 }
 
 enum CardEditorBackgroundAction: Equatable {
     case choosePhoto
     case remove
     case restore
+    case close
 }
 
 private struct CardEditorBackgroundActionDialog: ViewModifier {
@@ -40,6 +42,18 @@ private struct CardEditorBackgroundActionDialog: ViewModifier {
                     onSelect(.remove)
                 }
                 .accessibilityIdentifier("cardEditorRemoveBackgroundButton")
+
+            case let .pending(canCancel, canReplace):
+                if canReplace {
+                    Button("Replace Background") { onSelect(.choosePhoto) }
+                        .accessibilityIdentifier("cardEditorReplaceBackgroundButton")
+                }
+                if canCancel {
+                    Button("Cancel Background Change") { onSelect(.restore) }
+                        .accessibilityIdentifier("cardEditorRestoreBackgroundButton")
+                }
+                Button("Close Note") { onSelect(.close) }
+                    .accessibilityIdentifier("cardEditorCloseWithPendingBackground")
 
             case let .removed(canRestoreBackground):
                 Button("Choose New Background") {

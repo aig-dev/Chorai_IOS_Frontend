@@ -184,6 +184,10 @@ final class LocalNotesController: ObservableObject {
         Task { await library.synchronize() }
     }
 
+    func allowsBackgroundNetwork() -> Bool {
+        foreground && scopeTransition == .ready && library.cloudEnabled && access().cloudEnabled
+    }
+
     private func checkCloudTarget(_ scope: NoteStoreScope, session: UInt64, identifier: String, assetID: String) throws {
         guard foreground, scopeTransition == .ready, library.cloudEnabled, scope == library.scope,
               AuthManager.shared.currentNoteScope == scope, AuthManager.shared.sessionGeneration == session,
@@ -304,7 +308,7 @@ final class LocalNotesController: ObservableObject {
 }
 
 @MainActor
-final class LocalCoreCardEditingService: CoreCardEditingServing {
+final class LocalCoreCardEditingService: CoreCardEditingServing, ObservableObject {
     let scope: NoteStoreScope
     private let library: NoteLibraryStore
     private let cloud = NetworkCoreCardEditingService()
@@ -312,10 +316,32 @@ final class LocalCoreCardEditingService: CoreCardEditingServing {
     private var identifier: String?
     private var observedBodyRevision: Int64?
 
+    @Published private(set) var pendingBackground: NoteBackgroundCommand?
+    @Published private(set) var backgroundUnreadable = false
+    private(set) var confirmedBackground: String?
+    private var choice: (session: UInt64, localID: String, assetID: String?, baseline: Int64, previous: NoteBackgroundCommand?)?
+    private let backgroundTransport: any NoteBackgroundTransport
+    private let backgroundAccess: () -> (scope: NoteStoreScope?, session: UInt64, online: Bool)
+
     init(identifier: String?, creationID: String, scope: NoteStoreScope,
-         library: NoteLibraryStore = LocalNotesController.shared.library) {
+         library: NoteLibraryStore = LocalNotesController.shared.library,
+         backgroundTransport: any NoteBackgroundTransport = NetworkManager.shared,
+         backgroundAccess: @escaping () -> (scope: NoteStoreScope?, session: UInt64, online: Bool) = {
+             let auth = AuthManager.shared
+             return (auth.canOpenLocalNotes ? auth.currentNoteScope : nil, auth.sessionGeneration,
+                     auth.canEnterProduct && NetworkManager.shared.isConnected && LocalNotesController.shared.allowsBackgroundNetwork())
+         }) {
+        self.backgroundTransport = backgroundTransport
+        self.backgroundAccess = backgroundAccess
         self.identifier = identifier; self.creationID = creationID; self.scope = scope
         self.library = library
+    }
+
+    var isUnpublishedEmptyPlaceholder: Bool {
+        let id = identifier ?? "local-note:" + creationID
+        guard library.scope == scope,
+              let note = library.notes.first(where: { NoteLibraryStore.identifier($0) == id || $0.serverAssetID == id }) else { return false }
+        return note.serverAssetID == nil && note.bodyRevision == 1 && note.body == OfflineNoteBody(content: "")
     }
 
     func create(draft: CardEditingDraft, createRequestID: String) async throws -> CardEditingSnapshot {
@@ -372,14 +398,193 @@ final class LocalCoreCardEditingService: CoreCardEditingServing {
                 title: link.title, noteLinkID: link.noteLinkID, previewHTML: link.previewHTML, authorName: link.authorName, authorAvatarURL: link.authorAvatarURL)
         }
     }
+    private func checkBackgroundSession(_ session: UInt64, online: Bool = false) throws {
+        try Task.checkCancellation()
+        let current = backgroundAccess()
+        guard current.scope == scope, current.session == session, library.scope == scope,
+              !online || (current.online && library.cloudEnabled) else { throw NoteLocalStoreError.invalidScope }
+    }
+
+    private func backgroundTarget() async throws -> (store: NoteLocalStore, localID: String, note: OfflineNote?) {
+        try await library.backgroundTarget(identifier: identifier, createID: creationID, scope: scope)
+    }
+
+    func readBackground() async throws -> CardEditingBackgroundIntent {
+        let session = backgroundAccess().session
+        try checkBackgroundSession(session)
+        do {
+            let target = try await backgroundTarget()
+            let record = try await target.store.background(localID: target.localID)
+            var intent = CardEditingBackgroundIntent.unchanged
+            if let record {
+                guard record.assetID == nil || record.assetID == target.note?.serverAssetID else { throw NoteBackgroundError.changed }
+                intent = try await target.store.backgroundImage(record).map(CardEditingBackgroundIntent.replace) ?? .remove
+            }
+            try checkBackgroundSession(session)
+            pendingBackground = record
+            confirmedBackground = target.note?.backgroundMediaRef
+            backgroundUnreadable = false
+            return intent
+        } catch {
+            try checkBackgroundSession(session)
+            backgroundUnreadable = true
+            throw error
+        }
+    }
+
+    func observeBackgroundChoice() async throws {
+        let session = backgroundAccess().session
+        choice = nil
+        try checkBackgroundSession(session)
+        let target = try await backgroundTarget()
+        let stored = try await target.store.background(localID: target.localID)
+        try checkBackgroundSession(session)
+        guard stored == pendingBackground, stored?.canCancel != false, !backgroundUnreadable else { throw NoteBackgroundError.unresolved }
+        let observation: NoteBackgroundObservation
+        let asset = target.note?.serverAssetID
+        if let asset {
+            try checkBackgroundSession(session, online: true)
+            observation = try await backgroundTransport.backgroundObservation(scope: scope, asset: asset)
+            try checkBackgroundSession(session, online: true)
+            guard library.serverID(for: "local-note:" + target.localID) == asset else { throw NoteBackgroundError.changed }
+        } else {
+            observation = NoteBackgroundObservation(revision: 0, displayRef: nil)
+        }
+        confirmedBackground = observation.displayRef
+        choice = (session, target.localID, asset, observation.revision, stored)
+    }
+
+    func stageBackground(_ image: CardEditingImage?) async throws -> CardEditingBackgroundIntent {
+        guard let choice, !backgroundUnreadable else { throw NoteBackgroundError.changed }
+        self.choice = nil
+        try checkBackgroundSession(choice.session)
+        let target = try await backgroundTarget()
+        try checkBackgroundSession(choice.session)
+        guard target.localID == choice.localID, choice.assetID == nil || choice.assetID == target.note?.serverAssetID else {
+            throw NoteBackgroundError.changed
+        }
+        let cmd = try await target.store.stageBackground(localID: target.localID, assetID: target.note?.serverAssetID,
+            baseline: choice.baseline, image: image, expected: choice.previous, createPlaceholder: identifier == nil)
+        try checkBackgroundSession(choice.session)
+        try await library.publishBackgroundChange(localID: target.localID, scope: scope)
+        try checkBackgroundSession(choice.session)
+        pendingBackground = cmd
+        if let bytes = try await target.store.backgroundImage(cmd) {
+            try checkBackgroundSession(choice.session)
+            return .replace(bytes)
+        }
+        return .remove
+    }
+
+    func cancelBackground() async throws {
+        let session = backgroundAccess().session
+        guard let cmd = pendingBackground, cmd.canCancel, !backgroundUnreadable else { throw NoteBackgroundError.unresolved }
+        let target = try await backgroundTarget()
+        try checkBackgroundSession(session)
+        try await target.store.retireBackground(cmd, current: nil, cancel: true)
+        try checkBackgroundSession(session)
+        try await library.publishBackgroundChange(localID: target.localID, scope: scope)
+        try checkBackgroundSession(session)
+        choice = nil
+        pendingBackground = nil
+    }
+
+    func freezeBackgroundForSave() async throws {
+        guard let command = pendingBackground, command.phase == .staged else { return }
+        let session = backgroundAccess().session
+        let target = try await backgroundTarget()
+        try checkBackgroundSession(session)
+        guard target.localID == command.localID else { throw NoteBackgroundError.changed }
+        let frozen = try await target.store.advanceBackground(command, assetID: target.note?.serverAssetID, phase: .submitted)
+        try checkBackgroundSession(session)
+        pendingBackground = frozen
+    }
+
+    // This lease covers network presentation only. The editor body can continue to save
+    // under its independent Store operation while the upload/PATCH response is held.
+    func submitBackground() async throws -> String? {
+        let session = backgroundAccess().session
+        try checkBackgroundSession(session)
+        guard !backgroundUnreadable, var command = pendingBackground else { throw NoteBackgroundError.unresolved }
+        let target = try await backgroundTarget()
+        try checkBackgroundSession(session)
+        guard target.localID == command.localID, command.phase != .rejected else { throw NoteBackgroundError.unresolved }
+        let delivery = try library.beginBackgroundDelivery(localID: target.localID, scope: scope)
+        defer { library.endBackgroundDelivery(localID: target.localID, id: delivery) }
+        let store = target.store
+        let asset = target.note?.serverAssetID
+        if command.phase == .staged || (command.assetID == nil && asset != nil) || command.requiredBodyRevision == nil {
+            command = try await store.advanceBackground(command, assetID: asset, phase: .submitted, bindBody: true)
+            try checkBackgroundSession(session)
+            pendingBackground = command
+        }
+        guard let asset, command.assetID == asset, target.note?.baseSyncToken != nil else { throw NoteBackgroundError.unresolved }
+        func eligible() throws {
+            try checkBackgroundSession(session, online: true)
+            guard library.serverID(for: "local-note:" + target.localID) == asset else { throw NoteBackgroundError.changed }
+        }
+        do {
+            try eligible()
+            let original = try await store.backgroundImage(command)
+            try await store.requireBackgroundDelivery(command)
+            if let original, command.phase == .submitted || command.phase == .refreshUpload {
+                try eligible()
+                let ref = try await backgroundTransport.uploadBackground(command, bytes: original.data)
+                try eligible()
+                command = try await store.advanceBackground(command, assetID: asset, phase: .attachedRef, ref: ref)
+                try eligible()
+                pendingBackground = command
+            }
+            try await store.requireBackgroundDelivery(command)
+            try eligible()
+            let current = try await backgroundTransport.writeBackground(command)
+            try eligible()
+            try await store.retireBackground(command, current: current)
+            try eligible()
+            confirmedBackground = current.displayRef
+            pendingBackground = nil
+            try await library.publishBackgroundChange(localID: target.localID, scope: scope)
+            try eligible()
+            return current.displayRef
+        } catch NoteBackgroundError.stale {
+            try eligible()
+            let fresh = try await backgroundTransport.backgroundObservation(scope: scope, asset: asset)
+            try eligible()
+            try await store.retireBackground(command, current: fresh)
+            try eligible()
+            confirmedBackground = fresh.displayRef
+            pendingBackground = nil
+            try await library.publishBackgroundChange(localID: target.localID, scope: scope)
+            throw NoteBackgroundError.stale
+        } catch NoteBackgroundError.rejected where command.phase == .submitted && command.image != nil && command.logicalRef == nil {
+            try eligible()
+            let rejected = try await store.advanceBackground(command, assetID: asset, phase: .rejected)
+            try eligible()
+            pendingBackground = rejected
+            throw NoteBackgroundError.rejected
+        } catch NoteBackgroundError.expired where command.phase == .attachedRef {
+            try eligible()
+            let refresh = try await store.advanceBackground(command, assetID: asset, phase: .refreshUpload)
+            try eligible()
+            pendingBackground = refresh
+            throw NoteBackgroundError.expired
+        }
+    }
+
     func replaceBackground(cardID: String, image: CardEditingImage) async throws -> String {
-        let ref = try await cloud.replaceBackground(cardID: serverID(cardID), image: image)
-        try await library.recordMetadata(identifier: cardID, backgroundMediaRef: .some(ref), scope: scope)
+        let target = try await library.backgroundTarget(identifier: cardID, createID: creationID, scope: scope)
+        guard let command = pendingBackground, command.localID == target.localID,
+              let original = try await target.store.backgroundImage(command), original.data == image.data,
+              let ref = try await submitBackground() else { throw NoteBackgroundError.unresolved }
         return ref
     }
+
     func removeBackground(cardID: String) async throws {
-        try await cloud.removeBackground(cardID: serverID(cardID))
-        try await library.recordMetadata(identifier: cardID, backgroundMediaRef: .some(nil), scope: scope)
+        let target = try await library.backgroundTarget(identifier: cardID, createID: creationID, scope: scope)
+        guard let command = pendingBackground, command.localID == target.localID, command.image == nil else {
+            throw NoteBackgroundError.unresolved
+        }
+        _ = try await submitBackground()
     }
 
     private func serverID(_ id: String) throws -> String {

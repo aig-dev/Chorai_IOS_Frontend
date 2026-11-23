@@ -41,6 +41,7 @@ extension NoteLocalStore {
                   note.pendingOperation == nil, note.remoteSnapshot == nil, note.syncIssue == nil else {
                 throw NoteLocalStoreError.staleGeneration
             }
+            try Self.removePurgedBackground(directory: self.directoryURL, localID: attempt.localID)
             context.delete(row)
         }
     }
@@ -63,6 +64,7 @@ extension NoteLocalStore {
                       note.pendingOperation == nil, note.remoteSnapshot == nil, note.syncIssue == nil else {
                     throw NoteLocalStoreError.staleGeneration
                 }
+                try Self.removePurgedBackground(directory: self.directoryURL, localID: attempt.localID)
                 context.delete(row)
                 return true
             }

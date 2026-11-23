@@ -7,6 +7,11 @@ enum APIEnvironment: String, CaseIterable {
     static let infoDictionaryKey = "ChoraiAPIEnvironment"
     static let overrideEnvironmentKey = "CHORAI_API_BASE_URL"
 
+    static func noteCardPath(_ id: String) -> String { "/api/cards/" + id }
+    static func noteBackgroundPath(_ id: String) -> String { noteCardPath(id) + "/background" }
+    static let noteMediaUploadPath = "/api/v1/media/upload"
+    static func mediaContentPath(_ ref: String) -> String { "/api/v1/media/" + ref + "/content" }
+
     static func visibilityPath(assetID: String) -> String {
         "/api/v1/assets/\(assetID)/visibility"
     }

@@ -82,7 +82,7 @@ final class NewNoteViewSourceContractTests: XCTestCase {
         )
         XCTAssertTrue(save.contains("completeTagEntry()"))
         XCTAssertTrue(save.contains("applyCurrentSnapshot()"))
-        XCTAssertTrue(save.contains("editingStore.save()"))
+        XCTAssertTrue(save.contains("saveBodyAndChosenBackground()"))
         XCTAssertTrue(save.contains("classifyCommit("))
         XCTAssertFalse(save.contains("dismiss()"))
         XCTAssertFalse(save.contains("thenDismiss"))
@@ -98,7 +98,7 @@ final class NewNoteViewSourceContractTests: XCTestCase {
         XCTAssertTrue(close.contains("isUntouchedNewSnapshot(snapshot)"))
         XCTAssertTrue(Self.containsInOrder([
             "await persistLocalDraft()",
-            "snapshotMatchesCommittedBaseline(snapshot)",
+            "snapshotMatchesCommittedBaseline(snapshot, includingBackground: false)",
             "dismiss()",
         ], in: String(close)))
     }
@@ -285,7 +285,7 @@ final class NewNoteViewSourceContractTests: XCTestCase {
                 signature: "func handleSelectedBackgroundPhoto("
             )
         )
-        XCTAssertTrue(background.contains("editingStore.stageBackground("))
+        XCTAssertTrue(background.contains("localEditingService.stageBackground("))
         XCTAssertFalse(background.contains("editingStore.save()"))
         XCTAssertFalse(background.contains("insertImage("))
     }
@@ -491,7 +491,7 @@ final class NewNoteViewSourceContractTests: XCTestCase {
         let exactCheck = try XCTUnwrap(
             save.range(of: "!commitBaselineMatchesCurrent(baseline)")
         )
-        let persist = try XCTUnwrap(save.range(of: "editingStore.save()"))
+        let persist = try XCTUnwrap(save.range(of: "saveBodyAndChosenBackground()"))
 
         XCTAssertLessThan(snapshot.lowerBound, baseline.lowerBound)
         XCTAssertLessThan(baseline.lowerBound, recovery.lowerBound)
@@ -613,7 +613,7 @@ final class NewNoteViewSourceContractTests: XCTestCase {
         XCTAssertTrue(
             recovery.contains("editingStore.reconcileFailedRelationshipMutation()")
         )
-        XCTAssertTrue(recovery.contains("editingStore.retry()"))
+        XCTAssertTrue(recovery.contains("editingStore.retry(includingBackground: false)"))
         XCTAssertFalse(recovery.contains("editingStore.save()"))
         XCTAssertFalse(source.contains("recoverFailedDraftOperationIfNeeded"))
     }
@@ -681,7 +681,7 @@ final class NewNoteViewSourceContractTests: XCTestCase {
         let preserveFailure = try XCTUnwrap(
             save.range(of: "failureBaseline = priorFailedBaseline")
         )
-        let persist = try XCTUnwrap(save.range(of: "editingStore.save()"))
+        let persist = try XCTUnwrap(save.range(of: "saveBodyAndChosenBackground()"))
 
         XCTAssertLessThan(priorFailure.lowerBound, recovery.lowerBound)
         XCTAssertLessThan(recovery.lowerBound, recoveryFailure.lowerBound)
@@ -734,14 +734,14 @@ final class NewNoteViewSourceContractTests: XCTestCase {
         )
         let hide = try XCTUnwrap(handler.range(of: "hideSaveFailure()"))
         let task = try XCTUnwrap(handler.range(of: "Task {"))
-        let stage = try XCTUnwrap(handler.range(of: "editingStore.stageBackground(image)"))
+        let stage = try XCTUnwrap(handler.range(of: "localEditingService.stageBackground(image)"))
 
         XCTAssertLessThan(hide.lowerBound, task.lowerBound)
         XCTAssertLessThan(task.lowerBound, stage.lowerBound)
         XCTAssertGreaterThanOrEqual(
             Self.occurrenceCount("hideSaveFailure()", in: String(handler)),
-            4,
-            "Selection, invalid image, staged B, and load failure must retain A"
+            3,
+            "Selection, successful staging and failure must retain the prior frozen body"
         )
         XCTAssertFalse(handler.contains("resolveSaveFailure()"))
     }
@@ -852,8 +852,8 @@ final class NewNoteViewSourceContractTests: XCTestCase {
         XCTAssertFalse(source.contains(".popupMenu("))
         XCTAssertFalse(source.contains("layout: .grid3x3"))
         XCTAssertTrue(source.contains(".cardEditorBackgroundActionDialog("))
-        XCTAssertTrue(source.contains("editingStore.stageBackgroundRemoval()"))
-        XCTAssertTrue(source.contains("editingStore.restoreBackground()"))
+        XCTAssertTrue(source.contains("localEditingService.stageBackground(nil)"))
+        XCTAssertTrue(source.contains("localEditingService.cancelBackground()"))
         XCTAssertTrue(source.contains("editingStore.canRestoreBackground"))
         XCTAssertFalse(source.contains("editingStore.removeBackground()"))
 
@@ -880,8 +880,8 @@ final class NewNoteViewSourceContractTests: XCTestCase {
             )
         )
         XCTAssertTrue(presentation.contains("completeTagEntry()"))
-        XCTAssertTrue(presentation.contains("backgroundIntent == .unchanged"))
-        XCTAssertTrue(presentation.contains("backgroundMediaRef == nil"))
+        XCTAssertTrue(presentation.contains("localEditingService.pendingBackground != nil"))
+        XCTAssertTrue(presentation.contains("localEditingService.confirmedBackground == nil"))
         XCTAssertTrue(presentation.contains("showBackgroundPicker = true"))
         XCTAssertTrue(presentation.contains("showBackgroundActions = true"))
         XCTAssertFalse(presentation.contains("editingStore.save()"))
@@ -895,28 +895,20 @@ final class NewNoteViewSourceContractTests: XCTestCase {
         )
         for expected in [
             "showBackgroundPicker = true",
-            "editingStore.stageBackgroundRemoval()",
-            "editingStore.restoreBackground()",
+            "localEditingService.stageBackground(nil)",
+            "localEditingService.cancelBackground()",
         ] {
             XCTAssertTrue(handler.contains(expected))
         }
-        XCTAssertTrue(
-            handler.contains("guard editingStore.restoreBackground() else")
-        )
-        XCTAssertTrue(
-            handler.contains("Retry the pending background change before restoring.")
-        )
-        XCTAssertEqual(
-            Self.occurrenceCount("hideSaveFailure()", in: String(handler)),
-            3
-        )
+        XCTAssertTrue(handler.contains("try await localEditingService.observeBackgroundChoice()"))
+        XCTAssertTrue(handler.contains("hideSaveFailure()"))
         for forbidden in [
             "editingStore.save()",
             "editingStore.ensurePersisted()",
             "editingStore.stageBackground(",
             "editingStore.removeBackground()",
             "resolveSaveFailure()",
-            "Task {",
+            "submitBackground()",
             "NetworkManager",
             "URLSession",
             "service.",

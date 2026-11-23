@@ -27,7 +27,7 @@ private actor CardEditingCreateResponseLossFault {
 }
 #endif
 
-struct NetworkCoreCardEditingService: CoreCardEditingServing, Sendable {
+struct NetworkCoreCardEditingService: Sendable {
     private let network: NetworkManager
 
     @MainActor
@@ -200,49 +200,6 @@ struct NetworkCoreCardEditingService: CoreCardEditingServing, Sendable {
                 mediaRef: mediaRef,
                 url: url
             )
-        } catch {
-            throw Self.mapError(error)
-        }
-    }
-
-    func replaceBackground(
-        cardID: String,
-        image: CardEditingImage
-    ) async throws -> String {
-        do {
-            let upload = try await firstValue(
-                network.uploadCardMedia(
-                    data: image.data,
-                    filename: image.filename,
-                    mimeType: image.mimeType
-                )
-            )
-            guard let uploaded = upload.data, !uploaded.mediaRef.isEmpty else {
-                throw CardEditingError.transport(code: "card_media_ref_missing")
-            }
-            let response = try await firstValue(
-                network.updateCardBackground(
-                    cardId: cardID,
-                    mediaRef: uploaded.mediaRef
-                )
-            )
-            guard response.success else {
-                throw CardEditingError.transport(code: "card_background_rejected")
-            }
-            return response.data.backgroundMediaRef ?? uploaded.mediaRef
-        } catch {
-            throw Self.mapError(error)
-        }
-    }
-
-    func removeBackground(cardID: String) async throws {
-        do {
-            let response = try await firstValue(
-                network.clearCardBackground(cardId: cardID)
-            )
-            guard response.success else {
-                throw CardEditingError.transport(code: "card_background_clear_rejected")
-            }
         } catch {
             throw Self.mapError(error)
         }

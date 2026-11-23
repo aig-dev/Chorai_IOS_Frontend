@@ -111,6 +111,22 @@ final class LocalNoteEditorPersistenceSessionTests: XCTestCase {
         XCTAssertTrue(spans.allSatisfy { ($0["styles"] as? [String: Any])?["bold"] as? Bool == true })
     }
 
+    func testFinalBodyFlushLeavesStagedBackgroundForExplicitSave() async throws {
+        let fixture = try await NoteEditorFixture(scope: alice)
+        addTeardownBlock { @MainActor in
+            await fixture.library.configure(scope: nil, cloudEnabled: false)
+            fixture.removeFiles()
+        }
+        fixture.edit("Body before selection", revision: 1)
+        let image = CardEditingImage(data: Data([1]), filename: "chosen.png", mimeType: "image/png")
+        XCTAssertTrue(fixture.store.stageBackground(image))
+        let flushed = await fixture.persistence.closeForScopeChange()
+        XCTAssertTrue(flushed)
+        XCTAssertNil(fixture.store.failureStage)
+        XCTAssertEqual(fixture.store.pendingBackground, image)
+        XCTAssertEqual(fixture.library.notes.first?.body.content, "Body before selection")
+    }
+
     func testDisappearBeforeAppliedEventSavesFinalRevision() async throws {
         let fixture = try await NoteEditorFixture(scope: alice)
         defer { fixture.removeFiles() }
@@ -324,4 +340,235 @@ private struct EditorOfflineTransport: NoteSyncServing {
     func send(_ operation: NotePendingOperation) async throws -> NoteSyncReceipt { throw NoteSyncFailure.notReady }
     func upload(_ attachment: NoteLocalAttachment, data: Data) async throws -> NoteSyncUploadReceipt { throw NoteSyncFailure.notReady }
     func downloadAttachment(assetID: String, mediaRef: String) async throws -> NoteSyncDownloadedAttachment { throw NoteSyncFailure.notReady }
+}
+
+@MainActor
+final class LocalNoteBackgroundRecoveryTests: XCTestCase {
+    private let png = CardEditingImage(data: Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jAhkAAAAASUVORK5CYII=")!,
+        filename: "picker.png", mimeType: "image/png")
+
+    private func setupEditor() async throws -> BackgroundEditorFixture {
+        let fixture = BackgroundEditorFixture()
+        addTeardownBlock { @MainActor in
+            await fixture.library.configure(scope: nil, cloudEnabled: false)
+            try FileManager.default.removeItem(at: fixture.root)
+        }
+        await fixture.library.configure(scope: fixture.scope, cloudEnabled: true)
+        return fixture
+    }
+
+    func testLostUploadPatchAndRemovalReopenAndReuseOriginalDecision() async throws {
+        for loss in [BackgroundTestWire.Loss.upload, .patch, .remove] {
+            let f = try await setupEditor()
+            f.wire.current = .init(revision: 4, displayRef: loss == .remove ? "old-background" : nil)
+            let original = try await f.openEditor()
+            try await original.observeBackgroundChoice()
+            _ = try await original.stageBackground(loss == .remove ? nil : png)
+            let staged = try XCTUnwrap(original.pendingBackground)
+            f.wire.loss = loss
+            do { _ = try await original.submitBackground(); XCTFail("Lost response was confirmed") }
+            catch NoteBackgroundError.unknown {}
+            await f.library.configure(scope: nil, cloudEnabled: false)
+            await f.library.configure(scope: f.scope, cloudEnabled: true)
+            let reopened = try await f.openEditor()
+            XCTAssertEqual(reopened.pendingBackground?.id, staged.id)
+            XCTAssertFalse(reopened.pendingBackground?.canCancel ?? true)
+            if loss == .patch { XCTAssertEqual(reopened.pendingBackground?.logicalRef, f.wire.ref) }
+            let current = try await reopened.submitBackground()
+            XCTAssertEqual(current, f.wire.current.displayRef)
+            XCTAssertNil(reopened.pendingBackground)
+            XCTAssertEqual(f.wire.current.revision, 5)
+            XCTAssertEqual(Set(f.wire.uploads.map(\.id)).union(f.wire.writes.map(\.id)), [staged.id])
+            XCTAssertEqual(Set(f.wire.writes.map(\.baseline)), [4])
+            XCTAssertTrue(f.wire.bytes.allSatisfy { $0 == png.data })
+            XCTAssertEqual(f.wire.uploads.count, loss == .remove ? 0 : loss == .upload ? 2 : 1)
+            XCTAssertEqual(f.wire.writes.count, loss == .upload ? 1 : 2)
+            XCTAssertEqual(f.library.notes.first?.isPublic, true)
+            XCTAssertEqual(f.library.notes.first?.body.content, "Original body")
+        }
+    }
+
+    func testStaleABARefreshRequiresNewChoiceAndFailedRefreshKeepsOriginal() async throws {
+        let f = try await setupEditor()
+        let editor = try await f.openEditor()
+        try await editor.observeBackgroundChoice()
+        _ = try await editor.stageBackground(png)
+        let original = try XCTUnwrap(editor.pendingBackground)
+        f.wire.current = .init(revision: 2, displayRef: nil)
+        f.wire.failRead = true
+        do { _ = try await editor.submitBackground(); XCTFail("Stale accepted") }
+        catch NoteBackgroundError.unknown {}
+        XCTAssertEqual(editor.pendingBackground?.id, original.id)
+        f.wire.failRead = false
+        do { _ = try await editor.submitBackground(); XCTFail("Stale accepted") }
+        catch NoteBackgroundError.stale {}
+        XCTAssertNil(editor.pendingBackground)
+        XCTAssertEqual(f.wire.current.revision, 2)
+        try await editor.observeBackgroundChoice()
+        _ = try await editor.stageBackground(png)
+        XCTAssertNotEqual(editor.pendingBackground?.id, original.id)
+        XCTAssertEqual(editor.pendingBackground?.baseline, 2)
+        _ = try await editor.submitBackground()
+        XCTAssertEqual(f.wire.current.revision, 3)
+    }
+
+    func testInitialRejectionCanCancelButExpiredUploadRetainsOriginalAfterRef() async throws {
+        let f = try await setupEditor()
+        let editor = try await f.openEditor()
+        try await editor.observeBackgroundChoice()
+        _ = try await editor.stageBackground(png)
+        f.wire.uploadError = .rejected
+        do { _ = try await editor.submitBackground(); XCTFail("Accepted rejected upload") }
+        catch NoteBackgroundError.rejected {}
+        XCTAssertEqual(editor.pendingBackground?.phase, .rejected)
+        try await editor.cancelBackground()
+        XCTAssertNil(editor.pendingBackground)
+        f.wire.uploadError = nil
+        try await editor.observeBackgroundChoice()
+        _ = try await editor.stageBackground(png)
+        f.wire.writeError = .expired
+        do { _ = try await editor.submitBackground(); XCTFail("Expired ref acknowledged") }
+        catch NoteBackgroundError.expired {}
+        let frozen = try XCTUnwrap(editor.pendingBackground)
+        XCTAssertEqual(frozen.phase, .refreshUpload)
+        XCTAssertEqual(frozen.logicalRef, f.wire.ref)
+        f.wire.uploadError = .unknown
+        let reopened = try await f.openEditor()
+        do { _ = try await reopened.submitBackground(); XCTFail("Malformed refresh acknowledged") }
+        catch NoteBackgroundError.unknown {}
+        XCTAssertEqual(reopened.pendingBackground, frozen)
+        do { try await reopened.cancelBackground(); XCTFail("Canceled after original ref") }
+        catch NoteBackgroundError.unresolved {}
+        XCTAssertEqual(f.wire.uploads.last?.id, frozen.id)
+        XCTAssertEqual(f.wire.bytes.last, png.data)
+        f.wire.writeError = nil; f.wire.uploadError = nil
+        _ = try await reopened.submitBackground()
+        XCTAssertNil(reopened.pendingBackground)
+    }
+
+    func testWrongTargetAndChangedBytesCannotDispatchPendingBackground() async throws {
+        let f = try await setupEditor()
+        let editor = try await f.openEditor()
+        try await editor.observeBackgroundChoice()
+        _ = try await editor.stageBackground(png)
+        let frozen = try XCTUnwrap(editor.pendingBackground)
+        do {
+            _ = try await editor.replaceBackground(cardID: "local-note:other", image: png)
+            XCTFail("Dispatched another note's pending choice")
+        } catch NoteBackgroundError.unresolved {}
+        let files = try XCTUnwrap(FileManager.default.enumerator(at: f.root, includingPropertiesForKeys: nil)?.allObjects as? [URL])
+        let path = try XCTUnwrap(files.first { $0.lastPathComponent == frozen.image?.relativePath })
+        try Data("damaged".utf8).write(to: path)
+        do { _ = try await editor.submitBackground(); XCTFail("Sent unverified bytes") }
+        catch NoteLocalStoreError.attachmentMismatch {}
+        XCTAssertTrue(f.wire.uploads.isEmpty)
+        XCTAssertTrue(f.wire.writes.isEmpty)
+        XCTAssertEqual(editor.pendingBackground?.id, frozen.id)
+        do { _ = try await editor.readBackground(); XCTFail("Reported damaged bytes as settled") }
+        catch NoteLocalStoreError.attachmentMismatch {}
+        XCTAssertTrue(editor.backgroundUnreadable)
+    }
+
+    func testHeldUploadAllowsBodyCloseAndLateSessionCannotAttach() async throws {
+        let f = try await setupEditor()
+        let editor = try await f.openEditor()
+        try await editor.observeBackgroundChoice()
+        let intent = try await editor.stageBackground(png)
+        let original = try XCTUnwrap(editor.pendingBackground)
+        let gate = EditorExecutionGate()
+        let entered = expectation(description: "upload awaits response")
+        f.wire.onUpload = { entered.fulfill(); await gate.wait() }
+        let pending = Task { try await editor.submitBackground() }
+        await fulfillment(of: [entered], timeout: 4)
+
+        let note = try await editor.openExisting()
+        let store = CardEditingStore(cardID: NoteLibraryStore.identifier(note), draft: .init(title: nil, content: note.body.content, tags: [], isPublic: true),
+            backgroundMediaRef: nil, links: [], service: editor, preservesLocalDrafts: true)
+        store.restoreStoredBackground(intent, confirmed: nil)
+        let model = BlockNoteCardEditorModel(document: .init(contentJSON: nil, fallbackMarkdown: note.body.content))
+        let persistence = LocalNoteEditorPersistenceSession(scope: f.scope, editingStore: store, bodyModel: model, isNew: false, initialIsPublic: true)
+        model.controller.attach(drainAcceptedEvents: {
+            _ = store.applyBodyRevision(content: "Later accepted edit", contentJSON: nil, revision: 9)
+        }, commandHandler: { _ in })
+        let closed = await persistence.closeForScopeChange()
+        XCTAssertTrue(closed)
+        XCTAssertEqual(f.library.notes.first?.body.content, "Later accepted edit")
+        XCTAssertEqual(editor.pendingBackground?.id, original.id)
+        f.session += 1
+        f.accessScope = NoteStoreScope(actorID: "other-actor", environmentID: f.scope.environmentID)
+        gate.open()
+        do { _ = try await pending.value; XCTFail("Previous session attached") }
+        catch NoteLocalStoreError.invalidScope {}
+        XCTAssertTrue(f.wire.writes.isEmpty)
+        XCTAssertEqual(f.library.notes.first?.body.content, "Later accepted edit")
+        XCTAssertEqual(f.library.notes.first?.isPublic, true)
+    }
+}
+
+@MainActor
+private final class BackgroundEditorFixture {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    let scope = NoteStoreScope(actorID: UUID().uuidString, environmentID: "offline-background-tests")
+    let wire = BackgroundTestWire()
+    var session: UInt64 = 1
+    lazy var accessScope = scope
+    lazy var library = NoteLibraryStore(rootURL: root, service: { BackgroundNoteSource(scope: $0) })
+    func openEditor() async throws -> LocalCoreCardEditingService {
+        let editor = LocalCoreCardEditingService(identifier: "asset", creationID: UUID().uuidString, scope: scope, library: library,
+            backgroundTransport: wire, backgroundAccess: { (self.accessScope, self.session, true) })
+        _ = try await editor.openExisting()
+        _ = try await editor.readBackground()
+        return editor
+    }
+}
+
+private struct BackgroundNoteSource: NoteSyncServing {
+    let scope: NoteStoreScope
+    func manifest() async throws -> NoteSyncManifest {
+        .init(protocolVersion: 3, complete: true, notes: [.init(assetID: "asset", syncToken: "token", lifecycle: .active)])
+    }
+    func detail(assetID: String) async throws -> NoteRemoteSnapshot {
+        .init(assetID: assetID, syncToken: "token", body: .init(content: "Original body"), lifecycle: .active, isPublic: true)
+    }
+    func send(_ operation: NotePendingOperation) async throws -> NoteSyncReceipt { throw NoteSyncFailure.notReady }
+    func upload(_ attachment: NoteLocalAttachment, data: Data) async throws -> NoteSyncUploadReceipt { throw NoteSyncFailure.notReady }
+    func downloadAttachment(assetID: String, mediaRef: String) async throws -> NoteSyncDownloadedAttachment { throw NoteSyncFailure.notReady }
+}
+
+@MainActor
+private final class BackgroundTestWire: NoteBackgroundTransport {
+    enum Loss { case upload, patch, remove }
+    let ref = "med_1234567890abcdef"
+    var current = NoteBackgroundObservation(revision: 0, displayRef: nil)
+    var uploads: [NoteBackgroundCommand] = []
+    var bytes: [Data] = []
+    var writes: [NoteBackgroundCommand] = []
+    var loss: Loss?
+    var failRead = false
+    var uploadError: NoteBackgroundError?
+    var writeError: NoteBackgroundError?
+    var onUpload: (() async -> Void)?
+    func backgroundObservation(scope: NoteStoreScope, asset: String) async throws -> NoteBackgroundObservation {
+        if failRead { throw NoteBackgroundError.unknown }
+        return current
+    }
+    func uploadBackground(_ command: NoteBackgroundCommand, bytes: Data) async throws -> String {
+        uploads.append(command); self.bytes.append(bytes)
+        await onUpload?()
+        if let uploadError { throw uploadError }
+        if loss == .upload { loss = nil; throw NoteBackgroundError.unknown }
+        return ref
+    }
+    func writeBackground(_ command: NoteBackgroundCommand) async throws -> NoteBackgroundObservation {
+        writes.append(command)
+        if let writeError { throw writeError }
+        let desired = command.logicalRef.map { "/api/v1/media/" + $0 + "/content?asset_id=asset" }
+        if current.revision == command.baseline {
+            current = .init(revision: command.baseline + 1, displayRef: desired)
+        } else if current.revision != command.baseline + 1 || current.displayRef != desired {
+            throw NoteBackgroundError.stale
+        }
+        if loss == .patch || loss == .remove { loss = nil; throw NoteBackgroundError.unknown }
+        return current
+    }
 }

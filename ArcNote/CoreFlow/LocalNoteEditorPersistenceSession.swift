@@ -16,6 +16,7 @@ final class LocalNoteEditorPersistenceSession: ObservableObject {
 
     private let editingStore: CardEditingStore
     private let bodyModel: BlockNoteCardEditorModel
+    private let isUnpublishedEmptyPlaceholder: () -> Bool
     private let isNew: Bool
     private let initialIsPublic: Bool
     private var retiringScope = false
@@ -25,7 +26,9 @@ final class LocalNoteEditorPersistenceSession: ObservableObject {
     private var controllerSubscription: AnyCancellable?
 
     init(id: UUID = UUID(), scope: NoteStoreScope, editingStore: CardEditingStore,
-         bodyModel: BlockNoteCardEditorModel, isNew: Bool, initialIsPublic: Bool) {
+         bodyModel: BlockNoteCardEditorModel, isNew: Bool, initialIsPublic: Bool,
+         isUnpublishedEmptyPlaceholder: @escaping () -> Bool = { false }) {
+        self.isUnpublishedEmptyPlaceholder = isUnpublishedEmptyPlaceholder
         self.id = id
         self.scope = scope
         self.editingStore = editingStore
@@ -104,9 +107,9 @@ final class LocalNoteEditorPersistenceSession: ObservableObject {
                 }
                 await Task.yield() // let the store release its operation owner
             }
-            while self.editingStore.isDirty && !self.isUntouchedNewDraft {
+            while self.editingStore.isDraftDirty && !self.isUntouchedNewDraft {
                 let previousCommit = self.editingStore.lastCommittedDraft
-                let saved = await self.editingStore.save()
+                let saved = await self.editingStore.ensurePersisted() != nil
                 if !saved {
                     if case .failed = self.editingStore.phase {
                         self.hasSaveFailure = true
@@ -133,19 +136,17 @@ final class LocalNoteEditorPersistenceSession: ObservableObject {
     }
 
     private var isUntouchedNewDraft: Bool {
-        editingStore.cardID == nil && isNew
+        ((editingStore.cardID == nil && isNew) || isUnpublishedEmptyPlaceholder())
             && !editingStore.draft.hasMeaningfulContent
             && editingStore.draft.tags.isEmpty
             && editingStore.draft.isPublic == initialIsPublic
-            && editingStore.backgroundIntent == .unchanged
-            && editingStore.backgroundMediaRef == nil
     }
 
     private func releaseIfFinished() {
         guard (!isVisible || retiringScope), !hasSaveFailure,
               finalFlushTask == nil, saveTask == nil, closedBindings.isEmpty,
               bodyModel.controller.attachment?.isClosing != false,
-              !editingStore.isDirty || isUntouchedNewDraft else { return }
+              !editingStore.isDraftDirty || isUntouchedNewDraft else { return }
         onRelease?()
     }
 }

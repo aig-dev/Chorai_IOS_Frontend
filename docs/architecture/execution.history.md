@@ -1,5 +1,9 @@
 # Execution boundary history
 
+## 2026-11-23 — Durable note backgrounds
+
+The editor’s final body flush previously tried to apply a staged picture. The native adapter now persists each background choice under its local note identity, checks the original body acknowledgement and replays the conditional presentation operation across reopening. Hosted regressions cover lost upload, attachment and removal responses, stale observations, damaged retained bytes and a scope change while an upload is held. The staged picker UI case checks the server before and after explicit Save.
+
 ## 2026-11-23 — Shared editor bundle
 
 The native package still shipped BlockNote 0.46.2 while the Web lock specified 0.50.0. The Web generator at `e5f0aa9f` rebuilt the native resources with Node 25.6.1, npm 11.9.0 and locked Vite 6.4.5. Independent builds produced identical resources under bridge protocol 3 and document schema 1. The complete editor package suite exercised the regenerated bundle, including standard NOTE editing, preserved merge image references and WebKit focus behavior. A hosted test on iOS 26.2 also verifies a WebKit-driven selection change and a real rich-text edit through the local Save adapter. It closes and reopens the isolated store to verify both the exact accepted body and the persisted bold heading.

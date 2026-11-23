@@ -939,6 +939,9 @@ final class OrdinaryGoProxy: @unchecked Sendable {
         var policyToken: String?
         var basePolicy: String?
         var initialIsPublic: Bool?
+        var backgroundRef: String?
+        var ifMatch: String?
+        var backgroundUpload = false
     }
 
     static func sameFrozenRequest(_ attempts: [Mutation]) -> Bool {
@@ -1067,7 +1070,7 @@ final class OrdinaryGoProxy: @unchecked Sendable {
         var request = URLRequest(url: url)
         request.httpMethod = method
         if !body.isEmpty { request.httpBody = body }
-        for name in ["Content-Type", "Authorization", "Idempotency-Key", "Accept"] {
+        for name in ["Content-Type", "Authorization", "Idempotency-Key", "If-Match", "Accept"] {
             if let field = headers.first(where: { $0.key.caseInsensitiveCompare(name) == .orderedSame }) {
                 request.setValue(field.value, forHTTPHeaderField: name)
             }
@@ -1080,6 +1083,14 @@ final class OrdinaryGoProxy: @unchecked Sendable {
         let index = tracked ? records.count : nil
         if tracked {
             var record = Mutation(key: key, method: method, digest: Data(SHA256.hash(data: body)), path: path)
+            if method == "PATCH", path.hasSuffix("/background"),
+               let patch = try? JSONSerialization.jsonObject(with: body) as? [String: String] {
+                record.backgroundRef = patch["background_media_ref"]
+                record.ifMatch = request.value(forHTTPHeaderField: "If-Match")
+            }
+            if method == "POST", path == "/api/v1/media/upload" {
+                record.backgroundUpload = body.range(of: Data("name=\"kind\"\r\n\r\nbackground\r\n".utf8)) != nil
+            }
             if method == "POST", path == "/api/cards", let create = try? JSONSerialization.jsonObject(with: body) as? [String: Any] {
                 record.initialIsPublic = create["is_public"] as? Bool
             }

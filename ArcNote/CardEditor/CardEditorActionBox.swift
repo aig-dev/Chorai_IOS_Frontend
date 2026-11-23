@@ -107,7 +107,7 @@ struct CardEditorNativeMenuButton: UIViewRepresentable {
         attributes: UIMenuElement.Attributes = [],
         _ perform: @escaping () -> Void
     ) -> UIAction {
-        let cloudIDs = [CardEditorActionIdentity.background, CardEditorActionIdentity.spark, CardEditorActionIdentity.merge,
+        let cloudIDs = [CardEditorActionIdentity.spark, CardEditorActionIdentity.merge,
                         CardEditorActionIdentity.share, CardEditorActionIdentity.link, CardEditorActionIdentity.root,
                         CardEditorActionIdentity.pin]
         var effectiveAttributes = attributes

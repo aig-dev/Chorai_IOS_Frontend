@@ -7,6 +7,92 @@ import os
 
 @MainActor
 final class NetworkResponseExecutionTests: XCTestCase {
+    func testScopedBackgroundUploadPatchAndDeleteUseOriginalWireIdentity() async throws {
+        prepareLinkAuth()
+        let starts = (0..<4).map { expectation(description: "background request \($0)") }
+        let next = OSAllocatedUnfairLock(initialState: 0)
+        let fixture = HTTPFixture(onStart: {
+            let index = next.withLock { value in defer { value += 1 }; return value }
+            if index < starts.count { starts[index].fulfill() }
+        })
+        let network = NetworkManager(baseURL: fixture.baseURL, session: fixture.session)
+        network.setAuthToken("synthetic-link-token")
+        let scope = NoteStoreScope(actorID: "link_actor", environmentID: fixture.baseURL)
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let store = try await NoteLocalStore.open(rootURL: root, scope: scope)
+        addTeardownBlock { try await store.close(); try FileManager.default.removeItem(at: root) }
+        let snapshot = NoteRemoteSnapshot(assetID: "asset", syncToken: "token", body: .init(content: "fixture"), lifecycle: .active, isPublic: false)
+        let imported = try await store.applyRemote(snapshot, localID: nil, expectedGeneration: nil)
+        let localID = try XCTUnwrap(imported?.localID)
+        let bytes = try XCTUnwrap(Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jAhkAAAAASUVORK5CYII="))
+        let image = CardEditingImage(data: bytes, filename: "fixture.png", mimeType: "image/png")
+        let staged = try await store.stageBackground(localID: localID, assetID: "asset", baseline: 7, image: image, expected: nil, createPlaceholder: false)
+        let command = try await store.advanceBackground(staged, assetID: "asset", phase: .submitted)
+        let file = try XCTUnwrap(command.image)
+        let ref = "med_1234567890abcdef"
+        let content = APIEnvironment.mediaContentPath(ref)
+        let display = content + "?asset_id=asset"
+        func card(_ revision: Int, ref: String? = nil) -> String {
+            var data: [String: Any] = ["id":"asset","owner_actor_id":"link_actor","background_revision":revision]
+            if let ref { data["background_media_ref"] = ref }
+            return String(decoding: try! JSONSerialization.data(withJSONObject: ["success":true,"data":data]), as: UTF8.self)
+        }
+
+        let read = Task { try await network.backgroundObservation(scope: scope, asset: "asset") }
+        await fulfillment(of: [starts[0]], timeout: 4)
+        guard fixture.count == 1 else { read.cancel(); return XCTFail("Missing owner read") }
+        XCTAssertEqual(fixture.request().httpMethod, "GET")
+        XCTAssertEqual(fixture.request().url?.path, "/api/cards/asset")
+        fixture.respond(card(7))
+        let prior = try await read.value
+        XCTAssertEqual(prior.revision, 7)
+        let upload = Task { try await network.uploadBackground(command, bytes: bytes) }
+        await fulfillment(of: [starts[1]], timeout: 4)
+        guard fixture.count == 2 else { upload.cancel(); return XCTFail("Missing upload") }
+        let request = fixture.request(at: 1)
+        XCTAssertEqual(request.httpMethod, "POST")
+        XCTAssertEqual(request.url?.path, "/api/v1/media/upload")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Idempotency-Key"), command.id.uuidString)
+        XCTAssertTrue(request.value(forHTTPHeaderField: "Content-Type")?.hasPrefix("multipart/form-data") == true)
+        let descriptor: [String: Any] = ["bucket":"private","object_key":"test","media_ref":ref,"public_url":content,"mime":file.mimeType,
+            "size_bytes":bytes.count,"width":1,"height":1,"sha256":file.sha256,"upload_kind":"background"]
+        fixture.respond(String(decoding: try JSONSerialization.data(withJSONObject: ["success":true,"data":descriptor]), as: UTF8.self), status: 201, at: 1)
+        let verified = try await upload.value
+        let linked = try await store.advanceBackground(command, assetID: "asset", phase: .attachedRef, ref: verified)
+        let patch = Task { try await network.writeBackground(linked) }
+        await fulfillment(of: [starts[2]], timeout: 4)
+        guard fixture.count == 3 else { patch.cancel(); return XCTFail("Missing attachment") }
+        let patchRequest = fixture.request(at: 2)
+        XCTAssertEqual(patchRequest.url?.path, "/api/cards/asset/background")
+        XCTAssertEqual(patchRequest.httpMethod, "PATCH")
+        XCTAssertEqual(patchRequest.value(forHTTPHeaderField: "If-Match"), "\"7\"")
+        let data: Data
+        if let body = patchRequest.httpBody { data = body }
+        else {
+            let stream = try XCTUnwrap(patchRequest.httpBodyStream)
+            stream.open(); defer { stream.close() }
+            var buffer = [UInt8](repeating: 0, count: 1024)
+            let count = stream.read(&buffer, maxLength: buffer.count)
+            data = Data(buffer.prefix(max(0,count)))
+        }
+        XCTAssertEqual(try JSONDecoder().decode([String: String].self, from: data), ["background_media_ref":ref])
+        fixture.respond(card(8, ref: display), at: 2)
+        let current = try await patch.value
+        XCTAssertEqual(current.displayRef, display)
+        try await store.retireBackground(linked, current: current)
+        let removal = try await store.stageBackground(localID: localID, assetID: "asset", baseline: 8, image: nil, expected: nil, createPlaceholder: false)
+        let frozen = try await store.advanceBackground(removal, assetID: "asset", phase: .submitted)
+        let clear = Task { try await network.writeBackground(frozen) }
+        await fulfillment(of: [starts[3]], timeout: 4)
+        guard fixture.count == 4 else { clear.cancel(); return XCTFail("Missing removal") }
+        XCTAssertEqual(fixture.request(at: 3).httpMethod, "DELETE")
+        XCTAssertEqual(fixture.request(at: 3).value(forHTTPHeaderField: "If-Match"), "\"8\"")
+        fixture.respond(card(9), at: 3)
+        let absent = try await clear.value
+        XCTAssertNil(absent.displayRef)
+        XCTAssertEqual(absent.revision, 9)
+    }
+
     private func pinFixture() async throws -> (LocalNotesController, NoteStoreScope, ToggleCardPinResponse) {
         prepareLinkAuth()
         let scope = try XCTUnwrap(AuthManager.shared.currentNoteScope)
