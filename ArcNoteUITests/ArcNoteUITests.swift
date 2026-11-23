@@ -8863,6 +8863,14 @@ final class ArcNoteUITests: XCTestCase {
         }
         revealEditorBackgroundButton().tap()
         tapBackgroundDialogAction("cardEditorRestoreBackgroundButton")
+        typeInCardEditorBody("\n")
+        dismissCardEditorKeyboardWithVerticalDrag()
+        waitForLabel("cardEditorLeadingAction", expected: "Save note")
+        waitForButton("cardEditorLeadingAction").tap()
+        waitForEnabled(waitForButton("cardEditorLeadingAction"))
+        tap("fixture.background.inspect")
+        waitForLabel("fixture.background.live-proof", expected: "creates=0 uploads=0 writes=0 revision=1 ack=0 phase=none public=false body=")
+        XCTAssertTrue(app.staticTexts["Add content before saving this note."].exists)
         typeInCardEditorBody("New authored body")
         dismissCardEditorKeyboardWithVerticalDrag()
         closeNewNoteEditor()
@@ -8914,9 +8922,23 @@ final class ArcNoteUITests: XCTestCase {
         guard let before, let latest = field("revision", in: proof.label) else { return XCTFail("Missing stored body revisions") }
         XCTAssertGreaterThan(latest, before)
         XCTAssertEqual(field("ack", in: proof.label), latest)
-        tap("fixture.background.release")
         tap("fixture.background.open")
         assertRenderedEditorParagraph("Initial body prepared edited during upload")
+        let retry = app.staticTexts["Background unconfirmed · Retry Save"]
+        XCTAssertTrue(retry.waitForExistence(timeout: 10))
+        waitForButton("cardEditorLeadingAction").tap()
+        let failedRetry = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "Retry the pending background.")).firstMatch
+        XCTAssertTrue(failedRetry.waitForExistence(timeout: 10))
+        tap("fixture.background.release")
+        let settled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: retry)
+        XCTAssertEqual(XCTWaiter.wait(for: [settled], timeout: 12), .completed)
+        XCTAssertFalse(failedRetry.exists)
+        waitForLabel("cardEditorLeadingAction", expected: "Close note")
+        revealEditorBackgroundButton().tap()
+        tapBackgroundDialogAction("cardEditorRemoveBackgroundButton")
+        tap("fixture.background.inspect")
+        waitForBackgroundProof(waitFor("fixture.background.live-proof", timeout: 10), counts: "creates=1 uploads=1 writes=1",
+                               state: "phase=staged public=false body=Initial body prepared edited during upload")
     }
 
     func testNewCardStagesBackgroundAndPrivacyBeforeFirstSave() throws {

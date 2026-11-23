@@ -1,5 +1,9 @@
 # Execution boundary history
 
+## 2026-11-23 — Reopened editor and background validation
+
+On a reopened revision-one placeholder, cancellation or a damaged command let structurally blank editor JSON reach private CREATE. The first-body check now runs for every explicit Save. A previous editor could finish an upload while its successor still displayed Retry. The scoped library now publishes sidecar changes, and each mounted editor restores the latest note-local presentation. Actual staging of the frozen Go raster matrix also exposed 17 malformed inputs that ImageIO decoded, including trailing data in three formats. The native store now verifies their container structure before replacing a verified choice.
+
 ## 2026-11-23 — Background picker, Close and retired sessions
 
 A blank WK paragraph advanced the placeholder and created a private note on explicit Save. Cancelling after reopen could remove the row beneath the active editor. Real-editor regressions reproduce both paths. ImageIO returned decoded pixels for a CRC-corrupt PNG and unrotated pixel dimensions for a valid orientation-6 JPEG. The store now verifies the PNG checksums and freezes JPEG display dimensions before staging. A held body write and held private Core Data queue reproduced old-session delivery under a same-scope successor. A verified product-access denial followed by a new grant within the same login also let a queued response overwrite the original command. The editor now carries both login and grant identity through its waits and checks them at the durable effect. Its Close action flushes newer accepted input while a presentation response is held.

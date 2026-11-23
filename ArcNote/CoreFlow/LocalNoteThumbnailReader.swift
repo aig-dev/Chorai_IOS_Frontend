@@ -66,6 +66,7 @@ final class LocalNoteThumbnailReader: ObservableObject {
         library.changes.sink { [weak self] change in
             guard let self else { return }
             switch change {
+            case .background: break
             case .reset: self.invalidateAll()
             case .updated: self.invalidateObsoleteImages()
             }

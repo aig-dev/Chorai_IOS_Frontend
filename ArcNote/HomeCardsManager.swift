@@ -74,6 +74,7 @@ class HomeCardsManager: ObservableObject {
         libraryObservation = library.changes.sink { [weak self, weak library] change in
             guard let self, self.isOwnedLibrary, let library else { return }
             switch change {
+            case .background: break
             case .reset: self.presentLocalNotes(library.notes, scope: library.scope)
             case let .updated(notes, removed): self.updateLocalCards(notes, removed: removed, scope: library.scope)
             }

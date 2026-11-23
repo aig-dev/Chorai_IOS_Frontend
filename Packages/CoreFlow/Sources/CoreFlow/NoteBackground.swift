@@ -125,10 +125,15 @@ extension NoteLocalStore {
               w * h <= 100_000_000 else { throw NoteBackgroundError.invalidImage }
 
         // ImageIO can return complete, decoded pixels even when an IDAT CRC is wrong.
-        if type == "public.png" { try checkPNGChunks(image.data) }
+        let orientation: Int
+        if type == "public.png" {
+            try checkPNGChunks(image.data)
+            orientation = 1
+        } else {
+            orientation = try NoteBackgroundRaster.orientation(data: image.data, type: type, width: w, height: h)
+        }
         guard CGImageSourceCreateImageAtIndex(source, 0, [kCGImageSourceShouldCacheImmediately: true] as CFDictionary) != nil,
               CGImageSourceGetStatusAtIndex(source, 0) == .statusComplete else { throw NoteBackgroundError.invalidImage }
-        let orientation = info[kCGImagePropertyOrientation] as? Int ?? 1
         let swapAxes = type == "public.jpeg" && (5...8).contains(orientation)
         return ("card-background." + ext, mime, swapAxes ? h : w, swapAxes ? w : h)
     }
@@ -137,17 +142,46 @@ extension NoteLocalStore {
         try data.withUnsafeBytes { (bytes: UnsafeRawBufferPointer) in
             guard let start = bytes.bindMemory(to: UInt8.self).baseAddress else { throw NoteBackgroundError.invalidImage }
             var offset = 8
+            var sawHeader = false
+            var sawPalette = false
+            var sawData = false
+            var dataEnded = false
+            var dataBytes = 0
+            var color: UInt8 = 0
+            var depth: UInt8 = 0
             while bytes.count - offset >= 12 {
                 let size = Int(UInt32(bigEndian: bytes.loadUnaligned(fromByteOffset: offset, as: UInt32.self)))
                 guard size <= bytes.count - offset - 12 else { throw NoteBackgroundError.invalidImage }
                 let type = UInt32(bigEndian: bytes.loadUnaligned(fromByteOffset: offset + 4, as: UInt32.self))
                 let stored = UInt32(bigEndian: bytes.loadUnaligned(fromByteOffset: offset + 8 + size, as: UInt32.self))
                 guard crc32(0, start + offset + 4, UInt32(size + 4)) == stored else { throw NoteBackgroundError.invalidImage }
-                offset += size + 12
-                if type == 0x49454e44 { // IEND
-                    guard size == 0, offset == bytes.count else { throw NoteBackgroundError.invalidImage }
+                let tag = bytes[(offset + 4)..<(offset + 8)]
+                guard tag.allSatisfy({ (65...90).contains($0) || (97...122).contains($0) }),
+                      bytes[offset + 6] & 0x20 == 0 else { throw NoteBackgroundError.invalidImage }
+                switch type {
+                case 0x49484452: // IHDR
+                    guard offset == 8, size == 13 else { throw NoteBackgroundError.invalidImage }
+                    sawHeader = true
+                    depth = bytes[offset + 16]
+                    color = bytes[offset + 17]
+                case 0x504c5445: // PLTE
+                    guard sawHeader, !sawPalette, !sawData, size > 0, size <= 768, size.isMultiple(of: 3),
+                          color != 0, color != 4, color != 3 || (depth <= 8 && size / 3 <= 1 << depth) else {
+                        throw NoteBackgroundError.invalidImage
+                    }
+                    sawPalette = true
+                case 0x49444154: // IDAT
+                    guard sawHeader, !dataEnded, color != 3 || sawPalette else { throw NoteBackgroundError.invalidImage }
+                    sawData = true
+                    dataBytes += size
+                case 0x49454e44: // IEND
+                    guard dataBytes > 0, size == 0, offset + 12 == bytes.count else { throw NoteBackgroundError.invalidImage }
                     return
+                default:
+                    guard sawHeader, bytes[offset + 4] & 0x20 != 0 else { throw NoteBackgroundError.invalidImage }
+                    if sawData { dataEnded = true }
                 }
+                offset += size + 12
             }
             throw NoteBackgroundError.invalidImage
         }
@@ -189,6 +223,19 @@ extension NoteLocalStore {
 
     public func background(localID: String) throws -> NoteBackgroundCommand? {
         try Self.readBackground(at: backgroundFile(localID), scope: scope, localID: localID)
+    }
+
+    /// Sidecar and confirmed row are committed on this private queue. An editor that
+    /// opens during delivery must observe both from the same point in that sequence.
+    public func backgroundPresentation(localID: String) async throws
+        -> (command: NoteBackgroundCommand?, asset: String?, confirmed: String?) {
+        let url = try backgroundFile(localID)
+        let scope = scope
+        return try await transaction { context in
+            let command = try Self.readBackground(at: url, scope: scope, localID: localID)
+            let note = try Self.row(localID: localID, in: context).map { try Self.decode($0, scope: scope) }
+            return (command, note?.serverAssetID, note?.backgroundMediaRef)
+        }
     }
 
     public func backgroundImage(_ command: NoteBackgroundCommand) throws -> CardEditingImage? {

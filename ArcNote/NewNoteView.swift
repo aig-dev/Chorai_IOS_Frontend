@@ -211,6 +211,7 @@ private struct CardEditorSessionView: View {
     @State private var pendingOntologyLinkSourceID: String?
     @State private var unlinkingLinkID: String?
     @State private var saveMessage: String?
+    @State private var backgroundFailure: (command: UUID, message: String)?
     @State private var hasSaveFailure = false
     @State private var failedCommitBaseline: CardEditorCommitBaseline?
     @State private var isSaving = false
@@ -434,7 +435,7 @@ private struct CardEditorSessionView: View {
             persistenceSession.setVisible(true)
             localNotes.registerEditor(persistenceSession)
         }
-        .task { await reloadBackground() }
+        .task { await localEditingService.observeStoredBackground(restoreBackground) }
         .onChange(of: editingStore.draft) { _ in scheduleLocalSave() }
         .onChange(of: persistenceSession.hasSaveFailure) { failed in
             if failed {
@@ -808,6 +809,7 @@ private struct CardEditorSessionView: View {
     private func saveCurrentSnapshot() {
         guard !isSaving, !isClosing, !isDeliveringBackground else { return }
         let admission = localEditingService.backgroundAdmission()
+        let attemptedCommand = localEditingService.pendingBackground?.id
         completeTagEntry()
         let finishGeneration = authManager.sessionGeneration
         let priorFailedBaseline = failedCommitBaseline
@@ -874,9 +876,15 @@ private struct CardEditorSessionView: View {
                 }
             } catch let error as NoteBackgroundError {
                 guard persistenceSession.isVisible else { return }
-                saveMessage = persistenceSession.backgroundFailureMessage(error, bodyRevision: attemptedRevision)
+                let message = persistenceSession.backgroundFailureMessage(error, bodyRevision: attemptedRevision,
+                    hasBackgroundChoice: localEditingService.pendingBackground != nil)
+                saveMessage = message
                 hasSaveFailure = error != .stale && error != .needsBody
                 failedCommitBaseline = hasSaveFailure ? currentCommitBaseline : nil
+                if hasSaveFailure, let attemptedCommand {
+                    backgroundFailure = (attemptedCommand, message)
+                    clearSettledBackgroundFailure()
+                }
             } catch CardEditorSessionError.staleSnapshot {
                 saveMessage = nil
                 failedCommitBaseline = priorFailedBaseline
@@ -1005,6 +1013,7 @@ private struct CardEditorSessionView: View {
     }
 
     private func hideSaveFailure() {
+        backgroundFailure = nil
         hasSaveFailure = false
     }
 
@@ -1114,14 +1123,30 @@ private struct CardEditorSessionView: View {
     }
 
     private func reloadBackground() async {
-        do {
-            let intent = try await localEditingService.readBackground()
-            guard !Task.isCancelled else { return }
+        _ = try? await localEditingService.readBackground(restore: restoreBackground)
+    }
+
+    private func restoreBackground(_ result: Result<CardEditingBackgroundIntent, Error>) {
+        guard persistenceSession.isVisible else { return }
+        switch result {
+        case let .success(intent):
             editingStore.restoreStoredBackground(intent, confirmed: localEditingService.confirmedBackground)
             backgroundLoaded = true
-        } catch {
-            if !Task.isCancelled { backgroundLoaded = false; saveMessage = "Couldn’t read the pending background. Open Background to retry." }
+            clearSettledBackgroundFailure()
+        case .failure:
+            backgroundLoaded = false
+            saveMessage = "Couldn’t read the pending background. Open Background to retry."
         }
+    }
+
+    private func clearSettledBackgroundFailure() {
+        guard let failure = backgroundFailure, localEditingService.pendingBackground?.id != failure.command,
+              !localEditingService.backgroundUnreadable else { return }
+        backgroundFailure = nil
+        guard saveMessage == failure.message, !editingStore.isDraftDirty,
+              !editingStoreHasFailure, !persistenceSession.hasSaveFailure else { return }
+        saveMessage = nil
+        resolveSaveFailure()
     }
 
     private func handleBackgroundAction(_ action: CardEditorBackgroundAction) {

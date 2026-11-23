@@ -978,7 +978,6 @@ struct BackgroundRecoveryFixture: View {
         VStack {
             Text(dismissedProof).accessibilityIdentifier("fixture.background.proof")
             Button("Open note") { dismissedProof = ""; showing = true }.accessibilityIdentifier("fixture.background.open")
-            Button("Release upload") { owner.release() }.accessibilityIdentifier("fixture.background.release")
         }
         .accessibilityHidden(showing)
         .task {
@@ -999,6 +998,9 @@ struct BackgroundRecoveryFixture: View {
                         creationID: owner.id, suppliedService: owner.editor(new: openingNew), localNotes: owner.notes)
                 .safeAreaInset(edge: .bottom) {
                     VStack {
+                        if held && !openingNew {
+                            Button("Release upload") { owner.release() }.accessibilityIdentifier("fixture.background.release")
+                        }
                         Button("Inspect local note") {
                             Task {
                                 do { proof = try await owner.readback() }
@@ -1013,11 +1015,11 @@ struct BackgroundRecoveryFixture: View {
 }
 
 @MainActor
-private final class BackgroundRecoveryFixtureOwner: ObservableObject, NoteBackgroundTransport {
+final class BackgroundRecoveryFixtureOwner: ObservableObject, NoteBackgroundTransport {
     let id = UUID().uuidString
     let scope = NoteStoreScope(actorID: UUID().uuidString, environmentID: "offline-real-background-editor")
     let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-    lazy var source = BackgroundRecoveryFixtureSync(scope: scope)
+    private lazy var source = BackgroundRecoveryFixtureSync(scope: scope)
     lazy var library = NoteLibraryStore(rootURL: root, service: { [source] _ in source })
     lazy var notes = LocalNotesController(library: library, access: { [scope] in (scope, true) })
     var identifier: String { "local-note:" + id }
@@ -1026,6 +1028,7 @@ private final class BackgroundRecoveryFixtureOwner: ObservableObject, NoteBackgr
     private var writes = 0
     private var waiting: CheckedContinuation<Void, Never>?
     private var holdUpload = false
+    private var observation = NoteBackgroundObservation(revision: 0, displayRef: nil)
 
     func editor(new: Bool) -> LocalCoreCardEditingService {
         LocalCoreCardEditingService(identifier: new ? nil : identifier, creationID: id, scope: scope, library: library,
@@ -1048,12 +1051,14 @@ private final class BackgroundRecoveryFixtureOwner: ObservableObject, NoteBackgr
         await library.synchronize(forceRetry: true)
         let target = try await library.backgroundTarget(identifier: identifier, createID: id, scope: scope)
         let record = try await target.store.background(localID: id)
-        let count = await source.creates
-        return "creates=\(count) uploads=\(uploads) writes=\(writes) revision=\(target.note?.bodyRevision ?? 0) ack=\(target.note?.acknowledgedBodyRevision ?? 0) phase=\(record?.phase.rawValue ?? "none") public=\(target.note?.isPublic ?? false) body=\(target.note?.body.content ?? "")"
+        return "\(await counts()) revision=\(target.note?.bodyRevision ?? 0) ack=\(target.note?.acknowledgedBodyRevision ?? 0) phase=\(record?.phase.rawValue ?? "none") public=\(target.note?.isPublic ?? false) body=\(target.note?.body.content ?? "")"
+    }
+    func counts() async -> String {
+        "creates=\(await source.creates) uploads=\(uploads) writes=\(writes)"
     }
     func release() { holdUpload = false; waiting?.resume(); waiting = nil }
     func backgroundObservation(scope: NoteStoreScope, asset: String) async throws -> NoteBackgroundObservation {
-        .init(revision: 0, displayRef: nil)
+        observation
     }
     func uploadBackground(_ command: NoteBackgroundCommand, bytes: Data) async throws -> String {
         uploads += 1
@@ -1062,7 +1067,8 @@ private final class BackgroundRecoveryFixtureOwner: ObservableObject, NoteBackgr
     }
     func writeBackground(_ command: NoteBackgroundCommand) async throws -> NoteBackgroundObservation {
         writes += 1
-        return .init(revision: command.baseline + 1, displayRef: "/fixture/background")
+        observation = .init(revision: command.baseline + 1, displayRef: command.logicalRef == nil ? nil : "/fixture/background")
+        return observation
     }
 }
 

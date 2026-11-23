@@ -17,6 +17,36 @@ final class NoteBackgroundTests: XCTestCase {
         return store
     }
 
+    func testFrozenRasterMatrixUsesActualStagingAndRetainsExistingChoiceForRejectedInputs() async throws {
+        let store = try await temporaryStore()
+        for (index, vector) in NoteBackgroundRasterFixtures.vectors.enumerated() {
+            let id = "fixture-" + String(index)
+            let original = try await store.stageBackground(localID: id, assetID: nil, baseline: 0, image: image,
+                expected: nil, createPlaceholder: true, admission: admission)
+            let bytes = try XCTUnwrap(Data(base64Encoded: vector.bytes), vector.name)
+            let picked = CardEditingImage(data: bytes, filename: "picker", mimeType: "image/fixture")
+            do {
+                let result = try await store.stageBackground(localID: id, assetID: nil, baseline: 0, image: picked,
+                    expected: original, createPlaceholder: false, admission: admission)
+                XCTAssertGreaterThan(vector.width, 0, vector.name)
+                XCTAssertEqual(result.width, vector.width, vector.name)
+                XCTAssertEqual(result.height, vector.height, vector.name)
+                let saved = try await store.backgroundImage(result)
+                XCTAssertEqual(saved?.data, bytes, vector.name)
+            } catch NoteBackgroundError.invalidImage {
+                XCTAssertEqual(vector.width, 0, vector.name)
+            }
+            if vector.width == 0 {
+                let retained = try await store.background(localID: id)
+                XCTAssertEqual(retained, original, vector.name)
+                if retained == original {
+                    let retainedImage = try await store.backgroundImage(original)
+                    XCTAssertEqual(retainedImage?.data, image.data, vector.name)
+                }
+            }
+        }
+    }
+
     func testCorruptRasterCannotReplaceVerifiedChoice() async throws {
         let store = try await temporaryStore()
         let good = CardEditingImage(data: Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=")!, filename: "valid.png", mimeType: "image/png")

@@ -187,6 +187,7 @@ final class NoteLibraryStoreTests: XCTestCase {
         var changes: [[String]] = []
         let subscription = library.changes.sink { change in
             switch change {
+            case .background: break
             case .reset: changes.append(["reset"])
             case let .updated(notes, removed):
                 changes.append(notes.map(\.localID).sorted() + removed.sorted())

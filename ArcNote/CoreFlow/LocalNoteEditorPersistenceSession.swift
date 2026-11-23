@@ -49,7 +49,7 @@ final class LocalNoteEditorPersistenceSession: ObservableObject {
 
     func saveBodyAndChosenBackground(service: LocalCoreCardEditingService, admission: NoteBackgroundAdmission,
                                      backgroundLoaded: Bool, willDeliver: () -> Void) async throws -> Bool {
-        if isUntouchedNewDraft && service.pendingBackground != nil { throw NoteBackgroundError.needsBody }
+        if isUntouchedNewDraft { throw NoteBackgroundError.needsBody }
         if editingStore.draft.validationError == nil { try await service.freezeBackgroundForSave(admission) }
         guard await editingStore.ensurePersisted() != nil else { return false }
         guard backgroundLoaded, !service.backgroundUnreadable else { throw NoteBackgroundError.unreadable }
@@ -67,9 +67,9 @@ final class LocalNoteEditorPersistenceSession: ObservableObject {
         return !editingStore.isDirty
     }
 
-    func backgroundFailureMessage(_ error: NoteBackgroundError, bodyRevision: Int?) -> String {
+    func backgroundFailureMessage(_ error: NoteBackgroundError, bodyRevision: Int?, hasBackgroundChoice: Bool = false) -> String {
         switch error {
-        case .needsBody: return "Add content before saving this background."
+        case .needsBody: return hasBackgroundChoice ? "Add content before saving this background." : "Add content before saving this note."
         case .stale: return "Background changed elsewhere. Choose again."
         case .rejected: return "Image rejected. Cancel the background to choose again."
         default:

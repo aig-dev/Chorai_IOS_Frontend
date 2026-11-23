@@ -7,6 +7,7 @@ import Foundation
 public final class NoteLibraryStore: ObservableObject {
     public enum Change {
         case reset
+        case background(localID: String)
         case updated([OfflineNote], removed: Set<String>)
     }
 
@@ -131,6 +132,11 @@ public final class NoteLibraryStore: ObservableObject {
         return (store, id, note)
     }
 
+    public func backgroundCommandDidChange(localID: String, scope: NoteStoreScope) {
+        guard self.scope == scope else { return }
+        noteChanges.send(.background(localID: localID))
+    }
+
     public func publishBackgroundChange(localID: String, scope: NoteStoreScope) async throws {
         let (store, epoch) = try await context(scope)
         let note = try await store.note(localID: localID)
@@ -146,7 +152,9 @@ public final class NoteLibraryStore: ObservableObject {
     }
 
     public func endBackgroundDelivery(localID: String, id: UUID) {
-        if backgroundDeliveries[localID] == id { backgroundDeliveries[localID] = nil }
+        guard backgroundDeliveries[localID] == id else { return }
+        backgroundDeliveries[localID] = nil
+        noteChanges.send(.background(localID: localID))
     }
 
     public func synchronize(forceRetry: Bool = false) async {

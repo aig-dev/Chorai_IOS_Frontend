@@ -359,6 +359,61 @@ final class LocalNoteBackgroundRecoveryTests: XCTestCase {
         return fixture
     }
 
+    func testBlankReopenedPlaceholderCannotCreateAfterCancelOrUnreadableCommand() async throws {
+        for damaged in [false, true] {
+            let owner = BackgroundRecoveryFixtureOwner()
+            addTeardownBlock { @MainActor in
+                await owner.library.configure(scope: nil, cloudEnabled: false)
+                try FileManager.default.removeItem(at: owner.root)
+            }
+            try await owner.prepare(held: false)
+            let service = owner.editor(new: false)
+            _ = try await service.openExisting()
+            let target = try await owner.library.backgroundTarget(identifier: owner.identifier, createID: owner.id, scope: owner.scope)
+            if damaged {
+                let directory = target.store.directoryURL.appendingPathComponent("background-commands")
+                let slot = try XCTUnwrap(FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil).first)
+                try Data("malformed".utf8).write(to: slot)
+                do { _ = try await service.readBackground(); XCTFail("Damaged original was accepted") }
+                catch NoteBackgroundError.unreadable {}
+            } else {
+                _ = try await service.readBackground()
+                try await service.cancelBackground()
+            }
+            let editing = CardEditingStore(cardID: owner.identifier, draft: .init(title: nil, content: "", tags: [], isPublic: false),
+                backgroundMediaRef: nil, links: [], service: service, preservesLocalDrafts: true)
+            let model = BlockNoteCardEditorModel(document: .init(contentJSON: nil, fallbackMarkdown: ""))
+            let session = LocalNoteEditorPersistenceSession(scope: owner.scope, editingStore: editing, bodyModel: model,
+                isNew: false, initialIsPublic: false, isUnpublishedEmptyPlaceholder: { service.isUnpublishedEmptyPlaceholder })
+            let blank = #"[{"type":"paragraph","content":[],"children":[]},{"type":"paragraph","content":[],"children":[]}]"#
+            _ = editing.applyBodyRevision(content: "\n", contentJSON: blank, revision: 2)
+            XCTAssertTrue(session.isUntouchedNewDraft)
+            do {
+                _ = try await session.saveBodyAndChosenBackground(service: service, admission: service.backgroundAdmission(), backgroundLoaded: !damaged) {}
+                XCTFail("Explicit blank Save persisted the first body")
+            } catch { XCTAssertEqual(error as? NoteBackgroundError, .needsBody) }
+            await owner.library.synchronize(forceRetry: true)
+            let placeholder = try await target.store.note(localID: owner.id)
+            XCTAssertEqual(placeholder?.bodyRevision, 1)
+            XCTAssertEqual(placeholder?.acknowledgedBodyRevision, 0)
+            XCTAssertNil(placeholder?.serverAssetID)
+            let before = await owner.counts()
+            XCTAssertEqual(before, "creates=0 uploads=0 writes=0")
+            _ = editing.applyBodyRevision(content: "Known first body", contentJSON: nil, revision: 3)
+            do {
+                _ = try await session.saveBodyAndChosenBackground(service: service, admission: service.backgroundAdmission(), backgroundLoaded: !damaged) {}
+            } catch { XCTAssertTrue(damaged); XCTAssertEqual(error as? NoteBackgroundError, .unreadable) }
+            await owner.library.synchronize(forceRetry: true)
+            let saved = try await target.store.note(localID: owner.id)
+            XCTAssertEqual(saved?.body.content, "Known first body")
+            XCTAssertEqual(saved?.acknowledgedBodyRevision, saved?.bodyRevision)
+            XCTAssertEqual(saved?.serverAssetID, "fixture-asset")
+            XCTAssertEqual(saved?.isPublic, false)
+            let after = await owner.counts()
+            XCTAssertEqual(after, "creates=1 uploads=0 writes=0")
+        }
+    }
+
     func testLostUploadPatchAndRemovalReopenAndReuseOriginalDecision() async throws {
         for loss in [BackgroundTestWire.Loss.upload, .patch, .remove] {
             let f = try await setupEditor()
@@ -446,6 +501,35 @@ final class LocalNoteBackgroundRecoveryTests: XCTestCase {
         f.wire.writeError = nil; f.wire.uploadError = nil
         _ = try await reopened.submitBackground(reopened.backgroundAdmission())
         XCTAssertNil(reopened.pendingBackground)
+    }
+
+    func testTrailingImageBytesCannotReplaceOriginalOrStartTransport() async throws {
+        let f = try await setupEditor()
+        let editor = try await f.openEditor()
+        try await editor.observeBackgroundChoice()
+        _ = try await editor.stageBackground(png)
+        let original = try XCTUnwrap(editor.pendingBackground)
+        // The exact jpeg2x3, frozenGIF and webPVP8 positives from Go's frozen image contract.
+        let positives = [
+            "/9j/4AAQSkZJRgABAgAAAQABAAD//gAQTGF2YzYyLjI4LjEwMgD/2wBDAAgEBAQEBAUFBQUFBQYGBgYGBgYGBgYGBgYHBwcICAgHBwcGBgcHCAgICAkJCQgICAgJCQoKCgwMCwsODg4RERT/xABMAAEBAAAAAAAAAAAAAAAAAAAABgEBAQAAAAAAAAAAAAAAAAAABgcQAQAAAAAAAAAAAAAAAAAAAAARAQAAAAAAAAAAAAAAAAAAAAD/wAARCAADAAIDASIAAhEAAxEA/9oADAMBAAIRAxEAPwCLAE1/f//Z",
+            "R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==",
+            "UklGRj4AAABXRUJQVlA4IDIAAADwAQCdASoCAAMAAUAmJaACdLoB+AAETAAA/vNpl/5glfkG7UP/0uD9Lg/S4P/SkAAAAA==",
+        ]
+        for positive in positives {
+            var bytes = try XCTUnwrap(Data(base64Encoded: positive))
+            bytes.append(0)
+            try await editor.observeBackgroundChoice()
+            let observationReads = f.wire.reads
+            do {
+                _ = try await editor.stageBackground(.init(data: bytes, filename: "picker", mimeType: "image/fixture"))
+                XCTFail("Accepted trailing data")
+            } catch NoteBackgroundError.invalidImage {}
+            XCTAssertEqual(f.wire.reads, observationReads)
+            XCTAssertTrue(f.wire.uploads.isEmpty)
+            XCTAssertTrue(f.wire.writes.isEmpty)
+            let reopened = try await f.openEditor()
+            XCTAssertEqual(reopened.pendingBackground, original)
+        }
     }
 
     func testWrongTargetAndChangedBytesCannotDispatchPendingBackground() async throws {
@@ -672,6 +756,147 @@ final class LocalNoteBackgroundRecoveryTests: XCTestCase {
         XCTAssertEqual(f.wire.writes.count, holdWrite ? 1 : 0)
     }
 
+    func testSecondEditorReconcilesAttachedPhaseAndTerminalOriginal() async throws {
+        let f = try await setupEditor()
+        let first = try await f.openEditor()
+        try await first.observeBackgroundChoice()
+        _ = try await first.stageBackground(png)
+        let original = try XCTUnwrap(first.pendingBackground)
+        let upload = EditorExecutionGate(), patch = EditorExecutionGate()
+        let uploading = expectation(description: "original upload entered")
+        f.wire.onUpload = { uploading.fulfill(); await upload.wait() }
+        f.wire.onWrite = { await patch.wait() }
+        defer { upload.open(); patch.open() }
+        let delivery = Task { try await first.submitBackground(first.backgroundAdmission()) }
+        await fulfillment(of: [uploading], timeout: 5)
+        let second = try await f.openEditor()
+        let submitted = expectation(description: "second editor shows submitted")
+        let attached = expectation(description: "second editor shows original attachedRef while PATCH is held")
+        let settled = expectation(description: "second editor shows confirmed metadata and no Retry")
+        var seen = Set<String>()
+        let observer = Task {
+            await second.observeStoredBackground { result in
+                guard case .success = result else { return XCTFail("Failed to reconcile pending background") }
+                if let command = second.pendingBackground, command.id == original.id,
+                   seen.insert(command.phase.rawValue).inserted {
+                    if command.phase == .submitted { submitted.fulfill() }
+                    if command.phase == .attachedRef {
+                        XCTAssertEqual(command.logicalRef, f.wire.ref)
+                        attached.fulfill()
+                    }
+                } else if second.pendingBackground == nil, second.confirmedBackground != nil, seen.insert("confirmed").inserted {
+                    settled.fulfill()
+                }
+            }
+        }
+        defer { observer.cancel() }
+        await fulfillment(of: [submitted], timeout: 5)
+        upload.open()
+        await fulfillment(of: [attached], timeout: 5)
+        patch.open()
+        _ = try await delivery.value
+        await fulfillment(of: [settled], timeout: 5)
+        try await second.observeBackgroundChoice()
+        _ = try await second.stageBackground(png)
+        let next = try XCTUnwrap(second.pendingBackground)
+        XCTAssertNotEqual(next.id, original.id)
+        XCTAssertEqual(next.baseline, original.baseline + 1)
+        XCTAssertEqual(f.wire.uploads.map(\.id), [original.id])
+        XCTAssertEqual(f.wire.writes.map(\.id), [original.id])
+        observer.cancel()
+        await observer.value
+    }
+
+    func testLatePreviewAndReadErrorCannotReplaceNewlyStagedChoice() async throws {
+        let gif = CardEditingImage(data: try XCTUnwrap(Data(base64Encoded: "R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==")),
+                                   filename: "new.gif", mimeType: "image/gif")
+        for lateError in [false, true] {
+            let f = try await setupEditor()
+            let editor = try await f.openEditor()
+            try await editor.observeBackgroundChoice()
+            _ = try await editor.stageBackground(png)
+            let original = try XCTUnwrap(editor.pendingBackground)
+            if lateError {
+                let filename = try XCTUnwrap(original.image?.relativePath)
+                let files = try XCTUnwrap(FileManager.default.enumerator(at: f.root, includingPropertiesForKeys: nil)?.allObjects as? [URL])
+                let retained = try XCTUnwrap(files.first { $0.lastPathComponent == filename })
+                try Data("damaged original".utf8).write(to: retained)
+            }
+            let entered = expectation(description: "retained original bytes read before publication")
+            let release = EditorExecutionGate()
+            defer { release.open() }
+            let previous = Task {
+                try await editor.readBackground(readImage: { store, command in
+                    let result: Result<CardEditingImage?, Error>
+                    do {
+                        result = .success(try await store.backgroundImage(command))
+                        XCTAssertFalse(lateError)
+                    } catch {
+                        XCTAssertTrue(lateError)
+                        XCTAssertEqual(error as? NoteLocalStoreError, .attachmentMismatch)
+                        result = .failure(error)
+                    }
+                    entered.fulfill()
+                    await release.wait()
+                    return try result.get()
+                }, restore: { _ in XCTFail("Published a previous choice or its read failure") })
+            }
+            await fulfillment(of: [entered], timeout: 5)
+            try await editor.observeBackgroundChoice()
+            _ = try await editor.stageBackground(gif)
+            let replacement = try XCTUnwrap(editor.pendingBackground)
+            XCTAssertNotEqual(replacement.id, original.id)
+            release.open()
+            do { _ = try await previous.value; XCTFail("Outdated preview was accepted") }
+            catch is CancellationError {}
+            XCTAssertEqual(editor.pendingBackground, replacement)
+            XCTAssertFalse(editor.backgroundUnreadable)
+            let current = try await editor.readBackground()
+            guard case let .replace(selected) = current else { return XCTFail("Replacement disappeared") }
+            XCTAssertEqual(selected.data, gif.data)
+        }
+    }
+
+    func testSupersededReadAndRetiredGrantCannotPublishToMountedEditor() async throws {
+        let f = try await setupEditor()
+        let editor = try await f.openEditor()
+        try await editor.observeBackgroundChoice()
+        _ = try await editor.stageBackground(png)
+        let target = try await f.library.backgroundTarget(identifier: "asset", createID: "unused", scope: f.scope)
+        let original = try XCTUnwrap(editor.pendingBackground)
+        for retire in [false, true] {
+            let queued = expectation(description: "private queue held before reading")
+            let admitted = expectation(description: "old read entered its admission check")
+            let release = DispatchSemaphore(value: 0)
+            let blocker = Task {
+                try await target.store.transaction { _ in
+                    queued.fulfill()
+                    guard release.wait(timeout: .now() + 10) == .success else { throw NoteBackgroundError.unknown }
+                }
+            }
+            await fulfillment(of: [queued], timeout: 5)
+            let admission = editor.backgroundAdmission()
+            f.nextAccessCheck = { admitted.fulfill() }
+            let old = Task {
+                try await editor.readBackground(admission: admission, restore: { _ in XCTFail("Superseded read overwrote visible state") })
+            }
+            await fulfillment(of: [admitted], timeout: 5)
+            if retire { f.session += 1 }
+            let newer = expectation(description: "successor read started before releasing the old one")
+            f.nextAccessCheck = { newer.fulfill() }
+            let fresh = Task { try await editor.readBackground() }
+            await fulfillment(of: [newer], timeout: 5)
+            release.signal()
+            try await blocker.value
+            do { _ = try await old.value; XCTFail("Superseded read applied") }
+            catch is CancellationError {}
+            catch NoteLocalStoreError.invalidScope {}
+            _ = try await fresh.value
+            XCTAssertEqual(editor.pendingBackground, original)
+            XCTAssertFalse(editor.backgroundUnreadable)
+        }
+    }
+
     func testHeldUploadAllowsBodyCloseAndLateSessionCannotAttach() async throws {
         let f = try await setupEditor()
         let editor = try await f.openEditor()
@@ -771,12 +996,14 @@ private final class BackgroundTestWire: NoteBackgroundTransport {
     var bytes: [Data] = []
     var writes: [NoteBackgroundCommand] = []
     var loss: Loss?
+    var reads = 0
     var failRead = false
     var uploadError: NoteBackgroundError?
     var writeError: NoteBackgroundError?
     var onUpload: (() async -> Void)?
     var onWrite: (() async -> Void)?
     func backgroundObservation(scope: NoteStoreScope, asset: String) async throws -> NoteBackgroundObservation {
+        reads += 1
         if failRead { throw NoteBackgroundError.unknown }
         return current
     }
