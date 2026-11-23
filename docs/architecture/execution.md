@@ -239,6 +239,8 @@ CardImagePreparation serializes JPEG encoding outside the main thread. A cancele
 
 ## Bundled editor resources — implemented
 
+The sibling Web repository owns the editor bundle. From its root, install the package lock with `npm ci`, run `npm run build:ios-editor` to regenerate this package’s Resources directory and run `npm run check:ios-editor` to compare it against a fresh build. The November 2026 bundle uses BlockNote 0.50.0, bridge protocol 3 and document schema 1. The generated manifest records SHA-256 digests for the HTML, JavaScript and CSS. The BlockNoteEditor package tests open the shipped files in WKWebView and exercise snapshots, image references, focus and selection.
+
 BlockNoteResourceValidator owns one shared in-flight task and successful manifest per immutable app-bundle lifetime. Validation, including complete SHA checks, runs outside MainActor. Failures remain retryable. Independent test validators have independent caches. The coordinator loads WKWebView only after validation and a live attachment check; tearing down one view never cancels another view's shared validation.
 
 ## Local editor persistence — implemented before bridge offload

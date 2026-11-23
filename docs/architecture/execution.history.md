@@ -1,5 +1,9 @@
 # Execution boundary history
 
+## 2026-11-23 — Shared editor bundle
+
+The native package still shipped BlockNote 0.46.2 while the Web lock specified 0.50.0. The Web generator at `e5f0aa9f` rebuilt the native resources with Node 25.6.1, npm 11.9.0 and locked Vite 6.4.5. Independent builds produced identical resources under bridge protocol 3 and document schema 1. The complete editor package suite exercised the regenerated bundle, including standard NOTE editing, preserved merge image references and WebKit focus behavior.
+
 ## 2026-11-23 — Library Pin identity
 
 An ordinary Library Pin sent its local row ID to the server and received 404. A fixture reproduced the request path through the menu. The notes owner now resolves the server asset, validates its reply in the initiating scope and returns the confirmed state to that row. Tests cover Pin and Unpin, mismatched replies, unbound rows, remote-only canonical cards and session retirement.
