@@ -106,13 +106,14 @@ public struct NoteRemoteSnapshot: Codable, Equatable, Sendable {
     public let isPublic: Bool
     public let editorAtmosphere: String
     public let backgroundMediaRef: String?
+    public let backgroundRevision: Int64?
     public let isPinned: Bool?
     public let createdAt: Date?
     public let updatedAt: Date?
 
     public init(
         assetID: String, syncToken: String, body: OfflineNoteBody, lifecycle: NoteLifecycle,
-        isPublic: Bool, editorAtmosphere: String = "none", backgroundMediaRef: String? = nil, isPinned: Bool? = nil,
+        isPublic: Bool, editorAtmosphere: String = "none", backgroundMediaRef: String? = nil, backgroundRevision: Int64? = nil, isPinned: Bool? = nil,
         createdAt: Date? = nil, updatedAt: Date? = nil
     ) {
         self.assetID = assetID
@@ -122,6 +123,7 @@ public struct NoteRemoteSnapshot: Codable, Equatable, Sendable {
         self.isPublic = isPublic
         self.editorAtmosphere = editorAtmosphere
         self.backgroundMediaRef = backgroundMediaRef
+        self.backgroundRevision = backgroundRevision
         self.isPinned = isPinned
         self.createdAt = createdAt
         self.updatedAt = updatedAt
@@ -151,6 +153,20 @@ public struct OfflineNote: Codable, Equatable, Identifiable, Sendable {
     public internal(set) var isPublic = false
     public internal(set) var editorAtmosphere = "none"
     public internal(set) var backgroundMediaRef: String?
+    public internal(set) var backgroundRevision: Int64?
+
+    /// Order confirmed presentation independently of the body sync token.
+    @discardableResult
+    mutating func acceptBackground(ref: String?, revision: Int64?) -> Bool {
+        if let revision, !(0...NoteBackgroundCommand.maxRevision).contains(revision) { return false }
+        if let known = backgroundRevision {
+            guard let revision, revision >= known else { return false }
+            if revision == known { return ref == backgroundMediaRef }
+        }
+        backgroundMediaRef = ref
+        backgroundRevision = revision
+        return true
+    }
     public internal(set) var isPinned: Bool?
     public let createdAt: Date
     public internal(set) var updatedAt: Date

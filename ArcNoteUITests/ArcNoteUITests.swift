@@ -8843,6 +8843,62 @@ final class ArcNoteUITests: XCTestCase {
         )
     }
 
+    func testCancelDisplaysLatestOwnerBackgroundInMountedEditor() {
+        app.launchArguments.append("--ui-test-card-editor-shell")
+        app.launchEnvironment["CHORAI_CARD_EDITOR_FIXTURE_MODE"] = "owner-background"
+        app.launch()
+        waitForLabel("fixture.background.render", expected: "/fixture/A observed=/fixture/A")
+        revealEditorBackgroundButton().tap()
+        tapBackgroundDialogAction("cardEditorReplaceBackgroundButton")
+        waitForLabel("fixture.background.render", expected: "local observed=local")
+        revealEditorBackgroundButton().tap()
+        tapBackgroundDialogAction("cardEditorRestoreBackgroundButton")
+        waitForLabel("fixture.background.render", expected: "/fixture/B observed=/fixture/B")
+        tap("fixture.background.inspect")
+        waitForBackgroundProof(waitFor("fixture.background.live-proof", timeout: 10),
+                               counts: "creates=1 uploads=0 writes=0", state: "phase=none")
+    }
+
+    func testPickerDismissalKeepsFreshOwnerBackgroundWithoutWriting() {
+        app.launchArguments.append("--ui-test-card-editor-shell")
+        app.launchEnvironment["CHORAI_CARD_EDITOR_FIXTURE_MODE"] = "owner-background"
+        app.launchEnvironment["CHORAI_CARD_EDITOR_BACKGROUND_REFRESH"] = "replace"
+        app.launch()
+        waitForLabel("fixture.background.render", expected: "/fixture/A observed=/fixture/A")
+        revealEditorBackgroundButton().tap()
+        tapBackgroundDialogAction("cardEditorReplaceBackgroundButton")
+        let cancel = app.buttons.matching(NSPredicate(format: "label == 'Cancel' OR label == 'Close'")).firstMatch
+        XCTAssertTrue(cancel.waitForExistence(timeout: 15), "The real system photo picker must open")
+        cancel.tap()
+        let rendered = waitFor("fixture.background.render", timeout: 10)
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label BEGINSWITH %@", "/fixture/B observed="), object: rendered
+        )], timeout: 10), .completed,
+                      "Dismissing the picker must keep the current owner background, not cached A")
+        tap("fixture.background.inspect")
+        waitForBackgroundProof(waitFor("fixture.background.live-proof", timeout: 10),
+                               counts: "creates=1 uploads=0 writes=0", state: "phase=none")
+    }
+
+    func testRemoveAfterRemoteRemovalSettlesWithoutWriting() {
+        app.launchArguments.append("--ui-test-card-editor-shell")
+        app.launchEnvironment["CHORAI_CARD_EDITOR_FIXTURE_MODE"] = "owner-background"
+        app.launchEnvironment["CHORAI_CARD_EDITOR_BACKGROUND_REFRESH"] = "remove"
+        app.launch()
+        waitForLabel("fixture.background.render", expected: "/fixture/A observed=/fixture/A")
+        revealEditorBackgroundButton().tap()
+        tapBackgroundDialogAction("cardEditorRemoveBackgroundButton")
+        let rendered = waitFor("fixture.background.render", timeout: 10)
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label BEGINSWITH %@", "none observed="), object: rendered
+        )], timeout: 10), .completed,
+                      "An already-removed background needs no pending-command cancellation")
+        XCTAssertFalse(app.staticTexts["Couldn’t change the pending background. Retry when ready."].exists)
+        tap("fixture.background.inspect")
+        waitForBackgroundProof(waitFor("fixture.background.live-proof", timeout: 10),
+                               counts: "creates=1 uploads=0 writes=0", state: "phase=none")
+    }
+
     func testBackgroundOnlySaveAndReopenedCancelUseRealEditor() {
         app.launchArguments.append("--ui-test-card-editor-shell")
         app.launchEnvironment["CHORAI_CARD_EDITOR_FIXTURE_MODE"] = "persisted-background"

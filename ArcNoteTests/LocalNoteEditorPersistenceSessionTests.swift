@@ -503,6 +503,260 @@ final class LocalNoteBackgroundRecoveryTests: XCTestCase {
         XCTAssertNil(reopened.pendingBackground)
     }
 
+    func testOwnerObservationSurvivesStageCancelAndNewerProjectionSupersedesIt() async throws {
+        for original in ["/fixture/A", nil] as [String?] {
+            let f = try await setupEditor()
+            let editor = try await f.openEditor()
+            _ = try await f.library.recordMetadata(identifier: "asset", backgroundMediaRef: .some(original), scope: f.scope)
+            let shown = CardEditingStore(cardID: "asset", draft: .init(title: nil, content: "draft", tags: [], isPublic: true),
+                backgroundMediaRef: original, links: [], service: editor, preservesLocalDrafts: true)
+            let started = expectation(description: "initial row reconciled")
+            let staged = expectation(description: "mounted replacement reconciled")
+            let cancelled = expectation(description: "mounted cancellation reconciled")
+            let projected = expectation(description: "newer confirmed background reached mounted editor")
+            let removed = expectation(description: "newer confirmed removal reached mounted editor")
+            var phase = 0
+            let observer = Task {
+                await editor.observeStoredBackground { result in
+                    guard case let .success(intent) = result else { return XCTFail("Unreadable background") }
+                    shown.restoreStoredBackground(intent, confirmed: editor.confirmedBackground)
+                    if phase == 0 { phase = 1; started.fulfill() }
+                    else if phase == 1, case .replace = intent { phase = 2; staged.fulfill() }
+                    else if phase == 2, editor.pendingBackground == nil { phase = 3; cancelled.fulfill() }
+                    else if phase == 3, shown.backgroundMediaRef == "/fixture/D" { phase = 4; projected.fulfill() }
+                    else if phase == 4, shown.backgroundMediaRef == nil { phase = 5; removed.fulfill() }
+                }
+            }
+            defer { observer.cancel() }
+            await fulfillment(of: [started], timeout: 5)
+            f.wire.current = .init(revision: 2, displayRef: "/fixture/B")
+            try await editor.observeBackgroundChoice()
+            XCTAssertEqual(editor.confirmedBackground, "/fixture/B")
+            _ = try await editor.stageBackground(png)
+            await fulfillment(of: [staged], timeout: 5)
+            try await editor.cancelBackground()
+            await fulfillment(of: [cancelled], timeout: 5)
+            XCTAssertEqual(shown.backgroundMediaRef, "/fixture/B")
+            let target = try await f.library.backgroundTarget(identifier: "asset", createID: "unused", scope: f.scope)
+            for (revision, ref, received) in [(Int64(3), "/fixture/D" as String?, projected), (4, nil, removed)] {
+                let row = try await target.store.note(localID: target.localID)
+                let current = try XCTUnwrap(row)
+                let detail = NoteRemoteSnapshot(assetID: "asset", syncToken: "detail-" + String(revision), body: current.body,
+                    lifecycle: .active, isPublic: true, backgroundMediaRef: ref, backgroundRevision: revision)
+                let update = try await target.store.applyRemote(detail, localID: target.localID, expectedGeneration: current.generation)
+                f.library.publishConfirmedBackground(try XCTUnwrap(update), scope: f.scope)
+                await fulfillment(of: [received], timeout: 5)
+            }
+            XCTAssertTrue(f.wire.uploads.isEmpty)
+            XCTAssertTrue(f.wire.writes.isEmpty)
+        }
+    }
+
+    func testOlderTerminalReceiptRetiresOnlyOriginalAndReturnsWinningProjection() async throws {
+        let f = try await setupEditor()
+        let editor = try await f.openEditor()
+        try await editor.observeBackgroundChoice()
+        _ = try await editor.stageBackground(png)
+        let id = try XCTUnwrap(editor.pendingBackground?.id)
+        let gate = EditorExecutionGate()
+        let sent = expectation(description: "original PATCH entered")
+        f.wire.onWrite = { sent.fulfill(); await gate.wait() }
+        defer { gate.open() }
+        let deliver = Task { try await editor.submitBackground(editor.backgroundAdmission()) }
+        await fulfillment(of: [sent], timeout: 5)
+        let target = try await f.library.backgroundTarget(identifier: "asset", createID: "unused", scope: f.scope)
+        let row = try XCTUnwrap(target.note)
+        let detail = NoteRemoteSnapshot(assetID: "asset", syncToken: "later-body", body: .init(content: "later body"),
+            lifecycle: .active, isPublic: true, backgroundMediaRef: "/fixture/D", backgroundRevision: 5)
+        let newer = try await target.store.applyRemote(detail, localID: row.localID, expectedGeneration: row.generation)
+        f.library.publishConfirmedBackground(try XCTUnwrap(newer), scope: f.scope)
+        gate.open()
+        let actual = try await deliver.value
+        XCTAssertEqual(actual, "/fixture/D")
+        let saved = try await target.store.backgroundPresentation(localID: row.localID)
+        XCTAssertNil(saved.command)
+        XCTAssertEqual(saved.confirmed, "/fixture/D")
+        XCTAssertEqual(f.wire.writes.map(\.id), [id])
+        let reopened = try await f.openEditor()
+        XCTAssertNil(reopened.pendingBackground)
+        XCTAssertEqual(reopened.confirmedBackground, "/fixture/D")
+    }
+
+    func testSupersededChooserStillPublishesItsCommittedRowToMountedEditor() async throws {
+        let f = try await setupEditor()
+        let chooser = try await f.openEditor()
+        let mounted = try await f.openEditor()
+        let target = try await f.library.backgroundTarget(identifier: "asset", createID: "unused", scope: f.scope)
+        let initial = expectation(description: "other editor mounted")
+        let published = expectation(description: "other editor received committed observation")
+        var mountedReady = false, sawB = false
+        let stream = Task {
+            await mounted.observeStoredBackground { result in
+                guard case .success = result else { return }
+                if !mountedReady { mountedReady = true; initial.fulfill() }
+                if mounted.confirmedBackground == "/B", !sawB { sawB = true; published.fulfill() }
+            }
+        }
+        defer { stream.cancel() }
+        await fulfillment(of: [initial], timeout: 5)
+        let get = EditorExecutionGate()
+        let sent = expectation(description: "owner read sent")
+        f.wire.current = .init(revision: 2, displayRef: "/B")
+        f.wire.onRead = { sent.fulfill(); await get.wait() }
+        let choosing = Task { try await chooser.observeBackgroundChoice() }
+        await fulfillment(of: [sent], timeout: 5)
+        let held = expectation(description: "private context held")
+        let release = DispatchSemaphore(value: 0)
+        let blocker = Task {
+            try await target.store.transaction { _ in
+                held.fulfill()
+                guard release.wait(timeout: .now() + 10) == .success else { throw NoteBackgroundError.unknown }
+            }
+        }
+        await fulfillment(of: [held], timeout: 5)
+        let queued = expectation(description: "owner metadata ready for queue")
+        f.nextAccessCheck = { queued.fulfill() }
+        get.open()
+        await fulfillment(of: [queued], timeout: 5)
+        let newer = expectation(description: "replacement read owns chooser service")
+        f.nextAccessCheck = { newer.fulfill() }
+        let reading = Task { _ = try? await chooser.readBackground() }
+        await fulfillment(of: [newer], timeout: 5)
+        release.signal()
+        try await blocker.value
+        do { try await choosing.value; XCTFail("Superseded chooser established a selection") }
+        catch NoteBackgroundError.changed {}
+        await reading.value
+        await fulfillment(of: [published], timeout: 5)
+        do { _ = try await chooser.stageBackground(png); XCTFail("Superseded chooser staged") }
+        catch NoteBackgroundError.changed {}
+        let row = try await target.store.note(localID: target.localID)
+        XCTAssertEqual(row?.backgroundRevision, 2)
+        XCTAssertEqual(row?.backgroundMediaRef, "/B")
+    }
+
+    func testStagingContinuationCannotReturnBytesForSupersededCommand() async throws {
+        let f = try await setupEditor()
+        let editor = try await f.openEditor()
+        try await editor.observeBackgroundChoice()
+        let read = expectation(description: "verified original bytes read")
+        let gate = EditorExecutionGate()
+        let staged = Task {
+            try await editor.stageBackground(png) { store, command in
+                let bytes = try await store.backgroundImage(command)
+                read.fulfill()
+                await gate.wait()
+                return bytes
+            }
+        }
+        defer { gate.open() }
+        await fulfillment(of: [read], timeout: 5)
+        try await editor.observeBackgroundChoice()
+        _ = try await editor.stageBackground(nil)
+        let replacement = try XCTUnwrap(editor.pendingBackground)
+        gate.open()
+        do { _ = try await staged.value; XCTFail("Returned the earlier replace intent") }
+        catch NoteBackgroundError.changed {}
+        XCTAssertEqual(editor.pendingBackground, replacement)
+        XCTAssertNil(replacement.image)
+        XCTAssertTrue(f.wire.uploads.isEmpty && f.wire.writes.isEmpty)
+    }
+
+    func testCancelContinuationPreservesSuccessorChoiceAndCommand() async throws {
+        for commitSuccessor in [false, true] {
+            let f = try await setupEditor()
+            let editor = try await f.openEditor()
+            try await editor.observeBackgroundChoice()
+            _ = try await editor.stageBackground(png)
+            let retired = expectation(description: "original cancelled on disk")
+            let gate = EditorExecutionGate()
+            let cancelled = Task {
+                try await editor.cancelBackground { store, command, admission in
+                    let row = try await store.retireBackground(command, current: nil, cancel: true, admission: admission)
+                    retired.fulfill()
+                    await gate.wait()
+                    return row
+                }
+            }
+            defer { gate.open() }
+            await fulfillment(of: [retired], timeout: 5)
+            _ = try await editor.readBackground()
+            f.wire.current = .init(revision: 2, displayRef: "/B")
+            try await editor.observeBackgroundChoice()
+            if commitSuccessor { _ = try await editor.stageBackground(png) }
+            gate.open()
+            if commitSuccessor {
+                do { try await cancelled.value; XCTFail("Old cancel replaced a committed successor") }
+                catch NoteBackgroundError.changed {}
+            } else {
+                try await cancelled.value
+                _ = try await editor.stageBackground(png)
+            }
+            let reopened = try await f.openEditor()
+            XCTAssertEqual(editor.pendingBackground, reopened.pendingBackground)
+            XCTAssertEqual(reopened.pendingBackground?.baseline, 2)
+            XCTAssertTrue(f.wire.uploads.isEmpty && f.wire.writes.isEmpty)
+        }
+    }
+
+    func testLateOwnerObservationCannotOverwriteNewerConfirmedProjection() async throws {
+        for revoked in [false, true] {
+            let f = try await setupEditor()
+            let editor = try await f.openEditor()
+            let target = try await f.library.backgroundTarget(identifier: "asset", createID: "unused", scope: f.scope)
+            let held = EditorExecutionGate()
+            let sent = expectation(description: "original owner read reached transport")
+            f.wire.current = .init(revision: 2, displayRef: "/fixture/B")
+            f.wire.onRead = { sent.fulfill(); await held.wait() }
+            defer { held.open() }
+            let stale = Task { try await editor.observeBackgroundChoice() }
+            await fulfillment(of: [sent], timeout: 5)
+            f.wire.onRead = nil
+            if revoked { f.session += 1 }
+            let next = try await f.openEditor()
+            f.wire.current = .init(revision: 4, displayRef: "/fixture/D")
+            try await next.observeBackgroundChoice()
+            held.open()
+            do { try await stale.value; XCTFail("Old owner read was published") }
+            catch NoteBackgroundError.changed {} catch NoteLocalStoreError.invalidScope {}
+            let stored = try await target.store.note(localID: target.localID)
+            XCTAssertEqual(stored?.backgroundRevision, 4)
+            XCTAssertEqual(stored?.backgroundMediaRef, "/fixture/D")
+            XCTAssertNotEqual(editor.confirmedBackground, "/fixture/B")
+            XCTAssertTrue(f.wire.uploads.isEmpty && f.wire.writes.isEmpty)
+        }
+    }
+
+    func testInvalidJPEGHeadersCannotReplaceOriginalOrDispatch() async throws {
+        // The two fixed 229-byte negative controls from the descriptor review.
+        let rejected = [
+            "/9j/2wAC/+AAEEpGSUYAAQIAAAEAAQAA//4AEExhdmM2Mi4yOC4xMDIA/9sAQwAIBAQEBAQFBQUFBQUGBgYGBgYGBgYGBgYGBwcHCAgIBwcHBgYHBwgICAgJCQkICAgICQkKCgoMDAsLDg4OEREU/8QATAABAQAAAAAAAAAAAAAAAAAAAAYBAQEAAAAAAAAAAAAAAAAAAAYHEAEAAAAAAAAAAAAAAAAAAAAAEQEAAAAAAAAAAAAAAAAAAAAA/8AAEQgAAwACAwEiAAIRAAMRAP/aAAwDAQACEQMRAD8AiwBNf3//2Q==",
+            "/9j/zAAC/+AAEEpGSUYAAQIAAAEAAQAA//4AEExhdmM2Mi4yOC4xMDIA/9sAQwAIBAQEBAQFBQUFBQUGBgYGBgYGBgYGBgYGBwcHCAgIBwcHBgYHBwgICAgJCQkICAgICQkKCgoMDAsLDg4OEREU/8QATAABAQAAAAAAAAAAAAAAAAAAAAYBAQEAAAAAAAAAAAAAAAAAAAYHEAEAAAAAAAAAAAAAAAAAAAAAEQEAAAAAAAAAAAAAAAAAAAAA/8AAEQgAAwACAwEiAAIRAAMRAP/aAAwDAQACEQMRAD8AiwBNf3//2Q==",
+        ]
+        for fixture in rejected {
+            let f = try await setupEditor()
+            let editor = try await f.openEditor()
+            try await editor.observeBackgroundChoice()
+            _ = try await editor.stageBackground(png)
+            let original = try XCTUnwrap(editor.pendingBackground)
+            try await editor.observeBackgroundChoice()
+            do {
+                let bytes = try XCTUnwrap(Data(base64Encoded: fixture))
+                _ = try await editor.stageBackground(.init(data: bytes, filename: "picker.jpg", mimeType: "image/jpeg"))
+                XCTFail("Accepted an invalid JPEG table")
+            } catch NoteBackgroundError.invalidImage {}
+            let reopened = try await f.openEditor()
+            XCTAssertEqual(reopened.pendingBackground, original)
+            if reopened.pendingBackground == original {
+                let target = try await f.library.backgroundTarget(identifier: "asset", createID: "unused", scope: f.scope)
+                let retained = try await target.store.backgroundImage(original)
+                XCTAssertEqual(retained?.data, png.data)
+            }
+            XCTAssertTrue(f.wire.uploads.isEmpty)
+            XCTAssertTrue(f.wire.writes.isEmpty)
+        }
+    }
+
     func testTrailingImageBytesCannotReplaceOriginalOrStartTransport() async throws {
         let f = try await setupEditor()
         let editor = try await f.openEditor()
@@ -1000,12 +1254,15 @@ private final class BackgroundTestWire: NoteBackgroundTransport {
     var failRead = false
     var uploadError: NoteBackgroundError?
     var writeError: NoteBackgroundError?
+    var onRead: (() async -> Void)?
     var onUpload: (() async -> Void)?
     var onWrite: (() async -> Void)?
     func backgroundObservation(scope: NoteStoreScope, asset: String) async throws -> NoteBackgroundObservation {
         reads += 1
         if failRead { throw NoteBackgroundError.unknown }
-        return current
+        let snapshot = current
+        await onRead?()
+        return snapshot
     }
     func uploadBackground(_ command: NoteBackgroundCommand, bytes: Data) async throws -> String {
         uploads.append(command); self.bytes.append(bytes)

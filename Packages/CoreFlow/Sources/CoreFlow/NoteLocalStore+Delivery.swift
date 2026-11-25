@@ -55,7 +55,8 @@ extension NoteLocalStore {
     private static func acceptConflictRemote(_ note: inout OfflineNote, _ remote: NoteRemoteSnapshot) {
         note.body = remote.body; note.bodyRevision += 1; note.acknowledgedBodyRevision = note.bodyRevision
         note.baseSyncToken = remote.syncToken; note.desiredLifecycle = remote.lifecycle; note.confirmedLifecycle = remote.lifecycle
-        note.editorAtmosphere = remote.editorAtmosphere; note.backgroundMediaRef = remote.backgroundMediaRef
+        note.editorAtmosphere = remote.editorAtmosphere
+        note.acceptBackground(ref: remote.backgroundMediaRef, revision: remote.backgroundRevision)
         note.isPinned = remote.isPinned
         note.remoteSnapshot = nil; note.syncIssue = nil; note.updatedAt = remote.updatedAt ?? note.updatedAt; note.generation += 1
     }

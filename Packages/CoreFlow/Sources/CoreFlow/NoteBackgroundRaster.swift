@@ -35,7 +35,7 @@ enum NoteBackgroundRaster {
     static func orientation(data: Data, type: String, width: Int, height: Int) throws -> Int {
         var input = Bytes(rest: Array(data)[...])
         switch type {
-        case "public.jpeg": return try jpeg(&input)
+        case "public.jpeg": return try jpeg(&input, width: width, height: height)
         case "com.compuserve.gif": try gif(&input, width: width, height: height)
         case "org.webmproject.webp": try webP(&input, width: width, height: height)
         default: throw invalid
@@ -43,12 +43,14 @@ enum NoteBackgroundRaster {
         return 1
     }
 
-    private static func jpeg(_ input: inout Bytes) throws -> Int {
+    private static func jpeg(_ input: inout Bytes, width: Int, height: Int) throws -> Int {
         guard try input.number(2, littleEndian: false) == 0xffd8 else { throw invalid }
         var inScan = false
         var scanHasEntropy = false
         var sawScan = false
-        var sawFrame = false
+        var frame: JPEGFrame?
+        var jfif = false
+        var configRead = false
         var orientation: Int?
         while !input.rest.isEmpty {
             if inScan {
@@ -60,7 +62,11 @@ enum NoteBackgroundRaster {
             var marker = try input.byte()
             while marker == 0xff { marker = try input.byte() }
             if inScan && marker == 0 { scanHasEntropy = true; continue }
-            if marker == 1 || (inScan && (0xd0...0xd7).contains(marker)) { continue }
+            if marker == 1 {
+                guard configRead else { throw invalid }
+                continue
+            }
+            if inScan && (0xd0...0xd7).contains(marker) { continue }
             guard !inScan || scanHasEntropy else { throw invalid }
             inScan = false
             if marker == 0xd9 {
@@ -71,13 +77,23 @@ enum NoteBackgroundRaster {
             let length = try input.number(2, littleEndian: false)
             let segment = try input.take(length - 2)
             if (0xc0...0xc2).contains(marker) {
-                guard !sawFrame else { throw invalid }
-                sawFrame = true
+                guard frame == nil else { throw invalid }
+                frame = try JPEGFrame(marker: marker, segment: segment, width: width, height: height)
+                configRead = jfif
             } else if marker == 0xda {
-                guard sawFrame else { throw invalid }
+                guard let frame else { throw invalid }
+                try frame.checkScan(segment)
+                configRead = true
                 sawScan = true
                 inScan = true
                 scanHasEntropy = false
+            } else if marker == 0xdb || marker == 0xc4 || marker == 0xcc {
+                guard marker != 0xcc || configRead else { throw invalid }
+                try checkJPEGTables(marker, segment)
+            } else if marker == 0xdd {
+                guard segment.count == 2 else { throw invalid }
+            } else if marker == 0xe0 && segment.count >= 5 {
+                jfif = segment.starts(with: [74, 70, 73, 70, 0])
             } else if marker == 0xe1, segment.starts(with: [69,120,105,102,0,0]),
                       let value = try exifOrientation(segment.dropFirst(6)) {
                 guard orientation == nil || orientation == value else { throw invalid }
@@ -85,6 +101,77 @@ enum NoteBackgroundRaster {
             }
         }
         throw invalid
+    }
+
+    private struct JPEGFrame {
+        let marker: UInt8
+        let components: Set<UInt8>
+
+        init(marker: UInt8, segment: ArraySlice<UInt8>, width: Int, height: Int) throws {
+            var fields = Bytes(rest: segment)
+            guard try fields.byte() == 8,
+                  try fields.number(2, littleEndian: false) == height,
+                  try fields.number(2, littleEndian: false) == width else { throw invalid }
+            let count = Int(try fields.byte())
+            guard [1, 3, 4].contains(count), fields.rest.count == 3 * count else { throw invalid }
+            var ids = Set<UInt8>()
+            var samples: [UInt8] = []
+            for _ in 0..<count {
+                guard try ids.insert(fields.byte()).inserted else { throw invalid }
+                let hv = try fields.byte()
+                guard [1, 2, 4].contains(hv >> 4), [1, 2, 4].contains(hv & 15),
+                      try fields.byte() <= 3 else { throw invalid }
+                samples.append(hv)
+            }
+            // Go's JPEG config reader supports these chroma sampling ratios.
+            if count == 3 {
+                let y = samples[0], cb = samples[1]
+                guard y & 15 <= 2, (y >> 4).isMultiple(of: cb >> 4),
+                      (y & 15).isMultiple(of: cb & 15), cb == samples[2] else { throw invalid }
+            } else if count == 4 {
+                guard samples == [0x11, 0x11, 0x11, 0x11] || samples == [0x22, 0x11, 0x11, 0x22] else { throw invalid }
+            }
+            self.marker = marker
+            self.components = ids
+        }
+
+        func checkScan(_ segment: ArraySlice<UInt8>) throws {
+            var fields = Bytes(rest: segment)
+            let count = Int(try fields.byte())
+            guard (1...components.count).contains(count), fields.rest.count == 2 * count + 3 else { throw invalid }
+            var seen = Set<UInt8>()
+            for _ in 0..<count {
+                let id = try fields.byte(), tables = try fields.byte()
+                guard components.contains(id), seen.insert(id).inserted, tables >> 4 <= 3, tables & 15 <= 3 else { throw invalid }
+            }
+            let start = try fields.byte(), end = try fields.byte(), approximation = try fields.byte()
+            if marker != 0xc2 {
+                guard count == components.count, start == 0, end == 63, approximation == 0 else { throw invalid }
+            } else {
+                let high = approximation >> 4, low = approximation & 15
+                guard start <= end, end <= 63, high <= 13, low <= 13, high == 0 || high == low + 1,
+                      start == 0 ? end == 0 : count == 1 else { throw invalid }
+            }
+        }
+    }
+
+    private static func checkJPEGTables(_ marker: UInt8, _ segment: ArraySlice<UInt8>) throws {
+        var fields = Bytes(rest: segment)
+        guard !fields.rest.isEmpty else { throw invalid }
+        while !fields.rest.isEmpty {
+            let descriptor = try fields.byte()
+            guard descriptor >> 4 <= 1, descriptor & 15 <= 3 else { throw invalid }
+            switch marker {
+            case 0xdb:
+                _ = try fields.take(64 * (Int(descriptor >> 4) + 1))
+            case 0xc4:
+                let symbols = try fields.take(16).reduce(0) { $0 + Int($1) }
+                guard (1...256).contains(symbols) else { throw invalid }
+                _ = try fields.take(symbols)
+            default:
+                _ = try fields.byte()
+            }
+        }
     }
 
     private static func exifOrientation(_ tiff: ArraySlice<UInt8>) throws -> Int? {

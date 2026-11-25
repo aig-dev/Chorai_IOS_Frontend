@@ -435,6 +435,11 @@ final class LocalCoreCardEditingService: CoreCardEditingServing, ObservableObjec
             case let .background(localID) where matchesBackground(localID: localID):
                 backgroundReadVersion &+= 1
                 continuation.yield(())
+            case let .updated(notes, _) where notes.contains(where: {
+                matchesBackground(localID: $0.localID) && $0.backgroundMediaRef != confirmedBackground
+            }):
+                backgroundReadVersion &+= 1
+                continuation.yield(())
             case .reset where library.scope != scope:
                 backgroundReadVersion &+= 1
                 continuation.finish()
@@ -512,28 +517,52 @@ final class LocalCoreCardEditingService: CoreCardEditingServing, ObservableObjec
     func observeBackgroundChoice() async throws {
         let admission = backgroundAdmission()
         choice = nil
-        try checkBackgroundSession(admission)
+        backgroundReadVersion &+= 1
+        let version = backgroundReadVersion
+        func eligible(online: Bool = false) throws {
+            try checkBackgroundSession(admission, online: online)
+            guard version == backgroundReadVersion else { throw NoteBackgroundError.changed }
+        }
+        try eligible()
         let target = try await backgroundTarget()
+        try eligible()
         let stored = try await target.store.background(localID: target.localID)
-        try checkBackgroundSession(admission)
+        try eligible()
         guard stored == pendingBackground, stored?.canCancel != false, !backgroundUnreadable else { throw NoteBackgroundError.unresolved }
-        let observation: NoteBackgroundObservation
         let asset = target.note?.serverAssetID
-        if let asset {
-            try checkBackgroundSession(admission, online: true)
+        let observation: NoteBackgroundObservation
+        if let note = target.note, let asset {
+            try eligible(online: true)
             observation = try await backgroundTransport.backgroundObservation(scope: scope, asset: asset)
+            try eligible(online: true)
+            let confirmed = try await target.store.recordBackgroundObservation(localID: target.localID, asset: asset,
+                generation: note.generation, previous: stored, observation: observation, admission: admission)
             try checkBackgroundSession(admission, online: true)
-            guard library.serverID(for: "local-note:" + target.localID) == asset else { throw NoteBackgroundError.changed }
+            guard library.serverID(for: "local-note:" + target.localID) == asset,
+                  !library.notes.contains(where: { $0.localID == target.localID && $0.generation > confirmed.generation
+                      && ($0.backgroundRevision != confirmed.backgroundRevision || $0.backgroundMediaRef != confirmed.backgroundMediaRef) })
+            else { throw NoteBackgroundError.changed }
+            guard version == backgroundReadVersion else {
+                // Another read owns the editor now. Other mounted editors still need the committed row.
+                library.publishConfirmedBackground(confirmed, scope: scope)
+                throw NoteBackgroundError.changed
+            }
+            confirmedBackground = confirmed.backgroundMediaRef
+            library.publishConfirmedBackground(confirmed, scope: scope)
         } else {
             observation = NoteBackgroundObservation(revision: 0, displayRef: nil)
+            confirmedBackground = nil
         }
-        confirmedBackground = observation.displayRef
         choice = (admission, target.localID, asset, observation.revision, stored)
     }
 
-    func stageBackground(_ image: CardEditingImage?) async throws -> CardEditingBackgroundIntent {
+    func stageBackground(_ image: CardEditingImage?,
+                         readImage: @MainActor (NoteLocalStore, NoteBackgroundCommand) async throws -> CardEditingImage? = { store, command in
+                             try await store.backgroundImage(command)
+                         }) async throws -> CardEditingBackgroundIntent {
         guard let choice, !backgroundUnreadable else { throw NoteBackgroundError.changed }
         self.choice = nil
+        backgroundReadVersion &+= 1
         try checkBackgroundSession(choice.admission)
         let target = try await backgroundTarget()
         try checkBackgroundSession(choice.admission)
@@ -546,24 +575,26 @@ final class LocalCoreCardEditingService: CoreCardEditingServing, ObservableObjec
         committedBackground(cmd, localID: target.localID)
         try await library.publishBackgroundChange(localID: target.localID, scope: scope)
         try checkBackgroundSession(choice.admission)
-        if let bytes = try await target.store.backgroundImage(cmd) {
-            try checkBackgroundSession(choice.admission)
-            return .replace(bytes)
-        }
-        return .remove
+        let bytes = try await readImage(target.store, cmd)
+        try checkBackgroundSession(choice.admission)
+        guard pendingBackground == cmd else { throw NoteBackgroundError.changed }
+        return bytes.map(CardEditingBackgroundIntent.replace) ?? .remove
     }
 
-    func cancelBackground() async throws {
+    func cancelBackground(retire: @MainActor (NoteLocalStore, NoteBackgroundCommand, NoteBackgroundAdmission) async throws -> OfflineNote = { store, command, admission in
+        try await store.retireBackground(command, current: nil, cancel: true, admission: admission)
+    }) async throws {
         let admission = backgroundAdmission()
         guard let cmd = pendingBackground, cmd.canCancel, !backgroundUnreadable else { throw NoteBackgroundError.unresolved }
+        choice = nil
+        backgroundReadVersion &+= 1
         let target = try await backgroundTarget()
         try checkBackgroundSession(admission)
-        try await target.store.retireBackground(cmd, current: nil, cancel: true, admission: admission)
+        let retired = try await retire(target.store, cmd, admission)
         try checkBackgroundSession(admission)
-        choice = nil
+        guard pendingBackground == cmd || pendingBackground == nil else { throw NoteBackgroundError.changed }
         committedBackground(nil, localID: target.localID)
-        try await library.publishBackgroundChange(localID: target.localID, scope: scope)
-        try checkBackgroundSession(admission)
+        library.publishConfirmedBackground(retired, scope: scope)
     }
 
     func freezeBackgroundForSave(_ admission: NoteBackgroundAdmission) async throws {
@@ -599,6 +630,18 @@ final class LocalCoreCardEditingService: CoreCardEditingServing, ObservableObjec
             try checkBackgroundSession(admission, online: true)
             guard library.serverID(for: "local-note:" + target.localID) == asset else { throw NoteBackgroundError.changed }
         }
+        func finish(_ confirmed: OfflineNote, original: NoteBackgroundCommand) throws -> String? {
+            guard pendingBackground == original, confirmed.serverAssetID == asset else { throw NoteBackgroundError.changed }
+            if let published = library.notes.first(where: { $0.localID == target.localID }),
+               published.generation > confirmed.generation,
+               published.backgroundRevision != confirmed.backgroundRevision || published.backgroundMediaRef != confirmed.backgroundMediaRef {
+                throw NoteBackgroundError.changed
+            }
+            confirmedBackground = confirmed.backgroundMediaRef
+            committedBackground(nil, localID: target.localID)
+            library.publishConfirmedBackground(confirmed, scope: scope)
+            return confirmed.backgroundMediaRef
+        }
         do {
             try eligible()
             let original = try await store.backgroundImage(command)
@@ -615,22 +658,16 @@ final class LocalCoreCardEditingService: CoreCardEditingServing, ObservableObjec
             try eligible()
             let current = try await backgroundTransport.writeBackground(command)
             try eligible()
-            try await store.retireBackground(command, current: current, admission: admission)
+            let confirmed = try await store.retireBackground(command, current: current, admission: admission)
             try eligible()
-            confirmedBackground = current.displayRef
-            committedBackground(nil, localID: target.localID)
-            try await library.publishBackgroundChange(localID: target.localID, scope: scope)
-            try eligible()
-            return current.displayRef
+            return try finish(confirmed, original: command)
         } catch NoteBackgroundError.stale {
             try eligible()
             let fresh = try await backgroundTransport.backgroundObservation(scope: scope, asset: asset)
             try eligible()
-            try await store.retireBackground(command, current: fresh, admission: admission)
+            let confirmed = try await store.retireBackground(command, current: fresh, admission: admission)
             try eligible()
-            confirmedBackground = fresh.displayRef
-            committedBackground(nil, localID: target.localID)
-            try await library.publishBackgroundChange(localID: target.localID, scope: scope)
+            _ = try finish(confirmed, original: command)
             throw NoteBackgroundError.stale
         } catch NoteBackgroundError.rejected where command.phase == .submitted && command.image != nil && command.logicalRef == nil {
             try eligible()

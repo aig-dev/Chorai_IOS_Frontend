@@ -973,6 +973,7 @@ struct BackgroundRecoveryFixture: View {
     @State private var proof = ""
     @State private var dismissedProof = ""
     let held: Bool
+    var ownerChoice = false
 
     var body: some View {
         VStack {
@@ -982,8 +983,8 @@ struct BackgroundRecoveryFixture: View {
         .accessibilityHidden(showing)
         .task {
             do {
-                try await owner.prepare(held: held)
-                openingNew = !held
+                try await owner.prepare(held: held, ownerChoice: ownerChoice)
+                openingNew = !held && !ownerChoice
                 showing = true
             } catch { proof = String(describing: error) }
         }
@@ -1029,17 +1030,26 @@ final class BackgroundRecoveryFixtureOwner: ObservableObject, NoteBackgroundTran
     private var waiting: CheckedContinuation<Void, Never>?
     private var holdUpload = false
     private var observation = NoteBackgroundObservation(revision: 0, displayRef: nil)
+    private var refreshOnAction = false
+    private var observationCount = 0
 
     func editor(new: Bool) -> LocalCoreCardEditingService {
         LocalCoreCardEditingService(identifier: new ? nil : identifier, creationID: id, scope: scope, library: library,
                                     backgroundTransport: self, backgroundGeneration: generation, backgroundAccess: { [scope] in (scope, 0, true) })
     }
-    func prepare(held: Bool) async throws {
+    func prepare(held: Bool, ownerChoice: Bool = false) async throws {
         holdUpload = held
         await library.configure(scope: scope, cloudEnabled: true)
-        if held {
+        if held || ownerChoice {
             _ = try await library.save(identifier: nil, createID: id, body: .init(content: "Initial body", contentJSON: #"[{"id":"held-initial","type":"paragraph","props":{},"content":[{"type":"text","text":"Initial body","styles":{}}],"children":[]}]"#), scope: scope)
             await library.synchronize(forceRetry: true)
+        }
+        if ownerChoice {
+            _ = try await library.recordMetadata(identifier: identifier, backgroundMediaRef: .some("/fixture/A"), scope: scope)
+            let refresh = ProcessInfo.processInfo.environment["CHORAI_CARD_EDITOR_BACKGROUND_REFRESH"]
+            refreshOnAction = refresh != nil
+            observation = .init(revision: 2, displayRef: refresh == "remove" ? nil : "/fixture/B")
+            return
         }
         let service = editor(new: !held)
         _ = try await service.readBackground()
@@ -1058,7 +1068,11 @@ final class BackgroundRecoveryFixtureOwner: ObservableObject, NoteBackgroundTran
     }
     func release() { holdUpload = false; waiting?.resume(); waiting = nil }
     func backgroundObservation(scope: NoteStoreScope, asset: String) async throws -> NoteBackgroundObservation {
-        observation
+        observationCount += 1
+        if refreshOnAction && observationCount == 1 {
+            return .init(revision: 1, displayRef: "/fixture/A")
+        }
+        return observation
     }
     func uploadBackground(_ command: NoteBackgroundCommand, bytes: Data) async throws -> String {
         uploads += 1

@@ -1,5 +1,15 @@
 # Execution boundary history
 
+## 2026-11-25 — System picker refresh and already-removed backgrounds
+
+Two real-editor UI regressions reproduced a stale rendered background after dismissing the system Photos picker and after another writer had already removed the background. Choosing a replacement now reconciles the fresh owner observation into the displayed pair while retaining any existing staged intent. Remove cancels only an existing pending command; a confirmed empty background settles without a write. Both regressions keep the real action sheet and picker path and verify zero transport writes. The earlier source-contract checks now follow the extracted staging helper while retaining the no-save and frozen-failure constraints. Final regression and ordinary-account acceptance remain separate gates.
+
+## 2026-11-23 — Confirmed background revisions and image headers
+
+On a mapped note, the owner chooser could verify image B, then a local stage and Cancel could restore an older cached A or a blank background. An earlier conflict snapshot could also be adopted after B. The native store now carries the existing server background revision alongside its confirmed reference and orders presentation independently of body conflict resolution. The real-editor Cancel regression follows the rendered source through a staged replacement and checks that the fake transport received zero writes. Hosted tests hold actual storage reads and retirements while another choice completes.
+
+Two small JPEG fixtures with invalid table definitions passed ImageIO and replaced a verified choice in the isolated baseline store. Native admission now checks bounded JPEG table, sampling and scan headers and PNG configuration fields before retaining the new image. The added controls include legal progressive, grayscale, CMYK, indexed-transparency and unused-table cases. Source qualification and ordinary-account acceptance are tracked separately in the launch evidence.
+
 ## 2026-11-23 — Reopened editor and background validation
 
 On a reopened revision-one placeholder, cancellation or a damaged command let structurally blank editor JSON reach private CREATE. The first-body check now runs for every explicit Save. A previous editor could finish an upload while its successor still displayed Retry. The scoped library now publishes sidecar changes, and each mounted editor restores the latest note-local presentation. Actual staging of the frozen Go raster matrix also exposed 17 malformed inputs that ImageIO decoded, including trailing data in three formats. The native store now verifies their container structure before replacing a verified choice.

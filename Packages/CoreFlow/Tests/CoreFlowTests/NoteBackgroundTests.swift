@@ -47,6 +47,77 @@ final class NoteBackgroundTests: XCTestCase {
         }
     }
 
+    func testConfirmedRevisionOrdersConflictBodyAdoptionAndCopyIndependently() async throws {
+        for copy in [false, true] {
+            let store = try await temporaryStore()
+            let server = NoteRemoteSnapshot(assetID: "asset", syncToken: "v1", body: .init(content: "original"),
+                lifecycle: .active, isPublic: false, backgroundMediaRef: "/A")
+            let inserted = try await store.applyRemote(server, localID: nil, expectedGeneration: nil)
+            let id = try XCTUnwrap(inserted).localID
+            let dirty = try await store.saveBody(localID: id, body: .init(content: "own draft"))
+            let remote = NoteRemoteSnapshot(assetID: "asset", syncToken: "v2", body: .init(content: "remote body"),
+                lifecycle: .active, isPublic: false, backgroundMediaRef: "/A", backgroundRevision: 1)
+            let saved = try await store.applyRemote(remote, localID: id, expectedGeneration: dirty.generation)
+            let conflict = try XCTUnwrap(saved)
+            let confirmed = try await store.recordBackgroundObservation(localID: id, asset: "asset", generation: conflict.generation,
+                previous: nil, observation: .init(revision: 2, displayRef: "/B"), admission: admission)
+            XCTAssertEqual(confirmed.body, dirty.body)
+            XCTAssertEqual(confirmed.bodyRevision, dirty.bodyRevision)
+            XCTAssertEqual(confirmed.acknowledgedBodyRevision, dirty.acknowledgedBodyRevision)
+            XCTAssertEqual(confirmed.remoteSnapshot, remote)
+            for observation in [NoteBackgroundObservation(revision: 1, displayRef: "/A"), .init(revision: 2, displayRef: nil)] {
+                do {
+                    _ = try await store.recordBackgroundObservation(localID: id, asset: "asset", generation: confirmed.generation,
+                        previous: nil, observation: observation, admission: admission)
+                    XCTFail("Outdated or conflicting metadata accepted")
+                } catch NoteBackgroundError.changed {}
+            }
+            let repeated = try await store.recordBackgroundObservation(localID: id, asset: "asset", generation: confirmed.generation,
+                previous: nil, observation: .init(revision: 2, displayRef: "/B"), admission: admission)
+            XCTAssertEqual(repeated.generation, confirmed.generation)
+            if copy {
+                let duplicate = try await store.saveConflictCopy(localID: id, expectedGeneration: repeated.generation, body: dirty.body, attachments: [])
+                XCTAssertEqual(duplicate.body, dirty.body)
+                XCTAssertNil(duplicate.serverAssetID)
+                XCTAssertNil(duplicate.backgroundRevision)
+                XCTAssertNil(duplicate.backgroundMediaRef)
+            } else { _ = try await store.useRemoteVersion(localID: id) }
+            let read = try await store.note(localID: id)
+            let adopted = try XCTUnwrap(read)
+            XCTAssertEqual(adopted.body, remote.body)
+            XCTAssertEqual(adopted.bodyRevision, adopted.acknowledgedBodyRevision)
+            XCTAssertEqual(adopted.backgroundRevision, 2)
+            XCTAssertEqual(adopted.backgroundMediaRef, "/B")
+            let unversioned = try await store.applyRemote(server, localID: id, expectedGeneration: adopted.generation)
+            XCTAssertEqual(unversioned?.body, server.body)
+            XCTAssertEqual(unversioned?.backgroundMediaRef, "/B")
+            XCTAssertEqual(unversioned?.backgroundRevision, 2)
+        }
+    }
+
+    func testJPEGStructuralHeadersPreserveOriginalChoiceOnRejection() async throws {
+        let store = try await temporaryStore()
+        for control in NoteBackgroundRasterFixtures.headerControls {
+            let id = UUID().uuidString
+            let original = try await store.stageBackground(localID: id, assetID: nil, baseline: 0, image: image,
+                expected: nil, createPlaceholder: true, admission: admission)
+            do {
+                let selected = CardEditingImage(data: control.image, filename: "fixture", mimeType: "image/fixture")
+                let command = try await store.stageBackground(localID: id, assetID: nil, baseline: 0, image: selected,
+                    expected: original, createPlaceholder: false, admission: admission)
+                XCTAssertTrue(control.accepted, control.name)
+                let verified = try await store.backgroundImage(command)
+                XCTAssertEqual(verified?.data, control.image, control.name)
+            } catch NoteBackgroundError.invalidImage {
+                XCTAssertFalse(control.accepted, control.name)
+                let retained = try await store.background(localID: id)
+                XCTAssertEqual(retained, original, control.name)
+                let retainedImage = try await store.backgroundImage(original)
+                XCTAssertEqual(retainedImage?.data, image.data, control.name)
+            }
+        }
+    }
+
     func testCorruptRasterCannotReplaceVerifiedChoice() async throws {
         let store = try await temporaryStore()
         let good = CardEditingImage(data: Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=")!, filename: "valid.png", mimeType: "image/png")

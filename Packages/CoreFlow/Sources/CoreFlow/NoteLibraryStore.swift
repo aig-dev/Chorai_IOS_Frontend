@@ -137,6 +137,11 @@ public final class NoteLibraryStore: ObservableObject {
         noteChanges.send(.background(localID: localID))
     }
 
+    public func publishConfirmedBackground(_ note: OfflineNote, scope: NoteStoreScope) {
+        guard self.scope == scope else { return }
+        publish([note])
+    }
+
     public func publishBackgroundChange(localID: String, scope: NoteStoreScope) async throws {
         let (store, epoch) = try await context(scope)
         let note = try await store.note(localID: localID)
@@ -373,7 +378,7 @@ public final class NoteLibraryStore: ObservableObject {
             if let expectedGeneration, current.generation != expectedGeneration { throw NoteLocalStoreError.staleGeneration }
             if let isPublic { current.isPublic = isPublic }
             if let isPinned { current.isPinned = isPinned }
-            if let backgroundMediaRef { current.backgroundMediaRef = backgroundMediaRef }
+            if let backgroundMediaRef { current.acceptBackground(ref: backgroundMediaRef, revision: nil) }
             current.generation += 1
         }
         try check(epoch); publish([updated])

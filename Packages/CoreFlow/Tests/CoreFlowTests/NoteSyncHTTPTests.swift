@@ -3,6 +3,26 @@ import XCTest
 @testable import CoreFlow
 
 final class NoteSyncHTTPTests: XCTestCase {
+    func testOwnerBackgroundRevisionIsOptionalAndBounded() throws {
+        func decode(_ value: String?) throws -> NoteRemoteSnapshot {
+            let field = value.map { ",\"background_revision\":" + $0 } ?? ""
+            let bytes = Data("""
+            {"success":true,"data":{"id":"note","owner_actor_id":"actor","sync_token":"v1","lifecycle":"active","content":"body","tags":[],"is_public":false\(field)}}
+            """.utf8)
+            return try NoteSyncHTTP.snapshot(from: bytes, actorID: "actor")
+        }
+        XCTAssertNil(try decode(nil).backgroundRevision)
+        XCTAssertEqual(try decode("0").backgroundRevision, 0)
+        XCTAssertEqual(try decode("9007199254740991").backgroundRevision, NoteBackgroundCommand.maxRevision)
+        for value in ["-1", "true", "\"3\"", "1.5", "9007199254740992"] {
+            XCTAssertThrowsError(try decode(value))
+        }
+        let historical = OfflineNote(localID: "legacy", body: .init(content: "kept"))
+        let reopened = try JSONDecoder().decode(OfflineNote.self, from: JSONEncoder().encode(historical))
+        XCTAssertNil(reopened.backgroundRevision)
+        XCTAssertEqual(reopened.body, historical.body)
+    }
+
     func testInvalidAuthoredTimestampRejectsSnapshotWithoutChangingMissingTimeSupport() throws {
         for value in ["not-a-date", "2026-01-01T00:00:60Z"] {
             let data = Data("""

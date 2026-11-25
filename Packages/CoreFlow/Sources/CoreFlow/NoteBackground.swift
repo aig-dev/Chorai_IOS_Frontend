@@ -127,7 +127,7 @@ extension NoteLocalStore {
         // ImageIO can return complete, decoded pixels even when an IDAT CRC is wrong.
         let orientation: Int
         if type == "public.png" {
-            try checkPNGChunks(image.data)
+            try checkPNGChunks(image.data, width: w, height: h)
             orientation = 1
         } else {
             orientation = try NoteBackgroundRaster.orientation(data: image.data, type: type, width: w, height: h)
@@ -138,13 +138,15 @@ extension NoteLocalStore {
         return ("card-background." + ext, mime, swapAxes ? h : w, swapAxes ? w : h)
     }
 
-    private static func checkPNGChunks(_ data: Data) throws {
+    private static func checkPNGChunks(_ data: Data, width: Int, height: Int) throws {
         try data.withUnsafeBytes { (bytes: UnsafeRawBufferPointer) in
             guard let start = bytes.bindMemory(to: UInt8.self).baseAddress else { throw NoteBackgroundError.invalidImage }
+            guard bytes.starts(with: [137,80,78,71,13,10,26,10]) else { throw NoteBackgroundError.invalidImage }
             var offset = 8
             var sawHeader = false
             var sawPalette = false
             var sawData = false
+            var indexedConfigComplete = false
             var dataEnded = false
             var dataBytes = 0
             var color: UInt8 = 0
@@ -164,6 +166,17 @@ extension NoteLocalStore {
                     sawHeader = true
                     depth = bytes[offset + 16]
                     color = bytes[offset + 17]
+                    let depths: [UInt8]
+                    switch color {
+                    case 0: depths = [1, 2, 4, 8, 16]
+                    case 3: depths = [1, 2, 4, 8]
+                    case 2, 4, 6: depths = [8, 16]
+                    default: throw NoteBackgroundError.invalidImage
+                    }
+                    guard UInt32(bigEndian: bytes.loadUnaligned(fromByteOffset: offset + 8, as: UInt32.self)) == width,
+                          UInt32(bigEndian: bytes.loadUnaligned(fromByteOffset: offset + 12, as: UInt32.self)) == height,
+                          depths.contains(depth), bytes[offset + 18] == 0, bytes[offset + 19] == 0,
+                          bytes[offset + 20] <= 1 else { throw NoteBackgroundError.invalidImage }
                 case 0x504c5445: // PLTE
                     guard sawHeader, !sawPalette, !sawData, size > 0, size <= 768, size.isMultiple(of: 3),
                           color != 0, color != 4, color != 3 || (depth <= 8 && size / 3 <= 1 << depth) else {
@@ -179,6 +192,10 @@ extension NoteLocalStore {
                     return
                 default:
                     guard sawHeader, bytes[offset + 4] & 0x20 != 0 else { throw NoteBackgroundError.invalidImage }
+                    if type == 0x74524e53, color == 3, !sawData, !indexedConfigComplete {
+                        guard sawPalette, size <= 256 else { throw NoteBackgroundError.invalidImage }
+                        indexedConfigComplete = true
+                    }
                     if sawData { dataEnded = true }
                 }
                 offset += size + 12
@@ -356,20 +373,48 @@ extension NoteLocalStore {
         }
     }
 
+    public func recordBackgroundObservation(localID: String, asset: String, generation: Int64,
+                                            previous: NoteBackgroundCommand?, observation: NoteBackgroundObservation,
+                                            admission: NoteBackgroundAdmission) async throws -> OfflineNote {
+        let url = try backgroundFile(localID)
+        let scope = scope
+        return try await transaction { context in
+            guard try Self.readBackground(at: url, scope: scope, localID: localID) == previous,
+                  previous?.canCancel != false, let row = try Self.row(localID: localID, in: context) else {
+                throw NoteBackgroundError.changed
+            }
+            var note = try Self.decode(row, scope: scope)
+            guard note.generation == generation, note.serverAssetID == asset, note.pendingPurge == nil,
+                  note.desiredLifecycle == .active else { throw NoteBackgroundError.changed }
+            let changed = note.backgroundRevision != observation.revision || note.backgroundMediaRef != observation.displayRef
+            guard note.acceptBackground(ref: observation.displayRef, revision: observation.revision) else {
+                throw NoteBackgroundError.changed
+            }
+            if changed {
+                note.generation += 1
+                try Self.write(note, scope: scope, in: context)
+            }
+            try admission.commit { if context.hasChanges { try context.save() } }
+            return note
+        }
+    }
+
+    @discardableResult
     public func retireBackground(_ command: NoteBackgroundCommand, current: NoteBackgroundObservation?,
-                                 cancel: Bool = false, admission: NoteBackgroundAdmission) async throws {
+                                 cancel: Bool = false, admission: NoteBackgroundAdmission) async throws -> OfflineNote {
         let url = try backgroundFile(command.localID)
         let files = try backgroundBytes(command.localID)
         let scope = scope
-        try await transaction { context in
+        let confirmed = try await transaction { context in
             guard try Self.readBackground(at: url, scope: scope, localID: command.localID) == command,
                   let row = try Self.row(localID: command.localID, in: context) else { throw NoteBackgroundError.changed }
             var note = try Self.decode(row, scope: scope)
             guard note.pendingPurge == nil, note.desiredLifecycle == .active,
                   command.assetID == nil || note.serverAssetID == command.assetID,
                   cancel ? command.canCancel : current != nil && command.assetID != nil else { throw NoteBackgroundError.changed }
-            if let current {
-                note.backgroundMediaRef = current.displayRef
+            if let current,
+               note.backgroundRevision != current.revision || note.backgroundMediaRef != current.displayRef,
+               note.acceptBackground(ref: current.displayRef, revision: current.revision) {
                 note.generation += 1
                 try Self.write(note, scope: scope, in: context)
             }
@@ -378,10 +423,12 @@ extension NoteLocalStore {
                 if context.hasChanges { try context.save() }
                 try FileManager.default.removeItem(at: url)
             }
+            return note
         }
         if let image = command.image {
             try? FileManager.default.removeItem(at: files.directoryURL.appendingPathComponent(image.relativePath))
         }
+        return confirmed
     }
 }
 

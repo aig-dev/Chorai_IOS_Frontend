@@ -75,4 +75,53 @@ enum NoteBackgroundRasterFixtures {
         .init(name: "WebPVariants_VP8", bytes: "UklGRj4AAABXRUJQVlA4IDIAAADwAQCdASoCAAMAAUAmJaACdLoB+AAETAAA/vNpl/5glfkG7UP/0uD9Lg/S4P/SkAAAAA==", width: 2, height: 3),
         .init(name: "WebPVariants_VP8_scaling_hints_do_not_author_dimensions", bytes: "UklGRj4AAABXRUJQVlA4IDIAAADwAQCdASoCwAOAAUAmJaACdLoB+AAETAAA/vNpl/5glfkG7UP/0uD9Lg/S4P/SkAAAAA==", width: 2, height: 3),
     ]
+
+
+    // Fixed header controls checked against visualcontract.DeriveImageDescriptorV1 at 27e5295f.
+    // Each range changes only the indicated field in one small reference file.
+    static let headerControls: [(name: String, image: Data, accepted: Bool)] = {
+        let jpeg = Data(base64Encoded: "/9j/4AAQSkZJRgABAgAAAQABAAD//gAQTGF2YzYyLjI4LjEwMgD/2wBDAAgEBAQEBAUFBQUFBQYGBgYGBgYGBgYGBgYHBwcICAgHBwcGBgcHCAgICAkJCQgICAgJCQoKCgwMCwsODg4RERT/xABMAAEBAAAAAAAAAAAAAAAAAAAABgEBAQAAAAAAAAAAAAAAAAAABgcQAQAAAAAAAAAAAAAAAAAAAAARAQAAAAAAAAAAAAAAAAAAAAD/wAARCAADAAIDASIAAhEAAxEA/9oADAMBAAIRAxEAPwCLAE1/f//Z")!
+        let png = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=")!
+        let indexed = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAIAAAADAQMAAACDJEzCAAAABlBMVEUAAABvIQEddBCnAAAAAXRSTlMAQObYZgAAAAtJREFUeJxjYAABAAAGAAH+jGfIAAAAAElFTkSuQmCC")!
+        func replacing(_ image: Data, _ range: Range<Int>, with bytes: [UInt8]) -> Data {
+            var result = image
+            result.replaceSubrange(range, with: bytes)
+            return result
+        }
+        return [
+            ("DQT-unused-8bit", replacing(jpeg, 205..<205, with: Array(Data(base64Encoded: "2wBDAwYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgb/")!)), true),
+            ("DQT-unused-16bit", replacing(jpeg, 205..<205, with: Array(Data(base64Encoded: "2wCDEwYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYG/w==")!)), true),
+            ("DQT-incomplete-second", replacing(jpeg, 205..<205, with: Array(Data(base64Encoded: "2wBEAwYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYD/w==")!)), false),
+            ("DQT-invalid-precision", replacing(jpeg, 205..<205, with: Array(Data(base64Encoded: "2wBDIwYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgb/")!)), false),
+            ("DHT-unused", replacing(jpeg, 205..<205, with: Array(Data(base64Encoded: "xAAUAwEAAAAAAAAAAAAAAAAAAAAA/w==")!)), true),
+            ("DHT-empty-symbols", replacing(jpeg, 205..<205, with: Array(Data(base64Encoded: "xAATAAAAAAAAAAAAAAAAAAAAAAD/")!)), false),
+            ("DHT-short-symbol-list", replacing(jpeg, 205..<205, with: Array(Data(base64Encoded: "xAAUAwIAAAAAAAAAAAAAAAAAAAAA/w==")!)), false),
+            ("DHT-invalid-slot", replacing(jpeg, 205..<205, with: Array(Data(base64Encoded: "xAAUBAEAAAAAAAAAAAAAAAAAAAAA/w==")!)), false),
+            ("DAC-unused-pair", replacing(jpeg, 205..<205, with: [0xcc, 0x00, 0x04, 0x03, 0x00, 0xff]), true),
+            ("DAC-incomplete-pair", replacing(jpeg, 205..<205, with: [0xcc, 0x00, 0x03, 0x03, 0xff]), false),
+            ("DAC-invalid-class", replacing(jpeg, 205..<205, with: [0xcc, 0x00, 0x04, 0x23, 0x00, 0xff]), false),
+            ("DRI-zero", replacing(jpeg, 205..<205, with: [0xdd, 0x00, 0x04, 0x00, 0x00, 0xff]), true),
+            ("DRI-short", replacing(jpeg, 205..<205, with: [0xdd, 0x00, 0x03, 0x00, 0xff]), false),
+            ("SOF-precision", replacing(jpeg, 189..<190, with: [0x0c]), false),
+            ("SOF-count", replacing(jpeg, 194..<195, with: [0x02]), false),
+            ("SOF-duplicate-id", replacing(jpeg, 198..<199, with: [0x01]), false),
+            ("SOF-sampling-three", replacing(jpeg, 196..<197, with: [0x31]), false),
+            ("SOF-quant-slot", replacing(jpeg, 197..<198, with: [0x04]), false),
+            ("SOS-unknown-id", replacing(jpeg, 209..<210, with: [0x0e]), false),
+            ("SOS-selector", replacing(jpeg, 210..<211, with: [0x40]), false),
+            ("SOS-sequential-end", replacing(jpeg, 216..<217, with: [0x3e]), false),
+            ("SOS-progressive-invalid-DC", replacing(jpeg, 186..<187, with: [0xc2]), false),
+            ("PNG-color", replacing(png, 25..<33, with: [0x07, 0x00, 0x00, 0x00, 0xa7, 0xa9, 0xa3, 0xec]), false),
+            ("PNG-depth", replacing(png, 24..<33, with: [0x06, 0x04, 0x00, 0x00, 0x00, 0x0a, 0x2c, 0xb2, 0x63]), false),
+            ("PNG-compression", replacing(png, 26..<33, with: [0x01, 0x00, 0x00, 0xb4, 0xde, 0x66, 0x35]), false),
+            ("PNG-filter", replacing(png, 27..<33, with: [0x01, 0x00, 0xac, 0x07, 0x3d, 0x43]), false),
+            ("PNG-interlace", replacing(png, 28..<33, with: [0x02, 0x5b, 0x12, 0x6d, 0x2e]), false),
+            ("JPEG-progressive", Data(base64Encoded: "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wgARCAADAAIDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAb/xAAUAQEAAAAAAAAAAAAAAAAAAAAE/9oADAMBAAIQAxAAAAGdAy//xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAEFAn//xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oACAEDAQE/AX//xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oACAECAQE/AX//xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAY/An//xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAE/IX//2gAMAwEAAgADAAAAEPf/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oACAEDAQE/EH//xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oACAECAQE/EH//xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAE/EH//2Q==")!, true),
+            ("JPEG-gray", Data(base64Encoded: "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAADAAIBAREA/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/9oACAEBAAA/AHV//9k=")!, true),
+            ("JPEG-CMYK", Data(base64Encoded: "/9j/7gAOQWRvYmUAZAAAAAAA/9sAQwAIBgYHBgUIBwcHCQkICgwUDQwLCwwZEhMPFB0aHx4dGhwcICQuJyAiLCMcHCg3KSwwMTQ0NB8nOT04MjwuMzQy/8AAFAgAAwACBEMRAE0RAFkRAEsRAP/EAB8AAAEFAQEBAQEBAAAAAAAAAAABAgMEBQYHCAkKC//EALUQAAIBAwMCBAMFBQQEAAABfQECAwAEEQUSITFBBhNRYQcicRQygZGhCCNCscEVUtHwJDNicoIJChYXGBkaJSYnKCkqNDU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6g4SFhoeIiYqSk5SVlpeYmZqio6Slpqeoqaqys7S1tre4ubrCw8TFxsfIycrS09TV1tfY2drh4uPk5ebn6Onq8fLz9PX29/j5+v/aAA4EQwBNAFkASwAAPwD2uulr3ivea//Z")!, true),
+            ("PNG-indexed-transparency", indexed, true),
+            ("PNG-indexed-before-palette", replacing(indexed, 36..<64, with: Array(Data(base64Encoded: "AXRSTlMAQObYZgAAAAZQTFRFAAAAbyEBHXQQpw==")!)), false),
+            ("PNG-indexed-long-transparency", replacing(indexed, 53..<64, with: Array(Data(base64Encoded: "AQF0Uk5TAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAjW8YK")!)), false),
+        ]
+    }()
 }

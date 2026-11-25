@@ -122,7 +122,7 @@ extension NoteLocalStore {
         note.confirmedLifecycle = snapshot.lifecycle
         note.isPublic = snapshot.isPublic
         note.editorAtmosphere = snapshot.editorAtmosphere
-        note.backgroundMediaRef = snapshot.backgroundMediaRef
+        note.acceptBackground(ref: snapshot.backgroundMediaRef, revision: snapshot.backgroundRevision)
         note.isPinned = snapshot.isPinned
         note.updatedAt = snapshot.updatedAt ?? note.updatedAt
         note.remoteSnapshot = nil

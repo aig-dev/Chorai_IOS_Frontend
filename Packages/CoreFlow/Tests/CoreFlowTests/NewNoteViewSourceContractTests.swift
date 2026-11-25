@@ -282,9 +282,17 @@ final class NewNoteViewSourceContractTests: XCTestCase {
                 signature: "func handleSelectedBackgroundPhoto("
             )
         )
-        XCTAssertTrue(background.contains("localEditingService.stageBackground("))
-        XCTAssertFalse(background.contains("editingStore.save()"))
-        XCTAssertFalse(background.contains("insertImage("))
+        let staging = try XCTUnwrap(
+            Self.functionBody(in: source, signature: "func stageSelectedBackground(")
+        )
+        XCTAssertTrue(background.contains("try await stageSelectedBackground(image, generation: generation)"))
+        XCTAssertTrue(staging.contains("localEditingService.stageBackground(image)"))
+        for body in [background, staging] {
+            XCTAssertFalse(body.contains("editingStore.save()"))
+            XCTAssertFalse(body.contains("editingStore.ensurePersisted()"))
+            XCTAssertFalse(body.contains("insertImage("))
+            XCTAssertFalse(body.contains("resolveSaveFailure()"))
+        }
     }
 
     func testInlineImagePhotoAndCameraShareOneGuardedUploadThenInsertPipeline() throws {
@@ -729,18 +737,28 @@ final class NewNoteViewSourceContractTests: XCTestCase {
                 signature: "func handleSelectedBackgroundPhoto("
             )
         )
+        let staging = try XCTUnwrap(
+            Self.functionBody(in: source, signature: "func stageSelectedBackground(")
+        )
         let hide = try XCTUnwrap(handler.range(of: "hideSaveFailure()"))
         let task = try XCTUnwrap(handler.range(of: "Task {"))
-        let stage = try XCTUnwrap(handler.range(of: "localEditingService.stageBackground(image)"))
+        let stageCall = try XCTUnwrap(
+            handler.range(of: "try await stageSelectedBackground(image, generation: generation)")
+        )
+        let failure = try XCTUnwrap(handler.range(of: "catch {"))
+        let failureHide = try XCTUnwrap(
+            handler[failure.upperBound...].range(of: "hideSaveFailure()")
+        )
+        let stage = try XCTUnwrap(staging.range(of: "localEditingService.stageBackground(image)"))
+        let successHide = try XCTUnwrap(staging.range(of: "hideSaveFailure()"))
 
         XCTAssertLessThan(hide.lowerBound, task.lowerBound)
-        XCTAssertLessThan(task.lowerBound, stage.lowerBound)
-        XCTAssertGreaterThanOrEqual(
-            Self.occurrenceCount("hideSaveFailure()", in: String(handler)),
-            3,
-            "Selection, successful staging and failure must retain the prior frozen body"
-        )
+        XCTAssertLessThan(task.lowerBound, stageCall.lowerBound)
+        XCTAssertLessThan(stageCall.lowerBound, failure.lowerBound)
+        XCTAssertLessThan(failure.lowerBound, failureHide.lowerBound)
+        XCTAssertLessThan(stage.lowerBound, successHide.lowerBound)
         XCTAssertFalse(handler.contains("resolveSaveFailure()"))
+        XCTAssertFalse(staging.contains("resolveSaveFailure()"))
     }
 
     func testBodyImageHidesCommitFailureAcrossProcessingOutcomes() throws {

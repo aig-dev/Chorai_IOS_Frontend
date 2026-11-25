@@ -190,6 +190,20 @@ private struct CardEditorSessionView: View {
     @ObservedObject private var linkPopupManager = LinkPopupManager.shared
     @StateObject private var bodyModel: BlockNoteCardEditorModel
     @ObservedObject private var localEditingService: LocalCoreCardEditingService
+    #if DEBUG
+    @State private var fixtureReconciledBackground = ""
+    private var ownerBackgroundFixture: Bool {
+        ProcessInfo.processInfo.arguments.contains("--ui-test-card-editor-shell")
+            && ProcessInfo.processInfo.environment["CHORAI_CARD_EDITOR_FIXTURE_MODE"] == "owner-background"
+    }
+    private var fixtureBackgroundSource: String {
+        switch editorBackground {
+        case .none: return "none"
+        case .local: return "local"
+        case let .remote(url): return url.path
+        }
+    }
+    #endif
     @State private var backgroundLoaded = false
     @StateObject private var persistenceSession: LocalNoteEditorPersistenceSession
     @StateObject private var nativeActionRouter: CardEditorNativeActionRouter
@@ -435,6 +449,15 @@ private struct CardEditorSessionView: View {
             persistenceSession.setVisible(true)
             localNotes.registerEditor(persistenceSession)
         }
+        #if DEBUG
+        .overlay(alignment: .bottom) {
+            if ownerBackgroundFixture {
+                Text(fixtureBackgroundSource + " observed=" + fixtureReconciledBackground)
+                    .accessibilityIdentifier("fixture.background.render")
+                    .allowsHitTesting(false)
+            }
+        }
+        #endif
         .task { await localEditingService.observeStoredBackground(restoreBackground) }
         .onChange(of: editingStore.draft) { _ in scheduleLocalSave() }
         .onChange(of: persistenceSession.hasSaveFailure) { failed in
@@ -1131,6 +1154,9 @@ private struct CardEditorSessionView: View {
         switch result {
         case let .success(intent):
             editingStore.restoreStoredBackground(intent, confirmed: localEditingService.confirmedBackground)
+            #if DEBUG
+            if ownerBackgroundFixture { fixtureReconciledBackground = fixtureBackgroundSource }
+            #endif
             backgroundLoaded = true
             clearSettledBackgroundFailure()
         case .failure:
@@ -1156,11 +1182,24 @@ private struct CardEditorSessionView: View {
                 case .choosePhoto:
                     try await localEditingService.observeBackgroundChoice()
                     guard persistenceSession.isVisible else { return }
+                    editingStore.restoreStoredBackground(editingStore.backgroundIntent,
+                                                         confirmed: localEditingService.confirmedBackground)
+                    #if DEBUG
+                    if ownerBackgroundFixture,
+                       ProcessInfo.processInfo.environment["CHORAI_CARD_EDITOR_BACKGROUND_REFRESH"] == nil {
+                        let bytes = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=")!
+                        try await stageSelectedBackground(.init(data: bytes, filename: "picker.png", mimeType: "image/png"), generation: authManager.sessionGeneration)
+                        return
+                    }
+                    #endif
                     showBackgroundPicker = true
                 case .remove:
                     try await localEditingService.observeBackgroundChoice()
+                    guard persistenceSession.isVisible else { return }
                     if localEditingService.confirmedBackground == nil {
-                        try await localEditingService.cancelBackground()
+                        if localEditingService.pendingBackground != nil {
+                            try await localEditingService.cancelBackground()
+                        }
                         editingStore.restoreStoredBackground(.unchanged, confirmed: nil)
                     } else {
                         let intent = try await localEditingService.stageBackground(nil)
@@ -1313,17 +1352,21 @@ private struct CardEditorSessionView: View {
                     from: item,
                     stem: "card-background"
                 )
-                guard persistenceSession.isVisible, authManager.sessionGeneration == generation else { return }
-                let intent = try await localEditingService.stageBackground(image)
-                guard persistenceSession.isVisible, authManager.sessionGeneration == generation else { return }
-                editingStore.restoreStoredBackground(intent, confirmed: localEditingService.confirmedBackground)
-                saveMessage = nil
-                hideSaveFailure()
+                try await stageSelectedBackground(image, generation: generation)
             } catch {
                 saveMessage = "Couldn't read that background image."
                 hideSaveFailure()
             }
         }
+    }
+
+    private func stageSelectedBackground(_ image: CardEditingImage, generation: UInt64) async throws {
+        guard persistenceSession.isVisible, authManager.sessionGeneration == generation else { return }
+        let intent = try await localEditingService.stageBackground(image)
+        guard persistenceSession.isVisible, authManager.sessionGeneration == generation else { return }
+        editingStore.restoreStoredBackground(intent, confirmed: localEditingService.confirmedBackground)
+        saveMessage = nil
+        hideSaveFailure()
     }
 
     private func handleSelectedInlineImagePhoto(_ item: PhotosPickerItem?) {

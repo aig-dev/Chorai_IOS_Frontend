@@ -14,13 +14,14 @@ public enum NoteSyncHTTP {
         let isPublic: Bool
         let editorAtmosphere: String?
         let backgroundMediaRef: String?
+        let backgroundRevision: Int64?
         let isPinned: Bool?
         let createdAt: String?
         let updatedAt: String?
         enum CodingKeys: String, CodingKey {
             case id, title, content, tags, lifecycle
             case ownerActorID = "owner_actor_id", syncToken = "sync_token", contentJSON = "content_json"
-            case isPublic = "is_public", editorAtmosphere = "editor_atmosphere", backgroundMediaRef = "background_media_ref"
+            case isPublic = "is_public", editorAtmosphere = "editor_atmosphere", backgroundMediaRef = "background_media_ref", backgroundRevision = "background_revision"
             case isPinned = "is_pinned"
             case createdAt = "created_at", updatedAt = "updated_at"
         }
@@ -41,9 +42,12 @@ public enum NoteSyncHTTP {
 
     private static func snapshot(_ card: Card, actorID: String) throws -> NoteRemoteSnapshot {
         guard card.ownerActorID == actorID, !card.id.isEmpty, !card.syncToken.isEmpty else { throw NoteSyncFailure.invalidResponse }
+        if let revision = card.backgroundRevision, !(0...NoteBackgroundCommand.maxRevision).contains(revision) {
+            throw NoteSyncFailure.invalidResponse
+        }
         return NoteRemoteSnapshot(assetID: card.id, syncToken: card.syncToken,
             body: OfflineNoteBody(title: card.title, content: card.content, contentJSON: card.contentJSON, tags: card.tags),
-            lifecycle: card.lifecycle, isPublic: card.isPublic, editorAtmosphere: card.editorAtmosphere ?? "none", backgroundMediaRef: card.backgroundMediaRef, isPinned: card.isPinned,
+            lifecycle: card.lifecycle, isPublic: card.isPublic, editorAtmosphere: card.editorAtmosphere ?? "none", backgroundMediaRef: card.backgroundMediaRef, backgroundRevision: card.backgroundRevision, isPinned: card.isPinned,
             createdAt: try timestamp(card.createdAt), updatedAt: try timestamp(card.updatedAt))
     }
 
