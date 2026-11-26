@@ -1,5 +1,7 @@
 # iOS execution boundaries
 
+2026-11-27: the shared editor enforces the first-release representation boundary before transactions commit and preserves unsupported documents as read-only. See the [implementation and qualification boundary](../qa/2026-11-27-first-release-editor.md). Current ordinary-account cross-client acceptance remains open.
+
 UI state owners remain on MainActor. Expensive pure transformations run outside MainActor and return values that the owner validates before applying. This incrementally implements the [approved design](../superpowers/specs/2026-11-19-ios-execution-boundaries-design.md); the [plan](../superpowers/plans/2026-11-19-ios-execution-boundaries.md) tracks remaining work.
 
 The background action sheet reconciles each fresh owner observation into the mounted editor before opening the system picker, retaining any staged choice. Dismissing the picker keeps that observed background. If another writer already removed it, Remove settles locally and cancels only a pending command; it does not issue a replacement write.

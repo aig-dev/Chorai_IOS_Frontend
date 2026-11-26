@@ -1,5 +1,9 @@
 # Execution boundary history
 
+## 2026-11-27 — First-release editor representations
+
+Generated the shared editor bundle with pre-commit input restrictions, read-only preservation of unsupported initial documents, and lossless mediaRef handling. A real DOM paste exposed missing block IDs before the appended ID transaction; the final guard inspects raw proposed nodes instead of materializing incomplete blocks. No new Swift runtime owner or bridge protocol was introduced. See the [bounded qualification record](../qa/2026-11-27-first-release-editor.md); current runtime and Merge integration remain open.
+
 ## 2026-11-25 — System picker refresh and already-removed backgrounds
 
 Two real-editor UI regressions reproduced a stale rendered background after dismissing the system Photos picker and after another writer had already removed the background. Choosing a replacement now reconciles the fresh owner observation into the displayed pair while retaining any existing staged intent. Remove cancels only an existing pending command; a confirmed empty background settles without a write. Both regressions keep the real action sheet and picker path and verify zero transport writes. The earlier source-contract checks now follow the extracted staging helper while retaining the no-save and frozen-failure constraints. Final regression and ordinary-account acceptance remain separate gates.
