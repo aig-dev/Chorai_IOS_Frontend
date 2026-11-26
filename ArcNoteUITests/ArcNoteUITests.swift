@@ -6410,6 +6410,131 @@ final class ArcNoteUITests: XCTestCase {
         waitFor("screen.home.content", timeout: 20)
     }
 
+    func testOrdinaryCrossClientDocumentEditsAndReopensWithoutLoss() throws {
+        struct Fixture: Decodable {
+            let assetID: String
+            let actorID: String
+            let apiOrigin: String
+            let allowedMediaOrigins: [String]
+            let documentJSON: String
+            let syncToken: String
+            let marker: String
+            let title: String
+            let tags: [String]
+            let mediaRef: String
+            let imageSHA256: String
+            let imageName: String
+        }
+        guard let path = ProcessInfo.processInfo.environment["CHORAI_UI_TEST_CROSS_CLIENT_FIXTURE"] else {
+            throw XCTSkip("Requires an explicit task-owned Web acceptance fixture")
+        }
+        let fixture = try JSONDecoder().decode(Fixture.self, from: Data(contentsOf: URL(fileURLWithPath: path)))
+        XCTAssertEqual(UITestAPIConfiguration.baseURL, fixture.apiOrigin)
+        let session = try ordinarySession()
+        XCTAssertEqual(session.actorId, fixture.actorID)
+        let proxy = try OrdinaryGoProxy()
+        defer { app.terminate(); proxy.stop() }
+        let beforeText = fixture.marker + " web"
+        let afterText = beforeText + " iOS"
+
+        func canonicalDocument(_ json: String) throws -> Data {
+            var root = try XCTUnwrap(try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any])
+            root.removeValue(forKey: "content") // The derived fallback is checked separately.
+            var blocks = try XCTUnwrap(root["blocks"] as? [[String: Any]])
+            let index = try XCTUnwrap(blocks.firstIndex { $0["id"] as? String == "image" })
+            var props = try XCTUnwrap(blocks[index]["props"] as? [String: Any])
+            let url = try XCTUnwrap(URLComponents(string: try XCTUnwrap(props["url"] as? String)))
+            XCTAssertEqual(url.path, "/api/v1/media/" + fixture.mediaRef + "/content")
+            XCTAssertEqual(url.queryItems, [URLQueryItem(name: "asset_id", value: fixture.assetID)])
+            if url.host != nil {
+                var origin = url
+                origin.path = ""; origin.query = nil; origin.fragment = nil
+                XCTAssertTrue((fixture.allowedMediaOrigins + [fixture.apiOrigin, proxy.origin]).contains(origin.string ?? ""))
+            }
+            props["url"] = url.path + "?" + (url.percentEncodedQuery ?? "")
+            blocks[index]["props"] = props
+            root["blocks"] = blocks
+            return try JSONSerialization.data(withJSONObject: root, options: [.sortedKeys])
+        }
+        func assertDocument(_ card: SmokeCardResponse.SmokeCardData, text: String) throws {
+            XCTAssertEqual(card.id, fixture.assetID)
+            XCTAssertEqual(card.title, fixture.title)
+            XCTAssertEqual(card.tags, fixture.tags)
+            XCTAssertFalse(card.isPublic)
+            XCTAssertTrue(card.content.contains(text))
+            var expected = try XCTUnwrap(try JSONSerialization.jsonObject(with: Data(fixture.documentJSON.utf8)) as? [String: Any])
+            var blocks = try XCTUnwrap(expected["blocks"] as? [[String: Any]])
+            XCTAssertEqual(blocks.first?["id"] as? String, "paragraph")
+            var content = try XCTUnwrap(blocks[0]["content"] as? [[String: Any]])
+            content[0]["text"] = text
+            blocks[0]["content"] = content
+            expected["blocks"] = blocks
+            let expectedJSON = try XCTUnwrap(String(data: JSONSerialization.data(withJSONObject: expected), encoding: .utf8))
+            let actualJSON = try XCTUnwrap(card.contentJSON)
+            XCTAssertTrue(try canonicalDocument(actualJSON) == canonicalDocument(expectedJSON),
+                          "All blocks, IDs, styles, children, image references and envelope metadata must survive")
+            let actual = try XCTUnwrap(try JSONSerialization.jsonObject(with: Data(actualJSON.utf8)) as? [String: Any])
+            XCTAssertTrue((actual["content"] as? String)?.contains(text) == true)
+        }
+        let before = try fetchSmokeCard(id: fixture.assetID, token: session.token, sync: true)
+        XCTAssertEqual(before.syncToken, fixture.syncToken, "Do not replay an already edited or changed fixture")
+        try assertDocument(before, text: beforeText)
+        try launchOrdinary(session, through: proxy)
+        waitForSessionPhase("verified", timeout: 30)
+        XCTAssertTrue(proxy.verifiedFullAccess(session.actorId))
+        openOrdinaryLibrary()
+        let preview = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", fixture.marker)).firstMatch
+        XCTAssertTrue(preview.waitForExistence(timeout: 30))
+        preview.tap()
+        assertRenderedEditorParagraph(beforeText)
+        appendToCardEditorParagraph(" iOS", after: beforeText)
+        dismissCardEditorKeyboardWithVerticalDrag()
+        waitForSmokeCardState(id: fixture.assetID, token: session.token, timeout: 40) { $0.content.contains(afterText) }
+        try assertDocument(fetchSmokeCard(id: fixture.assetID, token: session.token, sync: true), text: afterText)
+        closeNewNoteEditor()
+        XCTAssertTrue(preview.waitForExistence(timeout: 15))
+        preview.tap()
+        assertRenderedEditorParagraph(afterText)
+        try assertDocument(fetchSmokeCard(id: fixture.assetID, token: session.token, sync: true), text: afterText)
+        captureVisual("cross-client-native-reopened-body")
+        let image = waitFor("cardEditorBodyWebView").images.matching(NSPredicate(format: "label == %@", fixture.imageName)).firstMatch
+        XCTAssertTrue(image.waitForExistence(timeout: 20))
+        let viewport = app.scrollViews.firstMatch
+        func imageIsFullyVisible() -> Bool {
+            let visible = viewport.frame.intersection(app.frame)
+            return !visible.isEmpty && visible.contains(image.frame)
+        }
+        for _ in 0..<6 where !imageIsFullyVisible() { viewport.swipeUp() }
+        XCTAssertTrue(imageIsFullyVisible(), "The image must be inside the actual screen viewport, not just hittable in WebKit")
+        XCTAssertTrue(image.isHittable)
+        XCTAssertGreaterThan(image.frame.width, 64)
+        XCTAssertGreaterThan(image.frame.height, 64)
+        let web = waitFor("cardEditorBodyWebView")
+        XCTAssertGreaterThanOrEqual(image.frame.minX, web.frame.minX - 1)
+        XCTAssertLessThanOrEqual(image.frame.maxX, web.frame.maxX + 1)
+        let mediaLoaded = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            proxy.mediaReads.contains { read in
+                read.path == "/api/v1/media/" + fixture.mediaRef + "/content" && read.assetID == fixture.assetID
+                    && read.authorized && read.status == 200
+                    && read.digest?.map { String(format: "%02x", $0) }.joined() == fixture.imageSHA256
+            }
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [mediaLoaded], timeout: 15), .completed)
+        captureVisual("cross-client-native-reopened-image")
+        closeNewNoteEditor()
+        // The shared proxy also records read-only visibility observations.
+        let writes = proxy.mutations.filter { $0.method != "GET" }
+        XCTAssertFalse(writes.isEmpty)
+        for mutation in writes {
+            XCTAssertEqual(mutation.method, "PUT")
+            XCTAssertEqual(mutation.path, "/api/cards/" + fixture.assetID)
+            XCTAssertEqual(mutation.status, 200)
+            XCTAssertFalse((mutation.key ?? "").isEmpty)
+            XCTAssertEqual(mutation.receipt, mutation.key)
+        }
+        // The external acceptance runner owns cleanup after Web reopens this asset.
+    }
+
     func testRevokedSessionRelaunchWithGrantedScopeRetainsLocalNotes() throws {
         let proxy = try OrdinaryGoProxy()
         defer { proxy.stop() }
