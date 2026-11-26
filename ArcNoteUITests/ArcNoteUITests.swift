@@ -8950,13 +8950,32 @@ final class ArcNoteUITests: XCTestCase {
         waitForBackgroundProof(first, counts: "creates=1 uploads=1 writes=1", state: "phase=none public=false body=First meaningful body")
     }
 
+    func testAppendingToWrappedEditorParagraphKeepsWholeBody() {
+        app.launchArguments.append("--ui-test-card-editor-shell")
+        app.launchEnvironment["CHORAI_CARD_EDITOR_FIXTURE_MODE"] = "held-background"
+        app.launch()
+        waitForLabel("cardEditorLeadingAction", expected: "Save note")
+        let continuation = " Audience819022AA-7158-44DB-B27A-0C8BDBF2ED52"
+        let wrapped = "Initial body" + continuation
+        appendToCardEditorParagraph(continuation, after: "Initial body")
+        dismissCardEditorKeyboardWithVerticalDrag()
+        assertRenderedEditorParagraph(wrapped)
+        appendToCardEditorParagraph(" edited", after: wrapped)
+        dismissCardEditorKeyboardWithVerticalDrag()
+        tap("fixture.background.inspect")
+        waitForBackgroundProof(waitFor("fixture.background.live-proof", timeout: 10),
+                               counts: "creates=1 uploads=0 writes=0",
+                               state: "phase=staged public=false body=" + wrapped + " edited")
+        assertRenderedEditorParagraph(wrapped + " edited")
+    }
+
     func testHeldBackgroundAllowsRealEditorCloseWithLatestBody() {
         app.launchArguments.append("--ui-test-card-editor-shell")
         app.launchEnvironment["CHORAI_CARD_EDITOR_FIXTURE_MODE"] = "held-background"
         app.launch()
         waitForLabel("cardEditorLeadingAction", expected: "Save note")
         assertRenderedEditorParagraph("Initial body")
-        appendToCardEditorParagraph(" prepared")
+        appendToCardEditorParagraph(" prepared", after: "Initial body")
         dismissCardEditorKeyboardWithVerticalDrag()
         tap("fixture.background.inspect")
         let preflight = waitFor("fixture.background.live-proof", timeout: 10)
@@ -8968,7 +8987,7 @@ final class ArcNoteUITests: XCTestCase {
         let before = field("revision", in: preflight.label)
         saveCardEditor()
         waitForLabel("cardEditorLeadingAction", expected: "Close note")
-        appendToCardEditorParagraph(" edited during upload")
+        appendToCardEditorParagraph(" edited during upload", after: "Initial body prepared")
         dismissCardEditorKeyboardWithVerticalDrag()
         waitForButton("cardEditorLeadingAction").tap()
         waitForMissing("cardEditorContent", timeout: 10)
@@ -9062,7 +9081,7 @@ final class ArcNoteUITests: XCTestCase {
         tap("card.home." + local)
         XCTAssertTrue(app.staticTexts["Background selected · Save to apply"].waitForExistence(timeout: 15))
         let updated = marker + " edited"
-        appendToCardEditorParagraph(" edited")
+        appendToCardEditorParagraph(" edited", after: marker)
         dismissCardEditorKeyboardWithVerticalDrag()
         waitForSmokeCardState(id: asset, token: session.token) { $0.content == updated || $0.content == updated + "\n" }
         let afterFlush = try fetchSmokeCard(id: asset, token: session.token)
@@ -11559,11 +11578,17 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertTrue(paragraph.waitForExistence(timeout: 10), "Reopened editor did not render its exact accepted paragraph", file: file, line: line)
     }
 
-    private func appendToCardEditorParagraph(_ suffix: String) {
+    private func appendToCardEditorParagraph(_ suffix: String, after text: String) {
         let body = waitFor("cardEditorBodyWebView", timeout: 15)
-        body.coordinate(withNormalizedOffset: CGVector(dx: 0.22, dy: 0.10)).tap()
+        let paragraph = body.descendants(matching: .any)
+            .matching(NSPredicate(format: "label == %@ OR value == %@", text, text)).firstMatch
+        XCTAssertTrue(paragraph.waitForExistence(timeout: 10))
+        // Tap below the text while the keyboard is hidden to place the caret
+        // after the paragraph. Retapping after focus can hit the formatting bar
+        // covering the lower part of the WebView's accessibility frame.
+        XCTAssertFalse(app.keyboards.firstMatch.exists)
+        paragraph.coordinate(withNormalizedOffset: CGVector(dx: 0.99, dy: 0.90)).tap()
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 8))
-        app.typeKey(.rightArrow, modifierFlags: .command)
         app.typeText(suffix)
     }
 

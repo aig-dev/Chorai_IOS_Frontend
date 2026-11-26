@@ -3,6 +3,7 @@
   "ArcNoteUITests/ArcNoteUITests/testCardEditorBridgeFailureFallbackRetriesIntoFreshWebView",
   "ArcNoteUITests/ArcNoteUITests/testCardEditorInlineImageRendersPixelsWithinPhoneViewport",
   "ArcNoteUITests/ArcNoteUITests/testCardEditorShellCompatibilityBlockIsReadOnlyAndCannotSave",
+  "ArcNoteUITests/ArcNoteUITests/testAppendingToWrappedEditorParagraphKeepsWholeBody",
   "ArcNoteUITests/ArcNoteUITests/testMergeArtifactImmediateBackReopensWithBodyAndPendingTag",
   "ArcNoteUITests/ArcNoteUITests/testMergeArtifactBackRetainsLossyDraftAndCompletedTag",
   "ArcNoteUITests/ArcNoteUITests/testMergeArtifactEditsInPlaceAndRestoresDraft",

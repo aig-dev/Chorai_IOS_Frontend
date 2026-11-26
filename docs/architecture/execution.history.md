@@ -398,3 +398,7 @@ Replaced marker-based cleanup in the new session cases with exact creation owner
 ## 2026-11-21 Bind the recovery fixture to its local note
 
 A valid create receipt can belong to another queued note on the same account. The ordinary recovery tests retain candidate receipts until the exact current actor, API origin and local editor ID acknowledge a matching server asset. A DEBUG readout observes the existing library under an explicit recovery-test flag. Missing ownership leaves cleanup unresolved. See [recovery fixture review](../qa/2026-11-21-prelaunch-boundaries.md#recovery-fixture-review).
+
+## 2026-11-27 — Ordinary runtime acceptance and wrapped input fixture
+
+The current prod API passed all six ordinary live synchronization cases and the two existing ordinary UI paths in separately qualified runs. Long wrapped text exposed unreliable shortcut positioning in the UI append fixture. It now taps the exact rendered body's lower area once before keyboard focus; the original whole-body assertions remain. Added a focused wrapped-body regression to the release selector list. Two affected fixture flows and 23 gate-runner tests passed; application code and editor resources are unchanged. [Evidence and exclusions](../qa/2026-11-27-ordinary-release-runtime.md). All owned fixtures were erased. Final screenshot/HTTP inspection separately confirmed an unauthenticated remote-background load returning 401; rendering remains blocked and will require a scoped download fix. The remaining cross-client/Merge conditions also stay open.
