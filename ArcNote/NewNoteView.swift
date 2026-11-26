@@ -200,7 +200,7 @@ private struct CardEditorSessionView: View {
         switch editorBackground {
         case .none: return "none"
         case .local: return "local"
-        case let .remote(url): return url.path
+        case let .remote(request): return request.url.path
         }
     }
     #endif
@@ -711,7 +711,9 @@ private struct CardEditorSessionView: View {
                   ) else {
                 return .none
             }
-            return .remote(url)
+            return .remote(.init(url: url, scope: localEditingService.scope,
+                                 sessionGeneration: authManager.sessionGeneration,
+                                 canLoad: authManager.canEnterProduct))
         }
     }
 

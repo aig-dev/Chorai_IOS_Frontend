@@ -160,6 +160,7 @@
 		D25E56F61A293DB592B455C7 /* NetworkResponseExecutionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E41C4CEBE69067D293BA7ECC /* NetworkResponseExecutionTests.swift */; };
 		03FE30A9B1F6454A930033F0 /* NetworkNoteImportBridgeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B2105EF37E34A849C8AC96F /* NetworkNoteImportBridgeTests.swift */; };
 		C11D1AA997C7E2E5D12BA7CA /* CardDetailReaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C19E959B8363D8E79720B724 /* CardDetailReaderTests.swift */; };
+		0C391F5410C64C2E9A3E9D3D /* CardEditorBackgroundTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57D629B9DB864B52B86E9131 /* CardEditorBackgroundTests.swift */; };
 		CAA378EBD05FBE2C0CA7A9D7 /* CardImagePreparationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 725D1C8BC22A06A30C4A6279 /* CardImagePreparationTests.swift */; };
 		82C443884ECE5389CA1B1A75 /* CardImagePreparation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70328C0F1F28C0DD3CFAC752 /* CardImagePreparation.swift */; };
 		A29F677BDCCDD4ADD4B884C4 /* LocalNoteEditorPersistenceSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9B5CAE97CCFFC3595F96129 /* LocalNoteEditorPersistenceSessionTests.swift */; };
@@ -344,6 +345,7 @@
 		E41C4CEBE69067D293BA7ECC /* NetworkResponseExecutionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ArcNoteTests/NetworkResponseExecutionTests.swift"; sourceTree = SOURCE_ROOT; };
 		8B2105EF37E34A849C8AC96F /* NetworkNoteImportBridgeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ArcNoteTests/NetworkNoteImportBridgeTests.swift"; sourceTree = SOURCE_ROOT; };
 		C19E959B8363D8E79720B724 /* CardDetailReaderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ArcNoteTests/CardDetailReaderTests.swift"; sourceTree = SOURCE_ROOT; };
+		57D629B9DB864B52B86E9131 /* CardEditorBackgroundTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ArcNoteTests/CardEditorBackgroundTests.swift"; sourceTree = SOURCE_ROOT; };
 		725D1C8BC22A06A30C4A6279 /* CardImagePreparationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ArcNoteTests/CardImagePreparationTests.swift"; sourceTree = SOURCE_ROOT; };
 		70328C0F1F28C0DD3CFAC752 /* CardImagePreparation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ArcNote/CardImagePreparation.swift"; sourceTree = SOURCE_ROOT; };
 		A9B5CAE97CCFFC3595F96129 /* LocalNoteEditorPersistenceSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ArcNoteTests/LocalNoteEditorPersistenceSessionTests.swift"; sourceTree = SOURCE_ROOT; };
@@ -616,6 +618,7 @@
 				58B971DA8E6B55058CC8C05C /* MergeArtifactDraftExecutionTests.swift */,
 				D3ADDC28A8156BE6C33154F7 /* MergeEditorRetirementTests.swift */,
 				A9B5CAE97CCFFC3595F96129 /* LocalNoteEditorPersistenceSessionTests.swift */,
+				57D629B9DB864B52B86E9131 /* CardEditorBackgroundTests.swift */,
 				725D1C8BC22A06A30C4A6279 /* CardImagePreparationTests.swift */,
 				C19E959B8363D8E79720B724 /* CardDetailReaderTests.swift */,
 				0D90B74C4070401F8591EB42 /* ChatDetailManagerTests.swift */,
@@ -914,6 +917,7 @@
 				47240F88F54B3581BA01AB4F /* MergeArtifactDraftExecutionTests.swift in Sources */,
 				0B6BC22F0BE17B1F86041C51 /* MergeEditorRetirementTests.swift in Sources */,
 				A29F677BDCCDD4ADD4B884C4 /* LocalNoteEditorPersistenceSessionTests.swift in Sources */,
+				0C391F5410C64C2E9A3E9D3D /* CardEditorBackgroundTests.swift in Sources */,
 				CAA378EBD05FBE2C0CA7A9D7 /* CardImagePreparationTests.swift in Sources */,
 				C11D1AA997C7E2E5D12BA7CA /* CardDetailReaderTests.swift in Sources */,
 				347BB35375D545E9B0A9BBB0 /* ChatDetailManagerTests.swift in Sources */,

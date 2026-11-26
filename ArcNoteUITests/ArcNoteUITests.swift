@@ -1,5 +1,6 @@
 import CoreImage
 import Vision
+import CryptoKit
 import XCTest
 import os
 
@@ -9101,6 +9102,7 @@ final class ArcNoteUITests: XCTestCase {
         let ref = try XCTUnwrap(attachment.backgroundRef)
         XCTAssertNotNil(ref.range(of: "^med_[a-f0-9]{16}$", options: .regularExpression))
         closeNewNoteEditor()
+        let readsBeforeReopen = proxy.mediaReads.count
         tap("card.home." + local)
         waitForLabel("cardEditorPrivacyButton", expected: "Make Private")
         assertRenderedEditorParagraph(updated)
@@ -9115,7 +9117,38 @@ final class ArcNoteUITests: XCTestCase {
         XCTAssertNotNil(creation.key)
         XCTAssertEqual(creation.receipt, creation.key)
         XCTAssertEqual(creation.initialIsPublic, false)
+        let backgroundPath = "/api/v1/media/" + ref + "/content"
+        let contentURL = try XCTUnwrap(URL(string: UITestAPIConfiguration.baseURL + backgroundPath + "?asset_id=" + asset))
+        var read = URLRequest(url: contentURL)
+        read.setValue("Bearer " + session.token, forHTTPHeaderField: "Authorization")
+        let bytes = try sendRawRequest(read)
+        XCTAssertTrue(proxy.uploadedImages.contains(bytes), "Accepted background must resolve to its exact uploaded bytes")
+        let digest = Data(SHA256.hash(data: bytes))
+        func waitForBackgroundLoad(after boundary: Int) {
+            let loaded = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+                proxy.mediaReads.dropFirst(boundary).contains { $0.path == backgroundPath && $0.assetID == asset
+                    && $0.authorized && $0.status == 200 && $0.digest == digest }
+            }, object: nil)
+            XCTAssertEqual(XCTWaiter.wait(for: [loaded], timeout: 12), .completed,
+                           "The real editor must fetch its background after reopening or same-session recovery")
+        }
+        waitForBackgroundLoad(after: readsBeforeReopen)
         captureVisual("card-editor-synced-background-privacy")
+
+        closeNewNoteEditor()
+        proxy.setOffline(true)
+        XCUIDevice.shared.press(.home)
+        app.activate()
+        waitForSessionPhase("degraded", timeout: 30)
+        openOrdinaryLibrary()
+        tap("card.home." + local)
+        assertRenderedEditorParagraph(updated)
+        let readsBeforeRecovery = proxy.mediaReads.count
+        proxy.setOffline(false)
+        recoverAppAfterTransportRestores()
+        waitForBackgroundLoad(after: readsBeforeRecovery)
+        assertRenderedEditorParagraph(updated)
+        captureVisual("card-editor-recovered-background-privacy")
     }
 
     func testOpeningCardActionsOnNewCardDoesNotCreateServerCard() throws {

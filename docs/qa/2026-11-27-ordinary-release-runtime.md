@@ -19,8 +19,10 @@ The earliest ordinary offline-relaunch attempt used unsigned synthetic-gate prod
 
 All earlier failed attempts' and the latest passing background flow's owned notes reached erasure COMPLETE and detail 404. Cleanup always replays the original request identity and body; it does not accelerate database retry clocks.
 
-## Open rendering blocker
+## Rendering blocker in the qualified historical version
 
 The final ordinary-flow screenshot shows no remote background image, and its media request returned HTTP 401. `NewNoteView.editorBackground` projects the accepted media reference to a remote URL; `CardEditorBackground` passes that URL to bare `AsyncImage`, while the current media-content endpoint requires an authenticated actor. The passing UI assertions verify saved content, visibility, media identity, upload and attachment; they do not qualify successful background rendering. This is a retained-feature release blocker. Repair must reuse the existing account/environment-scoped authenticated download, preserve media authorization, and verify actual loading plus stale-account/result rejection. The next product change is separate from this fixture-only commit.
+
+The follow-up [authenticated display repair](2026-11-27-background-display.md) now qualifies actual background loading, recovery and layout bounds. This historical record keeps the original 401 and blank screenshot failure; saved-reference assertions are not relabeled as a rendering pass.
 
 This qualifies the listed local paths only. The same complete document still needs a real Web-to-iOS-to-Web round trip; retained Merge integration and the remaining first-release deployment conditions remain open. No physical-device performance or distribution archive qualification is claimed.

@@ -1081,7 +1081,7 @@ final class CardEditorShellSourceContractTests: XCTestCase {
         )
 
         XCTAssertTrue(background.contains("case local(Data)"))
-        XCTAssertTrue(background.contains("case remote(URL)"))
+        XCTAssertTrue(background.contains("case remote(CardEditorBackgroundImage.Request)"))
         XCTAssertTrue(background.contains("backgroundImage"))
         XCTAssertTrue(background.contains("Color.black"))
         XCTAssertFalse(background.contains("cardEditorBodyBackground"))

@@ -927,6 +927,14 @@ final class RecentNotesServer: @unchecked Sendable {
 // Loopback transport for the ordinary Go scenarios. The serial queue owns all
 // connections, barriers and observations. Authentication and responses come from Go.
 final class OrdinaryGoProxy: @unchecked Sendable {
+    struct MediaRead: Equatable {
+        let path: String
+        let assetID: String?
+        let authorized: Bool
+        var status: Int?
+        var digest: Data?
+    }
+
     struct Mutation: Equatable {
         let key: String?
         let method: String
@@ -962,6 +970,7 @@ final class OrdinaryGoProxy: @unchecked Sendable {
     private var held: (() -> Void)?
     private var holdCreateReceipt = false
     private var records = [Mutation]()
+    private var readRecords = [MediaRead]()
     private struct CreateCapture {
         let journal: OrdinaryFixtureJournal
         let token: String
@@ -994,6 +1003,7 @@ final class OrdinaryGoProxy: @unchecked Sendable {
     var hasHeldResponse: Bool { queue.sync { held != nil } }
     var lastLogin: Data? { queue.sync { login } }
     var uploadedImages: [Data] { queue.sync { uploads } }
+    var mediaReads: [MediaRead] { queue.sync { readRecords } }
     func verifiedFullAccess(_ actor: String) -> Bool { queue.sync { admitted.contains(actor) } }
     func setOffline(_ value: Bool) { queue.sync { offline = value } }
     func dropFirstUpdateReceipt(asset: String) { queue.sync { dropPath = "/api/cards/" + asset } }
@@ -1077,6 +1087,13 @@ final class OrdinaryGoProxy: @unchecked Sendable {
         }
         let key = request.value(forHTTPHeaderField: "Idempotency-Key")
         let path = url.path
+        let mediaRead = method == "GET" && path.hasPrefix("/api/v1/media/") && path.hasSuffix("/content")
+        let mediaAsset = source.queryItems?.first(where: { $0.name == "asset_id" })?.value
+        let authorized = request.value(forHTTPHeaderField: "Authorization")?.hasPrefix("Bearer ") == true
+        let mediaIndex = mediaRead ? readRecords.count : nil
+        if mediaRead {
+            readRecords.append(MediaRead(path: path, assetID: mediaAsset, authorized: authorized))
+        }
         let card = (path == "/api/cards" || path.hasPrefix("/api/cards/")) && ["POST", "PUT", "PATCH", "DELETE"].contains(method)
         let policy = path.hasPrefix("/api/v1/assets/") && path.hasSuffix("/visibility")
         let tracked = card || policy || (method == "POST" && path == "/api/v1/media/upload")
@@ -1122,6 +1139,10 @@ final class OrdinaryGoProxy: @unchecked Sendable {
                     self.records[index].transportFailed = error != nil
                 }
                 guard let http = response as? HTTPURLResponse, let data, error == nil else { connection.cancel(); return }
+                if let mediaIndex {
+                    self.readRecords[mediaIndex].status = http.statusCode
+                    self.readRecords[mediaIndex].digest = Data(SHA256.hash(data: data))
+                }
                 let envelope = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
                 let payload = envelope?["data"] as? [String: Any]
                 if http.statusCode == 200 {

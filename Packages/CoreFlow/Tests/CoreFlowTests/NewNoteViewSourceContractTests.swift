@@ -958,7 +958,9 @@ final class NewNoteViewSourceContractTests: XCTestCase {
                                   ) else {
                                 return .none
                             }
-                            return .remote(url)
+                            return .remote(.init(url: url, scope: localEditingService.scope,
+                                                 sessionGeneration: authManager.sessionGeneration,
+                                                 canLoad: authManager.canEnterProduct))
                 """
             )
         )
