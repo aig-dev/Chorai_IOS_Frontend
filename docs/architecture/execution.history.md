@@ -1,5 +1,9 @@
 # Execution boundary history
 
+## 2026-11-28 — App privacy manifest and device archive
+
+An independent Release device archive compiled successfully but lacked the app-owned required-reason manifest. The app target now packages the CA92.1 declaration for existing app-local UserDefaults use. Both simulator configurations, the unsigned device archive and persisted Swift 6 settings pass; actual resources match source and the device executable is unchanged. Initial extraction and missing-manifest results remain recorded. No runtime data behavior or functional test coverage changed. Signing, export and complete privacy disclosure remain open in the [qualification record](../qa/2026-11-28-device-archive.md).
+
 ## 2026-11-28 — Local share identity and original session
 
 Actual Library sharing sent a local-note ID and received 403. The network adapter now resolves current synchronized identity for every preview/image/pin and returns retryable failure before HTTP when unavailable. Review found the resolve-to-send session window; existing captureSessionCheck now fences dispatch and delivery without another runtime owner. Five new hosted regressions and thirty existing network cases pass. The final ordinary share UI and non-owner reader observation, original NOTE cleanup COMPLETE, and full Swift 6 three-build/171-hosted/11-UI gate are documented in the [bounded qualification](../qa/2026-11-28-share-runtime.md). Earlier selector, identity and missing-auth fixture failures remain recorded; six opt-in API skips are separate from passes.

@@ -178,6 +178,7 @@
 		96173B537BE66B36D958C303 /* HTMLTextReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = D62B0B96B71343CC59CD3B90 /* HTMLTextReader.swift */; };
 		F0C9B2094CE23E011AD29001 /* AuthNoteAccessTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0C9B2094CE23E011AD29002 /* AuthNoteAccessTests.swift */; };
 		347BB35375D545E9B0A9BBB0 /* ChatDetailManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D90B74C4070401F8591EB42 /* ChatDetailManagerTests.swift */; };
+		90A913C4CFA352F6C4AD41EC /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 8884006713F613145F4A8FBC /* PrivacyInfo.xcprivacy */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -363,6 +364,7 @@
 		D62B0B96B71343CC59CD3B90 /* HTMLTextReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ArcNote/CoreFlow/HTMLTextReader.swift"; sourceTree = SOURCE_ROOT; };
 		F0C9B2094CE23E011AD29002 /* AuthNoteAccessTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ArcNoteTests/AuthNoteAccessTests.swift"; sourceTree = SOURCE_ROOT; };
 		0D90B74C4070401F8591EB42 /* ChatDetailManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ArcNoteTests/ChatDetailManagerTests.swift"; sourceTree = SOURCE_ROOT; };
+		8884006713F613145F4A8FBC /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -430,6 +432,7 @@
 				1B331DD72E7D0AE100876A32 /* Launch Screen.storyboard */,
 				1B99D97E2E740C2D00BF7927 /* Models */,
 				1B2A3B0A2E73E6E6009BAA1B /* Info.plist */,
+				8884006713F613145F4A8FBC /* PrivacyInfo.xcprivacy */,
 				1B598C952E7011A000023CC6 /* HTMLWebView.swift */,
 				1B598C932E6FF3DF00023CC6 /* HomeCardsManager.swift */,
 				1B598C882E6EEF0000023CC6 /* ExploreSearchEngagement.swift */,
@@ -732,6 +735,7 @@
 				1B331DD82E7D0AE100876A32 /* Launch Screen.storyboard in Resources */,
 				1B48AE3C2E3096810090CF86 /* Preview Assets.xcassets in Resources */,
 				1B48AE392E3096810090CF86 /* Assets.xcassets in Resources */,
+				90A913C4CFA352F6C4AD41EC /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
