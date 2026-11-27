@@ -8192,6 +8192,78 @@ final class ArcNoteUITests: XCTestCase {
         )
     }
 
+    func testSparkAcknowledgedHydrationFailureRetriesSameActivityAfterRelaunch() throws {
+        let environment = ProcessInfo.processInfo.environment
+        guard environment["CHORAI_UI_TEST_SPARK_HYDRATION_RECOVERY"] == "1",
+              let cardID = environment["CHORAI_UI_TEST_SPARK_CARD_ID"], !cardID.isEmpty,
+              let token = environment["CHORAI_UI_TEST_AUTH_TOKEN"], !token.isEmpty,
+              let actorID = environment["CHORAI_UI_TEST_ACTOR_ID"], !actorID.isEmpty,
+              let apiBaseURL = environment["CHORAI_API_BASE_URL"], !apiBaseURL.isEmpty else {
+            throw XCTSkip("Requires an isolated ordinary-account Spark fixture and a journaled result-read failure")
+        }
+        let session = SmokeSession(
+            token: token, actorId: actorID,
+            email: environment["CHORAI_UI_TEST_EMAIL"] ?? "rc-spark@example.invalid",
+            username: environment["CHORAI_UI_TEST_USERNAME"] ?? "rc-spark"
+        )
+        seedAppSession(session)
+        app.launchEnvironment["CHORAI_UI_TEST_DETAIL_CARD_ID"] = cardID
+        app.launchEnvironment["CHORAI_UI_TEST_SPARK_SESSION_SCOPE"] = sparkSessionScope
+        app.launchEnvironment["CHORAI_UI_TEST"] = "1"
+        app.launchEnvironment["CHORAI_API_BASE_URL"] = apiBaseURL
+        func openFixtureSpark() {
+            waitFor("screen.flow.content", timeout: 30)
+            tap("explore.card-detail")
+            waitFor("screen.detail.loaded", timeout: 30)
+            XCTAssertEqual(sparkAnchorValue("screen.detail.card-id"), cardID)
+            for identifier in ["detail.menu.open", "popup-menu.item.spark"] {
+                let button = app.buttons[identifier]
+                let ready = XCTNSPredicateExpectation(
+                    predicate: NSPredicate { _, _ in button.exists && button.isHittable },
+                    object: button
+                )
+                let outcome = XCTWaiter.wait(for: [ready], timeout: 10)
+                if outcome != .completed {
+                    captureVisual("spark-entry-not-ready")
+                    let tree = XCTAttachment(string: app.debugDescription)
+                    tree.name = "Spark entry accessibility tree"
+                    tree.lifetime = .keepAlways
+                    add(tree)
+                }
+                XCTAssertEqual(outcome, .completed, "Spark entry must become hittable: \(identifier)")
+                button.tap()
+            }
+        }
+        app.launch()
+        waitFor("tab.flow", timeout: 30)
+        openFixtureSpark()
+
+        waitFor("screen.spark.error", timeout: 90)
+        let activityID = sparkAnchorValue("spark.activity.id")
+        XCTAssertFalse(activityID.isEmpty)
+        XCTAssertEqual(sparkAnchorValue("spark.source.card-id"), cardID)
+        captureVisual("spark-ack-result-read-failed")
+        let retry = app.buttons["Retry Spark"]
+        XCTAssertTrue(retry.waitForExistence(timeout: 10))
+        retry.tap()
+        waitFor("screen.spark.loaded", timeout: 90)
+        XCTAssertEqual(sparkAnchorValue("spark.activity.id"), activityID)
+        let visibleID = sparkAnchorValue("spark.visible-card.id")
+        XCTAssertFalse(visibleID.isEmpty)
+        let historyCount = try fetchSparkHistoryTotal(cardID: cardID, token: session.token)
+        XCTAssertEqual(historyCount, 1)
+        captureVisual("spark-ack-original-results-recovered")
+
+        app.terminate()
+        app.launch()
+        openFixtureSpark()
+        waitFor("screen.spark.loaded", timeout: 90)
+        waitFor("spark.card.\(visibleID)", timeout: 30)
+        XCTAssertEqual(sparkAnchorValue("spark.activity.id"), activityID)
+        XCTAssertEqual(try fetchSparkHistoryTotal(cardID: cardID, token: session.token), historyCount)
+        captureVisual("spark-ack-original-activity-after-relaunch")
+    }
+
     func testSparkRelaunchRehydratesActivityWithoutNewTrigger() throws {
         let session = try requireSmokeSession()
         let cardID = sparkSeedCardID

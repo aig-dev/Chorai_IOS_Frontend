@@ -7,6 +7,53 @@ import os
 
 @MainActor
 final class NetworkResponseExecutionTests: XCTestCase {
+    func testAcknowledgedSparkHydrationFailureRetriesOriginalActivityWithoutPosting() async throws {
+        let starts = (0..<4).map { expectation(description: "Spark request \($0)") }
+        let next = OSAllocatedUnfairLock(initialState: 0)
+        let fixture = HTTPFixture(onStart: {
+            let index = next.withLock { value in defer { value += 1 }; return value }
+            if index < starts.count { starts[index].fulfill() }
+        })
+        let network = NetworkManager(baseURL: fixture.baseURL, session: fixture.session)
+        network.setAuthToken("synthetic-spark-token")
+        let suite = "spark-recovery-" + UUID().uuidString
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = SparkSessionStore(
+            actorID: "synthetic-actor", rootSourceAssetID: "card",
+            service: NetworkCoreSparkService(network: network),
+            persistence: UserDefaultsSparkSessionStore(defaults: defaults)
+        )
+        let failed = expectation(description: "Acknowledged result read failed")
+        let phase = store.$phase.filter { if case .failed = $0 { return true }; return false }
+            .prefix(1).sink { _ in failed.fulfill() }
+        defer { phase.cancel() }
+
+        store.start()
+        await fulfillment(of: [starts[0]], timeout: 4)
+        guard fixture.count == 1 else { return XCTFail("Missing source read") }
+        XCTAssertEqual(fixture.request().url?.path, "/api/cards/card")
+        fixture.respond(HTTPFixture.detail)
+        await fulfillment(of: [starts[1]], timeout: 4)
+        guard fixture.count == 2 else { return XCTFail("Missing Spark execution") }
+        XCTAssertEqual(fixture.request(at: 1).url?.path, "/api/v1/assets/card/spark")
+        XCTAssertEqual(fixture.request(at: 1).httpMethod, "POST")
+        fixture.respond(#"{"success":true,"data":{"activity_id":"act_original","root_activity_id":"act_original","chain_depth":0,"groups":{"related":{"name":"related","items":[{"asset_id":"result","version_id":"ver_result","score":1,"origin":"semantic","bucket":"related"}]},"angles":{"name":"angles","items":[]},"keywords":{"name":"keywords","items":[]}}}}"#, status: 201, at: 1)
+        await fulfillment(of: [starts[2]], timeout: 4)
+        guard fixture.count == 3 else { return XCTFail("Missing result hydration") }
+        XCTAssertEqual(fixture.request(at: 2).url?.path, "/api/cards/result")
+        fixture.respond(#"{"success":false,"error":{"code":"SERVICE_UNAVAILABLE","message":"Result read unavailable"}}"#, status: 503, at: 2)
+        await fulfillment(of: [failed], timeout: 4)
+
+        store.retryTrigger()
+        await fulfillment(of: [starts[3]], timeout: 4)
+        guard fixture.count == 4 else { return XCTFail("Missing recovery read") }
+        XCTAssertEqual(fixture.request(at: 3).httpMethod, "GET")
+        XCTAssertEqual(fixture.request(at: 3).url?.path, "/api/v1/spark/activities/act_original/results")
+        XCTAssertEqual((0..<fixture.count).filter { fixture.request(at: $0).httpMethod == "POST" }.count, 1)
+        fixture.respond(#"{"success":false,"error":{"code":"SERVICE_UNAVAILABLE","message":"Still unavailable"}}"#, status: 503, at: 3)
+    }
+
     func testScopedBackgroundUploadPatchAndDeleteUseOriginalWireIdentity() async throws {
         let admission = NoteBackgroundGeneration().admission(for: 0)
         prepareLinkAuth()

@@ -120,6 +120,7 @@ public enum CoreSparkError: Error, Equatable, Sendable {
     case insufficientCredit
     case maximumDepth
     case retrievalUnavailable
+    case resultsUnavailable(activityID: String, rootActivityID: String, chainDepth: Int)
     case offline
     case timeout
     case decoding

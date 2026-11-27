@@ -411,3 +411,8 @@ A real ordinary-account reopened editor sent an anonymous media request and disp
 ## 2026-11-27 — Full ordinary document across Web and native
 
 Added an explicit-fixture UI test for the same owned asset from Web through native and back to Web. The test preserves all retained structured fields, exact sync baseline, metadata and media bytes, and checks full image viewport containment. Earlier selector/record-filter failures and a passing-but-offscreen screenshot are retained; the final attempt passes XCTest and visual inspection. Application source and the generated editor resource are unchanged. Normal signed build and concurrency diagnostics passed. [Bounded evidence and cleanup ownership](../qa/2026-11-27-cross-client-note.md).
+
+
+## 2026-11-27 — Keep acknowledged Spark identity through hydration failure
+
+The actual network/store regression reproduced a second paid POST after the first successful acknowledgement's card read failed. The adapter now carries that identity and the existing store adopts it before exposing result-only retry. Root/child and restart regressions, one hosted transport case, the concurrency gate and the explicit ordinary-account UI case pass. The first UI entry failure is retained; its readiness wait was corrected without changing production navigation. Exact request/ledger evidence, backend discovery-to-erasure correction and remaining unknown-outcome boundaries are in the [QA record](../qa/2026-11-27-spark-ack-recovery.md).

@@ -414,6 +414,107 @@ final class SparkSessionStoreLifecycleTests: XCTestCase {
         XCTAssertNotNil(harness.store.currentResult)
     }
 
+    func testAcknowledgedResultFailurePersistsActivityAndRetriesOnlyItsRead() async {
+        let harness = makeHarness()
+        let source = harness.service.enqueueCard()
+        let trigger = harness.service.enqueueTrigger()
+        harness.store.start()
+        source.send(card("ast_root", content: "Root"))
+        source.send(completion: .finished)
+        await settle()
+        trigger.send(completion: .failure(.resultsUnavailable(
+            activityID: "act_original", rootActivityID: "act_original", chainDepth: 0
+        )))
+        await settle()
+
+        XCTAssertEqual(harness.store.activeActivityID, "act_original")
+        XCTAssertEqual(harness.persistence.lastSaved?.activeActivityID, "act_original")
+        XCTAssertNil(harness.persistence.lastSaved?.pendingTrigger)
+        XCTAssertEqual(harness.store.phase, .failed("Spark completed, but its results couldn't load."))
+        let failedRead = harness.service.enqueueActivityResults()
+        harness.store.retryTrigger()
+        failedRead.send(completion: .failure(.retrievalUnavailable))
+        await settle()
+        let recoveredRead = harness.service.enqueueActivityResults()
+        _ = harness.service.enqueueCard()
+        harness.store.retryTrigger()
+        recoveredRead.send(page(activity: "act_original", parent: nil, root: "act_original", depth: 0, source: "ast_root"))
+        recoveredRead.send(completion: .finished)
+        await settle()
+
+        XCTAssertEqual(harness.service.triggerCalls.count, 1)
+        XCTAssertEqual(harness.service.requestedActivityIDs, ["act_original", "act_original"])
+        XCTAssertTrue(harness.service.historyCalls.isEmpty)
+        XCTAssertEqual(harness.store.phase, .loaded)
+        XCTAssertEqual(harness.store.chain.map(\.activityID), ["act_original"])
+    }
+
+    func testRestartAfterAcknowledgedResultFailureReadsPersistedActivityWithoutTrigger() async {
+        let harness = makeHarness()
+        let source = harness.service.enqueueCard()
+        let trigger = harness.service.enqueueTrigger()
+        harness.store.start()
+        source.send(card("ast_root", content: "Root"))
+        source.send(completion: .finished)
+        await settle()
+        trigger.send(completion: .failure(.resultsUnavailable(
+            activityID: "act_original", rootActivityID: "act_original", chainDepth: 0
+        )))
+        await settle()
+
+        let service = MockCoreSparkService()
+        let read = service.enqueueActivityResults()
+        _ = service.enqueueCard()
+        let restarted = SparkSessionStore(
+            actorID: "act_user", rootSourceAssetID: "ast_root",
+            service: service, persistence: harness.persistence
+        )
+        restarted.start()
+        read.send(page(activity: "act_original", parent: nil, root: "act_original", depth: 0, source: "ast_root"))
+        read.send(completion: .finished)
+        await settle()
+
+        XCTAssertEqual(service.requestedActivityIDs, ["act_original"])
+        XCTAssertTrue(service.triggerCalls.isEmpty)
+        XCTAssertTrue(service.historyCalls.isEmpty)
+        XCTAssertEqual(restarted.phase, .loaded)
+        XCTAssertEqual(restarted.activeActivityID, "act_original")
+    }
+
+    func testAcknowledgedChildRemainsInHistoryWhenRevisitingItsParent() async {
+        let harness = makeHarness()
+        await loadRoot(harness, resultCount: 2)
+        let sourceID = harness.store.currentResult!.id
+        let trigger = harness.service.enqueueTrigger()
+        harness.store.sparkCurrentDeeper()
+        trigger.send(completion: .failure(.resultsUnavailable(
+            activityID: "act_child", rootActivityID: "act_root", chainDepth: 1
+        )))
+        await settle()
+        XCTAssertEqual(harness.store.chain.map(\.activityID), ["act_root", "act_child"])
+        XCTAssertEqual(harness.store.activeActivityID, "act_child")
+        XCTAssertEqual(harness.persistence.lastSaved?.nodes.last?.parentActivityID, "act_root")
+
+        let parentRead = harness.service.enqueueActivityResults()
+        _ = harness.service.enqueueCard()
+        harness.store.selectNode(activityID: "act_root")
+        parentRead.send(page(activity: "act_root", parent: nil, root: "act_root", depth: 0, source: "ast_root"))
+        parentRead.send(completion: .finished)
+        await settle()
+        let childRead = harness.service.enqueueActivityResults()
+        _ = harness.service.enqueueCard()
+        harness.store.selectNode(activityID: "act_child")
+        childRead.send(page(activity: "act_child", parent: "act_root", root: "act_root", depth: 1, source: sourceID))
+        childRead.send(completion: .finished)
+        await settle()
+
+        XCTAssertEqual(harness.service.triggerCalls.count, 2)
+        XCTAssertEqual(harness.service.requestedActivityIDs, ["act_root", "act_child"])
+        XCTAssertEqual(harness.store.chain.map(\.activityID), ["act_root", "act_child"])
+        XCTAssertEqual(harness.store.activeActivityID, "act_child")
+        XCTAssertEqual(harness.store.phase, .loaded)
+    }
+
     private typealias Harness = (
         store: SparkSessionStore,
         service: MockCoreSparkService,

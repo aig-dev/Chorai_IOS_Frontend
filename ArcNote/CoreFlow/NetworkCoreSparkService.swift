@@ -70,6 +70,15 @@ struct NetworkCoreSparkService: @MainActor CoreSparkServing {
             }
 
             return hydrate(groups: run.groups)
+                .mapError { _ in
+                    // The paid execution has already returned its canonical identity.
+                    // A presentation read failure must retain it for GET-only recovery.
+                    CoreSparkError.resultsUnavailable(
+                        activityID: run.activityId,
+                        rootActivityID: run.rootActivityId,
+                        chainDepth: run.chainDepth
+                    )
+                }
                 .map { groups in
                     SparkActivityPage(
                         activityID: run.activityId,

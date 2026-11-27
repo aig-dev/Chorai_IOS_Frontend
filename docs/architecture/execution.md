@@ -161,6 +161,10 @@ readiness; production closure is a launch requirement. Keep the current explicit
 concurrency semantics, wire CI alongside the work, and record signed-release and
 supported-OS acceptance separately from simulator checks.
 
+## Acknowledged Spark result reads
+
+A valid trigger acknowledgement remains owned by the original activity if subsequent card hydration fails. The adapter returns its exact activity/root/depth; the MainActor store validates the source and chain and reuses its existing persisted node. Retry and restart replay that activity, while the acknowledged trigger cannot be retried as a new paid action. Source/session generation checks and existing authorization handling remain. Unknown server outcomes and missing or malformed acknowledgements require separate recovery work. See [bounded recovery validation](../qa/2026-11-27-spark-ack-recovery.md).
+
 ## Network responses — implemented
 
 ### Local lifecycle action dispatch

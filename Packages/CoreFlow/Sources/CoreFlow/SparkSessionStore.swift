@@ -456,7 +456,31 @@ public final class SparkSessionStore: ObservableObject {
                     return
                 }
                 if case .failure(let error) = completion {
-                    if Self.isAmbiguousTriggerError(error) {
+                    if case .resultsUnavailable(let activityID, let rootActivityID, let depth) = error {
+                        let acknowledged = SparkActivityPage(
+                            activityID: activityID,
+                            parentActivityID: parentActivityID,
+                            rootActivityID: rootActivityID,
+                            chainDepth: depth,
+                            sourceAssetID: source.id,
+                            groups: [:],
+                            createdAt: nil
+                        )
+                        if self.isValid(
+                            page: acknowledged, sourceAssetID: source.id,
+                            parentActivityID: parentActivityID, rollback: rollback
+                        ) {
+                            self.applyTriggeredPage(
+                                acknowledged, source: source,
+                                parentActivityID: parentActivityID, rollback: rollback,
+                                resultLoadFailed: true
+                            )
+                        } else {
+                            self.restoreAfterTriggerFailure(
+                                rollback: rollback, pending: pending, source: source, error: .decoding
+                            )
+                        }
+                    } else if Self.isAmbiguousTriggerError(error) {
                         self.reconcilePendingTrigger(
                             pending,
                             rollback: rollback,
@@ -541,7 +565,8 @@ public final class SparkSessionStore: ObservableObject {
         _ page: SparkActivityPage,
         source: FlowCard,
         parentActivityID: String?,
-        rollback: TriggerRollback
+        rollback: TriggerRollback,
+        resultLoadFailed: Bool = false
     ) {
         let node = SparkChainNode(
             sourceAssetID: page.sourceAssetID,
@@ -574,8 +599,11 @@ public final class SparkSessionStore: ObservableObject {
         pendingTrigger = nil
         lastFailedTrigger = nil
         lastFailedSourceCard = nil
+        lastFailedReplayActivityID = resultLoadFailed ? page.activityID : nil
         isInteractionLocked = false
-        phase = results.isEmpty ? .empty : .loaded
+        phase = resultLoadFailed
+            ? .failed("Spark completed, but its results couldn't load.")
+            : results.isEmpty ? .empty : .loaded
         persistCurrentState()
     }
 
@@ -1123,6 +1151,8 @@ public final class SparkSessionStore: ObservableObject {
             return "This Spark has reached its limit."
         case .retrievalUnavailable:
             return "Spark is unavailable right now."
+        case .resultsUnavailable:
+            return "Spark completed, but its results couldn't load."
         case .offline, .timeout:
             return "Couldn't confirm this Spark."
         case .decoding, .server, .unknown:
