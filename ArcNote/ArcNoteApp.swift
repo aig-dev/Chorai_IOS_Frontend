@@ -1549,7 +1549,10 @@ private final class ChatVisibilityFixtureService:
                 createdAt: "2020-01-01T00:02:00Z",
                 messageType: "text",
                 referencedAssetId: request.attachedCardId,
-                isFromCurrentUser: true
+                isFromCurrentUser: true,
+                conversationID: conversationId,
+                idempotencyKey: request.idempotencyKey.uuidString.lowercased(),
+                sourceType: "HUMAN"
             )
             sentMessages.append(message)
             return Just(

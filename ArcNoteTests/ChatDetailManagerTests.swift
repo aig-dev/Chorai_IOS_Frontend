@@ -5,9 +5,204 @@ import CoreFlow
 
 @MainActor
 final class ChatDetailManagerTests: XCTestCase {
+    func testLateFailureAfterOtherViewAcknowledgedRetriesOriginalIdentity() async throws {
+        let store = makeSendStore()
+        let firstFetcher = ControlledChatFetcher()
+        let first = ChatDetailManager(humanActorID: "human", fetcher: firstFetcher, sendPersistence: store)
+        first.startConversationEvents(conversationId: "chat")
+        first.sendMessage(conversationId: "chat", content: "Original", attachedNotes: [])
+        let original = try XCTUnwrap(firstFetcher.sendRequests.first)
+        let secondFetcher = ControlledChatFetcher()
+        let second = ChatDetailManager(humanActorID: "human", fetcher: secondFetcher, sendPersistence: store)
+        second.startConversationEvents(conversationId: "chat")
+        second.retryPendingSend(conversationId: "chat")
+        secondFetcher.sends[0].send(SendMessageResponse(success: true, data: SendMessageData(message: acknowledgement(original))))
+        await drainDelivery()
+        XCTAssertNil(try store.load(actorID: "human", conversationID: "chat"))
+        firstFetcher.sends[0].send(completion: .failure(.timeout))
+        await drainDelivery()
+        first.retryPendingSend(conversationId: "chat")
+        XCTAssertEqual(firstFetcher.sendRequests.count, 2)
+        XCTAssertEqual(firstFetcher.sendRequests.last?.idempotencyKey, original.idempotencyKey,
+                       "A completed send in another view cannot turn a late failure into a new message")
+        XCTAssertEqual(try store.load(actorID: "human", conversationID: "chat")?.state, .outcomeUnknown)
+        first.stopConversationEvents()
+        second.stopConversationEvents()
+    }
+
+    func testAcknowledgementPreservesGoZeroWidthSpaceBoundary() async throws {
+        let store = makeSendStore()
+        let fetcher = ControlledChatFetcher()
+        let manager = ChatDetailManager(humanActorID: "human", fetcher: fetcher, sendPersistence: store)
+        manager.startConversationEvents(conversationId: "chat")
+        let body = "\u{200B}Keep boundaries\u{200B}"
+        manager.sendMessage(conversationId: "chat", content: body, attachedNotes: [])
+        let key = try XCTUnwrap(fetcher.sendRequests.first?.idempotencyKey)
+        // Go strings.TrimSpace retains U+200B. Foundation's whitespace set does not.
+        let receipt = APIChatMessage(id: "accepted", content: body, senderId: "human", receiverId: "agent",
+            createdAt: "2026-11-28T00:00:00Z", messageType: "TEXT", isFromCurrentUser: true,
+            conversationID: "chat", idempotencyKey: key.uuidString.lowercased(), sourceType: "HUMAN")
+        fetcher.sends[0].send(SendMessageResponse(success: true, data: SendMessageData(message: receipt)))
+        await drainDelivery()
+        XCTAssertTrue(manager.composerText.isEmpty)
+        XCTAssertNil(try store.load(actorID: "human", conversationID: "chat"))
+        manager.stopConversationEvents()
+    }
+
+    func testFailedSendReopensOriginalDraftAndRetriesTheSameKey() async throws {
+        let store = makeSendStore()
+        let fetcher = ControlledChatFetcher()
+        let manager = ChatDetailManager(humanActorID: "human", fetcher: fetcher, sendPersistence: store)
+        manager.startConversationEvents(conversationId: "chat")
+        let note = NoteCard(id: "note", title: "Note", description: "Private preview", isPublic: false, username: "", avatarUrl: nil)
+        manager.composerText = "Original draft"
+        manager.updateComposerAttachments([note])
+        manager.sendMessage(conversationId: "chat", content: manager.composerText, attachedNotes: manager.composerAttachments)
+        let original = try XCTUnwrap(fetcher.sendRequests.first)
+        XCTAssertEqual(manager.composerText, "Original draft")
+        fetcher.sends[0].send(completion: .failure(.timeout))
+        await drainDelivery()
+        XCTAssertEqual(manager.pendingSend?.state, .outcomeUnknown)
+        XCTAssertEqual(manager.composerAttachments, [note])
+        manager.stopConversationEvents()
+        XCTAssertTrue(manager.composerText.isEmpty)
+
+        let reopenedFetcher = ControlledChatFetcher()
+        let reopened = ChatDetailManager(humanActorID: "human", fetcher: reopenedFetcher, sendPersistence: store)
+        reopened.startConversationEvents(conversationId: "chat")
+        XCTAssertEqual(reopened.composerText, "Original draft")
+        XCTAssertEqual(reopened.composerAttachments.map(\.id), ["note"])
+        XCTAssertNotEqual(reopened.composerAttachments.first?.description, "Private preview", "Private previews are reauthorized, not persisted")
+        XCTAssertTrue(reopenedFetcher.sendRequests.isEmpty, "Reopening does not automatically send")
+        reopened.retryPendingSend(conversationId: "chat")
+        XCTAssertEqual(reopenedFetcher.sendRequests.first?.idempotencyKey, original.idempotencyKey)
+        XCTAssertEqual(reopenedFetcher.sendRequests.first?.attachedCardId, original.attachedCardId)
+        reopenedFetcher.sends[0].send(SendMessageResponse(success: true, data: SendMessageData(message: acknowledgement(original))))
+        await drainDelivery()
+        XCTAssertTrue(reopened.composerText.isEmpty)
+        XCTAssertTrue(reopened.composerAttachments.isEmpty)
+        XCTAssertNil(try store.load(actorID: "human", conversationID: "chat"))
+        reopened.stopConversationEvents()
+    }
+
+    func testFirstDefinitiveRejectionRetainsEditableDraftAndNewSendIdentity() async throws {
+        let store = makeSendStore()
+        let fetcher = ControlledChatFetcher()
+        let manager = ChatDetailManager(humanActorID: "human", fetcher: fetcher, sendPersistence: store)
+        manager.startConversationEvents(conversationId: "chat")
+        manager.composerText = "Original"
+        manager.sendMessage(conversationId: "chat", content: "Original", attachedNotes: [])
+        fetcher.sends[0].send(completion: .failure(.forbidden))
+        await drainDelivery()
+        XCTAssertEqual(manager.composerText, "Original")
+        XCTAssertTrue(manager.composerIsEditable)
+        XCTAssertEqual(try store.load(actorID: "human", conversationID: "chat")?.state, .rejected)
+        manager.composerText = "Corrected"
+        manager.sendMessage(conversationId: "chat", content: "Corrected", attachedNotes: [])
+        XCTAssertEqual(fetcher.sendRequests.count, 2)
+        XCTAssertNotEqual(fetcher.sendRequests[0].idempotencyKey, fetcher.sendRequests[1].idempotencyKey)
+        manager.stopConversationEvents()
+    }
+
+    func testRejectionAfterUnknownOutcomeCannotReleaseANewSend() async {
+        let fetcher = ControlledChatFetcher()
+        let manager = ChatDetailManager(humanActorID: "human", fetcher: fetcher, sendPersistence: makeSendStore())
+        manager.startConversationEvents(conversationId: "chat")
+        manager.composerText = "Original"
+        manager.sendMessage(conversationId: "chat", content: "Original", attachedNotes: [])
+        fetcher.sends[0].send(completion: .failure(.timeout))
+        await drainDelivery()
+        manager.retryPendingSend(conversationId: "chat")
+        fetcher.sends[1].send(completion: .failure(.forbidden))
+        await drainDelivery()
+        XCTAssertEqual(manager.pendingSend?.state, .outcomeUnknown)
+        XCTAssertFalse(manager.composerIsEditable)
+        manager.sendMessage(conversationId: "chat", content: "Different", attachedNotes: [])
+        XCTAssertEqual(fetcher.sendRequests.count, 2)
+        XCTAssertEqual(fetcher.sendRequests[0].idempotencyKey, fetcher.sendRequests[1].idempotencyKey)
+        manager.stopConversationEvents()
+    }
+
+    func testWrongAcknowledgementCannotClearSavedDraft() async throws {
+        let store = makeSendStore()
+        let fetcher = ControlledChatFetcher()
+        let manager = ChatDetailManager(humanActorID: "human", fetcher: fetcher, sendPersistence: store)
+        manager.startConversationEvents(conversationId: "chat")
+        manager.composerText = "Original"
+        manager.sendMessage(conversationId: "chat", content: "Original", attachedNotes: [])
+        let wrong = SendMessageRequest(content: "Original")
+        fetcher.sends[0].send(SendMessageResponse(success: true, data: SendMessageData(message: acknowledgement(wrong))))
+        await drainDelivery()
+        XCTAssertEqual(manager.composerText, "Original")
+        XCTAssertTrue(manager.messages.isEmpty)
+        XCTAssertEqual(try store.load(actorID: "human", conversationID: "chat")?.requestID, fetcher.sendRequests[0].idempotencyKey)
+        XCTAssertEqual(manager.pendingSend?.state, .outcomeUnknown)
+        manager.stopConversationEvents()
+    }
+
+    func testStorageFailurePreventsDispatchAndPreservesComposer() async {
+        let fetcher = ControlledChatFetcher()
+        let manager = ChatDetailManager(humanActorID: "human", fetcher: fetcher, sendPersistence: FailingChatSendPersistence())
+        manager.startConversationEvents(conversationId: "chat")
+        manager.composerText = "Keep this draft"
+        manager.sendMessage(conversationId: "chat", content: manager.composerText, attachedNotes: [])
+        XCTAssertTrue(fetcher.sendRequests.isEmpty)
+        XCTAssertEqual(manager.composerText, "Keep this draft")
+        XCTAssertNotNil(manager.sendError)
+        manager.stopConversationEvents()
+    }
+
+    func testRetryInOtherViewPreventsLateRejectionFromUnlockingDraft() async {
+        let store = makeSendStore()
+        let firstFetcher = ControlledChatFetcher()
+        let first = ChatDetailManager(humanActorID: "human", fetcher: firstFetcher, sendPersistence: store)
+        first.startConversationEvents(conversationId: "chat")
+        first.sendMessage(conversationId: "chat", content: "Original", attachedNotes: [])
+        let secondFetcher = ControlledChatFetcher()
+        let second = ChatDetailManager(humanActorID: "human", fetcher: secondFetcher, sendPersistence: store)
+        second.startConversationEvents(conversationId: "chat")
+        second.retryPendingSend(conversationId: "chat")
+        firstFetcher.sends[0].send(completion: .failure(.forbidden))
+        await drainDelivery()
+        XCTAssertEqual(first.pendingSend?.state, .outcomeUnknown)
+        XCTAssertFalse(first.composerIsEditable)
+        XCTAssertEqual(firstFetcher.sendRequests[0].idempotencyKey, secondFetcher.sendRequests[0].idempotencyKey)
+        first.stopConversationEvents()
+        second.stopConversationEvents()
+    }
+
+    func testRetiredAccountCannotClearItsPendingSendWithALateReceipt() async throws {
+        let store = makeSendStore()
+        let fetcher = ControlledChatFetcher()
+        let manager = ChatDetailManager(humanActorID: "human", fetcher: fetcher, sendPersistence: store)
+        manager.startConversationEvents(conversationId: "chat")
+        manager.sendMessage(conversationId: "chat", content: "Private draft", attachedNotes: [])
+        fetcher.sends[0].send(SendMessageResponse(success: true, data: SendMessageData(message: acknowledgement(fetcher.sendRequests[0]))))
+        NotificationCenter.default.post(name: .cardReadSessionDidChange, object: nil)
+        await drainDelivery()
+        XCTAssertTrue(manager.composerText.isEmpty)
+        XCTAssertTrue(manager.messages.isEmpty)
+        XCTAssertNotNil(try store.load(actorID: "human", conversationID: "chat"))
+        XCTAssertNil(try store.load(actorID: "other", conversationID: "chat"))
+    }
+
+    func testMultipleAttachmentsAreRetainedAndRejectedBeforeDispatch() async {
+        let fetcher = ControlledChatFetcher()
+        let manager = ChatDetailManager(humanActorID: "human", fetcher: fetcher, sendPersistence: makeSendStore())
+        manager.startConversationEvents(conversationId: "chat")
+        manager.composerText = "Keep both choices"
+        let notes = ["first", "second"].map { NoteCard(id: $0, title: $0, description: "", isPublic: false, username: "", avatarUrl: nil) }
+        manager.updateComposerAttachments(notes)
+        manager.sendMessage(conversationId: "chat", content: manager.composerText, attachedNotes: notes)
+        XCTAssertTrue(fetcher.sendRequests.isEmpty)
+        XCTAssertEqual(manager.composerAttachments, notes)
+        XCTAssertEqual(manager.composerText, "Keep both choices")
+        manager.stopConversationEvents()
+    }
+
     func testOlderMessageRefreshCannotReplaceNewerResponse() async {
         let fetcher = ControlledChatFetcher()
-        let manager = ChatDetailManager(humanActorID: "human", fetcher: fetcher)
+        let manager = ChatDetailManager(humanActorID: "human", fetcher: fetcher, sendPersistence: makeSendStore())
         manager.loadConversationDetail(conversationId: "old")
         manager.loadConversationDetail(conversationId: "new")
         fetcher.finishMessages(1, ids: ["new-message"])
@@ -29,7 +224,7 @@ final class ChatDetailManagerTests: XCTestCase {
 
     func testOldFailureCannotChangeNewErrorOrLoadingState() async {
         let fetcher = ControlledChatFetcher()
-        let manager = ChatDetailManager(humanActorID: "human", fetcher: fetcher)
+        let manager = ChatDetailManager(humanActorID: "human", fetcher: fetcher, sendPersistence: makeSendStore())
         manager.loadConversationDetail(conversationId: "old")
         manager.loadConversationDetail(conversationId: "new")
         fetcher.messageReads[0].subject.send(completion: .failure(.unauthorized))
@@ -42,7 +237,7 @@ final class ChatDetailManagerTests: XCTestCase {
 
     func testEventBurstCoalescesRefreshWithoutLosingLatestMessage() async {
         let fetcher = ControlledChatFetcher()
-        let manager = ChatDetailManager(humanActorID: "human", fetcher: fetcher)
+        let manager = ChatDetailManager(humanActorID: "human", fetcher: fetcher, sendPersistence: makeSendStore())
         manager.startConversationEvents(conversationId: "chat")
         manager.loadMessages(conversationId: "chat")
         for id in 1...12 {
@@ -64,7 +259,7 @@ final class ChatDetailManagerTests: XCTestCase {
 
     func testRetiredConversationRejectsLateMessagesAndHydration() async {
         let fetcher = ControlledChatFetcher()
-        let manager = ChatDetailManager(humanActorID: "human", fetcher: fetcher)
+        let manager = ChatDetailManager(humanActorID: "human", fetcher: fetcher, sendPersistence: makeSendStore())
         manager.startConversationEvents(conversationId: "same")
         manager.loadMessages(conversationId: "same")
         fetcher.finishMessages(0, ids: ["before-retirement"], reference: "note")
@@ -89,7 +284,7 @@ final class ChatDetailManagerTests: XCTestCase {
 
     func testLatestPageStillUsesServerPagination() async {
         let fetcher = ControlledChatFetcher()
-        let manager = ChatDetailManager(humanActorID: "human", fetcher: fetcher)
+        let manager = ChatDetailManager(humanActorID: "human", fetcher: fetcher, sendPersistence: makeSendStore())
         manager.loadMessages(conversationId: "chat")
         fetcher.finishMessages(0, ids: ["oldest"], pages: 3)
         await drainDelivery()
@@ -103,7 +298,7 @@ final class ChatDetailManagerTests: XCTestCase {
 
     func testDuplicateEventsDoNotRefreshAgainOrRestoreOldFailure() async {
         let fetcher = ControlledChatFetcher()
-        let manager = ChatDetailManager(humanActorID: "human", fetcher: fetcher)
+        let manager = ChatDetailManager(humanActorID: "human", fetcher: fetcher, sendPersistence: makeSendStore())
         manager.startConversationEvents(conversationId: "chat")
         fetcher.streams[0].subject.send(ready(id: "20"))
         await drainDelivery()
@@ -119,7 +314,7 @@ final class ChatDetailManagerTests: XCTestCase {
 
     func testOldFailureDoesNotHideNewReplyAndRemainsRecoverableAfterItsSuccess() async {
         let fetcher = ControlledChatFetcher()
-        let manager = ChatDetailManager(humanActorID: "human", fetcher: fetcher)
+        let manager = ChatDetailManager(humanActorID: "human", fetcher: fetcher, sendPersistence: makeSendStore())
         manager.startConversationEvents(conversationId: "chat")
         let events = [
             ("agent.thinking", #"{"source_message_id":"old"}"#),
@@ -139,7 +334,7 @@ final class ChatDetailManagerTests: XCTestCase {
 
     func testReconnectUsesLastAcceptedCursorAndStopsAfterRetirement() async {
         let fetcher = ControlledChatFetcher()
-        let manager = ChatDetailManager(humanActorID: "human", fetcher: fetcher)
+        let manager = ChatDetailManager(humanActorID: "human", fetcher: fetcher, sendPersistence: makeSendStore())
         manager.startConversationEvents(conversationId: "chat")
         fetcher.streams[0].subject.send(ChatConversationEvent(name: "agent.thinking", id: "42", data: Data(#"{"source_message_id":"source"}"#.utf8)))
         fetcher.streams[0].subject.send(completion: .finished)
@@ -157,12 +352,12 @@ final class ChatDetailManagerTests: XCTestCase {
 
     func testLateSendCannotReopenRetiredConversation() async {
         let fetcher = ControlledChatFetcher()
-        let manager = ChatDetailManager(humanActorID: "human", fetcher: fetcher)
+        let manager = ChatDetailManager(humanActorID: "human", fetcher: fetcher, sendPersistence: makeSendStore())
         manager.startConversationEvents(conversationId: "old")
         manager.sendMessage(conversationId: "old", content: "hello", attachedNotes: [])
         // Queue delivery before changing scope; correctness must not depend on
         // whether the network still supports canceling an already committed send.
-        fetcher.sends[0].send(SendMessageResponse(success: true, data: SendMessageData(message: message("late"), eventId: 12)))
+        fetcher.sends[0].send(SendMessageResponse(success: true, data: SendMessageData(message: acknowledgement(fetcher.sendRequests[0], conversationID: "old", id: "late"), eventId: 12)))
         manager.startConversationEvents(conversationId: "new")
         await drainDelivery()
         XCTAssertTrue(manager.messages.isEmpty)
@@ -173,7 +368,7 @@ final class ChatDetailManagerTests: XCTestCase {
 
     func testAuthenticationRetirementSynchronouslyClearsAndRejectsOldCallbacks() async {
         let fetcher = ControlledChatFetcher()
-        let manager = ChatDetailManager(humanActorID: "human", fetcher: fetcher)
+        let manager = ChatDetailManager(humanActorID: "human", fetcher: fetcher, sendPersistence: makeSendStore())
         manager.loadMessages(conversationId: "chat")
         fetcher.finishMessages(0, ids: ["private"])
         await drainDelivery()
@@ -186,12 +381,12 @@ final class ChatDetailManagerTests: XCTestCase {
 
     func testSendAcknowledgementDoesNotSkipUnconsumedStreamEvents() async {
         let fetcher = ControlledChatFetcher()
-        let manager = ChatDetailManager(humanActorID: "human", fetcher: fetcher)
+        let manager = ChatDetailManager(humanActorID: "human", fetcher: fetcher, sendPersistence: makeSendStore())
         manager.startConversationEvents(conversationId: "chat")
         fetcher.streams[0].subject.send(ChatConversationEvent(name: "agent.thinking", id: "40", data: Data(#"{"source_message_id":"old"}"#.utf8)))
         await drainDelivery()
         manager.sendMessage(conversationId: "chat", content: "next", attachedNotes: [])
-        fetcher.sends[0].send(SendMessageResponse(success: true, data: SendMessageData(message: message("next"), eventId: 50)))
+        fetcher.sends[0].send(SendMessageResponse(success: true, data: SendMessageData(message: acknowledgement(fetcher.sendRequests[0], conversationID: "chat", id: "next"), eventId: 50)))
         await drainDelivery()
         XCTAssertEqual(fetcher.streams.count, 1, "An acknowledgement is not proof that events 41...49 were consumed")
         fetcher.streams[0].subject.send(ChatConversationEvent(name: "agent.response_ready", id: "45", data: Data(#"{"status":"retry_available","source_message_id":"old"}"#.utf8)))
@@ -202,7 +397,7 @@ final class ChatDetailManagerTests: XCTestCase {
 
     func testLateRetryAcceptanceCannotReopenReplyCompletedByStream() async {
         let fetcher = ControlledChatFetcher()
-        let manager = ChatDetailManager(humanActorID: "human", fetcher: fetcher)
+        let manager = ChatDetailManager(humanActorID: "human", fetcher: fetcher, sendPersistence: makeSendStore())
         manager.startConversationEvents(conversationId: "chat")
         manager.retryAgentReply(conversationId: "chat", sourceMessageId: "source")
         fetcher.streams[0].subject.send(ready(id: "1"))
@@ -217,7 +412,7 @@ final class ChatDetailManagerTests: XCTestCase {
     func testPresentationPreservesOrderOwnershipAndSyntheticBaseline() async {
         for count in [20, 500] {
             let fetcher = ControlledChatFetcher()
-            let manager = ChatDetailManager(humanActorID: "human", fetcher: fetcher)
+            let manager = ChatDetailManager(humanActorID: "human", fetcher: fetcher, sendPersistence: makeSendStore())
             manager.loadMessages(conversationId: "chat")
             let values = (0..<count).reversed().map { index in
                 APIChatMessage(id: "m-\(index)", content: "Synthetic \(index)", senderId: index.isMultiple(of: 2) ? "human" : "agent", receiverId: "human", createdAt: String(format: "2010-01-02T00:%02d:%02dZ", index / 60, index % 60), messageType: "text", isFromCurrentUser: false)
@@ -246,7 +441,7 @@ final class ChatDetailManagerTests: XCTestCase {
         defer { defaults.removePersistentDomain(forName: suite) }
         let visibility = ChatHistoryVisibilityDependency(visibility: ChatHistoryVisibility(persistence: UserDefaultsChatHistoryCutoffPersistence(defaults: defaults)))
         let fetcher = ControlledChatFetcher()
-        let manager = ChatDetailManager(humanActorID: "human", fetcher: fetcher)
+        let manager = ChatDetailManager(humanActorID: "human", fetcher: fetcher, sendPersistence: makeSendStore())
         manager.bindVisibility(visibility)
         manager.loadConversationDetail(conversationId: "chat")
         fetcher.details[0].send(detail("chat"))
@@ -285,7 +480,7 @@ final class ChatDetailManagerTests: XCTestCase {
         defer { NSTimeZone.default = previousZone }
         NSTimeZone.default = try XCTUnwrap(TimeZone(secondsFromGMT: 0))
         let fetcher = ControlledChatFetcher()
-        let manager = ChatDetailManager(humanActorID: "human", fetcher: fetcher)
+        let manager = ChatDetailManager(humanActorID: "human", fetcher: fetcher, sendPersistence: makeSendStore())
         manager.loadMessages(conversationId: "chat")
         let value = APIChatMessage(id: "midnight", content: "hello", senderId: "human", receiverId: "agent", createdAt: "2010-01-01T23:00:00Z", messageType: "text", isFromCurrentUser: true)
         fetcher.messageReads[0].subject.send(MessagesListResponse(success: true, data: MessagesListData(items: [value], pagination: ChatPagination(page: 1, perPage: 20, total: 1, pages: 1, hasNext: false, hasPrev: false))))
@@ -309,6 +504,17 @@ final class ChatDetailManagerTests: XCTestCase {
 
     private func message(_ id: String) -> APIChatMessage {
         APIChatMessage(id: id, content: "hello", senderId: "human", receiverId: "agent", createdAt: "2026-11-20T00:00:00Z", messageType: "text", isFromCurrentUser: true)
+    }
+
+    private func makeSendStore() -> any ChatSendAttemptPersisting {
+        let suite = "ChatDetailSendTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        addTeardownBlock { defaults.removePersistentDomain(forName: suite) }
+        return UserDefaultsChatSendAttemptStore(defaults: defaults, keyPrefix: "test")
+    }
+
+    private func acknowledgement(_ request: SendMessageRequest, conversationID: String = "chat", id: String = "accepted") -> APIChatMessage {
+        APIChatMessage(id: id, content: request.content.trimmingCharacters(in: .whitespacesAndNewlines), senderId: "human", receiverId: "agent", createdAt: "2026-11-28T00:00:00Z", messageType: "text", referencedAssetId: request.attachedCardId, isFromCurrentUser: true, conversationID: conversationID, idempotencyKey: request.idempotencyKey.uuidString.lowercased(), sourceType: "HUMAN")
     }
 
     private func drainDelivery() async {
@@ -338,6 +544,7 @@ private final class ControlledChatFetcher: ChatDetailFetching {
     var streams: [Stream] = []
     var references: [PassthroughSubject<NoteCard, NetworkError>] = []
     var sends: [PassthroughSubject<SendMessageResponse, NetworkError>] = []
+    var sendRequests: [SendMessageRequest] = []
     var retries: [PassthroughSubject<AgentReplyRetryResponse, NetworkError>] = []
     var onStream: (() -> Void)?
 
@@ -353,6 +560,7 @@ private final class ControlledChatFetcher: ChatDetailFetching {
     }
     func sendMessage(conversationId: String, request: SendMessageRequest) -> AnyPublisher<SendMessageResponse, NetworkError> {
         let subject = PassthroughSubject<SendMessageResponse, NetworkError>()
+        sendRequests.append(request)
         sends.append(subject)
         return subject.eraseToAnyPublisher()
     }
@@ -378,4 +586,11 @@ private final class ControlledChatFetcher: ChatDetailFetching {
         read.subject.send(MessagesListResponse(success: true, data: MessagesListData(items: messages, pagination: ChatPagination(page: read.page, perPage: read.perPage, total: pages * 20, pages: pages, hasNext: read.page < pages, hasPrev: read.page > 1))))
         read.subject.send(completion: .finished)
     }
+}
+
+@MainActor
+private struct FailingChatSendPersistence: ChatSendAttemptPersisting {
+    func load(actorID: String, conversationID: String) throws -> ChatSendAttempt? { nil }
+    func save(_ attempt: ChatSendAttempt, replacing expected: ChatSendAttempt?) throws { throw ChatSendPersistenceError.writeFailed }
+    func remove(_ expected: ChatSendAttempt) throws { throw ChatSendPersistenceError.writeFailed }
 }

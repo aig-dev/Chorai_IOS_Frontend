@@ -5054,8 +5054,142 @@ final class ArcNoteUITests: XCTestCase {
         captureVisual("chat-agent-recovery-state")
     }
 
+    func testChatWithoutSendAcknowledgementRetainsComposer() throws {
+        app.launchArguments.append("--ui-test-chat-visibility")
+        app.launchEnvironment["CHORAI_API_BASE_URL"] = UITestAPIConfiguration.baseURL
+        app.launchEnvironment["CHORAI_UI_TEST_CHAT_SEND_SCOPE"] = UUID().uuidString
+        app.launch()
+
+        tap("chat.fixture.open-list")
+        tap("chat.conversation.conversation_before")
+        waitFor("chat.message.message_before")
+        let input = waitFor("chat.message.input")
+        input.tap()
+        input.typeText("Keep this unacknowledged draft")
+        tap("chat.message.send")
+
+        // This existing fixture completes without a successful send receipt.
+        // The production composer must not treat invocation as acceptance.
+        XCTAssertEqual(input.value as? String, "Keep this unacknowledged draft")
+        captureVisual("chat-unacknowledged-draft")
+    }
+
+    func testChatConfirmedMessageVisibleAfterReopening() throws {
+        let environment = ProcessInfo.processInfo.environment
+        guard environment["CHORAI_UI_TEST_CHAT_CONFIRMED_READ"] == "1",
+              let conversationID = environment["CHORAI_UI_TEST_CHAT_CONVERSATION"], !conversationID.isEmpty,
+              let content = environment["CHORAI_UI_TEST_CHAT_CONTENT"], !content.isEmpty,
+              let scope = environment["CHORAI_UI_TEST_CHAT_SEND_SCOPE"], !scope.isEmpty,
+              let token = environment["CHORAI_UI_TEST_AUTH_TOKEN"], !token.isEmpty,
+              let actorID = environment["CHORAI_UI_TEST_ACTOR_ID"], !actorID.isEmpty,
+              let baseURL = environment["CHORAI_API_BASE_URL"], !baseURL.isEmpty else {
+            throw XCTSkip("Requires the original acknowledged ordinary Chat message; this case never sends")
+        }
+        seedAppSession(SmokeSession(token: token, actorId: actorID,
+            email: environment["CHORAI_UI_TEST_EMAIL"] ?? "rc-chat@example.invalid",
+            username: environment["CHORAI_UI_TEST_USERNAME"] ?? "rc-chat"))
+        app.launchEnvironment["CHORAI_UI_TEST"] = "1"
+        app.launchEnvironment["CHORAI_API_BASE_URL"] = baseURL
+        app.launchEnvironment["CHORAI_UI_TEST_CHAT_SEND_SCOPE"] = scope
+        for index in 0..<2 {
+            app.launch()
+            waitFor("tab.chat", timeout: 30)
+            tap("tab.chat")
+            tap("chat.conversation.\(conversationID)")
+            let input = waitFor("chat.message.input")
+            XCTAssertTrue(input.isEnabled)
+            XCTAssertNotEqual(input.value as? String, content)
+            XCTAssertFalse(app.descendants(matching: .any)["chat.message.send-error"].exists)
+            let message = app.staticTexts[content].firstMatch
+            XCTAssertTrue(message.waitForExistence(timeout: 15))
+            let header = waitFor("chat.header.identity")
+            func fullyVisible() -> Bool {
+                message.isHittable && message.frame.minY >= header.frame.maxY
+                    && message.frame.maxY <= input.frame.minY
+            }
+            for _ in 0..<5 where !fullyVisible() {
+                app.scrollViews.firstMatch.swipeUp()
+            }
+            XCTAssertTrue(fullyVisible(), "The original message must be readable inside the viewport after scrolling")
+            captureVisual("chat-confirmed-visible-\(index)")
+            app.terminate()
+        }
+    }
+
+    func testChatUnknownSendRecoversOriginalMessageAfterRelaunch() throws {
+        let environment = ProcessInfo.processInfo.environment
+        guard environment["CHORAI_UI_TEST_CHAT_UNKNOWN_RECOVERY"] == "1",
+              let conversationID = environment["CHORAI_UI_TEST_CHAT_CONVERSATION"], !conversationID.isEmpty,
+              let content = environment["CHORAI_UI_TEST_CHAT_CONTENT"], !content.isEmpty,
+              let scope = environment["CHORAI_UI_TEST_CHAT_SEND_SCOPE"], !scope.isEmpty,
+              let token = environment["CHORAI_UI_TEST_AUTH_TOKEN"], !token.isEmpty,
+              let actorID = environment["CHORAI_UI_TEST_ACTOR_ID"], !actorID.isEmpty,
+              let baseURL = environment["CHORAI_API_BASE_URL"], !baseURL.isEmpty else {
+            throw XCTSkip("Requires an isolated ordinary-account Chat conversation and journaled lost/malformed receipts")
+        }
+        seedAppSession(SmokeSession(token: token, actorId: actorID,
+            email: environment["CHORAI_UI_TEST_EMAIL"] ?? "rc-chat@example.invalid",
+            username: environment["CHORAI_UI_TEST_USERNAME"] ?? "rc-chat"))
+        app.launchEnvironment["CHORAI_UI_TEST"] = "1"
+        app.launchEnvironment["CHORAI_API_BASE_URL"] = baseURL
+        app.launchEnvironment["CHORAI_UI_TEST_CHAT_SEND_SCOPE"] = scope
+        func openConversation() {
+            waitFor("tab.chat", timeout: 30)
+            tap("tab.chat")
+            tap("chat.conversation.\(conversationID)")
+            XCTAssertEqual(waitFor("chat.detail.conversation-id").label, conversationID)
+            waitFor("chat.message.input")
+        }
+        app.launch()
+        openConversation()
+        let input = waitFor("chat.message.input")
+        if environment["CHORAI_UI_TEST_CHAT_RESUME_EXISTING"] != "1" {
+            input.tap()
+            input.typeText(content)
+            tap("chat.message.send")
+            waitFor("chat.message.send-error", timeout: 45)
+        }
+        XCTAssertEqual(input.value as? String, content)
+        XCTAssertFalse(input.isEnabled)
+        captureVisual("chat-lost-receipt-retains-draft")
+
+        for index in 0..<2 {
+            app.terminate()
+            app.launch()
+            openConversation()
+            let recovered = waitFor("chat.message.input")
+            XCTAssertEqual(recovered.value as? String, content)
+            XCTAssertFalse(recovered.isEnabled)
+            XCTAssertEqual(waitForButton("chat.message.send").label, "Retry message")
+            tap("chat.message.send")
+            if index == 0 {
+                waitFor("chat.message.send-error", timeout: 45)
+                XCTAssertEqual(recovered.value as? String, content)
+                captureVisual("chat-malformed-receipt-retains-draft")
+            } else {
+                let confirmed = XCTNSPredicateExpectation(
+                    predicate: NSPredicate { _, _ in recovered.isEnabled && (recovered.value as? String) != content },
+                    object: recovered)
+                XCTAssertEqual(XCTWaiter.wait(for: [confirmed], timeout: 45), .completed)
+                XCTAssertFalse(app.descendants(matching: .any)["chat.message.send-error"].exists)
+                XCTAssertTrue(app.staticTexts[content].firstMatch.waitForExistence(timeout: 15))
+                captureVisual("chat-original-message-recovered")
+            }
+        }
+        app.terminate()
+        app.launch()
+        openConversation()
+        XCTAssertTrue(waitFor("chat.message.input").isEnabled)
+        XCTAssertNotEqual(waitFor("chat.message.input").value as? String, content)
+        XCTAssertTrue(app.staticTexts[content].firstMatch.waitForExistence(timeout: 15))
+        XCTAssertFalse(app.descendants(matching: .any)["chat.message.send-error"].exists)
+        captureVisual("chat-confirmed-message-reopened")
+    }
+
     func testChatRestoresLatestSentMessageAndHydratesCompactAttachment() throws {
         app.launchArguments.append("--ui-test-chat-visibility")
+        app.launchEnvironment["CHORAI_API_BASE_URL"] = UITestAPIConfiguration.baseURL
+        app.launchEnvironment["CHORAI_UI_TEST_CHAT_SEND_SCOPE"] = UUID().uuidString
         app.launch()
 
         tap("chat.fixture.open-attachment-list")

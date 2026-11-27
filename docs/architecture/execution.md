@@ -391,3 +391,41 @@ The service captures the original session check at creation. On MainActor it che
 ## App packaging and required-reason resources
 
 ArcNote/PrivacyInfo.xcprivacy belongs to the app target Resources phase. It declares the existing app-local UserDefaults use with CA92.1; third-party bundle manifests do not replace this app declaration. The device Release archive and both simulator configurations include the exact resource, retain iOS 16 and persisted Swift 6 checks. The device executable is unchanged by the correction. The [bounded archive qualification](../qa/2026-11-28-device-archive.md) is unsigned and does not close distribution or complete App Store privacy disclosure.
+
+
+## Chat send recovery
+
+`ChatDetailManager` owns the composer and a single requested send per API origin,
+actor and conversation. `CoreFlow/ChatSendRecovery.swift` persists its original
+text, one existing note reference and UUID before HTTP dispatch. There is no
+background send or general draft queue. Text edited before pressing Send is not
+covered by this requested-send recovery contract.
+
+The first attempt is awaiting a receipt; any retry is marked outcome-unknown
+before dispatch. Unknown sends retain the exact key and payload across screen
+exit, process restart and later errors. They remain visible and cannot be edited
+into a different logical send. A definitive first-request rejection keeps an
+editable draft; a later rejection after uncertainty cannot release a new key.
+A retry from another view advances shared state before a late first callback can
+classify it as rejected. Compare-and-replace prevents stale views from replacing
+newer attempts. If another view already acknowledged and removed the attempt,
+a late retry reconstructs the original UUID and only replays that send.
+
+Only a successful receipt matching actor, conversation, key, message type,
+source type, normalized content and reference clears the attempt. Receipt
+comparison uses Go's Unicode White_Space rule, retaining U+200B. Persistence
+retains the original text and enforces the API's raw scalar and normalized UTF-8
+limits plus a bounded encoded record. Corrupt or conflicting records block a
+new send; storage failure prevents dispatch. Session and conversation retirement
+reject late callbacks and clear visible state without erasing the saved send.
+
+The current Chat API accepts one note reference. The composer explicitly rejects
+multiple selected notes while preserving all choices and text. Only the reference
+ID is persisted; reopening reauthorizes preview loading through the existing card
+reader. A failed preview cannot alter the original referenced identity.
+
+The fixed UI gate includes unacknowledged-draft retention and successful message/
+attachment reopening. The separate ordinary-account acceptance drops an actual
+committed reply, injects a malformed replay receipt, restarts the app and checks
+the original message and settlement. Source qualification and remaining release
+boundaries belong to the [Chat recovery QA record](../qa/2026-11-28-chat-send-recovery.md).

@@ -189,6 +189,7 @@ struct MessagesListData: Codable {
 struct SendMessageRequest: Codable {
     let content: String
     let attachedCardId: String?
+    let idempotencyKey: UUID
     
     enum CodingKeys: String, CodingKey {
         case content
@@ -196,15 +197,17 @@ struct SendMessageRequest: Codable {
         case messageType = "message_type"
     }
     
-    init(content: String, attachedCardId: String? = nil) {
+    init(content: String, attachedCardId: String? = nil, idempotencyKey: UUID = UUID()) {
         self.content = content
         self.attachedCardId = attachedCardId
+        self.idempotencyKey = idempotencyKey
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         content = try container.decode(String.self, forKey: .content)
         attachedCardId = try container.decodeIfPresent(String.self, forKey: .attachedCardId)
+        idempotencyKey = UUID()
     }
 
     func encode(to encoder: Encoder) throws {
@@ -266,6 +269,9 @@ struct APIChatMessage: Codable, Identifiable {
     var referencedAssetId: String?
     var isFromCurrentUser: Bool
     var attachedCards: [NoteCard]
+    let conversationID: String?
+    let idempotencyKey: String?
+    let sourceType: String?
     
     enum CodingKeys: String, CodingKey {
         case id = "message_id"
@@ -275,10 +281,13 @@ struct APIChatMessage: Codable, Identifiable {
         case createdAt = "created_at"
         case messageType = "message_type"
         case referencedAssetId = "referenced_asset_id"
+        case conversationID = "conversation_id"
+        case idempotencyKey = "idempotency_key"
+        case sourceType = "source_type"
     }
     
     // 普通初始化方法
-    init(id: String, content: String, senderId: String, receiverId: String, createdAt: String, messageType: String, referencedAssetId: String? = nil, isFromCurrentUser: Bool, attachedCards: [NoteCard] = []) {
+    init(id: String, content: String, senderId: String, receiverId: String, createdAt: String, messageType: String, referencedAssetId: String? = nil, isFromCurrentUser: Bool, attachedCards: [NoteCard] = [], conversationID: String? = nil, idempotencyKey: String? = nil, sourceType: String? = nil) {
         self.id = id
         self.content = content
         self.senderId = senderId
@@ -288,6 +297,9 @@ struct APIChatMessage: Codable, Identifiable {
         self.referencedAssetId = referencedAssetId
         self.isFromCurrentUser = isFromCurrentUser
         self.attachedCards = attachedCards
+        self.conversationID = conversationID
+        self.idempotencyKey = idempotencyKey
+        self.sourceType = sourceType
     }
     
     init(from decoder: Decoder) throws {
@@ -299,6 +311,9 @@ struct APIChatMessage: Codable, Identifiable {
         createdAt = try container.decode(String.self, forKey: .createdAt)
         messageType = try container.decode(String.self, forKey: .messageType)
         referencedAssetId = try container.decodeIfPresent(String.self, forKey: .referencedAssetId)
+        conversationID = try container.decodeIfPresent(String.self, forKey: .conversationID)
+        idempotencyKey = try container.decodeIfPresent(String.self, forKey: .idempotencyKey)
+        sourceType = try container.decodeIfPresent(String.self, forKey: .sourceType)
         
         // 这里需要根据当前用户ID来判断，暂时设为false，在ChatDetailManager中处理
         isFromCurrentUser = false
@@ -317,6 +332,18 @@ class ChatDetailManager: ObservableObject {
     @Published var isLoading = false
     @Published var error: String?
     @Published private(set) var agentDeliveryState: ChatAgentDeliveryState = .idle
+    @Published var composerText = ""
+    @Published private(set) var composerAttachments: [NoteCard] = []
+    @Published private(set) var pendingSend: ChatSendAttempt?
+    @Published private(set) var isSending = false
+    @Published private(set) var sendError: String?
+
+    var composerIsEditable: Bool {
+        !sessionRetired && !isSending && (pendingSend == nil || pendingSend?.state == .rejected)
+    }
+
+    private let sendPersistence: any ChatSendAttemptPersisting
+    private var sendRequestID: UUID?
     
     private let fetcher: any ChatDetailFetching
     private let humanActorID: String
@@ -372,12 +399,20 @@ class ChatDetailManager: ObservableObject {
         humanActorID: String = AuthManager.shared.currentUser?.id ?? "",
         currentUserAvatarURL: String? = AuthManager.shared.userAvatar,
         participantAvatarURL: String? = nil,
-        fetcher: any ChatDetailFetching = NetworkManager.shared
+        fetcher: any ChatDetailFetching = NetworkManager.shared,
+        sendPersistence: (any ChatSendAttemptPersisting)? = nil
     ) {
         self.humanActorID = humanActorID
         self.currentUserAvatarURL = currentUserAvatarURL
         self.participantAvatarURL = participantAvatarURL
         self.fetcher = fetcher
+        var sendPrefix = "chorai.chat-send." + APIConfiguration.baseURL
+        #if DEBUG
+        if let scope = ProcessInfo.processInfo.environment["CHORAI_UI_TEST_CHAT_SEND_SCOPE"] {
+            sendPrefix += "." + scope
+        }
+        #endif
+        self.sendPersistence = sendPersistence ?? UserDefaultsChatSendAttemptStore(keyPrefix: sendPrefix)
         timeChangeCancellable = Publishers.MergeMany([
             UIApplication.significantTimeChangeNotification,
             NSLocale.currentLocaleDidChangeNotification,
@@ -451,6 +486,7 @@ class ChatDetailManager: ObservableObject {
 
         stopConversationEvents()
         eventConversationID = conversationId
+        restorePendingSend(conversationID: conversationId)
         connectConversationEvents(conversationId: conversationId)
     }
 
@@ -458,6 +494,12 @@ class ChatDetailManager: ObservableObject {
         // Invalidate identities before canceling: cancellation may synchronously
         // call a transport, and an already enqueued callback may still arrive.
         conversationEpoch = UUID()
+        sendRequestID = nil
+        isSending = false
+        pendingSend = nil
+        composerText = ""
+        composerAttachments = []
+        sendError = nil
         eventConnectionID = nil
         detailRequestID = nil
         messageRequestID = nil
@@ -573,40 +615,167 @@ class ChatDetailManager: ObservableObject {
         publishVisibleMessages()
     }
     
+    func updateComposerAttachments(_ notes: [NoteCard]) {
+        guard eventConversationID != nil, composerIsEditable else { return }
+        composerAttachments = notes
+    }
+
+    func removeComposerAttachment(_ note: NoteCard) {
+        guard composerIsEditable else { return }
+        composerAttachments.removeAll { $0.id == note.id }
+    }
+
+    private func restorePendingSend(conversationID: String) {
+        do {
+            pendingSend = try sendPersistence.load(actorID: humanActorID, conversationID: conversationID)
+            guard let attempt = pendingSend else { return }
+            composerText = attempt.content
+            if let reference = attempt.referencedAssetID {
+                // No private preview is persisted. Hydration still needs current authorization.
+                composerAttachments = [NoteCard(id: reference, title: "Attached note", description: "Attached note", isPublic: false, username: "", avatarUrl: nil)]
+                let epoch = conversationEpoch
+                fetcher.getReferencedNote(cardId: reference)
+                    .receive(on: DispatchQueue.main)
+                    .sink(receiveCompletion: { _ in }, receiveValue: { [weak self] note in
+                        guard let self, self.conversationEpoch == epoch,
+                              self.pendingSend?.requestID == attempt.requestID,
+                              self.composerAttachments.map(\.id) == [reference] else { return }
+                        self.composerAttachments = [note]
+                    }).store(in: &cancellables)
+            }
+            sendError = attempt.state == .rejected
+                ? "Your message wasn't sent. Your draft is saved."
+                : "Your message hasn't been confirmed. Retry to recover it."
+        } catch {
+            sendError = "Couldn't restore the saved message. Reopen this conversation to try again."
+        }
+    }
+
+    func retryPendingSend(conversationId: String) {
+        guard let attempt = pendingSend, attempt.state != .rejected else { return }
+        sendMessage(conversationId: conversationId, content: attempt.content, attachedNotes: composerAttachments)
+    }
+
     func sendMessage(conversationId: String, content: String, attachedNotes: [NoteCard]) {
-        guard !sessionRetired, eventConversationID == conversationId else { return }
+        guard !sessionRetired, eventConversationID == conversationId, !isSending else { return }
+        guard attachedNotes.count <= 1 else {
+            sendError = "Attach one note per message. Your draft is unchanged."
+            return
+        }
+        let attempt: ChatSendAttempt
+        do {
+            var saved = try sendPersistence.load(actorID: humanActorID, conversationID: conversationId)
+            if let retained = pendingSend, retained.state != .rejected {
+                guard retained.conversationID == conversationId,
+                      retained.content == content,
+                      retained.referencedAssetID == attachedNotes.first?.id else {
+                    sendError = "Recover your earlier message before sending another."
+                    return
+                }
+                if saved == nil {
+                    // Another view may have acknowledged and removed this record.
+                    // Reconstruct the original identity so a late failure can only
+                    // replay that send, never create a second message.
+                    let restored = ChatSendAttempt(actorID: retained.actorID,
+                        conversationID: retained.conversationID, requestID: retained.requestID,
+                        content: retained.content, referencedAssetID: retained.referencedAssetID)
+                    try sendPersistence.save(restored, replacing: nil)
+                    saved = restored
+                }
+                guard saved?.isSameSend(as: retained) == true else {
+                    sendError = "This conversation has a newer pending message. Reopen it to recover that message."
+                    return
+                }
+            }
+            if let saved, saved.state != .rejected {
+                guard saved.content == content, saved.referencedAssetID == attachedNotes.first?.id else {
+                    sendError = "Recover your earlier message before sending another."
+                    return
+                }
+                // Every retry marks uncertainty before dispatch. A concurrent first
+                // response can no longer classify the whole send as rejected.
+                attempt = saved.uncertain()
+                try sendPersistence.save(attempt, replacing: saved)
+            } else {
+                attempt = ChatSendAttempt(actorID: humanActorID, conversationID: conversationId,
+                    content: content, referencedAssetID: attachedNotes.first?.id)
+                try sendPersistence.save(attempt, replacing: saved)
+            }
+        } catch {
+            sendError = "Couldn't save this message for recovery. Your draft is unchanged."
+            return
+        }
+        pendingSend = attempt
+        composerText = attempt.content
+        if attempt.referencedAssetID == nil { composerAttachments = [] }
+        else if composerAttachments.first?.id != attempt.referencedAssetID { composerAttachments = attachedNotes }
+        sendError = nil
+        isSending = true
         let epoch = conversationEpoch
-        let attachedCardId = attachedNotes.first?.id
-        
-        let request = SendMessageRequest(content: content, attachedCardId: attachedCardId)
-        
+        let requestID = UUID()
+        sendRequestID = requestID
+        let request = SendMessageRequest(content: attempt.content, attachedCardId: attempt.referencedAssetID, idempotencyKey: attempt.requestID)
         fetcher.sendMessage(conversationId: conversationId, request: request)
             .receive(on: DispatchQueue.main)
-            .sink(
-                receiveCompletion: { [weak self] completion in
-                    guard let self, self.conversationEpoch == epoch else { return }
-                    if case .failure(let error) = completion {
-                        self.error = error.localizedDescription
-                    }
-                },
-                receiveValue: { [weak self] response in
-                    guard let self, self.conversationEpoch == epoch else { return }
-                    // The send ACK identifies this message, not every event
-                    // preceding it. Only consumed SSE events advance replay.
-                    if self.eventCancellable == nil {
-                        self.connectConversationEvents(conversationId: conversationId)
-                    }
-                    var message = response.message
-                    message.referencedAssetId = message.referencedAssetId ?? attachedCardId
-                    message.attachedCards = attachedNotes
-                    self.canonicalMessages.removeAll { $0.id == message.id }
-                    self.canonicalMessages.append(message)
-                    self.publishVisibleMessages()
-                    self.loadMessages(conversationId: conversationId)
-                    print("发送消息成功: id=\(response.message.id)")
+            .sink(receiveCompletion: { [weak self] completion in
+                guard let self, self.conversationEpoch == epoch, self.sendRequestID == requestID else { return }
+                let failure: NetworkError
+                if case .failure(let error) = completion { failure = error }
+                else { failure = .noData }
+                self.finishUnacknowledgedSend(attempt, failure: failure)
+            }, receiveValue: { [weak self] response in
+                guard let self, self.conversationEpoch == epoch, self.sendRequestID == requestID else { return }
+                let message = response.message
+                guard response.success, !message.id.isEmpty,
+                      message.conversationID == attempt.conversationID,
+                      message.senderId == attempt.actorID,
+                      message.idempotencyKey == attempt.requestID.uuidString.lowercased(),
+                      message.messageType.uppercased() == "TEXT", message.sourceType == "HUMAN",
+                      message.content == attempt.normalizedContent,
+                      message.referencedAssetId == attempt.referencedAssetID else {
+                    self.finishUnacknowledgedSend(attempt, failure: .decodingError)
+                    return
                 }
-            )
-            .store(in: &cancellables)
+                do { try self.sendPersistence.remove(attempt) }
+                catch {
+                    self.finishUnacknowledgedSend(attempt, failure: .unknown)
+                    return
+                }
+                self.sendRequestID = nil
+                self.isSending = false
+                self.pendingSend = nil
+                self.sendError = nil
+                let visibleAttachments = self.composerAttachments
+                if self.composerText == attempt.content {
+                    self.composerText = ""
+                    self.composerAttachments = []
+                }
+                if self.eventCancellable == nil { self.connectConversationEvents(conversationId: conversationId) }
+                var accepted = message
+                accepted.attachedCards = visibleAttachments.filter { $0.id == attempt.referencedAssetID }
+                self.canonicalMessages.removeAll { $0.id == accepted.id }
+                self.canonicalMessages.append(accepted)
+                self.publishVisibleMessages()
+                self.loadMessages(conversationId: conversationId)
+            }).store(in: &cancellables)
+    }
+
+    private func finishUnacknowledgedSend(_ attempt: ChatSendAttempt, failure: NetworkError) {
+        let rejected = attempt.state == .awaitingFirstReceipt
+            && failure.cardReadStatus.map { [400, 401, 403, 404, 409, 413, 422].contains($0) } == true
+        do {
+            try sendPersistence.save(rejected ? attempt.rejected() : attempt.uncertain(), replacing: attempt)
+        } catch {
+            // A different view may already have retried or settled this identity.
+            // Never overwrite its record with this callback's older state.
+        }
+        let current = try? sendPersistence.load(actorID: humanActorID, conversationID: attempt.conversationID)
+        pendingSend = current?.isSameSend(as: attempt) == true ? current : attempt.uncertain()
+        sendRequestID = nil
+        isSending = false
+        sendError = pendingSend?.state == .rejected
+            ? "Your message wasn't sent. Edit your draft or try again."
+            : "Your message hasn't been confirmed. Retry to recover it."
     }
 
     func retryAgentReply(conversationId: String, sourceMessageId: String) {

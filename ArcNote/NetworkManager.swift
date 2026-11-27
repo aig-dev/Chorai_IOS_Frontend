@@ -1104,8 +1104,9 @@ extension NetworkManager {
             endpoint: "/api/chats/conversations/\(conversationId)/messages",
             method: .post,
             parameters: parameters,
-            headers: ["Idempotency-Key": UUID().uuidString],
-            responseType: SendMessageResponse.self
+            headers: ["Idempotency-Key": request.idempotencyKey.uuidString.lowercased()],
+            responseType: SendMessageResponse.self,
+            presentsError: false
         )
     }
 

@@ -7,6 +7,62 @@ import os
 
 @MainActor
 final class NetworkResponseExecutionTests: XCTestCase {
+    func testChatRetryPreservesWireIdentityAndDecodesReceipt() async throws {
+        let starts = (0..<2).map { expectation(description: "Chat send \($0)") }
+        let next = OSAllocatedUnfairLock(initialState: 0)
+        let fixture = HTTPFixture(onStart: {
+            let index = next.withLock { value in defer { value += 1 }; return value }
+            if index < starts.count { starts[index].fulfill() }
+        })
+        let network = NetworkManager(baseURL: fixture.baseURL, session: fixture.session)
+        network.setAuthToken("synthetic-chat-token")
+        let request = SendMessageRequest(content: "Retained draft", attachedCardId: "note")
+        let failed = expectation(description: "Unconfirmed first send")
+        let first = network.sendMessage(conversationId: "chat", request: request)
+            .sink(receiveCompletion: { completion in
+                if case .failure = completion { failed.fulfill() }
+                else { XCTFail("Lost transport must not become success") }
+            }, receiveValue: { _ in XCTFail("No receipt was delivered") })
+        defer { first.cancel() }
+        await fulfillment(of: [starts[0]], timeout: 4)
+        guard fixture.count == 1 else { return XCTFail("Missing first send") }
+        fixture.fail()
+        await fulfillment(of: [failed], timeout: 4)
+        XCTAssertEqual(fixture.count, 1, "Transport failure does not automatically create a new send")
+        let accepted = expectation(description: "Original send receipt")
+        let second = network.sendMessage(conversationId: "chat", request: request)
+            .sink(receiveCompletion: { completion in
+                if case .failure(let error) = completion { XCTFail("Receipt failed: \(error)") }
+            }, receiveValue: { reply in
+                XCTAssertEqual(reply.message.id, "accepted")
+                XCTAssertEqual(reply.message.conversationID, "chat")
+                XCTAssertEqual(reply.message.senderId, "human")
+                XCTAssertEqual(reply.message.idempotencyKey, request.idempotencyKey.uuidString.lowercased())
+                XCTAssertEqual(reply.message.sourceType, "HUMAN")
+                XCTAssertEqual(reply.message.referencedAssetId, "note")
+                accepted.fulfill()
+            })
+        defer { second.cancel() }
+        await fulfillment(of: [starts[1]], timeout: 4)
+        guard fixture.count == 2 else { return XCTFail("Missing explicit retry") }
+        for index in 0..<2 {
+            let wire = fixture.request(at: index)
+            XCTAssertEqual(wire.httpMethod, "POST")
+            XCTAssertEqual(wire.url?.path, "/api/chats/conversations/chat/messages")
+            XCTAssertEqual(wire.value(forHTTPHeaderField: "Idempotency-Key"), request.idempotencyKey.uuidString.lowercased())
+            let data = try requestBody(wire)
+            let body = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: String])
+            XCTAssertEqual(body, ["content": "Retained draft", "message_type": "text", "referenced_asset_id": "note"])
+        }
+        let message: [String: Any] = ["message_id": "accepted", "conversation_id": "chat",
+            "sender_actor_id": "human", "receiver_actor_id": "agent", "content": request.content,
+            "created_at": "2026-11-28T00:00:00Z", "message_type": "TEXT", "source_type": "HUMAN",
+            "idempotency_key": request.idempotencyKey.uuidString.lowercased(), "referenced_asset_id": "note"]
+        let receipt = try JSONSerialization.data(withJSONObject: ["success": true, "data": ["message": message]])
+        fixture.respond(String(decoding: receipt, as: UTF8.self), at: 1)
+        await fulfillment(of: [accepted], timeout: 4)
+    }
+
     func testCommittedSparkReplyUnavailableRetriesExactActivity() async throws {
         try await assertCommittedSparkRetry(status: 409, reason: "spark_committed_reply_unavailable", code: "CONFLICT")
     }
@@ -103,15 +159,15 @@ final class NetworkResponseExecutionTests: XCTestCase {
             XCTAssertEqual(retry.url, original.url)
             XCTAssertEqual(original.value(forHTTPHeaderField: "Idempotency-Key"), key.uuidString.lowercased())
             XCTAssertEqual(retry.value(forHTTPHeaderField: "Idempotency-Key"), original.value(forHTTPHeaderField: "Idempotency-Key"))
-            let originalBytes = try sparkRequestBody(original)
-            XCTAssertEqual(try sparkRequestBody(retry), originalBytes)
+            let originalBytes = try requestBody(original)
+            XCTAssertEqual(try requestBody(retry), originalBytes)
             let body = try XCTUnwrap(JSONSerialization.jsonObject(with: originalBytes) as? [String: String])
             XCTAssertEqual(body, ["parent_activity_id": "act_parent"])
             fixture.respond(#"{"success":false,"error":{"code":"SERVICE_UNAVAILABLE","message":"Unavailable"}}"#, status: 503, at: 1)
         }
     }
 
-    private func sparkRequestBody(_ request: URLRequest) throws -> Data {
+    private func requestBody(_ request: URLRequest) throws -> Data {
         if let body = request.httpBody { return body }
         let stream = try XCTUnwrap(request.httpBodyStream)
         stream.open(); defer { stream.close() }

@@ -95,7 +95,6 @@ struct ChatDetailView: View {
         ChatHistoryVisibilityDependency
     @Environment(\.dismiss) private var dismiss
     @Environment(\.adaptiveLayoutMetrics) private var adaptiveLayout
-    @State private var messageText = ""
     @State private var contactName: String
     @State private var contactStatus: String
     @State private var contactAvatar: String?
@@ -210,7 +209,7 @@ struct ChatDetailView: View {
                 .onChange(of: chatDetailManager.messages.count) { _ in
                     scrollToBottom(proxy, animated: true)
                 }
-                .onChange(of: selectCardManager.selectedNotes.count) { _ in
+                .onChange(of: chatDetailManager.composerAttachments.count) { _ in
                     scrollToBottom(proxy, animated: false)
                 }
             }
@@ -219,10 +218,10 @@ struct ChatDetailView: View {
         .safeAreaInset(edge: .bottom, spacing: 0) {
             VStack(spacing: 0) {
             // 选中的notes展示区域
-            if !selectCardManager.selectedNotes.isEmpty {
+            if !chatDetailManager.composerAttachments.isEmpty {
                 HStack {
                     VStack(spacing: 0) {
-                        ForEach(Array(selectCardManager.selectedNotes.enumerated()), id: \.element.id) { index, note in
+                        ForEach(Array(chatDetailManager.composerAttachments.enumerated()), id: \.element.id) { index, note in
                             VStack(spacing: 0) {
                                 HStack(spacing: 10) {
                                     NoteAuthorAvatarView(note: note, size: 22)
@@ -242,7 +241,7 @@ struct ChatDetailView: View {
                                     Spacer()
 
                                     Button(action: {
-                                        selectCardManager.removeNote(note)
+                                        chatDetailManager.removeComposerAttachment(note)
                                     }) {
                                         Image(systemName: "xmark")
                                             .font(.system(size: 18, weight: .medium))
@@ -251,12 +250,13 @@ struct ChatDetailView: View {
                                     }
                                     .buttonStyle(.plain)
                                     .accessibilityLabel("Remove attached note")
+                                    .disabled(!chatDetailManager.composerIsEditable)
                                 }
                                 .padding(.horizontal, 16)
                                 .padding(.vertical, 10)
 
                                 // 间隔线（除了最后一个）
-                                if index < selectCardManager.selectedNotes.count - 1 {
+                                if index < chatDetailManager.composerAttachments.count - 1 {
                                     Rectangle()
                                         .fill(ChoraiTheme.surface)
                                         .frame(height: 1)
@@ -322,10 +322,20 @@ struct ChatDetailView: View {
                 .padding(.bottom, 8)
             }
 
+            if let sendError = chatDetailManager.sendError {
+                Text(sendError)
+                    .font(.footnote)
+                    .foregroundStyle(ChoraiTheme.secondaryInk)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .adaptiveContentGutter()
+                    .accessibilityIdentifier("chat.message.send-error")
+            }
+
             // 底部输入栏
             HStack(alignment: .bottom, spacing: 12) {
                 // 附件按钮
                 Button(action: {
+                    selectCardManager.selectedNotes = chatDetailManager.composerAttachments
                     selectCardManager.show()
                 }) {
                     ChatComposerIconLabel(symbol: "doc.text")
@@ -333,10 +343,11 @@ struct ChatDetailView: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("Attach a note")
                 .accessibilityIdentifier("chat.attachment.add")
+                .disabled(!chatDetailManager.composerIsEditable)
 
                 // 输入框
                 HStack(alignment: .bottom, spacing: 12) {
-                    TextField("Type a message...", text: $messageText, axis: .vertical)
+                    TextField("Type a message...", text: $chatDetailManager.composerText, axis: .vertical)
                         .lineLimit(1...5)
                         .textFieldStyle(PlainTextFieldStyle())
                         .font(.body)
@@ -345,24 +356,23 @@ struct ChatDetailView: View {
                         .frame(minHeight: 44)
                         .accessibilityIdentifier("chat.message.input")
                         .focused($isTextFieldFocused)
+                        .disabled(!chatDetailManager.composerIsEditable)
 
                     Button(action: {
-                        if !messageText.isEmpty {
-                            let attachedNotes = selectCardManager.selectedNotes
-                            // 发送消息到API
-                            chatDetailManager.sendMessage(conversationId: conversationId, content: messageText, attachedNotes: attachedNotes)
-                            messageText = ""
-                            isTextFieldFocused = false
-                            // 清空选中的卡片
-                            selectCardManager.selectedNotes.removeAll()
+                        if let pending = chatDetailManager.pendingSend, pending.state != .rejected {
+                            chatDetailManager.retryPendingSend(conversationId: conversationId)
+                        } else {
+                            chatDetailManager.sendMessage(conversationId: conversationId,
+                                content: chatDetailManager.composerText,
+                                attachedNotes: chatDetailManager.composerAttachments)
                         }
                     }) {
-                        ChatComposerIconLabel(symbol: "arrow.up", prominent: true)
+                        ChatComposerIconLabel(symbol: (chatDetailManager.pendingSend != nil && chatDetailManager.pendingSend?.state != .rejected) ? "arrow.clockwise" : "arrow.up", prominent: true)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Send message")
+                    .accessibilityLabel((chatDetailManager.pendingSend != nil && chatDetailManager.pendingSend?.state != .rejected) ? "Retry message" : "Send message")
                     .accessibilityIdentifier("chat.message.send")
-                    .disabled(messageText.isEmpty)
+                    .disabled(chatDetailManager.isSending || chatDetailManager.composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
                 .padding(.leading, 16)
                 .padding(.trailing, 2)
@@ -407,7 +417,9 @@ struct ChatDetailView: View {
         .sheet(isPresented: Binding(
             get: { selectCardManager.isShowing },
             set: { if !$0 { selectCardManager.hide() } }
-        )) {
+        ), onDismiss: {
+            chatDetailManager.updateComposerAttachments(selectCardManager.selectedNotes)
+        }) {
             SelectCardPopupView()
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)

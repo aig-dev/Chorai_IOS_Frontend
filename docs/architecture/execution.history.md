@@ -432,3 +432,18 @@ The actual network/store regression reproduced a second paid POST after the firs
 ## 2026-11-27 — Retain Spark identity before dispatch
 
 Unknown replies previously cleared pending state or guessed a recent history entry. The persisted operation now carries an explicit UUID/source/parent, exact error context, and acknowledged activity ID. Retry/relaunch use same-key POST or exact GET; storage and scope checks reject unsafe continuation. Review exposed and closed corrupt-record deletion by broadcasts, acknowledgement loss on hydration 401, hidden retry after browsing, depth overflow, and a CAS conflict whose Retry did not reload the winning record. Original REDs, 86 focused regressions, hosted transport, actual ordinary UI and final concurrency qualification are kept in the [bounded QA record](../qa/2026-11-27-spark-unknown-recovery.md).
+
+
+## 2026-11-28 — Recover requested Chat sends without losing the composer
+
+The actual composer regression reproduced text loss before an acknowledgement.
+The manager now retains and scopes the original requested send, persists its key
+before dispatch, and clears only an exact successful receipt. A two-view regression
+also reproduced a fresh UUID after another view had already acknowledged the send;
+that path now replays the original identity. Review found a raw/normalized length
+mismatch, and a separate red regression caught Foundation trimming U+200B from a
+valid Go receipt. Both use the backend normalization rule while preserving input.
+The existing one-reference API limit is now explicit instead of silently dropping
+additional selected notes. The two synthetic Chat cases join the fixed UI gate;
+ordinary local recovery, source-bound checks and retained failed attempts are
+recorded in the [QA record](../qa/2026-11-28-chat-send-recovery.md).

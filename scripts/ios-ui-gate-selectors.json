@@ -9,5 +9,7 @@
   "ArcNoteUITests/ArcNoteUITests/testMergeArtifactEditsInPlaceAndRestoresDraft",
   "ArcNoteUITests/ArcNoteUITests/testNativeFidelityHomeMenuOpensRealUnboxedEditor",
   "ArcNoteUITests/NativeRemediationVisualTests/testTrashCancelAndRejectedDeleteKeepTheOriginalNote",
-  "ArcNoteUITests/ArcNoteUITests/testHomeRemovalKeepsLocalTrashWhenSyncIsUnavailable"
+  "ArcNoteUITests/ArcNoteUITests/testHomeRemovalKeepsLocalTrashWhenSyncIsUnavailable",
+  "ArcNoteUITests/ArcNoteUITests/testChatWithoutSendAcknowledgementRetainsComposer",
+  "ArcNoteUITests/ArcNoteUITests/testChatRestoresLatestSentMessageAndHydratesCompactAttachment"
 ]
