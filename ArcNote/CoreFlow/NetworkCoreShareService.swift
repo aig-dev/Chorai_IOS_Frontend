@@ -36,17 +36,26 @@ struct SharePinWireResponse: Codable {
 
 struct NetworkCoreShareService: CoreShareServing, Sendable {
     private let network: NetworkManager
+    private let resolveLocalCardID: @MainActor @Sendable (String) -> String?
+    private let isCurrentSession: @MainActor @Sendable () -> Bool
 
     @MainActor
-    init(network: NetworkManager = .shared) {
+    init(
+        network: NetworkManager = .shared,
+        resolveLocalCardID: @escaping @MainActor @Sendable (String) -> String? = {
+            LocalNotesController.shared.cloudAssetID(for: $0)
+        }
+    ) {
         self.network = network
+        self.resolveLocalCardID = resolveLocalCardID
+        self.isCurrentSession = network.captureSessionCheck()
     }
 
     func preview(cardID: String) async throws -> ShareCardPreview {
         do {
-            let response = try await firstValue(
-                network.getSharePreview(cardId: cardID)
-            )
+            let response = try await firstValue(cardID: cardID) { serverCardID in
+                network.getSharePreview(cardId: serverCardID)
+            }
             guard response.artifact.status == "ready",
                   response.artifact.contentType == "image/png",
                   !response.artifact.id.isEmpty else {
@@ -84,12 +93,12 @@ struct NetworkCoreShareService: CoreShareServing, Sendable {
         artifactID: String
     ) async throws -> Data {
         do {
-            let data = try await firstValue(
+            let data = try await firstValue(cardID: cardID) { serverCardID in
                 network.getShareArtifactImage(
-                    cardId: cardID,
+                    cardId: serverCardID,
                     artifactId: artifactID
                 )
-            )
+            }
             guard !data.isEmpty else {
                 throw CoreShareError.invalidResponse(
                     code: "share_image_empty"
@@ -106,12 +115,12 @@ struct NetworkCoreShareService: CoreShareServing, Sendable {
         artifactID: String
     ) async throws -> ShareArtifactPin {
         do {
-            let response = try await firstValue(
+            let response = try await firstValue(cardID: cardID) { serverCardID in
                 network.pinShareArtifact(
-                    cardId: cardID,
+                    cardId: serverCardID,
                     artifactId: artifactID
                 )
-            )
+            }
             return ShareArtifactPin(
                 noteID: response.noteId,
                 noteVersionID: response.noteVersionId,
@@ -124,13 +133,37 @@ struct NetworkCoreShareService: CoreShareServing, Sendable {
     }
 
     @MainActor
-    private func firstValue<Output: Sendable>(
-        _ publisher: @autoclosure @MainActor @Sendable () -> AnyPublisher<Output, NetworkError>
-    ) async throws -> Output {
-        guard let value = try await NetworkManager.firstValue(publisher()) else {
-            throw NetworkError.noData
+    private func requestCardID(_ cardID: String) throws -> String {
+        guard cardID.hasPrefix("local-note:") else { return cardID }
+        guard let serverID = resolveLocalCardID(cardID),
+              !serverID.isEmpty, !serverID.hasPrefix("local-note:") else {
+            throw CoreShareError.transport(code: "note_not_yet_synced")
         }
-        return value
+        return serverID
+    }
+
+    @MainActor
+    private func firstValue<Output: Sendable>(
+        cardID: String,
+        publisher: @MainActor @Sendable (String) -> AnyPublisher<Output, NetworkError>
+    ) async throws -> Output {
+        try Task.checkCancellation()
+        guard isCurrentSession() else { throw NetworkError.unauthorized }
+        let serverCardID = try requestCardID(cardID)
+        guard isCurrentSession() else { throw NetworkError.unauthorized }
+        // Resolve and create the eager request in one MainActor turn, before any suspension.
+        do {
+            guard let value = try await NetworkManager.firstValue(publisher(serverCardID)) else {
+                throw NetworkError.noData
+            }
+            try Task.checkCancellation()
+            guard isCurrentSession() else { throw NetworkError.unauthorized }
+            return value
+        } catch {
+            try Task.checkCancellation()
+            guard isCurrentSession() else { throw NetworkError.unauthorized }
+            throw error
+        }
     }
 
     private static func mapError(_ error: Error) -> CoreShareError {

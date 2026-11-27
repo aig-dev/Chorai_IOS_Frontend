@@ -821,11 +821,18 @@ final class NetworkResponseExecutionTests: XCTestCase {
         let started = expectation(description: "started")
         let fixture = HTTPFixture(onStart: { started.fulfill() })
         let network = NetworkManager(baseURL: fixture.baseURL, session: fixture.session)
+        network.setAuthToken("synthetic-share-token")
         let service = NetworkCoreShareService(network: network)
         let operation = Task.detached {
             try await service.artifactImage(cardID: "card", artifactID: "image")
         }
         await fulfillment(of: [started], timeout: 3)
+        guard fixture.count == 1 else {
+            operation.cancel()
+            _ = try await operation.value
+            return XCTFail("Expected authenticated share image request")
+        }
+        XCTAssertEqual(fixture.request().value(forHTTPHeaderField: "Authorization"), "Bearer synthetic-share-token")
         fixture.respond("synthetic-image-bytes", contentType: "image/png")
         let bytes = try await operation.value
         XCTAssertEqual(bytes, Data("synthetic-image-bytes".utf8))
@@ -880,5 +887,175 @@ extension XCTestCase {
             isNewUser: false,
             productAccess: AccessState(mode: "private_beta", status: "allowed", scope: "product_full", reasonCode: nil))))
         XCTAssertTrue(auth.canEnterProduct)
+    }
+}
+
+@MainActor
+final class NetworkShareIdentityTests: XCTestCase {
+    private let localID = "local-note:retained-note"
+    private let previewJSON = #"{"noteId":"ast_server","noteVersionId":"version","artifactKind":"vertical-card","artifact":{"id":"artifact","kind":"vertical-card","imageUrl":"/image","contentType":"image/png","width":1080,"height":1350,"status":"ready"},"actions":{"canDownload":true,"canNativeShare":true,"canCopyLink":true,"canShareToX":true}}"#
+    private let pinJSON = #"{"noteId":"ast_server","noteVersionId":"version","artifactId":"artifact","artifactKind":"vertical-card"}"#
+
+    private final class Identity {
+        var value: String?
+        var requested: [String] = []
+        init(_ value: String?) { self.value = value }
+        func resolve(_ id: String) -> String? { requested.append(id); return value }
+    }
+
+    private func service(_ fixture: HTTPFixture, identity: Identity) -> NetworkCoreShareService {
+        let network = NetworkManager(baseURL: fixture.baseURL, session: fixture.session)
+        network.setAuthToken("synthetic-share-token")
+        return NetworkCoreShareService(network: network, resolveLocalCardID: { identity.resolve($0) })
+    }
+
+    func testSynchronizedLocalShareResolvesPreviewImageAndPin() async throws {
+        let fixture = HTTPFixture()
+        let identity = Identity("ast_server")
+        let service = service(fixture, identity: identity)
+        let local = localID
+        let preview = try await response(fixture, path: "/api/cards/ast_server/share-preview", body: previewJSON) {
+            try await service.preview(cardID: local)
+        }
+        XCTAssertEqual(preview.noteID, "ast_server")
+        let image = try await response(fixture, path: "/api/cards/ast_server/share-artifacts/artifact/image", body: "png", contentType: "image/png") {
+            try await service.artifactImage(cardID: local, artifactID: preview.artifact.id)
+        }
+        XCTAssertEqual(image, Data("png".utf8))
+        let pin = try await response(fixture, path: "/api/cards/ast_server/share-artifacts/artifact/pin", method: "POST", body: pinJSON) {
+            try await service.pinArtifact(cardID: local, artifactID: preview.artifact.id)
+        }
+        XCTAssertEqual(pin.noteID, "ast_server")
+        XCTAssertEqual(pin.artifactID, preview.artifact.id)
+        XCTAssertEqual(identity.requested, [local, local, local])
+    }
+
+    func testUnresolvedLocalShareNeverDispatchesAndRemoteIDsRemainUnchanged() async throws {
+        let fixture = HTTPFixture()
+        let identity = Identity(nil)
+        let service = service(fixture, identity: identity)
+        let local = localID
+        await noDispatch(fixture) { _ = try await service.preview(cardID: local) }
+        await noDispatch(fixture) { _ = try await service.artifactImage(cardID: local, artifactID: "artifact") }
+        await noDispatch(fixture) { _ = try await service.pinArtifact(cardID: local, artifactID: "artifact") }
+        XCTAssertEqual(fixture.count, 0)
+        _ = try await response(fixture, path: "/api/cards/ast_direct/share-preview", body: previewJSON) {
+            try await service.preview(cardID: "ast_direct")
+        }
+        XCTAssertEqual(identity.requested, [local, local, local])
+    }
+
+    func testShareRetryResolvesRecoveredIdentityAndPinRechecksEligibility() async throws {
+        let fixture = HTTPFixture()
+        let identity = Identity(nil)
+        let service = service(fixture, identity: identity)
+        let local = localID
+        await noDispatch(fixture) { _ = try await service.preview(cardID: local) }
+        identity.value = "ast_server"
+        let preview = try await response(fixture, path: "/api/cards/ast_server/share-preview", body: previewJSON) {
+            try await service.preview(cardID: local)
+        }
+        identity.value = nil
+        await noDispatch(fixture) { _ = try await service.pinArtifact(cardID: local, artifactID: preview.artifact.id) }
+        identity.value = "ast_server"
+        let pin = try await response(fixture, path: "/api/cards/ast_server/share-artifacts/artifact/pin", method: "POST", body: pinJSON) {
+            try await service.pinArtifact(cardID: local, artifactID: preview.artifact.id)
+        }
+        XCTAssertEqual(pin.artifactID, preview.artifact.id)
+        XCTAssertEqual(identity.requested, [local, local, local, local])
+    }
+
+    func testShareDispatchRejectsRetiredSessionBeforeAndDuringResolution() async {
+        for kind in ["preview", "image", "pin"] {
+            for retireDuringResolution in [false, true] {
+                let fixture = HTTPFixture()
+                let network = NetworkManager(baseURL: fixture.baseURL, session: fixture.session)
+                network.setAuthToken("share-account-A")
+                let service = NetworkCoreShareService(network: network, resolveLocalCardID: { _ in
+                    if retireDuringResolution { network.setAuthToken("share-account-B") }
+                    return "ast_server"
+                })
+                if !retireDuringResolution { network.setAuthToken("share-account-B") }
+                let local = localID
+                await noDispatch(fixture, expected: .transport(code: "share_unauthorized")) {
+                    switch kind {
+                    case "preview": _ = try await service.preview(cardID: local)
+                    case "image": _ = try await service.artifactImage(cardID: local, artifactID: "artifact")
+                    default: _ = try await service.pinArtifact(cardID: local, artifactID: "artifact")
+                    }
+                }
+            }
+        }
+    }
+
+    func testShareSessionRetirementRejectsLatePreviewImageAndPin() async throws {
+        for kind in ["preview", "image", "pin"] {
+            let fixture = HTTPFixture()
+            let network = NetworkManager(baseURL: fixture.baseURL, session: fixture.session)
+            network.setAuthToken("share-account-A")
+            let service = NetworkCoreShareService(network: network, resolveLocalCardID: { _ in "ast_server" })
+            let local = localID
+            let task = Task { () -> CoreShareError? in
+                do {
+                    switch kind {
+                    case "preview": _ = try await service.preview(cardID: local)
+                    case "image": _ = try await service.artifactImage(cardID: local, artifactID: "artifact")
+                    default: _ = try await service.pinArtifact(cardID: local, artifactID: "artifact")
+                    }
+                    return nil
+                } catch let error as CoreShareError { return error }
+                catch { return .transport(code: "unexpected_test_error") }
+            }
+            for _ in 0..<500 where fixture.count == 0 { try await Task.sleep(for: .milliseconds(10)) }
+            guard fixture.count == 1 else { task.cancel(); XCTFail("Expected original share request"); return }
+            XCTAssertEqual(fixture.request().value(forHTTPHeaderField: "Authorization"), "Bearer share-account-A")
+            network.setAuthToken("share-account-B")
+            fixture.respond(kind == "preview" ? previewJSON : kind == "pin" ? pinJSON : "png",
+                            contentType: kind == "image" ? "image/png" : "application/json")
+            let error = await task.value
+            XCTAssertEqual(error, .transport(code: "share_unauthorized"), "Late \(kind) survived session retirement")
+            XCTAssertEqual(fixture.count, 1)
+        }
+    }
+
+    private func response<T: Sendable>(
+        _ fixture: HTTPFixture, path: String, method: String = "GET", body: String,
+        contentType: String = "application/json",
+        operation: @escaping @MainActor @Sendable () async throws -> T
+    ) async throws -> T {
+        let index = fixture.count
+        let task = Task { try await operation() }
+        for _ in 0..<500 where fixture.count == index { try await Task.sleep(for: .milliseconds(10)) }
+        guard fixture.count == index + 1 else {
+            task.cancel()
+            XCTFail("Expected exactly one share request")
+            throw CancellationError()
+        }
+        let request = fixture.request(at: index)
+        XCTAssertEqual(request.url?.path, path)
+        XCTAssertEqual(request.httpMethod, method)
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer synthetic-share-token")
+        fixture.respond(body, at: index, contentType: contentType)
+        return try await task.value
+    }
+
+    private func noDispatch(_ fixture: HTTPFixture, expected: CoreShareError = .transport(code: "note_not_yet_synced"), operation: @escaping @MainActor @Sendable () async throws -> Void) async {
+        let index = fixture.count
+        var completed = false
+        let task = Task { () -> CoreShareError? in
+            defer { completed = true }
+            do { try await operation(); return nil }
+            catch let error as CoreShareError { return error }
+            catch { return .transport(code: "unexpected_test_error") }
+        }
+        for _ in 0..<500 where !completed && fixture.count == index { try? await Task.sleep(for: .milliseconds(10)) }
+        if fixture.count > index {
+            fixture.respond(#"{"code":"FORBIDDEN","message":"denied"}"#, status: 403, at: index)
+        } else if !completed {
+            task.cancel()
+        }
+        let error = await task.value
+        XCTAssertEqual(fixture.count, index, "Unresolved local identity reached HTTP")
+        XCTAssertEqual(error, expected)
     }
 }

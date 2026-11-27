@@ -9843,23 +9843,40 @@ final class ArcNoteUITests: XCTestCase {
     func testLibraryCardShareLoadsGoArtifactAndOpensNativeShare() throws {
         let session = try requireSmokeSession()
         seedAppSession(session)
-        let searchToken = "share-\(Int(Date().timeIntervalSince1970))"
-        let cardID = try createPublicSmokeCard(
-            token: session.token,
-            searchToken: searchToken
-        )
+        let suppliedCardID = ProcessInfo.processInfo.environment[
+            "CHORAI_UI_TEST_SHARE_CARD_ID"
+        ]?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cardID: String
+        let ownsFixture = suppliedCardID?.isEmpty != false
+        if let suppliedCardID, !suppliedCardID.isEmpty {
+            cardID = suppliedCardID
+        } else {
+            let searchToken = "share-\(Int(Date().timeIntervalSince1970))"
+            cardID = try createPublicSmokeCard(
+                token: session.token,
+                searchToken: searchToken
+            )
+        }
         defer {
-            deleteSmokeCard(id: cardID, token: session.token)
+            if ownsFixture {
+                deleteSmokeCard(id: cardID, token: session.token)
+            }
         }
         let canonicalPreview = try fetchSmokeSharePreview(
             cardID: cardID,
             token: session.token
         )
 
+        let source = try fetchSmokeCard(id: cardID, token: session.token, sync: true)
+        let marker = String(try XCTUnwrap(source.content.split(separator: "\n").first))
         launchAuthenticatedApp()
         tap("tab.library")
-        waitFor("card.home.\(cardID)", timeout: 30)
-        tap("home.card.menu.\(cardID)")
+        let row = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier BEGINSWITH %@", "card.home.local-note:"))
+            .containing(NSPredicate(format: "label CONTAINS %@", marker)).firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 30), "Synchronized NOTE missing from local Library")
+        let localID = String(row.identifier.dropFirst("card.home.".count))
+        tap("home.card.menu.\(localID)")
         tap("popup-menu.item.share")
 
         waitFor("screen.share-card", timeout: 20)

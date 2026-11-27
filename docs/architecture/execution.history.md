@@ -1,5 +1,9 @@
 # Execution boundary history
 
+## 2026-11-28 — Local share identity and original session
+
+Actual Library sharing sent a local-note ID and received 403. The network adapter now resolves current synchronized identity for every preview/image/pin and returns retryable failure before HTTP when unavailable. Review found the resolve-to-send session window; existing captureSessionCheck now fences dispatch and delivery without another runtime owner. Five new hosted regressions and thirty existing network cases pass. The final ordinary share UI and non-owner reader observation, original NOTE cleanup COMPLETE, and full Swift 6 three-build/171-hosted/11-UI gate are documented in the [bounded qualification](../qa/2026-11-28-share-runtime.md). Earlier selector, identity and missing-auth fixture failures remain recorded; six opt-in API skips are separate from passes.
+
 ## 2026-11-28 — Structured reader and protected previews
 
 Ordinary-account simulator qualification found that Detail rendered the text summary instead of the structured document, while Flow's bare image request received 401. Detail now reuses the shipped read-only BlockNote renderer and its local media scheme; Flow and Library reuse the existing scoped image loader. No new package image-handler API or HTML parser was retained. Review reproduced and fixed lost text during degraded authentication and an ineffective readonly Retry; canceled old preparations and late image bytes stay retired. Actual WebKit controls verify authored headings, decoded pixels, readonly state, retry pixels, and readonly-only selection decoration. The original ordinary NOTE's API/actual-app observation and final source checks retain separate snapshots in the [qualification record](../qa/2026-11-28-public-note-reader.md).
