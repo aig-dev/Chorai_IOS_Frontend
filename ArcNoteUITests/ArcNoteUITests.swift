@@ -14650,8 +14650,16 @@ final class ArcNoteUITests: XCTestCase {
     private func openNotificationInbox(notificationID: String) {
         launchAuthenticatedApp()
         waitFor("tab.flow", timeout: 20)
-        tap("side-menu.open")
-        tap("side-menu.notification")
+        // The toolbar identifier is also exposed by its accessibility container.
+        // Target the actual button and wait for the launch transition to settle.
+        let sidebar = waitForButton("side-menu.open", timeout: 20)
+        let ready = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "hittable == true"),
+            object: sidebar
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 20), .completed)
+        sidebar.tap()
+        tapButton("side-menu.notification")
         waitFor("notification.row.\(notificationID)", timeout: 30)
     }
 
