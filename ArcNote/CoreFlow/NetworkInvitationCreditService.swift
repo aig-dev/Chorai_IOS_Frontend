@@ -372,7 +372,7 @@ struct NetworkInvitationCreditService:
         switch error {
         case .unauthorized:
             return .unauthorized
-        case .api(_, _, let message), .serverError(_, let message):
+        case .api(_, _, let message, _), .serverError(_, let message):
             return .requestFailed(message: safeMessage(message))
         default:
             return .requestFailed(message: nil)

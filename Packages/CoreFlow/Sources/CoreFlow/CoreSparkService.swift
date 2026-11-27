@@ -6,7 +6,8 @@ public protocol CoreSparkServing {
 
     func trigger(
         sourceAssetID: String,
-        parentActivityID: String?
+        parentActivityID: String?,
+        requestKey: UUID
     ) -> AnyPublisher<SparkActivityPage, CoreSparkError>
 
     func activityResults(

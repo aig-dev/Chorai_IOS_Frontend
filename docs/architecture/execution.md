@@ -163,7 +163,15 @@ supported-OS acceptance separately from simulator checks.
 
 ## Acknowledged Spark result reads
 
-A valid trigger acknowledgement remains owned by the original activity if subsequent card hydration fails. The adapter returns its exact activity/root/depth; the MainActor store validates the source and chain and reuses its existing persisted node. Retry and restart replay that activity, while the acknowledged trigger cannot be retried as a new paid action. Source/session generation checks and existing authorization handling remain. Unknown server outcomes and missing or malformed acknowledgements require separate recovery work. See [bounded recovery validation](../qa/2026-11-27-spark-ack-recovery.md).
+A valid trigger acknowledgement remains owned by the original activity if subsequent card hydration fails. The adapter returns its exact activity/root/depth; the MainActor store validates the source and chain and reuses its existing persisted node. Retry and restart replay that activity, while the acknowledged trigger cannot be retried as a new paid action. Source/session generation checks and existing authorization handling remain. Unknown and malformed replies now recover through the stable request contract described below. See [bounded recovery validation](../qa/2026-11-27-spark-ack-recovery.md).
+
+## Stable Spark operations and unknown replies
+
+A deliberate Spark saves one UUID with its original source and parent before the network call. The actor/backend-scoped snapshot survives retry and relaunch; unknown replies repeat that same key and input, while acknowledged activity IDs and committed error contexts use exact activity GET. The store no longer searches recent history or treats empty history as proof of no execution. Source/parent/root/depth and typed outcome identities must agree before results are adopted.
+
+Persistence read/write failures and corrupt records block execution and preserve the original bytes. Distinct stores in the same process compare the bytes they observed under the existing UserDefaults boundary; a conflict retires stale callbacks and Retry reloads the winning record. A missing or unreadable winner cannot authorize a new request. Normal save I/O failure retains the in-memory key or acknowledgement. Network admission captures the account session and token; old work cannot use a newly admitted account's credentials. A 401 after a valid acknowledgement still retains that receipt unless the initiating session has actually retired.
+
+The backend requires the key through HTTP and AgentOS and commits the settled credit pair with the activity and provenance. Legacy reservation/refund/settlement error reasons remain decoded for safe recovery, but the new backend no longer produces those separate charging phases. No new job, worker or independent compensation state is introduced. [Current bounded evidence](../qa/2026-11-27-spark-unknown-recovery.md) records actual recovery and final build qualification separately from the older acknowledgement gate.
 
 ## Network responses — implemented
 

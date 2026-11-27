@@ -419,7 +419,7 @@ struct SignUpView: View {
         switch error {
         case .serverError(let status, _):
             return AuthenticationErrorPresentation.registrationRejectsCode(statusCode: status, errorCode: nil)
-        case .api(let status, let code, _):
+        case .api(let status, let code, _, _):
             return AuthenticationErrorPresentation.registrationRejectsCode(statusCode: status, errorCode: code)
         default: return false
         }
@@ -431,7 +431,7 @@ struct SignUpView: View {
             : AuthenticationErrorPresentation.registrationMessage
         switch error {
         case .serverError(let status, _): return serviceMessage(status, nil)
-        case .api(let status, let code, _): return serviceMessage(status, code)
+        case .api(let status, let code, _, _): return serviceMessage(status, code)
         case .networkError: return "Connection unavailable. Try again when you’re back online."
         case .timeout: return "Request timed out. Please try again."
         case .decodingError: return "The server returned an unexpected response. Please try again later."

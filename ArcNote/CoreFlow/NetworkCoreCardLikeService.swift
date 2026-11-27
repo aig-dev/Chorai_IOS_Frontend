@@ -67,7 +67,7 @@ private extension NetworkError {
         case .decodingError: "decoding"
         case .encodingError: "encoding"
         case .serverError(let status, _): "server_\(status)"
-        case .api(let status, let code, _): code ?? "api_\(status)"
+        case .api(let status, let code, _, _): code ?? "api_\(status)"
         case .networkError: "network"
         case .unauthorized: "unauthorized"
         case .forbidden: "forbidden"

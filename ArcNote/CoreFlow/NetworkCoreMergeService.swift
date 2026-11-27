@@ -268,7 +268,7 @@ struct NetworkCoreMergeService: CoreMergeServing, Sendable {
         }
 
         switch networkError {
-        case .api(let statusCode, let code, let message):
+        case .api(let statusCode, let code, let message, _):
 #if DEBUG
             if let message {
                 print("Merge API error [\(code ?? "UNKNOWN")]: \(message)")

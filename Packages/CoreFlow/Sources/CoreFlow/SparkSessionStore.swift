@@ -32,6 +32,12 @@ public final class SparkSessionStore: ObservableObject {
         return results[nextIndex]
     }
 
+    private var settledResultsPhase: SparkSessionPhase {
+        if snapshotReloadRequired { return .failed("This Spark changed in another session. Retry to restore it.") }
+        if pendingTrigger != nil { return .failed("An earlier Spark still needs recovery.") }
+        return currentResult == nil ? .empty : .loaded
+    }
+
     private struct TriggerRollback {
         let sourceCard: FlowCard?
         let results: [SparkResult]
@@ -46,10 +52,12 @@ public final class SparkSessionStore: ObservableObject {
     private let service: CoreSparkServing
     private let persistence: SparkSessionPersisting
     private let now: () -> Date
+    private let isCurrentSession: @MainActor () -> Bool
 
     private var operationToken = 0
     private var pendingTrigger: PendingSparkTrigger?
-    private var lastFailedTrigger: PendingSparkTrigger?
+    private var snapshotReadFailed = false
+    private var snapshotReloadRequired = false
     private var lastFailedSourceCard: FlowCard?
     private var lastFailedReplayActivityID: String?
     private var nextCursor: String?
@@ -62,7 +70,6 @@ public final class SparkSessionStore: ObservableObject {
     private var triggerCancellable: AnyCancellable?
     private var replayCancellable: AnyCancellable?
     private var replaySourceCancellable: AnyCancellable?
-    private var historyCancellable: AnyCancellable?
     private var moreCancellable: AnyCancellable?
     private var interactionCancellable: AnyCancellable?
     private var ownedCardRefreshCancellable: AnyCancellable?
@@ -73,39 +80,52 @@ public final class SparkSessionStore: ObservableObject {
         rootSourceAssetID: String,
         service: CoreSparkServing,
         persistence: SparkSessionPersisting,
-        now: @escaping () -> Date = Date.init
+        now: @escaping () -> Date = Date.init,
+        isCurrentSession: @escaping @MainActor () -> Bool = { true }
     ) {
         self.actorID = actorID
         self.rootSourceAssetID = rootSourceAssetID
         self.service = service
         self.persistence = persistence
         self.now = now
+        self.isCurrentSession = isCurrentSession
     }
 
     public func start() {
-        guard phase == .idle else {
+        guard isCurrentSession(), phase == .idle else {
             return
         }
 
-        if let snapshot = persistence.snapshot(
-            actorID: actorID,
-            rootSourceAssetID: rootSourceAssetID
-        ) {
+        let saved: SparkSessionSnapshot?
+        do {
+            saved = try persistence.snapshot(actorID: actorID, rootSourceAssetID: rootSourceAssetID)
+            // A removed or empty competing record cannot authorize a new execution.
+            if (snapshotReloadRequired || snapshotReadFailed) && saved == nil {
+                throw SparkSessionPersistenceError.invalidRecord
+            }
+            snapshotReadFailed = false
+        } catch {
+            snapshotReadFailed = true
+            failPersistence()
+            return
+        }
+        if let snapshot = saved {
+            if snapshotReloadRequired {
+                sourceCard = nil
+                results = []
+                visibleIndex = 0
+                lastFailedSourceCard = nil
+                lastFailedReplayActivityID = nil
+            }
+            snapshotReloadRequired = false
             chain = snapshot.nodes
             activeActivityID = snapshot.activeActivityID
             pendingTrigger = snapshot.pendingTrigger
             didShowUpwardCue = snapshot.didShowUpwardCue
-
             if let pending = snapshot.pendingTrigger {
-                lastFailedTrigger = pending
-                reconcilePendingTrigger(
-                    pending,
-                    rollback: nil,
-                    source: nil
-                )
+                resumePendingTrigger(pending)
                 return
             }
-
             if let activityID = snapshot.activeActivityID {
                 replay(activityID: activityID)
                 return
@@ -121,7 +141,7 @@ public final class SparkSessionStore: ObservableObject {
         }
 
         visibleIndex += 1
-        phase = currentResult == nil ? .empty : .loaded
+        phase = settledResultsPhase
         persistCurrentState()
         prefetchIfNeeded()
     }
@@ -131,7 +151,7 @@ public final class SparkSessionStore: ObservableObject {
               visibleIndex > 0,
               results.indices.contains(visibleIndex - 1) else { return }
         visibleIndex -= 1
-        phase = .loaded
+        phase = settledResultsPhase
         persistCurrentState()
     }
 
@@ -313,6 +333,7 @@ public final class SparkSessionStore: ObservableObject {
         guard
             !isInteractionLocked,
             phase == .loaded,
+            pendingTrigger == nil,
             let source = currentResult?.card,
             let parentActivityID = activeActivityID
         else {
@@ -326,46 +347,23 @@ public final class SparkSessionStore: ObservableObject {
     }
 
     public func retryTrigger() {
-        guard !isInteractionLocked else {
-            return
-        }
-
-        if let pendingTrigger {
-            reconcilePendingTrigger(
-                pendingTrigger,
-                rollback: nil,
-                source: lastFailedSourceCard
-            )
-            return
-        }
-
-        if let activityID = lastFailedReplayActivityID {
+        guard isCurrentSession(), !isInteractionLocked else { return }
+        if snapshotReadFailed || snapshotReloadRequired {
+            phase = .idle
+            start()
+        } else if let pendingTrigger {
+            resumePendingTrigger(pendingTrigger)
+        } else if let activityID = lastFailedReplayActivityID {
             replay(activityID: activityID)
-            return
-        }
-
-        if chain.isEmpty, sourceCard == nil {
+        } else if chain.isEmpty, sourceCard == nil {
             loadRootSource()
-            return
         }
-
-        guard
-            let pending = lastFailedTrigger,
-            let source = lastFailedSourceCard,
-            pending.sourceAssetID == source.id
-        else {
-            return
-        }
-
-        beginTrigger(
-            source: source,
-            parentActivityID: pending.parentActivityID
-        )
     }
 
     public func selectNode(activityID: String) {
         guard
             !isInteractionLocked,
+            !snapshotReloadRequired,
             activityID != activeActivityID,
             chain.contains(where: { $0.activityID == activityID })
         else {
@@ -408,129 +406,98 @@ public final class SparkSessionStore: ObservableObject {
                         return
                     }
                     receivedCard = true
+                    guard card.id == self.rootSourceAssetID else {
+                        self.failRootLoad(.decoding)
+                        return
+                    }
                     self.sourceCard = card
                     self.beginTrigger(source: card, parentActivityID: nil)
                 }
             )
     }
 
-    private func beginTrigger(
-        source: FlowCard,
-        parentActivityID: String?
-    ) {
-        let rollback = TriggerRollback(
-            sourceCard: sourceCard,
-            results: results,
-            visibleIndex: visibleIndex,
-            chain: chain,
-            activeActivityID: activeActivityID,
-            didShowUpwardCue: didShowUpwardCue
-        )
+    private func beginTrigger(source: FlowCard, parentActivityID: String?) {
+        guard pendingTrigger == nil else { return }
         let pending = PendingSparkTrigger(
-            sourceAssetID: source.id,
-            sourcePreview: Self.preview(for: source),
-            parentActivityID: parentActivityID,
-            startedAt: now(),
-            priorActivityID: activeActivityID,
-            priorVisibleIndex: visibleIndex
+            requestKey: UUID(), sourceAssetID: source.id,
+            sourcePreview: Self.preview(for: source), parentActivityID: parentActivityID,
+            startedAt: now(), priorActivityID: activeActivityID, priorVisibleIndex: visibleIndex
         )
-
         pendingTrigger = pending
-        lastFailedTrigger = nil
-        lastFailedSourceCard = nil
-        phase = .triggering
+        lastFailedSourceCard = source
+        resumePendingTrigger(pending)
+    }
+
+    // Reopening or Retry resolves the frozen operation, never a history guess.
+    // A known commit uses GET; an unknown outcome repeats the exact POST/key.
+    private func resumePendingTrigger(_ pending: PendingSparkTrigger) {
+        guard isCurrentSession(), !snapshotReloadRequired else { return }
+        let rollback = TriggerRollback(
+            sourceCard: sourceCard, results: results, visibleIndex: visibleIndex,
+            chain: chain, activeActivityID: activeActivityID, didShowUpwardCue: didShowUpwardCue
+        )
+        let source = lastFailedSourceCard ?? Self.pendingSource(pending)
+        pendingTrigger = pending
+        phase = pending.committedActivityID == nil ? .triggering : .replaying
         isInteractionLocked = true
         notice = nil
-        persistCurrentState()
+        guard persistCurrentState() else { return }
 
         let token = beginOperation()
         var receivedPage = false
-        triggerCancellable = service.trigger(
-            sourceAssetID: source.id,
-            parentActivityID: parentActivityID
-        )
-        .receive(on: DispatchQueue.main)
-        .sink(
+        let publisher = pending.committedActivityID.map { service.activityResults(activityID: $0) }
+            ?? service.trigger(sourceAssetID: pending.sourceAssetID, parentActivityID: pending.parentActivityID, requestKey: pending.requestKey)
+        triggerCancellable = publisher.receive(on: DispatchQueue.main).sink(
             receiveCompletion: { [weak self] completion in
-                guard let self, self.isCurrentOperation(token) else {
-                    return
-                }
+                guard let self, self.isCurrentOperation(token) else { return }
                 if case .failure(let error) = completion {
-                    if case .resultsUnavailable(let activityID, let rootActivityID, let depth) = error {
-                        let acknowledged = SparkActivityPage(
-                            activityID: activityID,
-                            parentActivityID: parentActivityID,
-                            rootActivityID: rootActivityID,
-                            chainDepth: depth,
-                            sourceAssetID: source.id,
-                            groups: [:],
-                            createdAt: nil
-                        )
-                        if self.isValid(
-                            page: acknowledged, sourceAssetID: source.id,
-                            parentActivityID: parentActivityID, rollback: rollback
-                        ) {
-                            self.applyTriggeredPage(
-                                acknowledged, source: source,
-                                parentActivityID: parentActivityID, rollback: rollback,
-                                resultLoadFailed: true
-                            )
-                        } else {
-                            self.restoreAfterTriggerFailure(
-                                rollback: rollback, pending: pending, source: source, error: .decoding
-                            )
+                    if case .resultsUnavailable(let id, let root, let depth) = error {
+                        let page = SparkActivityPage(activityID: id, parentActivityID: pending.parentActivityID,
+                            rootActivityID: root, chainDepth: depth, sourceAssetID: pending.sourceAssetID, groups: [:], createdAt: nil)
+                        if self.matchesAttempt(id, pending: pending), self.isValid(page: page,
+                            sourceAssetID: pending.sourceAssetID, parentActivityID: pending.parentActivityID, rollback: rollback) {
+                            self.applyTriggeredPage(page, source: source, parentActivityID: pending.parentActivityID,
+                                rollback: rollback, resultLoadFailed: true)
+                            return
                         }
-                    } else if Self.isAmbiguousTriggerError(error) {
-                        self.reconcilePendingTrigger(
-                            pending,
-                            rollback: rollback,
-                            source: source
-                        )
-                    } else {
-                        self.restoreAfterTriggerFailure(
-                            rollback: rollback,
-                            pending: pending,
-                            source: source,
-                            error: error
-                        )
                     }
+                    var retained = pending
+                    if case .executionOutcome(let outcome) = error {
+                        guard self.matchesAttempt(outcome.activityID, pending: pending) else {
+                            self.restoreAfterTriggerFailure(rollback: rollback, pending: pending, source: source, error: .decoding)
+                            return
+                        }
+                        retained.attemptActivityID = outcome.activityID
+                        if outcome.isCommitted { retained.committedActivityID = outcome.activityID }
+                    }
+                    self.restoreAfterTriggerFailure(rollback: rollback, pending: retained, source: source, error: error)
                 } else if !receivedPage {
-                    self.restoreAfterTriggerFailure(
-                        rollback: rollback,
-                        pending: pending,
-                        source: source,
-                        error: .decoding
-                    )
+                    self.restoreAfterTriggerFailure(rollback: rollback, pending: pending, source: source, error: .decoding)
                 }
             },
             receiveValue: { [weak self] page in
-                guard let self, self.isCurrentOperation(token) else {
-                    return
-                }
+                guard let self, self.isCurrentOperation(token) else { return }
                 receivedPage = true
-                guard self.isValid(
-                    page: page,
-                    sourceAssetID: source.id,
-                    parentActivityID: parentActivityID,
-                    rollback: rollback
-                ) else {
-                    self.restoreAfterTriggerFailure(
-                        rollback: rollback,
-                        pending: pending,
-                        source: source,
-                        error: .decoding,
-                        message: "Couldn't continue this Spark."
-                    )
+                guard self.matchesAttempt(page.activityID, pending: pending), self.isValid(page: page,
+                    sourceAssetID: pending.sourceAssetID, parentActivityID: pending.parentActivityID, rollback: rollback) else {
+                    self.restoreAfterTriggerFailure(rollback: rollback, pending: pending, source: source, error: .decoding)
                     return
                 }
-                self.applyTriggeredPage(
-                    page,
-                    source: source,
-                    parentActivityID: parentActivityID,
-                    rollback: rollback
-                )
+                self.applyTriggeredPage(page, source: source, parentActivityID: pending.parentActivityID, rollback: rollback)
             }
         )
+    }
+
+    private func matchesAttempt(_ activityID: String, pending: PendingSparkTrigger) -> Bool {
+        activityID.range(of: "^[A-Za-z0-9_-]{1,64}$", options: .regularExpression) != nil
+            && (pending.attemptActivityID == nil || pending.attemptActivityID == activityID)
+            && (pending.committedActivityID == nil || pending.committedActivityID == activityID)
+    }
+
+    private static func pendingSource(_ pending: PendingSparkTrigger) -> FlowCard {
+        FlowCard(id: pending.sourceAssetID, title: nil, content: pending.sourcePreview, contentHash: nil,
+            tags: [], isPublic: false, createdAt: "", updatedAt: "", favoriteCount: 0, likeCount: 0,
+            commentCount: 0, rate: 0, isFavorited: false, isLiked: false, isPinned: false, pinnedAt: nil, author: nil)
     }
 
     private func isValid(
@@ -540,7 +507,7 @@ public final class SparkSessionStore: ObservableObject {
         rollback: TriggerRollback
     ) -> Bool {
         guard
-            !page.activityID.isEmpty,
+            page.activityID.range(of: "^[A-Za-z0-9_-]{1,64}$", options: .regularExpression) != nil,
             page.sourceAssetID == sourceAssetID,
             page.parentActivityID == parentActivityID
         else {
@@ -558,7 +525,7 @@ public final class SparkSessionStore: ObservableObject {
             return false
         }
         return page.rootActivityID == parent.rootActivityID
-            && page.chainDepth == parent.chainDepth + 1
+            && page.chainDepth > 0 && parent.chainDepth == page.chainDepth - 1
     }
 
     private func applyTriggeredPage(
@@ -597,14 +564,13 @@ public final class SparkSessionStore: ObservableObject {
             activityID: page.activityID
         )
         pendingTrigger = nil
-        lastFailedTrigger = nil
         lastFailedSourceCard = nil
         lastFailedReplayActivityID = resultLoadFailed ? page.activityID : nil
         isInteractionLocked = false
         phase = resultLoadFailed
             ? .failed("Spark completed, but its results couldn't load.")
             : results.isEmpty ? .empty : .loaded
-        persistCurrentState()
+        if !persistCurrentState() { lastFailedReplayActivityID = page.activityID }
     }
 
     private func restoreAfterTriggerFailure(
@@ -620,8 +586,7 @@ public final class SparkSessionStore: ObservableObject {
         chain = rollback.chain
         activeActivityID = rollback.activeActivityID
         didShowUpwardCue = rollback.didShowUpwardCue
-        pendingTrigger = nil
-        lastFailedTrigger = pending
+        pendingTrigger = pending
         lastFailedSourceCard = source
         isInteractionLocked = false
         phase = .failed(message ?? Self.message(for: error))
@@ -667,7 +632,11 @@ public final class SparkSessionStore: ObservableObject {
                         return
                     }
                     receivedPage = true
-                    guard page.activityID == activityID else {
+                    guard page.activityID == activityID,
+                          page.sourceAssetID == savedNode.sourceAssetID,
+                          page.parentActivityID == savedNode.parentActivityID,
+                          page.rootActivityID == savedNode.rootActivityID,
+                          page.chainDepth == savedNode.chainDepth else {
                         self.failReplay(.decoding)
                         return
                     }
@@ -766,10 +735,9 @@ public final class SparkSessionStore: ObservableObject {
             sourceAssetID: page.sourceAssetID,
             activityID: page.activityID
         )
-        pendingTrigger = nil
         lastFailedReplayActivityID = nil
         isInteractionLocked = false
-        phase = replayedResults.isEmpty ? .empty : .loaded
+        phase = settledResultsPhase
         persistCurrentState()
     }
 
@@ -824,147 +792,6 @@ public final class SparkSessionStore: ObservableObject {
         )
     }
 
-    private func reconcilePendingTrigger(
-        _ pending: PendingSparkTrigger,
-        rollback: TriggerRollback?,
-        source: FlowCard?
-    ) {
-        pendingTrigger = pending
-        lastFailedTrigger = pending
-        lastFailedSourceCard = source
-        phase = .reconciling
-        isInteractionLocked = true
-        persistCurrentState()
-
-        let token = beginOperation()
-        var receivedHistory = false
-        historyCancellable = service.history(
-            sourceAssetID: pending.sourceAssetID,
-            limit: 20
-        )
-        .receive(on: DispatchQueue.main)
-        .sink(
-            receiveCompletion: { [weak self] completion in
-                guard let self, self.isCurrentOperation(token) else {
-                    return
-                }
-                if case .failure = completion {
-                    self.isInteractionLocked = false
-                    self.phase = .failed("Couldn't check this Spark.")
-                    self.persistCurrentState()
-                } else if !receivedHistory {
-                    self.isInteractionLocked = false
-                    self.phase = .failed("Couldn't check this Spark.")
-                    self.persistCurrentState()
-                }
-            },
-            receiveValue: { [weak self] entries in
-                guard let self, self.isCurrentOperation(token) else {
-                    return
-                }
-                receivedHistory = true
-                let earliestMatch = pending.startedAt.addingTimeInterval(-2)
-                let match = entries
-                    .filter {
-                        $0.sourceAssetID == pending.sourceAssetID
-                            && $0.parentActivityID == pending.parentActivityID
-                            && $0.createdAt >= earliestMatch
-                    }
-                    .max(by: { $0.createdAt < $1.createdAt })
-
-                if let match {
-                    self.recover(
-                        match: match,
-                        pending: pending,
-                        rollback: rollback,
-                        source: source
-                    )
-                } else {
-                    self.confirmNoHistoryMatch(
-                        pending: pending,
-                        rollback: rollback,
-                        source: source
-                    )
-                }
-            }
-        )
-    }
-
-    private func recover(
-        match: SparkHistoryEntry,
-        pending: PendingSparkTrigger,
-        rollback: TriggerRollback?,
-        source: FlowCard?
-    ) {
-        let recoveredNode = SparkChainNode(
-            sourceAssetID: match.sourceAssetID,
-            sourcePreview: pending.sourcePreview,
-            activityID: match.activityID,
-            parentActivityID: match.parentActivityID,
-            rootActivityID: match.rootActivityID,
-            chainDepth: match.chainDepth,
-            visibleIndex: 0
-        )
-        let baseChain = rollback?.chain ?? chain
-        if let parentActivityID = pending.parentActivityID,
-           let parentIndex = baseChain.firstIndex(where: {
-               $0.activityID == parentActivityID
-           }) {
-            chain = Array(baseChain.prefix(through: parentIndex)) + [recoveredNode]
-            didShowUpwardCue = true
-        } else {
-            chain = [recoveredNode]
-        }
-
-        sourceCard = source ?? rollback?.sourceCard ?? sourceCard
-        results = rollback?.results ?? results
-        visibleIndex = 0
-        activeActivityID = match.activityID
-        pendingTrigger = nil
-        lastFailedTrigger = nil
-        lastFailedSourceCard = nil
-        persistCurrentState()
-        replay(activityID: match.activityID)
-    }
-
-    private func confirmNoHistoryMatch(
-        pending: PendingSparkTrigger,
-        rollback: TriggerRollback?,
-        source: FlowCard?
-    ) {
-        pendingTrigger = nil
-        lastFailedTrigger = pending
-        lastFailedSourceCard = source
-        if let rollback {
-            sourceCard = rollback.sourceCard ?? source
-            results = rollback.results
-            visibleIndex = rollback.visibleIndex
-            chain = rollback.chain
-            activeActivityID = rollback.activeActivityID
-            didShowUpwardCue = rollback.didShowUpwardCue
-        }
-        isInteractionLocked = false
-        phase = .failed("Couldn't confirm this Spark.")
-        persistCurrentState()
-
-        if source == nil {
-            loadSourceForConfirmedRetry(pending: pending)
-        }
-    }
-
-    private func loadSourceForConfirmedRetry(
-        pending: PendingSparkTrigger
-    ) {
-        sourceCancellable = service.card(assetID: pending.sourceAssetID)
-            .receive(on: DispatchQueue.main)
-            .sink(
-                receiveCompletion: { _ in },
-                receiveValue: { [weak self] card in
-                    self?.lastFailedSourceCard = card
-                }
-            )
-    }
-
     private func resetMoreState(
         sourceAssetID: String,
         activityID: String
@@ -987,6 +814,7 @@ public final class SparkSessionStore: ObservableObject {
 
     private func prefetchIfNeeded() {
         guard
+            !snapshotReloadRequired,
             !isLoadingMore,
             !isMoreExhausted,
             let sourceAssetID = sourceCard?.id,
@@ -1043,7 +871,7 @@ public final class SparkSessionStore: ObservableObject {
                     || self.consecutiveEmptyMorePages >= 2
                 self.isLoadingMore = false
                 if self.currentResult != nil {
-                    self.phase = .loaded
+                    if !self.isInteractionLocked { self.phase = self.settledResultsPhase }
                 } else if !self.isMoreExhausted {
                     DispatchQueue.main.async { [weak self] in
                         self?.prefetchIfNeeded()
@@ -1055,19 +883,11 @@ public final class SparkSessionStore: ObservableObject {
 
     private func failReplay(_ error: CoreSparkError) {
         isInteractionLocked = false
-        if error == .forbidden || error == .notFound || error == .decoding {
-            persistence.remove(
-                actorID: actorID,
-                rootSourceAssetID: rootSourceAssetID
-            )
-            chain = []
-            activeActivityID = nil
-            pendingTrigger = nil
+        // Read denial clears displayed content, not the identity of a paid operation.
+        if error == .forbidden || error == .notFound || error == .decoding || error == .unauthorized {
+            sourceCard = nil
             results = []
             visibleIndex = 0
-            lastFailedReplayActivityID = nil
-            phase = .failed("This Spark can no longer be restored.")
-            return
         }
         phase = .failed("Couldn't restore this Spark.")
     }
@@ -1083,41 +903,66 @@ public final class SparkSessionStore: ObservableObject {
     }
 
     private func isCurrentOperation(_ token: Int) -> Bool {
-        token == operationToken
+        token == operationToken && isCurrentSession()
     }
 
-    private func persistCurrentState() {
-        guard
-            !chain.isEmpty
-                || activeActivityID != nil
-                || pendingTrigger != nil
-        else {
-            persistence.remove(
-                actorID: actorID,
-                rootSourceAssetID: rootSourceAssetID
-            )
-            return
-        }
+    @discardableResult
+    private func persistCurrentState() -> Bool {
+        guard isCurrentSession(), !snapshotReadFailed, !snapshotReloadRequired else { return false }
+        do {
+            guard
+                !chain.isEmpty
+                    || activeActivityID != nil
+                    || pendingTrigger != nil
+            else {
+                try persistence.remove(
+                    actorID: actorID,
+                    rootSourceAssetID: rootSourceAssetID
+                )
+                return true
+            }
 
-        var persistedChain = chain
-        if let activeActivityID,
-           let index = persistedChain.firstIndex(where: {
-               $0.activityID == activeActivityID
-           }) {
-            persistedChain[index].visibleIndex = visibleIndex
-            chain = persistedChain
-        }
+            var persistedChain = chain
+            if let activeActivityID,
+               let index = persistedChain.firstIndex(where: {
+                   $0.activityID == activeActivityID
+               }) {
+                persistedChain[index].visibleIndex = visibleIndex
+                chain = persistedChain
+            }
 
-        persistence.save(
-            SparkSessionSnapshot(
-                actorID: actorID,
-                rootSourceAssetID: rootSourceAssetID,
-                nodes: persistedChain,
-                activeActivityID: activeActivityID,
-                pendingTrigger: pendingTrigger,
-                didShowUpwardCue: didShowUpwardCue
+            try persistence.save(
+                SparkSessionSnapshot(
+                    actorID: actorID,
+                    rootSourceAssetID: rootSourceAssetID,
+                    nodes: persistedChain,
+                    activeActivityID: activeActivityID,
+                    pendingTrigger: pendingTrigger,
+                    didShowUpwardCue: didShowUpwardCue
+                )
             )
-        )
+            return true
+        } catch {
+            if case SparkSessionPersistenceError.recordChanged = error {
+                // Retire callbacks using the obsolete snapshot. Retry rereads the
+                // winning record before deciding between exact GET and same-key POST.
+                snapshotReloadRequired = true
+                operationToken += 1
+                sourceCancellable?.cancel()
+                triggerCancellable?.cancel()
+                replayCancellable?.cancel()
+                replaySourceCancellable?.cancel()
+                moreCancellable?.cancel()
+                isLoadingMore = false
+            }
+            failPersistence()
+            return false
+        }
+    }
+
+    private func failPersistence() {
+        isInteractionLocked = false
+        phase = .failed("Couldn't preserve this Spark safely. Its recovery record was kept.")
     }
 
     private static func preview(for card: FlowCard) -> String {
@@ -1129,12 +974,6 @@ public final class SparkSessionStore: ObservableObject {
             )
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return String(normalized.prefix(80))
-    }
-
-    private static func isAmbiguousTriggerError(
-        _ error: CoreSparkError
-    ) -> Bool {
-        error == .offline || error == .timeout || error == .unknown
     }
 
     private static func message(for error: CoreSparkError) -> String {
@@ -1151,6 +990,8 @@ public final class SparkSessionStore: ObservableObject {
             return "This Spark has reached its limit."
         case .retrievalUnavailable:
             return "Spark is unavailable right now."
+        case .executionOutcome(let outcome):
+            return outcome.isCommitted ? "Spark completed, but its results couldn't load." : "Couldn't confirm this Spark."
         case .resultsUnavailable:
             return "Spark completed, but its results couldn't load."
         case .offline, .timeout:

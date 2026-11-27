@@ -640,7 +640,7 @@ enum NetworkError: Error, LocalizedError {
     case decodingError
     case encodingError
     case serverError(Int, String?)
-    case api(statusCode: Int, code: String?, message: String?)
+    case api(statusCode: Int, code: String?, message: String?, sparkOutcome: SparkExecutionOutcome? = nil)
     case networkError(Error)
     case unauthorized
     case forbidden
@@ -658,7 +658,7 @@ enum NetworkError: Error, LocalizedError {
         case .unauthorized: return 401
         case .forbidden: return 403
         case .notFound: return 404
-        case .serverError(let status, _), .api(let status, _, _):
+        case .serverError(let status, _), .api(let status, _, _, _):
             return status
         default:
             return nil

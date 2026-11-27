@@ -269,9 +269,9 @@ final class AuthManager: ObservableObject {
                 self.sessionVerification = nil
                 guard case .failure(let error) = completion else { return }
                 switch error {
-                case .unauthorized, .api(statusCode: 401, code: _, message: _):
+                case .unauthorized, .api(statusCode: 401, code: _, message: _, sparkOutcome: _):
                     self.markSessionNeedsLogin()
-                case .forbidden, .api(statusCode: 403, code: _, message: _):
+                case .forbidden, .api(statusCode: 403, code: _, message: _, sparkOutcome: _):
                     self.markAccountRestricted()
                 default:
                     self.accessState = nil

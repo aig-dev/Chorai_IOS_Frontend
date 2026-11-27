@@ -20,7 +20,7 @@ final class SparkSessionPersistenceTests: XCTestCase {
         super.tearDown()
     }
 
-    func testSnapshotsAreIsolatedByActorAndRootSource() {
+    func testSnapshotsAreIsolatedByActorAndRootSource() throws {
         let store = UserDefaultsSparkSessionStore(
             defaults: defaults,
             keyPrefix: "spark.test"
@@ -36,23 +36,23 @@ final class SparkSessionPersistenceTests: XCTestCase {
             activityID: "act_spark_b"
         )
 
-        store.save(actorASnapshot)
-        store.save(actorBSnapshot)
+        try store.save(actorASnapshot)
+        try store.save(actorBSnapshot)
 
         XCTAssertEqual(
-            store.snapshot(actorID: "act_a", rootSourceAssetID: "ast_root_a"),
+            try store.snapshot(actorID: "act_a", rootSourceAssetID: "ast_root_a"),
             actorASnapshot
         )
         XCTAssertEqual(
-            store.snapshot(actorID: "act_b", rootSourceAssetID: "ast_root_a"),
+            try store.snapshot(actorID: "act_b", rootSourceAssetID: "ast_root_a"),
             actorBSnapshot
         )
         XCTAssertNil(
-            store.snapshot(actorID: "act_a", rootSourceAssetID: "ast_other")
+            try store.snapshot(actorID: "act_a", rootSourceAssetID: "ast_other")
         )
     }
 
-    func testRemoveDeletesOnlyRequestedActorRootSnapshot() {
+    func testRemoveDeletesOnlyRequestedActorRootSnapshot() throws {
         let store = UserDefaultsSparkSessionStore(
             defaults: defaults,
             keyPrefix: "spark.test"
@@ -67,21 +67,21 @@ final class SparkSessionPersistenceTests: XCTestCase {
             rootSourceAssetID: "ast_second",
             activityID: "act_spark_second"
         )
-        store.save(first)
-        store.save(second)
+        try store.save(first)
+        try store.save(second)
 
-        store.remove(actorID: "act_a", rootSourceAssetID: "ast_first")
+        try store.remove(actorID: "act_a", rootSourceAssetID: "ast_first")
 
         XCTAssertNil(
-            store.snapshot(actorID: "act_a", rootSourceAssetID: "ast_first")
+            try store.snapshot(actorID: "act_a", rootSourceAssetID: "ast_first")
         )
         XCTAssertEqual(
-            store.snapshot(actorID: "act_a", rootSourceAssetID: "ast_second"),
+            try store.snapshot(actorID: "act_a", rootSourceAssetID: "ast_second"),
             second
         )
     }
 
-    func testInvalidSnapshotIsPrunedWithoutRemovingOtherSnapshots() {
+    func testInvalidSnapshotIsReportedAndPreservedWithoutRemovingOtherSnapshots() throws {
         let keyPrefix = "spark.test"
         let store = UserDefaultsSparkSessionStore(
             defaults: defaults,
@@ -92,18 +92,46 @@ final class SparkSessionPersistenceTests: XCTestCase {
             rootSourceAssetID: "ast_root",
             activityID: "act_spark_valid"
         )
-        store.save(valid)
+        try store.save(valid)
         let invalidKey = "\(keyPrefix).act_a.ast_root"
         defaults.set(Data([0x00, 0x01]), forKey: invalidKey)
 
-        XCTAssertNil(
-            store.snapshot(actorID: "act_a", rootSourceAssetID: "ast_root")
-        )
-        XCTAssertNil(defaults.data(forKey: invalidKey))
+        XCTAssertThrowsError(try store.snapshot(actorID: "act_a", rootSourceAssetID: "ast_root"))
+        XCTAssertEqual(defaults.data(forKey: invalidKey), Data([0x00, 0x01]))
         XCTAssertEqual(
-            store.snapshot(actorID: "act_b", rootSourceAssetID: "ast_root"),
+            try store.snapshot(actorID: "act_b", rootSourceAssetID: "ast_root"),
             valid
         )
+    }
+
+    func testExtremeParentDepthIsRejectedWithoutDeletingRecord() throws {
+        let store = UserDefaultsSparkSessionStore(defaults: defaults, keyPrefix: "extreme")
+        let value = SparkSessionSnapshot(actorID: "actor", rootSourceAssetID: "source",
+            nodes: [
+                SparkChainNode(sourceAssetID: "source", sourcePreview: "", activityID: "child", parentActivityID: "parent",
+                    rootActivityID: "parent", chainDepth: 1, visibleIndex: 0),
+                SparkChainNode(sourceAssetID: "source", sourcePreview: "", activityID: "parent", parentActivityID: nil,
+                    rootActivityID: "parent", chainDepth: Int.max, visibleIndex: 0)
+            ], activeActivityID: "child", pendingTrigger: nil, didShowUpwardCue: false)
+        let bytes = try JSONEncoder().encode(value)
+        defaults.set(bytes, forKey: "extreme.actor.source")
+        XCTAssertThrowsError(try store.snapshot(actorID: "actor", rootSourceAssetID: "source"))
+        XCTAssertEqual(defaults.data(forKey: "extreme.actor.source"), bytes)
+    }
+
+    func testSecondSessionCannotOverwriteOrRemoveAnOperationSavedSinceItsRead() throws {
+        let first = UserDefaultsSparkSessionStore(defaults: defaults, keyPrefix: "shared")
+        let second = UserDefaultsSparkSessionStore(defaults: defaults, keyPrefix: "shared")
+        XCTAssertNil(try first.snapshot(actorID: "actor", rootSourceAssetID: "source"))
+        XCTAssertNil(try second.snapshot(actorID: "actor", rootSourceAssetID: "source"))
+        let original = snapshot(actorID: "actor", rootSourceAssetID: "source", activityID: "first")
+        try first.save(original)
+        let bytes = defaults.data(forKey: "shared.actor.source")
+        XCTAssertThrowsError(try second.save(snapshot(actorID: "actor", rootSourceAssetID: "source", activityID: "second")))
+        XCTAssertEqual(defaults.data(forKey: "shared.actor.source"), bytes)
+        XCTAssertThrowsError(try second.remove(actorID: "actor", rootSourceAssetID: "source"))
+        XCTAssertEqual(defaults.data(forKey: "shared.actor.source"), bytes)
+        XCTAssertEqual(try second.snapshot(actorID: "actor", rootSourceAssetID: "source"), original)
     }
 
     private func snapshot(
@@ -127,6 +155,7 @@ final class SparkSessionPersistenceTests: XCTestCase {
             ],
             activeActivityID: activityID,
             pendingTrigger: PendingSparkTrigger(
+                    requestKey: UUID(),
                 sourceAssetID: rootSourceAssetID,
                 sourcePreview: "A source",
                 parentActivityID: nil,

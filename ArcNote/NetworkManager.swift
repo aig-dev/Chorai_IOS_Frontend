@@ -133,6 +133,17 @@ final class NetworkManager: ObservableObject, Sendable {
         self.authToken = nil
     }
 
+    /// Capture once when a user-scoped feature is created. A retired feature
+    /// cannot dispatch with a replacement account's credentials or adopt its response.
+    func captureSessionCheck() -> @MainActor @Sendable () -> Bool {
+        let token = authToken
+        let generation = AuthManager.shared.sessionGeneration
+        return { [weak self] in
+            guard let self, let token, !token.isEmpty else { return false }
+            return self.authToken == token && AuthManager.shared.sessionGeneration == generation
+        }
+    }
+
     private func authorizedHeaders(extra customHeaders: HTTPHeaders? = nil) -> HTTPHeaders {
         var requestHeaders: HTTPHeaders = [
             "Content-Type": "application/json",
@@ -206,17 +217,22 @@ final class NetworkManager: ObservableObject, Sendable {
         responseType: T.Type,
         presentsError: Bool = true,
         suppressesPayloadLogging: Bool = false,
-        isCredentialExchange: Bool = false
+        isCredentialExchange: Bool = false,
+        admission: (@MainActor @Sendable () -> Bool)? = nil
     ) -> AnyPublisher<T, NetworkError> {
         // Preserve the existing eager, shared Future semantics for mutations.
         Future<T, NetworkError> { [weak self] promise in
             Self.onMain {
                 guard let self else { promise(.failure(.unknown)); return }
+                guard admission?() != false else { promise(.failure(.unauthorized)); return }
                 self.startRequest(
                     endpoint: endpoint, method: method, parameters: parameters,
                     encoding: encoding, headers: headers, responseType: responseType,
                     presentsError: presentsError, isCredentialExchange: isCredentialExchange,
-                    completion: { promise($0) }
+                    completion: { result in
+                        guard admission?() != false else { promise(.failure(.unauthorized)); return }
+                        promise(result)
+                    }
                 )
             }
         }.eraseToAnyPublisher()
@@ -260,7 +276,7 @@ final class NetworkManager: ObservableObject, Sendable {
         switch response.result {
         case .success(let data):
             if isCredentialExchange, let api = APIErrorPayload.decode(from: data, statusCode: status) {
-                return (.failure(.api(statusCode: status ?? 200, code: api.code, message: api.message)), nil)
+                return (.failure(.api(statusCode: status ?? 200, code: api.code, message: api.message, sparkOutcome: api.sparkOutcome)), nil)
             }
             do { return (.success(try JSONDecoder().decode(type, from: data)), nil) }
             catch { return (.failure(.decodingError), nil) }
@@ -271,7 +287,7 @@ final class NetworkManager: ObservableObject, Sendable {
             if status == 401 && !isCredentialExchange {
                 mapped = .unauthorized
             } else if let status, (400...599).contains(status), isCredentialExchange || api != nil {
-                mapped = .api(statusCode: status, code: api?.code, message: api?.message ?? message)
+                mapped = .api(statusCode: status, code: api?.code, message: api?.message ?? message, sparkOutcome: api?.sparkOutcome)
             } else {
                 mapped = self.handleError(error, response: response.response)
             }
@@ -366,7 +382,8 @@ final class NetworkManager: ObservableObject, Sendable {
                                     .api(
                                         statusCode: statusCode,
                                         code: apiError.code,
-                                        message: apiError.message
+                                        message: apiError.message,
+                                        sparkOutcome: apiError.sparkOutcome
                                     )
                                 )
                             )
@@ -872,36 +889,40 @@ extension NetworkManager {
         )
     }
     // MARK: 生成相关卡片
-    func generateRelatedCards(cardId: String) -> AnyPublisher<GenerateRelatedCardsResponse, NetworkError> {
+    func generateRelatedCards(cardId: String, requestKey: UUID) -> AnyPublisher<GenerateRelatedCardsResponse, NetworkError> {
         return self.request(
             endpoint: "/api/v1/assets/\(cardId)/spark",
             method: .post,
+            headers: ["Idempotency-Key": requestKey.uuidString.lowercased()],
             responseType: GenerateRelatedCardsResponse.self
         )
     }
 
-    func triggerSpark(cardId: String, parentActivityId: String?) -> AnyPublisher<NetworkResponse<SparkRunData>, NetworkError> {
+    func triggerSpark(cardId: String, parentActivityId: String?, requestKey: UUID, admission: (@MainActor @Sendable () -> Bool)? = nil) -> AnyPublisher<NetworkResponse<SparkRunData>, NetworkError> {
         let parameters = parentActivityId.map { ["parent_activity_id": $0] }
 
         return self.request(
             endpoint: "/api/v1/assets/\(cardId)/spark",
             method: .post,
             parameters: parameters,
+            headers: ["Idempotency-Key": requestKey.uuidString.lowercased()],
             responseType: NetworkResponse<SparkRunData>.self,
-            presentsError: false
+            presentsError: false,
+            admission: admission
         )
     }
 
-    func getSparkCard(id: String) -> AnyPublisher<NetworkResponse<RelatedCard>, NetworkError> {
+    func getSparkCard(id: String, admission: (@MainActor @Sendable () -> Bool)? = nil) -> AnyPublisher<NetworkResponse<RelatedCard>, NetworkError> {
         return self.request(
             endpoint: "/api/cards/\(id)",
             method: .get,
             responseType: NetworkResponse<RelatedCard>.self,
-            presentsError: false
+            presentsError: false,
+            admission: admission
         )
     }
 
-    func getSparkHistory(cardId: String, offset: Int = 0, limit: Int = 20) -> AnyPublisher<NetworkResponse<SparkHistoryResponse>, NetworkError> {
+    func getSparkHistory(cardId: String, offset: Int = 0, limit: Int = 20, admission: (@MainActor @Sendable () -> Bool)? = nil) -> AnyPublisher<NetworkResponse<SparkHistoryResponse>, NetworkError> {
         let parameters: Parameters = [
             "offset": offset,
             "limit": limit
@@ -913,11 +934,12 @@ extension NetworkManager {
             parameters: parameters,
             encoding: URLEncoding.default,
             responseType: NetworkResponse<SparkHistoryResponse>.self,
-            presentsError: false
+            presentsError: false,
+            admission: admission
         )
     }
 
-    func getSparkMore(cardId: String, cursor: String? = nil, limit: Int = 20) -> AnyPublisher<NetworkResponse<SparkMoreResponse>, NetworkError> {
+    func getSparkMore(cardId: String, cursor: String? = nil, limit: Int = 20, admission: (@MainActor @Sendable () -> Bool)? = nil) -> AnyPublisher<NetworkResponse<SparkMoreResponse>, NetworkError> {
         var parameters: Parameters = [
             "limit": limit
         ]
@@ -931,17 +953,19 @@ extension NetworkManager {
             parameters: parameters,
             encoding: URLEncoding.default,
             responseType: NetworkResponse<SparkMoreResponse>.self,
-            presentsError: false
+            presentsError: false,
+            admission: admission
         )
     }
 
-    func getSparkActivityResults(activityId: String) -> AnyPublisher<NetworkResponse<SparkActivityResultsResponse>, NetworkError> {
+    func getSparkActivityResults(activityId: String, admission: (@MainActor @Sendable () -> Bool)? = nil) -> AnyPublisher<NetworkResponse<SparkActivityResultsResponse>, NetworkError> {
         return self.request(
             endpoint: "/api/v1/spark/activities/\(activityId)/results",
             method: .get,
             encoding: URLEncoding.default,
             responseType: NetworkResponse<SparkActivityResultsResponse>.self,
-            presentsError: false
+            presentsError: false,
+            admission: admission
         )
     }
 

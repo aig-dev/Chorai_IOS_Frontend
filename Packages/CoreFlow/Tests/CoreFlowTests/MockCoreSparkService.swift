@@ -6,6 +6,7 @@ final class MockCoreSparkService: CoreSparkServing {
     struct TriggerCall: Equatable {
         let sourceAssetID: String
         let parentActivityID: String?
+        let requestKey: UUID
     }
 
     struct MoreCall: Equatable {
@@ -84,12 +85,14 @@ final class MockCoreSparkService: CoreSparkServing {
 
     func trigger(
         sourceAssetID: String,
-        parentActivityID: String?
+        parentActivityID: String?,
+        requestKey: UUID
     ) -> AnyPublisher<SparkActivityPage, CoreSparkError> {
         triggerCalls.append(
             TriggerCall(
                 sourceAssetID: sourceAssetID,
-                parentActivityID: parentActivityID
+                parentActivityID: parentActivityID,
+                requestKey: requestKey
             )
         )
         return dequeue(&triggerSubjects).eraseToAnyPublisher()

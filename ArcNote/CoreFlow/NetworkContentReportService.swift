@@ -91,7 +91,7 @@ struct NetworkContentReportService: ContentReportServing, Sendable {
         switch networkError {
         case .decodingError:
             return .invalidResponse(code: "report_decoding")
-        case .api(_, let code, _):
+        case .api(_, let code, _, _):
             return .transport(code: code?.lowercased() ?? "report_api")
         case .unauthorized:
             return .transport(code: "report_unauthorized")

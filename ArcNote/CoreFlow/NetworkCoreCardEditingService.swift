@@ -236,7 +236,7 @@ struct NetworkCoreCardEditingService: Sendable {
             return .transport(code: "card_editing_unknown")
         }
         switch networkError {
-        case .api(_, let code, _):
+        case .api(_, let code, _, _):
             return .transport(code: code?.lowercased() ?? "card_editing_api")
         case .unauthorized:
             return .transport(code: "card_editing_unauthorized")

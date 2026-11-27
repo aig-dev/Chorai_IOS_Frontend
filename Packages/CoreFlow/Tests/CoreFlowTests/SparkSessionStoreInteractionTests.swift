@@ -396,169 +396,103 @@ final class SparkSessionStoreInteractionTests: XCTestCase {
         XCTAssertEqual(harness.service.moreCalls.count, 2)
     }
 
-    func testAmbiguousTriggerReconcilesHistoryWithoutSecondPost() async {
+    func testAmbiguousTriggerRecoversOriginalRequestOnExplicitRetry() async {
         let harness = makeHarness()
-        let cardSubject = harness.service.enqueueCard()
-        let triggerSubject = harness.service.enqueueTrigger()
-        let historySubject = harness.service.enqueueHistory()
-        let replaySubject = harness.service.enqueueActivityResults()
-        let replayCardSubject = harness.service.enqueueCard()
-
+        let source = harness.service.enqueueCard()
+        let first = harness.service.enqueueTrigger()
         harness.store.start()
-        cardSubject.send(card("ast_root"))
-        cardSubject.send(completion: .finished)
+        source.send(card("ast_root")); source.send(completion: .finished)
         await settle()
-        triggerSubject.send(completion: .failure(.timeout))
+        first.send(completion: .failure(.timeout))
         await settle()
-
-        XCTAssertEqual(harness.store.phase, .reconciling)
-        XCTAssertEqual(harness.service.historyCalls.count, 1)
-        historySubject.send([
-            SparkHistoryEntry(
-                activityID: "act_recovered",
-                parentActivityID: nil,
-                sourceAssetID: "ast_root",
-                rootActivityID: "act_recovered",
-                chainDepth: 0,
-                createdAt: Date(timeIntervalSince1970: 1_001)
-            )
-        ])
-        historySubject.send(completion: .finished)
-        await settle()
-        replaySubject.send(
-            page(
-                activity: "act_recovered",
-                parent: nil,
-                root: "act_recovered",
-                depth: 0,
-                source: "ast_root",
-                resultCount: 2
-            )
-        )
-        replaySubject.send(completion: .finished)
-        await settle()
-        replayCardSubject.send(card("ast_root"))
-        replayCardSubject.send(completion: .finished)
-        await settle()
-
         XCTAssertEqual(harness.service.triggerCalls.count, 1)
+        XCTAssertTrue(harness.service.historyCalls.isEmpty)
+        XCTAssertNotNil(harness.persistence.lastSaved?.pendingTrigger)
+        let retry = harness.service.enqueueTrigger()
+        harness.store.retryTrigger()
+        XCTAssertEqual(harness.service.triggerCalls.first, harness.service.triggerCalls.last)
+        retry.send(page(activity: "act_recovered", parent: nil, root: "act_recovered", depth: 0, source: "ast_root", resultCount: 2))
+        retry.send(completion: .finished)
+        await settle()
         XCTAssertEqual(harness.store.activeActivityID, "act_recovered")
         XCTAssertEqual(harness.store.phase, .loaded)
         XCTAssertNil(harness.persistence.lastSaved?.pendingTrigger)
     }
 
-    func testNoHistoryMatchRequiresExplicitRetryBeforeSecondPost() async {
+    func testOfflineFailureRequiresExplicitSameRequestRetry() async {
         let harness = makeHarness()
-        let cardSubject = harness.service.enqueueCard()
-        let triggerSubject = harness.service.enqueueTrigger()
-        let historySubject = harness.service.enqueueHistory()
-
+        let source = harness.service.enqueueCard()
+        let trigger = harness.service.enqueueTrigger()
         harness.store.start()
-        cardSubject.send(card("ast_root"))
-        cardSubject.send(completion: .finished)
+        source.send(card("ast_root")); source.send(completion: .finished)
         await settle()
-        triggerSubject.send(completion: .failure(.offline))
+        trigger.send(completion: .failure(.offline))
         await settle()
-        historySubject.send([])
-        historySubject.send(completion: .finished)
-        await settle()
-
         XCTAssertEqual(harness.service.triggerCalls.count, 1)
-        XCTAssertEqual(harness.store.phase, .failed("Couldn't confirm this Spark."))
         XCTAssertFalse(harness.store.isInteractionLocked)
-
+        XCTAssertEqual(harness.store.phase, .failed("Couldn't confirm this Spark."))
         _ = harness.service.enqueueTrigger()
         harness.store.retryTrigger()
-
         XCTAssertEqual(harness.service.triggerCalls.count, 2)
+        XCTAssertEqual(harness.service.triggerCalls.first, harness.service.triggerCalls.last)
     }
 
-    func testHistoryCheckFailureRetriesHistoryInsteadOfPostingAgain() async {
+    func testRepeatedUnknownFailuresKeepOriginalRequest() async {
         let harness = makeHarness()
-        let cardSubject = harness.service.enqueueCard()
-        let triggerSubject = harness.service.enqueueTrigger()
-        let firstHistory = harness.service.enqueueHistory()
-
+        let source = harness.service.enqueueCard()
+        let first = harness.service.enqueueTrigger()
         harness.store.start()
-        cardSubject.send(card("ast_root"))
-        cardSubject.send(completion: .finished)
+        source.send(card("ast_root")); source.send(completion: .finished)
         await settle()
-        triggerSubject.send(completion: .failure(.timeout))
+        first.send(completion: .failure(.timeout))
         await settle()
-        firstHistory.send(completion: .failure(.offline))
-        await settle()
-
-        XCTAssertEqual(harness.service.triggerCalls.count, 1)
-        XCTAssertEqual(harness.service.historyCalls.count, 1)
-        XCTAssertNotNil(harness.persistence.lastSaved?.pendingTrigger)
-        XCTAssertEqual(harness.store.phase, .failed("Couldn't check this Spark."))
-
-        _ = harness.service.enqueueHistory()
+        let second = harness.service.enqueueTrigger()
         harness.store.retryTrigger()
-
-        XCTAssertEqual(harness.service.triggerCalls.count, 1)
-        XCTAssertEqual(harness.service.historyCalls.count, 2)
-        XCTAssertEqual(harness.store.phase, .reconciling)
+        second.send(completion: .failure(.decoding))
+        await settle()
+        XCTAssertNotNil(harness.persistence.lastSaved?.pendingTrigger)
+        XCTAssertEqual(harness.service.triggerCalls.first, harness.service.triggerCalls.last)
+        XCTAssertTrue(harness.service.historyCalls.isEmpty)
     }
 
-    func testPersistedPendingTriggerReconcilesOnStartWithoutPosting() async {
+    func testPersistedPendingTriggerResumesOriginalKeyWithoutHistoryGuess() async {
         let harness = makeHarness()
-        harness.persistence.seed(
-            SparkSessionSnapshot(
-                actorID: "act_user",
-                rootSourceAssetID: "ast_root",
-                nodes: [],
-                activeActivityID: nil,
-                pendingTrigger: PendingSparkTrigger(
-                    sourceAssetID: "ast_root",
-                    sourcePreview: "Root",
-                    parentActivityID: nil,
-                    startedAt: Date(timeIntervalSince1970: 1_000),
-                    priorActivityID: nil,
-                    priorVisibleIndex: 0
-                ),
-                didShowUpwardCue: false
-            )
-        )
-        let historySubject = harness.service.enqueueHistory()
-        let replaySubject = harness.service.enqueueActivityResults()
-        let sourceSubject = harness.service.enqueueCard()
-
+        let key = UUID()
+        harness.persistence.seed(SparkSessionSnapshot(actorID: "act_user", rootSourceAssetID: "ast_root",
+            nodes: [], activeActivityID: nil,
+            pendingTrigger: PendingSparkTrigger(requestKey: key, sourceAssetID: "ast_root", sourcePreview: "Root",
+                parentActivityID: nil, startedAt: Date(timeIntervalSince1970: 1_000), priorActivityID: nil, priorVisibleIndex: 0),
+            didShowUpwardCue: false))
+        let retry = harness.service.enqueueTrigger()
         harness.store.start()
-
-        XCTAssertTrue(harness.service.triggerCalls.isEmpty)
-        XCTAssertEqual(harness.service.historyCalls.count, 1)
-        historySubject.send([
-            SparkHistoryEntry(
-                activityID: "act_recovered",
-                parentActivityID: nil,
-                sourceAssetID: "ast_root",
-                rootActivityID: "act_recovered",
-                chainDepth: 0,
-                createdAt: Date(timeIntervalSince1970: 1_001)
-            )
-        ])
-        historySubject.send(completion: .finished)
+        XCTAssertEqual(harness.service.triggerCalls.first?.requestKey, key)
+        XCTAssertTrue(harness.service.historyCalls.isEmpty)
+        XCTAssertTrue(harness.service.requestedCardIDs.isEmpty)
+        retry.send(page(activity: "act_recovered", parent: nil, root: "act_recovered", depth: 0, source: "ast_root", resultCount: 2))
+        retry.send(completion: .finished)
         await settle()
-        replaySubject.send(
-            page(
-                activity: "act_recovered",
-                parent: nil,
-                root: "act_recovered",
-                depth: 0,
-                source: "ast_root",
-                resultCount: 2
-            )
-        )
-        replaySubject.send(completion: .finished)
-        await settle()
-        sourceSubject.send(card("ast_root"))
-        sourceSubject.send(completion: .finished)
-        await settle()
-
-        XCTAssertTrue(harness.service.triggerCalls.isEmpty)
         XCTAssertEqual(harness.store.activeActivityID, "act_recovered")
         XCTAssertEqual(harness.store.phase, .loaded)
+    }
+
+    func testBrowsingAndLatePaginationKeepPendingChildRecoveryAvailable() async {
+        let harness = makeHarness()
+        await loadRoot(harness, resultCount: 3)
+        let child = harness.service.enqueueTrigger()
+        harness.store.sparkCurrentDeeper()
+        child.send(completion: .failure(.timeout)); await settle()
+        let key = harness.persistence.lastSaved?.pendingTrigger?.requestKey
+        let more = harness.service.enqueueMore()
+        harness.store.advance()
+        if case .failed = harness.store.phase {} else { XCTFail("Next hid unresolved Spark recovery") }
+        harness.store.previous()
+        if case .failed = harness.store.phase {} else { XCTFail("Previous hid unresolved Spark recovery") }
+        more.send(SparkMorePage(results: [], nextCursor: nil, round: 1, sourceAssetID: "ast_root"))
+        more.send(completion: .finished); await settle()
+        if case .failed = harness.store.phase {} else { XCTFail("Late pagination hid unresolved Spark recovery") }
+        XCTAssertEqual(harness.persistence.lastSaved?.pendingTrigger?.requestKey, key)
+        _ = harness.service.enqueueTrigger(); harness.store.retryTrigger()
+        XCTAssertEqual(harness.service.triggerCalls.last?.requestKey, key)
     }
 
     private typealias Harness = (

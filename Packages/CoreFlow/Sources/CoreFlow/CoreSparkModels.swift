@@ -121,6 +121,7 @@ public enum CoreSparkError: Error, Equatable, Sendable {
     case maximumDepth
     case retrievalUnavailable
     case resultsUnavailable(activityID: String, rootActivityID: String, chainDepth: Int)
+    case executionOutcome(SparkExecutionOutcome)
     case offline
     case timeout
     case decoding
@@ -174,6 +175,9 @@ public struct SparkChainNode: Codable, Equatable, Identifiable, Sendable {
 }
 
 public struct PendingSparkTrigger: Codable, Equatable, Sendable {
+    public let requestKey: UUID
+    public var attemptActivityID: String?
+    public var committedActivityID: String?
     public let sourceAssetID: String
     public let sourcePreview: String
     public let parentActivityID: String?
@@ -182,6 +186,9 @@ public struct PendingSparkTrigger: Codable, Equatable, Sendable {
     public let priorVisibleIndex: Int
 
     public init(
+        requestKey: UUID,
+        attemptActivityID: String? = nil,
+        committedActivityID: String? = nil,
         sourceAssetID: String,
         sourcePreview: String,
         parentActivityID: String?,
@@ -189,6 +196,9 @@ public struct PendingSparkTrigger: Codable, Equatable, Sendable {
         priorActivityID: String?,
         priorVisibleIndex: Int
     ) {
+        self.requestKey = requestKey
+        self.attemptActivityID = attemptActivityID
+        self.committedActivityID = committedActivityID
         self.sourceAssetID = sourceAssetID
         self.sourcePreview = sourcePreview
         self.parentActivityID = parentActivityID

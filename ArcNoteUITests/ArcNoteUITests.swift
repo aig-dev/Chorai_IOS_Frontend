@@ -8193,8 +8193,17 @@ final class ArcNoteUITests: XCTestCase {
     }
 
     func testSparkAcknowledgedHydrationFailureRetriesSameActivityAfterRelaunch() throws {
+        try assertSparkRecoveryAfterRelaunch(unknownOutcome: false)
+    }
+
+    func testSparkUnknownExecutionRestoresSameActivityAfterRelaunch() throws {
+        try assertSparkRecoveryAfterRelaunch(unknownOutcome: true)
+    }
+
+    private func assertSparkRecoveryAfterRelaunch(unknownOutcome: Bool) throws {
         let environment = ProcessInfo.processInfo.environment
-        guard environment["CHORAI_UI_TEST_SPARK_HYDRATION_RECOVERY"] == "1",
+        let acceptanceFlag = unknownOutcome ? "CHORAI_UI_TEST_SPARK_UNKNOWN_RECOVERY" : "CHORAI_UI_TEST_SPARK_HYDRATION_RECOVERY"
+        guard environment[acceptanceFlag] == "1",
               let cardID = environment["CHORAI_UI_TEST_SPARK_CARD_ID"], !cardID.isEmpty,
               let token = environment["CHORAI_UI_TEST_AUTH_TOKEN"], !token.isEmpty,
               let actorID = environment["CHORAI_UI_TEST_ACTOR_ID"], !actorID.isEmpty,
@@ -8206,12 +8215,18 @@ final class ArcNoteUITests: XCTestCase {
             email: environment["CHORAI_UI_TEST_EMAIL"] ?? "rc-spark@example.invalid",
             username: environment["CHORAI_UI_TEST_USERNAME"] ?? "rc-spark"
         )
+        let existingScope = environment["CHORAI_UI_TEST_SPARK_EXISTING_SESSION_SCOPE"].flatMap { $0.isEmpty ? nil : $0 }
+        let existingActivity = environment["CHORAI_UI_TEST_SPARK_EXISTING_ACTIVITY_ID"].flatMap { $0.isEmpty ? nil : $0 }
+        XCTAssertEqual(existingScope == nil, existingActivity == nil, "Resuming requires both the original slot and authoritative expected activity")
+        if existingScope != nil { XCTAssertTrue(unknownOutcome) }
         seedAppSession(session)
         app.launchEnvironment["CHORAI_UI_TEST_DETAIL_CARD_ID"] = cardID
-        app.launchEnvironment["CHORAI_UI_TEST_SPARK_SESSION_SCOPE"] = sparkSessionScope
+        app.launchEnvironment["CHORAI_UI_TEST_SPARK_SESSION_SCOPE"] = existingScope ?? sparkSessionScope
         app.launchEnvironment["CHORAI_UI_TEST"] = "1"
         app.launchEnvironment["CHORAI_API_BASE_URL"] = apiBaseURL
         func openFixtureSpark() {
+            waitFor("tab.flow", timeout: 30)
+            tap("tab.flow")
             waitFor("screen.flow.content", timeout: 30)
             tap("explore.card-detail")
             waitFor("screen.detail.loaded", timeout: 30)
@@ -8238,21 +8253,39 @@ final class ArcNoteUITests: XCTestCase {
         waitFor("tab.flow", timeout: 30)
         openFixtureSpark()
 
-        waitFor("screen.spark.error", timeout: 90)
+        var acknowledgedActivityID: String?
+        if existingScope == nil {
+            waitFor("screen.spark.error", timeout: 90)
+            if unknownOutcome {
+                XCTAssertFalse(app.descendants(matching: .any)["spark.activity.id"].exists,
+                    "An unknown reply cannot manufacture an acknowledged activity")
+            } else {
+                acknowledgedActivityID = sparkAnchorValue("spark.activity.id")
+                XCTAssertFalse(acknowledgedActivityID?.isEmpty ?? true)
+            }
+            XCTAssertEqual(sparkAnchorValue("spark.source.card-id"), cardID)
+            captureVisual(unknownOutcome ? "spark-unknown-reply-failed" : "spark-ack-result-read-failed")
+            let retry = app.buttons["Retry Spark"]
+            XCTAssertTrue(retry.waitForExistence(timeout: 10))
+            if unknownOutcome {
+                // Reopen while only the stable request identity is known.
+                app.terminate()
+                app.launch()
+                openFixtureSpark()
+            } else {
+                retry.tap()
+            }
+        }
+        waitFor("screen.spark.loaded", timeout: 90)
         let activityID = sparkAnchorValue("spark.activity.id")
         XCTAssertFalse(activityID.isEmpty)
-        XCTAssertEqual(sparkAnchorValue("spark.source.card-id"), cardID)
-        captureVisual("spark-ack-result-read-failed")
-        let retry = app.buttons["Retry Spark"]
-        XCTAssertTrue(retry.waitForExistence(timeout: 10))
-        retry.tap()
-        waitFor("screen.spark.loaded", timeout: 90)
-        XCTAssertEqual(sparkAnchorValue("spark.activity.id"), activityID)
+        if let acknowledgedActivityID { XCTAssertEqual(activityID, acknowledgedActivityID) }
+        if let existingActivity { XCTAssertEqual(activityID, existingActivity) }
         let visibleID = sparkAnchorValue("spark.visible-card.id")
         XCTAssertFalse(visibleID.isEmpty)
         let historyCount = try fetchSparkHistoryTotal(cardID: cardID, token: session.token)
         XCTAssertEqual(historyCount, 1)
-        captureVisual("spark-ack-original-results-recovered")
+        captureVisual(unknownOutcome ? "spark-unknown-original-results-recovered" : "spark-ack-original-results-recovered")
 
         app.terminate()
         app.launch()
@@ -8261,7 +8294,7 @@ final class ArcNoteUITests: XCTestCase {
         waitFor("spark.card.\(visibleID)", timeout: 30)
         XCTAssertEqual(sparkAnchorValue("spark.activity.id"), activityID)
         XCTAssertEqual(try fetchSparkHistoryTotal(cardID: cardID, token: session.token), historyCount)
-        captureVisual("spark-ack-original-activity-after-relaunch")
+        captureVisual(unknownOutcome ? "spark-unknown-original-activity-after-relaunch" : "spark-ack-original-activity-after-relaunch")
     }
 
     func testSparkRelaunchRehydratesActivityWithoutNewTrigger() throws {

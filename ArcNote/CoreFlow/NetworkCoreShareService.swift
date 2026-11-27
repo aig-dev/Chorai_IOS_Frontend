@@ -144,7 +144,7 @@ struct NetworkCoreShareService: CoreShareServing, Sendable {
         switch networkError {
         case .decodingError:
             return .invalidResponse(code: "share_decoding")
-        case .api(_, let code, _):
+        case .api(_, let code, _, _):
             return .transport(code: code?.lowercased() ?? "share_api")
         case .unauthorized:
             return .transport(code: "share_unauthorized")

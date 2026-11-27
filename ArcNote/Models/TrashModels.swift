@@ -162,7 +162,7 @@ class TrashManager: ObservableObject {
                 do { receipt = try await NetworkManager.shared.permanentlyDeleteNote(attempt) }
                 catch let error as NetworkError {
                     guard AuthManager.shared.sessionGeneration == generation else { throw CancellationError() }
-                    if case .api(let status, let reason, _) = error, let reason {
+                    if case .api(let status, let reason, _, _) = error, let reason {
                         let removed = try await library.rejectPurge(attempt, status: status, reason: reason)
                         guard AuthManager.shared.sessionGeneration == generation else { throw CancellationError() }
                         if removed { completion(.success(true)); return }

@@ -52,8 +52,9 @@ struct SparkContinuationView: View {
                 rootSourceAssetID: cardID,
                 service: NetworkCoreSparkService(),
                 persistence: UserDefaultsSparkSessionStore(
-                    keyPrefix: keyPrefix
-                )
+                    keyPrefix: keyPrefix + "." + APIConfiguration.baseURL
+                ),
+                isCurrentSession: NetworkManager.shared.captureSessionCheck()
             )
         )
     }
@@ -1431,7 +1432,7 @@ private final class SparkFidelityService: CoreSparkServing {
         return value(card)
     }
 
-    func trigger(sourceAssetID: String, parentActivityID: String?) -> AnyPublisher<SparkActivityPage, CoreSparkError> {
+    func trigger(sourceAssetID: String, parentActivityID: String?, requestKey: UUID) -> AnyPublisher<SparkActivityPage, CoreSparkError> {
         guard cards[sourceAssetID] != nil else { return failure(.notFound) }
         if let parentActivityID, activities[parentActivityID] == nil { return failure(.notFound) }
         let parent = parentActivityID.flatMap { activities[$0] }

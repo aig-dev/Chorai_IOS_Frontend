@@ -5,13 +5,15 @@ import Foundation
 @MainActor
 struct NetworkCoreSparkService: @MainActor CoreSparkServing {
     private let network: NetworkManager
+    private let isCurrentSession: @MainActor @Sendable () -> Bool
 
     init(network: NetworkManager = .shared) {
         self.network = network
+        self.isCurrentSession = network.captureSessionCheck()
     }
 
     func card(assetID: String) -> AnyPublisher<FlowCard, CoreSparkError> {
-        network.getSparkCard(id: assetID)
+        network.getSparkCard(id: assetID, admission: isCurrentSession)
             .tryMap { response in
                 guard response.success, let card = response.data else {
                     throw CoreSparkError.server
@@ -24,7 +26,8 @@ struct NetworkCoreSparkService: @MainActor CoreSparkServing {
 
     func trigger(
         sourceAssetID: String,
-        parentActivityID: String?
+        parentActivityID: String?,
+        requestKey: UUID
     ) -> AnyPublisher<SparkActivityPage, CoreSparkError> {
 #if DEBUG
         if parentActivityID == nil,
@@ -61,19 +64,25 @@ struct NetworkCoreSparkService: @MainActor CoreSparkServing {
 #endif
         let publisher = network.triggerSpark(
             cardId: sourceAssetID,
-            parentActivityId: parentActivityID
+            parentActivityId: parentActivityID,
+            requestKey: requestKey,
+            admission: isCurrentSession
         )
         .mapError(Self.mapNetworkError)
         .flatMap { response -> AnyPublisher<SparkActivityPage, CoreSparkError> in
-            guard response.success, let run = response.data else {
+            guard response.success, let run = response.data,
+                  run.activityId.range(of: "^[A-Za-z0-9_-]{1,64}$", options: .regularExpression) != nil,
+                  run.rootActivityId.range(of: "^[A-Za-z0-9_-]{1,64}$", options: .regularExpression) != nil,
+                  parentActivityID == nil ? (run.chainDepth == 0 && run.rootActivityId == run.activityId) : run.chainDepth > 0 else {
                 return Fail(error: .server).eraseToAnyPublisher()
             }
 
             return hydrate(groups: run.groups)
                 .mapError { _ in
+                    if !isCurrentSession() { return CoreSparkError.unauthorized }
                     // The paid execution has already returned its canonical identity.
                     // A presentation read failure must retain it for GET-only recovery.
-                    CoreSparkError.resultsUnavailable(
+                    return CoreSparkError.resultsUnavailable(
                         activityID: run.activityId,
                         rootActivityID: run.rootActivityId,
                         chainDepth: run.chainDepth
@@ -112,7 +121,7 @@ struct NetworkCoreSparkService: @MainActor CoreSparkServing {
     func activityResults(
         activityID: String
     ) -> AnyPublisher<SparkActivityPage, CoreSparkError> {
-        network.getSparkActivityResults(activityId: activityID)
+        network.getSparkActivityResults(activityId: activityID, admission: isCurrentSession)
             .mapError(Self.mapNetworkError)
             .flatMap { response -> AnyPublisher<SparkActivityPage, CoreSparkError> in
                 guard response.success, let result = response.data else {
@@ -140,7 +149,7 @@ struct NetworkCoreSparkService: @MainActor CoreSparkServing {
         sourceAssetID: String,
         limit: Int
     ) -> AnyPublisher<[SparkHistoryEntry], CoreSparkError> {
-        network.getSparkHistory(cardId: sourceAssetID, limit: limit)
+        network.getSparkHistory(cardId: sourceAssetID, limit: limit, admission: isCurrentSession)
             .tryMap { response in
                 guard response.success, let history = response.data else {
                     throw CoreSparkError.server
@@ -169,7 +178,7 @@ struct NetworkCoreSparkService: @MainActor CoreSparkServing {
         cursor: String?,
         limit: Int
     ) -> AnyPublisher<SparkMorePage, CoreSparkError> {
-        network.getSparkMore(cardId: sourceAssetID, cursor: cursor, limit: limit)
+        network.getSparkMore(cardId: sourceAssetID, cursor: cursor, limit: limit, admission: isCurrentSession)
             .mapError(Self.mapNetworkError)
             .flatMap { response -> AnyPublisher<SparkMorePage, CoreSparkError> in
                 guard response.success, let page = response.data else {
@@ -194,6 +203,7 @@ struct NetworkCoreSparkService: @MainActor CoreSparkServing {
         assetID: String,
         sparkActivityID: String
     ) -> AnyPublisher<Void, CoreSparkError> {
+        guard isCurrentSession() else { return Fail(error: .unauthorized).eraseToAnyPublisher() }
 #if DEBUG
         if ProcessInfo.processInfo.environment[
             "CHORAI_UI_TEST_SPARK_FAIL_FAVORITE"
@@ -216,7 +226,8 @@ struct NetworkCoreSparkService: @MainActor CoreSparkServing {
     }
 
     func unfavorite(assetID: String) -> AnyPublisher<Void, CoreSparkError> {
-        network.unfavoriteCard(cardId: assetID, presentsError: false)
+        guard isCurrentSession() else { return Fail(error: .unauthorized).eraseToAnyPublisher() }
+        return network.unfavoriteCard(cardId: assetID, presentsError: false)
             .tryMap { response in
                 guard response.success else {
                     throw CoreSparkError.server
@@ -293,7 +304,7 @@ struct NetworkCoreSparkService: @MainActor CoreSparkServing {
         }
 
         return Deferred {
-            return network.getSparkCard(id: candidate.item.assetId)
+            return network.getSparkCard(id: candidate.item.assetId, admission: isCurrentSession)
                 .tryMap { response -> RelatedCard in
                     guard response.success, let card = response.data else {
                         throw CoreSparkError.server
@@ -377,7 +388,8 @@ struct NetworkCoreSparkService: @MainActor CoreSparkServing {
 
     nonisolated private static func mapNetworkError(_ error: NetworkError) -> CoreSparkError {
         switch error {
-        case .api(let statusCode, let code, let message):
+        case .api(let statusCode, let code, let message, let outcome):
+            if [409, 503].contains(statusCode), let outcome { return .executionOutcome(outcome) }
 #if DEBUG
             if let message {
                 print("Spark API error [\(code ?? "UNKNOWN")]: \(message)")

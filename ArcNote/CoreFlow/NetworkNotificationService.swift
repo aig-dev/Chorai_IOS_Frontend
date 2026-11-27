@@ -217,7 +217,7 @@ struct NetworkNotificationService: CoreNotificationServing, Sendable {
             return .forbidden
         case .notFound:
             return .notFound
-        case .api(let statusCode, let code, _):
+        case .api(let statusCode, let code, _, _):
             switch statusCode {
             case 401: return .unauthorized
             case 403: return .forbidden

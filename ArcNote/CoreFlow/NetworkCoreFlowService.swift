@@ -139,7 +139,7 @@ private extension NetworkError {
             return .offline
         case .serverError:
             return .server
-        case .api(let statusCode, let code, _):
+        case .api(let statusCode, let code, _, _):
             if statusCode == 401 || code == "UNAUTHORIZED" {
                 return .unauthorized
             }

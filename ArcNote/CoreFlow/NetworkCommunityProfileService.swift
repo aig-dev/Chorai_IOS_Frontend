@@ -177,7 +177,7 @@ private extension NetworkError {
             .forbidden
         case .notFound:
             .notFound
-        case .api(let status, let code, _):
+        case .api(let status, let code, _, _):
             switch status {
             case 403: .forbidden
             case 404: .notFound

@@ -4630,7 +4630,7 @@ private final class APIMigrationSmokeRunner {
             _ = try await expectTrashList(name: "trash-list-after-restore")
             let sparkCardId = defaults.string(forKey: "api_migration_smoke_spark_asset_id") ?? "ast_cs_art_88ba36bc8dea"
             _ = try await expect("spark") {
-                NetworkManager.shared.generateRelatedCards(cardId: sparkCardId)
+                NetworkManager.shared.generateRelatedCards(cardId: sparkCardId, requestKey: UUID())
             }
             let chatParticipantId = defaults.string(forKey: "api_migration_smoke_chat_participant") ?? "act_ag_art"
             let conversation = try await expect("chat-create-conversation") {

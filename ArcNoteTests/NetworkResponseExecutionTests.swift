@@ -7,7 +7,161 @@ import os
 
 @MainActor
 final class NetworkResponseExecutionTests: XCTestCase {
+    func testCommittedSparkReplyUnavailableRetriesExactActivity() async throws {
+        try await assertCommittedSparkRetry(status: 409, reason: "spark_committed_reply_unavailable", code: "CONFLICT")
+    }
+
+    func testCommittedSparkSettlementPendingRetriesExactActivity() async throws {
+        try await assertCommittedSparkRetry(status: 503, reason: "spark_committed_settlement_pending", code: "SERVICE_UNAVAILABLE")
+    }
+
+    private func assertCommittedSparkRetry(status: Int, reason: String, code: String) async throws {
+        let starts = (0..<3).map { expectation(description: "Spark outcome request \($0)") }
+        let next = OSAllocatedUnfairLock(initialState: 0)
+        let fixture = HTTPFixture(onStart: {
+            let index = next.withLock { value in defer { value += 1 }; return value }
+            if index < starts.count { starts[index].fulfill() }
+        })
+        let network = NetworkManager(baseURL: fixture.baseURL, session: fixture.session)
+        network.setAuthToken("synthetic-spark-token")
+        let suite = "spark-outcome-" + UUID().uuidString
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = SparkSessionStore(actorID: "synthetic-actor", rootSourceAssetID: "card",
+            service: NetworkCoreSparkService(network: network),
+            persistence: UserDefaultsSparkSessionStore(defaults: defaults))
+        let failed = expectation(description: "Committed response unavailable")
+        let phase = store.$phase.filter { if case .failed = $0 { return true }; return false }
+            .prefix(1).sink { _ in failed.fulfill() }
+        defer { phase.cancel() }
+        store.start()
+        await fulfillment(of: [starts[0]], timeout: 4)
+        guard fixture.count == 1 else { return XCTFail("Missing source read") }
+        fixture.respond(HTTPFixture.detail)
+        await fulfillment(of: [starts[1]], timeout: 4)
+        guard fixture.count == 2 else { return XCTFail("Missing Spark execution") }
+        XCTAssertEqual(fixture.request(at: 1).httpMethod, "POST")
+        let body: [String: Any] = ["success": false, "error": ["code": code, "message": reason,
+            "context": ["reason": reason, "activity_id": "act_original"]]]
+        fixture.respond(String(decoding: try JSONSerialization.data(withJSONObject: body), as: UTF8.self), status: status, at: 1)
+        await fulfillment(of: [failed], timeout: 4)
+        store.retryTrigger()
+        await fulfillment(of: [starts[2]], timeout: 4)
+        guard fixture.count == 3 else { return XCTFail("Missing outcome recovery") }
+        XCTAssertEqual(fixture.request(at: 2).httpMethod, "GET")
+        XCTAssertEqual(fixture.request(at: 2).url?.path, "/api/v1/spark/activities/act_original/results")
+        XCTAssertEqual((0..<fixture.count).filter { fixture.request(at: $0).httpMethod == "POST" }.count, 1)
+        fixture.respond(#"{"success":false,"error":{"code":"SERVICE_UNAVAILABLE","message":"Still unavailable"}}"#, status: 503, at: 2)
+    }
+
+    func testUnknownSparkOutcomesPreserveChildWireIdentityAcrossRestart() async throws {
+        for outcome in ["lost", "malformed", "spark_commit_unknown", "spark_reservation_unknown", "spark_refund_pending"] {
+            let starts = (0..<2).map { expectation(description: "unknown Spark \(outcome) request \($0)") }
+            let next = OSAllocatedUnfairLock(initialState: 0)
+            let fixture = HTTPFixture(onStart: {
+                let index = next.withLock { value in defer { value += 1 }; return value }
+                if index < starts.count { starts[index].fulfill() }
+            })
+            let network = NetworkManager(baseURL: fixture.baseURL, session: fixture.session)
+            network.setAuthToken("synthetic-spark-token")
+            let suite = "spark-unknown-" + UUID().uuidString
+            let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+            defer { defaults.removePersistentDomain(forName: suite) }
+            let persistence = UserDefaultsSparkSessionStore(defaults: defaults)
+            let key = UUID()
+            try persistence.save(.init(actorID: "synthetic-actor", rootSourceAssetID: "root",
+                nodes: [.init(sourceAssetID: "root", sourcePreview: "Root", activityID: "act_parent", parentActivityID: nil,
+                    rootActivityID: "act_parent", chainDepth: 0, visibleIndex: 0)], activeActivityID: "act_parent",
+                pendingTrigger: .init(requestKey: key, sourceAssetID: "card", sourcePreview: "Child", parentActivityID: "act_parent",
+                    startedAt: Date(), priorActivityID: "act_parent", priorVisibleIndex: 0), didShowUpwardCue: false))
+            let first = SparkSessionStore(actorID: "synthetic-actor", rootSourceAssetID: "root",
+                service: NetworkCoreSparkService(network: network), persistence: persistence)
+            let failed = expectation(description: "unknown result retained")
+            let observer = first.$phase.filter { if case .failed = $0 { return true }; return false }.prefix(1).sink { _ in failed.fulfill() }
+            defer { observer.cancel() }
+            first.start()
+            await fulfillment(of: [starts[0]], timeout: 4)
+            guard fixture.count == 1 else { return XCTFail("Expected original POST") }
+            if outcome == "lost" { fixture.fail() }
+            else if outcome == "malformed" { fixture.respond("{", status: 201) }
+            else {
+                let body: [String: Any] = ["success": false, "error": ["code": "SERVICE_UNAVAILABLE", "message": outcome,
+                    "context": ["reason": outcome, "activity_id": "act_original"]]]
+                fixture.respond(String(decoding: try JSONSerialization.data(withJSONObject: body), as: UTF8.self), status: 503)
+            }
+            await fulfillment(of: [failed], timeout: 4)
+            let retained = try XCTUnwrap(persistence.snapshot(actorID: "synthetic-actor", rootSourceAssetID: "root")?.pendingTrigger)
+            XCTAssertEqual(retained.requestKey, key)
+            XCTAssertNil(retained.committedActivityID)
+            let restarted = SparkSessionStore(actorID: "synthetic-actor", rootSourceAssetID: "root",
+                service: NetworkCoreSparkService(network: network), persistence: persistence)
+            restarted.start()
+            await fulfillment(of: [starts[1]], timeout: 4)
+            guard fixture.count == 2 else { return XCTFail("Expected original operation retry") }
+            let original = fixture.request(), retry = fixture.request(at: 1)
+            XCTAssertEqual(original.httpMethod, "POST"); XCTAssertEqual(retry.httpMethod, "POST")
+            XCTAssertEqual(retry.url, original.url)
+            XCTAssertEqual(original.value(forHTTPHeaderField: "Idempotency-Key"), key.uuidString.lowercased())
+            XCTAssertEqual(retry.value(forHTTPHeaderField: "Idempotency-Key"), original.value(forHTTPHeaderField: "Idempotency-Key"))
+            let originalBytes = try sparkRequestBody(original)
+            XCTAssertEqual(try sparkRequestBody(retry), originalBytes)
+            let body = try XCTUnwrap(JSONSerialization.jsonObject(with: originalBytes) as? [String: String])
+            XCTAssertEqual(body, ["parent_activity_id": "act_parent"])
+            fixture.respond(#"{"success":false,"error":{"code":"SERVICE_UNAVAILABLE","message":"Unavailable"}}"#, status: 503, at: 1)
+        }
+    }
+
+    private func sparkRequestBody(_ request: URLRequest) throws -> Data {
+        if let body = request.httpBody { return body }
+        let stream = try XCTUnwrap(request.httpBodyStream)
+        stream.open(); defer { stream.close() }
+        var data = Data(), buffer = [UInt8](repeating: 0, count: 1024)
+        while stream.hasBytesAvailable {
+            let count = stream.read(&buffer, maxLength: buffer.count)
+            guard count >= 0 else { throw URLError(.cannotDecodeRawData) }
+            if count == 0 { break }
+            data.append(contentsOf: buffer.prefix(count))
+        }
+        return data
+    }
+
+    func testRetiredSparkServiceRejectsLateReceiptAndCannotPostAsReplacementAccount() async throws {
+        let started = expectation(description: "original Spark POST")
+        let fixture = HTTPFixture(onStart: { started.fulfill() })
+        let network = NetworkManager(baseURL: fixture.baseURL, session: fixture.session)
+        network.setAuthToken("synthetic-first-token")
+        let service = NetworkCoreSparkService(network: network)
+        let rejected = expectation(description: "retired late receipt rejected")
+        let request = service.trigger(sourceAssetID: "card", parentActivityID: nil, requestKey: UUID())
+            .sink(receiveCompletion: { completion in
+                guard case .failure(.unauthorized) = completion else { XCTFail("Expected retired session rejection"); rejected.fulfill(); return }
+                rejected.fulfill()
+            }, receiveValue: { _ in XCTFail("Retired Spark receipt was adopted") })
+        defer { request.cancel() }
+        await fulfillment(of: [started], timeout: 4)
+        network.setAuthToken("synthetic-replacement-token")
+        fixture.respond(#"{"success":true,"data":{"activity_id":"act_original","root_activity_id":"act_original","chain_depth":0,"groups":{"related":{"name":"related","items":[]},"angles":{"name":"angles","items":[]},"keywords":{"name":"keywords","items":[]}}}}"#, status: 201)
+        await fulfillment(of: [rejected], timeout: 4)
+        let retryRejected = expectation(description: "old service dispatch rejected")
+        let retry = service.trigger(sourceAssetID: "card", parentActivityID: nil, requestKey: UUID())
+            .sink(receiveCompletion: { completion in
+                guard case .failure(.unauthorized) = completion else { XCTFail("Old service must not dispatch"); retryRejected.fulfill(); return }
+                retryRejected.fulfill()
+            }, receiveValue: { _ in XCTFail("Unexpected value") })
+        defer { retry.cancel() }
+        await fulfillment(of: [retryRejected], timeout: 4)
+        XCTAssertEqual(fixture.count, 1)
+    }
+
     func testAcknowledgedSparkHydrationFailureRetriesOriginalActivityWithoutPosting() async throws {
+        try await assertAcknowledgedSparkHydrationFailure(status: 503)
+    }
+
+    func testAcknowledgedSparkHydrationUnauthorizedRetainsOriginalActivity() async throws {
+        try await assertAcknowledgedSparkHydrationFailure(status: 401)
+    }
+
+    private func assertAcknowledgedSparkHydrationFailure(status: Int) async throws {
         let starts = (0..<4).map { expectation(description: "Spark request \($0)") }
         let next = OSAllocatedUnfairLock(initialState: 0)
         let fixture = HTTPFixture(onStart: {
@@ -42,7 +196,7 @@ final class NetworkResponseExecutionTests: XCTestCase {
         await fulfillment(of: [starts[2]], timeout: 4)
         guard fixture.count == 3 else { return XCTFail("Missing result hydration") }
         XCTAssertEqual(fixture.request(at: 2).url?.path, "/api/cards/result")
-        fixture.respond(#"{"success":false,"error":{"code":"SERVICE_UNAVAILABLE","message":"Result read unavailable"}}"#, status: 503, at: 2)
+        fixture.respond(#"{"success":false,"error":{"code":"SERVICE_UNAVAILABLE","message":"Result read unavailable"}}"#, status: status, at: 2)
         await fulfillment(of: [failed], timeout: 4)
 
         store.retryTrigger()
@@ -425,7 +579,7 @@ final class NetworkResponseExecutionTests: XCTestCase {
                 XCTAssertEqual(key, originalKey)
                 do { _ = try await operation.value; XCTFail("A recovered old unlink cannot acknowledge the replacement") }
                 catch let error as NetworkError where index == 1 {
-                    guard case .api(_, let code, _) = error else { return XCTFail("Expected recovery result") }
+                    guard case .api(_, let code, _, _) = error else { return XCTFail("Expected recovery result") }
                     XCTAssertEqual(code, "link_previous_request_recovered")
                 } catch { if index == 1 { XCTFail("Unexpected recovery result: \(error)") } }
             } else {
@@ -547,7 +701,7 @@ final class NetworkResponseExecutionTests: XCTestCase {
                     switch error {
                     case .decodingError: actual = "decode"
                     case .unauthorized: actual = "unauthorized"
-                    case .api(let code, _, _): actual = "api:\(code)"
+                    case .api(let code, _, _, _): actual = "api:\(code)"
                     default: actual = "unexpected"
                     }
                     XCTAssertEqual(actual, expected)

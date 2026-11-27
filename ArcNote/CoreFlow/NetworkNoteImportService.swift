@@ -563,7 +563,7 @@ struct NetworkNoteImportService: CoreNoteImportServing, Sendable {
             return .requestFailed(code: "network")
         case .decodingError:
             return .contract(code: "decoding")
-        case .api(_, let code, _):
+        case .api(_, let code, _, _):
             return .requestFailed(code: code)
         case .serverError(let status, _):
             return .requestFailed(code: "server_\(status)")

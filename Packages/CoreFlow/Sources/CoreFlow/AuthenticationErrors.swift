@@ -1,12 +1,45 @@
 import Foundation
 
+public struct SparkExecutionOutcome: Codable, Equatable, Sendable {
+    public enum Reason: String, Codable, CaseIterable, Sendable {
+        case committedReplyUnavailable = "spark_committed_reply_unavailable"
+        case committedSettlementPending = "spark_committed_settlement_pending"
+        case commitUnknown = "spark_commit_unknown"
+        case reservationUnknown = "spark_reservation_unknown"
+        case refundPending = "spark_refund_pending"
+    }
+    public let reason: Reason
+    public let activityID: String
+    public var isCommitted: Bool {
+        reason == .committedReplyUnavailable || reason == .committedSettlementPending
+    }
+    public init(reason: Reason, activityID: String) {
+        self.reason = reason
+        self.activityID = activityID
+    }
+    enum CodingKeys: String, CodingKey {
+        case reason
+        case activityID = "activity_id"
+    }
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        reason = try values.decode(Reason.self, forKey: .reason)
+        activityID = try values.decode(String.self, forKey: .activityID)
+        guard activityID.range(of: "^[A-Za-z0-9_-]{1,64}$", options: .regularExpression) != nil else {
+            throw DecodingError.dataCorruptedError(forKey: .activityID, in: values, debugDescription: "Invalid Spark identity")
+        }
+    }
+}
+
 public struct APIErrorPayload: Equatable, Sendable {
     public let code: String?
     public let message: String?
+    public let sparkOutcome: SparkExecutionOutcome?
 
-    public init(code: String?, message: String?) {
+    public init(code: String?, message: String?, sparkOutcome: SparkExecutionOutcome? = nil) {
         self.code = code
         self.message = message
+        self.sparkOutcome = sparkOutcome
     }
 
     public static func decode(
@@ -36,7 +69,7 @@ public struct APIErrorPayload: Equatable, Sendable {
         guard isHTTPFailure || isErrorEnvelope else {
             return nil
         }
-        return APIErrorPayload(code: code, message: message)
+        return APIErrorPayload(code: code, message: message, sparkOutcome: envelope.error?.sparkOutcome)
     }
 
     private static func firstNonEmpty(_ values: String?...) -> String? {
@@ -75,11 +108,13 @@ private struct APIErrorBody: Decodable {
     let code: String?
     let errorCode: String?
     let message: String?
+    let sparkOutcome: SparkExecutionOutcome?
 
     enum CodingKeys: String, CodingKey {
         case code
         case errorCode = "error_code"
         case message
+        case sparkOutcome = "context"
     }
 
     init(from decoder: Decoder) throws {
@@ -87,6 +122,7 @@ private struct APIErrorBody: Decodable {
         code = try? container.decode(String.self, forKey: .code)
         errorCode = try? container.decode(String.self, forKey: .errorCode)
         message = try? container.decode(String.self, forKey: .message)
+        sparkOutcome = try? container.decode(SparkExecutionOutcome.self, forKey: .sparkOutcome)
     }
 }
 

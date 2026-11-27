@@ -26,10 +26,9 @@ final class SparkSessionStoreLifecycleTests: XCTestCase {
         triggerSubject.send(completion: .finished)
         await settle()
 
-        XCTAssertEqual(
-            harness.service.triggerCalls,
-            [.init(sourceAssetID: "ast_root", parentActivityID: nil)]
-        )
+        XCTAssertEqual(harness.service.triggerCalls.count, 1)
+        XCTAssertEqual(harness.service.triggerCalls.first?.sourceAssetID, "ast_root")
+        XCTAssertNil(harness.service.triggerCalls.first?.parentActivityID)
         XCTAssertEqual(harness.store.activeActivityID, "act_root")
         XCTAssertEqual(harness.store.chain.map(\.activityID), ["act_root"])
         XCTAssertEqual(harness.store.results.map(\.bucket), [.angles, .keywords])
@@ -104,10 +103,9 @@ final class SparkSessionStoreLifecycleTests: XCTestCase {
 
         harness.store.sparkCurrentDeeper()
 
-        XCTAssertEqual(
-            harness.service.triggerCalls.last,
-            .init(sourceAssetID: expectedSource.id, parentActivityID: "act_root")
-        )
+        XCTAssertEqual(harness.service.triggerCalls.last?.sourceAssetID, expectedSource.id)
+        XCTAssertEqual(harness.service.triggerCalls.last?.parentActivityID, "act_root")
+        XCTAssertNotEqual(harness.service.triggerCalls.first?.requestKey, harness.service.triggerCalls.last?.requestKey)
         childTrigger.send(
             page(
                 activity: "act_child",
@@ -153,7 +151,7 @@ final class SparkSessionStoreLifecycleTests: XCTestCase {
         XCTAssertEqual(harness.store.chain.map(\.activityID), ["act_root"])
         XCTAssertEqual(harness.store.visibleIndex, 1)
         XCTAssertEqual(harness.store.phase, .failed("Couldn't continue this Spark."))
-        XCTAssertNil(harness.persistence.lastSaved?.pendingTrigger)
+        XCTAssertNotNil(harness.persistence.lastSaved?.pendingTrigger)
     }
 
     func testChildFailureRestoresExactParentAndIndex() async {
@@ -173,7 +171,7 @@ final class SparkSessionStoreLifecycleTests: XCTestCase {
         XCTAssertEqual(harness.store.phase, .failed("Spark is unavailable right now."))
     }
 
-    func testConfirmedRootTriggerFailureRemovesPendingOnlySnapshot() async {
+    func testRootTriggerFailureRetainsPendingIdentity() async {
         let harness = makeHarness()
         let cardSubject = harness.service.enqueueCard()
         let triggerSubject = harness.service.enqueueTrigger()
@@ -185,13 +183,8 @@ final class SparkSessionStoreLifecycleTests: XCTestCase {
         triggerSubject.send(completion: .failure(.retrievalUnavailable))
         await settle()
 
-        XCTAssertNil(
-            harness.persistence.snapshot(
-                actorID: "act_user",
-                rootSourceAssetID: "ast_root"
-            )
-        )
-        XCTAssertEqual(harness.persistence.removals.count, 1)
+        XCTAssertNotNil(harness.persistence.snapshot(actorID: "act_user", rootSourceAssetID: "ast_root")?.pendingTrigger)
+        XCTAssertTrue(harness.persistence.removals.isEmpty)
         XCTAssertEqual(harness.store.phase, .failed("Spark is unavailable right now."))
     }
 
@@ -286,7 +279,7 @@ final class SparkSessionStoreLifecycleTests: XCTestCase {
         XCTAssertEqual(harness.store.phase, .loaded)
     }
 
-    func testMissingRestoredActivityPrunesSnapshotWithoutTriggering() async {
+    func testMissingRestoredActivityRetainsSnapshotWithoutTriggering() async {
         let harness = makeHarness()
         harness.persistence.seed(
             SparkSessionSnapshot(
@@ -315,8 +308,9 @@ final class SparkSessionStoreLifecycleTests: XCTestCase {
         await settle()
 
         XCTAssertTrue(harness.service.triggerCalls.isEmpty)
-        XCTAssertEqual(harness.persistence.removals.count, 1)
-        XCTAssertEqual(harness.store.phase, .failed("This Spark can no longer be restored."))
+        XCTAssertTrue(harness.persistence.removals.isEmpty)
+        XCTAssertEqual(harness.persistence.snapshot(actorID: "act_user", rootSourceAssetID: "ast_root")?.activeActivityID, "act_missing")
+        XCTAssertEqual(harness.store.phase, .failed("Couldn't restore this Spark."))
     }
 
     func testTransientReplayFailureRetriesExactActivity() async {

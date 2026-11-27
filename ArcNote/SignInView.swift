@@ -248,7 +248,7 @@ struct SignInView: View {
                     errorCode: nil
                 )
             )
-        case .api(let statusCode, let errorCode, _):
+        case .api(let statusCode, let errorCode, _, _):
             showAlert(
                 message: AuthenticationErrorPresentation.signInMessage(
                     statusCode: statusCode,
@@ -293,7 +293,7 @@ struct SignInView: View {
     ) {
         let genericMessage = "\(provider) sign-in could not be verified. Please try again."
         switch error {
-        case .api(let statusCode, let errorCode, _):
+        case .api(let statusCode, let errorCode, _, _):
             let sharedCodes = [
                 "PRODUCT_ACCESS_REQUIRED",
                 "FORBIDDEN",

@@ -178,10 +178,10 @@ final class LinkPopupManager: ObservableObject {
                 } catch {
                     guard let self, self.presentationID == requestPresentationID else { return }
                     self.isLinking = false
-                    if case NetworkError.api(_, let code, _) = error,
+                    if case NetworkError.api(_, let code, _, _) = error,
                        code == "link_previous_request_recovered" {
                         self.errorMessage = "上次操作已恢复，请刷新后重试"
-                    } else if case NetworkError.api(_, let code, _) = error,
+                    } else if case NetworkError.api(_, let code, _, _) = error,
                               code == "NOTE_LINK_ACTIVE_CONFLICT" {
                         self.errorMessage = "卡片已有关联，请刷新后查看"
                     } else {
