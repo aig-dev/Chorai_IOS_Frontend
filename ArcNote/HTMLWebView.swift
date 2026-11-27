@@ -1,5 +1,9 @@
 import SwiftUI
 import WebKit
+import CoreFlow
+import BlockNoteEditor
+import ImageIO
+import UniformTypeIdentifiers
 
 struct AdaptiveHTMLWebView: UIViewRepresentable {
     @Environment(\.colorScheme) private var colorScheme
@@ -106,5 +110,210 @@ private enum ChoraiHTMLAppearance {
         p { margin-bottom:24px; } body > :first-child { margin-top:0; }
         </style></head><body>\(content)</body></html>
         """
+    }
+}
+
+/// Structured NOTE bodies use the shipped renderer in read-only mode. The
+/// summary remains a fallback; it cannot replace authored blocks or images.
+struct NoteReaderDocument: View {
+    let card: CardDetail
+    @ObservedObject private var auth = AuthManager.shared
+    @StateObject private var media = NoteReaderMedia()
+    @State private var shown: (NoteReaderMedia.Request, BlockNoteCardEditorModel)?
+    @State private var legacyHeight: CGFloat = 200
+
+    var body: some View {
+        let request = NoteReaderMedia.Request(content: card.content, contentJSON: card.contentJSON,
+            assetID: card.id, documentVersionID: card.noteDocumentVersionID,
+            scope: auth.canEnterProduct ? auth.currentNoteScope : nil, generation: auth.sessionGeneration)
+        Group {
+            if auth.cardReadSession == nil {
+                EmptyView()
+            } else if card.contentJSON == nil {
+                AdaptiveHTMLWebView(htmlContent: card.content, height: $legacyHeight).frame(height: legacyHeight)
+            } else if let (accepted, model) = shown, accepted == request {
+                BlockNoteCardEditor(model: model)
+            } else {
+                ProgressView().frame(maxWidth: .infinity, minHeight: 44)
+            }
+        }
+        .task(id: request) {
+            guard !Task.isCancelled else { return }
+            shown = nil
+            guard auth.cardReadSession != nil else { media.retire(); return }
+            guard let document = await media.prepare(request), !Task.isCancelled else { return }
+            shown = (request, BlockNoteCardEditorModel(document: document, editable: false,
+                                                       localImageSource: media.source))
+        }
+        .onDisappear { media.retire(); shown = nil }
+    }
+}
+
+/// Only this API's exact NOTE content endpoint is eligible for credentialed
+/// preview downloads. Other image URLs retain the ordinary unauthenticated path.
+enum NoteReaderMediaURL {
+    nonisolated static func target(_ url: URL, assetID: String, origin: URL) -> URL? {
+        guard !assetID.isEmpty, url.scheme == origin.scheme, url.host == origin.host,
+              url.port == origin.port, url.user == nil, url.password == nil, url.fragment == nil,
+              let parts = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              parts.queryItems == [URLQueryItem(name: "asset_id", value: assetID)] else { return nil }
+        let segments = url.path.split(separator: "/")
+        guard segments.count == 5 else { return nil }
+        let ref = String(segments[3])
+        guard canonical(ref), url.path == APIEnvironment.mediaContentPath(ref),
+              parts.percentEncodedPath == url.path else { return nil }
+        return url
+    }
+
+    nonisolated static func canonical(_ ref: String) -> Bool {
+        ref.range(of: #"^med_[0-9a-f]{16}$"#, options: .regularExpression) != nil
+    }
+
+    nonisolated static func target(ref: String, assetID: String, origin: URL) -> URL? {
+        guard canonical(ref), var parts = URLComponents(url: origin, resolvingAgainstBaseURL: false) else { return nil }
+        parts.path = APIEnvironment.mediaContentPath(ref)
+        parts.queryItems = [URLQueryItem(name: "asset_id", value: assetID)]
+        parts.fragment = nil
+        guard let url = parts.url else { return nil }
+        return target(url, assetID: assetID, origin: origin)
+    }
+}
+
+@MainActor
+final class NoteReaderMedia: ObservableObject {
+    struct Request: Equatable, Sendable {
+        let content: String
+        let contentJSON: String?
+        let assetID: String
+        let documentVersionID: String?
+        let scope: NoteStoreScope?
+        let generation: UInt64
+    }
+    private struct Prepared: Sendable {
+        let document: BlockNoteInitialDocument
+        let resources: [URL: URL]
+    }
+    private let currentSession: @MainActor () -> (NoteStoreScope?, UInt64)
+    private let download: @MainActor (NoteStoreScope, URL) async throws -> Data
+    private var active: UUID?
+    private var request: Request?
+    private var resources: [URL: URL] = [:]
+
+    init(currentSession: @escaping @MainActor () -> (NoteStoreScope?, UInt64) = {
+        let auth = AuthManager.shared
+        return (auth.canEnterProduct ? auth.currentNoteScope : nil, auth.sessionGeneration)
+    }, download: @escaping @MainActor (NoteStoreScope, URL) async throws -> Data = { scope, url in
+        try await NetworkManager.shared.noteSyncDownload(scope: scope, url: url)
+    }) {
+        self.currentSession = currentSession; self.download = download
+    }
+
+    var source: BlockNoteLocalImageSource {
+        .init(scheme: "chorai-note-media") { [weak self] url in
+            guard let self else { throw CancellationError() }
+            return try await self.load(url)
+        }
+    }
+
+    func prepare(_ request: Request) async -> BlockNoteInitialDocument? {
+        // A canceled task may start after its replacement. It must not retire
+        // the replacement's mapping before noticing its cancellation.
+        // The owning CardDetailManager and cardReadSession retain already
+        // delivered text during verification/degraded connectivity. A missing
+        // network scope yields no protected media mapping, not a lost body.
+        guard !Task.isCancelled, isCurrent(request) else { return nil }
+        retire()
+        let id = UUID(); active = id; self.request = request
+        let prepared = await Task.detached(priority: .userInitiated) { Self.project(request, id: id) }.value
+        guard !Task.isCancelled, active == id, isCurrent(request) else { return nil }
+        resources = prepared.resources
+        return prepared.document
+    }
+
+    nonisolated private static func project(_ request: Request, id: UUID) -> Prepared {
+        var references = Set<String>()
+        func collect(_ blocks: [[String: Any]]) {
+            for block in blocks {
+                if block["type"] as? String == "image", let props = block["props"] as? [String: Any],
+                   let ref = props["mediaRef"] as? String, NoteReaderMediaURL.canonical(ref) { references.insert(ref) }
+                if let children = block["children"] as? [[String: Any]] { collect(children) }
+            }
+        }
+        if let raw = request.contentJSON, let value = try? JSONSerialization.jsonObject(with: Data(raw.utf8)) {
+            if let blocks = value as? [[String: Any]] { collect(blocks) }
+            else if let envelope = value as? [String: Any], let blocks = envelope["blocks"] as? [[String: Any]] { collect(blocks) }
+        }
+        var urls: [String: String] = [:], resources: [URL: URL] = [:]
+        let origin = request.scope.flatMap { URL(string: $0.environmentID) }
+        for ref in references {
+            var parts = URLComponents(); parts.scheme = "chorai-note-media"
+            parts.host = id.uuidString.lowercased(); parts.path = "/" + ref
+            guard let local = parts.url else { continue }
+            // Even while network admission is unavailable, canonical images
+            // cannot fall back to an uncredentialed URL from the document.
+            urls[ref] = local.absoluteString
+            if let origin, let target = NoteReaderMediaURL.target(ref: ref, assetID: request.assetID, origin: origin) {
+                resources[local] = target
+            }
+        }
+        return Prepared(document: .init(contentJSON: request.contentJSON, fallbackMarkdown: request.content,
+                                        displayURLsByMediaReference: urls), resources: resources)
+    }
+
+    func load(_ url: URL) async throws -> (data: Data, mimeType: String) {
+        try Task.checkCancellation()
+        guard let id = active, let request, isCurrent(request), let scope = request.scope,
+              let target = resources[url] else { throw URLError(.noPermissionsToReadFile) }
+        let bytes = try await download(scope, target)
+        try Task.checkCancellation()
+        guard active == id, isCurrent(request), !bytes.isEmpty, bytes.count <= 25 * 1024 * 1024 else { throw CancellationError() }
+        let mime = await Task.detached(priority: .userInitiated) { () -> String? in
+            guard let source = CGImageSourceCreateWithData(bytes as CFData, nil),
+                  let type = CGImageSourceGetType(source), let mime = UTType(type as String)?.preferredMIMEType,
+                  ["image/png", "image/jpeg", "image/gif", "image/webp"].contains(mime) else { return nil }
+            return mime
+        }.value
+        try Task.checkCancellation()
+        guard active == id, isCurrent(request), let mime else { throw URLError(.cannotDecodeContentData) }
+        return (bytes, mime)
+    }
+
+    func retire() { active = nil; request = nil; resources = [:] }
+
+    private func isCurrent(_ request: Request) -> Bool {
+        let (scope, generation) = currentSession()
+        return scope == request.scope && generation == request.generation
+    }
+}
+
+struct NoteMediaPreview<Content: View>: View {
+    let url: URL
+    let cardID: String
+    @ViewBuilder let content: (AsyncImagePhase) -> Content
+    @ObservedObject private var auth = AuthManager.shared
+    @StateObject private var loader = CardEditorBackgroundImage()
+    @State private var finished: CardEditorBackgroundImage.Request?
+
+    var body: some View {
+        if let scope = auth.currentNoteScope, let origin = URL(string: scope.environmentID),
+           let target = NoteReaderMediaURL.target(url, assetID: cardID, origin: origin) {
+            let request = CardEditorBackgroundImage.Request(url: target, scope: scope,
+                sessionGeneration: auth.sessionGeneration, canLoad: auth.canEnterProduct)
+            content(phase(for: request))
+                .task(id: request) {
+                    guard !Task.isCancelled else { return }
+                    finished = nil
+                    await loader.load(request)
+                    guard !Task.isCancelled else { return }
+                    finished = request
+                }
+        } else {
+            AsyncImage(url: url, content: content)
+        }
+    }
+
+    private func phase(for request: CardEditorBackgroundImage.Request) -> AsyncImagePhase {
+        if let image = loader.image(for: request) { return .success(Image(uiImage: image)) }
+        return finished == request ? .failure(URLError(.cannotLoadFromNetwork)) : .empty
     }
 }

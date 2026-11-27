@@ -1017,7 +1017,7 @@ struct FlowRichPreview: View {
             card: card, snapshotID: snapshotID ?? viewSnapshotID,
             loadsPreview: loadsPreview, priority: .userInitiated, project: { $0 }
         ) { presentation in
-            RenderedFlowRichPreview(presentation: presentation, compact: compact)
+            RenderedFlowRichPreview(presentation: presentation, compact: compact, cardID: card.id)
         }
     }
 }
@@ -1026,6 +1026,7 @@ struct FlowRichPreview: View {
 private struct RenderedFlowRichPreview: View {
     let presentation: LibraryCardPresentation?
     let compact: Bool
+    let cardID: String
     @Environment(\.dynamicTypeSize) private var typeSize
     @ScaledMetric(relativeTo: .body) private var readingSize = 20.0
     @ScaledMetric(relativeTo: .body) private var compactSize = 13.0
@@ -1120,7 +1121,7 @@ private struct RenderedFlowRichPreview: View {
         Color.clear.frame(height: compact ? 184 : 146)
             .overlay {
                 GeometryReader { geometry in
-                    AsyncImage(url: url) { phase in
+                    NoteMediaPreview(url: url, cardID: cardID) { phase in
                         switch phase {
                         case .success(let image):
                             image.resizable().scaledToFill().frame(width: geometry.size.width, height: geometry.size.height).clipped()

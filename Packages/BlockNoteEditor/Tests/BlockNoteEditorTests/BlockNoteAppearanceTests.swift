@@ -19,7 +19,8 @@ final class BlockNoteAppearanceTests: XCTestCase {
         XCTAssertTrue(script.contains("chorai-native-appearance"))
         XCTAssertFalse(script.contains("innerHTML"))
         XCTAssertFalse(script.contains("receiveCommand"))
-        XCTAssertFalse(script.contains("contenteditable"))
+        XCTAssertFalse(script.contains("setAttribute('contenteditable'"))
+        XCTAssertFalse(script.contains(".contentEditable ="))
     }
 
     func testWritingSpacingMatchesTheApprovedTextWhileMergeStaysCompact() {

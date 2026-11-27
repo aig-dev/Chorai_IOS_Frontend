@@ -1,5 +1,9 @@
 # Execution boundary history
 
+## 2026-11-28 — Structured reader and protected previews
+
+Ordinary-account simulator qualification found that Detail rendered the text summary instead of the structured document, while Flow's bare image request received 401. Detail now reuses the shipped read-only BlockNote renderer and its local media scheme; Flow and Library reuse the existing scoped image loader. No new package image-handler API or HTML parser was retained. Review reproduced and fixed lost text during degraded authentication and an ineffective readonly Retry; canceled old preparations and late image bytes stay retired. Actual WebKit controls verify authored headings, decoded pixels, readonly state, retry pixels, and readonly-only selection decoration. The original ordinary NOTE's API/actual-app observation and final source checks retain separate snapshots in the [qualification record](../qa/2026-11-28-public-note-reader.md).
+
 ## 2026-11-27 — First-release editor representations
 
 Generated the shared editor bundle with pre-commit input restrictions, read-only preservation of unsupported initial documents, and lossless mediaRef handling. A real DOM paste exposed missing block IDs before the appended ID transaction; the final guard inspects raw proposed nodes instead of materializing incomplete blocks. No new Swift runtime owner or bridge protocol was introduced. See the [bounded qualification record](../qa/2026-11-27-first-release-editor.md); current runtime and Merge integration remain open.

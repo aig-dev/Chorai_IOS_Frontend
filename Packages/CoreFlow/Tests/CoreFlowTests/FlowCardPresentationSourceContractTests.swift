@@ -15,7 +15,7 @@ final class FlowCardPresentationSourceContractTests: XCTestCase {
 
         XCTAssertTrue(source.contains("FlowRichPreview("))
         let views = try flowViewSource()
-        XCTAssertTrue(views.contains("RenderedFlowRichPreview(presentation: presentation, compact: compact)"))
+        XCTAssertTrue(views.contains("RenderedFlowRichPreview(presentation: presentation, compact: compact, cardID: card.id)"))
         XCTAssertFalse(views.contains("JSONSerialization"))
         XCTAssertFalse(views.contains("LibraryCardPreviewParser.parse"))
         XCTAssertFalse(

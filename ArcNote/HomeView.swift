@@ -2296,11 +2296,7 @@ private struct LibraryCardPreviewBody: View {
                                            source: .previewURL(url), content: imageContent)
                             .id(local.scope)
                     } else {
-                        AsyncImage(
-                            url: url,
-                            transaction: Transaction(animation: reduceMotion ? nil : .easeInOut(duration: 0.2)),
-                            content: imageContent
-                        )
+                        NoteMediaPreview(url: url, cardID: cardID, content: imageContent)
                     }
                 }
             }

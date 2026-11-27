@@ -74,6 +74,10 @@ enum BlockNoteEditorAppearance {
         color: var(--chorai-editor-muted);
     }
     .ios-readonly-custom-block__kind { color: var(--chorai-editor-gold); }
+    .ios-blocknote-view .bn-editor[contenteditable="false"] .bn-block-content.ProseMirror-selectednode > *,
+    .ios-blocknote-view .bn-editor[contenteditable="false"] .ProseMirror-selectednode > .bn-block-content > * {
+        outline: none;
+    }
     """
 
     static var installationScript: String {

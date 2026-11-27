@@ -7,7 +7,12 @@ final class DetailPresentationSourceContractTests: XCTestCase {
         let body = try section(source, from: "private var readerCard: some View", to: "private var readerAuthorRow: some View")
         XCTAssertTrue(body.contains("ChoraiReadingIdentity(rate: cardDetail.rate)"))
         XCTAssertTrue(body.contains("readerAuthorRow"))
-        XCTAssertTrue(body.contains("AdaptiveHTMLWebView(htmlContent: cardDetail.content, height: $contentHeight)"))
+        XCTAssertTrue(body.contains("NoteReaderDocument(card: cardDetail)"))
+        let reader = try String(contentsOf: rootURL().appendingPathComponent("ArcNote/HTMLWebView.swift"), encoding: .utf8)
+        XCTAssertTrue(reader.contains("if auth.cardReadSession == nil"))
+        XCTAssertTrue(reader.contains("guard auth.cardReadSession != nil else"))
+        XCTAssertFalse(body.contains("AdaptiveHTMLWebView(htmlContent: cardDetail.content"),
+                       "A text summary cannot replace the authored structured document")
         XCTAssertFalse(body.contains(".choraiCardLevel"), "Full reading must not be boxed in a grade card")
         XCTAssertFalse(body.contains("cardDetail.title"), "Only authored heading blocks determine document headings")
         XCTAssertFalse(body.contains(".padding(22)"), "The document uses page margins, not another nested content inset")
@@ -45,10 +50,14 @@ final class DetailPresentationSourceContractTests: XCTestCase {
         XCTAssertFalse(body.contains("UITabBar.appearance"), "A reader must not change every tab bar globally")
     }
 
-    private func detailSource() throws -> String {
+    private func rootURL() -> URL {
         var root = URL(fileURLWithPath: #filePath)
         for _ in 0..<5 { root.deleteLastPathComponent() }
-        return try String(contentsOf: root.appendingPathComponent("ArcNote/DetailView.swift"), encoding: .utf8)
+        return root
+    }
+
+    private func detailSource() throws -> String {
+        try String(contentsOf: rootURL().appendingPathComponent("ArcNote/DetailView.swift"), encoding: .utf8)
     }
 
     private func section(_ source: String, from start: String, to end: String) throws -> String {

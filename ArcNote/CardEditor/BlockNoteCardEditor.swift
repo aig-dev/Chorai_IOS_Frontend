@@ -177,8 +177,7 @@ final class BlockNoteCardEditorModel: ObservableObject {
 
     func retryAfterBridgeFailure() {
         guard bridgeFailureNotice != nil,
-              compatibilityNotice == nil,
-              isInitiallyEditable else { return }
+              compatibilityNotice == nil else { return }
 
         controller.beginClosing()
         availability = .loading
@@ -288,7 +287,8 @@ final class BlockNoteCardEditorModel: ObservableObject {
     private func transitionToBridgeFailure(code: String) {
         guard compatibilityNotice == nil else { return }
         availability = .failed(code: code)
-        bridgeFailureNotice = Self.bridgeFailureExplanation
+        bridgeFailureNotice = isInitiallyEditable ? Self.bridgeFailureExplanation
+            : "This note could not be displayed. Retry to reopen it."
         selectionState = nil
         isBodyFocused = false
         controller.blur()
@@ -391,7 +391,7 @@ struct BlockNoteCardEditor: View {
                     .accessibilityIdentifier("cardEditorBridgeFailureNotice")
 
                 Button(action: model.retryAfterBridgeFailure) {
-                    Text("Retry editor")
+                    Text(model.isInitiallyEditable ? "Retry editor" : "Retry")
                         .font(.body.weight(.semibold))
                         .frame(
                             maxWidth: .infinity,

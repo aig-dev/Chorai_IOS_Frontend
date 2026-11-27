@@ -13,7 +13,6 @@ struct DetailView: View {
     @State private var ownedCardRefreshRequestID: UUID?
     @State private var navigateToUserProfile = false
     @State private var isRelatedNotesExpanded = false
-    @State private var contentHeight: CGFloat = 200
     @StateObject private var cardDetailManager: CardDetailManager
     
     // 状态管理
@@ -474,8 +473,7 @@ struct DetailView: View {
                     ChoraiReadingIdentity(rate: cardDetail.rate)
                     readerAuthorRow
                 }
-                AdaptiveHTMLWebView(htmlContent: cardDetail.content, height: $contentHeight)
-                    .frame(height: contentHeight)
+                NoteReaderDocument(card: cardDetail)
             } else if cardDetailManager.error != nil {
                 VStack(spacing: 8) {
                     Text("Couldn’t load this note.")
