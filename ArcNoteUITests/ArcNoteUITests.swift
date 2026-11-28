@@ -5940,9 +5940,22 @@ final class ArcNoteUITests: XCTestCase {
                 )
                 dismissKeyboard()
                 if (targetCard.value as? String) != "selected" {
-                    targetCard.coordinate(
-                        withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)
-                    ).tap()
+                    let sourceList = app.scrollViews.firstMatch
+                    XCTAssertTrue(sourceList.waitForExistence(timeout: 10))
+                    func isFullyVisible() -> Bool {
+                        let visible = sourceList.frame.intersection(app.frame)
+                        return !visible.isEmpty
+                            && visible.contains(targetCard.frame)
+                            && targetCard.isHittable
+                    }
+                    for _ in 0..<8 where !isFullyVisible() {
+                        sourceList.swipeUp()
+                    }
+                    XCTAssertTrue(
+                        isFullyVisible(),
+                        "Scroll the candidate inside the source list before tapping"
+                    )
+                    targetCard.tap()
                 }
                 waitForAccessibilityValue(
                     "merge.card.\(cardID)",
@@ -5969,11 +5982,9 @@ final class ArcNoteUITests: XCTestCase {
                 ] = configuredExistingSessionScope
             }
             launchAuthenticatedApp()
-            waitFor("screen.flow.content", timeout: 30)
         }
 
-        waitForButton("tab.library").tap()
-        waitFor("screen.home.content", timeout: 30)
+        openOrdinaryLibrary()
         let measuredRail = waitForExactlyOneMergeTaskRail(timeout: 10)
         let measuredNewNote = waitForButton("note.create")
         XCTAssertEqual(
@@ -6088,9 +6099,7 @@ final class ArcNoteUITests: XCTestCase {
         }
         launchAuthenticatedApp()
 
-        waitFor("screen.flow.content", timeout: 30)
-        waitForButton("tab.library").tap()
-        waitFor("screen.home.content", timeout: 30)
+        openOrdinaryLibrary()
         let resumedRail = waitForExactlyOneMergeTaskRail(timeout: 20)
         let newNote = waitForButton("note.create")
         XCTAssertEqual(resumedRail.frame.midX, newNote.frame.midX, accuracy: 1.5)
@@ -6178,7 +6187,7 @@ final class ArcNoteUITests: XCTestCase {
 
         app.terminate()
         launchAuthenticatedApp()
-        waitFor("screen.flow.content", timeout: 30)
+        openOrdinaryLibrary()
         waitForExactlyOneMergeTaskRail(timeout: 20).tap()
         waitForMergeArtifactReady(timeout: 30)
         XCTAssertEqual(mergeAnchorValue("merge.job.id"), originalJobID)
@@ -6268,6 +6277,7 @@ final class ArcNoteUITests: XCTestCase {
 
         app.terminate()
         launchAuthenticatedApp()
+        waitForButton("tab.flow", timeout: 30).tap()
         waitFor("screen.flow.content", timeout: 30)
         XCTAssertFalse(
             app.descendants(matching: .any)["merge.task-rail"]
